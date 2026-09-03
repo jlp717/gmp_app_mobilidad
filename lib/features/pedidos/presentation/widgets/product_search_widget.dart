@@ -141,8 +141,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           visualDensity: VisualDensity.compact,
           onSelected: (_) {
-            final next =
-                selectedPrefamily == 'NESTLE' ? null : 'NESTLE';
+            final next = selectedPrefamily == 'NESTLE' ? null : 'NESTLE';
             provider.setPrefamilyFilter(next);
             provider.loadProducts(
               vendedorCodes: widget.vendedorCodes,

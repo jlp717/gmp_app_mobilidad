@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/articles_page.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/load_history_page.dart';
@@ -50,10 +51,10 @@ class _WarehouseShellPageState extends State<WarehouseShellPage> {
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: (i) => setState(() => _currentIndex = i),
-          backgroundColor: Colors.transparent,
+          backgroundColor: AppColors.transparent,
           elevation: 0,
           selectedItemColor: AppTheme.info,
-          unselectedItemColor: Colors.white38,
+          unselectedItemColor: AppColors.themedWhite38,
           selectedLabelStyle: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 10,

@@ -122,7 +122,8 @@ class _AnimatedKpiChipState extends State<_AnimatedKpiChip>
             boxShadow: widget.kpi.trend != 'neutral'
                 ? [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: _glow.value * 0.3),
+                      color: AppColors.systemBlack
+                          .withValues(alpha: _glow.value * 0.3),
                       blurRadius: 10,
                       offset: const Offset(0, 3),
                     ),
@@ -148,8 +149,8 @@ class _AnimatedKpiChipState extends State<_AnimatedKpiChip>
                 children: [
                   Text(
                     widget.kpi.value,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: AppColors.themedWhite,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
@@ -255,7 +256,7 @@ class _AnimatedMiniBarChartState extends State<_AnimatedMiniBarChart>
                         child: Text(
                           widget.points[idx].label,
                           style: TextStyle(
-                            color: Colors.grey.shade600,
+                            color: AppColors.systemGrey600,
                             fontSize: 9,
                           ),
                         ),

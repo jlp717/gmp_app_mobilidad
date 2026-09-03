@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -119,7 +120,7 @@ class AsyncOperationModal extends StatelessWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withValues(alpha: 0.7),
+      barrierColor: AppColors.systemBlack.withValues(alpha: 0.7),
       builder: (_) => AsyncOperationModal(controller: controller),
     );
 
@@ -132,7 +133,7 @@ class AsyncOperationModal extends StatelessWidget {
       canPop: false,
       child: Center(
         child: Material(
-          color: Colors.transparent,
+          color: AppColors.transparent,
           child: ValueListenableBuilder<_ModalState>(
             valueListenable: controller._stateNotifier,
             builder: (context, state, _) {

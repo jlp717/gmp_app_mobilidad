@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 
@@ -107,7 +108,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
         backgroundColor: AppTheme.raisedSurface,
         title: Text(
           label,
-          style: const TextStyle(color: Colors.white, fontSize: 16),
+          style: TextStyle(color: AppColors.themedWhite, fontSize: 16),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -118,8 +119,8 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
                   desc,
-                  style: const TextStyle(
-                    color: Colors.white38,
+                  style: TextStyle(
+                    color: AppColors.themedWhite38,
                     fontSize: 12,
                   ),
                 ),
@@ -127,10 +128,10 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
             TextField(
               controller: controller,
               autofocus: true,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: AppColors.themedWhite),
               decoration: InputDecoration(
                 labelText: 'Valor',
-                labelStyle: const TextStyle(color: Colors.white38),
+                labelStyle: TextStyle(color: AppColors.themedWhite38),
                 enabledBorder: OutlineInputBorder(
                   borderSide: BorderSide(
                     color: AppTheme.info.withValues(alpha: 0.3),
@@ -148,9 +149,9 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Cancelar',
-              style: TextStyle(color: Colors.white38),
+              style: TextStyle(color: AppColors.themedWhite38),
             ),
           ),
           ElevatedButton(
@@ -201,7 +202,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
       appBar: AppBar(
         backgroundColor: AppTheme.inkSurface,
         elevation: 0,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -215,7 +216,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
             ),
             Text(
               'Parametros globales del almacen',
-              style: TextStyle(color: Colors.white38, fontSize: 11),
+              style: TextStyle(color: AppColors.themedWhite38, fontSize: 11),
             ),
           ],
         ),
@@ -245,15 +246,15 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.settings_rounded,
-              color: Colors.white24,
+              color: AppColors.themedWhite24,
               size: 48,
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'No hay configuracion guardada',
-              style: TextStyle(color: Colors.white38, fontSize: 14),
+              style: TextStyle(color: AppColors.themedWhite38, fontSize: 14),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
@@ -299,7 +300,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
                 icon: const Icon(Icons.refresh_rounded, size: 16),
                 label: const Text('Restablecer valores por defecto'),
                 style: TextButton.styleFrom(
-                  foregroundColor: Colors.white30,
+                  foregroundColor: AppColors.themedWhite30,
                 ),
               ),
             ),
@@ -327,8 +328,8 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
             ),
             title: Text(
               label,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppColors.themedWhite,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -336,8 +337,8 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
             subtitle: desc != null
                 ? Text(
                     desc,
-                    style: const TextStyle(
-                      color: Colors.white24,
+                    style: TextStyle(
+                      color: AppColors.themedWhite24,
                       fontSize: 10,
                     ),
                   )
@@ -382,7 +383,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Text(
               _error ?? 'Error',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              style: TextStyle(color: AppColors.themedWhite70, fontSize: 14),
               textAlign: TextAlign.center,
             ),
           ),

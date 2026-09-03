@@ -6,6 +6,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
@@ -30,7 +31,7 @@ Future<dynamic> showOrderPreviewSheet({
 }) {
   return showDialog<dynamic>(
     context: context,
-    barrierColor: Colors.black87,
+    barrierColor: AppColors.systemBlack87,
     builder: (ctx) => _OrderPreviewSheet(
       provider: provider,
       vendedorCode: vendedorCode,
@@ -164,15 +165,15 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.16),
+                  color: AppColors.systemBlack.withValues(alpha: 0.16),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
               ],
             ),
-            child: const Icon(
+            child: Icon(
               Icons.task_alt_rounded,
-              color: Colors.white,
+              color: AppColors.themedWhite,
               size: 24,
             ),
           ),
@@ -183,8 +184,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               children: [
                 Text(
                   provider.clientName ?? 'Pedido listo',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppColors.themedWhite,
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                   ),
@@ -211,7 +212,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           ),
           IconButton(
             onPressed: _isConfirming ? null : () => Navigator.pop(context),
-            icon: const Icon(Icons.close, color: Colors.white54),
+            icon: Icon(Icons.close, color: AppColors.themedWhite54),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),
@@ -224,9 +225,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: AppColors.themedWhite.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border:
+            Border.all(color: AppColors.themedWhite.withValues(alpha: 0.08)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -235,8 +237,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           const SizedBox(width: 5),
           Text(
             label,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.themedWhite,
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -271,8 +273,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               children: [
                 Text(
                   provider.clientName ?? 'Sin cliente',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppColors.themedWhite,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
@@ -381,10 +383,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Reparto',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppColors.themedWhite,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                       ),
@@ -420,9 +422,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.18),
+              color: AppColors.systemBlack.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              border: Border.all(
+                  color: AppColors.themedWhite.withValues(alpha: 0.08)),
             ),
             child: Row(
               children: [
@@ -445,8 +448,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                           Flexible(
                             child: Text(
                               dateLabel,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: AppColors.themedWhite,
                                 fontSize: 24,
                                 fontWeight: FontWeight.w900,
                               ),
@@ -483,7 +486,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   style: IconButton.styleFrom(
                     backgroundColor: AppTheme.success.withValues(alpha: 0.12),
                     disabledBackgroundColor:
-                        Colors.white.withValues(alpha: 0.04),
+                        AppColors.themedWhite.withValues(alpha: 0.04),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -503,9 +506,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             child: Container(
               padding: const EdgeInsets.all(13),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.055),
+                color: AppColors.themedWhite.withValues(alpha: 0.055),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                border: Border.all(
+                    color: AppColors.themedWhite.withValues(alpha: 0.08)),
               ),
               child: Row(
                 children: [
@@ -605,8 +609,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               ),
               child: Text(
                 _capitalize(day),
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
@@ -640,8 +644,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               ),
               Text(
                 value,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -749,8 +753,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               children: [
                 Text(
                   line.descripcion,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppColors.themedWhite,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -783,8 +787,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           // Line total
           Text(
             PedidosFormatters.money(lineTotal),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.themedWhite,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -878,10 +882,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'TOTAL',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                 ),
@@ -979,7 +983,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         Text(
           value,
           style: TextStyle(
-            color: valueColor ?? Colors.white,
+            color: valueColor ?? AppColors.themedWhite,
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
@@ -1018,7 +1022,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   ),
                   Text(
                     PedidosFormatters.money(e.value),
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style:
+                        TextStyle(color: AppColors.themedWhite70, fontSize: 12),
                   ),
                 ],
               ),
@@ -1070,8 +1075,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                       ),
                       Text(
                         PedidosFormatters.money(total),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: AppColors.themedWhite,
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                         ),
@@ -1111,12 +1116,12 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                           ? null
                           : _handleConfirm,
                       icon: _isConfirming
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: AppColors.themedWhite,
                               ),
                             )
                           : Icon(
@@ -1139,7 +1144,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.success,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.themedWhite,
                         disabledBackgroundColor:
                             AppTheme.success.withValues(alpha: 0.4),
                         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -1280,11 +1285,12 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           backgroundColor: AppTheme.raisedSurface,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
+          title: Row(
             children: [
               Icon(Icons.local_shipping_rounded, color: AppTheme.success),
               SizedBox(width: 8),
-              Text('Seleccionar camion', style: TextStyle(color: Colors.white)),
+              Text('Seleccionar camion',
+                  style: TextStyle(color: AppColors.themedWhite)),
             ],
           ),
           content: SizedBox(
@@ -1315,7 +1321,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   title: Text(
                     desc.isNotEmpty ? '$code - $desc' : 'Camion $code',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
@@ -1358,9 +1364,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text(
+              child: Text(
                 'Cancelar',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(color: AppColors.themedWhite54),
               ),
             ),
           ],

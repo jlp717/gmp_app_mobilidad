@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -127,7 +128,7 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.transparent,
         elevation: 0,
         title: const Text(
           'Ordenar Rutero',
@@ -183,12 +184,11 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
               controller: _searchController,
               onChanged: (val) =>
                   setState(() => _searchQuery = val.toLowerCase()),
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: AppColors.themedWhite),
               decoration: InputDecoration(
                 hintText: 'Buscar cliente para mover...',
                 hintStyle: TextStyle(color: AppTheme.textTertiary),
-                prefixIcon:
-                    Icon(Icons.search, color: AppTheme.textTertiary),
+                prefixIcon: Icon(Icons.search, color: AppTheme.textTertiary),
                 filled: true,
                 fillColor: AppTheme.raisedSurface,
                 border: OutlineInputBorder(
@@ -268,7 +268,8 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border:
+            Border.all(color: AppColors.themedWhite.withValues(alpha: 0.05)),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -284,8 +285,8 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
         ),
         title: Text(
           (client['name'] as String?) ?? 'Sin Nombre',
-          style:
-              const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+          style: TextStyle(
+              color: AppColors.themedWhite, fontWeight: FontWeight.w500),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),

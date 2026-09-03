@@ -6,6 +6,7 @@ library;
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
@@ -129,7 +130,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
+              color: AppColors.themedWhite24,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -144,7 +145,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
               Text(
                 'Seleccionar cliente',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontSize: Responsive.fontSize(context, small: 17, large: 20),
                   fontWeight: FontWeight.bold,
                 ),
@@ -158,16 +159,16 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
           child: TextField(
             controller: _searchController,
             autofocus: true,
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: AppColors.themedWhite),
             decoration: InputDecoration(
               hintText: 'Buscar por nombre, codigo, NIF, ciudad...',
-              hintStyle: const TextStyle(color: Colors.white38),
-              prefixIcon: const Icon(Icons.search, color: Colors.white54),
+              hintStyle: TextStyle(color: AppColors.themedWhite38),
+              prefixIcon: Icon(Icons.search, color: AppColors.themedWhite54),
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.clear,
-                        color: Colors.white54,
+                        color: AppColors.themedWhite54,
                         size: 18,
                       ),
                       onPressed: () {
@@ -223,7 +224,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
             Text(
               'Error al cargar clientes',
               style: TextStyle(
-                color: Colors.white70,
+                color: AppColors.themedWhite70,
                 fontSize: Responsive.fontSize(context, small: 14, large: 16),
               ),
             ),
@@ -246,7 +247,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
         child: Text(
           'No se encontraron clientes',
           style: TextStyle(
-            color: Colors.white54,
+            color: AppColors.themedWhite54,
             fontSize: Responsive.fontSize(context, small: 14, large: 16),
           ),
         ),
@@ -268,7 +269,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
             right: 0,
             child: LinearProgressIndicator(
               color: AppTheme.info,
-              backgroundColor: Colors.transparent,
+              backgroundColor: AppColors.transparent,
             ),
           ),
       ],
@@ -322,7 +323,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                     Text(
                       name,
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppColors.themedWhite,
                         fontWeight: FontWeight.w600,
                         fontSize:
                             Responsive.fontSize(context, small: 13, large: 15),
@@ -347,7 +348,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                           Text(
                             ' · ',
                             style: TextStyle(
-                              color: Colors.white38,
+                              color: AppColors.themedWhite38,
                               fontSize: Responsive.fontSize(
                                 context,
                                 small: 11,
@@ -359,7 +360,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                             child: Text(
                               city,
                               style: TextStyle(
-                                color: Colors.white54,
+                                color: AppColors.themedWhite54,
                                 fontSize: Responsive.fontSize(
                                   context,
                                   small: 11,
@@ -374,7 +375,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                           Text(
                             ' · ',
                             style: TextStyle(
-                              color: Colors.white38,
+                              color: AppColors.themedWhite38,
                               fontSize: Responsive.fontSize(
                                 context,
                                 small: 11,
@@ -385,7 +386,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                           Text(
                             nif,
                             style: TextStyle(
-                              color: Colors.white54,
+                              color: AppColors.themedWhite54,
                               fontSize: Responsive.fontSize(
                                 context,
                                 small: 11,
@@ -401,7 +402,8 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.white24, size: 18),
+              Icon(Icons.chevron_right,
+                  color: AppColors.themedWhite24, size: 18),
             ],
           ),
         ),

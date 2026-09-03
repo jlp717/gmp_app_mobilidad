@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -185,7 +186,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                 const Spacer(),
                 Icon(
                   _isExpanded ? Icons.expand_less : Icons.expand_more,
-                  color: Colors.white38,
+                  color: AppColors.themedWhite38,
                   size: 20,
                 ),
               ],
@@ -231,7 +232,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
             Text(
               promo.name,
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontWeight: FontWeight.w600,
                 fontSize: Responsive.fontSize(context, small: 11, large: 13),
               ),
@@ -242,7 +243,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
             Text(
               promo.code,
               style: TextStyle(
-                color: Colors.white38,
+                color: AppColors.themedWhite38,
                 fontSize: Responsive.fontSize(context, small: 10, large: 11),
               ),
             ),
@@ -299,7 +300,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                   Text(
                     'hasta ${promo.dateTo}',
                     style: TextStyle(
-                      color: Colors.white38,
+                      color: AppColors.themedWhite38,
                       fontSize:
                           Responsive.fontSize(context, small: 9, large: 10),
                     ),
@@ -337,7 +338,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
           Text(
             PedidosFormatters.money(promo.regularPrice, decimals: 3),
             style: TextStyle(
-              color: Colors.white38,
+              color: AppColors.themedWhite38,
               fontSize: Responsive.fontSize(context, small: 10, large: 11),
               decoration: TextDecoration.lineThrough,
             ),

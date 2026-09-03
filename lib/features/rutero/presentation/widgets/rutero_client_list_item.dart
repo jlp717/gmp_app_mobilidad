@@ -43,7 +43,7 @@ class _RuteroOrderVisualState {
         return const _RuteroOrderVisualState(
           label: 'PEDIDO BORRADOR',
           semanticLabel: 'Pedido en borrador',
-          color: Color(0xFFF97316),
+          color: AppColors.legacyFFF97316,
           icon: Icons.edit_note_rounded,
           backgroundAlpha: 0.16,
           bannerAlpha: 0.25,
@@ -194,7 +194,7 @@ class RuteroClientListItem extends StatelessWidget {
                     children: [
                       const Icon(
                         Icons.warning_amber_rounded,
-                        color: Colors.black87,
+                        color: AppColors.systemBlack87,
                         size: 16,
                       ),
                       const SizedBox(width: 8),
@@ -202,7 +202,7 @@ class RuteroClientListItem extends StatelessWidget {
                         child: Text(
                           observaciones['text'] as String,
                           style: const TextStyle(
-                            color: Colors.black87,
+                            color: AppColors.systemBlack87,
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),
@@ -213,7 +213,7 @@ class RuteroClientListItem extends StatelessWidget {
                       const Icon(
                         Icons.edit,
                         size: 14,
-                        color: Colors.black54,
+                        color: AppColors.systemBlack54,
                       ),
                     ],
                   ),
@@ -444,8 +444,8 @@ class RuteroClientListItem extends StatelessWidget {
               ),
               child: Text(
                 '$index',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
@@ -622,8 +622,8 @@ class RuteroClientListItem extends StatelessWidget {
                     color: AppTheme.borderColor,
                   ),
                 ),
-                textStyle: const TextStyle(
-                  color: Colors.white,
+                textStyle: TextStyle(
+                  color: AppColors.themedWhite,
                   fontSize: 13,
                 ),
                 message:

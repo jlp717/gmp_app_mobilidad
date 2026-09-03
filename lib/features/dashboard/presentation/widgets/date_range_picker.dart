@@ -172,8 +172,8 @@ class DateRangePicker extends StatelessWidget {
       },
       style: OutlinedButton.styleFrom(
         backgroundColor: AppTheme.inkSurface,
-        side:
-            BorderSide(color: date != null ? AppTheme.success : AppTheme.textTertiary),
+        side: BorderSide(
+            color: date != null ? AppTheme.success : AppTheme.textTertiary),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

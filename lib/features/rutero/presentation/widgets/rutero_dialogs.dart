@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -360,7 +361,7 @@ class _PositionOption extends StatelessWidget {
             : AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isSelected ? AppTheme.accentRose : Colors.transparent,
+          color: isSelected ? AppTheme.accentRose : AppColors.transparent,
           width: 2,
         ),
       ),
@@ -385,7 +386,9 @@ class _PositionOption extends StatelessWidget {
                       label,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: isSelected ? AppTheme.accentRose : Colors.white,
+                        color: isSelected
+                            ? AppTheme.accentRose
+                            : AppColors.themedWhite,
                       ),
                     ),
                     Text(

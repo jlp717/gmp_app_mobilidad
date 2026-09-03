@@ -114,7 +114,7 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
   @override
   Future<DashboardState> build() async {
     // Read auth state to know when user is logged in
-    ref.watch(authProvider);
+    ref.watch(authProvider.select((state) => state.value?.user?.code));
 
     final now = DateTime.now();
     return DashboardState(

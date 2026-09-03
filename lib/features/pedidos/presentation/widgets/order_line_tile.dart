@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
@@ -202,7 +203,7 @@ class OrderLineTile extends StatelessWidget {
                       Text(
                         line.descripcion,
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppColors.themedWhite,
                           fontWeight: FontWeight.w500,
                           fontSize: Responsive.fontSize(
                             context,
@@ -270,7 +271,7 @@ class OrderLineTile extends StatelessWidget {
                                     color: line.claseLinea == 'SC'
                                         ? AppTheme.textSecondary
                                             .withValues(alpha: 0.45)
-                                        : Colors.transparent,
+                                        : AppColors.transparent,
                                     width: 0.5,
                                   ),
                                 ),
@@ -294,14 +295,15 @@ class OrderLineTile extends StatelessWidget {
                           // Qty Stepper
                           Container(
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.05),
+                              color:
+                                  AppColors.themedWhite.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Material(
-                                  color: Colors.transparent,
+                                  color: AppColors.transparent,
                                   child: InkWell(
                                     onTap: line.cantidadEnvases > 0 ||
                                             line.cantidadUnidades > 0
@@ -310,7 +312,7 @@ class OrderLineTile extends StatelessWidget {
                                     borderRadius: const BorderRadius.horizontal(
                                       left: Radius.circular(6),
                                     ),
-                                    child: const Padding(
+                                    child: Padding(
                                       padding: EdgeInsets.symmetric(
                                         horizontal: 6,
                                         vertical: 3,
@@ -318,7 +320,7 @@ class OrderLineTile extends StatelessWidget {
                                       child: Icon(
                                         Icons.remove,
                                         size: 14,
-                                        color: Colors.white70,
+                                        color: AppColors.themedWhite70,
                                       ),
                                     ),
                                   ),
@@ -330,7 +332,7 @@ class OrderLineTile extends StatelessWidget {
                                   child: Text(
                                     _getQtyLabel(),
                                     style: TextStyle(
-                                      color: Colors.white,
+                                      color: AppColors.themedWhite,
                                       fontSize: Responsive.fontSize(
                                         context,
                                         small: 11,
@@ -341,7 +343,7 @@ class OrderLineTile extends StatelessWidget {
                                   ),
                                 ),
                                 Material(
-                                  color: Colors.transparent,
+                                  color: AppColors.transparent,
                                   child: InkWell(
                                     onTap: onIncrement,
                                     borderRadius: const BorderRadius.horizontal(
@@ -370,8 +372,8 @@ class OrderLineTile extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           _priceLabel(),
-                          style: const TextStyle(
-                            color: Colors.white38,
+                          style: TextStyle(
+                            color: AppColors.themedWhite38,
                             fontSize: 10,
                           ),
                         ),
@@ -424,7 +426,7 @@ class OrderLineTile extends StatelessWidget {
                             decimals: 3,
                           ),
                           style: TextStyle(
-                            color: Colors.white38,
+                            color: AppColors.themedWhite38,
                             decoration: TextDecoration.lineThrough,
                             fontSize: Responsive.fontSize(
                               context,
@@ -440,7 +442,7 @@ class OrderLineTile extends StatelessWidget {
                             decimals: 3,
                           ),
                           style: TextStyle(
-                            color: Colors.white70,
+                            color: AppColors.themedWhite70,
                             fontSize: Responsive.fontSize(
                               context,
                               small: 11,
@@ -464,10 +466,9 @@ class OrderLineTile extends StatelessWidget {
                       if (belowMinPrice)
                         Consumer(
                           builder: (ctx, ref, _) {
-                            final visible =
-                                ref.watch(
-                                  pedidosProvider.select((p) => p.isMarginVisible),
-                                );
+                            final visible = ref.watch(
+                              pedidosProvider.select((p) => p.isMarginVisible),
+                            );
                             if (!visible) return const SizedBox.shrink();
                             return Padding(
                               padding: const EdgeInsets.only(top: 4),
@@ -545,19 +546,19 @@ class _LineDiscountChip extends StatelessWidget {
       builder: (ctx) {
         return AlertDialog(
           backgroundColor: AppTheme.raisedSurface,
-          title: const Text(
+          title: Text(
             'Descuento de línea',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: AppColors.themedWhite),
           ),
           content: TextField(
             controller: controller,
             autofocus: true,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
+            style: TextStyle(color: AppColors.themedWhite),
+            decoration: InputDecoration(
               hintText: '0 - 100',
               suffixText: '%',
-              hintStyle: TextStyle(color: Colors.white38),
+              hintStyle: TextStyle(color: AppColors.themedWhite38),
             ),
           ),
           actions: [
@@ -598,12 +599,12 @@ class _LineDiscountChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: hasDiscount
               ? AppTheme.success.withValues(alpha: 0.18)
-              : Colors.white.withValues(alpha: 0.05),
+              : AppColors.themedWhite.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: hasDiscount
                 ? AppTheme.success.withValues(alpha: 0.6)
-                : Colors.white24,
+                : AppColors.themedWhite24,
             width: 0.5,
           ),
         ),
@@ -613,7 +614,7 @@ class _LineDiscountChip extends StatelessWidget {
             Icon(
               hasDiscount ? Icons.percent : Icons.local_offer_outlined,
               size: 11,
-              color: hasDiscount ? AppTheme.success : Colors.white54,
+              color: hasDiscount ? AppTheme.success : AppColors.themedWhite54,
             ),
             const SizedBox(width: 3),
             Text(
@@ -621,7 +622,7 @@ class _LineDiscountChip extends StatelessWidget {
                   ? '-${line.lineDiscountPct.toStringAsFixed(line.lineDiscountPct % 1 == 0 ? 0 : 1)}%'
                   : 'Dto',
               style: TextStyle(
-                color: hasDiscount ? AppTheme.success : Colors.white54,
+                color: hasDiscount ? AppTheme.success : AppColors.themedWhite54,
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
               ),

@@ -21,7 +21,7 @@ class FuturisticTheme {
   // ============================================================================
   // COLORES NEÓN PRINCIPALES
   // ============================================================================
-  
+
   static const Color cyanNeon = AppColors.legacyFF00F5FF;
   static const Color magentaNeon = AppColors.legacyFFFF00FF;
   static const Color yellowNeon = AppColors.legacyFFFFE600;
@@ -34,7 +34,7 @@ class FuturisticTheme {
   // ============================================================================
   // COLORES DE SUPERFICIE (DARK MODE)
   // ============================================================================
-  
+
   static const Color backgroundDark = AppColors.legacyFF0A0E27;
   static const Color surfaceDark = AppColors.legacyFF1A1F3A;
   static const Color surfaceLighter = AppColors.legacyFF252B47;
@@ -43,7 +43,7 @@ class FuturisticTheme {
   // ============================================================================
   // COLORES DE TEXTO (OPTIMIZADOS PARA DARK MODE)
   // ============================================================================
-  
+
   static const Color textPrimary = AppColors.legacyFFFFFFFF;
   static const Color textSecondary = AppColors.legacyFFB8C5D6;
   static const Color textTertiary = AppColors.legacyFF8A98AC;
@@ -52,7 +52,7 @@ class FuturisticTheme {
   // ============================================================================
   // GRADIENTES CYBERPUNK
   // ============================================================================
-  
+
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [cyanNeon, blueNeon],
     begin: Alignment.topLeft,
@@ -106,55 +106,55 @@ class FuturisticTheme {
   // ============================================================================
   // SOMBRAS NEÓN
   // ============================================================================
-  
+
   static List<BoxShadow> get neonShadowCyan => [
-    BoxShadow(
-      color: cyanNeon.withValues(alpha: 0.3),
-      blurRadius: 20,
-      spreadRadius: 2,
-      offset: const Offset(0, 4),
-    ),
-    BoxShadow(
-      color: cyanNeon.withValues(alpha: 0.1),
-      blurRadius: 40,
-      spreadRadius: 4,
-      offset: const Offset(0, 8),
-    ),
-  ];
+        BoxShadow(
+          color: cyanNeon.withValues(alpha: 0.3),
+          blurRadius: 20,
+          spreadRadius: 2,
+          offset: const Offset(0, 4),
+        ),
+        BoxShadow(
+          color: cyanNeon.withValues(alpha: 0.1),
+          blurRadius: 40,
+          spreadRadius: 4,
+          offset: const Offset(0, 8),
+        ),
+      ];
 
   static List<BoxShadow> get neonShadowMagenta => [
-    BoxShadow(
-      color: magentaNeon.withValues(alpha: 0.3),
-      blurRadius: 20,
-      spreadRadius: 2,
-      offset: const Offset(0, 4),
-    ),
-    BoxShadow(
-      color: magentaNeon.withValues(alpha: 0.1),
-      blurRadius: 40,
-      spreadRadius: 4,
-      offset: const Offset(0, 8),
-    ),
-  ];
+        BoxShadow(
+          color: magentaNeon.withValues(alpha: 0.3),
+          blurRadius: 20,
+          spreadRadius: 2,
+          offset: const Offset(0, 4),
+        ),
+        BoxShadow(
+          color: magentaNeon.withValues(alpha: 0.1),
+          blurRadius: 40,
+          spreadRadius: 4,
+          offset: const Offset(0, 8),
+        ),
+      ];
 
   static List<BoxShadow> get glassShadow => [
-    BoxShadow(
-      color: AppColors.systemBlack.withValues(alpha: 0.2),
-      blurRadius: 15,
-      spreadRadius: 1,
-      offset: const Offset(0, 5),
-    ),
-    BoxShadow(
-      color: cyanNeon.withValues(alpha: 0.1),
-      blurRadius: 30,
-      offset: const Offset(0, 10),
-    ),
-  ];
+        BoxShadow(
+          color: AppColors.systemBlack.withValues(alpha: 0.2),
+          blurRadius: 15,
+          spreadRadius: 1,
+          offset: const Offset(0, 5),
+        ),
+        BoxShadow(
+          color: cyanNeon.withValues(alpha: 0.1),
+          blurRadius: 30,
+          offset: const Offset(0, 10),
+        ),
+      ];
 
   // ============================================================================
   // COLORES PARA MODO CLARO
   // ============================================================================
-  
+
   static const Color lightBackground = AppColors.legacyFFF8FAFC;
   static const Color lightSurface = AppColors.legacyFFFFFFFF;
   static const Color lightTextPrimary = AppColors.legacyFF0F172A;
@@ -164,16 +164,16 @@ class FuturisticTheme {
   // ============================================================================
   // THEME DATA COMPLETO
   // ============================================================================
-  
+
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      
+
       // Colores base
       scaffoldBackgroundColor: lightBackground,
       primaryColor: cyanNeon,
-      colorScheme:  ColorScheme.light(
+      colorScheme: ColorScheme.light(
         primary: cyanNeon,
         secondary: magentaNeon,
         tertiary: purpleNeon,
@@ -470,12 +470,12 @@ class FuturisticTheme {
       ),
     );
   }
-  
+
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      
+
       // Colores base
       scaffoldBackgroundColor: backgroundDark,
       primaryColor: cyanNeon,

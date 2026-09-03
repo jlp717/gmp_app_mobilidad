@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -681,7 +682,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       appBar: AppBar(
         backgroundColor: AppTheme.inkSurface,
         toolbarHeight: 52,
@@ -918,7 +919,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             fontWeight: FontWeight.w500,
           ),
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          dividerColor: Colors.transparent,
+          dividerColor: AppColors.transparent,
           tabs: [
             Tab(
               height: 40,
@@ -995,8 +996,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             child: Container(
               clipBehavior: Clip.antiAlias,
               decoration: AppTheme.premiumPanel(
-                accentColor:
-                    hasClient ? AppTheme.info : AppTheme.mutedPanel,
+                accentColor: hasClient ? AppTheme.info : AppTheme.mutedPanel,
               ),
               child: _buildCatalogPanel(),
             ),
@@ -1008,8 +1008,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             child: Container(
               clipBehavior: Clip.antiAlias,
               decoration: AppTheme.premiumPanel(
-                accentColor:
-                    hasLines ? AppTheme.success : AppTheme.accentAmber,
+                accentColor: hasLines ? AppTheme.success : AppTheme.accentAmber,
               ),
               child: OrderSummaryWidget(
                 vendedorCode: _activeOrderVendedorCode,
@@ -1431,7 +1430,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                                 ? 'Borrador activo'
                                 : 'Sin líneas',
                             provider.hasLines
-                                ? const Color(0xFFF97316)
+                                ? AppColors.legacyFFF97316
                                 : AppTheme.textTertiary,
                           ),
                         ],

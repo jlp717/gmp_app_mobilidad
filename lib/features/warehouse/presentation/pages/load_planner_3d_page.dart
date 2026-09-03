@@ -5,6 +5,7 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
@@ -318,7 +319,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
 
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (ctx) => Container(
         margin: const EdgeInsets.all(12),
         padding: const EdgeInsets.all(20),
@@ -384,7 +385,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                 _optimizeStatRow(
                   'Margen real',
                   '${m.totalMargenEur.toStringAsFixed(2)} €',
-                  const Color(0xFF66BB6A),
+                  AppColors.legacyFF66BB6A,
                 ),
               if (m.overflowImporteEur > 0)
                 _optimizeStatRow(
@@ -396,7 +397,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             // Axle balance section
             if (r.placed.isNotEmpty) ...[
               const SizedBox(height: 12),
-              const Divider(color: Colors.white10),
+              Divider(color: AppColors.themedWhite10),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -472,7 +473,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
               label: const Text('Cerrar'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: sc.withValues(alpha: 0.2),
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.themedWhite,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 30,
                   vertical: 12,
@@ -500,7 +501,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.35),
+            color: AppColors.themedWhite.withValues(alpha: 0.35),
             fontSize: 8,
           ),
         ),
@@ -516,7 +517,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         children: [
           Text(
             label,
-            style: const TextStyle(color: Colors.white54, fontSize: 14),
+            style: TextStyle(color: AppColors.themedWhite54, fontSize: 14),
           ),
           Text(
             value,
@@ -616,7 +617,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
 
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       isScrollControlled: true,
       builder: (context) => Container(
         margin: const EdgeInsets.all(12),
@@ -648,8 +649,8 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                     children: [
                       Text(
                         box.label.isNotEmpty ? box.label : box.articleCode,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: AppColors.themedWhite,
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
@@ -667,9 +668,9 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                 ),
               ],
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(color: Colors.white24),
+              child: Divider(color: AppColors.themedWhite24),
             ),
             _modalRow(Icons.business_center_rounded, 'Cliente', client),
             _modalRow(
@@ -695,7 +696,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                 label: const Text('Cerrar'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: cc.withValues(alpha: 0.2),
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.themedWhite,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
                 ),
@@ -711,24 +712,25 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
     IconData icon,
     String label,
     String value, {
-    Color color = Colors.white70,
+    Color? color,
   }) {
+    final resolvedColor = color ?? AppColors.themedWhite70;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white54, size: 20),
+          Icon(icon, color: AppColors.themedWhite54, size: 20),
           const SizedBox(width: 12),
           Text(
             '$label:',
-            style: const TextStyle(color: Colors.white54, fontSize: 14),
+            style: TextStyle(color: AppColors.themedWhite54, fontSize: 14),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               value,
               style: TextStyle(
-                color: color,
+                color: resolvedColor,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
@@ -757,9 +759,9 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
       appBar: AppBar(
         backgroundColor: AppTheme.raisedSurface,
         elevation: 0,
-        surfaceTintColor: Colors.transparent,
+        surfaceTintColor: AppColors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white70),
+          icon: Icon(Icons.arrow_back_rounded, color: AppColors.themedWhite70),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
@@ -777,7 +779,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             Text(
               '${widget.vehicleCode} · ${widget.vehicleName}',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: AppColors.themedWhite.withValues(alpha: 0.5),
                 fontSize: 12,
               ),
             ),
@@ -806,7 +808,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                       Icons.palette_rounded,
                       color: _colorMode == ColorMode.product
                           ? AppTheme.info
-                          : Colors.white54,
+                          : AppColors.themedWhite54,
                       size: 18,
                     ),
                     const SizedBox(width: 8),
@@ -815,7 +817,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                       style: TextStyle(
                         color: _colorMode == ColorMode.product
                             ? AppTheme.info
-                            : Colors.white70,
+                            : AppColors.themedWhite70,
                         fontSize: 13,
                       ),
                     ),
@@ -830,7 +832,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                       Icons.people_rounded,
                       color: _colorMode == ColorMode.client
                           ? AppTheme.info
-                          : Colors.white54,
+                          : AppColors.themedWhite54,
                       size: 18,
                     ),
                     const SizedBox(width: 8),
@@ -839,7 +841,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                       style: TextStyle(
                         color: _colorMode == ColorMode.client
                             ? AppTheme.info
-                            : Colors.white70,
+                            : AppColors.themedWhite70,
                         fontSize: 13,
                       ),
                     ),
@@ -854,7 +856,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                       Icons.thermostat_rounded,
                       color: _colorMode == ColorMode.heatmap
                           ? AppTheme.info
-                          : Colors.white54,
+                          : AppColors.themedWhite54,
                       size: 18,
                     ),
                     const SizedBox(width: 8),
@@ -863,7 +865,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                       style: TextStyle(
                         color: _colorMode == ColorMode.heatmap
                             ? AppTheme.info
-                            : Colors.white70,
+                            : AppColors.themedWhite70,
                         fontSize: 13,
                       ),
                     ),
@@ -966,7 +968,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
       ),
       body: WarehouseUi.pageShell(
         child: _loading
-            ? const Center(
+            ? Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -974,7 +976,8 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                     SizedBox(height: 16),
                     Text(
                       'Calculando carga...',
-                      style: TextStyle(color: Colors.white54, fontSize: 14),
+                      style: TextStyle(
+                          color: AppColors.themedWhite54, fontSize: 14),
                     ),
                   ],
                 ),
@@ -1084,7 +1087,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                 accentAlpha: 0.08,
                 elevated: false,
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
@@ -1098,7 +1101,8 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                   SizedBox(width: 6),
                   Text(
                     'Recalculando...',
-                    style: TextStyle(color: Colors.white54, fontSize: 10),
+                    style:
+                        TextStyle(color: AppColors.themedWhite54, fontSize: 10),
                   ),
                 ],
               ),
@@ -1285,7 +1289,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                             const Text(
                               ' EUR',
                               style: TextStyle(
-                                color: Color(0xFF66BB6A),
+                                color: AppColors.legacyFF66BB6A,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -1300,7 +1304,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                             child: Text(
                               'Margen: ${m.totalMargenEur.toStringAsFixed(0)} EUR',
                               style: TextStyle(
-                                color: const Color(0xFF66BB6A)
+                                color: AppColors.legacyFF66BB6A
                                     .withValues(alpha: 0.8),
                                 fontSize: 9,
                                 fontWeight: FontWeight.w600,
@@ -1396,7 +1400,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           child: Text(
             label,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.4),
+              color: AppColors.themedWhite.withValues(alpha: 0.4),
               fontSize: 8,
             ),
           ),
@@ -1408,7 +1412,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
               value: pct / 100,
-              backgroundColor: Colors.white10,
+              backgroundColor: AppColors.themedWhite10,
               color: c,
             ),
           ),
@@ -1446,7 +1450,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                   builder: (_, v, __) => CircularProgressIndicator(
                     value: v,
                     strokeWidth: 3.5,
-                    backgroundColor: Colors.white10,
+                    backgroundColor: AppColors.themedWhite10,
                     color: color,
                     strokeCap: StrokeCap.round,
                   ),
@@ -1467,7 +1471,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.4),
+            color: AppColors.themedWhite.withValues(alpha: 0.4),
             fontSize: 8,
             fontWeight: FontWeight.w600,
           ),
@@ -1539,8 +1543,8 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
               children: [
                 Text(
                   box.label.isNotEmpty ? box.label : box.articleCode,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppColors.themedWhite,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1550,7 +1554,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                 Text(
                   '$client · Pedido #${box.orderNumber}',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4),
+                    color: AppColors.themedWhite.withValues(alpha: 0.4),
                     fontSize: 10,
                   ),
                   maxLines: 1,
@@ -1573,7 +1577,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
               Text(
                 '${box.w.toInt()}x${box.d.toInt()}x${box.h.toInt()} cm',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: AppColors.themedWhite.withValues(alpha: 0.3),
                   fontSize: 10,
                 ),
               ),
@@ -1582,9 +1586,9 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           const SizedBox(width: 6),
           GestureDetector(
             onTap: () => setState(() => _selectedBoxId = null),
-            child: const Icon(
+            child: Icon(
               Icons.close_rounded,
-              color: Colors.white30,
+              color: AppColors.themedWhite30,
               size: 18,
             ),
           ),
@@ -1607,7 +1611,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Text(
                 _error ?? 'Error',
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
+                style: TextStyle(color: AppColors.themedWhite70, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -1636,7 +1640,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         decoration: BoxDecoration(
           color: isActive
               ? AppTheme.info.withValues(alpha: 0.25)
-              : Colors.transparent,
+              : AppColors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
         child: Row(
@@ -1644,14 +1648,14 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           children: [
             Icon(
               icon,
-              color: isActive ? AppTheme.info : Colors.white38,
+              color: isActive ? AppTheme.info : AppColors.themedWhite38,
               size: 14,
             ),
             const SizedBox(width: 3),
             Text(
               label,
               style: TextStyle(
-                color: isActive ? AppTheme.info : Colors.white38,
+                color: isActive ? AppTheme.info : AppColors.themedWhite38,
                 fontSize: 9,
                 fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               ),
@@ -1796,7 +1800,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: AppColors.themedWhite10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1804,8 +1808,8 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         children: [
           Text(
             modeLabel,
-            style: const TextStyle(
-              color: Colors.white54,
+            style: TextStyle(
+              color: AppColors.themedWhite54,
               fontSize: 8,
               fontWeight: FontWeight.bold,
               letterSpacing: 0,
@@ -1829,8 +1833,8 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                   Expanded(
                     child: Text(
                       e.key,
-                      style: const TextStyle(
-                        color: Colors.white60,
+                      style: TextStyle(
+                        color: AppColors.themedWhite60,
                         fontSize: 8,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -1844,7 +1848,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             Text(
               '+ ${_result!.placed.length - 8} más',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.3),
+                color: AppColors.themedWhite.withValues(alpha: 0.3),
                 fontSize: 7,
               ),
             ),
@@ -1876,7 +1880,7 @@ class _BalanceDiagramPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
     final cy = size.height / 2;
-    final accent = balanced ? AppTheme.success : const Color(0xFFFFE66D);
+    final accent = balanced ? AppTheme.success : AppColors.legacyFFFFE66D;
 
     // Truck outline (simplified top-down)
     final truckRect = RRect.fromRectAndRadius(
@@ -1889,7 +1893,7 @@ class _BalanceDiagramPainter extends CustomPainter {
     );
     canvas.drawRRect(
       truckRect,
-      Paint()..color = const Color(0x20FFFFFF),
+      Paint()..color = AppColors.legacy20FFFFFF,
     );
     canvas.drawRRect(
       truckRect,
@@ -1901,7 +1905,7 @@ class _BalanceDiagramPainter extends CustomPainter {
 
     // Center cross lines
     final crossPaint = Paint()
-      ..color = const Color(0x15FFFFFF)
+      ..color = AppColors.legacy15FFFFFF
       ..strokeWidth = 0.5;
     canvas.drawLine(
       Offset(cx, cy - size.height * 0.4),
@@ -1926,7 +1930,7 @@ class _BalanceDiagramPainter extends CustomPainter {
       Offset(cogX, cogY),
       4,
       Paint()
-        ..color = Colors.white
+        ..color = AppColors.themedWhite
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );

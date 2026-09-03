@@ -6,6 +6,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/cargo_box_renderer.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
@@ -70,7 +71,7 @@ class TruckPainter extends CustomPainter {
       ..shader = RadialGradient(
         colors: [
           statusColor.withValues(alpha: 0.03 + glow * 0.015),
-          Colors.transparent,
+          AppColors.transparent,
         ],
       ).createShader(
         Rect.fromCenter(
@@ -223,20 +224,20 @@ class TopViewPainter extends CustomPainter {
     canvas.drawRect(
       containerRect,
       Paint()
-        ..color = const Color(0xFF1A202C)
+        ..color = AppColors.legacyFF1A202C
         ..style = PaintingStyle.fill,
     );
     canvas.drawRect(
       containerRect,
       Paint()
-        ..color = const Color(0xFF4A5568)
+        ..color = AppColors.legacyFF4A5568
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
 
     // Grid
     final gridPaint = Paint()
-      ..color = const Color(0x15FFFFFF)
+      ..color = AppColors.legacy15FFFFFF
       ..strokeWidth = 0.5;
     for (double x = 0; x <= cW; x += 50) {
       final p1 = toScreen(x, 0);
@@ -271,8 +272,9 @@ class TopViewPainter extends CustomPainter {
       canvas.drawRect(
         rect,
         Paint()
-          ..color =
-              isSelected ? Colors.white : Colors.white.withValues(alpha: 0.3)
+          ..color = isSelected
+              ? AppColors.themedWhite
+              : AppColors.themedWhite.withValues(alpha: 0.3)
           ..style = PaintingStyle.stroke
           ..strokeWidth = isSelected ? 2.5 : 0.8,
       );
@@ -284,7 +286,7 @@ class TopViewPainter extends CustomPainter {
             : b.articleCode;
         final luminance = color.computeLuminance();
         final textColor =
-            luminance > 0.45 ? const Color(0xFF1A1A2E) : Colors.white;
+            luminance > 0.45 ? AppColors.legacyFF1A1A2E : AppColors.themedWhite;
 
         final tp = TextPainter(
           text: TextSpan(
@@ -315,12 +317,12 @@ class TopViewPainter extends CustomPainter {
     );
     canvas.drawRRect(
       cabRect,
-      Paint()..color = const Color(0xFF1E40AF).withValues(alpha: 0.7),
+      Paint()..color = AppColors.legacyFF1E40AF.withValues(alpha: 0.7),
     );
     canvas.drawRRect(
       cabRect,
       Paint()
-        ..color = const Color(0xFF60A5FA).withValues(alpha: 0.4)
+        ..color = AppColors.legacyFF60A5FA.withValues(alpha: 0.4)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
@@ -330,7 +332,7 @@ class TopViewPainter extends CustomPainter {
       text: const TextSpan(
         text: 'CABINA',
         style: TextStyle(
-          color: Color(0xAAFFFFFF),
+          color: AppColors.legacyAAFFFFFF,
           fontSize: 9,
           fontWeight: FontWeight.w600,
           letterSpacing: 0,
@@ -348,7 +350,7 @@ class TopViewPainter extends CustomPainter {
 
     // Dimensions
     const dimStyle = TextStyle(
-      color: Color(0xAAFFFFFF),
+      color: AppColors.legacyAAFFFFFF,
       fontSize: 9,
       fontWeight: FontWeight.w500,
     );
@@ -420,18 +422,18 @@ class FrontViewPainter extends CustomPainter {
       cW * scale,
       cH * scale,
     );
-    canvas.drawRect(containerRect, Paint()..color = const Color(0xFF1A202C));
+    canvas.drawRect(containerRect, Paint()..color = AppColors.legacyFF1A202C);
     canvas.drawRect(
       containerRect,
       Paint()
-        ..color = const Color(0xFF4A5568)
+        ..color = AppColors.legacyFF4A5568
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
 
     // Grid
     final gridPaint = Paint()
-      ..color = const Color(0x15FFFFFF)
+      ..color = AppColors.legacy15FFFFFF
       ..strokeWidth = 0.5;
     for (double x = 0; x <= cW; x += 50) {
       canvas.drawLine(toScreen(x, 0), toScreen(x, cH), gridPaint);
@@ -466,8 +468,9 @@ class FrontViewPainter extends CustomPainter {
       canvas.drawRect(
         rect,
         Paint()
-          ..color =
-              isSelected ? Colors.white : Colors.white.withValues(alpha: 0.2)
+          ..color = isSelected
+              ? AppColors.themedWhite
+              : AppColors.themedWhite.withValues(alpha: 0.2)
           ..style = PaintingStyle.stroke
           ..strokeWidth = isSelected ? 2 : 0.5,
       );
@@ -479,7 +482,7 @@ class FrontViewPainter extends CustomPainter {
             : b.articleCode;
         final luminance = color.computeLuminance();
         final textColor =
-            luminance > 0.45 ? const Color(0xFF1A1A2E) : Colors.white;
+            luminance > 0.45 ? AppColors.legacyFF1A1A2E : AppColors.themedWhite;
         final tp = TextPainter(
           text: TextSpan(
             text: label,
@@ -518,13 +521,13 @@ class FrontViewPainter extends CustomPainter {
         canvas.drawCircle(
           cogScreen,
           6,
-          Paint()..color = const Color(0xFFFF6B6B),
+          Paint()..color = AppColors.legacyFFFF6B6B,
         );
         canvas.drawCircle(
           cogScreen,
           6,
           Paint()
-            ..color = Colors.white
+            ..color = AppColors.themedWhite
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.5,
         );
@@ -533,7 +536,7 @@ class FrontViewPainter extends CustomPainter {
           text: const TextSpan(
             text: 'CdG',
             style: TextStyle(
-              color: Color(0xFFFF6B6B),
+              color: AppColors.legacyFFFF6B6B,
               fontSize: 8,
               fontWeight: FontWeight.bold,
             ),
@@ -549,7 +552,7 @@ class FrontViewPainter extends CustomPainter {
 
     // Dimensions
     const dimStyle = TextStyle(
-      color: Color(0xAAFFFFFF),
+      color: AppColors.legacyAAFFFFFF,
       fontSize: 9,
       fontWeight: FontWeight.w500,
     );

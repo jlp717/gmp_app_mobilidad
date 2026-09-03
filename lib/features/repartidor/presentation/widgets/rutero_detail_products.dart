@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -217,8 +218,7 @@ class RuteroDetailProducts extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               '$itemsError',
-              style:
-                  TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -371,7 +371,7 @@ class RuteroDetailProducts extends StatelessWidget {
               label: const Text('CONTINUAR'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.info,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.themedWhite,
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
@@ -536,7 +536,7 @@ class _ProductCard extends StatelessWidget {
 
   Widget _buildFichaButton() {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: onOpenFicha,
@@ -661,7 +661,7 @@ class _QuantityButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),

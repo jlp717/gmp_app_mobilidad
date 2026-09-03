@@ -15,7 +15,7 @@ const manifest = {
   confirmation: 'JAVIER_TEST_DDL',
   repositoryCatalog: {
     file: 'repartidor-liquidacion-db2-repository.js',
-    sha256: '1F4B028B60473DCC2570E5C9B10454EF50A831A0571BBF354940FCAC508E0199',
+    sha256: 'BC8AF1A179CBFE4F980D76EB01422417813357AABD9F2CD4B78E5C4FA969BF0C',
     tableKeys: {
       TEST_REPARTIDOR_LIQUIDACION_OPS: 'liquidationOps',
       TEST_REPARTIDOR_COBROS: 'cobros',
@@ -30,7 +30,7 @@ const manifest = {
   verifier: {
     id: '035',
     file: '035_verify_reparto_isolated_test_schema.sql',
-    sha256: 'AB5CFF817C7E0E9D88A421885170B693C08DC032BC76CFEA5DC608C9911A8520',
+    sha256: 'D32B22A9533819DACA4D99CB32DA8FA64CC7D11BFF9FEC86CE1F3DC685792B99',
     statementCount: 9,
     labels: [
       'required_objects',

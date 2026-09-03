@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
@@ -62,7 +63,7 @@ class OrderCard extends StatelessWidget {
         ],
       ),
       child: Material(
-        color: Colors.transparent,
+        color: AppColors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           onTap: onTap,
@@ -168,7 +169,7 @@ class OrderCard extends StatelessWidget {
                     color: AppTheme.inkSurface.withValues(alpha: 0.36),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.06),
+                      color: AppColors.themedWhite.withValues(alpha: 0.06),
                     ),
                   ),
                   child: Row(

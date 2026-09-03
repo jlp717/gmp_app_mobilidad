@@ -382,8 +382,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
       style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle:
-            TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+        labelStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
         prefixIcon: Icon(icon, size: 18, color: AppTheme.textTertiary),
         filled: true,
         fillColor: AppTheme.softPanel,

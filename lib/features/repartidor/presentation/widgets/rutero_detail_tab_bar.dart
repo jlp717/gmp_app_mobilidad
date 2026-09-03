@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_delivery_validation.dart';
 
@@ -31,7 +32,7 @@ class RuteroDetailTabBar extends StatelessWidget {
       ),
       child: TabBar(
         controller: tabController,
-        dividerColor: Colors.transparent,
+        dividerColor: AppColors.transparent,
         indicatorSize: TabBarIndicatorSize.tab,
         indicator: BoxDecoration(
           color: AppTheme.info.withValues(alpha: 0.14),
@@ -86,7 +87,7 @@ class _TabIcon extends StatelessWidget {
     return Badge(
       isLabelVisible: errorCount > 0,
       backgroundColor: AppTheme.error,
-      textColor: Colors.white,
+      textColor: AppColors.themedWhite,
       label: Text('$errorCount'),
       child: Icon(
         icon,
@@ -317,7 +318,7 @@ class _RuteroErrorSpotlightState extends State<RuteroErrorSpotlight>
                     color: AppTheme.error,
                     width: 2.5 + (1.5 * t),
                   )
-                : Border.all(color: Colors.transparent, width: 0),
+                : Border.all(color: AppColors.transparent, width: 0),
             boxShadow: widget.active
                 ? [
                     BoxShadow(

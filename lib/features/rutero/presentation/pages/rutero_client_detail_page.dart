@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
@@ -119,8 +120,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             ),
             Text(
               'Código: ${widget.clientCode}',
-              style:
-                  TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -362,8 +362,8 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 ),
                 child: Text(
                   badgeText,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppColors.themedWhite,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -433,7 +433,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                     rodIndex == 0 ? month['currentYear'] : month['lastYear'];
                 return BarTooltipItem(
                   '${rodIndex == 0 ? _selectedYear : _selectedYear - 1}\n${CurrencyFormatter.formatWhole((value as num?)?.toDouble() ?? 0)}',
-                  const TextStyle(color: Colors.white, fontSize: 11),
+                  TextStyle(color: AppColors.themedWhite, fontSize: 11),
                 );
               },
             ),
@@ -696,7 +696,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
         border: Border.all(
           color: isFrequent
               ? AppTheme.success.withValues(alpha: 0.3)
-              : Colors.transparent,
+              : AppColors.transparent,
         ),
       ),
       child: Row(

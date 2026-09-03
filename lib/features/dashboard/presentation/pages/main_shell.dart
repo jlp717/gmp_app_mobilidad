@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -288,7 +289,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.success,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.themedWhite,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(
@@ -353,7 +354,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   Future<void> _showLogoutConfirmation(AuthState authState) async {
     final shouldLogout = await showDialog<bool>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.56),
+      barrierColor: AppColors.systemBlack.withValues(alpha: 0.56),
       builder: (context) => _LogoutConfirmationDialog(
         userName: authState.user?.name ?? 'Usuario',
       ),
@@ -608,7 +609,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         hasOverflow ? navItems.sublist(0, maxBottomItems - 1) : navItems;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       drawer: _buildPhoneDrawer(user, isJefeVentas),
       body: DecoratedBox(
         decoration: AppTheme.appBackground(),
@@ -626,7 +627,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.42),
+              color: AppColors.systemBlack.withValues(alpha: 0.42),
               blurRadius: 24,
               offset: const Offset(0, -10),
             ),
@@ -721,12 +722,12 @@ class _MainShellState extends ConsumerState<MainShell> {
                   stops: const [0.0, 0.58, 1.0],
                 )
               : null,
-          color: isSelected ? null : Colors.transparent,
+          color: isSelected ? null : AppColors.transparent,
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           border: Border.all(
             color: isSelected
                 ? item.color.withValues(alpha: 0.48)
-                : Colors.transparent,
+                : AppColors.transparent,
           ),
           boxShadow: isSelected
               ? [
@@ -745,7 +746,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               width: 20,
               height: 2,
               decoration: BoxDecoration(
-                color: isSelected ? item.color : Colors.transparent,
+                color: isSelected ? item.color : AppColors.transparent,
                 boxShadow: isSelected
                     ? [
                         BoxShadow(
@@ -960,7 +961,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final sidebarW = Responsive.sidebarWidth(context);
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       body: DecoratedBox(
         decoration: AppTheme.appBackground(),
         child: SafeArea(
@@ -983,7 +984,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.40),
+                              color:
+                                  AppColors.systemBlack.withValues(alpha: 0.40),
                               blurRadius: 24,
                               offset: const Offset(10, 0),
                             ),
@@ -1469,11 +1471,11 @@ class _MainShellState extends ConsumerState<MainShell> {
                   stops: const [0.0, 0.60, 1.0],
                 )
               : null,
-          color: isSelected ? null : Colors.transparent,
+          color: isSelected ? null : AppColors.transparent,
           border: Border.all(
             color: isSelected
                 ? item.color.withValues(alpha: 0.48)
-                : Colors.transparent,
+                : AppColors.transparent,
           ),
           boxShadow: isSelected
               ? [
@@ -2226,7 +2228,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
     final titleFs = Responsive.fontSize(context, small: 18, large: 22);
 
     return Dialog(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       child: Container(
         width: dw,
         padding: EdgeInsets.all(dp),
@@ -2238,7 +2240,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.34),
+              color: AppColors.systemBlack.withValues(alpha: 0.34),
               blurRadius: 24,
               offset: const Offset(0, 14),
             ),
@@ -2326,25 +2328,25 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                       color: AppTheme.error,
                     ),
                     child: Material(
-                      color: Colors.transparent,
+                      color: AppColors.transparent,
                       child: InkWell(
                         onTap: () => Navigator.pop(context, true),
                         borderRadius: BorderRadius.circular(14),
-                        child: const Padding(
+                        child: Padding(
                           padding: EdgeInsets.symmetric(vertical: 14),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
                                 Icons.logout_rounded,
-                                color: Colors.white,
+                                color: AppColors.themedWhite,
                                 size: 18,
                               ),
                               SizedBox(width: 8),
                               Text(
                                 'Salir',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: AppColors.themedWhite,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),

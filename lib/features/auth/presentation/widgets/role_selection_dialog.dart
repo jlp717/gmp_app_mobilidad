@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -23,7 +24,7 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
     final dialogWidth = Responsive.clampWidth(context, 440);
 
     return Dialog(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       insetPadding: EdgeInsets.symmetric(
         horizontal: isSmall ? 16 : 40,
         vertical: isSmall ? 12 : 24,
@@ -34,10 +35,11 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
         decoration: BoxDecoration(
           color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border:
+              Border.all(color: AppColors.themedWhite.withValues(alpha: 0.08)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
+              color: AppColors.systemBlack.withValues(alpha: 0.4),
               blurRadius: 40,
               offset: const Offset(0, 20),
             ),
@@ -57,9 +59,9 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
                       color: AppTheme.info,
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.account_circle_rounded,
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       size: 22,
                     ),
                   ),
@@ -71,7 +73,7 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
                         Text(
                           'Selecciona tu Rol Activo',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: AppColors.themedWhite,
                             fontSize: isSmall ? 17 : 20,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0,
@@ -81,7 +83,7 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
                         Text(
                           'Como Jefe, puedes operar en diferentes perfiles',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.4),
+                            color: AppColors.themedWhite.withValues(alpha: 0.4),
                             fontSize: 12,
                           ),
                         ),
@@ -136,16 +138,16 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
                         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                       ),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Cancelar',
-                      style: TextStyle(color: Colors.white38),
+                      style: TextStyle(color: AppColors.themedWhite38),
                     ),
                   ),
                   const SizedBox(width: 10),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.info,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.themedWhite,
                       padding: EdgeInsets.symmetric(
                         horizontal: isSmall ? 20 : 28,
                         vertical: isSmall ? 10 : 14,
@@ -202,7 +204,7 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
           border: Border.all(
             color: isSelected
                 ? color.withValues(alpha: 0.3)
-                : Colors.white.withValues(alpha: 0.06),
+                : AppColors.themedWhite.withValues(alpha: 0.06),
             width: isSelected ? 1.5 : 1,
           ),
           boxShadow: isSelected
@@ -220,13 +222,15 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: (isSelected ? color : Colors.white)
+                color: (isSelected ? color : AppColors.themedWhite)
                     .withValues(alpha: isSelected ? 0.15 : 0.06),
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               ),
               child: Icon(
                 icon,
-                color: isSelected ? color : Colors.white.withValues(alpha: 0.3),
+                color: isSelected
+                    ? color
+                    : AppColors.themedWhite.withValues(alpha: 0.3),
                 size: 22,
               ),
             ),
@@ -235,8 +239,8 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
               label,
               style: TextStyle(
                 color: isSelected
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.5),
+                    ? AppColors.themedWhite
+                    : AppColors.themedWhite.withValues(alpha: 0.5),
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                 fontSize: 15,
               ),

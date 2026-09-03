@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -285,7 +286,7 @@ class RuteroDetailPayment extends StatelessWidget {
                 ),
               ),
               child: isPaid
-                  ? const Icon(Icons.check, color: Colors.white, size: 18)
+                  ? Icon(Icons.check, color: AppColors.themedWhite, size: 18)
                   : null,
             ),
             const SizedBox(width: 14),
@@ -371,7 +372,7 @@ class RuteroDetailPayment extends StatelessWidget {
       label: const Text('CONTINUAR A FINALIZAR'),
       style: ElevatedButton.styleFrom(
         backgroundColor: AppTheme.info,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.themedWhite,
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),

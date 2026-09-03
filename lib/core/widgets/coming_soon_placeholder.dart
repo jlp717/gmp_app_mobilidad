@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -48,7 +49,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
                         colors: [
                           accentColor.withValues(alpha: 0.15),
                           accentColor.withValues(alpha: 0.04),
-                          Colors.transparent,
+                          AppColors.transparent,
                         ],
                         stops: const [0.3, 0.7, 1.0],
                       ),
@@ -101,7 +102,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
                     fontSize:
                         Responsive.fontSize(context, small: 20, large: 26),
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                     letterSpacing: 0,
                   ),
                   textAlign: TextAlign.center,

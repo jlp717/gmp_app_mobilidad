@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -106,7 +107,7 @@ class _ProductCardState extends State<ProductCard> {
           : AppTheme.softPanel,
       elevation: inCart ? 2 : 0,
       shadowColor: AppTheme.success.withValues(alpha: 0.12),
-      surfaceTintColor: Colors.transparent,
+      surfaceTintColor: AppColors.transparent,
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -542,7 +543,7 @@ class _ProductCardState extends State<ProductCard> {
                 Tooltip(
                   message: 'Añadir al carrito',
                   child: Material(
-                    color: Colors.transparent,
+                    color: AppColors.transparent,
                     child: InkWell(
                       onTap: widget.onQuickAdd,
                       borderRadius: BorderRadius.circular(AppTheme.radiusFull),

@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -94,7 +95,7 @@ class _RecommendationsSectionState
                 const Spacer(),
                 Icon(
                   _isExpanded ? Icons.expand_less : Icons.expand_more,
-                  color: Colors.white38,
+                  color: AppColors.themedWhite38,
                   size: 20,
                 ),
               ],
@@ -145,12 +146,12 @@ class _RecommendationsSectionState
           ),
           child: Row(
             children: [
-              Icon(icon, color: Colors.white54, size: 14),
+              Icon(icon, color: AppColors.themedWhite54, size: 14),
               const SizedBox(width: 4),
               Text(
                 title,
                 style: TextStyle(
-                  color: Colors.white54,
+                  color: AppColors.themedWhite54,
                   fontWeight: FontWeight.w500,
                   fontSize: Responsive.fontSize(context, small: 11, large: 12),
                 ),
@@ -233,7 +234,7 @@ class _RecommendationsSectionState
             Text(
               item.name,
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontWeight: FontWeight.w500,
                 fontSize: Responsive.fontSize(context, small: 10, large: 11),
               ),

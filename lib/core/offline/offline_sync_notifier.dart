@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_audit_log.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -64,7 +65,7 @@ class OfflineSyncNotifier {
   static void orderQueued({required String clientName}) {
     _show(
       'Pedido guardado localmente para $clientName. Se enviara al recuperar conexion.',
-      backgroundColor: Colors.orange.shade700,
+      backgroundColor: AppColors.systemOrange700,
     );
   }
 
@@ -91,7 +92,7 @@ class OfflineSyncNotifier {
   static void deliveryQueued() {
     _show(
       'Entrega pendiente de sincronizar. No se contabilizara hasta que el servidor la confirme.',
-      backgroundColor: Colors.orange.shade700,
+      backgroundColor: AppColors.systemOrange700,
     );
   }
 
@@ -146,7 +147,7 @@ class OfflineSyncNotifier {
     final color = failed > 0
         ? AppTheme.error
         : pending > 0
-            ? Colors.orange.shade700
+            ? AppColors.systemOrange700
             : AppTheme.success;
 
     _show(

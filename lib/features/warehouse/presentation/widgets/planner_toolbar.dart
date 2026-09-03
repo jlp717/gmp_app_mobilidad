@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -225,7 +226,7 @@ class _PillSegmented<T> extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isActive
                     ? AppTheme.info.withValues(alpha: 0.14)
-                    : Colors.transparent,
+                    : AppColors.transparent,
                 borderRadius: BorderRadius.circular(7),
                 border: isActive
                     ? Border.all(

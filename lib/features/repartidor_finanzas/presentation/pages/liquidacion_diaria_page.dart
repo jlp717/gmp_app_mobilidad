@@ -1166,7 +1166,7 @@ class _CobrosPreview extends ConsumerWidget {
     // Req #16: bottomSheet con detalle del cobro del día.
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       isScrollControlled: true,
       builder: (sheetCtx) {
         return RepartidorExecutiveSheet(
@@ -1421,7 +1421,7 @@ class _CobrosPreview extends ConsumerWidget {
         children: [
           for (final cobro in cobros.take(8))
             Material(
-              color: Colors.transparent,
+              color: AppColors.transparent,
               child: InkWell(
                 onTap: () => _showCobroDetail(context, ref, cobro),
                 child: Container(
@@ -1698,8 +1698,8 @@ class _LiquidacionCorporateHeader extends StatelessWidget {
   final DateTime date;
   final VoidCallback? onBack;
 
-  static const _navy = Color(0xFF003D7A);
-  static const _green = Color(0xFF00A878);
+  static const _navy = AppColors.legacyFF003D7A;
+  static const _green = AppColors.forest;
 
   @override
   Widget build(BuildContext context) {
@@ -1710,7 +1710,7 @@ class _LiquidacionCorporateHeader extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [_navy, Color(0xFF1A5490)],
+          colors: [_navy, AppColors.legacyFF1A5490],
         ),
         border: Border(
           bottom: BorderSide(color: _green, width: 3),
@@ -1728,17 +1728,17 @@ class _LiquidacionCorporateHeader extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
                     onPressed: onBack,
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    label: const Text(
+                    icon: Icon(Icons.arrow_back, color: AppColors.themedWhite),
+                    label: Text(
                       'Volver',
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(color: AppColors.themedWhite),
                     ),
                   ),
                 ),
               Text(
                 'Liquidación Diaria',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       fontWeight: FontWeight.w800,
                     ),
               ),
@@ -1746,7 +1746,7 @@ class _LiquidacionCorporateHeader extends StatelessWidget {
               Text(
                 gmpRef,
                 style: const TextStyle(
-                  color: Color(0xFFD7ECFF),
+                  color: AppColors.legacyFFD7ECFF,
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                 ),
@@ -1779,7 +1779,7 @@ class _MetaLine extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 2),
       child: RichText(
         text: TextSpan(
-          style: const TextStyle(color: Color(0xFF9EC5EA), fontSize: 12),
+          style: const TextStyle(color: AppColors.legacyFF9EC5EA, fontSize: 12),
           children: [
             TextSpan(
               text: '$label: ',
@@ -1787,7 +1787,7 @@ class _MetaLine extends StatelessWidget {
             ),
             TextSpan(
               text: value,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: AppColors.themedWhite),
             ),
           ],
         ),
@@ -1811,7 +1811,7 @@ class _TreasuryLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = emphasized ? const Color(0xFF067A58) : AppColors.info;
+    final accent = emphasized ? AppColors.legacyFF067A58 : AppColors.info;
     return RepartidorExecutivePanel(
       accentColor: accent,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

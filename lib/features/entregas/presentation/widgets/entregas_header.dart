@@ -10,11 +10,22 @@ class EntregasHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(entregasProvider);
-    final total = state.albaranes.length;
-    final entregados = state.totalEntregados;
-    final pendientes = state.totalPendientes;
-    final importeCTR = state.importeTotalCTR;
+    final header = ref.watch(
+      entregasProvider.select(
+        (state) => (
+          albaranes: state.albaranes.length,
+          entregados: state.totalEntregados,
+          pendientes: state.totalPendientes,
+          importeCTR: state.importeTotalCTR,
+          fecha: state.fechaSeleccionada,
+          progreso: state.progresoTotal,
+        ),
+      ),
+    );
+    final total = header.albaranes;
+    final entregados = header.entregados;
+    final pendientes = header.pendientes;
+    final importeCTR = header.importeCTR;
 
     return Container(
       padding:
@@ -53,7 +64,7 @@ class EntregasHeader extends ConsumerWidget {
                       onTap: () async {
                         final fecha = await showDatePicker(
                           context: context,
-                          initialDate: state.fechaSeleccionada,
+                          initialDate: header.fecha,
                           firstDate: DateTime(2024),
                           lastDate: DateTime(2030),
                           builder: (context, child) {
@@ -77,7 +88,7 @@ class EntregasHeader extends ConsumerWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            _formatFecha(state.fechaSeleccionada),
+                            _formatFecha(header.fecha),
                             style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 14,
@@ -162,7 +173,7 @@ class EntregasHeader extends ConsumerWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: LinearProgressIndicator(
-                    value: state.progresoTotal,
+                    value: header.progreso,
                     backgroundColor: AppTheme.softPanel,
                     valueColor: const AlwaysStoppedAnimation(AppTheme.info),
                     minHeight: 8,

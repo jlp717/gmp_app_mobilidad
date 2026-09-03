@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Local presentation primitives for the warehouse profile.
@@ -7,9 +8,9 @@ class WarehouseUi {
 
   /// Dark executive background shared by warehouse screens.
   static const List<Color> executiveGradient = [
-    Color(0xFF07111F),
-    Color(0xFF111927),
-    Color(0xFF172033),
+    AppColors.legacyFF07111F,
+    AppColors.legacyFF111927,
+    AppColors.legacyFF172033,
   ];
 
   /// Full-page dark gradient background for warehouse views.

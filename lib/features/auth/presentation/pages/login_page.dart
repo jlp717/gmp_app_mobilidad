@@ -687,8 +687,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color:
-                isFocused ? AppTheme.info : AppTheme.textPrimary.withValues(alpha: 0.4),
+            color: isFocused
+                ? AppTheme.info
+                : AppTheme.textPrimary.withValues(alpha: 0.4),
             letterSpacing: 0,
           ),
           child: Text(label),
@@ -705,7 +706,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   : AppTheme.textPrimary.withValues(alpha: 0.06),
               width: isFocused ? 1.5 : 1,
             ),
-            color: AppTheme.textPrimary.withValues(alpha: isFocused ? 0.06 : 0.03),
+            color:
+                AppTheme.textPrimary.withValues(alpha: isFocused ? 0.06 : 0.03),
             boxShadow: isFocused
                 ? [
                     BoxShadow(
@@ -726,7 +728,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             style: TextStyle(fontSize: 14, color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(color: AppTheme.textPrimary.withValues(alpha: 0.2)),
+              hintStyle:
+                  TextStyle(color: AppTheme.textPrimary.withValues(alpha: 0.2)),
               prefixIcon: Icon(
                 icon,
                 size: 18,

@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -44,27 +45,27 @@ class _DraftsBody extends StatelessWidget {
           Text(
             'Borradores guardados',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.themedWhite,
               fontSize: Responsive.fontSize(context, small: 16, large: 18),
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 12),
           if (drafts.isEmpty)
-            const Center(
+            Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
                 child: Column(
                   children: [
                     Icon(
                       Icons.description_outlined,
-                      color: Colors.white38,
+                      color: AppColors.themedWhite38,
                       size: 48,
                     ),
                     SizedBox(height: 8),
                     Text(
                       'No hay borradores guardados',
-                      style: TextStyle(color: Colors.white54),
+                      style: TextStyle(color: AppColors.themedWhite54),
                     ),
                   ],
                 ),
@@ -89,14 +90,15 @@ class _DraftsBody extends StatelessWidget {
                   ),
                   title: Text(
                     client.toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: AppColors.themedWhite,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   subtitle: Text(
                     '$lines lineas - $savedAtLabel',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    style:
+                        TextStyle(color: AppColors.themedWhite54, fontSize: 12),
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,

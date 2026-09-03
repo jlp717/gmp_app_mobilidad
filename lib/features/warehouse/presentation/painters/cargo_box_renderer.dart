@@ -11,6 +11,7 @@ library;
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
 
@@ -78,11 +79,11 @@ class CargoBoxRenderer {
       labelPos,
       '${overflow.length} bultos sin espacio (${totalOverflowKg.toStringAsFixed(0)} kg)',
       const TextStyle(
-        color: Color(0xFFFF6B6B),
+        color: AppColors.legacyFFFF6B6B,
         fontSize: 11,
         fontWeight: FontWeight.bold,
       ),
-      bgColor: const Color(0xCC1A1A2E),
+      bgColor: AppColors.legacyCC1A1A2E,
     );
 
     // Render overflow boxes stacked neatly in front of truck
@@ -112,11 +113,11 @@ class CargoBoxRenderer {
         morePos,
         '+${overflow.length - maxShow} mas',
         const TextStyle(
-          color: Color(0xFFFF8C8C),
+          color: AppColors.legacyFFFF8C8C,
           fontSize: 9,
           fontWeight: FontWeight.w600,
         ),
-        bgColor: const Color(0xAA1A1A2E),
+        bgColor: AppColors.legacyAA1A1A2E,
       );
     }
   }
@@ -148,7 +149,7 @@ class CargoBoxRenderer {
 
   void _renderShadows(Canvas canvas, List<PlacedBox> sorted) {
     final shadowPaint = Paint()
-      ..color = const Color(0x18000000)
+      ..color = AppColors.legacy18000000
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
 
     for (final b in sorted) {
@@ -225,8 +226,8 @@ class CargoBoxRenderer {
 
     if (!isTiny) {
       final edgeColor = isSelected
-          ? Colors.white.withValues(alpha: 0.9)
-          : Colors.white.withValues(alpha: 0.3);
+          ? AppColors.themedWhite.withValues(alpha: 0.9)
+          : AppColors.themedWhite.withValues(alpha: 0.3);
       final edgeWidth = isSelected ? 2.5 : 1.2;
 
       // Top face edges (most visible)
@@ -255,7 +256,7 @@ class CargoBoxRenderer {
 
       // Inner bright outline
       final innerPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.5 + glow * 0.2)
+        ..color = AppColors.themedWhite.withValues(alpha: 0.5 + glow * 0.2)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
       canvas.drawPath(PolyHelper.pathOf(topPts), innerPaint);
@@ -284,7 +285,7 @@ class CargoBoxRenderer {
           text: TextSpan(
             text: code,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
+              color: AppColors.themedWhite.withValues(alpha: 0.45),
               fontSize: math.min(faceW * 0.18, 9).toDouble(),
               fontWeight: FontWeight.w600,
               letterSpacing: 0,
@@ -353,7 +354,7 @@ class CargoBoxRenderer {
         letterSpacing: 0,
       ),
       bgColor: boxColor.withValues(alpha: 0.85),
-      borderColor: isSelected ? Colors.white : null,
+      borderColor: isSelected ? AppColors.themedWhite : null,
     );
 
     // Weight badge (only for larger boxes)
@@ -365,12 +366,12 @@ class CargoBoxRenderer {
         canvas,
         Offset(center.dx, center.dy + 9),
         weightText,
-        const TextStyle(
-          color: Colors.white,
+        TextStyle(
+          color: AppColors.themedWhite,
           fontSize: 7,
           fontWeight: FontWeight.w500,
         ),
-        bgColor: const Color(0xAA000000),
+        bgColor: AppColors.legacyAA000000,
       );
     }
 
@@ -383,12 +384,12 @@ class CargoBoxRenderer {
         canvas,
         Offset(center.dx, center.dy + 20),
         eurText,
-        const TextStyle(
-          color: Colors.white,
+        TextStyle(
+          color: AppColors.themedWhite,
           fontSize: 7,
           fontWeight: FontWeight.w500,
         ),
-        bgColor: const Color(0xAA1B5E20),
+        bgColor: AppColors.legacyAA1B5E20,
       );
     }
 
@@ -403,11 +404,11 @@ class CargoBoxRenderer {
         Offset(orderPos.dx, orderPos.dy + 8),
         '#${b.orderNumber}',
         const TextStyle(
-          color: Color(0xCCFFFFFF),
+          color: AppColors.legacyCCFFFFFF,
           fontSize: 6,
           fontWeight: FontWeight.w500,
         ),
-        bgColor: const Color(0x80000000),
+        bgColor: AppColors.legacy80000000,
       );
     }
   }
@@ -418,7 +419,7 @@ class CargoBoxRenderer {
     Offset center,
     String text,
     TextStyle style, {
-    Color bgColor = const Color(0xCC000000),
+    Color bgColor = AppColors.legacyCC000000,
     Color? borderColor,
   }) {
     final tp = TextPainter(
@@ -461,7 +462,7 @@ class CargoBoxRenderer {
   /// Choose white or dark text based on background brightness
   Color _textColorForBg(Color bg) {
     final luminance = bg.computeLuminance();
-    return luminance > 0.45 ? const Color(0xFF1A1A2E) : Colors.white;
+    return luminance > 0.45 ? AppColors.legacyFF1A1A2E : AppColors.themedWhite;
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -500,7 +501,7 @@ class CargoBoxRenderer {
       text: TextSpan(
         text: label,
         style: TextStyle(
-          color: Colors.white,
+          color: AppColors.themedWhite,
           fontSize: math.min(r * 1.1, 8).toDouble(),
           fontWeight: FontWeight.w900,
         ),
@@ -524,7 +525,7 @@ class CargoBoxRenderer {
     double by,
     double bz,
   ) {
-    const color = Color(0xFFFF6B6B);
+    const color = AppColors.legacyFFFF6B6B;
     final corners = proj.projectBox(bx, by, bz, b.w, b.d, b.h, size);
 
     // Top
@@ -540,8 +541,8 @@ class CargoBoxRenderer {
     PolyHelper.fillFaceSolid(canvas, rightPts, color, 0.45, 0.4);
 
     // Red outline
-    PolyHelper.strokeFace(canvas, topPts, const Color(0xFFFF4444), 1.5);
-    PolyHelper.strokeFace(canvas, frontPts, const Color(0xFFFF4444), 1);
+    PolyHelper.strokeFace(canvas, topPts, AppColors.legacyFFFF4444, 1.5);
+    PolyHelper.strokeFace(canvas, frontPts, AppColors.legacyFFFF4444, 1);
 
     // Label
     _drawBoxLabel(canvas, topPts, b, color, true);
@@ -570,8 +571,8 @@ class CargoBoxRenderer {
       final tp = TextPainter(
         text: TextSpan(
           text: line,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppColors.themedWhite,
             fontSize: 10,
             fontWeight: FontWeight.w500,
             height: 1.3,
@@ -590,7 +591,7 @@ class CargoBoxRenderer {
         ),
         const Radius.circular(6),
       );
-      canvas.drawRRect(rect, Paint()..color = const Color(0xCC1A202C));
+      canvas.drawRRect(rect, Paint()..color = AppColors.legacyCC1A202C);
 
       tp.paint(canvas, Offset(pos.dx - tp.width - 8, yOffset + 4));
       yOffset += tp.height + 14;

@@ -789,8 +789,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             const SizedBox(height: 16),
             Text(
               'Sin clientes para ${_weekdayFullLabels[_selectedDay]}',
-              style:
-                  TextStyle(fontSize: 16, color: AppTheme.textSecondary),
+              style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 8),
             Text(
@@ -887,7 +886,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               'Sin clientes con alertas',
               style: TextStyle(
                 fontSize: 18,
-                color: Colors.white.withValues(alpha: 0.9),
+                color: AppColors.themedWhite.withValues(alpha: 0.9),
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -897,8 +896,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                   ? 'Este día no tiene alertas detectadas'
                   : 'No hay alertas de tipo\n"${KpiAlertsService.instance.getKpiAlertTypeName(_selectedAlertType)}"',
               textAlign: TextAlign.center,
-              style:
-                  TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+              style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 24),
             TextButton.icon(
@@ -1891,7 +1889,8 @@ class _ReorderDialogState extends State<ReorderDialog> {
                           key: ValueKey(item['code']),
                           decoration: const BoxDecoration(
                             border: Border(
-                              bottom: BorderSide(color: Colors.black12),
+                              bottom:
+                                  BorderSide(color: AppColors.systemBlack12),
                             ),
                           ),
                           child: ListTile(

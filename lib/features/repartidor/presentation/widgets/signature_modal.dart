@@ -6,6 +6,7 @@ library;
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
@@ -36,7 +37,7 @@ class SignatureModal extends StatefulWidget {
     return showModalBottomSheet<String?>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (ctx) => SignatureModal(title: title, subtitle: subtitle),
     );
   }
@@ -53,7 +54,7 @@ class _SignatureModalState extends State<SignatureModal> {
   void initState() {
     super.initState();
     _controller = SignatureController(
-      exportBackgroundColor: Colors.white,
+      exportBackgroundColor: AppColors.themedWhite,
     );
 
     _controller.addListener(() {
@@ -191,7 +192,7 @@ class _SignatureModalState extends State<SignatureModal> {
                     // Signature pad
                     Signature(
                       controller: _controller,
-                      backgroundColor: Colors.white,
+                      backgroundColor: AppColors.themedWhite,
                     ),
 
                     // Placeholder text when empty
@@ -266,7 +267,7 @@ class _SignatureModalState extends State<SignatureModal> {
                           _isEmpty ? AppTheme.softPanel : AppTheme.success,
                       disabledBackgroundColor: AppTheme.softPanel,
                       disabledForegroundColor: AppTheme.textTertiary,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.themedWhite,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppTheme.radiusMd),

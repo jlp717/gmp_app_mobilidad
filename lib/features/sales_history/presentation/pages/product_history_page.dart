@@ -583,7 +583,8 @@ class _ProductCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     'Cód: ${item.productCode}',
-                    style: TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+                    style:
+                        TextStyle(color: AppTheme.textTertiary, fontSize: 11),
                   ),
                   const SizedBox(height: 6),
                   // Info row: client, invoice, date
@@ -821,7 +822,8 @@ class _ValueTag extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: TextStyle(color: AppTheme.textTertiary, fontSize: 9)),
+        Text(label,
+            style: TextStyle(color: AppTheme.textTertiary, fontSize: 9)),
         Text(
           value,
           style: TextStyle(

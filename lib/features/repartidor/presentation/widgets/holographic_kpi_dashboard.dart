@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -462,9 +463,9 @@ class _HoloRingPainter extends CustomPainter {
         startAngle: scannerAngle - 0.3,
         endAngle: scannerAngle + 0.3,
         colors: [
-          Colors.transparent,
+          AppColors.transparent,
           glowColor.withValues(alpha: 0.16),
-          Colors.transparent,
+          AppColors.transparent,
         ],
         stops: const [0.0, 0.5, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: radius))

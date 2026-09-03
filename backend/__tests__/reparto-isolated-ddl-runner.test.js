@@ -9,7 +9,7 @@ const runner = require('../scripts/reparto-isolated-ddl-runner');
 const sqlDirectory = path.join(__dirname, '..', 'scripts', 'sql');
 
 function sourceFor(entry) {
-  return fs.readFileSync(path.join(sqlDirectory, entry.file), 'utf8');
+  return fs.readFileSync(path.join(sqlDirectory, entry.file), 'utf8').replace(/\r\n/g, '\n');
 }
 
 function exactInventory(entry) {
@@ -168,7 +168,7 @@ describe('reparto isolated DDL pinned contract', () => {
       statementCount: 20,
     });
     expect(manifest.verifier).toMatchObject({
-      sha256: 'AB5CFF817C7E0E9D88A421885170B693C08DC032BC76CFEA5DC608C9911A8520',
+      sha256: 'D32B22A9533819DACA4D99CB32DA8FA64CC7D11BFF9FEC86CE1F3DC685792B99',
       statementCount: 9,
     });
     for (const entry of [...Object.values(manifest.migrations), manifest.verifier]) {

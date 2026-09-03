@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/features/authentication/domain/entities/user.dart';
@@ -46,7 +47,7 @@ class DashboardHeader extends StatelessWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.18),
+                  color: AppColors.systemBlack.withValues(alpha: 0.18),
                   blurRadius: 8,
                   offset: const Offset(0, 3),
                 ),

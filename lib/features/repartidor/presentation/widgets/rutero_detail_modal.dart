@@ -219,7 +219,7 @@ SnackBar repartoConfirmationErrorSnackBar({
   return SnackBar(
     content: Row(
       children: <Widget>[
-        const Icon(Icons.error_outline, color: Colors.white),
+        Icon(Icons.error_outline, color: AppColors.themedWhite),
         const SizedBox(width: 12),
         Expanded(child: Text(presentation.message)),
       ],
@@ -281,7 +281,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   final _finalizeScrollController = ScrollController();
 
   final SignatureController _signatureController = SignatureController(
-    exportBackgroundColor: Colors.white,
+    exportBackgroundColor: AppColors.themedWhite,
   );
 
   final Map<String, bool> _productChecked = {};
@@ -820,7 +820,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             const Positioned.fill(
               child: ModalBarrier(
                 dismissible: false,
-                color: Colors.black54,
+                color: AppColors.systemBlack54,
               ),
             ),
             Positioned.fill(child: _buildSubmissionOverlay()),
@@ -1341,6 +1341,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                 fit: BoxFit.cover,
                                 width: 104,
                                 height: 104,
+                                cacheWidth: (104 *
+                                        MediaQuery.devicePixelRatioOf(context))
+                                    .round(),
+                                cacheHeight: (104 *
+                                        MediaQuery.devicePixelRatioOf(context))
+                                    .round(),
                                 errorBuilder: (_, __, ___) => ColoredBox(
                                   color: AppTheme.softPanel,
                                   child: Icon(
@@ -1366,7 +1372,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                           icon: const Icon(Icons.close, size: 18),
                           style: IconButton.styleFrom(
                             backgroundColor: AppTheme.error,
-                            foregroundColor: Colors.white,
+                            foregroundColor: AppColors.themedWhite,
                             minimumSize: const Size(48, 48),
                           ),
                         ),
@@ -1427,6 +1433,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             child: Image.file(
               File(photo.path),
               fit: BoxFit.contain,
+              cacheWidth: 1600,
               errorBuilder: (_, __, ___) => const SizedBox(
                 height: 180,
                 child: Center(child: Text('No se pudo mostrar la foto')),
@@ -1635,7 +1642,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 borderRadius: BorderRadius.circular(AppTheme.radiusLg),
                 child: Signature(
                   controller: _signatureController,
-                  backgroundColor: Colors.white,
+                  backgroundColor: AppColors.themedWhite,
                 ),
               ),
             ),
@@ -1654,22 +1661,22 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       onPressed: _isSubmitting ? null : _submitDelivery,
       style: ElevatedButton.styleFrom(
         backgroundColor: noEntrega ? AppTheme.warning : AppTheme.success,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.themedWhite,
         disabledBackgroundColor:
             noEntrega ? AppTheme.warning : AppTheme.success,
-        disabledForegroundColor: Colors.white,
+        disabledForegroundColor: AppColors.themedWhite,
         padding: const EdgeInsets.symmetric(vertical: 18),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         ),
       ),
       child: _isSubmitting
-          ? const SizedBox(
+          ? SizedBox(
               height: 24,
               width: 24,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Colors.white,
+                color: AppColors.themedWhite,
               ),
             )
           : Row(
@@ -1799,7 +1806,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.info,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.themedWhite,
             ),
             child: const Text('ACEPTAR'),
           ),
@@ -1877,7 +1884,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       await navigator.push<void>(
         MaterialPageRoute<void>(
           builder: (_) => Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: AppColors.themedWhite,
             appBar: AppBar(
               title: Text(
                 'Ficha - ${linea.codigoArticulo.trim()}',
@@ -2487,8 +2494,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               noEntrega
                   ? 'Se registrará como no entregado sin cobro ni firma.'
                   : '¿Está seguro de confirmar esta entrega?',
-              style:
-                  TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             ),
             const SizedBox(height: 16),
             Container(
@@ -2604,7 +2610,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: noEntrega ? AppTheme.warning : AppTheme.success,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.themedWhite,
             ),
             child: Text(noEntrega ? 'REGISTRAR' : 'CONFIRMAR'),
           ),
@@ -2763,9 +2769,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         Navigator.pop(context);
         messenger.showSnackBar(
           SnackBar(
-            content: const Row(
+            content: Row(
               children: <Widget>[
-                Icon(Icons.cloud_upload_outlined, color: Colors.white),
+                Icon(Icons.cloud_upload_outlined, color: AppColors.themedWhite),
                 SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -2774,7 +2780,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 ),
               ],
             ),
-            backgroundColor: Colors.orange.shade700,
+            backgroundColor: AppColors.systemOrange700,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -2842,7 +2848,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 exceptionSnack
                     ? Icons.warning_amber_rounded
                     : Icons.check_circle,
-                color: Colors.white,
+                color: AppColors.themedWhite,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2917,7 +2923,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.info,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.themedWhite,
             ),
             child: const Text('ENTENDIDO'),
           ),
@@ -2942,7 +2948,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.error_outline, color: Colors.white),
+            Icon(Icons.error_outline, color: AppColors.themedWhite),
             const SizedBox(width: 12),
             Expanded(child: Text(message)),
           ],

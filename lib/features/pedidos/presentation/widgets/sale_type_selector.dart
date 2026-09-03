@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -35,9 +36,10 @@ class SaleTypeSelector extends StatelessWidget {
         child: DropdownButton<String>(
           value: value,
           dropdownColor: AppTheme.softPanel,
-          icon: const Icon(Icons.expand_more, color: Colors.white38, size: 18),
+          icon:
+              Icon(Icons.expand_more, color: AppColors.themedWhite38, size: 18),
           style: TextStyle(
-            color: Colors.white,
+            color: AppColors.themedWhite,
             fontSize: Responsive.fontSize(context, small: 12, large: 14),
           ),
           isDense: true,
@@ -47,7 +49,7 @@ class SaleTypeSelector extends StatelessWidget {
               child: Text(
                 opt['label']!,
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontSize: Responsive.fontSize(context, small: 12, large: 14),
                 ),
               ),

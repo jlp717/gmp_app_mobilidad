@@ -113,7 +113,7 @@ describe('perf low-risk contracts', () => {
         test('source uses chunked bulk inserts instead of sequential await per line', () => {
             const fs = require('fs');
             const path = require('path');
-            const source = fs.readFileSync(path.join(__dirname, '../services/pedidos.service.js'), 'utf8');
+            const source = fs.readFileSync(path.join(__dirname, '../services/pedidos/index.js'), 'utf8');
             const start = source.indexOf('async function createOrder');
             const end = source.indexOf('async function getOrders', start);
             expect(start).toBeGreaterThanOrEqual(0);

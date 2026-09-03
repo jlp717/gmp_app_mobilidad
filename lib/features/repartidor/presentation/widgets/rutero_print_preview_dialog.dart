@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
@@ -414,19 +415,19 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
         ElevatedButton.icon(
           onPressed: _isPrinting ? null : _print,
           icon: _isPrinting
-              ? const SizedBox(
+              ? SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                   ),
                 )
               : const Icon(Icons.print),
           label: Text(_isPrinting ? 'Imprimiendo...' : 'Imprimir ticket'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.info,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.themedWhite,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -278,7 +279,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     required VoidCallback onTap,
   }) {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
@@ -429,7 +430,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                         ? AppTheme.info.withValues(alpha: 0.5)
                         : (count > 0
                             ? statusColor.withValues(alpha: 0.3)
-                            : Colors.transparent),
+                            : AppColors.transparent),
                 width: isSelected || isToday ? 2 : 1,
               ),
               boxShadow: isSelected

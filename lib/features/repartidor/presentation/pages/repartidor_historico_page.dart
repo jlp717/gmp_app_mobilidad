@@ -1332,7 +1332,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   border: Border.all(
                     color: _selectedYear != null
                         ? AppTheme.info.withValues(alpha: 0.5)
-                        : Colors.white.withValues(alpha: 0.1),
+                        : AppColors.themedWhite.withValues(alpha: 0.1),
                   ),
                 ),
                 child: DropdownButtonHideUnderline(
@@ -1469,8 +1469,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 child: OutlinedButton.icon(
                   onPressed: _filterTodayDocuments,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor:
-                        _isTodayFilterActive ? Colors.white : AppTheme.success,
+                    foregroundColor: _isTodayFilterActive
+                        ? AppColors.themedWhite
+                        : AppTheme.success,
                     backgroundColor: _isTodayFilterActive
                         ? AppTheme.success
                         : AppTheme.success.withValues(alpha: 0.12),
@@ -1501,7 +1502,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   border: Border.all(
                     color: _filterDocType != null
                         ? AppTheme.accentIndigo.withValues(alpha: 0.5)
-                        : Colors.white.withValues(alpha: 0.1),
+                        : AppColors.themedWhite.withValues(alpha: 0.1),
                   ),
                 ),
                 child: DropdownButtonHideUnderline(
@@ -1594,7 +1595,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   border: Border.all(
                     color: _filterStatus != null
                         ? _statusColor(_filterStatus).withValues(alpha: 0.5)
-                        : Colors.white.withValues(alpha: 0.1),
+                        : AppColors.themedWhite.withValues(alpha: 0.1),
                   ),
                 ),
                 child: DropdownButtonHideUnderline(
@@ -1790,7 +1791,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     return Container(
       width: 1,
       height: 24,
-      color: Colors.white.withValues(alpha: 0.08),
+      color: AppColors.themedWhite.withValues(alpha: 0.08),
     );
   }
 
@@ -1814,7 +1815,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           border: Border.all(
             color: isActive
                 ? color.withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.1),
+                : AppColors.themedWhite.withValues(alpha: 0.1),
           ),
         ),
         child: Row(
@@ -1866,7 +1867,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           border: Border.all(
             color: isActive
                 ? color.withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.1),
+                : AppColors.themedWhite.withValues(alpha: 0.1),
             width: isActive ? 1.5 : 1,
           ),
         ),
@@ -2003,7 +2004,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
     final isFactura = doc.type == _DocType.factura;
     final documentColor =
-        isFactura ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8);
+        isFactura ? AppColors.legacyFFF59E0B : AppColors.legacyFF38BDF8;
     final documentIcon =
         isFactura ? Icons.receipt_long : Icons.description_outlined;
     final hasAnySignature = doc.hasSignature || doc.hasLegacySignature;
@@ -2288,7 +2289,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (ctx) => RepartidorExecutiveSheet(
         accentColor: isFactura ? AppTheme.accentIndigo : AppTheme.info,
         child: Column(
@@ -2481,7 +2482,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (context) => RepartidorExecutiveSheet(
         accentColor: AppTheme.accentIndigo,
         child: SafeArea(
@@ -2495,7 +2496,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     'Compartir documentos',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: AppColors.themedWhite,
                         ),
                   ),
                 ),
@@ -2520,14 +2521,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     backgroundColor: noteActionAvailable
                         ? AppColors.whatsappGreen
                         : AppTheme.mutedPanel,
-                    child:
-                        const Icon(Icons.chat, color: Colors.white, size: 20),
+                    child: Icon(Icons.chat,
+                        color: AppColors.themedWhite, size: 20),
                   ),
                   title: Text(
                     'WhatsApp · nota de entrega',
                     style: TextStyle(
                       color: noteActionAvailable
-                          ? Colors.white
+                          ? AppColors.themedWhite
                           : AppTheme.textSecondary,
                     ),
                   ),
@@ -2550,9 +2551,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                       backgroundColor: noteActionAvailable
                           ? AppTheme.info
                           : AppTheme.mutedPanel,
-                      child: const Icon(
+                      child: Icon(
                         Icons.email_outlined,
-                        color: Colors.white,
+                        color: AppColors.themedWhite,
                         size: 20,
                       ),
                     ),
@@ -2560,7 +2561,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                       'Email · nota de entrega',
                       style: TextStyle(
                         color: noteActionAvailable
-                            ? Colors.white
+                            ? AppColors.themedWhite
                             : AppTheme.textSecondary,
                       ),
                     ),
@@ -2577,9 +2578,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     backgroundColor: noteActionAvailable
                         ? AppTheme.success
                         : AppTheme.mutedPanel,
-                    child: const Icon(
+                    child: Icon(
                       Icons.download_rounded,
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       size: 20,
                     ),
                   ),
@@ -2587,7 +2588,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     'Guardar · nota de entrega',
                     style: TextStyle(
                       color: noteActionAvailable
-                          ? Colors.white
+                          ? AppColors.themedWhite
                           : AppTheme.textSecondary,
                     ),
                   ),
@@ -2615,13 +2616,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   ),
                 ),
                 ListTile(
-                  leading: const CircleAvatar(
+                  leading: CircleAvatar(
                     backgroundColor: AppColors.whatsappGreen,
-                    child: Icon(Icons.chat, color: Colors.white, size: 20),
+                    child: Icon(Icons.chat,
+                        color: AppColors.themedWhite, size: 20),
                   ),
-                  title: const Text(
+                  title: Text(
                     'WhatsApp · documento comercial',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: AppColors.themedWhite),
                   ),
                   subtitle: const Text('Albarán o factura del ERP'),
                   onTap: () {
@@ -2631,17 +2633,17 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 ),
                 if (widget.canEmailDocuments)
                   ListTile(
-                    leading: const CircleAvatar(
+                    leading: CircleAvatar(
                       backgroundColor: AppTheme.info,
                       child: Icon(
                         Icons.email_outlined,
-                        color: Colors.white,
+                        color: AppColors.themedWhite,
                         size: 20,
                       ),
                     ),
-                    title: const Text(
+                    title: Text(
                       'Email · documento comercial',
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(color: AppColors.themedWhite),
                     ),
                     onTap: () {
                       Navigator.pop(context);
@@ -2649,17 +2651,17 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     },
                   ),
                 ListTile(
-                  leading: const CircleAvatar(
+                  leading: CircleAvatar(
                     backgroundColor: AppTheme.success,
                     child: Icon(
                       Icons.download_rounded,
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       size: 20,
                     ),
                   ),
-                  title: const Text(
+                  title: Text(
                     'Guardar · documento comercial',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: AppColors.themedWhite),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -3747,7 +3749,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       builder: (context, child) => Theme(
         data: ThemeData.dark().copyWith(
           colorScheme: ColorScheme.dark(
-            onPrimary: Colors.white,
+            onPrimary: AppColors.themedWhite,
             surface: AppTheme.raisedSurface,
           ),
         ),
@@ -4162,7 +4164,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: AppColors.themedWhite,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color:
@@ -4177,6 +4179,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                               child: Image.memory(
                                 _signatureBytes!,
                                 fit: BoxFit.contain,
+                                cacheWidth: 900,
                               ),
                             ),
                           ),

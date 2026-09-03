@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -525,7 +526,7 @@ class _RepartidorRuteroReorderModalState
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.transparent,
         elevation: 0,
         title: const Text(
           'Ordenar ruta del día',
@@ -805,7 +806,7 @@ class _RepartidorRuteroReorderModalState
           key: ValueKey(a.id),
           color: selected
               ? AppTheme.info.withValues(alpha: 0.12)
-              : Colors.transparent,
+              : AppColors.transparent,
           child: ListTile(
             onTap: () => _selectStop(a.id),
             leading: CircleAvatar(

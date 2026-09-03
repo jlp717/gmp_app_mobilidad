@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
@@ -49,7 +50,7 @@ class AlbaranCard extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
+              color: AppColors.systemBlack.withValues(alpha: 0.2),
               blurRadius: 14,
               offset: const Offset(0, 6),
             ),
@@ -137,20 +138,21 @@ class AlbaranCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.14),
+                          color: AppColors.systemBlack.withValues(alpha: 0.14),
                           blurRadius: 8,
                         ),
                       ],
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.warning, color: Colors.white, size: 12),
+                        Icon(Icons.warning,
+                            color: AppColors.themedWhite, size: 12),
                         SizedBox(width: 4),
                         Text(
                           'CTR',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: AppColors.themedWhite,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                           ),
@@ -292,7 +294,7 @@ class AlbaranCard extends StatelessWidget {
                           child: LinearProgressIndicator(
                             value: albaran.porcentajeCompletado,
                             backgroundColor:
-                                Colors.white.withValues(alpha: 0.1),
+                                AppColors.themedWhite.withValues(alpha: 0.1),
                             valueColor: AlwaysStoppedAnimation(
                               albaran.completo
                                   ? AppTheme.success
@@ -308,7 +310,7 @@ class AlbaranCard extends StatelessWidget {
                     const SizedBox(width: 16),
                     // Botón de completar rápido
                     Material(
-                      color: Colors.transparent,
+                      color: AppColors.transparent,
                       child: InkWell(
                         onTap: onQuickComplete,
                         borderRadius: BorderRadius.circular(12),
@@ -322,20 +324,22 @@ class AlbaranCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.14),
+                                color: AppColors.systemBlack
+                                    .withValues(alpha: 0.14),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
                             ],
                           ),
-                          child: const Row(
+                          child: Row(
                             children: [
-                              Icon(Icons.check, color: Colors.white, size: 18),
+                              Icon(Icons.check,
+                                  color: AppColors.themedWhite, size: 18),
                               SizedBox(width: 6),
                               Text(
                                 'Completar',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: AppColors.themedWhite,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 12,
                                 ),

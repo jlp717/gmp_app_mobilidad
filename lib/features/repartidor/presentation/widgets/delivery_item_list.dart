@@ -143,8 +143,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
           children: [
             Text(
               '${item.code} - ${item.description}',
-              style:
-                  TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 16),
             TextField(

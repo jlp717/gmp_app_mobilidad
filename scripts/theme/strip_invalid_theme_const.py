@@ -14,7 +14,7 @@ GETTERS = re.compile(
     r"dataHeaderGradient|cardGradient|urgentGradient|successGradient)|"
     r"AppColors\.(textPrimary|textSecondary|textTertiary|darkBase|"
     r"darkSurface|darkCard|borderColor|backgroundColor|surfaceColor|"
-    r"cardColor|surfaceVariant|outlineVariant|inversePrimary))\b"
+    r"cardColor|surfaceVariant|outlineVariant|inversePrimary|themed\w+))\b"
 )
 
 

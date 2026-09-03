@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -54,7 +55,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
         border: Border.all(color: widget.color.withValues(alpha: 0.20)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
+            color: AppColors.systemBlack.withValues(alpha: 0.2),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -86,8 +87,8 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                         };
                         return map[type] ?? type.toUpperCase();
                       }()}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppColors.themedWhite,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0,
@@ -144,8 +145,8 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                       final node = topItems[groupIndex];
                       return BarTooltipItem(
                         '${node.name}\n',
-                        const TextStyle(
-                          color: Colors.white,
+                        TextStyle(
+                          color: AppColors.themedWhite,
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
                         ),
@@ -210,8 +211,9 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                             child: Text(
                               label,
                               style: TextStyle(
-                                color:
-                                    isTouched ? Colors.white : Colors.white54,
+                                color: isTouched
+                                    ? AppColors.themedWhite
+                                    : AppColors.themedWhite54,
                                 fontWeight: isTouched
                                     ? FontWeight.bold
                                     : FontWeight.normal,
@@ -234,8 +236,8 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                         return Text(
                           CurrencyFormatter.formatWhole(value)
                               .replaceAll(' €', ''),
-                          style: const TextStyle(
-                            color: Colors.white24,
+                          style: TextStyle(
+                            color: AppColors.themedWhite24,
                             fontSize: 10,
                           ),
                         );
@@ -248,7 +250,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                 gridData: FlGridData(
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (value) => FlLine(
-                    color: Colors.white.withValues(alpha: 0.06),
+                    color: AppColors.themedWhite.withValues(alpha: 0.06),
                     strokeWidth: 1,
                   ),
                 ),
@@ -267,7 +269,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                           colors: [
                             widget.color.withValues(alpha: 0.38),
                             widget.color.withValues(alpha: 0.92),
-                            Colors.white.withValues(alpha: 0.72),
+                            AppColors.themedWhite.withValues(alpha: 0.72),
                           ],
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
@@ -279,7 +281,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                         backDrawRodData: BackgroundBarChartRodData(
                           show: true,
                           toY: maxY,
-                          color: Colors.white.withValues(alpha: 0.02),
+                          color: AppColors.themedWhite.withValues(alpha: 0.02),
                         ),
                       ),
                     ],

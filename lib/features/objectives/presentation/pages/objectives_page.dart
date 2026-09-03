@@ -1221,7 +1221,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
 
           // Row 2: Advanced Filters (Expansion Tile)
           Theme(
-            data: Theme.of(context).copyWith(dividerColor: AppColors.transparent),
+            data:
+                Theme.of(context).copyWith(dividerColor: AppColors.transparent),
             child: ExpansionTile(
               title: Text(
                 (_selectedPopulation != null ||
@@ -2067,7 +2068,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                               child: Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.textPrimary.withValues(alpha: 0.05),
+                                  color: AppTheme.textPrimary
+                                      .withValues(alpha: 0.05),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Column(
@@ -2636,8 +2638,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                       horizontal: 14,
                       vertical: 10,
                     ),
-                    tooltipBorder:
-                        BorderSide(color: AppTheme.textPrimary.withValues(alpha: 0.15)),
+                    tooltipBorder: BorderSide(
+                        color: AppTheme.textPrimary.withValues(alpha: 0.15)),
                     getTooltipItems: (touchedSpots) {
                       return touchedSpots.map((spot) {
                         final monthIdx = spot.x.toInt();
@@ -2657,7 +2659,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                                 ? sortedYears[yearIndex]
                                 : sortedYears.firstOrNull ?? 0;
 
-                        final lineColor = spot.bar.color ?? AppTheme.textPrimary;
+                        final lineColor =
+                            spot.bar.color ?? AppTheme.textPrimary;
 
                         return LineTooltipItem(
                           // Clearly distinguish Objective vs Sales
@@ -2887,7 +2890,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   'achieved',
                   'Conseguido',
                   Icons.check_circle,
-                  Colors.green,
+                  AppColors.systemGreen,
                   statusCounts['achieved']!,
                 ),
                 const SizedBox(width: 6),
@@ -2895,7 +2898,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   'ontrack',
                   'En camino',
                   Icons.trending_up,
-                  Colors.blue,
+                  AppColors.systemBlue,
                   statusCounts['ontrack']!,
                 ),
                 const SizedBox(width: 6),
@@ -2911,7 +2914,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   'critical',
                   'Crítico',
                   Icons.error,
-                  Colors.red,
+                  AppColors.systemRed,
                   statusCounts['critical']!,
                 ),
               ],

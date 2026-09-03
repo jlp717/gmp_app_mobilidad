@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Executive card wrapper with consistent border, density, and depth.
@@ -53,7 +54,8 @@ class PremiumCard extends StatelessWidget {
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(color: color.withValues(alpha: 0.72), width: 3),
-              top: BorderSide(color: Colors.white.withValues(alpha: 0.045)),
+              top: BorderSide(
+                  color: AppColors.themedWhite.withValues(alpha: 0.045)),
             ),
           ),
           child: padding != EdgeInsets.zero

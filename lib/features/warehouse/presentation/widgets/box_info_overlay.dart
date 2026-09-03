@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -60,7 +61,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
           child: Opacity(opacity: _fadeAnim.value, child: child),
         ),
         child: Material(
-          color: Colors.transparent,
+          color: AppColors.transparent,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: BackdropFilter(

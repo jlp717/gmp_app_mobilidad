@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
@@ -91,12 +92,12 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         children: [
           // Header with metrics
           _buildHeader(m, sc),
-          const Divider(color: Colors.white10, height: 1),
+          Divider(color: AppColors.themedWhite10, height: 1),
           // Status banner
           _buildStatusBar(m, sc),
           // Tabs
           _buildTabs(m),
-          const Divider(color: Colors.white10, height: 1),
+          Divider(color: AppColors.themedWhite10, height: 1),
           // Tab content
           Expanded(
             child: _panelTab == 0
@@ -370,11 +371,12 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color:
-                sel ? activeColor.withValues(alpha: 0.08) : Colors.transparent,
+            color: sel
+                ? activeColor.withValues(alpha: 0.08)
+                : AppColors.transparent,
             border: Border(
               bottom: BorderSide(
-                color: sel ? activeColor : Colors.white10,
+                color: sel ? activeColor : AppColors.themedWhite10,
                 width: sel ? 2.5 : 1,
               ),
             ),
@@ -385,13 +387,13 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
               Icon(
                 icon,
                 size: 13,
-                color: sel ? activeColor : Colors.white30,
+                color: sel ? activeColor : AppColors.themedWhite30,
               ),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
-                  color: sel ? activeColor : Colors.white30,
+                  color: sel ? activeColor : AppColors.themedWhite30,
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                 ),
@@ -498,7 +500,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.35),
+            color: AppColors.themedWhite.withValues(alpha: 0.35),
             fontSize: 9,
           ),
         ),
@@ -534,8 +536,8 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         ),
         title: Text(
           c.name,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppColors.themedWhite,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -545,12 +547,12 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         subtitle: Text(
           '${c.orders.length} lin · ${c.totalBoxes} bul · ${c.totalWeight.toStringAsFixed(0)} kg${c.totalImporteEur > 0 ? ' · ${c.totalImporteEur.toStringAsFixed(0)}€' : ''}',
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.35),
+            color: AppColors.themedWhite.withValues(alpha: 0.35),
             fontSize: 10,
           ),
         ),
-        iconColor: Colors.white30,
-        collapsedIconColor: Colors.white.withValues(alpha: 0.2),
+        iconColor: AppColors.themedWhite30,
+        collapsedIconColor: AppColors.themedWhite.withValues(alpha: 0.2),
         children: c.orders
             .map(
               (o) => Padding(
@@ -582,8 +584,8 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                         o.articleName.isNotEmpty
                             ? o.articleName
                             : o.articleCode,
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: AppColors.themedWhite70,
                           fontSize: 11,
                         ),
                         maxLines: 1,
@@ -604,7 +606,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                     Text(
                       '${(o.units * o.weightPerUnit).toStringAsFixed(1)} kg',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.3),
+                        color: AppColors.themedWhite.withValues(alpha: 0.3),
                         fontSize: 10,
                       ),
                     ),
@@ -670,7 +672,9 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                             ? o.articleName
                             : o.articleCode,
                         style: TextStyle(
-                          color: excluded ? Colors.white30 : Colors.white,
+                          color: excluded
+                              ? AppColors.themedWhite30
+                              : AppColors.themedWhite,
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
                           decoration:
@@ -682,7 +686,9 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                       Text(
                         '${o.clientName.isNotEmpty ? o.clientName : o.clientCode} · #${o.orderNumber}',
                         style: TextStyle(
-                          color: excluded ? Colors.white10 : Colors.white24,
+                          color: excluded
+                              ? AppColors.themedWhite10
+                              : AppColors.themedWhite24,
                           fontSize: 8,
                         ),
                       ),
@@ -698,7 +704,9 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                           ? '${o.boxes.toStringAsFixed(0)}cj'
                           : '${o.units.toStringAsFixed(0)}u',
                       style: TextStyle(
-                        color: excluded ? Colors.white12 : AppTheme.success,
+                        color: excluded
+                            ? AppColors.themedWhite12
+                            : AppTheme.success,
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                       ),
@@ -707,7 +715,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                       Text(
                         '${weight.toStringAsFixed(1)}kg',
                         style: TextStyle(
-                          color: Colors.white.withValues(
+                          color: AppColors.themedWhite.withValues(
                             alpha: excluded ? 0.08 : 0.2,
                           ),
                           fontSize: 8,
@@ -725,8 +733,8 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                         v ? widget.onRestoreOrder(i) : widget.onRemoveOrder(i),
                     activeThumbColor: AppTheme.success,
                     activeTrackColor: AppTheme.success.withValues(alpha: 0.3),
-                    inactiveThumbColor: Colors.white24,
-                    inactiveTrackColor: Colors.white10,
+                    inactiveThumbColor: AppColors.themedWhite24,
+                    inactiveTrackColor: AppColors.themedWhite10,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
@@ -742,7 +750,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           feedback: Material(
             elevation: 6,
             borderRadius: BorderRadius.circular(8),
-            color: Colors.transparent,
+            color: AppColors.transparent,
             child: Container(
               width: 140,
               padding: const EdgeInsets.all(8),
@@ -753,8 +761,8 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
               ),
               child: Text(
                 o.articleName.isNotEmpty ? o.articleName : o.articleCode,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
                   fontSize: 11,
                 ),
                 maxLines: 1,
@@ -774,10 +782,10 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
   Widget _buildOverflow() {
     final overflow = widget.result.overflow;
     if (overflow.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'Todo cabe en el camion',
-          style: TextStyle(color: Colors.white30, fontSize: 13),
+          style: TextStyle(color: AppColors.themedWhite30, fontSize: 13),
         ),
       );
     }
@@ -885,8 +893,8 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                   children: [
                     Text(
                       g.name.isNotEmpty ? g.name : g.code,
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: AppColors.themedWhite70,
                         fontSize: 11,
                       ),
                       maxLines: 1,
@@ -895,7 +903,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                     Text(
                       client,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.25),
+                        color: AppColors.themedWhite.withValues(alpha: 0.25),
                         fontSize: 9,
                       ),
                     ),
@@ -945,7 +953,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           child: Text(
             label,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.4),
+              color: AppColors.themedWhite.withValues(alpha: 0.4),
               fontSize: 9,
             ),
           ),
@@ -961,7 +969,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                 curve: Curves.easeOutCubic,
                 builder: (_, v, __) => LinearProgressIndicator(
                   value: v,
-                  backgroundColor: Colors.white10,
+                  backgroundColor: AppColors.themedWhite10,
                   color: c,
                 ),
               ),
@@ -972,7 +980,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         Text(
           '${used.toStringAsFixed(1)}/${max.toStringAsFixed(1)} $unit',
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.4),
+            color: AppColors.themedWhite.withValues(alpha: 0.4),
             fontSize: 8,
           ),
         ),

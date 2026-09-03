@@ -8,6 +8,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
@@ -175,7 +176,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
     final canEdit = user?.isJefeVentas ?? false;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       appBar: AppBar(
         title: const Text('Bolsa Comercial'),
         backgroundColor: AppTheme.inkSurface,
@@ -279,7 +280,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
                   Text(
                     'Movimientos',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       fontSize:
                           Responsive.fontSize(context, small: 14, large: 16),
                       fontWeight: FontWeight.bold,
@@ -290,8 +291,8 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
                     provider.movements.isEmpty
                         ? ''
                         : '(${filtered.length}/${provider.movements.length})',
-                    style: const TextStyle(
-                      color: Colors.white54,
+                    style: TextStyle(
+                      color: AppColors.themedWhite54,
                       fontSize: 12,
                     ),
                   ),
@@ -331,9 +332,9 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
                 color: AppTheme.raisedSurface,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
+              child: Text(
                 'No hay movimientos este mes',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(color: AppColors.themedWhite54),
               ),
             );
           }
@@ -345,9 +346,9 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
                 color: AppTheme.raisedSurface,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
+              child: Text(
                 'Ningún movimiento coincide con los filtros',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(color: AppColors.themedWhite54),
               ),
             );
           }
@@ -380,9 +381,9 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
       builder: (ctx) {
         return AlertDialog(
           backgroundColor: AppTheme.raisedSurface,
-          title: const Text(
+          title: Text(
             'Configurar bolsa',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: AppColors.themedWhite),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -391,7 +392,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
                 controller: limitePctCtrl,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: AppColors.themedWhite),
                 decoration: const InputDecoration(
                   labelText: 'Límite (%)',
                   suffixText: '%',
@@ -403,7 +404,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
                 controller: limiteImporteCtrl,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: AppColors.themedWhite),
                 decoration: const InputDecoration(
                   labelText: 'Límite importe (opcional)',
                   suffixText: '€',
@@ -489,8 +490,8 @@ class _BolsaSummaryCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'Saldo disponible · $monthLabel ${status.ejercicio}',
-                style: const TextStyle(
-                  color: Colors.white70,
+                style: TextStyle(
+                  color: AppColors.themedWhite70,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
@@ -637,7 +638,7 @@ class _PeriodDropdown<T> extends StatelessWidget {
       initialValue: value,
       isExpanded: true,
       dropdownColor: AppTheme.raisedSurface,
-      iconEnabledColor: Colors.white70,
+      iconEnabledColor: AppColors.themedWhite70,
       decoration: InputDecoration(
         isDense: true,
         prefixIcon: Icon(icon, color: AppTheme.info, size: 17),
@@ -646,14 +647,16 @@ class _PeriodDropdown<T> extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+          borderSide:
+              BorderSide(color: AppColors.themedWhite.withValues(alpha: 0.12)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+          borderSide:
+              BorderSide(color: AppColors.themedWhite.withValues(alpha: 0.12)),
         ),
       ),
-      style: const TextStyle(color: Colors.white, fontSize: 12),
+      style: TextStyle(color: AppColors.themedWhite, fontSize: 12),
       items: items
           .map(
             (item) => DropdownMenuItem<T>(
@@ -699,7 +702,7 @@ class _GroupedBolsaView extends StatelessWidget {
             child: Text(
               'Distribucion por comercial',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontSize: Responsive.fontSize(
                   context,
                   small: 14,
@@ -718,9 +721,9 @@ class _GroupedBolsaView extends StatelessWidget {
               color: AppTheme.raisedSurface,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Text(
+            child: Text(
               'No hay movimientos de bolsa este mes',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: AppColors.themedWhite54),
             ),
           );
         }
@@ -759,14 +762,14 @@ class _GroupedSummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               Icon(Icons.groups, color: AppTheme.info, size: 20),
               SizedBox(width: 8),
               Text(
                 'Bolsa del equipo',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -852,14 +855,14 @@ class _GroupedVendorTile extends StatelessWidget {
         ),
         title: Text(
           'Comercial ${status.vendedor}',
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppColors.themedWhite,
             fontWeight: FontWeight.w600,
           ),
         ),
         subtitle: Text(
           'Acum. ${_bolsaMoney(status.acumulado)} · Cons. ${_bolsaMoney(status.consumido)} · Uso ${status.porcentajeConsumido.toStringAsFixed(1).replaceAll('.', ',')}%',
-          style: const TextStyle(color: Colors.white54, fontSize: 11),
+          style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -875,7 +878,7 @@ class _GroupedVendorTile extends StatelessWidget {
                 fontSize: 13,
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.white38, size: 18),
+            Icon(Icons.chevron_right, color: AppColors.themedWhite38, size: 18),
           ],
         ),
       ),
@@ -919,7 +922,7 @@ class _MetricBox extends StatelessWidget {
           ),
           Text(
             label,
-            style: const TextStyle(color: Colors.white54, fontSize: 10),
+            style: TextStyle(color: AppColors.themedWhite54, fontSize: 10),
           ),
         ],
       ),
@@ -946,14 +949,14 @@ class _ProgressBar extends StatelessWidget {
           padding: const EdgeInsets.only(left: 4, bottom: 6),
           child: Text(
             'Consumo del periodo: ${status.porcentajeConsumido.toStringAsFixed(1).replaceAll('.', ',')}%',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: TextStyle(color: AppColors.themedWhite70, fontSize: 12),
           ),
         ),
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 6),
           child: Text(
             '${_bolsaMoney(status.consumido)} usados sobre ${_bolsaMoney(status.presupuestoPeriodo)}',
-            style: const TextStyle(color: Colors.white38, fontSize: 11),
+            style: TextStyle(color: AppColors.themedWhite38, fontSize: 11),
           ),
         ),
         ClipRRect(
@@ -1053,20 +1056,23 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
           backgroundColor: AppTheme.inkSurface.withValues(alpha: 0.34),
           selectedColor: AppTheme.info.withValues(alpha: 0.20),
           side: BorderSide(
-            color:
-                selected ? AppTheme.info : Colors.white.withValues(alpha: 0.15),
+            color: selected
+                ? AppTheme.info
+                : AppColors.themedWhite.withValues(alpha: 0.15),
           ),
           label: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 13, color: Colors.white.withValues(alpha: 0.7)),
+              Icon(icon,
+                  size: 13,
+                  color: AppColors.themedWhite.withValues(alpha: 0.7)),
               const SizedBox(width: 4),
               Text(label, style: const TextStyle(fontSize: 11)),
               const SizedBox(width: 4),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.10),
+                  color: AppColors.themedWhite.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -1080,8 +1086,9 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
             ],
           ),
           labelStyle: TextStyle(
-            color:
-                selected ? Colors.white : Colors.white.withValues(alpha: 0.75),
+            color: selected
+                ? AppColors.themedWhite
+                : AppColors.themedWhite.withValues(alpha: 0.75),
           ),
         ),
       );
@@ -1116,16 +1123,16 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
             setState(() {});
             p.setSearchQuery(value);
           },
-          style: const TextStyle(color: Colors.white, fontSize: 13),
+          style: TextStyle(color: AppColors.themedWhite, fontSize: 13),
           decoration: InputDecoration(
             isDense: true,
             prefixIcon:
-                const Icon(Icons.search, size: 18, color: Colors.white54),
+                Icon(Icons.search, size: 18, color: AppColors.themedWhite54),
             suffixIcon: _searchCtrl.text.isEmpty
                 ? null
                 : IconButton(
                     icon: const Icon(Icons.close, size: 16),
-                    color: Colors.white54,
+                    color: AppColors.themedWhite54,
                     onPressed: () {
                       _searchCtrl.clear();
                       p.setSearchQuery('');
@@ -1133,7 +1140,7 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
                   ),
             hintText: 'Buscar por artículo o descripción…',
             hintStyle: TextStyle(
-              color: Colors.white.withValues(alpha: 0.35),
+              color: AppColors.themedWhite.withValues(alpha: 0.35),
               fontSize: 12,
             ),
             filled: true,
@@ -1143,13 +1150,13 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: Colors.white.withValues(alpha: 0.10),
+                color: AppColors.themedWhite.withValues(alpha: 0.10),
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: Colors.white.withValues(alpha: 0.10),
+                color: AppColors.themedWhite.withValues(alpha: 0.10),
               ),
             ),
             focusedBorder: OutlineInputBorder(
@@ -1260,8 +1267,8 @@ class _DateFilterButton extends StatelessWidget {
       icon: const Icon(Icons.calendar_today, size: 14),
       label: Text(text, style: const TextStyle(fontSize: 11)),
       style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white70,
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+        foregroundColor: AppColors.themedWhite70,
+        side: BorderSide(color: AppColors.themedWhite.withValues(alpha: 0.18)),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         minimumSize: const Size(0, 34),
       ),
@@ -1290,15 +1297,15 @@ class _FilterTextField extends StatelessWidget {
       controller: controller,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
-      style: const TextStyle(color: Colors.white, fontSize: 12),
+      style: TextStyle(color: AppColors.themedWhite, fontSize: 12),
       decoration: InputDecoration(
         isDense: true,
-        prefixIcon: Icon(icon, size: 16, color: Colors.white54),
+        prefixIcon: Icon(icon, size: 16, color: AppColors.themedWhite54),
         suffixIcon: controller.text.isEmpty
             ? null
             : IconButton(
                 icon: const Icon(Icons.close, size: 15),
-                color: Colors.white54,
+                color: AppColors.themedWhite54,
                 onPressed: () {
                   controller.clear();
                   onChanged('');
@@ -1306,7 +1313,7 @@ class _FilterTextField extends StatelessWidget {
               ),
         hintText: hint,
         hintStyle: TextStyle(
-          color: Colors.white.withValues(alpha: 0.35),
+          color: AppColors.themedWhite.withValues(alpha: 0.35),
           fontSize: 11,
         ),
         filled: true,
@@ -1314,11 +1321,13 @@ class _FilterTextField extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+          borderSide:
+              BorderSide(color: AppColors.themedWhite.withValues(alpha: 0.10)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+          borderSide:
+              BorderSide(color: AppColors.themedWhite.withValues(alpha: 0.10)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -1357,13 +1366,13 @@ class _MovimientoTile extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      surfaceTintColor: Colors.transparent,
+      surfaceTintColor: AppColors.transparent,
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         side: BorderSide(color: color.withValues(alpha: 0.24), width: 0.8),
       ),
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: ListTile(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -1375,8 +1384,8 @@ class _MovimientoTile extends StatelessWidget {
           pedidoLabel.isNotEmpty
               ? '${movimiento.tipo.label} - $pedidoLabel'
               : movimiento.tipo.label,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppColors.themedWhite,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1386,19 +1395,19 @@ class _MovimientoTile extends StatelessWidget {
             if (clienteLabel.isNotEmpty)
               Text(
                 clienteLabel,
-                style: const TextStyle(color: Colors.white70, fontSize: 11),
+                style: TextStyle(color: AppColors.themedWhite70, fontSize: 11),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             if (movimiento.codigoArticulo.isNotEmpty)
               Text(
                 'Art.: ${movimiento.codigoArticulo}',
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
               ),
             if (movimiento.descripcion.isNotEmpty)
               Text(
                 movimiento.descripcion,
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1418,7 +1427,7 @@ class _MovimientoTile extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               'Saldo: ${_formatMoney(movimiento.saldoAnterior)} -> ${_formatMoney(movimiento.saldoPosterior)}',
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
+              style: TextStyle(color: AppColors.themedWhite38, fontSize: 11),
             ),
           ],
         ),
@@ -1437,7 +1446,7 @@ class _MovimientoTile extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               dateStr,
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
+              style: TextStyle(color: AppColors.themedWhite38, fontSize: 11),
             ),
           ],
         ),
@@ -1514,7 +1523,7 @@ class _ErrorView extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70),
+              style: TextStyle(color: AppColors.themedWhite70),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
@@ -1532,7 +1541,7 @@ class _ErrorView extends StatelessWidget {
 class _EmptyVendorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
         padding: EdgeInsets.all(24),
         child: Column(
@@ -1541,13 +1550,13 @@ class _EmptyVendorView extends StatelessWidget {
             Icon(
               Icons.account_balance_wallet_outlined,
               size: 64,
-              color: Colors.white24,
+              color: AppColors.themedWhite24,
             ),
             SizedBox(height: 16),
             Text(
               'Selecciona un vendedor en el filtro superior para ver su bolsa',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 14),
+              style: TextStyle(color: AppColors.themedWhite54, fontSize: 14),
             ),
           ],
         ),

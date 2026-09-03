@@ -98,7 +98,7 @@ class AppTheme {
         begin: Alignment.centerLeft,
         end: Alignment.centerRight,
         colors: [
-          AppColors.teal.withValues(alpha: 0.20),
+          AppColors.systemTeal.withValues(alpha: 0.20),
           AppColors.harbor.withValues(alpha: 0.14),
           AppColors.aubergine.withValues(alpha: 0.08),
         ],
@@ -174,9 +174,9 @@ class AppTheme {
   }) {
     final isDark = brightness == Brightness.dark;
     final scheme = ColorScheme.fromSeed(
-      seedColor: AppColors.teal,
+      seedColor: AppColors.systemTeal,
       brightness: brightness,
-      primary: AppColors.teal,
+      primary: AppColors.systemTeal,
       secondary: AppColors.harbor,
       error: AppColors.error,
       surface: surface,
@@ -301,7 +301,7 @@ class AppTheme {
       brightness: brightness,
       scaffoldBackgroundColor: canvasColor,
       colorScheme: scheme,
-      primaryColor: AppColors.teal,
+      primaryColor: AppColors.systemTeal,
       textTheme: textTheme,
       fontFamily: GoogleFonts.inter().fontFamily,
       cardTheme: CardThemeData(
@@ -347,12 +347,12 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.teal,
+          backgroundColor: AppColors.systemTeal,
           foregroundColor: AppColors.ink,
           disabledBackgroundColor: panel,
           disabledForegroundColor: tertiaryText,
           elevation: 0,
-          shadowColor: AppColors.teal.withValues(alpha: 0.28),
+          shadowColor: AppColors.systemTeal.withValues(alpha: 0.28),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusMd),
           ),
@@ -368,7 +368,7 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.teal,
+          foregroundColor: AppColors.systemTeal,
           side: BorderSide(color: border),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusMd),
@@ -384,7 +384,7 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.teal,
+          foregroundColor: AppColors.systemTeal,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusSm),
           ),
@@ -433,7 +433,7 @@ class AppTheme {
         suffixIconColor: secondaryText,
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: AppColors.teal,
+        backgroundColor: AppColors.systemTeal,
         foregroundColor: AppColors.ink,
         elevation: 3,
         focusElevation: 4,
@@ -455,23 +455,26 @@ class AppTheme {
           return primaryText;
         }),
         dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return AppColors.teal;
+          if (states.contains(WidgetState.selected))
+            return AppColors.systemTeal;
           return AppColors.transparent;
         }),
         todayForegroundColor: WidgetStateProperty.all(
-          isDark ? AppColors.teal : AppColors.harbor,
+          isDark ? AppColors.systemTeal : AppColors.harbor,
         ),
         todayBackgroundColor: WidgetStateProperty.all(AppColors.transparent),
-        todayBorder: const BorderSide(color: AppColors.teal),
+        todayBorder: const BorderSide(color: AppColors.systemTeal),
         yearForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return AppColors.ink;
           return primaryText;
         }),
         yearBackgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return AppColors.teal;
+          if (states.contains(WidgetState.selected))
+            return AppColors.systemTeal;
           return AppColors.transparent;
         }),
-        rangeSelectionBackgroundColor: AppColors.teal.withValues(alpha: 0.14),
+        rangeSelectionBackgroundColor:
+            AppColors.systemTeal.withValues(alpha: 0.14),
         dividerColor: border,
       ),
       dialogTheme: DialogThemeData(
@@ -527,7 +530,7 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: isDark ? AppColors.surfaceCommand : panel,
-        selectedColor: AppColors.teal.withValues(alpha: 0.18),
+        selectedColor: AppColors.systemTeal.withValues(alpha: 0.18),
         disabledColor: panel.withValues(alpha: 0.55),
         labelStyle: TextStyle(color: secondaryText, fontSize: 12),
         secondaryLabelStyle: TextStyle(color: primaryText, fontSize: 12),
@@ -543,7 +546,7 @@ class AppTheme {
         iconColor: secondaryText,
         textColor: primaryText,
         tileColor: AppColors.transparent,
-        selectedTileColor: AppColors.teal.withValues(alpha: 0.12),
+        selectedTileColor: AppColors.systemTeal.withValues(alpha: 0.12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMd),
         ),
@@ -575,7 +578,7 @@ class AppTheme {
         ),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
-        color: AppColors.teal,
+        color: AppColors.systemTeal,
         linearTrackColor: panel,
         circularTrackColor: panel,
       ),
@@ -613,8 +616,8 @@ class AppTheme {
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: isDark ? AppColors.surfaceCommand : surface,
-        indicatorColor: AppColors.teal.withValues(alpha: 0.16),
-        selectedIconTheme: const IconThemeData(color: AppColors.teal),
+        indicatorColor: AppColors.systemTeal.withValues(alpha: 0.16),
+        selectedIconTheme: const IconThemeData(color: AppColors.systemTeal),
         unselectedIconTheme: IconThemeData(color: secondaryText),
         selectedLabelTextStyle: TextStyle(
           color: primaryText,
@@ -629,7 +632,7 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: isDark ? AppColors.surfaceCommand : surface,
-        indicatorColor: AppColors.teal.withValues(alpha: 0.16),
+        indicatorColor: AppColors.systemTeal.withValues(alpha: 0.16),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return TextStyle(
@@ -700,12 +703,12 @@ class AppTheme {
         gradient: cardGradient,
         borderRadius: BorderRadius.circular(radiusLg),
         border: Border.all(
-          color: (glowColor ?? AppColors.teal).withValues(alpha: 0.30),
+          color: (glowColor ?? AppColors.systemTeal).withValues(alpha: 0.30),
         ),
         boxShadow: [
           ...elevation2,
           BoxShadow(
-            color: (glowColor ?? AppColors.teal).withValues(alpha: 0.10),
+            color: (glowColor ?? AppColors.systemTeal).withValues(alpha: 0.10),
             blurRadius: 26,
           ),
         ],
@@ -743,10 +746,10 @@ class AppTheme {
 
   static BoxDecoration fabGlow() => BoxDecoration(
         shape: BoxShape.circle,
-        color: AppColors.teal,
+        color: AppColors.systemTeal,
         boxShadow: [
           BoxShadow(
-            color: AppColors.teal.withValues(alpha: 0.24),
+            color: AppColors.systemTeal.withValues(alpha: 0.24),
             blurRadius: 22,
           ),
           BoxShadow(
@@ -758,7 +761,7 @@ class AppTheme {
       );
 
   static List<Color> get pulsingBorderColors => [
-        AppColors.teal.withValues(alpha: 0.26),
+        AppColors.systemTeal.withValues(alpha: 0.26),
         AppColors.harbor.withValues(alpha: 0.38),
         AppColors.aubergine.withValues(alpha: 0.26),
       ];
@@ -773,7 +776,7 @@ class AppTheme {
     Color? glowColor,
     double glowBlur = 16.0,
   }) {
-    final glow = glowColor ?? AppColors.teal;
+    final glow = glowColor ?? AppColors.systemTeal;
     return BoxDecoration(
       color: (color ?? surfaceGlass).withValues(alpha: opacity),
       borderRadius: BorderRadius.circular(borderRadius),
@@ -863,7 +866,7 @@ class AppTheme {
           offset: const Offset(0, 22),
         ),
         BoxShadow(
-          color: AppColors.teal.withValues(alpha: 0.09),
+          color: AppColors.systemTeal.withValues(alpha: 0.09),
           blurRadius: 34,
         ),
       ];

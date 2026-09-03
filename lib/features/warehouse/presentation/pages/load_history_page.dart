@@ -208,8 +208,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
             const SizedBox(height: 8),
             Text(
               _error!,
-              style:
-                  TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 13),
             ),
           ],
         ),

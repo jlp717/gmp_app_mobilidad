@@ -154,10 +154,10 @@ class ChatHelpSheet extends StatelessWidget {
               ),
             ),
           ),
-          const Text(
+          Text(
             'Preguntas frecuentes',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.themedWhite,
               fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
@@ -165,7 +165,7 @@ class ChatHelpSheet extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Toca una pregunta para enviarla al asistente.',
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+            style: TextStyle(color: AppColors.systemGrey500, fontSize: 13),
           ),
           const SizedBox(height: 12),
           const _HelpTipRow(
@@ -217,8 +217,8 @@ class ChatHelpSheet extends StatelessWidget {
                           Expanded(
                             child: Text(
                               title,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: AppColors.themedWhite,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -227,7 +227,7 @@ class ChatHelpSheet extends StatelessWidget {
                           Icon(
                             Icons.arrow_forward_ios,
                             size: 12,
-                            color: Colors.grey.shade600,
+                            color: AppColors.systemGrey600,
                           ),
                         ],
                       ),
@@ -261,7 +261,7 @@ class _HelpTipRow extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+              style: TextStyle(color: AppColors.systemGrey500, fontSize: 12),
             ),
           ),
         ],

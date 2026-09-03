@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
@@ -20,7 +21,7 @@ BoxDecoration _commissionSurfaceDecoration({
 }) {
   final surfaceColor = color ?? AppTheme.raisedSurface;
   final outlineColor = borderColor ?? AppTheme.borderColor;
-  final hasVisibleSurface = surfaceColor != Colors.transparent;
+  final hasVisibleSurface = surfaceColor != AppColors.transparent;
   return BoxDecoration(
     color: surfaceColor,
     gradient: hasVisibleSurface
@@ -39,7 +40,7 @@ BoxDecoration _commissionSurfaceDecoration({
     boxShadow: hasVisibleSurface
         ? [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
+              color: AppColors.systemBlack.withValues(alpha: 0.12),
               blurRadius: 12,
               offset: const Offset(0, 5),
             ),
@@ -129,7 +130,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     }
   }
 
-  Future<void> _loadData({bool forceRefresh = false}) async {
+  Future<void> _loadData(
+      {bool forceRefresh = false, bool silent = false}) async {
     final generation = ++_loadGeneration;
     if (_isCommissionsHiddenForUser()) {
       if (!mounted) return;
@@ -141,10 +143,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       });
       return;
     }
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    final keepCurrentTable = silent && _data != null;
+    if (!keepCurrentTable) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
     try {
       final defaultCode = widget.employeeCode.split(',').first;
 
@@ -176,10 +181,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       setState(() {
         _data = res;
         _isLoading = false;
+        _error = null;
         _lastFetchTime = DateTime.now();
       });
     } catch (e) {
       if (mounted && generation == _loadGeneration) {
+        if (keepCurrentTable) {
+          return;
+        }
         setState(() {
           _error = e.toString();
           _isLoading = false;
@@ -426,6 +435,56 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     return (monthly['$month'] as num?)?.toDouble() ??
         (monthly[month] as num?)?.toDouble() ??
         0;
+  }
+
+  Map<String, dynamic> _mutableMap(Map? source) {
+    return Map<String, dynamic>.from(
+      (source ?? const {}).map((key, value) => MapEntry(key.toString(), value)),
+    );
+  }
+
+  void _patchPaymentsMap(Map<String, dynamic> target, int month, double delta) {
+    final payments = _mutableMap(target['payments'] as Map?);
+    final monthly = _mutableMap(payments['monthly'] as Map?);
+    final current = (monthly['$month'] as num?)?.toDouble() ??
+        (monthly[month] as num?)?.toDouble() ??
+        0;
+    monthly['$month'] = current + delta;
+    payments['monthly'] = monthly;
+    payments['total'] = ((payments['total'] as num?)?.toDouble() ?? 0) + delta;
+    target['payments'] = payments;
+  }
+
+  void _applyLocalPayment({
+    required String vendorCode,
+    required int month,
+    required double amount,
+    required bool setTotal,
+  }) {
+    if (_data == null) return;
+    final data = _mutableMap(_data);
+    final previous = _getPaidAmountForMonth(vendorCode, month);
+    final nextPaid = setTotal ? amount : previous + amount;
+    final delta = nextPaid - previous;
+    if (delta.abs() < 0.0001) {
+      setState(() => _data = data);
+      return;
+    }
+
+    final breakdown = (data['breakdown'] as List?)
+            ?.map((item) => _mutableMap(item as Map?))
+            .toList() ??
+        <Map<String, dynamic>>[];
+    if (breakdown.isNotEmpty) {
+      for (final vendor in breakdown) {
+        if (vendor['vendedorCode']?.toString() == vendorCode) {
+          _patchPaymentsMap(vendor, month, delta);
+        }
+      }
+      data['breakdown'] = breakdown;
+    }
+    _patchPaymentsMap(data, month, delta);
+    setState(() => _data = data);
   }
 
   double _getRemainingDueForMonth(String vendorCode, int month) {
@@ -1245,7 +1304,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.success,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.themedWhite,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -1256,7 +1315,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       try {
                         final res = await CommissionsService.payCommission(
                           vendedorCode: vendorCode,
-                          year: 2026,
+                          year: DateTime.now().year,
                           month: month,
                           amount: amount,
                           generatedAmount: generatedAmount,
@@ -1269,6 +1328,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                         );
 
                         if (mounted && res['success'] == true) {
+                          _applyLocalPayment(
+                            vendorCode: vendorCode,
+                            month: month,
+                            amount: amount,
+                            setTotal: setTotal,
+                          );
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
@@ -1279,7 +1344,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                               backgroundColor: AppTheme.success,
                             ),
                           );
-                          _loadData(forceRefresh: true);
+                          _loadData(silent: true);
                         } else {
                           throw Exception(res['error'] ?? 'Error desconocido');
                         }
@@ -1298,8 +1363,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       setTotal
                           ? 'CONFIRMAR CORRECCION'
                           : 'CONFIRMAR Y REGISTRAR PAGO',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppColors.themedWhite,
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
@@ -2059,7 +2124,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           ? AppTheme.mutedPanel
           : (isCurrent
               ? AppTheme.accentIndigo.withValues(alpha: 0.15)
-              : Colors.transparent);
+              : AppColors.transparent);
       final textColor = isPast
           ? AppTheme.textTertiary
           : (isCurrent ? AppTheme.accentIndigo : AppTheme.textTertiary);
@@ -3378,8 +3443,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
               decoration: _commissionSurfaceDecoration(
                 color: _isExpanded
                     ? AppTheme.info.withValues(alpha: 0.08)
-                    : Colors.transparent,
-                borderColor: Colors.transparent,
+                    : AppColors.transparent,
+                borderColor: AppColors.transparent,
                 radius: AppTheme.radiusLg,
               ),
               child: Row(
@@ -3818,7 +3883,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
 
     return DataRow(
       color: WidgetStateProperty.all(
-        isFuture ? AppTheme.mutedPanel : Colors.transparent,
+        isFuture ? AppTheme.mutedPanel : AppColors.transparent,
       ),
       cells: [
         DataCell(

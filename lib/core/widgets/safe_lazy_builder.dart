@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/scheduler.dart';
 
 /// SafeLazyBuilder - Optimized FutureBuilder with Isolate support and jank detection
@@ -230,7 +231,8 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const Icon(Icons.error_outline,
+                color: AppColors.systemRed, size: 48),
             const SizedBox(height: 16),
             Text(
               'Error loading data',

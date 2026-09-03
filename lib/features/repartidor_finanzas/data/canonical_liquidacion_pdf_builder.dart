@@ -1,3 +1,4 @@
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'dart:typed_data';
 
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
@@ -142,14 +143,14 @@ class CanonicalLiquidacionPdfBuilder {
                 pw.SizedBox(height: 5),
                 pw.Text(
                   'Operacion ${_portablePdfText(liquidacion.id)}',
-                  style: const pw.TextStyle(
+                  style: pw.TextStyle(
                     color: PdfColors.white,
                     fontSize: 11,
                   ),
                 ),
                 pw.Text(
                   'Repartidor ${_portablePdfText(liquidacion.repartidorId)} - $dateLabel',
-                  style: const pw.TextStyle(
+                  style: pw.TextStyle(
                     color: PdfColors.white,
                     fontSize: 11,
                   ),

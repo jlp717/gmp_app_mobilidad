@@ -43,7 +43,7 @@ class _ChatExportTableState extends State<ChatExportTable> {
     return Container(
       margin: const EdgeInsets.only(top: 10),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.25),
+        color: AppColors.systemBlack.withValues(alpha: 0.25),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.info.withValues(alpha: 0.2)),
       ),
@@ -67,7 +67,7 @@ class _ChatExportTableState extends State<ChatExportTable> {
                   letterSpacing: 0,
                 ),
                 dataTextStyle: TextStyle(
-                  color: Colors.grey.shade300,
+                  color: AppColors.systemGrey300,
                   fontSize: 12,
                 ),
                 columns:
@@ -87,7 +87,7 @@ class _ChatExportTableState extends State<ChatExportTable> {
                           }
 
                           return entry.key.isEven
-                              ? Colors.white.withValues(alpha: 0.02)
+                              ? AppColors.themedWhite.withValues(alpha: 0.02)
                               : null;
                         }),
                         cells: entry.value
@@ -100,7 +100,7 @@ class _ChatExportTableState extends State<ChatExportTable> {
             ),
             if (showToggle)
               Material(
-                color: Colors.transparent,
+                color: AppColors.transparent,
                 child: InkWell(
                   onTap: () => setState(() => _expanded = !_expanded),
                   child: Container(

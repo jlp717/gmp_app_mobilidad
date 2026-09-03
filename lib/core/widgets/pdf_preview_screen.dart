@@ -256,8 +256,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
             const SizedBox(height: 16),
             Text(
               _errorMessage!,
-              style:
-                  TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -378,7 +377,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
     VoidCallback? onTap,
   }) {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),

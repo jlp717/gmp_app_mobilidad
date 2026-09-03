@@ -241,8 +241,8 @@ class _ClientDetailPageState extends State<ClientDetailPage>
                         children: [
                           Text(
                             editableNotes['text'] as String,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: AppColors.themedWhite,
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
                             ),

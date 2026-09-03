@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/dashboard_chart_factory.dart'; // Use factory instead of direct chart
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/matrix_data_table.dart';
@@ -78,7 +79,7 @@ class HierarchySection extends StatelessWidget {
               Text(
                 '${data.length} registros',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.42),
+                  color: AppColors.themedWhite.withValues(alpha: 0.42),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),

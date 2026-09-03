@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -107,7 +108,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                     ),
                   ),
                   indicatorSize: TabBarIndicatorSize.tab,
-                  dividerColor: Colors.transparent,
+                  dividerColor: AppColors.transparent,
                   splashFactory: NoSplash.splashFactory,
                   labelStyle: const TextStyle(
                     fontSize: 11,

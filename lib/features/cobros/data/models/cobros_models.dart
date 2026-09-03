@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
 
 // Re-export EstadoEntrega from shared location
@@ -37,15 +38,15 @@ enum TipoCobro {
   Color get color {
     switch (this) {
       case TipoCobro.albaran:
-        return Colors.blue;
+        return AppColors.systemBlue;
       case TipoCobro.factura:
-        return Colors.green;
+        return AppColors.systemGreen;
       case TipoCobro.presupuesto:
-        return Colors.purple;
+        return AppColors.systemPurple;
       case TipoCobro.pedidoApp:
-        return Colors.teal;
+        return AppColors.systemTeal;
       case TipoCobro.normal:
-        return Colors.orange;
+        return AppColors.systemOrange;
     }
   }
 }
@@ -104,11 +105,11 @@ enum EstadoCobro {
   Color get color {
     switch (this) {
       case EstadoCobro.vencido:
-        return Colors.red;
+        return AppColors.systemRed;
       case EstadoCobro.pendiente:
-        return Colors.amber;
+        return AppColors.systemAmber;
       case EstadoCobro.alDia:
-        return Colors.green;
+        return AppColors.systemGreen;
     }
   }
 }
@@ -444,13 +445,13 @@ class EstadoCliente {
   Color get statusColor {
     switch (estado) {
       case 'ACTIVO':
-        return Colors.green;
+        return AppColors.systemGreen;
       case 'EN_ROJO':
-        return Colors.orange;
+        return AppColors.systemOrange;
       case 'BLOQUEADO':
-        return Colors.red;
+        return AppColors.systemRed;
       default:
-        return Colors.grey;
+        return AppColors.systemGrey;
     }
   }
 }

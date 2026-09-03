@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -81,7 +82,7 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
           }).toList();
 
     return Dialog(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
       ),
@@ -100,10 +101,11 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
             ],
           ),
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          border:
+              Border.all(color: AppColors.themedWhite.withValues(alpha: 0.06)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: AppColors.systemBlack.withValues(alpha: 0.3),
               blurRadius: 30,
               offset: const Offset(0, 15),
             ),
@@ -116,10 +118,10 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
             // Header
             Text(
               widget.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 letterSpacing: 0,
               ),
             ),
@@ -129,8 +131,8 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Buscar...',
-                hintStyle:
-                    TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                hintStyle: TextStyle(
+                    color: AppColors.themedWhite.withValues(alpha: 0.3)),
                 prefixIcon: _isLoading
                     ? const Padding(
                         padding: EdgeInsets.all(14),
@@ -145,7 +147,7 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                       )
                     : Icon(
                         Icons.search_rounded,
-                        color: Colors.white.withValues(alpha: 0.3),
+                        color: AppColors.themedWhite.withValues(alpha: 0.3),
                       ),
                 filled: true,
                 fillColor: AppTheme.raisedSurface.withValues(alpha: 0.5),
@@ -156,7 +158,7 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                 contentPadding:
                     const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
               ),
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: AppColors.themedWhite),
               onChanged: _onSearchChanged,
             ),
             const SizedBox(height: 12),
@@ -167,7 +169,7 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                       child: Text(
                         'No se encontraron resultados',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.25),
+                          color: AppColors.themedWhite.withValues(alpha: 0.25),
                         ),
                       ),
                     )
@@ -189,7 +191,7 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 2),
                           child: Material(
-                            color: Colors.transparent,
+                            color: AppColors.transparent,
                             child: InkWell(
                               onTap: () {
                                 setState(() {
@@ -234,14 +236,14 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                                         border: Border.all(
                                           color: isSelected
                                               ? AppTheme.info
-                                              : Colors.white
+                                              : AppColors.themedWhite
                                                   .withValues(alpha: 0.15),
                                           width: 1.5,
                                         ),
                                         color: isSelected
                                             ? AppTheme.info
                                                 .withValues(alpha: 0.15)
-                                            : Colors.transparent,
+                                            : AppColors.transparent,
                                       ),
                                       child: isSelected
                                           ? const Icon(
@@ -257,8 +259,8 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                                         widget.labelBuilder(item),
                                         style: TextStyle(
                                           color: isSelected
-                                              ? Colors.white
-                                              : Colors.white
+                                              ? AppColors.themedWhite
+                                              : AppColors.themedWhite
                                                   .withValues(alpha: 0.6),
                                           fontWeight: isSelected
                                               ? FontWeight.w500
@@ -291,16 +293,16 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Cancelar',
-                    style: TextStyle(color: Colors.white54),
+                    style: TextStyle(color: AppColors.themedWhite54),
                   ),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.info,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.themedWhite,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 12,

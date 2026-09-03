@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
@@ -185,10 +186,10 @@ class _ClientMapViewState extends State<ClientMapView> {
           decoration: BoxDecoration(
             color: isSelected ? AppTheme.info : AppTheme.success,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
+            border: Border.all(color: AppColors.themedWhite, width: 2),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
+                color: AppColors.systemBlack.withValues(alpha: 0.3),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -196,7 +197,7 @@ class _ClientMapViewState extends State<ClientMapView> {
           ),
           child: Icon(
             Icons.store,
-            color: Colors.white,
+            color: AppColors.themedWhite,
             size: isSelected ? 24 : 20,
           ),
         ),

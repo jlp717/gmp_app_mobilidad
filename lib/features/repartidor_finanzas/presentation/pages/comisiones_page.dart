@@ -1,6 +1,7 @@
 // ignore_for_file: public_member_api_docs
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
@@ -21,7 +22,7 @@ BoxDecoration _commissionSurfaceDecoration({
 }) {
   final surfaceColor = color ?? AppTheme.raisedSurface;
   final outlineColor = borderColor ?? AppTheme.borderColor;
-  final hasVisibleSurface = surfaceColor != Colors.transparent;
+  final hasVisibleSurface = surfaceColor != AppColors.transparent;
   return BoxDecoration(
     color: surfaceColor,
     gradient: hasVisibleSurface
@@ -40,7 +41,7 @@ BoxDecoration _commissionSurfaceDecoration({
     boxShadow: hasVisibleSurface
         ? [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
+              color: AppColors.systemBlack.withValues(alpha: 0.12),
               blurRadius: 12,
               offset: const Offset(0, 5),
             ),

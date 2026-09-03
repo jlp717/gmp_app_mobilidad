@@ -14,6 +14,8 @@ const routeSources = [
   { file: "backend/routes/health-check-e2e.js", prefix: "/api/health-check-e2e" },
   { file: "backend/routes/repartidor-finanzas.js", prefix: "/api/repartidor-finanzas" },
   { file: "backend/routes/repartidor.js", prefix: "/api/repartidor" },
+  { file: "backend/routes/repartidor-history-routes.js", prefix: "/api/repartidor" },
+  { file: "backend/routes/repartidor-document-routes.js", prefix: "/api/repartidor" },
   { file: "backend/routes/entregas.js", prefix: "/api/entregas" },
   { file: "backend/routes/dashboard.js", prefix: "/api/dashboard" },
   { file: "backend/routes/analytics.js", prefix: "/api/analytics" },

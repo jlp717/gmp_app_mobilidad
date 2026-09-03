@@ -86,9 +86,9 @@ class ChatMessageBubble extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.psychology,
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       size: 20,
                     ),
                   ),
@@ -116,7 +116,7 @@ class ChatMessageBubble extends ConsumerWidget {
                                 ],
                               )
                             : null,
-                        color: isUser ? null : const Color(0xFF1A1F35),
+                        color: isUser ? null : AppColors.legacyFF1A1F35,
                         borderRadius: BorderRadius.only(
                           topLeft: const Radius.circular(18),
                           topRight: const Radius.circular(18),
@@ -136,7 +136,7 @@ class ChatMessageBubble extends ConsumerWidget {
                           BoxShadow(
                             color: isUser
                                 ? AppTheme.info.withValues(alpha: 0.3)
-                                : Colors.black.withValues(alpha: 0.3),
+                                : AppColors.systemBlack.withValues(alpha: 0.3),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -192,8 +192,9 @@ class ChatMessageBubble extends ConsumerWidget {
                                     _formatTime(timestamp!),
                                     style: TextStyle(
                                       color: isUser
-                                          ? Colors.white.withValues(alpha: 0.6)
-                                          : Colors.grey.shade600,
+                                          ? AppColors.themedWhite
+                                              .withValues(alpha: 0.6)
+                                          : AppColors.systemGrey600,
                                       fontSize: 10,
                                       letterSpacing: 0,
                                     ),
@@ -291,8 +292,8 @@ class ChatMessageBubble extends ConsumerWidget {
                                   document.title,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: AppColors.themedWhite,
                                     fontSize: 12.5,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -303,7 +304,7 @@ class ChatMessageBubble extends ConsumerWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: Colors.grey.shade500,
+                                    color: AppColors.systemGrey500,
                                     fontSize: 10.5,
                                   ),
                                 ),
@@ -382,10 +383,10 @@ class ChatMessageBubble extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          const Text(
+          Text(
             'IA Comercial',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.themedWhite,
               fontSize: 11,
               fontWeight: FontWeight.w800,
             ),
@@ -549,12 +550,12 @@ class ChatMessageBubble extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Align(
+              Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Documentos',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
@@ -569,11 +570,11 @@ class ChatMessageBubble extends ConsumerWidget {
                   ),
                   title: Text(
                     doc.title,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: AppColors.themedWhite),
                   ),
                   subtitle: Text(
                     doc.fileName ?? doc.url,
-                    style: TextStyle(color: Colors.grey.shade500),
+                    style: TextStyle(color: AppColors.systemGrey500),
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -672,10 +673,10 @@ class ChatMessageBubble extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Compartir respuesta',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -683,9 +684,9 @@ class ChatMessageBubble extends ConsumerWidget {
               const SizedBox(height: 16),
               ListTile(
                 leading: const Icon(Icons.chat, color: AppColors.success),
-                title: const Text(
+                title: Text(
                   'WhatsApp',
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: AppColors.themedWhite),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -695,8 +696,8 @@ class ChatMessageBubble extends ConsumerWidget {
               ListTile(
                 leading:
                     const Icon(Icons.email_outlined, color: AppColors.info),
-                title:
-                    const Text('Email', style: TextStyle(color: Colors.white)),
+                title: Text('Email',
+                    style: TextStyle(color: AppColors.themedWhite)),
                 onTap: () {
                   Navigator.pop(ctx);
                   ChatShareActions.shareViaEmail(message);
@@ -705,15 +706,15 @@ class ChatMessageBubble extends ConsumerWidget {
               ListTile(
                 leading:
                     const Icon(Icons.ios_share, color: AppColors.accentIndigo),
-                title: const Text(
+                title: Text(
                   'Más opciones',
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: AppColors.themedWhite),
                 ),
                 subtitle: exportable != null
                     ? Text(
                         'Incluye nota sobre ${exportable.rows.length} filas exportables',
                         style: TextStyle(
-                          color: Colors.grey.shade500,
+                          color: AppColors.systemGrey500,
                           fontSize: 11,
                         ),
                       )
@@ -730,9 +731,9 @@ class ChatMessageBubble extends ConsumerWidget {
                 ListTile(
                   leading:
                       const Icon(Icons.table_chart, color: AppColors.success),
-                  title: const Text(
+                  title: Text(
                     'Compartir CSV',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: AppColors.themedWhite),
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -784,9 +785,9 @@ class ChatMessageBubble extends ConsumerWidget {
                           q,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
-                            color: Colors.white70,
+                            color: AppColors.themedWhite70,
                           ),
                         ),
                       ),
@@ -817,7 +818,7 @@ class ChatMessageBubble extends ConsumerWidget {
                   height: 4,
                   margin: const EdgeInsets.only(top: 8, right: 8),
                   decoration: BoxDecoration(
-                    color: isUser ? Colors.white70 : AppTheme.info,
+                    color: isUser ? AppColors.themedWhite70 : AppTheme.info,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -844,7 +845,7 @@ class ChatMessageBubble extends ConsumerWidget {
       return Text(
         text,
         style: TextStyle(
-          color: isUser ? Colors.white : Colors.grey.shade300,
+          color: isUser ? AppColors.themedWhite : AppColors.systemGrey300,
           fontSize: 14,
           height: 1.5,
         ),
@@ -874,7 +875,7 @@ class ChatMessageBubble extends ConsumerWidget {
     return RichText(
       text: TextSpan(
         style: TextStyle(
-          color: isUser ? Colors.white : Colors.grey.shade300,
+          color: isUser ? AppColors.themedWhite : AppColors.systemGrey300,
           fontSize: 14,
           height: 1.5,
         ),
@@ -965,7 +966,7 @@ class _AnalysisStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.info : Colors.grey.shade700;
+    final color = active ? AppColors.info : AppColors.systemGrey700;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),

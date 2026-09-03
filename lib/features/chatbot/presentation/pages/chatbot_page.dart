@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -123,7 +124,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (sheetContext) {
         return Consumer(
           builder: (context, ref, _) {
@@ -151,7 +152,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                       width: 42,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.white24,
+                        color: AppColors.themedWhite24,
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
@@ -164,11 +165,11 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                             color: AppTheme.info,
                           ),
                           const SizedBox(width: 10),
-                          const Expanded(
+                          Expanded(
                             child: Text(
                               'Historial de chats',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: AppColors.themedWhite,
                                 fontSize: 17,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -198,7 +199,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                           children: [
                             Icon(
                               Icons.forum_outlined,
-                              color: Colors.white.withValues(alpha: 0.48),
+                              color:
+                                  AppColors.themedWhite.withValues(alpha: 0.48),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -206,7 +208,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                                 'Todavia no hay conversaciones guardadas. '
                                 'La primera consulta creara un historial.',
                                 style: TextStyle(
-                                  color: Colors.grey.shade400,
+                                  color: AppColors.systemGrey400,
                                   fontSize: 13,
                                 ),
                               ),
@@ -224,8 +226,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                               const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final session = sessions[index];
-                            final isActive =
-                                session.id == activeSessionId;
+                            final isActive = session.id == activeSessionId;
                             final sessionAge =
                                 _formatSessionAge(session.updatedAt);
                             final sessionMeta =
@@ -245,12 +246,14 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                                 decoration: BoxDecoration(
                                   color: isActive
                                       ? AppTheme.info.withValues(alpha: 0.1)
-                                      : Colors.white.withValues(alpha: 0.035),
+                                      : AppColors.themedWhite
+                                          .withValues(alpha: 0.035),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
                                     color: isActive
                                         ? AppTheme.info.withValues(alpha: 0.36)
-                                        : Colors.white.withValues(alpha: 0.08),
+                                        : AppColors.themedWhite
+                                            .withValues(alpha: 0.08),
                                   ),
                                 ),
                                 child: Row(
@@ -281,8 +284,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                                             session.title,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Colors.white,
+                                            style: TextStyle(
+                                              color: AppColors.themedWhite,
                                               fontSize: 13,
                                               fontWeight: FontWeight.w800,
                                             ),
@@ -293,7 +296,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
-                                              color: Colors.grey.shade500,
+                                              color: AppColors.systemGrey500,
                                               fontSize: 11,
                                             ),
                                           ),
@@ -309,7 +312,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                                         Icons.delete_outline,
                                         size: 18,
                                       ),
-                                      color: Colors.white54,
+                                      color: AppColors.themedWhite54,
                                     ),
                                   ],
                                 ),
@@ -471,10 +474,10 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                   const SizedBox(width: 8),
                   Text(
                     label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: Colors.white70,
+                      color: AppColors.themedWhite70,
                     ),
                   ),
                 ],
@@ -520,8 +523,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                   children: [
                     Text(
                       isJefe ? 'Mesa comercial completa' : 'Mesa comercial',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppColors.themedWhite,
                         fontSize: 15,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0,
@@ -535,7 +538,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.grey.shade400,
+                        color: AppColors.systemGrey400,
                         fontSize: 11.5,
                         height: 1.2,
                       ),
@@ -673,7 +676,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                 decoration: BoxDecoration(
                   color: selected
                       ? _mint.withValues(alpha: 0.14)
-                      : Colors.white.withValues(alpha: 0.045),
+                      : AppColors.themedWhite.withValues(alpha: 0.045),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: selected
@@ -687,13 +690,15 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                     Icon(
                       icon,
                       size: 16,
-                      color: selected ? _mint : Colors.white70,
+                      color: selected ? _mint : AppColors.themedWhite70,
                     ),
                     const SizedBox(width: 7),
                     Text(
                       label,
                       style: TextStyle(
-                        color: selected ? Colors.white : Colors.white70,
+                        color: selected
+                            ? AppColors.themedWhite
+                            : AppColors.themedWhite70,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -812,8 +817,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                             label,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: AppColors.themedWhite,
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
                             ),
@@ -827,7 +832,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.grey.shade400,
+                        color: AppColors.systemGrey400,
                         fontSize: 10,
                         height: 1.1,
                       ),
@@ -864,7 +869,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
             child: Text(
               'No se pudo completar la última consulta. '
               'Revisa la conexión e inténtalo de nuevo.',
-              style: TextStyle(color: Colors.grey.shade300, fontSize: 12.5),
+              style: TextStyle(color: AppColors.systemGrey300, fontSize: 12.5),
             ),
           ),
         ],
@@ -969,14 +974,14 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             'Copiloto Comercial GMP',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: AppColors.themedWhite,
                               fontSize: 18,
                               fontWeight: FontWeight.w900,
                               letterSpacing: 0,
@@ -988,7 +993,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Colors.white60,
+                              color: AppColors.themedWhite60,
                               fontSize: 12,
                               height: 1.25,
                             ),
@@ -1084,7 +1089,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                         icon: const Icon(Icons.history_rounded, size: 17),
                         label: const Text('Historial'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
+                          foregroundColor: AppColors.themedWhite,
                           side: BorderSide(color: _line),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -1208,8 +1213,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                           title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppColors.themedWhite,
                             fontSize: 13,
                             fontWeight: FontWeight.w900,
                           ),
@@ -1222,7 +1227,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.grey.shade400,
+                      color: AppColors.systemGrey400,
                       fontSize: 11,
                       height: 1.15,
                     ),
@@ -1541,11 +1546,12 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                     ),
                     child: TextField(
                       controller: _messageController,
-                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      style:
+                          TextStyle(color: AppColors.themedWhite, fontSize: 15),
                       decoration: InputDecoration(
                         hintText:
                             'Pregunta por cliente, producto, factura, ruta, objetivo...',
-                        hintStyle: TextStyle(color: Colors.grey.shade500),
+                        hintStyle: TextStyle(color: AppColors.systemGrey500),
                         border: InputBorder.none,
                         prefixIcon: Icon(
                           isLoading
@@ -1574,17 +1580,15 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                     style: FilledButton.styleFrom(
                       padding: EdgeInsets.zero,
                       backgroundColor:
-                          isLoading ? Colors.grey.shade800 : _mint,
+                          isLoading ? AppColors.systemGrey800 : _mint,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     child: Icon(
-                      isLoading
-                          ? Icons.hourglass_top
-                          : Icons.send_rounded,
+                      isLoading ? Icons.hourglass_top : Icons.send_rounded,
                       color: isLoading
-                          ? Colors.white70
+                          ? AppColors.themedWhite70
                           : AppTheme.inkSurface,
                     ),
                   ),
@@ -1634,8 +1638,8 @@ class _WelcomeMetric extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppColors.themedWhite,
                     fontSize: 12,
                     fontWeight: FontWeight.w900,
                   ),
@@ -1646,7 +1650,7 @@ class _WelcomeMetric extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.grey.shade400,
+                    color: AppColors.systemGrey400,
                     fontSize: 10.5,
                     height: 1.15,
                   ),
@@ -1678,7 +1682,7 @@ class _SectionLabel extends StatelessWidget {
         Text(
           label.toUpperCase(),
           style: TextStyle(
-            color: Colors.grey.shade400,
+            color: AppColors.systemGrey400,
             fontSize: 10.5,
             fontWeight: FontWeight.w800,
             letterSpacing: 0,
@@ -1724,8 +1728,8 @@ class _CapabilityCard extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppColors.themedWhite,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w900,
                   ),
@@ -1739,7 +1743,7 @@ class _CapabilityCard extends StatelessWidget {
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.grey.shade400,
+              color: AppColors.systemGrey400,
               fontSize: 11,
               height: 1.2,
             ),
@@ -1793,8 +1797,8 @@ class _PromptTile extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                 ),
@@ -1807,7 +1811,7 @@ class _PromptTile extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.grey.shade400,
+                  color: AppColors.systemGrey400,
                   fontSize: 12,
                   height: 1.2,
                 ),
@@ -1857,7 +1861,7 @@ class _StatusPill extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.grey.shade400,
+              color: AppColors.systemGrey400,
               fontSize: 10,
               fontWeight: FontWeight.w600,
             ),
@@ -1865,8 +1869,8 @@ class _StatusPill extends StatelessWidget {
           const SizedBox(width: 5),
           Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.themedWhite,
               fontSize: 10,
               fontWeight: FontWeight.w800,
             ),
@@ -1897,9 +1901,10 @@ class _ComposerTool extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 38),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.045),
+          color: AppColors.themedWhite.withValues(alpha: 0.045),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border:
+              Border.all(color: AppColors.themedWhite.withValues(alpha: 0.08)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1908,8 +1913,8 @@ class _ComposerTool extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: AppColors.themedWhite70,
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
               ),

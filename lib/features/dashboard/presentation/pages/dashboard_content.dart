@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart'; // For compute
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
@@ -52,7 +53,7 @@ BoxDecoration _executivePanelDecoration({
     border: Border.all(color: accent.withValues(alpha: accentAlpha)),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.18),
+        color: AppColors.systemBlack.withValues(alpha: 0.18),
         blurRadius: 18,
         offset: const Offset(0, 8),
       ),
@@ -76,7 +77,7 @@ BoxDecoration _executiveFieldDecoration({
     border: Border.all(
       color: active
           ? accent.withValues(alpha: 0.52)
-          : Colors.white.withValues(alpha: 0.08),
+          : AppColors.themedWhite.withValues(alpha: 0.08),
     ),
     boxShadow: active
         ? [
@@ -206,8 +207,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     final result = await showDialog<FiFilterState>(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
+        backgroundColor: AppColors.transparent,
+        surfaceTintColor: AppColors.transparent,
         child: Container(
           padding: const EdgeInsets.all(16),
           constraints: const BoxConstraints(maxWidth: 400, maxHeight: 400),
@@ -672,7 +673,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                           if (_isLoading)
                             Positioned.fill(
                               child: ColoredBox(
-                                color: Colors.black.withValues(alpha: 0.3),
+                                color: AppColors.systemBlack
+                                    .withValues(alpha: 0.3),
                                 child: const Center(
                                   child: SizedBox(
                                     width: 20,
@@ -732,7 +734,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                 Text(
                   'Actividad comercial',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                     fontSize: small ? 16 : 20,
                     fontWeight: FontWeight.bold,
                   ),
@@ -741,7 +743,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                 Text(
                   'Vista ejecutiva de ventas, margen y cartera',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.52),
+                    color: AppColors.themedWhite.withValues(alpha: 0.52),
                     fontSize: small ? 10 : 11,
                   ),
                   maxLines: 1,
@@ -783,10 +785,10 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                 size: 18,
               ),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 'Segmentacion ejecutiva',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),
@@ -848,7 +850,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                         borderSide: BorderSide(
                           color: _selectedVendedor != null
                               ? AppTheme.info
-                              : Colors.transparent,
+                              : AppColors.transparent,
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -864,7 +866,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                     dropdownColor: AppTheme.raisedSurface,
                     icon:
                         const Icon(Icons.arrow_drop_down, color: AppTheme.info),
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    style:
+                        TextStyle(color: AppColors.themedWhite, fontSize: 13),
                     items: [
                       const DropdownMenuItem<String>(
                         value: '',
@@ -920,16 +923,16 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                                   : '${_selectedClientCodes.length} selec.',
                               style: TextStyle(
                                 color: _selectedClientCodes.isNotEmpty
-                                    ? Colors.white
-                                    : Colors.white54,
+                                    ? AppColors.themedWhite
+                                    : AppColors.themedWhite54,
                                 fontSize: 13,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const Icon(
+                          Icon(
                             Icons.arrow_drop_down,
-                            color: Colors.white54,
+                            color: AppColors.themedWhite54,
                           ),
                         ],
                       ),
@@ -966,16 +969,16 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                                   : _buildFiFilterSummary(),
                               style: TextStyle(
                                 color: _fiFilters.isNotEmpty
-                                    ? Colors.white
-                                    : Colors.white54,
+                                    ? AppColors.themedWhite
+                                    : AppColors.themedWhite54,
                                 fontSize: 13,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const Icon(
+                          Icon(
                             Icons.arrow_drop_down,
-                            color: Colors.white54,
+                            color: AppColors.themedWhite54,
                           ),
                         ],
                       ),
@@ -1028,16 +1031,16 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                                   : '${_selectedProductCodes.length} selec.',
                               style: TextStyle(
                                 color: _selectedProductCodes.isNotEmpty
-                                    ? Colors.white
-                                    : Colors.white54,
+                                    ? AppColors.themedWhite
+                                    : AppColors.themedWhite54,
                                 fontSize: 13,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const Icon(
+                          Icon(
                             Icons.arrow_drop_down,
-                            color: Colors.white54,
+                            color: AppColors.themedWhite54,
                           ),
                         ],
                       ),
@@ -1153,12 +1156,12 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           const SizedBox(width: 4),
           Text(
             value,
-            style: const TextStyle(color: Colors.white, fontSize: 11),
+            style: TextStyle(color: AppColors.themedWhite, fontSize: 11),
           ),
           const SizedBox(width: 6),
           GestureDetector(
             onTap: onRemove,
-            child: const Icon(Icons.close, size: 14, color: Colors.white54),
+            child: Icon(Icons.close, size: 14, color: AppColors.themedWhite54),
           ),
         ],
       ),
@@ -1220,11 +1223,11 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
                 'Años:',
-                style: TextStyle(color: Colors.white, fontSize: 12),
+                style: TextStyle(color: AppColors.themedWhite, fontSize: 12),
               ),
             ),
             const SizedBox(width: 12),
@@ -1263,9 +1266,9 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         // Months
         Row(
           children: [
-            const Text(
+            Text(
               'Meses:',
-              style: TextStyle(color: Colors.white, fontSize: 12),
+              style: TextStyle(color: AppColors.themedWhite, fontSize: 12),
             ),
             const Spacer(),
             TextButton(
@@ -1350,16 +1353,16 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                 : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.info,
-              disabledBackgroundColor: Colors.white10,
+              disabledBackgroundColor: AppColors.themedWhite10,
               padding: const EdgeInsets.symmetric(vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: const Text(
+            child: Text(
               'Aplicar Cambios',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1391,16 +1394,17 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           decoration: BoxDecoration(
             color: AppTheme.softPanel.withValues(alpha: 0.72),
             borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            border: Border.all(
+                color: AppColors.themedWhite.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: [
               const Icon(Icons.speed_outlined, color: AppTheme.info, size: 18),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 'KPIs del periodo',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
@@ -1409,7 +1413,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
               if (_kpiData != null)
                 Text(
                   '${DateFormatter.getMonthName(_kpiData!['period']['month'] as int)} ${_kpiData!['period']['year']}',
-                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                  style:
+                      TextStyle(color: AppColors.themedWhite38, fontSize: 11),
                 ),
             ],
           ),
@@ -1532,7 +1537,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(color: Colors.white70, fontSize: 10),
+                  style:
+                      TextStyle(color: AppColors.themedWhite70, fontSize: 10),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1557,8 +1563,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
             fit: BoxFit.scaleDown,
             child: Text(
               value,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppColors.themedWhite,
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
               ),
@@ -1578,7 +1584,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
             Text(
               subtitle,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.44),
+                color: AppColors.themedWhite.withValues(alpha: 0.44),
                 fontSize: 9,
               ),
               overflow: TextOverflow.ellipsis,
@@ -1603,15 +1609,16 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       decoration: BoxDecoration(
         color: AppTheme.softPanel.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border:
+            Border.all(color: AppColors.themedWhite.withValues(alpha: 0.08)),
       ),
       child: Row(
         children: [
           const Icon(Icons.bar_chart, color: AppTheme.info, size: 16),
           const SizedBox(width: 8),
-          const Text(
+          Text(
             'Grafico',
-            style: TextStyle(color: Colors.white70, fontSize: 12),
+            style: TextStyle(color: AppColors.themedWhite70, fontSize: 12),
           ),
           const SizedBox(width: 12),
           ...ChartType.values.map((type) {
@@ -1635,14 +1642,18 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                     Icon(
                       icon,
                       size: 14,
-                      color: isSelected ? Colors.white : Colors.white54,
+                      color: isSelected
+                          ? AppColors.themedWhite
+                          : AppColors.themedWhite54,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       label,
                       style: TextStyle(
                         fontSize: 11,
-                        color: isSelected ? Colors.white : Colors.white54,
+                        color: isSelected
+                            ? AppColors.themedWhite
+                            : AppColors.themedWhite54,
                       ),
                     ),
                   ],
@@ -1652,13 +1663,13 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   setState(() => _chartType = type);
                 },
                 selectedColor: AppTheme.info.withValues(alpha: 0.26),
-                backgroundColor: Colors.white.withValues(alpha: 0.05),
+                backgroundColor: AppColors.themedWhite.withValues(alpha: 0.05),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                   side: BorderSide(
                     color: isSelected
                         ? AppTheme.info.withValues(alpha: 0.42)
-                        : Colors.white.withValues(alpha: 0.08),
+                        : AppColors.themedWhite.withValues(alpha: 0.08),
                   ),
                 ),
                 showCheckmark: false,
@@ -1715,8 +1726,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           ),
           Text(
             '${CurrencyFormatter.format(margin)} (${marginPct.toStringAsFixed(1)}%)',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.themedWhite,
               fontSize: 12,
               fontWeight: FontWeight.bold,
             ),
@@ -1883,8 +1894,8 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: Colors.transparent,
-      surfaceTintColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
+      surfaceTintColor: AppColors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -1895,7 +1906,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
+                Row(
                   children: [
                     Icon(
                       Icons.inventory_2_outlined,
@@ -1906,7 +1917,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                     Text(
                       'Filtrar Productos',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppColors.themedWhite,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1934,23 +1945,23 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
             TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: AppColors.themedWhite),
               decoration: InputDecoration(
                 hintText: 'Buscar por codigo, nombre o familia...',
-                hintStyle: const TextStyle(color: Colors.white30),
-                prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                hintStyle: TextStyle(color: AppColors.themedWhite30),
+                prefixIcon: Icon(Icons.search, color: AppColors.themedWhite54),
                 filled: true,
                 fillColor: AppTheme.softPanel.withValues(alpha: 0.82),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.08),
+                    color: AppColors.themedWhite.withValues(alpha: 0.08),
                   ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.08),
+                    color: AppColors.themedWhite.withValues(alpha: 0.08),
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
@@ -1966,10 +1977,10 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                       child: CircularProgressIndicator(color: AppTheme.info),
                     )
                   : _searchResults.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             'No hay resultados',
-                            style: TextStyle(color: Colors.white30),
+                            style: TextStyle(color: AppColors.themedWhite30),
                           ),
                         )
                       : ListView.builder(
@@ -1987,15 +1998,16 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                                 isSelected
                                     ? Icons.check_circle
                                     : Icons.circle_outlined,
-                                color:
-                                    isSelected ? AppTheme.info : Colors.white24,
+                                color: isSelected
+                                    ? AppTheme.info
+                                    : AppColors.themedWhite24,
                               ),
                               title: Text(
                                 name,
                                 style: TextStyle(
                                   color: isSelected
-                                      ? Colors.white
-                                      : Colors.white70,
+                                      ? AppColors.themedWhite
+                                      : AppColors.themedWhite70,
                                 ),
                               ),
                               subtitle: Row(
@@ -2003,8 +2015,8 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                                   Flexible(
                                     child: Text(
                                       code,
-                                      style: const TextStyle(
-                                        color: Colors.white30,
+                                      style: TextStyle(
+                                        color: AppColors.themedWhite30,
                                         fontSize: 12,
                                       ),
                                     ),
@@ -2043,9 +2055,9 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text(
+                  child: Text(
                     'Cancelar',
-                    style: TextStyle(color: Colors.white54),
+                    style: TextStyle(color: AppColors.themedWhite54),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -2057,7 +2069,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.info,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.themedWhite,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),

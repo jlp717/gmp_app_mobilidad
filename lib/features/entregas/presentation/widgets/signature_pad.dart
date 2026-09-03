@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -62,7 +63,7 @@ class _SignaturePadState extends State<SignaturePad> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: AppTheme.borderColor.withValues(alpha: 0.55),
@@ -123,19 +124,19 @@ class _SignaturePadState extends State<SignaturePad> {
                       ? (_isSaving ? null : _guardar)
                       : null,
                   icon: _isSaving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: AppColors.themedWhite,
                           ),
                         )
                       : const Icon(Icons.check),
                   label: Text(_isSaving ? 'Guardando...' : 'Guardar Firma'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.success,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.themedWhite,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -167,12 +168,12 @@ class _SignaturePadState extends State<SignaturePad> {
       // Fondo blanco
       canvas.drawRect(
         const Rect.fromLTWH(0, 0, 400, 200),
-        Paint()..color = Colors.white,
+        Paint()..color = AppColors.themedWhite,
       );
 
       // Dibujar firma
       final paint = Paint()
-        ..color = Colors.black
+        ..color = AppColors.systemBlack
         ..strokeWidth = 3.0
         ..strokeCap = StrokeCap.round;
 
@@ -213,7 +214,7 @@ class _SignaturePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.black
+      ..color = AppColors.systemBlack
       ..strokeWidth = 3.0
       ..strokeCap = StrokeCap.round;
 

@@ -2,6 +2,7 @@
 // JEFE_VENTAS ve todos los clientes, COMERCIAL solo los suyos
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
@@ -169,11 +170,11 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off, size: 48, color: Colors.grey[600]),
+            Icon(Icons.cloud_off, size: 48, color: AppColors.systemGrey600),
             const SizedBox(height: 12),
             Text(
               _error!,
-              style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              style: TextStyle(color: AppColors.systemGrey400, fontSize: 14),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
@@ -286,8 +287,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
           Expanded(
             child: Text(
               label,
-              style:
-                  TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
           ),
         ],
@@ -377,7 +377,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
             const SizedBox(height: 2),
             Text(
               label,
-              style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+              style: TextStyle(fontSize: 10, color: AppColors.systemGrey500),
             ),
           ],
         ),
@@ -409,8 +409,8 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
             flex: 3,
             child: Text(
               label,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppColors.themedWhite,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -425,8 +425,8 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
             child: Text(
               '$total',
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: AppColors.themedWhite70,
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
               ),
@@ -470,13 +470,13 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
             : null,
       ),
       child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        data: Theme.of(context).copyWith(dividerColor: AppColors.transparent),
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
           childrenPadding:
               const EdgeInsets.only(left: 14, right: 14, bottom: 12),
           backgroundColor: headerColor,
-          collapsedBackgroundColor: Colors.transparent,
+          collapsedBackgroundColor: AppColors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -491,8 +491,8 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
                   children: [
                     Text(
                       name.isNotEmpty ? name : 'Cliente $shortCode',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppColors.themedWhite,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -505,7 +505,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
                         if (city.isNotEmpty) city,
                       ].join('  ·  '),
                       style: TextStyle(
-                        color: Colors.grey[500],
+                        color: AppColors.systemGrey500,
                         fontSize: 11,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -520,7 +520,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
               Text(
                 '$total',
                 style: TextStyle(
-                  color: Colors.grey[500],
+                  color: AppColors.systemGrey500,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
@@ -535,14 +535,14 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
                   Icon(
                     Icons.location_on_outlined,
                     size: 14,
-                    color: Colors.grey[600],
+                    color: AppColors.systemGrey600,
                   ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       [address, if (city.isNotEmpty) city].join(', '),
                       style: TextStyle(
-                        color: Colors.grey[500],
+                        color: AppColors.systemGrey500,
                         fontSize: 11,
                       ),
                     ),
@@ -644,7 +644,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
             const SizedBox(height: 4),
             Text(
               detail,
-              style: TextStyle(color: Colors.grey[500], fontSize: 11),
+              style: TextStyle(color: AppColors.systemGrey500, fontSize: 11),
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
             ),
@@ -710,8 +710,8 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
             hasGlobalData
                 ? 'Sin alertas para tus clientes'
                 : 'Sin alertas de Nestlé',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.themedWhite,
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
@@ -723,7 +723,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
                     'pero ninguna afecta a tus clientes'
                 : 'Todos tus clientes estan al dia '
                     'con sus objetivos',
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+            style: TextStyle(color: AppColors.systemGrey500, fontSize: 13),
             textAlign: TextAlign.center,
           ),
         ],
@@ -736,8 +736,8 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
   Widget _buildSectionTitle(String text) {
     return Text(
       text,
-      style: const TextStyle(
-        color: Colors.white,
+      style: TextStyle(
+        color: AppColors.themedWhite,
         fontSize: 15,
         fontWeight: FontWeight.w600,
       ),
@@ -768,7 +768,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
       final cleaned = hex.replaceFirst('#', '');
       return Color(int.parse('FF$cleaned', radix: 16));
     } catch (_) {
-      return Colors.grey;
+      return AppColors.systemGrey;
     }
   }
 }

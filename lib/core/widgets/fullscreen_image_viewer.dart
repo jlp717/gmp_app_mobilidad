@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 
@@ -47,7 +48,7 @@ class FullscreenImageViewer extends StatelessWidget {
     Navigator.of(context, rootNavigator: rootNavigator).push(
       PageRouteBuilder<void>(
         opaque: false,
-        barrierColor: Colors.black54,
+        barrierColor: AppColors.systemBlack54,
         barrierDismissible: true,
         pageBuilder: (ctx, anim, secondAnim) {
           return FullscreenImageViewer(
@@ -66,18 +67,18 @@ class FullscreenImageViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const viewerBackground = Colors.black;
-    const imageSurface = Color(0xFFF7F8FA);
+    const viewerBackground = AppColors.systemBlack;
+    const imageSurface = AppColors.legacyFFF7F8FA;
 
     return Scaffold(
       backgroundColor: viewerBackground,
       appBar: AppBar(
         backgroundColor: viewerBackground,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: AppColors.themedWhite),
         title: Text(
           productName,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
+          style: TextStyle(color: AppColors.themedWhite, fontSize: 14),
           overflow: TextOverflow.ellipsis,
         ),
         leading: IconButton(

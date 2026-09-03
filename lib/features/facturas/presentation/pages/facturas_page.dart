@@ -307,11 +307,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 ],
               )
             : null,
-        color: isDark ? null : Colors.white,
+        color: isDark ? null : AppColors.themedWhite,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
+            color: AppColors.systemBlack.withValues(alpha: 0.2),
             blurRadius: 16,
             offset: const Offset(0, 7),
           ),
@@ -323,7 +323,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         border: Border.all(
           color: isDark
               ? documentColor.withValues(alpha: 0.22)
-              : Colors.grey.shade200,
+              : AppColors.systemGrey200,
         ),
       ),
       child: Stack(
@@ -351,7 +351,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             ),
           ),
           Material(
-            color: Colors.transparent,
+            color: AppColors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
               onTap: () {}, // Optional: Show details
@@ -414,8 +414,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                       fontWeight: FontWeight.w400,
                                       fontSize: 11,
                                       color: isDark
-                                          ? Colors.grey.shade400
-                                          : Colors.grey.shade600,
+                                          ? AppColors.systemGrey400
+                                          : AppColors.systemGrey600,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -438,21 +438,22 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                     ),
                                     decoration: BoxDecoration(
                                       color: isDark
-                                          ? Colors.white.withValues(alpha: 0.12)
-                                          : Colors.grey.shade200,
+                                          ? AppColors.themedWhite
+                                              .withValues(alpha: 0.12)
+                                          : AppColors.systemGrey200,
                                       borderRadius: BorderRadius.circular(6),
                                       border: Border.all(
                                         color: isDark
-                                            ? Colors.white24
-                                            : Colors.grey.shade400,
+                                            ? AppColors.themedWhite24
+                                            : AppColors.systemGrey400,
                                       ),
                                     ),
                                     child: Text(
                                       factura.numeroFormateado, // ALBARAN
                                       style: TextStyle(
                                         color: isDark
-                                            ? Colors.white
-                                            : Colors.black87,
+                                            ? AppColors.themedWhite
+                                            : AppColors.systemBlack87,
                                         fontWeight: FontWeight.w900, // Heavy
                                         fontSize: Responsive.isSmall(context)
                                             ? 14
@@ -464,8 +465,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                     factura.fecha,
                                     style: TextStyle(
                                       color: isDark
-                                          ? Colors.white70
-                                          : Colors.grey[800],
+                                          ? AppColors.themedWhite70
+                                          : AppColors.systemGrey800,
                                       fontSize:
                                           Responsive.isSmall(context) ? 12 : 14,
                                       fontWeight: FontWeight.w600,
@@ -520,7 +521,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                     const SizedBox(height: 16),
                     Divider(
                       height: 1,
-                      color: isDark ? Colors.white10 : Colors.grey.shade100,
+                      color: isDark
+                          ? AppColors.themedWhite10
+                          : AppColors.systemGrey100,
                     ),
                     const SizedBox(height: 12),
 
@@ -573,7 +576,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       child: Text(
         '$label ${_formatMoney(value)}',
         style: TextStyle(
-          color: isDark ? Colors.white60 : Colors.grey.shade700,
+          color: isDark ? AppColors.themedWhite60 : AppColors.systemGrey700,
           fontSize: 11,
           fontWeight: FontWeight.w600,
         ),
@@ -623,12 +626,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         decoration: BoxDecoration(
           color: isPrimary
               ? AppTheme.info.withValues(alpha: 0.1)
-              : Colors.transparent,
+              : AppColors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isPrimary
                 ? AppTheme.info.withValues(alpha: 0.5)
-                : (isDark ? Colors.white24 : Colors.grey.shade300),
+                : (isDark ? AppColors.themedWhite24 : AppColors.systemGrey300),
           ),
         ),
         child: Row(
@@ -638,7 +641,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               size: 16,
               color: isPrimary
                   ? (isDark ? AppTheme.info : AppTheme.info)
-                  : (isDark ? Colors.white70 : Colors.grey.shade700),
+                  : (isDark
+                      ? AppColors.themedWhite70
+                      : AppColors.systemGrey700),
             ),
             const SizedBox(width: 6),
             Text(
@@ -648,7 +653,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 fontWeight: FontWeight.w600,
                 color: isPrimary
                     ? (isDark ? AppTheme.info : AppTheme.info)
-                    : (isDark ? Colors.white70 : Colors.grey.shade700),
+                    : (isDark
+                        ? AppColors.themedWhite70
+                        : AppColors.systemGrey700),
               ),
             ),
           ],
@@ -882,90 +889,100 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   void _showShareOptions(BuildContext context, Factura factura) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border(
-            top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+      backgroundColor: AppColors.transparent,
+      builder: (sheetContext) {
+        AppColors.syncWithTheme(sheetContext);
+        final scheme = Theme.of(sheetContext).colorScheme;
+        final onSurface = scheme.onSurface;
+        return Container(
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            border: Border(
+              top: BorderSide(color: scheme.outlineVariant),
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 20),
-                child: Text(
-                  'Compartir ${factura.tipoLabel}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                ),
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: AppColors.whatsappGreen,
-                  child: Icon(Icons.chat, color: Colors.white, size: 20),
-                ),
-                title: const Text(
-                  'WhatsApp',
-                  style: TextStyle(color: Colors.white),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _whatsAppFactura(factura);
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: AppTheme.info,
-                  child: Icon(
-                    Icons.email_outlined,
-                    color: Colors.white,
-                    size: 20,
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: scheme.outline,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                title: const Text(
-                  'Email',
-                  style: TextStyle(color: Colors.white),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Text(
+                    'Compartir ${factura.tipoLabel}',
+                    style:
+                        Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: onSurface,
+                            ),
+                  ),
                 ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _emailFactura(factura);
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Colors.grey,
-                  child:
-                      Icon(Icons.share_outlined, color: Colors.white, size: 20),
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.whatsappGreen,
+                    child:
+                        Icon(Icons.chat, color: AppColors.onAccent, size: 20),
+                  ),
+                  title: Text(
+                    'WhatsApp',
+                    style: TextStyle(color: onSurface),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _whatsAppFactura(factura);
+                  },
                 ),
-                title: const Text(
-                  'Sistema',
-                  style: TextStyle(color: Colors.white),
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppTheme.info,
+                    child: Icon(
+                      Icons.email_outlined,
+                      color: AppColors.onAccent,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'Email',
+                    style: TextStyle(color: onSurface),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _emailFactura(factura);
+                  },
                 ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _shareFacturaPdf(factura);
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.systemGrey,
+                    child: Icon(
+                      Icons.share_outlined,
+                      color: AppColors.onAccent,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'Sistema',
+                    style: TextStyle(color: onSurface),
+                  ),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _shareFacturaPdf(factura);
+                  },
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1104,12 +1121,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               decoration: BoxDecoration(
                 color: AppTheme.raisedSurface,
                 border: Border(
-                  bottom:
-                      BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+                  bottom: BorderSide(
+                      color: AppColors.themedWhite.withValues(alpha: 0.05)),
                 ),
                 boxShadow: const [
                   BoxShadow(
-                    color: Colors.black12,
+                    color: AppColors.systemBlack12,
                     blurRadius: 4,
                     offset: Offset(0, 2),
                   ),
@@ -1282,10 +1299,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 ],
               )
             : null,
-        color: isDark ? null : Colors.white,
+        color: isDark ? null : AppColors.themedWhite,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark ? color.withValues(alpha: 0.20) : Colors.grey.shade100,
+          color:
+              isDark ? color.withValues(alpha: 0.20) : AppColors.systemGrey100,
         ),
         boxShadow: isDark ? AppTheme.elevation1 : null,
       ),
@@ -1310,7 +1328,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
-                    color: isDark ? Colors.white : Colors.black87,
+                    color: isDark
+                        ? AppColors.themedWhite
+                        : AppColors.systemBlack87,
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 1,
@@ -1324,8 +1344,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             label,
             style: TextStyle(
               color: isDark
-                  ? Colors.white.withValues(alpha: 0.7)
-                  : Colors.grey.shade600,
+                  ? AppColors.themedWhite.withValues(alpha: 0.7)
+                  : AppColors.systemGrey600,
               fontSize: 10,
               fontWeight: FontWeight.w500,
             ),
@@ -1355,12 +1375,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 ],
               )
             : null,
-        color: isDark ? null : Colors.grey.shade50,
+        color: isDark ? null : AppColors.systemGrey50,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark
               ? AppTheme.accentMint.withValues(alpha: 0.18)
-              : Colors.grey.shade200,
+              : AppColors.systemGrey200,
         ),
         boxShadow: isDark ? AppTheme.elevation1 : null,
       ),
@@ -1373,7 +1393,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               Icon(
                 Icons.filter_list,
                 size: 16,
-                color: isDark ? Colors.white38 : Colors.grey.shade500,
+                color:
+                    isDark ? AppColors.themedWhite38 : AppColors.systemGrey500,
               ),
               const SizedBox(width: 6),
               Text(
@@ -1381,7 +1402,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white38 : Colors.grey.shade500,
+                  color: isDark
+                      ? AppColors.themedWhite38
+                      : AppColors.systemGrey500,
                   letterSpacing: 0,
                 ),
               ),
@@ -1530,14 +1553,14 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               ? accentColor.withValues(alpha: 0.08)
               : (isDark
                   ? AppTheme.inkSurface.withValues(alpha: 0.34)
-                  : Colors.white),
+                  : AppColors.themedWhite),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isActive
                 ? accentColor.withValues(alpha: 0.4)
                 : (isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.grey.shade200),
+                    ? AppColors.themedWhite.withValues(alpha: 0.08)
+                    : AppColors.systemGrey200),
             width: isActive ? 1.5 : 1,
           ),
         ),
@@ -1549,7 +1572,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               size: 16,
               color: isActive
                   ? accentColor
-                  : (isDark ? Colors.white38 : Colors.grey.shade400),
+                  : (isDark
+                      ? AppColors.themedWhite38
+                      : AppColors.systemGrey400),
             ),
             const SizedBox(width: 8),
             Text(
@@ -1558,8 +1583,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 color: isActive
                     ? accentColor
                     : (isDark
-                        ? Colors.white.withValues(alpha: 0.7)
-                        : Colors.black87),
+                        ? AppColors.themedWhite.withValues(alpha: 0.7)
+                        : AppColors.systemBlack87),
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
                 fontSize: 13,
               ),
@@ -1577,13 +1602,14 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color:
-            isDark ? AppTheme.inkSurface.withValues(alpha: 0.34) : Colors.white,
+        color: isDark
+            ? AppTheme.inkSurface.withValues(alpha: 0.34)
+            : AppColors.themedWhite,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.grey.shade200,
+              ? AppColors.themedWhite.withValues(alpha: 0.08)
+              : AppColors.systemGrey200,
         ),
       ),
       child: DropdownButtonHideUnderline(
@@ -1609,15 +1635,16 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               Icon(
                 Icons.description_outlined,
                 size: 16,
-                color: isDark ? Colors.white38 : Colors.grey.shade400,
+                color:
+                    isDark ? AppColors.themedWhite38 : AppColors.systemGrey400,
               ),
               const SizedBox(width: 8),
               Text(
                 'Todos',
                 style: TextStyle(
                   color: isDark
-                      ? Colors.white.withValues(alpha: 0.7)
-                      : Colors.black87,
+                      ? AppColors.themedWhite.withValues(alpha: 0.7)
+                      : AppColors.systemBlack87,
                   fontSize: 13,
                 ),
               ),
@@ -1625,11 +1652,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           ),
           icon: Icon(
             Icons.arrow_drop_down,
-            color: isDark ? Colors.white38 : Colors.grey.shade400,
+            color: isDark ? AppColors.themedWhite38 : AppColors.systemGrey400,
           ),
-          dropdownColor: isDark ? AppTheme.raisedSurface : Colors.white,
+          dropdownColor:
+              isDark ? AppTheme.raisedSurface : AppColors.themedWhite,
           style: TextStyle(
-            color: isDark ? Colors.white : Colors.black87,
+            color: isDark ? AppColors.themedWhite : AppColors.systemBlack87,
             fontSize: 14,
           ),
           isExpanded: true,
@@ -1648,33 +1676,34 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color:
-            isDark ? AppTheme.inkSurface.withValues(alpha: 0.34) : Colors.white,
+        color: isDark
+            ? AppTheme.inkSurface.withValues(alpha: 0.34)
+            : AppColors.themedWhite,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.grey.shade200,
+              ? AppColors.themedWhite.withValues(alpha: 0.08)
+              : AppColors.systemGrey200,
         ),
       ),
       child: TextField(
         controller: controller,
         onChanged: (_) => _onSearchChanged(),
         style: TextStyle(
-          color: isDark ? Colors.white : Colors.black87,
+          color: isDark ? AppColors.themedWhite : AppColors.systemBlack87,
           fontSize: 14,
         ),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.3)
-                : Colors.grey.shade400,
+                ? AppColors.themedWhite.withValues(alpha: 0.3)
+                : AppColors.systemGrey400,
             fontSize: 13,
           ),
           prefixIcon: Icon(
             icon,
-            color: isDark ? Colors.white38 : Colors.grey.shade400,
+            color: isDark ? AppColors.themedWhite38 : AppColors.systemGrey400,
             size: 18,
           ),
           prefixIconConstraints: const BoxConstraints(minWidth: 40),
@@ -1699,13 +1728,14 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color:
-            isDark ? AppTheme.inkSurface.withValues(alpha: 0.34) : Colors.white,
+        color: isDark
+            ? AppTheme.inkSurface.withValues(alpha: 0.34)
+            : AppColors.themedWhite,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.grey.shade200,
+              ? AppColors.themedWhite.withValues(alpha: 0.08)
+              : AppColors.systemGrey200,
         ),
       ),
       child: DropdownButtonHideUnderline(
@@ -1719,15 +1749,16 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               Icon(
                 icon,
                 size: 16,
-                color: isDark ? Colors.white38 : Colors.grey.shade400,
+                color:
+                    isDark ? AppColors.themedWhite38 : AppColors.systemGrey400,
               ),
               const SizedBox(width: 8),
               Text(
                 hint,
                 style: TextStyle(
                   color: isDark
-                      ? Colors.white.withValues(alpha: 0.3)
-                      : Colors.grey.shade400,
+                      ? AppColors.themedWhite.withValues(alpha: 0.3)
+                      : AppColors.systemGrey400,
                   fontSize: 13,
                 ),
               ),
@@ -1735,11 +1766,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           ),
           icon: Icon(
             Icons.arrow_drop_down,
-            color: isDark ? Colors.white38 : Colors.grey.shade400,
+            color: isDark ? AppColors.themedWhite38 : AppColors.systemGrey400,
           ),
-          dropdownColor: isDark ? AppTheme.raisedSurface : Colors.white,
+          dropdownColor:
+              isDark ? AppTheme.raisedSurface : AppColors.themedWhite,
           style: TextStyle(
-            color: isDark ? Colors.white : Colors.black87,
+            color: isDark ? AppColors.themedWhite : AppColors.systemBlack87,
             fontSize: 14,
           ),
           isExpanded: true,
@@ -1767,7 +1799,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   ? Icons.search_off_rounded
                   : Icons.receipt_long_outlined,
               size: 56,
-              color: Colors.white24,
+              color: AppColors.themedWhite24,
             ),
             const SizedBox(height: 16),
             Text(
@@ -1775,8 +1807,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   ? 'No se han encontrado documentos para los filtros seleccionados'
                   : 'No hay documentos disponibles',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white54,
+              style: TextStyle(
+                color: AppColors.themedWhite54,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -1787,7 +1819,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   ? 'Prueba a seleccionar otro comercial, ampliar el rango de fechas o modificar la búsqueda.'
                   : 'Los documentos apareceran aqui cuando esten disponibles.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white38, fontSize: 13),
+              style: TextStyle(color: AppColors.themedWhite38, fontSize: 13),
             ),
             if (hasFilters) ...[
               const SizedBox(height: 20),
@@ -1806,8 +1838,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 icon: const Icon(Icons.filter_alt_off, size: 18),
                 label: const Text('Limpiar filtros'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white54,
-                  side: const BorderSide(color: Colors.white24),
+                  foregroundColor: AppColors.themedWhite54,
+                  side: BorderSide(color: AppColors.themedWhite24),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),

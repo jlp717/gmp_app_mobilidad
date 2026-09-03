@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -972,7 +973,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       // The detail owns an explicit close action. Keeping the route from
       // dismissing by barrier tap or swipe guarantees that the confirmation
       // lock cannot be bypassed while evidence/payment is being persisted.
@@ -1021,8 +1022,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             Expanded(
               child: Text(
                 'Nota para ${albaran.nombreCliente}',
-                style:
-                    TextStyle(color: AppTheme.textPrimary, fontSize: 16),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 16),
                 overflow: TextOverflow.ellipsis,
               ),
             ),

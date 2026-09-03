@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_models.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_preferences.dart';
@@ -215,7 +216,7 @@ class LocalNotificationService {
         importance: Importance.high,
         priority: Priority.high,
         category: AndroidNotificationCategory.reminder,
-        color: const Color(0xFF2F80ED),
+        color: AppColors.legacyFF2F80ED,
         actions: actions,
       ),
       iOS: DarwinNotificationDetails(

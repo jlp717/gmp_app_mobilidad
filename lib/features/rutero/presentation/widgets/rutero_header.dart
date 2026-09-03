@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 
@@ -63,7 +64,7 @@ class RuteroHeader extends StatelessWidget {
                         fontSize: isSmallScreen ? 18 : 20,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0,
-                        color: Colors.white,
+                        color: AppColors.themedWhite,
                       ),
                     ),
                   ),
@@ -118,7 +119,7 @@ class RuteroHeader extends StatelessWidget {
           ),
           IconButton(
             onPressed: onSortTap,
-            icon: const Icon(Icons.sort, color: Colors.white, size: 22),
+            icon: Icon(Icons.sort, color: AppColors.themedWhite, size: 22),
             tooltip: 'Ordenar',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),

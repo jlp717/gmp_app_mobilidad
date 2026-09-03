@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
@@ -95,8 +96,8 @@ class ClientBalanceBadge extends StatelessWidget {
                   Text(
                     '$year: fact. ${PedidosFormatters.money(facturado)}'
                     ' - cobr. ${PedidosFormatters.money(cobrado)}',
-                    style: const TextStyle(
-                      color: Colors.white54,
+                    style: TextStyle(
+                      color: AppColors.themedWhite54,
                       fontSize: 9,
                     ),
                   ),
@@ -132,7 +133,7 @@ class ClientBalanceBadge extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3)),
         ),
-        title: const Row(
+        title: Row(
           children: [
             Icon(
               Icons.account_balance_wallet,
@@ -144,7 +145,7 @@ class ClientBalanceBadge extends StatelessWidget {
               child: Text(
                 'Datos financieros del cliente',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
                 ),
@@ -214,10 +215,10 @@ class ClientBalanceBadge extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       'Niveles de riesgo:',
                       style: TextStyle(
-                        color: Colors.white70,
+                        color: AppColors.themedWhite70,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
@@ -299,7 +300,7 @@ class ClientBalanceBadge extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             desc,
-            style: const TextStyle(color: Colors.white38, fontSize: 10),
+            style: TextStyle(color: AppColors.themedWhite38, fontSize: 10),
           ),
         ],
       ),
@@ -328,7 +329,7 @@ class ClientBalanceBadge extends StatelessWidget {
           Flexible(
             child: Text(
               desc,
-              style: const TextStyle(color: Colors.white38, fontSize: 10),
+              style: TextStyle(color: AppColors.themedWhite38, fontSize: 10),
             ),
           ),
         ],
@@ -435,7 +436,7 @@ Color clientDebtColor(Map<String, Object?> debt) {
   final state = debt['state'];
   if (state == 'loading') return AppTheme.info;
   if (state == 'error') return AppTheme.warning;
-  if (state == 'unknown') return Colors.white54;
+  if (state == 'unknown') return AppColors.themedWhite54;
   final pending = (debt['pending'] as double?) ?? 0;
   final overdue = (debt['overdue'] as double?) ?? 0;
   if (overdue > 0 || pending > 10000) return AppTheme.error;

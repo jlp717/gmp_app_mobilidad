@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:intl/intl.dart';
@@ -37,7 +38,7 @@ class CobrosSummaryCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
+            color: AppColors.systemBlack.withValues(alpha: 0.12),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -88,7 +89,8 @@ class CobrosSummaryCard extends StatelessWidget {
                       child: CircularProgressIndicator(
                         value: progreso,
                         strokeWidth: 8,
-                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        backgroundColor:
+                            AppColors.themedWhite.withValues(alpha: 0.1),
                         valueColor: AlwaysStoppedAnimation(
                           progreso >= 1 ? AppTheme.success : AppTheme.info,
                         ),
@@ -155,7 +157,7 @@ class CobrosSummaryCard extends StatelessWidget {
           ),
 
           const SizedBox(height: 16),
-          const Divider(color: Colors.white10),
+          Divider(color: AppColors.themedWhite10),
           const SizedBox(height: 16),
 
           // CTR Alerta

@@ -458,13 +458,13 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                   fillColor: AppTheme.inkSurface.withValues(alpha: 0.38),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                    borderSide:
-                        BorderSide(color: AppTheme.textPrimary.withValues(alpha: 0.08)),
+                    borderSide: BorderSide(
+                        color: AppTheme.textPrimary.withValues(alpha: 0.08)),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                    borderSide:
-                        BorderSide(color: AppTheme.textPrimary.withValues(alpha: 0.08)),
+                    borderSide: BorderSide(
+                        color: AppTheme.textPrimary.withValues(alpha: 0.08)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppTheme.radiusLg),
@@ -524,8 +524,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                           ),
                           subtitle: Text(
                             town.isEmpty ? code : '$code · $town',
-                            style:
-                                TextStyle(color: AppTheme.textSecondary),
+                            style: TextStyle(color: AppTheme.textSecondary),
                             overflow: TextOverflow.ellipsis,
                           ),
                           trailing: selected
@@ -585,8 +584,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
             const SizedBox(height: 16),
             Text(
               'No hay datos de evolución para $_selectedClientName ($_selectedClientCode)',
-              style:
-                  TextStyle(color: AppTheme.textSecondary, fontSize: 16),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
               textAlign: TextAlign.center,
             ),
           ],

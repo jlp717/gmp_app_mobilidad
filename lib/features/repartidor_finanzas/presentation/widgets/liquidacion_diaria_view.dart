@@ -8,11 +8,11 @@ import 'package:intl/intl.dart';
 
 /// Corporate palette aligned with ERP/PDF liquidación (#003d7a / #067a58).
 abstract final class LiquidacionBrand {
-  static const navy = Color(0xFF003D7A);
-  static const navyDeep = Color(0xFF1A5490);
-  static const green = Color(0xFF00A878);
-  static const greenDark = Color(0xFF067A58);
-  static const sky = Color(0xFFD7ECFF);
+  static const navy = AppColors.legacyFF003D7A;
+  static const navyDeep = AppColors.legacyFF1A5490;
+  static const green = AppColors.forest;
+  static const greenDark = AppColors.legacyFF067A58;
+  static const sky = AppColors.legacyFFD7ECFF;
 }
 
 String formatLiquidacionMoney(double value, {bool withSymbol = true}) {
@@ -224,9 +224,9 @@ class _LiquidacionHeroHeader extends StatelessWidget {
                   if (onBack != null)
                     IconButton(
                       onPressed: onBack,
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.arrow_back_rounded,
-                        color: Colors.white,
+                        color: AppColors.themedWhite,
                       ),
                       tooltip: 'Volver',
                     ),
@@ -244,7 +244,7 @@ class _LiquidacionHeroHeader extends StatelessWidget {
                           'Liquidación Diaria',
                           style:
                               Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    color: Colors.white,
+                                    color: AppColors.themedWhite,
                                     fontWeight: FontWeight.w800,
                                   ),
                         ),
@@ -319,13 +319,13 @@ class _MetaChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return RichText(
       text: TextSpan(
-        style: const TextStyle(color: Color(0xFF9EC5EA), fontSize: 11),
+        style: const TextStyle(color: AppColors.legacyFF9EC5EA, fontSize: 11),
         children: [
           TextSpan(
             text: '$label: ',
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          TextSpan(text: value, style: const TextStyle(color: Colors.white)),
+          TextSpan(text: value, style: TextStyle(color: AppColors.themedWhite)),
         ],
       ),
     );
@@ -417,8 +417,8 @@ class LiquidacionCobrosTable extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: DataTable(
             headingRowColor: WidgetStateProperty.all(LiquidacionBrand.navy),
-            headingTextStyle: const TextStyle(
-              color: Colors.white,
+            headingTextStyle: TextStyle(
+              color: AppColors.themedWhite,
               fontWeight: FontWeight.w700,
               fontSize: 10,
             ),
@@ -490,11 +490,11 @@ class _LiquidacionTotalStrip extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Text(
               'TOTAL',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontWeight: FontWeight.w800,
                 fontSize: 14,
               ),
@@ -502,8 +502,8 @@ class _LiquidacionTotalStrip extends StatelessWidget {
           ),
           Text(
             formatLiquidacionMoney(amount),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.themedWhite,
               fontWeight: FontWeight.w800,
               fontSize: 16,
             ),
@@ -972,7 +972,7 @@ class _LiquidacionCloseBar extends StatelessWidget {
           onPressed: isSaving || isClosed ? null : onPressed,
           style: ElevatedButton.styleFrom(
             backgroundColor: LiquidacionBrand.greenDark,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.themedWhite,
             disabledBackgroundColor: AppColors.mutedPanel,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppTheme.radiusLg),
@@ -980,12 +980,12 @@ class _LiquidacionCloseBar extends StatelessWidget {
             elevation: 0,
           ),
           icon: isSaving
-              ? const SizedBox(
+              ? SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                   ),
                 )
               : Icon(isClosed ? Icons.lock_rounded : Icons.lock_open_rounded),

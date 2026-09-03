@@ -172,8 +172,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
             style: TextStyle(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: 'Buscar por nombre, codigo o articulo...',
-              hintStyle:
-                  TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+              hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 13),
               prefixIcon:
                   const Icon(Icons.search, color: AppTheme.info, size: 20),
               suffixIcon: _search.isNotEmpty

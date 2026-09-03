@@ -9,6 +9,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
@@ -26,9 +27,9 @@ Future<void> showStockAlternativesSheet({
 }) {
   return showDialog<void>(
     context: context,
-    barrierColor: Colors.black54,
+    barrierColor: AppColors.systemBlack54,
     builder: (ctx) => Dialog(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       insetPadding: const EdgeInsets.all(16),
       child: _StockAlternativesSheet(
         product: outOfStockProduct,
@@ -190,7 +191,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x66FF3B5C),
+            color: AppColors.legacy66FF3B5C,
             blurRadius: 30,
             offset: Offset(0, -8),
           ),
@@ -298,7 +299,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
 
   Widget _buildSearchToggle() {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: _toggleSearch,
         borderRadius: BorderRadius.circular(12),
@@ -364,8 +365,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
               )
             : _searchController.text.isNotEmpty
                 ? IconButton(
-                    icon:
-                        Icon(Icons.clear, color: AppTheme.textSecondary),
+                    icon: Icon(Icons.clear, color: AppTheme.textSecondary),
                     onPressed: () {
                       _searchController.clear();
                       setState(() => _searchResults = []);
@@ -815,7 +815,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                 ),
                 const SizedBox(width: 10),
                 Material(
-                  color: Colors.transparent,
+                  color: AppColors.transparent,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(10),
                     onTap: () => _addToCart(result, _getQty(code, stockEnv)),
@@ -1098,7 +1098,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
               const SizedBox(width: 10),
               // Add to cart
               Material(
-                color: Colors.transparent,
+                color: AppColors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(10),
                   onTap: () => _addToCart(alt, qty),
@@ -1174,7 +1174,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
 
   Widget _buildQtyButton(IconData icon, bool disabled, VoidCallback onTap) {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: disabled

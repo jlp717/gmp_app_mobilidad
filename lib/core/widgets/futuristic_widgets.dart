@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Legacy card API restyled as an executive data surface.
@@ -63,8 +64,8 @@ class _HolographicCardState extends State<HolographicCard> {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [
-                            Colors.white.withValues(alpha: 0.060),
-                            Colors.transparent,
+                            AppColors.themedWhite.withValues(alpha: 0.060),
+                            AppColors.transparent,
                             accent.withValues(alpha: 0.050),
                           ],
                           stops: const [0.0, 0.45, 1.0],
@@ -82,9 +83,9 @@ class _HolographicCardState extends State<HolographicCard> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        Colors.transparent,
+                        AppColors.transparent,
                         accent.withValues(alpha: 0.66),
-                        Colors.transparent,
+                        AppColors.transparent,
                       ],
                     ),
                   ),
@@ -160,7 +161,7 @@ class NeonButton extends StatelessWidget {
         style: (style ??
                 ElevatedButton.styleFrom(
                   backgroundColor: color,
-                  foregroundColor: const Color(0xFF061014),
+                  foregroundColor: AppColors.legacyFF061014,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
                   shape: RoundedRectangleBorder(
@@ -169,7 +170,7 @@ class NeonButton extends StatelessWidget {
                 ))
             .copyWith(
           elevation: WidgetStateProperty.all(0),
-          shadowColor: WidgetStateProperty.all(Colors.transparent),
+          shadowColor: WidgetStateProperty.all(AppColors.transparent),
         ),
         child: isLoading
             ? const SizedBox(
@@ -177,14 +178,15 @@ class NeonButton extends StatelessWidget {
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF061014)),
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(AppColors.legacyFF061014),
                 ),
               )
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (icon != null) ...[
-                    Icon(icon, color: const Color(0xFF061014), size: 18),
+                    Icon(icon, color: AppColors.legacyFF061014, size: 18),
                     const SizedBox(width: 8),
                   ],
                   Text(
@@ -192,7 +194,7 @@ class NeonButton extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF061014),
+                      color: AppColors.legacyFF061014,
                       letterSpacing: 0,
                     ),
                   ),
@@ -450,7 +452,7 @@ class FuturisticTabBar extends StatelessWidget {
                   border: Border.all(
                     color: isActive
                         ? active.withValues(alpha: 0.42)
-                        : Colors.transparent,
+                        : AppColors.transparent,
                   ),
                   boxShadow: isActive
                       ? [

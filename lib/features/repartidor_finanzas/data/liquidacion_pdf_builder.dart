@@ -1,3 +1,4 @@
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'dart:typed_data';
 
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
@@ -276,7 +277,7 @@ class LiquidacionPdfBuilder {
           pw.SizedBox(height: 4),
           pw.Text(
             'Granja Mari Pepa · Vendedor $repartidorId',
-            style: const pw.TextStyle(color: PdfColors.white, fontSize: 11),
+            style: pw.TextStyle(color: PdfColors.white, fontSize: 11),
           ),
           pw.Text(
             dateLabel,

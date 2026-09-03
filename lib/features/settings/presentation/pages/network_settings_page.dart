@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
@@ -57,7 +58,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             content: Text(
               '✅ Servidor detectado: ${NetworkService.activeServer?.name ?? 'N/A'}',
             ),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.systemGreen,
           ),
         );
       }
@@ -66,7 +67,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Error: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.systemRed,
           ),
         );
       }
@@ -86,7 +87,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('✅ Servidor configurado correctamente'),
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.systemGreen,
             ),
           );
         }
@@ -95,7 +96,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('❌ No se pudo conectar al servidor'),
-              backgroundColor: Colors.red,
+              backgroundColor: AppColors.systemRed,
             ),
           );
         }
@@ -124,9 +125,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: AppColors.legacyFF0F172A,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppColors.legacyFF1E293B,
         title: const Text('Configuración de Red'),
         actions: [
           IconButton(
@@ -163,7 +164,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
   Widget _buildCurrentServerCard() {
     final activeServer = NetworkService.activeServer;
     return Card(
-      color: const Color(0xFF1E293B),
+      color: AppColors.legacyFF1E293B,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -175,13 +176,16 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   width: 12,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: activeServer != null ? Colors.green : Colors.red,
+                    color: activeServer != null
+                        ? AppColors.systemGreen
+                        : AppColors.systemRed,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color:
-                            (activeServer != null ? Colors.green : Colors.red)
-                                .withValues(alpha: 0.5),
+                        color: (activeServer != null
+                                ? AppColors.systemGreen
+                                : AppColors.systemRed)
+                            .withValues(alpha: 0.5),
                         blurRadius: 8,
                       ),
                     ],
@@ -194,7 +198,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     fontSize:
                         Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                   ),
                 ),
               ],
@@ -206,7 +210,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 style: TextStyle(
                   fontSize: Responsive.fontSize(context, small: 18, large: 24),
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFF22D3EE),
+                  color: AppColors.legacyFF22D3EE,
                 ),
               ),
               const SizedBox(height: 8),
@@ -214,7 +218,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 children: [
                   Icon(
                     activeServer.isSecure ? Icons.lock : Icons.lock_open,
-                    color: activeServer.isSecure ? Colors.green : Colors.amber,
+                    color: activeServer.isSecure
+                        ? AppColors.systemGreen
+                        : AppColors.systemAmber,
                     size: 16,
                   ),
                   const SizedBox(width: 8),
@@ -223,14 +229,14 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                       activeServer.baseUrl,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey[400],
+                        color: AppColors.systemGrey400,
                         fontFamily: 'monospace',
                       ),
                     ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.copy, size: 18),
-                    color: Colors.grey[400],
+                    color: AppColors.systemGrey400,
                     onPressed: () {
                       Clipboard.setData(
                         ClipboardData(text: activeServer.baseUrl),
@@ -245,7 +251,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             ] else
               const Text(
                 'No hay servidor configurado',
-                style: TextStyle(color: Colors.red),
+                style: TextStyle(color: AppColors.systemRed),
               ),
           ],
         ),
@@ -255,7 +261,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
 
   Widget _buildAutoDetectCard() {
     return Card(
-      color: const Color(0xFF1E293B),
+      color: AppColors.legacyFF1E293B,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -263,7 +269,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
           children: [
             Row(
               children: [
-                const Icon(Icons.auto_fix_high, color: Color(0xFF22D3EE)),
+                const Icon(Icons.auto_fix_high,
+                    color: AppColors.legacyFF22D3EE),
                 const SizedBox(width: 12),
                 Text(
                   'Detección Automática',
@@ -271,7 +278,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     fontSize:
                         Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                   ),
                 ),
               ],
@@ -279,7 +286,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             const SizedBox(height: 12),
             Text(
               'Prueba todos los servidores disponibles y selecciona el mejor.',
-              style: TextStyle(color: Colors.grey[400]),
+              style: TextStyle(color: AppColors.systemGrey400),
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -296,8 +303,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 label:
                     Text(_isDetecting ? 'Detectando...' : 'Detectar Servidor'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF22D3EE),
-                  foregroundColor: Colors.black,
+                  backgroundColor: AppColors.legacyFF22D3EE,
+                  foregroundColor: AppColors.systemBlack,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
               ),
@@ -313,7 +320,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     final activeUrl = NetworkService.activeBaseUrl;
 
     return Card(
-      color: const Color(0xFF1E293B),
+      color: AppColors.legacyFF1E293B,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -321,7 +328,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
           children: [
             Row(
               children: [
-                const Icon(Icons.dns, color: Color(0xFFA78BFA)),
+                const Icon(Icons.dns, color: AppColors.legacyFFA78BFA),
                 const SizedBox(width: 12),
                 Text(
                   'Servidores Disponibles',
@@ -329,7 +336,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     fontSize:
                         Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                   ),
                 ),
               ],
@@ -341,24 +348,28 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
                   color: isActive
-                      ? const Color(0xFF22D3EE).withValues(alpha: 0.1)
-                      : Colors.transparent,
+                      ? AppColors.legacyFF22D3EE.withValues(alpha: 0.1)
+                      : AppColors.transparent,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color:
-                        isActive ? const Color(0xFF22D3EE) : Colors.grey[700]!,
+                    color: isActive
+                        ? AppColors.legacyFF22D3EE
+                        : AppColors.systemGrey700,
                   ),
                 ),
                 child: ListTile(
                   leading: Icon(
                     server.isSecure ? Icons.lock : Icons.public,
-                    color:
-                        isActive ? const Color(0xFF22D3EE) : Colors.grey[400],
+                    color: isActive
+                        ? AppColors.legacyFF22D3EE
+                        : AppColors.systemGrey400,
                   ),
                   title: Text(
                     server.name,
                     style: TextStyle(
-                      color: isActive ? const Color(0xFF22D3EE) : Colors.white,
+                      color: isActive
+                          ? AppColors.legacyFF22D3EE
+                          : AppColors.themedWhite,
                       fontWeight:
                           isActive ? FontWeight.bold : FontWeight.normal,
                     ),
@@ -367,16 +378,16 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     server.baseUrl,
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.grey[500],
+                      color: AppColors.systemGrey500,
                       fontFamily: 'monospace',
                     ),
                   ),
                   trailing: isActive
                       ? const Chip(
                           label: Text('ACTIVO'),
-                          backgroundColor: Color(0xFF22D3EE),
-                          labelStyle:
-                              TextStyle(color: Colors.black, fontSize: 10),
+                          backgroundColor: AppColors.legacyFF22D3EE,
+                          labelStyle: TextStyle(
+                              color: AppColors.systemBlack, fontSize: 10),
                         )
                       : TextButton(
                           onPressed: () => _setServer(server.baseUrl),
@@ -393,7 +404,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
 
   Widget _buildCustomServerCard() {
     return Card(
-      color: const Color(0xFF1E293B),
+      color: AppColors.legacyFF1E293B,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -401,7 +412,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
           children: [
             Row(
               children: [
-                const Icon(Icons.add_link, color: Color(0xFFF472B6)),
+                const Icon(Icons.add_link, color: AppColors.legacyFFF472B6),
                 const SizedBox(width: 12),
                 Text(
                   'Servidor Personalizado',
@@ -409,7 +420,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     fontSize:
                         Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                   ),
                 ),
               ],
@@ -417,7 +428,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             const SizedBox(height: 12),
             Text(
               'Ingresa una URL personalizada si conoces la IP del servidor.',
-              style: TextStyle(color: Colors.grey[400]),
+              style: TextStyle(color: AppColors.systemGrey400),
             ),
             const SizedBox(height: 16),
             Row(
@@ -427,17 +438,18 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     controller: _customUrlController,
                     decoration: InputDecoration(
                       hintText: 'ej: 192.168.1.100:3000',
-                      hintStyle: TextStyle(color: Colors.grey[600]),
+                      hintStyle: TextStyle(color: AppColors.systemGrey600),
                       filled: true,
-                      fillColor: const Color(0xFF0F172A),
+                      fillColor: AppColors.legacyFF0F172A,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide.none,
                       ),
-                      prefixIcon: const Icon(Icons.link, color: Colors.grey),
+                      prefixIcon:
+                          const Icon(Icons.link, color: AppColors.systemGrey),
                     ),
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: AppColors.themedWhite,
                       fontFamily: 'monospace',
                     ),
                     onSubmitted: (_) => _addCustomServer(),
@@ -447,8 +459,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 ElevatedButton(
                   onPressed: _addCustomServer,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF472B6),
-                    foregroundColor: Colors.black,
+                    backgroundColor: AppColors.legacyFFF472B6,
+                    foregroundColor: AppColors.systemBlack,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24,
                       vertical: 20,
@@ -468,7 +480,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     if (_diagnostics == null) return const SizedBox.shrink();
 
     return Card(
-      color: const Color(0xFF1E293B),
+      color: AppColors.legacyFF1E293B,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -479,7 +491,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.bug_report, color: Color(0xFF4ADE80)),
+                    const Icon(Icons.bug_report,
+                        color: AppColors.legacyFF4ADE80),
                     const SizedBox(width: 12),
                     Text(
                       'Diagnóstico de Red',
@@ -487,14 +500,14 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                         fontSize:
                             Responsive.fontSize(context, small: 16, large: 20),
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: AppColors.themedWhite,
                       ),
                     ),
                   ],
                 ),
                 IconButton(
                   icon: const Icon(Icons.copy_all),
-                  color: Colors.grey[400],
+                  color: AppColors.systemGrey400,
                   onPressed: () {
                     Clipboard.setData(
                       ClipboardData(text: _diagnostics.toString()),
@@ -511,7 +524,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
+                color: AppColors.legacyFF0F172A,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -529,11 +542,11 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     'Servidor Activo',
                     (_diagnostics!['activeServer'] as String?) ?? 'N/A',
                   ),
-                  const Divider(color: Colors.grey),
-                  const Text(
+                  const Divider(color: AppColors.systemGrey),
+                  Text(
                     'Test de Conectividad:',
                     style: TextStyle(
-                      color: Colors.white70,
+                      color: AppColors.themedWhite70,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -549,7 +562,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                               status == 'OK'
                                   ? Icons.check_circle
                                   : Icons.cancel,
-                              color: status == 'OK' ? Colors.green : Colors.red,
+                              color: status == 'OK'
+                                  ? AppColors.systemGreen
+                                  : AppColors.systemRed,
                               size: 16,
                             ),
                             const SizedBox(width: 8),
@@ -558,16 +573,17 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                                 (s['name'] as String?) ?? '',
                                 style: TextStyle(
                                   color: s['isActive'] == true
-                                      ? const Color(0xFF22D3EE)
-                                      : Colors.white70,
+                                      ? AppColors.legacyFF22D3EE
+                                      : AppColors.themedWhite70,
                                 ),
                               ),
                             ),
                             Text(
                               status,
                               style: TextStyle(
-                                color:
-                                    status == 'OK' ? Colors.green : Colors.red,
+                                color: status == 'OK'
+                                    ? AppColors.systemGreen
+                                    : AppColors.systemRed,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -594,14 +610,14 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             width: 120,
             child: Text(
               '$label:',
-              style: const TextStyle(color: Colors.grey),
+              style: const TextStyle(color: AppColors.systemGrey),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style:
-                  const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+              style: TextStyle(
+                  color: AppColors.themedWhite, fontFamily: 'monospace'),
             ),
           ),
         ],

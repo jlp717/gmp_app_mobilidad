@@ -131,11 +131,6 @@ class CommissionsService {
       // are redundant under their own prefix and were dropped.
       await Future.wait([
         CacheService.invalidateByPrefix('commissions_v17_paid_month_lock_'),
-        CacheService.invalidateByPrefix('commissions_v16_client_scope_sales_'),
-        CacheService.invalidateByPrefix(
-          'commissions_v15_db2_commission_source_',
-        ),
-        CacheService.invalidateByPrefix('commissions_v14_final_sources_'),
         CacheService.invalidateByPrefix('commissions_team_'),
         CacheService.invalidateByPrefix('comm:summary:ALL'),
       ]);

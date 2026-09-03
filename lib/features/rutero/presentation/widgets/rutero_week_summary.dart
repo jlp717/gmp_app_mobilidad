@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -114,10 +115,10 @@ class RuteroWeekSummary extends StatelessWidget {
               IconButton(
                 tooltip: 'Semana anterior',
                 onPressed: () => onWeekChange(-1),
-                icon: const Icon(
+                icon: Icon(
                   Icons.chevron_left,
                   size: 20,
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                 ),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -126,7 +127,7 @@ class RuteroWeekSummary extends StatelessWidget {
               Text(
                 'Semana $selectedWeek ($startDay - $endDay $monthName)',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontWeight: FontWeight.bold,
                   fontSize: Responsive.isSmall(context) ? 12 : 13,
                 ),
@@ -135,10 +136,10 @@ class RuteroWeekSummary extends StatelessWidget {
               IconButton(
                 tooltip: 'Semana siguiente',
                 onPressed: () => onWeekChange(1),
-                icon: const Icon(
+                icon: Icon(
                   Icons.chevron_right,
                   size: 20,
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                 ),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -202,7 +203,8 @@ class _CompactDayChip extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 10,
-                color: isSelected ? Colors.white : AppTheme.textSecondary,
+                color:
+                    isSelected ? AppColors.themedWhite : AppTheme.textSecondary,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
@@ -211,7 +213,8 @@ class _CompactDayChip extends StatelessWidget {
               '$count',
               style: TextStyle(
                 fontSize: 12,
-                color: isSelected ? Colors.white : AppTheme.textPrimary,
+                color:
+                    isSelected ? AppColors.themedWhite : AppTheme.textPrimary,
                 fontWeight: FontWeight.bold,
               ),
             ),

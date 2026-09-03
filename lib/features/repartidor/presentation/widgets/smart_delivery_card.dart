@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -185,7 +186,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     return Container(
       decoration: _cardDecoration,
       child: Material(
-        color: Colors.transparent,
+        color: AppColors.transparent,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -490,7 +491,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     final buttonColor = color ?? AppTheme.info;
 
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),

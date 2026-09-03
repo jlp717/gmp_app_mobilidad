@@ -2,6 +2,7 @@
 // Diseño operativo con colores semánticos, agrupación por tipo, y visibilidad por rol
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -185,12 +186,12 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Alertas comerciales',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                     letterSpacing: 0,
                   ),
                 ),
@@ -458,12 +459,12 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Alertas comerciales',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                            color: AppColors.themedWhite,
                             letterSpacing: 0,
                           ),
                         ),
@@ -600,7 +601,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         ),
       ),
       child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        data: Theme.of(context).copyWith(dividerColor: AppColors.transparent),
         child: ExpansionTile(
           initiallyExpanded: alerts.any((a) => a.severity == 'critical'),
           tilePadding: const EdgeInsets.symmetric(horizontal: 10),

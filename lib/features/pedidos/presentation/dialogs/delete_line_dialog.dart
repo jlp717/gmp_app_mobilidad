@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class DeleteLineDialog extends StatelessWidget {
@@ -29,28 +30,28 @@ class DeleteLineDialog extends StatelessWidget {
     return AlertDialog(
       backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Row(
+      title: Row(
         children: [
           Icon(Icons.delete_outline, color: AppTheme.error, size: 24),
           SizedBox(width: 8),
           Expanded(
             child: Text(
               'Borrar linea',
-              style: TextStyle(color: Colors.white, fontSize: 18),
+              style: TextStyle(color: AppColors.themedWhite, fontSize: 18),
             ),
           ),
         ],
       ),
       content: Text(
         'Borrar linea de $productName?',
-        style: const TextStyle(color: Colors.white70, fontSize: 14),
+        style: TextStyle(color: AppColors.themedWhite70, fontSize: 14),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text(
+          child: Text(
             'Cancelar',
-            style: TextStyle(color: Colors.white54),
+            style: TextStyle(color: AppColors.themedWhite54),
           ),
         ),
         TextButton(

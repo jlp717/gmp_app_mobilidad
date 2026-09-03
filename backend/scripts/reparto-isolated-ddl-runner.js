@@ -833,7 +833,7 @@ function loadPinnedSql(entry, fsImpl = fs) {
   if (path.dirname(realPath) !== sqlDirectory || realPath !== nominalPath) {
     throw new RunnerError('SQL_PATH_ESCAPE');
   }
-  const source = fsImpl.readFileSync(realPath, 'utf8');
+  const source = fsImpl.readFileSync(realPath, 'utf8').replace(/\r\n/g, '\n');
   if (sha256(source) !== entry.sha256) throw new RunnerError('SQL_HASH_MISMATCH');
   return { source, realPath };
 }
@@ -851,7 +851,7 @@ function loadPinnedRepositoryCatalog(fsImpl = fs) {
   if (path.dirname(realPath) !== repositoryDirectory || realPath !== nominalPath) {
     throw new RunnerError('CATALOG_MANIFEST_PATH_ESCAPE');
   }
-  const source = fsImpl.readFileSync(realPath, 'utf8');
+  const source = fsImpl.readFileSync(realPath, 'utf8').replace(/\r\n/g, '\n');
   if (sha256(source) !== manifest.repositoryCatalog.sha256) {
     throw new RunnerError('CATALOG_MANIFEST_HASH_MISMATCH');
   }

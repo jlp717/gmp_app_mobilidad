@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
@@ -60,9 +61,9 @@ class SummaryStatsWidget extends StatelessWidget {
                     gradient: AppTheme.primaryGradient,
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.analytics_outlined,
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                     size: 24,
                   ),
                 ),
@@ -212,7 +213,7 @@ class SummaryStatsWidget extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Colors.white,
+            AppColors.themedWhite,
             gradient.colors.first.withValues(alpha: 0.05),
           ],
         ),
@@ -241,7 +242,7 @@ class SummaryStatsWidget extends StatelessWidget {
             ),
             child: Icon(
               icon,
-              color: Colors.white,
+              color: AppColors.themedWhite,
               size: 20,
             ),
           ),

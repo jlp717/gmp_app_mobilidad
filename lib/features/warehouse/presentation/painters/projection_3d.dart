@@ -4,6 +4,7 @@ library;
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 
@@ -305,22 +306,22 @@ enum ColorMode { product, client, heatmap }
 class CargoColors {
   // Premium palette — high saturation, distinct hues, designed for dark backgrounds
   static const palette = <Color>[
-    Color(0xFFFF6B6B), // Soft Red
-    Color(0xFF4ECDC4), // Teal
-    Color(0xFFFFE66D), // Warm Yellow
-    Color(0xFF95E1D3), // Mint
-    Color(0xFFA06CD5), // Purple
-    Color(0xFFFF8C42), // Orange
-    Color(0xFF6BCB77), // Green
-    Color(0xFF4D96FF), // Blue
-    Color(0xFFFF6B9D), // Pink
-    Color(0xFF00D2FF), // Cyan
-    Color(0xFFFF9A9E), // Salmon
-    Color(0xFFA8E6CF), // Pale Green
-    Color(0xFFDDA0DD), // Plum
-    Color(0xFFF0E68C), // Khaki
-    Color(0xFF87CEEB), // Sky Blue
-    Color(0xFFFFB347), // Pastel Orange
+    AppColors.legacyFFFF6B6B, // Soft Red
+    AppColors.legacyFF4ECDC4, // Teal
+    AppColors.legacyFFFFE66D, // Warm Yellow
+    AppColors.legacyFF95E1D3, // Mint
+    AppColors.legacyFFA06CD5, // Purple
+    AppColors.legacyFFFF8C42, // Orange
+    AppColors.legacyFF6BCB77, // Green
+    AppColors.legacyFF4D96FF, // Blue
+    AppColors.legacyFFFF6B9D, // Pink
+    AppColors.legacyFF00D2FF, // Cyan
+    AppColors.legacyFFFF9A9E, // Salmon
+    AppColors.legacyFFA8E6CF, // Pale Green
+    AppColors.legacyFFDDA0DD, // Plum
+    AppColors.legacyFFF0E68C, // Khaki
+    AppColors.legacyFF87CEEB, // Sky Blue
+    AppColors.legacyFFFFB347, // Pastel Orange
   ];
 
   static Color byProduct(String articleCode) {
@@ -334,17 +335,17 @@ class CargoColors {
   static Color byWeight(double weight, double maxWeight) {
     final t = maxWeight > 0 ? (weight / maxWeight).clamp(0.0, 1.0) : 0.5;
     if (t < 0.33) {
-      return Color.lerp(const Color(0xFF4D96FF), AppTheme.success, t / 0.33)!;
+      return Color.lerp(AppColors.legacyFF4D96FF, AppTheme.success, t / 0.33)!;
     } else if (t < 0.66) {
       return Color.lerp(
         AppTheme.success,
-        const Color(0xFFFFE66D),
+        AppColors.legacyFFFFE66D,
         (t - 0.33) / 0.33,
       )!;
     } else {
       return Color.lerp(
-        const Color(0xFFFFE66D),
-        const Color(0xFFFF6B6B),
+        AppColors.legacyFFFFE66D,
+        AppColors.legacyFFFF6B6B,
         (t - 0.66) / 0.34,
       )!;
     }

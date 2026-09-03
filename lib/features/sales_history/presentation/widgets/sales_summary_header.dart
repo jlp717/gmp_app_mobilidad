@@ -116,8 +116,8 @@ class SalesSummaryHeader extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white60,
+                style: TextStyle(
+                  color: AppColors.themedWhite60,
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0,
@@ -193,17 +193,17 @@ class SalesSummaryHeader extends StatelessWidget {
                 if (useMonthly && prevValue != null) {
                   if (prevValue == 0) {
                     // CASO 1: Nuevo (No hubo ventas mes anterior)
-                    cardColor = const Color(0xFF0000FF)
+                    cardColor = AppColors.legacyFF0000FF
                         .withValues(alpha: 0.2); // Azul background tint
                     statusLabel = 'NUEVO';
                   } else if (mainValue > prevValue) {
                     // CASO 2: Mejora
-                    cardColor = const Color(0xFF00FF00)
+                    cardColor = AppColors.legacyFF00FF00
                         .withValues(alpha: 0.15); // Verde
                   } else {
                     // CASO 3: Desmejora
-                    cardColor =
-                        const Color(0xFFFF0000).withValues(alpha: 0.15); // Rojo
+                    cardColor = AppColors.legacyFFFF0000
+                        .withValues(alpha: 0.15); // Rojo
                   }
                 } else {
                   // Annual default
@@ -211,14 +211,14 @@ class SalesSummaryHeader extends StatelessWidget {
                 }
 
                 // Border Color based on same logic to make it pop
-                var borderColor = Colors.white10;
+                var borderColor = AppColors.themedWhite10;
                 if (useMonthly && prevValue != null) {
                   if (prevValue == 0) {
-                    borderColor = const Color(0xFF0000FF);
+                    borderColor = AppColors.legacyFF0000FF;
                   } else if (mainValue > prevValue)
-                    borderColor = const Color(0xFF00FF00);
+                    borderColor = AppColors.legacyFF00FF00;
                   else
-                    borderColor = const Color(0xFFFF0000);
+                    borderColor = AppColors.legacyFFFF0000;
                 }
 
                 return Container(
@@ -246,10 +246,10 @@ class SalesSummaryHeader extends StatelessWidget {
                         children: [
                           Text(
                             label,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: Colors.white,
+                              color: AppColors.themedWhite,
                             ),
                           ),
                           if (statusLabel.isNotEmpty) ...[
@@ -260,15 +260,15 @@ class SalesSummaryHeader extends StatelessWidget {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.blue,
+                                color: AppColors.systemBlue,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 statusLabel,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 8,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                  color: AppColors.themedWhite,
                                 ),
                               ),
                             ),
@@ -278,8 +278,8 @@ class SalesSummaryHeader extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         fmt.format(mainValue),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: AppColors.themedWhite,
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
                         ),
@@ -288,7 +288,7 @@ class SalesSummaryHeader extends StatelessWidget {
                         Text(
                           'vs ${fmt.format(prevValue)}',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.7),
+                            color: AppColors.themedWhite.withValues(alpha: 0.7),
                             fontSize: 10,
                           ),
                         ),
@@ -297,8 +297,8 @@ class SalesSummaryHeader extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           '${_formatCompact(u)} Uds',
-                          style: const TextStyle(
-                            color: Colors.white38,
+                          style: TextStyle(
+                            color: AppColors.themedWhite38,
                             fontSize: 10,
                           ),
                         ),
@@ -345,10 +345,11 @@ class SalesSummaryHeader extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border:
+            Border.all(color: AppColors.themedWhite.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
+            color: AppColors.systemBlack.withValues(alpha: 0.4),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -371,12 +372,12 @@ class SalesSummaryHeader extends StatelessWidget {
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               height: 1,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Colors.transparent,
-                    Colors.white24,
-                    Colors.transparent,
+                    AppColors.transparent,
+                    AppColors.themedWhite24,
+                    AppColors.transparent,
                   ],
                 ),
               ),
@@ -477,8 +478,8 @@ class SalesSummaryHeader extends StatelessWidget {
               children: [
                 Text(
                   _formatCurrency(sales),
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppColors.themedWhite,
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
@@ -518,9 +519,9 @@ class SalesSummaryHeader extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
+          color: AppColors.themedWhite.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white10),
+          border: Border.all(color: AppColors.themedWhite10),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -533,14 +534,14 @@ class SalesSummaryHeader extends StatelessWidget {
                 fontSize: 14,
               ),
             ),
-            const Text(
+            Text(
               ' vs ',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
+              style: TextStyle(color: AppColors.themedWhite38, fontSize: 12),
             ),
             Text(
               _formatCurrencyDecimals(prevSales),
-              style: const TextStyle(
-                color: Colors.white60,
+              style: TextStyle(
+                color: AppColors.themedWhite60,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -553,15 +554,15 @@ class SalesSummaryHeader extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          const Text(
+          Text(
             'Año anterior',
-            style: TextStyle(color: Colors.white38, fontSize: 10),
+            style: TextStyle(color: AppColors.themedWhite38, fontSize: 10),
           ),
           const SizedBox(height: 2),
           Text(
             _formatCurrencyDecimals(prevSales),
-            style: const TextStyle(
-              color: Colors.white60,
+            style: TextStyle(
+              color: AppColors.themedWhite60,
               fontSize: 16,
               fontWeight: FontWeight.w600,
             ),
@@ -588,9 +589,10 @@ class SalesSummaryHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: AppColors.themedWhite.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border:
+            Border.all(color: AppColors.themedWhite.withValues(alpha: 0.06)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -619,8 +621,8 @@ class SalesSummaryHeader extends StatelessWidget {
           // Value
           Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.themedWhite,
               fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
@@ -666,9 +668,10 @@ class SalesSummaryHeader extends StatelessWidget {
             ),
       ), // Altura mínima uniforme y responsive
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: AppColors.themedWhite.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border:
+            Border.all(color: AppColors.themedWhite.withValues(alpha: 0.06)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -676,8 +679,8 @@ class SalesSummaryHeader extends StatelessWidget {
           // Value principal
           Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.themedWhite,
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -734,9 +737,10 @@ class SalesSummaryHeader extends StatelessWidget {
             ),
       ), // Altura mínima uniforme y responsive
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: AppColors.themedWhite.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border:
+            Border.all(color: AppColors.themedWhite.withValues(alpha: 0.06)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -811,7 +815,7 @@ class SalesSummaryHeader extends StatelessWidget {
     } else {
       return Text(
         'Ant: $prevText',
-        style: const TextStyle(color: Colors.white38, fontSize: 9),
+        style: TextStyle(color: AppColors.themedWhite38, fontSize: 9),
       );
     }
   }
@@ -829,9 +833,10 @@ class SalesSummaryHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: AppColors.themedWhite.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border:
+            Border.all(color: AppColors.themedWhite.withValues(alpha: 0.06)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -916,7 +921,7 @@ class SalesSummaryHeader extends StatelessWidget {
           Expanded(
             child: Text(
               'vs $prevText',
-              style: const TextStyle(color: Colors.white38, fontSize: 9),
+              style: TextStyle(color: AppColors.themedWhite38, fontSize: 9),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -926,7 +931,7 @@ class SalesSummaryHeader extends StatelessWidget {
       // Comercial: solo muestra valor anterior
       return Text(
         'Ant: $prevText',
-        style: const TextStyle(color: Colors.white38, fontSize: 10),
+        style: TextStyle(color: AppColors.themedWhite38, fontSize: 10),
       );
     }
   }

@@ -2194,7 +2194,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     style: TextStyle(
                       fontSize: compact ? 9 : 10,
                       fontWeight: FontWeight.bold,
-                      color: hasSales ? AppTheme.textPrimary : AppTheme.textSecondary,
+                      color: hasSales
+                          ? AppTheme.textPrimary
+                          : AppTheme.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -2483,8 +2485,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             final avgPrice = _numValue(data, 'avgUnitPrice');
             final units = _numValue(data, 'units');
             final sales = _numValue(data, 'sales');
-            final rowColor =
-                sales.abs() < 0.01 ? AppTheme.textSecondary : AppTheme.textPrimary;
+            final rowColor = sales.abs() < 0.01
+                ? AppTheme.textSecondary
+                : AppTheme.textPrimary;
 
             return Padding(
               padding: const EdgeInsets.only(top: 2),
@@ -2989,8 +2992,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             ),
             subtitle: Text(
               '$pCount productos • ${subs.length} subfam.',
-              style:
-                  TextStyle(fontSize: 9, color: AppTheme.textSecondary),
+              style: TextStyle(fontSize: 9, color: AppTheme.textSecondary),
             ),
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,

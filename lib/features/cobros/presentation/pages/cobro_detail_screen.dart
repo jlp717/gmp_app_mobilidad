@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
@@ -149,10 +150,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           DropdownButton<String?>(
             value: _tipoDocumento,
             dropdownColor: AppTheme.raisedSurface,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-            hint: const Text(
+            style: TextStyle(color: AppColors.themedWhite, fontSize: 13),
+            hint: Text(
               'Tipo documento',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: AppColors.themedWhite54),
             ),
             items: _tipoDocumentoOptions.entries
                 .map(
@@ -308,13 +309,13 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           children: [
             Text(
               'Cliente: ${widget.nombreCliente}',
-              style: const TextStyle(color: Colors.white70),
+              style: TextStyle(color: AppColors.themedWhite70),
             ),
             const SizedBox(height: 8),
             Text(
               'Importe: ${_currencyFormat.format(totalACobrar)}',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppColors.themedWhite,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -322,7 +323,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             const SizedBox(height: 4),
             Text(
               'Forma de pago: $_formaPago',
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              style: TextStyle(color: AppColors.themedWhite70, fontSize: 13),
             ),
           ],
         ),
@@ -550,12 +551,12 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             ),
             Text(
               'Codigo: ${widget.codigoCliente}',
-              style: const TextStyle(fontSize: 12, color: Colors.white70),
+              style: TextStyle(fontSize: 12, color: AppColors.themedWhite70),
             ),
           ],
         ),
         backgroundColor: AppTheme.raisedSurface,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: AppColors.themedWhite),
         elevation: 0,
         actions: [
           IconButton(
@@ -624,7 +625,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                           Expanded(
                             child: Text(
                               cobros.error!,
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: AppColors.themedWhite),
                             ),
                           ),
                         ],
@@ -655,8 +656,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                               'Resumen lista: ${_currencyFormat.format(summaryPending)} · '
                               'Detalle cobrable: ${_currencyFormat.format(totalPendiente)}. '
                               'Puede haber más documentos en ERP.',
-                              style: const TextStyle(
-                                color: Colors.white70,
+                              style: TextStyle(
+                                color: AppColors.themedWhite70,
                                 fontSize: 11,
                               ),
                             ),
@@ -693,7 +694,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                           Container(
                             width: 1,
                             height: 32,
-                            color: Colors.white.withValues(alpha: 0.08),
+                            color:
+                                AppColors.themedWhite.withValues(alpha: 0.08),
                           ),
                           Expanded(
                             child: _detailSummaryItem(
@@ -708,7 +710,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                           Container(
                             width: 1,
                             height: 32,
-                            color: Colors.white.withValues(alpha: 0.08),
+                            color:
+                                AppColors.themedWhite.withValues(alpha: 0.08),
                           ),
                           Expanded(
                             child: _detailSummaryItem(
@@ -731,10 +734,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
+                          Text(
                             'Total a cobrar:',
-                            style:
-                                TextStyle(color: Colors.white70, fontSize: 14),
+                            style: TextStyle(
+                                color: AppColors.themedWhite70, fontSize: 14),
                           ),
                           Text(
                             _currencyFormat.format(totalAbonar),
@@ -808,7 +811,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               Text(
                 label,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: AppColors.themedWhite.withValues(alpha: 0.5),
                   fontSize: 9,
                 ),
               ),
@@ -855,8 +858,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -891,8 +894,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           cobro.conceptoVisible,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white70,
+          style: TextStyle(
+            color: AppColors.themedWhite70,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -940,8 +943,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         leading: const Icon(Icons.payments, color: AppTheme.info, size: 20),
         title: Text(
           cobro.referencia.isNotEmpty ? cobro.referencia : 'Cobro #${cobro.id}',
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppColors.themedWhite,
             fontWeight: FontWeight.w600,
             fontSize: 13,
           ),
@@ -1001,8 +1004,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             Expanded(
               child: Text(
                 cobro.conceptoVisible,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
                   fontWeight: FontWeight.w600,
                 ),
                 maxLines: 1,
@@ -1097,10 +1100,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   TextField(
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: AppColors.themedWhite),
                     decoration: InputDecoration(
                       hintText: 'Importe a cobrar',
-                      hintStyle: const TextStyle(color: Colors.white54),
+                      hintStyle: TextStyle(color: AppColors.themedWhite54),
                       filled: true,
                       fillColor: AppTheme.inkSurface,
                       border: OutlineInputBorder(
@@ -1113,8 +1116,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                       errorMaxLines: 1,
                       suffixText:
                           'Max: ${_currencyFormat.format(cobro.importePendiente)}',
-                      suffixStyle: const TextStyle(
-                        color: Colors.white54,
+                      suffixStyle: TextStyle(
+                        color: AppColors.themedWhite54,
                         fontSize: 10,
                       ),
                     ),
@@ -1159,7 +1162,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         label: Text(label, style: const TextStyle(fontSize: 11)),
         style: ElevatedButton.styleFrom(
           backgroundColor: isSelected ? AppTheme.success : AppTheme.inkSurface,
-          foregroundColor: isSelected ? Colors.white : Colors.white70,
+          foregroundColor:
+              isSelected ? AppColors.themedWhite : AppColors.themedWhite70,
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         ),
       ),
@@ -1182,14 +1186,15 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                Text(
                   'Forma de pago',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                  style:
+                      TextStyle(color: AppColors.themedWhite70, fontSize: 12),
                 ),
                 DropdownButton<String>(
                   value: _formaPago,
                   dropdownColor: AppTheme.raisedSurface,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: AppColors.themedWhite),
                   items: ['CONTADO', 'CREDITO'].map((p) {
                     return DropdownMenuItem(value: p, child: Text(p));
                   }).toList(),
@@ -1208,7 +1213,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                 total > 0 && !_isSubmitting ? () => _submitCobro(total) : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.info,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.themedWhite,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),

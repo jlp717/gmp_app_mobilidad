@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
@@ -100,7 +101,7 @@ class _ComercialLiquidacionDiariaPageState
     );
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       appBar: AppBar(
         title: const Text('Liquidación diaria'),
         backgroundColor: AppTheme.inkSurface,
@@ -295,7 +296,7 @@ class _LiquidacionHero extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.28),
+                color: AppColors.systemBlack.withValues(alpha: 0.28),
                 blurRadius: 24,
                 offset: const Offset(0, 14),
               ),
@@ -377,7 +378,7 @@ class _HeroCopy extends StatelessWidget {
                     'Liquidación diaria',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: AppColors.themedWhite,
                         ),
                   ),
                   _StatusPill(status: status),
@@ -441,8 +442,8 @@ class _HeroTotal extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               _money(totalAIngresar),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppColors.themedWhite,
                 fontSize: 34,
                 fontWeight: FontWeight.w900,
                 fontFeatures: [FontFeature.tabularFigures()],
@@ -560,8 +561,8 @@ class _MetricTileState extends State<_MetricTile> {
                     _money(metric.value),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: AppColors.themedWhite,
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
                       fontFeatures: [FontFeature.tabularFigures()],
@@ -728,8 +729,8 @@ class _BalancePanel extends StatelessWidget {
               Expanded(
                 child: Text(
                   draft.isBalanced ? 'Diferencia' : 'Pendiente',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppColors.themedWhite,
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
                   ),
@@ -780,8 +781,8 @@ class _MoneyField extends StatelessWidget {
       textInputAction: textInputAction,
       onFieldSubmitted: onFieldSubmitted,
       validator: validateAmount,
-      style: const TextStyle(
-        color: Colors.white,
+      style: TextStyle(
+        color: AppColors.themedWhite,
         fontWeight: FontWeight.w800,
         fontFeatures: [FontFeature.tabularFigures()],
       ),
@@ -827,7 +828,7 @@ class _SaveBar extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.30),
+            color: AppColors.systemBlack.withValues(alpha: 0.30),
             blurRadius: 18,
             offset: const Offset(0, -8),
           ),
@@ -923,8 +924,8 @@ class _PanelHeader extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
                 ),
@@ -970,8 +971,8 @@ class _BalanceRow extends StatelessWidget {
           ),
           Text(
             _money(value),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.themedWhite,
               fontSize: 14,
               fontWeight: FontWeight.w800,
               fontFeatures: [FontFeature.tabularFigures()],

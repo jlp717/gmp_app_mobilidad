@@ -11,6 +11,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -116,11 +117,11 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
     if (totalCur == 0 && totalPrev == 0) return const SizedBox.shrink();
 
     final color = variacionYtd == null
-        ? Colors.white60
+        ? AppColors.themedWhite60
         : (variacionYtd >= 0 ? AppTheme.success : AppTheme.error);
 
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: () => setState(() => _expanded = !_expanded),
         borderRadius: BorderRadius.circular(8),
@@ -151,8 +152,8 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
                   Expanded(
                     child: RichText(
                       text: TextSpan(
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: AppColors.themedWhite,
                           fontSize: 12,
                         ),
                         children: [
@@ -163,19 +164,22 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
                           TextSpan(
                             text: '  vs ',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.5),
+                              color:
+                                  AppColors.themedWhite.withValues(alpha: 0.5),
                             ),
                           ),
                           TextSpan(
                             text: '${_fmtInt(ytdPrev)} cj',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.7),
+                              color:
+                                  AppColors.themedWhite.withValues(alpha: 0.7),
                             ),
                           ),
                           TextSpan(
                             text: '  (mismo periodo año anterior)',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.4),
+                              color:
+                                  AppColors.themedWhite.withValues(alpha: 0.4),
                               fontSize: 10,
                             ),
                           ),
@@ -202,7 +206,7 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 18,
-                    color: Colors.white.withValues(alpha: 0.4),
+                    color: AppColors.themedWhite.withValues(alpha: 0.4),
                   ),
                 ],
               ),
@@ -221,7 +225,7 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
                     _kpiSmall(
                       'Año anterior',
                       '${_fmtInt(totalPrev)} cj',
-                      Colors.white60,
+                      AppColors.themedWhite60,
                     ),
                     const SizedBox(width: 12),
                     _kpiSmall(
@@ -244,7 +248,7 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.18),
+          color: AppColors.systemBlack.withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Column(
@@ -253,7 +257,7 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
             Text(
               label,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: AppColors.themedWhite.withValues(alpha: 0.5),
                 fontSize: 10,
               ),
             ),
@@ -322,7 +326,8 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
                           width: 5,
                           height: prevH < 2 ? 2 : prevH,
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.25),
+                            color:
+                                AppColors.themedWhite.withValues(alpha: 0.25),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -352,7 +357,7 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
                     style: TextStyle(
                       color: isCurrentMonth
                           ? color
-                          : Colors.white.withValues(alpha: 0.45),
+                          : AppColors.themedWhite.withValues(alpha: 0.45),
                       fontSize: 9,
                       fontWeight:
                           isCurrentMonth ? FontWeight.w700 : FontWeight.normal,

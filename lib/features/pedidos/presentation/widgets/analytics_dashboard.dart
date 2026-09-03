@@ -5,6 +5,7 @@ library;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -40,7 +41,7 @@ class AnalyticsDashboard extends StatelessWidget {
           child: Text(
             'Sin datos de analytics aun',
             style: TextStyle(
-              color: Colors.white38,
+              color: AppColors.themedWhite38,
               fontSize: Responsive.fontSize(context, small: 14, large: 16),
             ),
           ),
@@ -158,7 +159,7 @@ class AnalyticsDashboard extends StatelessWidget {
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white54,
+                    color: AppColors.themedWhite54,
                     fontSize:
                         Responsive.fontSize(context, small: 10, large: 11),
                   ),
@@ -171,7 +172,7 @@ class AnalyticsDashboard extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.themedWhite,
               fontWeight: FontWeight.bold,
               fontSize: Responsive.fontSize(context, small: 14, large: 16),
             ),
@@ -225,7 +226,7 @@ class AnalyticsDashboard extends StatelessWidget {
           Text(
             'Evolucion mensual',
             style: TextStyle(
-              color: Colors.white70,
+              color: AppColors.themedWhite70,
               fontSize: Responsive.fontSize(context, small: 12, large: 14),
               fontWeight: FontWeight.w600,
             ),
@@ -255,8 +256,8 @@ class AnalyticsDashboard extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 4),
                           child: Text(
                             '${m['month']}',
-                            style: const TextStyle(
-                              color: Colors.white38,
+                            style: TextStyle(
+                              color: AppColors.themedWhite38,
                               fontSize: 10,
                             ),
                           ),
@@ -361,7 +362,7 @@ class AnalyticsDashboard extends StatelessWidget {
           Text(
             'Top productos',
             style: TextStyle(
-              color: Colors.white70,
+              color: AppColors.themedWhite70,
               fontSize: Responsive.fontSize(context, small: 12, large: 14),
               fontWeight: FontWeight.w600,
             ),
@@ -380,7 +381,7 @@ class AnalyticsDashboard extends StatelessWidget {
                     child: Text(
                       (p['name'] ?? '').toString(),
                       style: TextStyle(
-                        color: Colors.white70,
+                        color: AppColors.themedWhite70,
                         fontSize:
                             Responsive.fontSize(context, small: 11, large: 12),
                       ),

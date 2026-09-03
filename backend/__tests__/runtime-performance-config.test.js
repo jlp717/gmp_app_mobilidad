@@ -6,6 +6,18 @@ const path = require('path');
 describe('runtime performance configuration', () => {
   const backendRoot = path.join(__dirname, '..');
 
+  function readPedidosImplementation() {
+    return [
+      'services/pedidos.service.js',
+      'services/pedidos/index.js',
+      'services/pedidos/search.js',
+      'services/pedidos/catalog.js',
+      'services/pedidos/write.js',
+      'services/pedidos/analytics.js',
+      'services/pedidos/shared.js',
+    ].map((relative) => fs.readFileSync(path.join(backendRoot, relative), 'utf8')).join('\n');
+  }
+
   afterEach(() => {
     jest.resetModules();
     delete process.env.PM2_INSTANCES;
@@ -153,7 +165,7 @@ describe('runtime performance configuration', () => {
   });
 
   test('pedido order analytics uses qualified vendor filters without TRIM', () => {
-    const source = fs.readFileSync(path.join(backendRoot, 'services/pedidos.service.js'), 'utf8');
+    const source = readPedidosImplementation();
 
     expect(source).toMatch(/function buildPedidoCabVendorFilter/);
     expect(source).toMatch(/buildPedidoCabVendorFilter\(vendedorCodes, 'C'\)/);
@@ -162,7 +174,7 @@ describe('runtime performance configuration', () => {
   });
 
   test('pedido product catalog paginates before page-level enrichment and caches final response', () => {
-    const source = fs.readFileSync(path.join(backendRoot, 'services/pedidos.service.js'), 'utf8');
+    const source = readPedidosImplementation();
     const getProductsBlock = source.slice(
       source.indexOf('async function getProducts'),
       source.indexOf('async function getProductDetail'),
@@ -179,7 +191,7 @@ describe('runtime performance configuration', () => {
   });
 
   test('pedido delivery and family helpers avoid known cold-path log noise', () => {
-    const source = fs.readFileSync(path.join(backendRoot, 'services/pedidos.service.js'), 'utf8');
+    const source = readPedidosImplementation();
 
     expect(source).toMatch(/Promise\.all\(\[vendorRowsPromise, allVendorRowsPromise\]\)/);
     expect(source).toMatch(/LCCDCL = CAST\(\? AS CHAR\(10\)\)/);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/commissions/data/commissions_pdf_service.dart';
 
@@ -108,7 +109,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('PDF generado correctamente'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.systemGreen,
           ),
         );
       },
@@ -116,7 +117,8 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
         if (!mounted) return;
         _setLoading(false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Error: $e'), backgroundColor: AppColors.systemRed),
         );
       },
     );
@@ -378,7 +380,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                                   ),
                                 ),
                                 activeColor: AppTheme.success,
-                                checkColor: Colors.white,
+                                checkColor: AppColors.themedWhite,
                                 dense: true,
                                 controlAffinity:
                                     ListTileControlAffinity.leading,
@@ -501,22 +503,22 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
           onPressed: _isLoading ? null : _generatePdf,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.success,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.themedWhite,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
           child: _isLoading
-              ? const SizedBox(
+              ? SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                   ),
                 )
-              : const Text(
+              : Text(
                   'GENERAR PDF',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),

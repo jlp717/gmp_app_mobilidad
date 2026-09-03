@@ -646,6 +646,18 @@ class AppColors {
   static const Color legacyFFFFE600 = Color(0xFFFFE600);
   static const Color legacyFFFFE66D = Color(0xFFFFE66D);
   static const Color legacyFFFFFFFF = Color(0xFFFFFFFF);
+  static const Color legacyFF003D7A = Color(0xFF003D7A);
+  static const Color legacyFF061014 = Color(0xFF061014);
+  static const Color legacyFF067A58 = Color(0xFF067A58);
+  static const Color legacyFF07111F = Color(0xFF07111F);
+  static const Color legacyFF111927 = Color(0xFF111927);
+  static const Color legacyFF172033 = Color(0xFF172033);
+  static const Color legacyFF1A5490 = Color(0xFF1A5490);
+  static const Color legacyFF2F80ED = Color(0xFF2F80ED);
+  static const Color legacyFF9EC5EA = Color(0xFF9EC5EA);
+  static const Color legacyFFD7ECFF = Color(0xFFD7ECFF);
+  static const Color legacyFFF59E0B = Color(0xFFF59E0B);
+  static const Color legacyFFF7F8FA = Color(0xFFF7F8FA);
   // END GENERATED F1 LEGACY TOKENS
 
   // Historical white-overlay names are kept as dynamic aliases. In dark mode

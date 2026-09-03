@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -123,10 +124,11 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
           // Search bar
           TextField(
             controller: _searchCtrl,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
+            style: TextStyle(color: AppColors.themedWhite, fontSize: 13),
             decoration: InputDecoration(
               hintText: 'Buscar por pedido, cliente o código...',
-              hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+              hintStyle:
+                  TextStyle(color: AppColors.themedWhite38, fontSize: 12),
               prefixIcon: const Icon(
                 Icons.manage_search_rounded,
                 color: AppTheme.activeRing,
@@ -134,9 +136,9 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
               ),
               suffixIcon: widget.searchQuery.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.clear,
-                        color: Colors.white54,
+                        color: AppColors.themedWhite54,
                         size: 16,
                       ),
                       onPressed: () {
@@ -177,12 +179,12 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
               children: [
                 _statusChip('Todos', null, null),
                 const SizedBox(width: 6),
-                _statusChip('Borrador', 'BORRADOR', const Color(0xFFF97316)),
+                _statusChip('Borrador', 'BORRADOR', AppColors.legacyFFF97316),
                 const SizedBox(width: 6),
                 _statusChip(
                   'Confirmado',
                   'CONFIRMADO',
-                  const Color(0xFF22C55E),
+                  AppColors.legacyFF22C55E,
                 ),
               ],
             ),
@@ -300,8 +302,8 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                           initialValue: widget.sortBy,
                           decoration: InputDecoration(
                             labelText: 'Ordenar por',
-                            labelStyle: const TextStyle(
-                              color: Colors.white54,
+                            labelStyle: TextStyle(
+                              color: AppColors.themedWhite54,
                               fontSize: 11,
                             ),
                             filled: true,
@@ -316,8 +318,8 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                             ),
                           ),
                           dropdownColor: AppTheme.raisedSurface,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppColors.themedWhite,
                             fontSize: 12,
                           ),
                           items: const [
@@ -349,8 +351,8 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                           initialValue: widget.sortOrder,
                           decoration: InputDecoration(
                             labelText: 'Orden',
-                            labelStyle: const TextStyle(
-                              color: Colors.white54,
+                            labelStyle: TextStyle(
+                              color: AppColors.themedWhite54,
                               fontSize: 11,
                             ),
                             filled: true,
@@ -365,8 +367,8 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                             ),
                           ),
                           dropdownColor: AppTheme.raisedSurface,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppColors.themedWhite,
                             fontSize: 12,
                           ),
                           items: const [
@@ -489,7 +491,9 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                     ? '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}'
                     : label,
                 style: TextStyle(
-                  color: date != null ? Colors.white : Colors.white54,
+                  color: date != null
+                      ? AppColors.themedWhite
+                      : AppColors.themedWhite54,
                   fontSize: 11,
                 ),
               ),
@@ -513,8 +517,8 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
         ),
         child: Text(
           label,
-          style: const TextStyle(
-            color: Colors.white70,
+          style: TextStyle(
+            color: AppColors.themedWhite70,
             fontSize: 10,
             fontWeight: FontWeight.w500,
           ),
@@ -533,10 +537,10 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
     return TextField(
       controller: ctrl,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      style: const TextStyle(color: Colors.white, fontSize: 12),
+      style: TextStyle(color: AppColors.themedWhite, fontSize: 12),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white54, fontSize: 10),
+        labelStyle: TextStyle(color: AppColors.themedWhite54, fontSize: 10),
         filled: true,
         fillColor: AppTheme.raisedSurface,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -572,7 +576,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
           data: Theme.of(ctx).copyWith(
             colorScheme: ColorScheme.dark(
               primary: AppTheme.info,
-              onPrimary: Colors.white,
+              onPrimary: AppColors.themedWhite,
               surface: AppTheme.raisedSurface,
             ),
           ),

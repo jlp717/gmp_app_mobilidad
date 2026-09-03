@@ -10,6 +10,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -150,7 +151,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
       AppTheme.info,
       AppTheme.warning,
       AppTheme.accentIndigo,
-      Colors.pinkAccent,
+      AppColors.systemPinkAccent,
     ];
     return colors[index % colors.length];
   }
@@ -188,7 +189,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                         Text(
                           _error!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white70),
+                          style: TextStyle(color: AppColors.themedWhite70),
                         ),
                         const SizedBox(height: 12),
                         ElevatedButton(
@@ -233,15 +234,16 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
           children: [
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.calendar_today,
                   size: 16,
-                  color: Colors.white54,
+                  color: AppColors.themedWhite54,
                 ),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   'Años:',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                  style:
+                      TextStyle(color: AppColors.themedWhite70, fontSize: 12),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -260,12 +262,13 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? AppTheme.accentIndigo.withValues(alpha: 0.2)
-                                : Colors.white.withValues(alpha: 0.05),
+                                : AppColors.themedWhite.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                               color: isSelected
                                   ? AppTheme.accentIndigo.withValues(alpha: 0.5)
-                                  : Colors.white.withValues(alpha: 0.1),
+                                  : AppColors.themedWhite
+                                      .withValues(alpha: 0.1),
                             ),
                           ),
                           child: Text(
@@ -273,7 +276,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                             style: TextStyle(
                               color: isSelected
                                   ? AppTheme.accentIndigo
-                                  : Colors.white54,
+                                  : AppColors.themedWhite54,
                               fontWeight: isSelected
                                   ? FontWeight.w700
                                   : FontWeight.normal,
@@ -342,10 +345,10 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Resumen por año',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontWeight: FontWeight.w700,
                 fontSize: 14,
               ),
@@ -372,7 +375,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                     ),
               ],
             ),
-            const Divider(color: Colors.white12, height: 8),
+            Divider(color: AppColors.themedWhite12, height: 8),
             _buildSummaryRow(
               'Vendido',
               Icons.euro,
@@ -441,7 +444,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
             _buildSummaryRow(
               'Líneas',
               Icons.list_alt,
-              Colors.white70,
+              AppColors.themedWhite70,
               sortedYears,
               (year) {
                 final yearData =
@@ -479,7 +482,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                 Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.6),
+                    color: AppColors.themedWhite.withValues(alpha: 0.6),
                     fontSize: 11,
                   ),
                 ),
@@ -491,8 +494,8 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
               child: Text(
                 valueFn(year),
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -522,14 +525,15 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.compare_arrows, color: Colors.white54, size: 18),
+                Icon(Icons.compare_arrows,
+                    color: AppColors.themedWhite54, size: 18),
                 SizedBox(width: 8),
                 Text(
                   'Comparativa interanual',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
                   ),
@@ -539,12 +543,12 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
             const SizedBox(height: 12),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   flex: 2,
                   child: Text(
                     'Comparación',
                     style: TextStyle(
-                      color: Colors.white54,
+                      color: AppColors.themedWhite54,
                       fontSize: 10,
                     ),
                   ),
@@ -562,19 +566,19 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                     ),
                   ),
                 ),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Var.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white54,
+                      color: AppColors.themedWhite54,
                       fontSize: 10,
                     ),
                   ),
                 ),
               ],
             ),
-            const Divider(color: Colors.white12, height: 8),
+            Divider(color: AppColors.themedWhite12, height: 8),
             ...List.generate(sortedYears.length - 1, (i) {
               final newerYear = sortedYears[i];
               final olderYear = sortedYears[i + 1];
@@ -583,7 +587,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
               final variacion =
                   antigua > 0 ? ((nueva - antigua) / antigua) * 100 : null;
               final color = variacion == null
-                  ? Colors.white54
+                  ? AppColors.themedWhite54
                   : variacion >= 0
                       ? AppTheme.success
                       : AppTheme.error;
@@ -596,8 +600,8 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                       flex: 2,
                       child: Text(
                         '$newerYear vs $olderYear',
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: AppColors.themedWhite70,
                           fontSize: 12,
                         ),
                       ),
@@ -704,10 +708,10 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Ventas por mes',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -795,7 +799,8 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                             style: TextStyle(
                               color: isCurrent
                                   ? AppTheme.success
-                                  : Colors.white.withValues(alpha: 0.55),
+                                  : AppColors.themedWhite
+                                      .withValues(alpha: 0.55),
                               fontSize: 9,
                               fontWeight: isCurrent
                                   ? FontWeight.w700
@@ -824,10 +829,10 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Top 10 productos del periodo',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -841,8 +846,8 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                       flex: 4,
                       child: Text(
                         '${p['code']} · ${p['name']}',
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: AppColors.themedWhite70,
                           fontSize: 12,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -852,8 +857,8 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
                       child: Text(
                         '${(p['unidades'] as num?)?.toStringAsFixed(0) ?? '0'} ud',
                         textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          color: Colors.white54,
+                        style: TextStyle(
+                          color: AppColors.themedWhite54,
                           fontSize: 12,
                         ),
                       ),
@@ -888,7 +893,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
           child: Center(
             child: Text(
               'Sin lineas para los filtros aplicados',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: AppColors.themedWhite54),
             ),
           ),
         ),
@@ -903,8 +908,8 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
           children: [
             Text(
               'Líneas (${_lines.length})',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppColors.themedWhite,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -912,13 +917,13 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
-                headingTextStyle: const TextStyle(
-                  color: Colors.white70,
+                headingTextStyle: TextStyle(
+                  color: AppColors.themedWhite70,
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),
                 dataTextStyle:
-                    const TextStyle(color: Colors.white, fontSize: 12),
+                    TextStyle(color: AppColors.themedWhite, fontSize: 12),
                 columnSpacing: 16,
                 horizontalMargin: 8,
                 columns: const [

@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -486,7 +487,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
           decoration: BoxDecoration(
             color: selected
                 ? AppTheme.info.withValues(alpha: 0.14)
-                : Colors.transparent,
+                : AppColors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: selected

@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
@@ -35,7 +36,7 @@ class EntregaDetailSheet extends StatelessWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: AppColors.themedWhite.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -56,7 +57,7 @@ class EntregaDetailSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.14),
+                        color: AppColors.systemBlack.withValues(alpha: 0.14),
                         blurRadius: 8,
                         offset: const Offset(0, 3),
                       ),
@@ -65,7 +66,7 @@ class EntregaDetailSheet extends StatelessWidget {
                   child: Text(
                     'Albarán #${albaran.numeroAlbaran}',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       fontWeight: FontWeight.bold,
                       fontSize:
                           Responsive.fontSize(context, small: 14, large: 16),
@@ -115,14 +116,15 @@ class EntregaDetailSheet extends StatelessWidget {
                       color: AppTheme.error,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.warning, color: Colors.white, size: 14),
+                        Icon(Icons.warning,
+                            color: AppColors.themedWhite, size: 14),
                         SizedBox(width: 4),
                         Text(
                           'CONTRA REEMBOLSO',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: AppColors.themedWhite,
                             fontWeight: FontWeight.bold,
                             fontSize: 10,
                           ),
@@ -168,7 +170,7 @@ class EntregaDetailSheet extends StatelessWidget {
             ),
           ),
 
-          const Divider(color: Colors.white10),
+          Divider(color: AppColors.themedWhite10),
 
           // Cliente info
           Padding(
@@ -264,7 +266,7 @@ class EntregaDetailSheet extends StatelessWidget {
             ),
           ),
 
-          const Divider(color: Colors.white10),
+          Divider(color: AppColors.themedWhite10),
 
           // Lista de items
           Expanded(
@@ -305,7 +307,8 @@ class EntregaDetailSheet extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppTheme.inkSurface,
               border: Border(
-                top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+                top: BorderSide(
+                    color: AppColors.themedWhite.withValues(alpha: 0.05)),
               ),
             ),
             child: Row(
@@ -343,7 +346,7 @@ class EntregaDetailSheet extends StatelessWidget {
                 // Botón completar entrega
                 if (!albaran.completo && onComplete != null)
                   Material(
-                    color: Colors.transparent,
+                    color: AppColors.transparent,
                     child: InkWell(
                       onTap: onComplete,
                       borderRadius: BorderRadius.circular(16),
@@ -357,20 +360,22 @@ class EntregaDetailSheet extends StatelessWidget {
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.16),
+                              color:
+                                  AppColors.systemBlack.withValues(alpha: 0.16),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
                           ],
                         ),
-                        child: const Row(
+                        child: Row(
                           children: [
-                            Icon(Icons.check_circle, color: Colors.white),
+                            Icon(Icons.check_circle,
+                                color: AppColors.themedWhite),
                             SizedBox(width: 10),
                             Text(
                               'Completar Entrega',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: AppColors.themedWhite,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 15,
                               ),
@@ -393,12 +398,12 @@ class EntregaDetailSheet extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: AppColors.themedWhite.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: item.estado == EstadoEntrega.entregado
               ? AppTheme.success.withValues(alpha: 0.3)
-              : Colors.white.withValues(alpha: 0.05),
+              : AppColors.themedWhite.withValues(alpha: 0.05),
         ),
       ),
       child: Row(
@@ -484,7 +489,7 @@ class EntregaDetailSheet extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),

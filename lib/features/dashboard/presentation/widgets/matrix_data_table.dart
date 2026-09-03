@@ -360,7 +360,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
       AppTheme.info,
       AppTheme.accentIndigo,
       AppTheme.success,
-      AppColors.teal,
+      AppColors.systemTeal,
       AppColors.neonPink,
     ];
     final levelColor = levelColors[level % levelColors.length];
@@ -398,7 +398,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                   ? AppTheme.textPrimary.withValues(alpha: 0.025 * level)
                   : AppTheme.textPrimary.withValues(alpha: 0.01)),
           border: Border(
-            bottom: BorderSide(color: AppTheme.textPrimary.withValues(alpha: 0.05)),
+            bottom:
+                BorderSide(color: AppTheme.textPrimary.withValues(alpha: 0.05)),
             left: BorderSide(
               color: levelColor.withValues(alpha: level == 0 ? 0.26 : 0.38),
               width: level == 0 ? 3 : 2,
@@ -441,7 +442,9 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                   Text(
                     node.name,
                     style: TextStyle(
-                      color: level == 0 ? AppTheme.textPrimary : AppTheme.textSecondary,
+                      color: level == 0
+                          ? AppTheme.textPrimary
+                          : AppTheme.textSecondary,
                       fontWeight:
                           level == 0 ? FontWeight.bold : FontWeight.normal,
                       fontSize: level == 0 ? 14 : 13,

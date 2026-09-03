@@ -9,6 +9,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -114,8 +115,8 @@ class _MisPedidosYoYBarState extends State<MisPedidosYoYBar> {
     if (total == 0 && totalLastYear == 0) return const SizedBox.shrink();
 
     final color = variation == null
-        ? Colors.white60
-        : (variation >= 0 ? AppTheme.success : Colors.redAccent);
+        ? AppColors.themedWhite60
+        : (variation >= 0 ? AppTheme.success : AppColors.systemRedAccent);
     final now = DateTime.now();
     final monthLabel = [
       'enero',
@@ -166,14 +167,15 @@ class _MisPedidosYoYBarState extends State<MisPedidosYoYBar> {
                 Text(
                   'Acumulado hasta hoy ($monthLabel)',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.6),
+                    color: AppColors.themedWhite.withValues(alpha: 0.6),
                     fontSize: 10,
                   ),
                 ),
                 const SizedBox(height: 2),
                 RichText(
                   text: TextSpan(
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    style:
+                        TextStyle(color: AppColors.themedWhite, fontSize: 13),
                     children: [
                       TextSpan(
                         text: _fmtMoney(total),
@@ -185,19 +187,19 @@ class _MisPedidosYoYBarState extends State<MisPedidosYoYBar> {
                       TextSpan(
                         text: '  vs ',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
+                          color: AppColors.themedWhite.withValues(alpha: 0.5),
                         ),
                       ),
                       TextSpan(
                         text: _fmtMoney(totalLastYear),
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.75),
+                          color: AppColors.themedWhite.withValues(alpha: 0.75),
                         ),
                       ),
                       TextSpan(
                         text: '   año pasado',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.45),
+                          color: AppColors.themedWhite.withValues(alpha: 0.45),
                           fontSize: 11,
                         ),
                       ),

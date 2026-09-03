@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -125,7 +126,7 @@ class OrderKpiDashboard extends ConsumerWidget {
           Text(
             value,
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.themedWhite,
               fontSize: Responsive.fontSize(context, small: 12, large: 14),
               fontWeight: FontWeight.bold,
             ),
@@ -135,7 +136,7 @@ class OrderKpiDashboard extends ConsumerWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white54,
+              color: AppColors.themedWhite54,
               fontSize: Responsive.fontSize(context, small: 8, large: 9),
             ),
           ),
@@ -189,7 +190,7 @@ class OrderKpiDashboard extends ConsumerWidget {
     } else if (pct < 0) {
       return const Icon(Icons.arrow_downward, color: AppTheme.error, size: 12);
     }
-    return const Icon(Icons.remove, color: Colors.white54, size: 12);
+    return Icon(Icons.remove, color: AppColors.themedWhite54, size: 12);
   }
 
   Widget? _trendText(double? pct) {
@@ -200,7 +201,7 @@ class OrderKpiDashboard extends ConsumerWidget {
       style: TextStyle(
         color: pct > 0
             ? AppTheme.success
-            : (pct < 0 ? AppTheme.error : Colors.white54),
+            : (pct < 0 ? AppTheme.error : AppColors.themedWhite54),
         fontSize: 9,
         fontWeight: FontWeight.w600,
       ),

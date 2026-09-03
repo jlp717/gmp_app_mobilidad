@@ -6,6 +6,7 @@ library;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/features/facturas/data/facturas_service.dart';
@@ -158,9 +159,9 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
     return AlertDialog(
       backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text(
+      title: Text(
         'Albaranes vinculados',
-        style: TextStyle(color: Colors.white),
+        style: TextStyle(color: AppColors.themedWhite),
       ),
       content: SizedBox(
         width: double.maxFinite,
@@ -176,10 +177,10 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                     ),
                   )
                 : _albaranes.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           'No se encontraron albaranes vinculados',
-                          style: TextStyle(color: Colors.white70),
+                          style: TextStyle(color: AppColors.themedWhite70),
                         ),
                       )
                     : Column(
@@ -213,8 +214,8 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                                   albaranRef.isNotEmpty
                                       ? 'Albaran $albaranRef'
                                       : "${a['serie'] ?? ''} ${a['numeroAlbaran'] ?? ''}",
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: AppColors.themedWhite,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
                                   ),
@@ -222,8 +223,8 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                                 const SizedBox(height: 4),
                                 Text(
                                   "Fecha: ${a['fecha'] ?? ''}",
-                                  style: const TextStyle(
-                                    color: Colors.white70,
+                                  style: TextStyle(
+                                    color: AppColors.themedWhite70,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -238,8 +239,8 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                                   hasFactura
                                       ? 'Factura: $facturaDisplay'
                                       : 'Pendiente de factura',
-                                  style: const TextStyle(
-                                    color: Colors.white54,
+                                  style: TextStyle(
+                                    color: AppColors.themedWhite54,
                                     fontSize: 11,
                                   ),
                                 ),
@@ -288,7 +289,8 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
         ),
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cerrar', style: TextStyle(color: Colors.white54)),
+          child:
+              Text('Cerrar', style: TextStyle(color: AppColors.themedWhite54)),
         ),
       ],
     );

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
@@ -291,7 +292,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final search = _searchController.text.trim();
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       body: DecoratedBox(
         decoration: AppTheme.appBackground(),
         child: RefreshIndicator(
@@ -467,7 +468,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               Container(
                 width: 1,
                 height: 36,
-                color: Colors.white.withValues(alpha: 0.08),
+                color: AppColors.themedWhite.withValues(alpha: 0.08),
               ),
               Expanded(
                 child: _summaryItem(
@@ -480,7 +481,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               Container(
                 width: 1,
                 height: 36,
-                color: Colors.white.withValues(alpha: 0.08),
+                color: AppColors.themedWhite.withValues(alpha: 0.08),
               ),
               Expanded(
                 child: _summaryItem(
@@ -500,14 +501,14 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               Icon(
                 Icons.info_outline,
                 size: 11,
-                color: Colors.white.withValues(alpha: 0.35),
+                color: AppColors.themedWhite.withValues(alpha: 0.35),
               ),
               const SizedBox(width: 4),
               Text(
                 'Fuente: $sourceLabel',
                 style: TextStyle(
                   fontSize: 9,
-                  color: Colors.white.withValues(alpha: 0.35),
+                  color: AppColors.themedWhite.withValues(alpha: 0.35),
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -519,7 +520,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               'ERP bruto: ${fmtMoney(cobros.cvcGrandTotal)} · App provisional: ${fmtMoney(cobros.appOrdersTotal)} · App ya descontado: ${fmtMoney(cobros.appAdjustmentsTotal)}',
               style: TextStyle(
                 fontSize: 9,
-                color: Colors.white.withValues(alpha: 0.4),
+                color: AppColors.themedWhite.withValues(alpha: 0.4),
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -543,7 +544,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               Text(
                 label,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.55),
+                  color: AppColors.themedWhite.withValues(alpha: 0.55),
                   fontSize: 10,
                 ),
               ),
@@ -555,8 +556,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             alignment: Alignment.centerLeft,
             child: Text(
               value,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppColors.themedWhite,
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
               ),
@@ -573,7 +574,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   /// - "Al dia": solo los que no deben nada
   /// - "Todos": no filtra
   Widget _buildEstadoFilterChips() {
-    const filters = [
+    final filters = [
       _FilterDef(
         'pendiente',
         'Pendientes',
@@ -587,14 +588,15 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         Icons.check_circle_outline,
         AppTheme.success,
       ),
-      _FilterDef('todos', 'Todos', Icons.list, Colors.white70),
+      _FilterDef('todos', 'Todos', Icons.list, AppColors.themedWhite70),
     ];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: AppTheme.inkSurface.withValues(alpha: 0.58),
         border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+          bottom:
+              BorderSide(color: AppColors.themedWhite.withValues(alpha: 0.06)),
         ),
       ),
       child: SingleChildScrollView(
@@ -608,7 +610,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 avatar: Icon(
                   f.icon,
                   size: 16,
-                  color: selected ? Colors.white : f.color,
+                  color: selected ? AppColors.themedWhite : f.color,
                 ),
                 label: Text(f.label),
                 selected: selected,
@@ -616,13 +618,15 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 backgroundColor: AppTheme.softPanel,
                 selectedColor: f.color.withValues(alpha: 0.25),
                 labelStyle: TextStyle(
-                  color: selected ? Colors.white : Colors.white70,
+                  color: selected
+                      ? AppColors.themedWhite
+                      : AppColors.themedWhite70,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                 ),
                 side: BorderSide(
                   color: selected
                       ? f.color.withValues(alpha: 0.6)
-                      : Colors.white.withValues(alpha: 0.1),
+                      : AppColors.themedWhite.withValues(alpha: 0.1),
                 ),
               ),
             );
@@ -691,7 +695,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.22),
+            color: AppColors.systemBlack.withValues(alpha: 0.22),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -721,7 +725,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             style: TextStyle(
               fontSize: Responsive.fontSize(context, small: 18, large: 22),
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: AppColors.themedWhite,
             ),
           ),
         ],
@@ -737,7 +741,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           TextField(
             controller: _searchController,
             onChanged: _onSearchChanged,
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: AppColors.themedWhite),
             decoration: InputDecoration(
               hintText: 'Buscar por nombre, código, NIF...',
               hintStyle: TextStyle(
@@ -912,7 +916,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
       color: AppTheme.softPanel,
-      surfaceTintColor: Colors.transparent,
+      surfaceTintColor: AppColors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         side: pending > 0
@@ -965,7 +969,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                         fontSize:
                             Responsive.fontSize(context, small: 14, large: 16),
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        color: AppColors.themedWhite,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

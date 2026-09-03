@@ -141,4 +141,89 @@ describe('Email PDF Service', () => {
             contentType: 'application/pdf',
         }));
     });
+
+    test('invoice HTML escapes client and custom body and includes total', () => {
+        const { service } = loadService();
+        const html = service.generateInvoiceEmailHtml({
+            serie: 'FAV',
+            numero: '99',
+            fecha: '2026-09-03',
+            total: 12.5,
+            clienteNombre: 'Cliente <script>',
+        });
+        expect(html).toContain('Factura FAV-99');
+        expect(html).toContain('Cliente &lt;script&gt;');
+        expect(html).toContain('12.50');
+        expect(html).toContain('2026-09-03');
+        expect(html).not.toContain('<script>');
+
+        const custom = service.generateInvoiceEmailHtml({
+            serie: 'FAV',
+            numero: '99',
+            customBody: 'Hola <img>',
+        });
+        expect(custom).toContain('Hola &lt;img&gt;');
+        expect(custom).not.toContain('<img>');
+    });
+
+    test('rejects invalid sendEmailWithPdf inputs', async () => {
+        const { service } = loadService();
+        await expect(service.sendEmailWithPdf({
+            to: '',
+            subject: 'x',
+            htmlBody: '<p>x</p>',
+            pdfBuffer: Buffer.from('%PDF-1.4'),
+            pdfFilename: 'a.pdf',
+        })).rejects.toThrow('Destinatario');
+        await expect(service.sendEmailWithPdf({
+            to: 'not-an-email',
+            subject: 'x',
+            htmlBody: '<p>x</p>',
+            pdfBuffer: Buffer.from('%PDF-1.4'),
+            pdfFilename: 'a.pdf',
+        })).rejects.toThrow('inválido');
+        await expect(service.sendEmailWithPdf({
+            to: 'ok@example.com',
+            subject: 'x',
+            htmlBody: '<p>x</p>',
+            pdfBuffer: 'not-a-buffer',
+            pdfFilename: 'a.pdf',
+        })).rejects.toThrow('PDF buffer');
+        await expect(service.sendEmailWithPdf({
+            to: 'ok@example.com',
+            subject: 'x',
+            htmlBody: '<p>x</p>',
+            pdfBuffer: Buffer.from('%PDF-1.4'),
+            pdfFilename: '',
+        })).rejects.toThrow('Nombre del archivo');
+    });
+
+    test('pdf cache stores and returns buffers by key', () => {
+        const { service } = loadService();
+        const buf = Buffer.from('pdf-bytes');
+        service.cachePdf('k1', buf);
+        expect(service.getCachedPdf('k1').equals(buf)).toBe(true);
+        expect(service.getCachedPdf('missing')).toBeNull();
+    });
+
+    test('sendHtmlEmail sends without requiring a PDF', async () => {
+        const sendMail = jest.fn().mockResolvedValue({ messageId: 'html-1' });
+        const { service } = loadService(sendMail);
+        const result = await service.sendHtmlEmail({
+            to: 'cliente@example.com',
+            subject: 'Aviso',
+            htmlBody: '<p>Hola</p>',
+            textBody: 'Hola',
+        });
+        expect(result).toEqual({ success: true, messageId: 'html-1' });
+        expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({
+            to: 'cliente@example.com',
+            subject: 'Aviso',
+        }));
+    });
+
+    test('verifySmtpConnection returns true when transporter verifies', async () => {
+        const { service } = loadService();
+        await expect(service.verifySmtpConnection()).resolves.toBe(true);
+    });
 });

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
@@ -40,7 +41,8 @@ class ExecutiveSurface extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             border: Border(
-              top: BorderSide(color: Colors.white.withValues(alpha: 0.045)),
+              top: BorderSide(
+                  color: AppColors.themedWhite.withValues(alpha: 0.045)),
               left: BorderSide(color: accent.withValues(alpha: 0.46), width: 2),
             ),
           ),

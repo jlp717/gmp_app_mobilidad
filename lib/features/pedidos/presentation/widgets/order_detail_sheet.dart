@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -151,21 +152,22 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.delete_outline, color: AppTheme.error, size: 22),
             SizedBox(width: 8),
-            Text('Eliminar borrador', style: TextStyle(color: Colors.white)),
+            Text('Eliminar borrador',
+                style: TextStyle(color: AppColors.themedWhite)),
           ],
         ),
-        content: const Text(
+        content: Text(
           'Esta accion no se puede deshacer. Deseas eliminar este borrador?',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: AppColors.themedWhite70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('No', style: TextStyle(color: Colors.white54)),
+            child: Text('No', style: TextStyle(color: AppColors.themedWhite54)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -203,22 +205,23 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.check_circle_outline, color: AppTheme.success, size: 22),
             SizedBox(width: 8),
-            Text('Confirmar pedido', style: TextStyle(color: Colors.white)),
+            Text('Confirmar pedido',
+                style: TextStyle(color: AppColors.themedWhite)),
           ],
         ),
         content: Text(
           '¿Deseas confirmar el pedido #${header.numeroPedido} para el cliente ${header.clienteName}?',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: AppColors.themedWhite70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child:
-                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+            child: Text('Cancelar',
+                style: TextStyle(color: AppColors.themedWhite54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -268,7 +271,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             Text(
               'Error al cargar pedido',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontSize: Responsive.fontSize(context, small: 14, large: 16),
               ),
             ),
@@ -299,7 +302,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
+              color: AppColors.themedWhite24,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -310,10 +313,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         // Lines
         Expanded(
           child: detail.lines.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text(
                     'Sin lineas',
-                    style: TextStyle(color: Colors.white38),
+                    style: TextStyle(color: AppColors.themedWhite38),
                   ),
                 )
               : ListView.builder(
@@ -347,7 +350,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               Text(
                 'Pedido #${header.numeroPedido}',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontSize: Responsive.fontSize(context, small: 18, large: 22),
                   fontWeight: FontWeight.bold,
                 ),
@@ -408,13 +411,13 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: Colors.white54, size: 14),
+        Icon(icon, color: AppColors.themedWhite54, size: 14),
         const SizedBox(width: 6),
         Flexible(
           child: Text(
             text,
             style: TextStyle(
-              color: Colors.white70,
+              color: AppColors.themedWhite70,
               fontSize: Responsive.fontSize(context, small: 12, large: 14),
             ),
             overflow: TextOverflow.ellipsis,
@@ -498,7 +501,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                   child: Text(
                     line.descripcion,
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       fontWeight: FontWeight.w600,
                       fontSize:
                           Responsive.fontSize(context, small: 13, large: 15),
@@ -512,7 +515,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             Text(
               line.codigoArticulo,
               style: TextStyle(
-                color: Colors.white54,
+                color: AppColors.themedWhite54,
                 fontSize: Responsive.fontSize(context, small: 11, large: 12),
               ),
             ),
@@ -561,12 +564,14 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               children: [
                 Text(
                   'PVP: ${PedidosFormatters.money(line.precioVenta, decimals: 3)}',
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  style:
+                      TextStyle(color: AppColors.themedWhite54, fontSize: 11),
                 ),
                 const SizedBox(width: 12),
                 Text(
                   'Tarifa: ${PedidosFormatters.money(line.precioTarifa, decimals: 3)}',
-                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                  style:
+                      TextStyle(color: AppColors.themedWhite38, fontSize: 11),
                 ),
                 if (showMargin && line.precioMinimo > 0) ...[
                   const SizedBox(width: 12),
@@ -575,7 +580,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                     style: TextStyle(
                       color: line.precioVenta < line.precioMinimo
                           ? AppTheme.warning
-                          : Colors.white38,
+                          : AppColors.themedWhite38,
                       fontSize: 11,
                     ),
                   ),
@@ -633,8 +638,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: AppColors.themedWhite70,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -663,11 +668,11 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white54, size: 12),
+          Icon(icon, color: AppColors.themedWhite54, size: 12),
           const SizedBox(width: 3),
           Text(
             label,
-            style: const TextStyle(color: Colors.white54, fontSize: 11),
+            style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
           ),
         ],
       ),
@@ -701,7 +706,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           Text(
             'Resumen del pedido',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.themedWhite,
               fontWeight: FontWeight.bold,
               fontSize: Responsive.fontSize(context, small: 14, large: 16),
             ),
@@ -718,12 +723,12 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               _buildTotalItem(
                 'Cajas',
                 totalEnvases.toStringAsFixed(0),
-                Colors.white70,
+                AppColors.themedWhite70,
               ),
               _buildTotalItem(
                 'Uds',
                 totalUnidades.toStringAsFixed(0),
-                Colors.white70,
+                AppColors.themedWhite70,
               ),
             ],
           ),
@@ -734,8 +739,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           Consumer(
             builder: (ctx, ref, _) {
               final showMargin = ref.watch(
-      pedidosProvider.select((p) => p.isMarginVisible),
-    );
+                pedidosProvider.select((p) => p.isMarginVisible),
+              );
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -750,7 +755,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                     _buildTotalItem(
                       'Margen',
                       PedidosFormatters.money(totalMargen),
-                      Colors.white70,
+                      AppColors.themedWhite70,
                     ),
                     _buildTotalItem(
                       '% Margen',
@@ -808,7 +813,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       children: [
         Text(
           label,
-          style: const TextStyle(color: Colors.white54, fontSize: 11),
+          style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
         ),
         const SizedBox(height: 2),
         Text(
@@ -869,19 +874,19 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               child: ElevatedButton.icon(
                 onPressed: _isConfirming ? null : _confirmOrder,
                 icon: _isConfirming
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: AppColors.themedWhite,
                         ),
                       )
                     : const Icon(Icons.check_circle_outline),
                 label: Text(_isConfirming ? 'Confirmando...' : 'Confirmar'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.success,
-                  foregroundColor: Colors.black,
+                  foregroundColor: AppColors.systemBlack,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

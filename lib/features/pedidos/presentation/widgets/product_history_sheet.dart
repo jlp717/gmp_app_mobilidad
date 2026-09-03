@@ -6,6 +6,7 @@ library;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -188,7 +189,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -196,7 +197,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
             SizedBox(height: 12),
             Text(
               'Cargando historial...',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: AppColors.themedWhite54),
             ),
           ],
         ),
@@ -218,7 +219,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               const SizedBox(height: 12),
               Text(
                 'Error: $_error',
-                style: const TextStyle(color: Colors.white70),
+                style: TextStyle(color: AppColors.themedWhite70),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
@@ -241,12 +242,12 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.history, color: Colors.white38, size: 48),
+            Icon(Icons.history, color: AppColors.themedWhite38, size: 48),
             const SizedBox(height: 12),
             Text(
               'Sin historial de compras\npara este producto',
               style: TextStyle(
-                color: Colors.white54,
+                color: AppColors.themedWhite54,
                 fontSize: Responsive.fontSize(context, small: 14, large: 16),
               ),
               textAlign: TextAlign.center,
@@ -292,7 +293,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         ? AppTheme.success
         : _trend == 'down'
             ? AppTheme.error
-            : Colors.white54;
+            : AppColors.themedWhite54;
     final trendLabel = _trend == 'up'
         ? 'Subiendo'
         : _trend == 'down'
@@ -311,7 +312,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
             height: 4,
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: Colors.white24,
+              color: AppColors.themedWhite24,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -351,7 +352,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                   Text(
                     widget.productName,
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       fontSize: Responsive.fontSize(
                         context,
                         small: 15,
@@ -365,8 +366,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                   const SizedBox(height: 2),
                   Text(
                     'Cod: ${widget.productCode}',
-                    style: const TextStyle(
-                      color: Colors.white38,
+                    style: TextStyle(
+                      color: AppColors.themedWhite38,
                       fontSize: 11,
                     ),
                   ),
@@ -424,11 +425,11 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     final sortedYears = _years.keys.toList()..sort((a, b) => b.compareTo(a));
     return Row(
       children: [
-        const Icon(Icons.calendar_today, color: Colors.white54, size: 14),
+        Icon(Icons.calendar_today, color: AppColors.themedWhite54, size: 14),
         const SizedBox(width: 6),
-        const Text(
+        Text(
           'Ejercicio:',
-          style: TextStyle(color: Colors.white54, fontSize: 12),
+          style: TextStyle(color: AppColors.themedWhite54, fontSize: 12),
         ),
         const SizedBox(width: 8),
         ...sortedYears.map((yr) {
@@ -455,7 +456,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 child: Text(
                   yr,
                   style: TextStyle(
-                    color: sel ? AppTheme.info : Colors.white54,
+                    color: sel ? AppTheme.info : AppColors.themedWhite54,
                     fontSize: 13,
                     fontWeight: sel ? FontWeight.bold : FontWeight.normal,
                   ),
@@ -467,7 +468,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         const Spacer(),
         GestureDetector(
           onTap: _loadHistory,
-          child: const Icon(Icons.refresh, color: Colors.white38, size: 18),
+          child: Icon(Icons.refresh, color: AppColors.themedWhite38, size: 18),
         ),
       ],
     );
@@ -521,8 +522,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               children: [
                 Text(
                   item.label,
-                  style: const TextStyle(
-                    color: Colors.white54,
+                  style: TextStyle(
+                    color: AppColors.themedWhite54,
                     fontSize: 9,
                   ),
                 ),
@@ -584,13 +585,13 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     Icon(
                       opt.$3,
                       size: 12,
-                      color: sel ? AppTheme.info : Colors.white38,
+                      color: sel ? AppTheme.info : AppColors.themedWhite38,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       opt.$2,
                       style: TextStyle(
-                        color: sel ? AppTheme.info : Colors.white54,
+                        color: sel ? AppTheme.info : AppColors.themedWhite54,
                         fontSize: 11,
                         fontWeight: sel ? FontWeight.bold : FontWeight.normal,
                       ),
@@ -644,7 +645,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     if (current > 0 && previous <= 0) return AppTheme.info;
     if (current > previous) return AppTheme.success;
     if (current < previous) return AppTheme.error;
-    return Colors.white24;
+    return AppColors.themedWhite24;
   }
 
   Color _monthComparisonColor(int month, _YearData yearData) {
@@ -685,7 +686,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          color: textColor ?? Colors.white70,
+          color: textColor ?? AppColors.themedWhite70,
           fontSize: 10,
           fontWeight: fontWeight,
         ),
@@ -714,7 +715,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
             _legendDot(AppTheme.info, currentYr),
             if (prevYr != null) ...[
               const SizedBox(width: 8),
-              _legendDot(Colors.white30, prevYr),
+              _legendDot(AppColors.themedWhite30, prevYr),
             ],
           ],
         ),
@@ -730,8 +731,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     final yr = rodIndex == 0 ? currentYr : prevYr ?? '';
                     return BarTooltipItem(
                       '$month $yr\n${_metricLabel(rod.toY)}',
-                      const TextStyle(
-                        color: Colors.white,
+                      TextStyle(
+                        color: AppColors.themedWhite,
                         fontSize: 11,
                       ),
                     );
@@ -749,8 +750,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                       }
                       return Text(
                         _monthShort[idx],
-                        style: const TextStyle(
-                          color: Colors.white38,
+                        style: TextStyle(
+                          color: AppColors.themedWhite38,
                           fontSize: 8,
                         ),
                       );
@@ -767,8 +768,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                           : value.toStringAsFixed(0);
                       return Text(
                         label,
-                        style: const TextStyle(
-                          color: Colors.white24,
+                        style: TextStyle(
+                          color: AppColors.themedWhite24,
                           fontSize: 9,
                         ),
                       );
@@ -803,7 +804,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     if (prevYr != null)
                       BarChartRodData(
                         toY: prevVal,
-                        color: Colors.white24,
+                        color: AppColors.themedWhite24,
                         width: 6,
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(3),
@@ -824,17 +825,21 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     final sortedYears = _years.keys.toList()..sort();
     if (sortedYears.length < 2) return const SizedBox.shrink();
 
-    final colors = [Colors.white30, AppTheme.accentIndigo, AppTheme.info];
+    final colors = [
+      AppColors.themedWhite30,
+      AppTheme.accentIndigo,
+      AppTheme.info
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Text(
+            Text(
               'Tendencia interanual',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
               ),
@@ -875,7 +880,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
               gridData: FlGridData(
                 drawVerticalLine: false,
                 getDrawingHorizontalLine: (value) =>
-                    const FlLine(color: Colors.white10, strokeWidth: 0.5),
+                    FlLine(color: AppColors.themedWhite10, strokeWidth: 0.5),
               ),
               titlesData: FlTitlesData(
                 bottomTitles: AxisTitles(
@@ -889,8 +894,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                       }
                       return Text(
                         _monthShort[idx],
-                        style: const TextStyle(
-                          color: Colors.white38,
+                        style: TextStyle(
+                          color: AppColors.themedWhite38,
                           fontSize: 9,
                         ),
                       );
@@ -907,8 +912,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                           : value.toStringAsFixed(0);
                       return Text(
                         label,
-                        style: const TextStyle(
-                          color: Colors.white24,
+                        style: TextStyle(
+                          color: AppColors.themedWhite24,
                           fontSize: 9,
                         ),
                       );
@@ -972,8 +977,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
       children: [
         Text(
           'Detalle mensual $_selectedYear',
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppColors.themedWhite,
             fontSize: 13,
             fontWeight: FontWeight.bold,
           ),
@@ -1000,8 +1005,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
-              dataTextStyle: const TextStyle(
-                color: Colors.white70,
+              dataTextStyle: TextStyle(
+                color: AppColors.themedWhite70,
                 fontSize: 10,
               ),
               columns: const [
@@ -1032,8 +1037,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                       DataCell(
                         Text(
                           _monthNames[m - 1].substring(0, 3),
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppColors.themedWhite,
                             fontWeight: FontWeight.w500,
                             fontSize: 10,
                           ),
@@ -1065,7 +1070,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                           style: TextStyle(
                             color: widget.isMarginVisible
                                 ? marginColor
-                                : Colors.white24,
+                                : AppColors.themedWhite24,
                             fontSize: 10,
                           ),
                         ),
@@ -1165,10 +1170,10 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Comparativa por ejercicio',
           style: TextStyle(
-            color: Colors.white,
+            color: AppColors.themedWhite,
             fontSize: 13,
             fontWeight: FontWeight.bold,
           ),
@@ -1195,8 +1200,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
-              dataTextStyle: const TextStyle(
-                color: Colors.white70,
+              dataTextStyle: TextStyle(
+                color: AppColors.themedWhite70,
                 fontSize: 11,
               ),
               columns: const [
@@ -1217,7 +1222,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     t.sales > 0 ? ((t.sales - t.cost) / t.sales * 100) : 0.0;
                 // YoY change
                 var yoy = '-';
-                var yoyColor = Colors.white38;
+                var yoyColor = AppColors.themedWhite38;
                 if (entry.key + 1 < sortedYears.length) {
                   final prevT = _years[sortedYears[entry.key + 1]]!.totals;
                   if (prevT.sales > 0) {
@@ -1227,7 +1232,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                         ? AppTheme.success
                         : pct < 0
                             ? AppTheme.error
-                            : Colors.white54;
+                            : AppColors.themedWhite54;
                   }
                 }
                 return DataRow(
@@ -1235,8 +1240,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     DataCell(
                       Text(
                         yr,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: AppColors.themedWhite,
                           fontWeight: FontWeight.bold,
                           fontSize: 11,
                         ),
@@ -1262,7 +1267,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                               ? (margin > 15
                                   ? AppTheme.success
                                   : AppTheme.error)
-                              : Colors.white24,
+                              : AppColors.themedWhite24,
                           fontSize: 11,
                         ),
                       ),
@@ -1313,8 +1318,8 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 const SizedBox(width: 6),
                 Text(
                   'Total ${_grandTotal.years} ejercicios: ',
-                  style: const TextStyle(
-                    color: Colors.white54,
+                  style: TextStyle(
+                    color: AppColors.themedWhite54,
                     fontSize: 11,
                   ),
                 ),
@@ -1326,10 +1331,10 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     fontSize: 12,
                   ),
                 ),
-                const Text(
+                Text(
                   ' ventas  |  ',
                   style: TextStyle(
-                    color: Colors.white38,
+                    color: AppColors.themedWhite38,
                     fontSize: 11,
                   ),
                 ),
@@ -1341,10 +1346,10 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     fontSize: 12,
                   ),
                 ),
-                const Text(
+                Text(
                   ' env  |  ',
                   style: TextStyle(
-                    color: Colors.white38,
+                    color: AppColors.themedWhite38,
                     fontSize: 11,
                   ),
                 ),
@@ -1356,10 +1361,10 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     fontSize: 12,
                   ),
                 ),
-                const Text(
+                Text(
                   ' uds',
                   style: TextStyle(
-                    color: Colors.white38,
+                    color: AppColors.themedWhite38,
                     fontSize: 11,
                   ),
                 ),

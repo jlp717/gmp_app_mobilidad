@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Shared floating action button.
@@ -28,7 +29,7 @@ class PremiumFloatingActionButton extends StatelessWidget {
     final button = Material(
       color: color,
       elevation: 4,
-      shadowColor: Colors.black.withValues(alpha: 0.24),
+      shadowColor: AppColors.systemBlack.withValues(alpha: 0.24),
       shape: isExtended
           ? RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppTheme.radiusFull),
@@ -48,13 +49,13 @@ class PremiumFloatingActionButton extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (icon != null) ...[
-                      Icon(icon, size: 20, color: Colors.white),
+                      Icon(icon, size: 20, color: AppColors.themedWhite),
                       const SizedBox(width: 8),
                     ],
                     Text(
                       label!,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppColors.themedWhite,
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                         letterSpacing: 0,
@@ -67,7 +68,8 @@ class PremiumFloatingActionButton extends StatelessWidget {
                 width: size,
                 height: size,
                 child: Center(
-                  child: Icon(icon ?? Icons.add, size: 24, color: Colors.white),
+                  child: Icon(icon ?? Icons.add,
+                      size: 24, color: AppColors.themedWhite),
                 ),
               ),
       ),

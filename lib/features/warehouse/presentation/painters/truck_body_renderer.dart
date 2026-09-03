@@ -15,6 +15,7 @@ library;
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
 
@@ -47,27 +48,27 @@ class TruckBodyRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   // Container
-  static const Color _containerBase = Color(0xFF2D3748);
-  static const Color _containerFrame = Color(0xFF4A5568);
-  static const Color _containerFloor = Color(0xFF1A202C);
+  static const Color _containerBase = AppColors.legacyFF2D3748;
+  static const Color _containerFrame = AppColors.legacyFF4A5568;
+  static const Color _containerFloor = AppColors.legacyFF1A202C;
 
   // Cab
-  static const Color _cabPrimary = Color(0xFF1E40AF); // Deep blue
-  static const Color _cabSecondary = Color(0xFF2563EB); // Lighter blue
-  static const Color _cabAccent = Color(0xFF60A5FA); // Bright accent
-  static const Color _windshield = Color(0xFF38BDF8); // Glass blue
-  static const Color _headlight = Color(0xFFFDE68A); // Warm yellow
-  static const Color _chrome = Color(0xFFE2E8F0); // Chrome silver
-  static const Color _indicator = Color(0xFFFF8C42); // Orange indicator
+  static const Color _cabPrimary = AppColors.legacyFF1E40AF; // Deep blue
+  static const Color _cabSecondary = AppColors.legacyFF2563EB; // Lighter blue
+  static const Color _cabAccent = AppColors.legacyFF60A5FA; // Bright accent
+  static const Color _windshield = AppColors.legacyFF38BDF8; // Glass blue
+  static const Color _headlight = AppColors.legacyFFFDE68A; // Warm yellow
+  static const Color _chrome = AppColors.legacyFFE2E8F0; // Chrome silver
+  static const Color _indicator = AppColors.legacyFFFF8C42; // Orange indicator
 
   // Environment
-  static const Color _groundShadow = Color(0x20000000);
-  static const Color _gridLine = Color(0x25FFFFFF);
-  static const Color _gridLineAccent = Color(0x55FFFFFF);
-  static const Color _measureLine = Color(0x60FFFFFF);
-  static const Color _woodPlank = Color(0x12FFFFFF);
-  static const Color _railColor = Color(0x18FFFFFF);
-  static const Color _ledColor = Color(0x45FFFFFF);
+  static const Color _groundShadow = AppColors.legacy20000000;
+  static const Color _gridLine = AppColors.legacy25FFFFFF;
+  static const Color _gridLineAccent = AppColors.legacy55FFFFFF;
+  static const Color _measureLine = AppColors.legacy60FFFFFF;
+  static const Color _woodPlank = AppColors.legacy12FFFFFF;
+  static const Color _railColor = AppColors.legacy18FFFFFF;
+  static const Color _ledColor = AppColors.legacy45FFFFFF;
 
   void drawAll(Canvas canvas) {
     _drawGroundShadow(canvas);
@@ -104,7 +105,7 @@ class TruckBodyRenderer {
         colors: [
           _groundShadow.withValues(alpha: 0.18),
           _groundShadow.withValues(alpha: 0.06),
-          Colors.transparent,
+          AppColors.transparent,
         ],
         stops: const [0.0, 0.55, 1.0],
       ).createShader(
@@ -185,7 +186,7 @@ class TruckBodyRenderer {
           text: TextSpan(
             text: '${y.toInt()}',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.3),
+              color: AppColors.themedWhite.withValues(alpha: 0.3),
               fontSize: 8,
             ),
           ),
@@ -240,7 +241,7 @@ class TruckBodyRenderer {
 
     // Brighter core
     final corePaint = Paint()
-      ..color = const Color(0x30FFFFFF)
+      ..color = AppColors.legacy30FFFFFF
       ..strokeWidth = 1.5;
     canvas.drawLine(led1, led2, corePaint);
   }
@@ -357,7 +358,7 @@ class TruckBodyRenderer {
 
   void _drawAmbientOcclusion(Canvas canvas) {
     final aoHeight = cH * 0.05;
-    final aoPaint = Paint()..color = const Color(0x0A000000);
+    final aoPaint = Paint()..color = AppColors.legacy0A000000;
 
     // Left wall AO strip
     final lao = [
@@ -543,7 +544,7 @@ class TruckBodyRenderer {
 
     // ── Door shadows on ground ──
     final shadowPaint = Paint()
-      ..color = const Color(0x18000000)
+      ..color = AppColors.legacy18000000
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
     // Left door shadow
     final lShadow = [
@@ -703,7 +704,7 @@ class TruckBodyRenderer {
       text: TextSpan(
         text: text,
         style: const TextStyle(
-          color: Color(0xAAFFFFFF),
+          color: AppColors.legacyAAFFFFFF,
           fontSize: 9,
           fontWeight: FontWeight.w500,
           letterSpacing: 0,
@@ -716,7 +717,7 @@ class TruckBodyRenderer {
       Rect.fromCenter(center: pos, width: tp.width + 10, height: tp.height + 6),
       const Radius.circular(4),
     );
-    canvas.drawRRect(rect, Paint()..color = const Color(0x60000000));
+    canvas.drawRRect(rect, Paint()..color = AppColors.legacy60000000);
     tp.paint(canvas, Offset(pos.dx - tp.width / 2, pos.dy - tp.height / 2));
   }
 
@@ -766,7 +767,7 @@ class TruckBodyRenderer {
     PolyHelper.fillFaceSolid(canvas, windshield, _windshield, 0.8, 0.5);
     // Double reflection lines
     final reflectPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.15)
+      ..color = AppColors.themedWhite.withValues(alpha: 0.15)
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
     final midW1 = Offset.lerp(windshield[0], windshield[1], 0.35)!;
@@ -777,7 +778,7 @@ class TruckBodyRenderer {
     canvas.drawLine(
       midW2,
       midW2t,
-      reflectPaint..color = Colors.white.withValues(alpha: 0.08),
+      reflectPaint..color = AppColors.themedWhite.withValues(alpha: 0.08),
     );
 
     // Cab roof
@@ -899,7 +900,7 @@ class TruckBodyRenderer {
     PolyHelper.fillFaceSolid(canvas, ws, _windshield, 0.8, 0.5);
     // Reflection
     final reflectPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.12)
+      ..color = AppColors.themedWhite.withValues(alpha: 0.12)
       ..strokeWidth = 1.2
       ..style = PaintingStyle.stroke;
     canvas.drawLine(
@@ -1091,12 +1092,12 @@ class TruckBodyRenderer {
     );
     canvas.drawRRect(
       plateRect,
-      Paint()..color = Colors.white.withValues(alpha: 0.85),
+      Paint()..color = AppColors.themedWhite.withValues(alpha: 0.85),
     );
     canvas.drawRRect(
       plateRect,
       Paint()
-        ..color = const Color(0xFF1A1A2E)
+        ..color = AppColors.legacyFF1A1A2E
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.5,
     );
@@ -1106,7 +1107,7 @@ class TruckBodyRenderer {
       text: TextSpan(
         text: plateText.length > 8 ? plateText.substring(0, 8) : plateText,
         style: TextStyle(
-          color: const Color(0xFF1A1A2E),
+          color: AppColors.legacyFF1A1A2E,
           fontSize: math.min(plateH * 0.6, 8).toDouble(),
           fontWeight: FontWeight.w900,
           letterSpacing: 0,
@@ -1134,7 +1135,7 @@ class TruckBodyRenderer {
     const archD = 60.0;
 
     final archPaint = Paint()
-      ..color = const Color(0xFF1A1A2E).withValues(alpha: 0.4);
+      ..color = AppColors.legacyFF1A1A2E.withValues(alpha: 0.4);
 
     // Left wheel arch
     final leftArch = [
@@ -1192,17 +1193,17 @@ class TruckBodyRenderer {
       Offset(center.dx + 1, center.dy + 2),
       sr * 1.1,
       Paint()
-        ..color = const Color(0x40000000)
+        ..color = AppColors.legacy40000000
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
     );
     // Tire (dark rubber)
-    canvas.drawCircle(center, sr, Paint()..color = const Color(0xFF1A1A2E));
+    canvas.drawCircle(center, sr, Paint()..color = AppColors.legacyFF1A1A2E);
     // Tire tread ring
     canvas.drawCircle(
       center,
       sr * 0.85,
       Paint()
-        ..color = const Color(0xFF2D2D44)
+        ..color = AppColors.legacyFF2D2D44
         ..style = PaintingStyle.stroke
         ..strokeWidth = sr * 0.15,
     );
@@ -1216,7 +1217,7 @@ class TruckBodyRenderer {
     canvas.drawCircle(
       center,
       sr * 0.15,
-      Paint()..color = const Color(0xFF4A5568),
+      Paint()..color = AppColors.legacyFF4A5568,
     );
     // Chrome rim
     canvas.drawCircle(

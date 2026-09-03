@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/features/entregas/presentation/widgets/signature_pad.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
@@ -34,7 +35,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppColors.legacyFFF5F7FA,
       appBar: AppBar(
         title: Text('Albarán ${widget.albaran.numeroAlbaran}'),
         elevation: 0,
@@ -44,19 +45,20 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
               margin: const EdgeInsets.only(right: 12),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.green,
+                color: AppColors.systemGreen,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_circle, size: 16, color: Colors.white),
+                  Icon(Icons.check_circle,
+                      size: 16, color: AppColors.themedWhite),
                   SizedBox(width: 4),
                   Text(
                     'ENTREGADO',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       fontSize: 12,
                     ),
                   ),
@@ -68,19 +70,19 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
               margin: const EdgeInsets.only(right: 12),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.amber,
+                color: AppColors.systemAmber,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.euro, size: 16, color: Colors.black87),
+                  Icon(Icons.euro, size: 16, color: AppColors.systemBlack87),
                   SizedBox(width: 4),
                   Text(
                     'COBRAR',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: AppColors.systemBlack87,
                     ),
                   ),
                 ],
@@ -160,7 +162,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                       Text(
                         'Código: ${widget.albaran.codigoCliente}',
                         style: TextStyle(
-                          color: Colors.grey.shade600,
+                          color: AppColors.systemGrey600,
                           fontSize: 13,
                         ),
                       ),
@@ -192,7 +194,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: Colors.grey),
+          Icon(icon, size: 18, color: AppColors.systemGrey),
           const SizedBox(width: 8),
           Expanded(child: Text(text)),
         ],
@@ -219,7 +221,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                 const Spacer(),
                 Text(
                   '${widget.albaran.items.length} items',
-                  style: TextStyle(color: Colors.grey.shade600),
+                  style: TextStyle(color: AppColors.systemGrey600),
                 ),
               ],
             ),
@@ -230,7 +232,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                   padding: const EdgeInsets.all(16),
                   child: Text(
                     'Cargando items...',
-                    style: TextStyle(color: Colors.grey.shade500),
+                    style: TextStyle(color: AppColors.systemGrey500),
                   ),
                 ),
               )
@@ -246,7 +248,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+        border: Border(bottom: BorderSide(color: AppColors.systemGrey200)),
       ),
       child: Row(
         children: [
@@ -263,7 +265,8 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                 ),
                 Text(
                   item.codigoArticulo,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style:
+                      TextStyle(fontSize: 12, color: AppColors.systemGrey600),
                 ),
               ],
             ),
@@ -272,14 +275,14 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.blue.shade50,
+              color: AppColors.systemBlue50,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               '${item.cantidadPedida.toStringAsFixed(0)} uds',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Colors.blue.shade700,
+                color: AppColors.systemBlue700,
               ),
             ),
           ),
@@ -291,7 +294,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
   Widget _buildImporteCard() {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: widget.albaran.esCTR ? Colors.amber.shade50 : null,
+      color: widget.albaran.esCTR ? AppColors.systemAmber50 : null,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -299,7 +302,9 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
             Icon(
               widget.albaran.esCTR ? Icons.payments : Icons.receipt_long,
               size: 32,
-              color: widget.albaran.esCTR ? Colors.amber.shade800 : Colors.grey,
+              color: widget.albaran.esCTR
+                  ? AppColors.systemAmber800
+                  : AppColors.systemGrey,
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -313,8 +318,8 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: widget.albaran.esCTR
-                          ? Colors.amber.shade900
-                          : Colors.grey.shade700,
+                          ? AppColors.systemAmber900
+                          : AppColors.systemGrey700,
                     ),
                   ),
                   if (widget.albaran.esCTR)
@@ -331,8 +336,8 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: widget.albaran.esCTR
-                    ? Colors.amber.shade900
-                    : Colors.black87,
+                    ? AppColors.systemAmber900
+                    : AppColors.systemBlack87,
               ),
             ),
           ],
@@ -371,7 +376,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                 alignment: Alignment.center,
                 child: Text(
                   'Sin fotos. Toma una foto como comprobante.',
-                  style: TextStyle(color: Colors.grey.shade500),
+                  style: TextStyle(color: AppColors.systemGrey500),
                 ),
               )
             else
@@ -386,7 +391,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                     margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
-                      color: Colors.grey.shade200,
+                      color: AppColors.systemGrey200,
                     ),
                     child: Stack(
                       children: [
@@ -407,13 +412,13 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                             child: Container(
                               padding: const EdgeInsets.all(2),
                               decoration: const BoxDecoration(
-                                color: Colors.red,
+                                color: AppColors.systemRed,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.close,
                                 size: 14,
-                                color: Colors.white,
+                                color: AppColors.themedWhite,
                               ),
                             ),
                           ),
@@ -461,9 +466,9 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                 height: 120,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: AppColors.systemGrey100,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(color: AppColors.systemGrey300),
                 ),
                 child: _firmaBase64 != null
                     ? ClipRRect(
@@ -479,12 +484,12 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                           Icon(
                             Icons.gesture,
                             size: 32,
-                            color: Colors.grey.shade400,
+                            color: AppColors.systemGrey400,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Toca para firmar',
-                            style: TextStyle(color: Colors.grey.shade500),
+                            style: TextStyle(color: AppColors.systemGrey500),
                           ),
                         ],
                       ),
@@ -521,7 +526,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
               decoration: InputDecoration(
                 hintText: 'Añade notas sobre la entrega...',
                 filled: true,
-                fillColor: Colors.grey.shade100,
+                fillColor: AppColors.systemGrey100,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -541,7 +546,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.green.shade50,
+              color: AppColors.systemGreen50,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
@@ -549,7 +554,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
               children: [
                 Icon(
                   Icons.check_circle,
-                  color: Colors.green.shade700,
+                  color: AppColors.systemGreen700,
                   size: 32,
                 ),
                 const SizedBox(width: 12),
@@ -558,7 +563,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.green.shade800,
+                    color: AppColors.systemGreen800,
                   ),
                 ),
               ],
@@ -572,8 +577,8 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
               onPressed: () =>
                   _showPostDeliveryDialog(popOnClose: false, isResend: true),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.blue.shade700,
-                side: BorderSide(color: Colors.blue.shade300),
+                foregroundColor: AppColors.systemBlue700,
+                side: BorderSide(color: AppColors.systemBlue300),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -598,19 +603,19 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
           child: ElevatedButton.icon(
             onPressed: _isProcessing ? null : _confirmarEntrega,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.systemGreen,
+              foregroundColor: AppColors.themedWhite,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
             ),
             icon: _isProcessing
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                     ),
                   )
                 : const Icon(Icons.check_circle, size: 28),
@@ -629,8 +634,8 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
               child: OutlinedButton.icon(
                 onPressed: _isProcessing ? null : _marcarParcial,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.orange,
-                  side: const BorderSide(color: Colors.orange),
+                  foregroundColor: AppColors.systemOrange,
+                  side: const BorderSide(color: AppColors.systemOrange),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -645,8 +650,8 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
               child: OutlinedButton.icon(
                 onPressed: _isProcessing ? null : _marcarNoEntregado,
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red,
-                  side: const BorderSide(color: Colors.red),
+                  foregroundColor: AppColors.systemRed,
+                  side: const BorderSide(color: AppColors.systemRed),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -693,7 +698,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Por favor, obtén la firma del cliente'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppColors.systemOrange,
         ),
       );
       return;
@@ -728,7 +733,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
           SnackBar(
             content:
                 Text(ref.read(entregasProvider).error ?? 'Error al registrar'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.systemRed,
           ),
         );
       }
@@ -770,7 +775,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Entrega parcial registrada'),
-            backgroundColor: Colors.orange,
+            backgroundColor: AppColors.systemOrange,
           ),
         );
         Navigator.pop(context);
@@ -797,7 +802,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Marcado como no entregado'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.systemRed,
           ),
         );
         Navigator.pop(context);
@@ -859,7 +864,8 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
         children: [
           Icon(
             widget.isResend ? Icons.receipt_long : Icons.check_circle,
-            color: widget.isResend ? Colors.blue : Colors.green,
+            color:
+                widget.isResend ? AppColors.systemBlue : AppColors.systemGreen,
             size: 56,
           ),
           const SizedBox(height: 12),
@@ -873,7 +879,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
           const SizedBox(height: 4),
           Text(
             'Albarán ${widget.albaran.numeroAlbaran}',
-            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 13, color: AppColors.systemGrey600),
           ),
         ],
       ),
@@ -882,7 +888,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
         children: [
           const Text(
             'Enviar nota de entrega al cliente:',
-            style: TextStyle(fontSize: 14, color: Colors.black87),
+            style: TextStyle(fontSize: 14, color: AppColors.systemBlack87),
           ),
           const SizedBox(height: 16),
 
@@ -890,7 +896,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
           _buildActionButton(
             icon: Icons.download,
             label: 'Descargar PDF',
-            color: Colors.blue,
+            color: AppColors.systemBlue,
             actionKey: 'download',
             onTap: _downloadReceipt,
           ),
@@ -900,7 +906,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
           _buildActionButton(
             icon: Icons.share,
             label: 'Compartir (WhatsApp...)',
-            color: Colors.green,
+            color: AppColors.systemGreen,
             actionKey: 'whatsapp',
             onTap: _shareReceipt,
           ),
@@ -910,7 +916,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
           _buildActionButton(
             icon: Icons.email,
             label: 'Enviar por Email',
-            color: Colors.orange,
+            color: AppColors.systemOrange,
             actionKey: 'email',
             onTap: _sendByEmail,
           ),
@@ -938,19 +944,19 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
       child: ElevatedButton.icon(
         onPressed: _isProcessing ? null : onTap,
         icon: isThisProcessing
-            ? const SizedBox(
+            ? SizedBox(
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                 ),
               )
             : Icon(icon, size: 20),
         label: Text(label),
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.themedWhite,
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -973,7 +979,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Error al generar el recibo'),
-              backgroundColor: Colors.red,
+              backgroundColor: AppColors.systemRed,
             ),
           );
         }
@@ -1007,14 +1013,15 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('PDF generado correctamente'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.systemGreen,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Error: $e'), backgroundColor: AppColors.systemRed),
         );
       }
     } finally {
@@ -1041,7 +1048,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Error al generar el recibo'),
-              backgroundColor: Colors.red,
+              backgroundColor: AppColors.systemRed,
             ),
           );
         }
@@ -1076,7 +1083,8 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Error: $e'), backgroundColor: AppColors.systemRed),
         );
       }
     } finally {
@@ -1122,7 +1130,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   const SnackBar(
                     content: Text('Email no válido'),
-                    backgroundColor: Colors.orange,
+                    backgroundColor: AppColors.systemOrange,
                   ),
                 );
               }
@@ -1152,14 +1160,16 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
             content: Text(
               success ? 'Email enviado a $email' : 'Error al enviar email',
             ),
-            backgroundColor: success ? Colors.green : Colors.red,
+            backgroundColor:
+                success ? AppColors.systemGreen : AppColors.systemRed,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Error: $e'), backgroundColor: AppColors.systemRed),
         );
       }
     } finally {

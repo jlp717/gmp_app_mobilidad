@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/advanced_sales_chart.dart'; // Reuse existing bar chart
@@ -72,8 +73,8 @@ class DashboardChartFactory extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.themedWhite,
               fontWeight: FontWeight.bold,
               fontSize: 16,
             ),
@@ -100,10 +101,10 @@ class DashboardChartFactory extends StatelessWidget {
                     value: value,
                     title: '${(value / total * 100).toStringAsFixed(0)}%',
                     radius: isLarge ? 60 : 50,
-                    titleStyle: const TextStyle(
+                    titleStyle: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                     ),
                   );
                 }).toList(),
@@ -137,8 +138,8 @@ class DashboardChartFactory extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text(
                         node.name,
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: AppColors.themedWhite70,
                           fontSize: 10,
                         ),
                       ),

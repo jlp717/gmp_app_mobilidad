@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -108,7 +109,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       child: Container(
         width: Responsive.clampWidth(context, 420),
         padding:
@@ -178,8 +179,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
                 keyboardType: TextInputType.emailAddress,
                 validator: _validateEmail,
                 autofocus: true,
-                style:
-                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'email@ejemplo.com',
                   icon: Icons.alternate_email,
@@ -192,8 +192,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
               const SizedBox(height: 6),
               TextFormField(
                 controller: _subjectController,
-                style:
-                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'Asunto del email',
                   icon: Icons.subject,
@@ -207,8 +206,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
               TextFormField(
                 controller: _bodyController,
                 maxLines: 3,
-                style:
-                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'Escriba un mensaje personalizado...',
                   icon: Icons.message_outlined,

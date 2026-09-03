@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
@@ -32,7 +33,7 @@ class TarifaSelectorModal extends StatefulWidget {
   }) {
     return showDialog<double>(
       context: context,
-      barrierColor: Colors.black54,
+      barrierColor: AppColors.systemBlack54,
       builder: (_) => TarifaSelectorModal(
         product: product,
         tariffs: tariffs,
@@ -185,7 +186,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                   child: Text(
                     'Precio',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       fontWeight: FontWeight.bold,
                       fontSize:
                           Responsive.fontSize(context, small: 15, large: 17),
@@ -194,8 +195,8 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon:
-                      const Icon(Icons.close, color: Colors.white54, size: 20),
+                  icon: Icon(Icons.close,
+                      color: AppColors.themedWhite54, size: 20),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -204,7 +205,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
             const SizedBox(height: 4),
             Text(
               p.name,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              style: TextStyle(color: AppColors.themedWhite70, fontSize: 13),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -218,13 +219,15 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: AppTheme.borderColor),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.white38, size: 18),
+                    Icon(Icons.info_outline,
+                        color: AppColors.themedWhite38, size: 18),
                     SizedBox(width: 8),
                     Text(
                       'Sin tarifa disponible',
-                      style: TextStyle(color: Colors.white54, fontSize: 13),
+                      style: TextStyle(
+                          color: AppColors.themedWhite54, fontSize: 13),
                     ),
                   ],
                 ),
@@ -266,8 +269,8 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                         children: [
                           Text(
                             _abbreviate(ct.description),
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: AppColors.themedWhite,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -300,23 +303,26 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                 leading: Text(
                   'PU',
                   style: TextStyle(
-                    color: _selected == _kPU ? orange : Colors.white54,
+                    color: _selected == _kPU ? orange : AppColors.themedWhite54,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
                 ),
                 content: Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'por unidad',
-                        style: TextStyle(color: Colors.white60, fontSize: 12),
+                        style: TextStyle(
+                            color: AppColors.themedWhite60, fontSize: 12),
                       ),
                     ),
                     Text(
                       '${_fmt(ct.precioUnitario)} €/$unitAbbr',
                       style: TextStyle(
-                        color: _selected == _kPU ? orange : Colors.white54,
+                        color: _selected == _kPU
+                            ? orange
+                            : AppColors.themedWhite54,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -335,7 +341,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                 leading: Text(
                   '${t.code}',
                   style: TextStyle(
-                    color: _selected == key ? orange : Colors.white54,
+                    color: _selected == key ? orange : AppColors.themedWhite54,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
@@ -348,8 +354,8 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                         children: [
                           Text(
                             _abbreviate(t.description),
-                            style: const TextStyle(
-                              color: Colors.white70,
+                            style: TextStyle(
+                              color: AppColors.themedWhite70,
                               fontSize: 12,
                             ),
                             maxLines: 1,
@@ -357,8 +363,8 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                           ),
                           Text(
                             '${_fmt(t.price)} €/cj',
-                            style: const TextStyle(
-                              color: Colors.white54,
+                            style: TextStyle(
+                              color: AppColors.themedWhite54,
                               fontSize: 11,
                             ),
                           ),
@@ -368,8 +374,8 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                     if (p.unitsPerBox > 1)
                       Text(
                         '(${_fmt(t.precioUnitario)} €/$unitAbbr)',
-                        style: const TextStyle(
-                          color: Colors.white38,
+                        style: TextStyle(
+                          color: AppColors.themedWhite38,
                           fontSize: 11,
                         ),
                       ),
@@ -387,7 +393,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
               child: OutlinedButton(
                 onPressed: () => Navigator.pop(context),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white54,
+                  foregroundColor: AppColors.themedWhite54,
                   side: BorderSide(color: AppTheme.borderColor),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -415,7 +421,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.warning,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.themedWhite,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),

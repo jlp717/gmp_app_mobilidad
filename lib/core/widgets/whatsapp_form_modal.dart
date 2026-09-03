@@ -106,7 +106,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
     const whatsAppGreen = AppColors.whatsappGreen;
 
     return Dialog(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       child: Container(
         width: Responsive.clampWidth(context, 400),
         padding: const EdgeInsets.all(24),
@@ -182,8 +182,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[\d\+\s\-\(\)]')),
                 ],
-                style:
-                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: '+34 612 345 678',
                   icon: Icons.phone,
@@ -198,8 +197,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
               TextFormField(
                 controller: _messageController,
                 maxLines: 3,
-                style:
-                    TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'Escriba un mensaje...',
                   icon: Icons.message_outlined,
@@ -230,7 +228,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                     label: const Text('Compartir'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: whatsAppGreen,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.themedWhite,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
                         vertical: 12,

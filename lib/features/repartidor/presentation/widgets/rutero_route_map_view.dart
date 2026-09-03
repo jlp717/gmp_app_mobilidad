@@ -21,7 +21,7 @@ Color ruteroStopColor(int index, int total) {
   if (t <= 0.5) {
     return Color.lerp(AppColors.success, AppColors.info, t * 2)!;
   }
-  return Color.lerp(AppColors.info, const Color(0xFFF97316), (t - 0.5) * 2)!;
+  return Color.lerp(AppColors.info, AppColors.legacyFFF97316, (t - 0.5) * 2)!;
 }
 
 // ponytail: Spain bbox 27-44 / -18-5 rejects Africa/0,0 garbage. Upgrade: tighten per delegación if needed.
@@ -602,12 +602,12 @@ class _StopDetailCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: color,
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
+                    border: Border.all(color: AppColors.themedWhite, width: 2),
                   ),
                   child: Text(
                     index >= 0 ? '${index + 1}' : '·',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: AppColors.themedWhite,
                       fontWeight: FontWeight.w800,
                       fontSize: 14,
                     ),
@@ -785,7 +785,7 @@ class _NumberedPin extends StatelessWidget {
                 ? AppTheme.warning
                 : selected
                     ? AppTheme.info
-                    : Colors.white,
+                    : AppColors.themedWhite,
             width: isFirst ? 5 : 3),
         boxShadow: [
           if (isFirst)
@@ -796,12 +796,12 @@ class _NumberedPin extends StatelessWidget {
             ),
           if (isLast)
             BoxShadow(
-              color: const Color(0xFFF97316).withValues(alpha: 0.45),
+              color: AppColors.legacyFFF97316.withValues(alpha: 0.45),
               blurRadius: 8,
               spreadRadius: 1,
             ),
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
+            color: AppColors.systemBlack.withValues(alpha: 0.35),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -809,8 +809,8 @@ class _NumberedPin extends StatelessWidget {
       ),
       child: Text(
         '$index',
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: AppColors.themedWhite,
           fontWeight: FontWeight.bold,
           fontSize: 22,
         ),

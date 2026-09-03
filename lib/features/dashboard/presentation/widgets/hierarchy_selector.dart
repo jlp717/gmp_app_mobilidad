@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class HierarchySelector extends StatefulWidget {
@@ -79,13 +80,13 @@ class _HierarchySelectorState extends State<HierarchySelector> {
                 style: Theme.of(context)
                     .textTheme
                     .titleSmall
-                    ?.copyWith(color: Colors.white70),
+                    ?.copyWith(color: AppColors.themedWhite70),
               ),
               const Spacer(),
-              const Text(
+              Text(
                 'Arrastra para ordenar',
                 style: TextStyle(
-                  color: Colors.white30,
+                  color: AppColors.themedWhite30,
                   fontSize: 10,
                   fontStyle: FontStyle.italic,
                 ),
@@ -134,7 +135,7 @@ class _HierarchySelectorState extends State<HierarchySelector> {
       key: key,
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Material(
-        color: Colors.transparent,
+        color: AppColors.transparent,
         child: InkWell(
           onTap: () {
             setState(() {
@@ -158,11 +159,11 @@ class _HierarchySelectorState extends State<HierarchySelector> {
             decoration: BoxDecoration(
               color: isActive
                   ? AppTheme.info.withValues(alpha: 0.15)
-                  : Colors.white10,
+                  : AppColors.themedWhite10,
               border: Border.all(
                 color: isActive
                     ? AppTheme.info.withValues(alpha: 0.5)
-                    : Colors.white10,
+                    : AppColors.themedWhite10,
               ),
               borderRadius: BorderRadius.circular(20),
             ),
@@ -170,29 +171,31 @@ class _HierarchySelectorState extends State<HierarchySelector> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (isActive)
-                  const Icon(
+                  Icon(
                     Icons.drag_indicator,
                     size: 16,
-                    color: Colors.white30,
+                    color: AppColors.themedWhite30,
                   ),
                 if (isActive) const SizedBox(width: 8),
                 Icon(
                   _dimensionIcons[dim],
                   size: 16,
-                  color: isActive ? AppTheme.info : Colors.white30,
+                  color: isActive ? AppTheme.info : AppColors.themedWhite30,
                 ),
                 const SizedBox(width: 8),
                 Text(
                   _dimensionLabels[dim]!,
                   style: TextStyle(
-                    color: isActive ? Colors.white : Colors.white54,
+                    color: isActive
+                        ? AppColors.themedWhite
+                        : AppColors.themedWhite54,
                     fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                     fontSize: 13,
                   ),
                 ),
                 if (isActive && _activeDimensions.length > 1) ...[
                   const SizedBox(width: 8),
-                  const Icon(Icons.close, size: 14, color: Colors.white30),
+                  Icon(Icons.close, size: 14, color: AppColors.themedWhite30),
                 ] else if (!isActive) ...[
                   const SizedBox(width: 8),
                   const Icon(Icons.add, size: 14, color: AppTheme.info),

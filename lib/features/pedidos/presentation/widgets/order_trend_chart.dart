@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class TrendDataPoint {
@@ -32,10 +33,10 @@ class OrderTrendChart extends StatelessWidget {
     if (data.isEmpty) {
       return SizedBox(
         height: height,
-        child: const Center(
+        child: Center(
           child: Text(
             'Sin datos de tendencia',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
+            style: TextStyle(color: AppColors.themedWhite38, fontSize: 11),
           ),
         ),
       );
@@ -137,7 +138,7 @@ class _TrendChartPainter extends CustomPainter {
       textAlign: TextAlign.center,
       textDirection: TextDirection.ltr,
     );
-    const labelStyle = TextStyle(color: Colors.white54, fontSize: 8);
+    final labelStyle = TextStyle(color: AppColors.themedWhite54, fontSize: 8);
 
     for (var i = 0; i < data.length; i++) {
       final x = padding +

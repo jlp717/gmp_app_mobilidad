@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
@@ -45,7 +46,7 @@ class UnitSelectorModal extends StatefulWidget {
 
     return showDialog<Map<String, dynamic>>(
       context: context,
-      barrierColor: Colors.black54,
+      barrierColor: AppColors.systemBlack54,
       builder: (_) => UnitSelectorModal(
         initialUnit: initialUnit,
         initialQuantity: initialQuantity,
@@ -355,7 +356,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.warning,
-                  foregroundColor: Colors.black,
+                  foregroundColor: AppColors.systemBlack,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -396,7 +397,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                   child: Text(
                     'Seleccionar unidad y cantidad',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.themedWhite,
                       fontWeight: FontWeight.bold,
                       fontSize:
                           Responsive.fontSize(context, small: 15, large: 17),
@@ -405,8 +406,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon:
-                      const Icon(Icons.close, color: Colors.white54, size: 20),
+                  icon: Icon(Icons.close,
+                      color: AppColors.themedWhite54, size: 20),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -418,7 +419,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
               const SizedBox(height: 8),
               Text(
                 widget.product!.name,
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: TextStyle(color: AppColors.themedWhite70, fontSize: 13),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -505,7 +506,9 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                             selected
                                 ? Icons.radio_button_checked
                                 : Icons.radio_button_off,
-                            color: selected ? AppTheme.info : Colors.white38,
+                            color: selected
+                                ? AppTheme.info
+                                : AppColors.themedWhite38,
                             size: 20,
                           ),
                           const SizedBox(width: 10),
@@ -517,8 +520,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                                   _unitLabel(unit),
                                   style: TextStyle(
                                     color: selected
-                                        ? Colors.white
-                                        : Colors.white70,
+                                        ? AppColors.themedWhite
+                                        : AppColors.themedWhite70,
                                     fontWeight: selected
                                         ? FontWeight.bold
                                         : FontWeight.normal,
@@ -528,8 +531,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                                 if (subtitle != null)
                                   Text(
                                     subtitle,
-                                    style: const TextStyle(
-                                      color: Colors.white38,
+                                    style: TextStyle(
+                                      color: AppColors.themedWhite38,
                                       fontSize: 11,
                                     ),
                                   ),
@@ -559,8 +562,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                             const SizedBox(width: 8),
                             Text(
                               priceStr,
-                              style: const TextStyle(
-                                color: Colors.white54,
+                              style: TextStyle(
+                                color: AppColors.themedWhite54,
                                 fontSize: 11,
                               ),
                             ),
@@ -580,8 +583,8 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
               controller: _qtyController,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: AppColors.themedWhite,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -598,7 +601,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
               decoration: InputDecoration(
                 labelText: 'Cantidad (${_unitLabel(_selectedUnit)})',
                 labelStyle:
-                    const TextStyle(color: Colors.white54, fontSize: 13),
+                    TextStyle(color: AppColors.themedWhite54, fontSize: 13),
                 filled: true,
                 fillColor: AppTheme.softPanel,
                 border: OutlineInputBorder(
@@ -678,7 +681,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.info,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.themedWhite,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),

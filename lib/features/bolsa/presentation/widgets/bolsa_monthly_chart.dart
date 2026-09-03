@@ -6,6 +6,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
 
@@ -73,10 +74,10 @@ class BolsaMonthlyChart extends StatelessWidget {
                 size: 18,
               ),
               const SizedBox(width: 6),
-              const Text(
+              Text(
                 'Histórico 12 meses',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
@@ -110,7 +111,8 @@ class BolsaMonthlyChart extends StatelessWidget {
                               _kFormat(p.acumulado),
                               style: TextStyle(
                                 fontSize: 8,
-                                color: Colors.white.withValues(alpha: 0.45),
+                                color: AppColors.themedWhite
+                                    .withValues(alpha: 0.45),
                               ),
                             ),
                           const SizedBox(height: 2),
@@ -142,7 +144,8 @@ class BolsaMonthlyChart extends StatelessWidget {
                                   isCurrent ? FontWeight.w800 : FontWeight.w500,
                               color: isCurrent
                                   ? AppTheme.info
-                                  : Colors.white.withValues(alpha: 0.55),
+                                  : AppColors.themedWhite
+                                      .withValues(alpha: 0.55),
                             ),
                           ),
                         ],
@@ -204,7 +207,7 @@ class BolsaMonthlyChart extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.65),
+            color: AppColors.themedWhite.withValues(alpha: 0.65),
             fontSize: 10,
           ),
         ),
@@ -227,7 +230,7 @@ class BolsaMonthlyChart extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.55),
+                color: AppColors.themedWhite.withValues(alpha: 0.55),
                 fontSize: 9,
               ),
             ),

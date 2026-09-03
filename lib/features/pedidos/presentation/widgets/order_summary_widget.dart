@@ -186,7 +186,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                         SizedBox(width: 8),
                         Text(
                           'Vaciar carrito',
-                          style: TextStyle(color: AppTheme.textPrimary, fontSize: 16),
+                          style: TextStyle(
+                              color: AppTheme.textPrimary, fontSize: 16),
                         ),
                       ],
                     ),
@@ -441,13 +442,11 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       isDense: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide:
-                            BorderSide(color: AppTheme.borderColor),
+                        borderSide: BorderSide(color: AppTheme.borderColor),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide:
-                            BorderSide(color: AppTheme.borderColor),
+                        borderSide: BorderSide(color: AppTheme.borderColor),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -517,11 +516,13 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 children: [
                   Text(
                     'Base: ${PedidosFormatters.money(provider.totalBase)}',
-                    style: TextStyle(color: AppTheme.textTertiary, fontSize: 10),
+                    style:
+                        TextStyle(color: AppTheme.textTertiary, fontSize: 10),
                   ),
                   Text(
                     'IVA: ${PedidosFormatters.money(provider.totalIva)}',
-                    style: TextStyle(color: AppTheme.textTertiary, fontSize: 10),
+                    style:
+                        TextStyle(color: AppTheme.textTertiary, fontSize: 10),
                   ),
                   ...provider.ivaBreakdown.entries.map(
                     (e) => Text(
@@ -549,7 +550,9 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                     provider.isDirty
                         ? Icons.edit_outlined
                         : Icons.check_circle_outline,
-                    color: provider.isDirty ? AppTheme.textTertiary : AppTheme.success,
+                    color: provider.isDirty
+                        ? AppTheme.textTertiary
+                        : AppTheme.success,
                     size: 12,
                   ),
                   const SizedBox(width: 4),
@@ -796,7 +799,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
 
     showDialog<void>(
       context: context,
-      barrierColor: Colors.black54,
+      barrierColor: AppColors.systemBlack54,
       builder: (ctx) {
         return Dialog(
           backgroundColor: AppTheme.raisedSurface,
@@ -910,7 +913,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             labelText: 'Cajas',
-                            labelStyle: TextStyle(color: AppTheme.textSecondary),
+                            labelStyle:
+                                TextStyle(color: AppTheme.textSecondary),
                             filled: true,
                             fillColor: AppTheme.softPanel,
                             border: OutlineInputBorder(
@@ -956,7 +960,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                           decoration: InputDecoration(
                             labelText:
                                 'Uds (${formatQty(line.unidadesCaja, 'UNIDADES')} U/C)',
-                            labelStyle: TextStyle(color: AppTheme.textSecondary),
+                            labelStyle:
+                                TextStyle(color: AppTheme.textSecondary),
                             filled: true,
                             fillColor: AppTheme.softPanel,
                             border: OutlineInputBorder(
@@ -1001,13 +1006,11 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       fillColor: AppTheme.softPanel,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            BorderSide(color: AppTheme.borderColor),
+                        borderSide: BorderSide(color: AppTheme.borderColor),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            BorderSide(color: AppTheme.borderColor),
+                        borderSide: BorderSide(color: AppTheme.borderColor),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -1032,7 +1035,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             labelText: 'Cantidad ($unitLabel)',
-                            labelStyle: TextStyle(color: AppTheme.textSecondary),
+                            labelStyle:
+                                TextStyle(color: AppTheme.textSecondary),
                             filled: true,
                             fillColor: AppTheme.softPanel,
                             border: OutlineInputBorder(
@@ -1066,7 +1070,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                           decoration: InputDecoration(
                             labelText: 'Precio',
                             suffixText: ' \u20AC',
-                            labelStyle: TextStyle(color: AppTheme.textSecondary),
+                            labelStyle:
+                                TextStyle(color: AppTheme.textSecondary),
                             filled: true,
                             fillColor: AppTheme.softPanel,
                             border: OutlineInputBorder(

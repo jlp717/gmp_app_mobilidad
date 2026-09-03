@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
@@ -156,7 +157,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             const SizedBox(width: 16),
             Text(
               'Descargando ficha técnica...',
-              style: TextStyle(color: Colors.grey[300]),
+              style: TextStyle(color: AppColors.systemGrey300),
             ),
           ],
         ),

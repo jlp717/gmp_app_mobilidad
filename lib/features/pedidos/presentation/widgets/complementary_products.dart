@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -81,8 +82,8 @@ class ComplementaryProducts extends StatelessWidget {
                       children: [
                         Text(
                           name,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppColors.themedWhite,
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                           ),
@@ -100,16 +101,16 @@ class ComplementaryProducts extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.link,
-                              color: Colors.white38,
+                              color: AppColors.themedWhite38,
                               size: 10,
                             ),
                             const SizedBox(width: 3),
                             Text(
                               '$cooc pedidos juntos',
-                              style: const TextStyle(
-                                color: Colors.white38,
+                              style: TextStyle(
+                                color: AppColors.themedWhite38,
                                 fontSize: 9,
                               ),
                             ),

@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
@@ -69,7 +70,7 @@ class SalesChartCard extends StatelessWidget {
                     label: 'Ventas Totales',
                     value: Formatters.currency(salesSummary.totalSales),
                     icon: Icons.euro,
-                    color: Colors.green,
+                    color: AppColors.systemGreen,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -79,7 +80,7 @@ class SalesChartCard extends StatelessWidget {
                     label: 'Unidades',
                     value: salesSummary.totalUnits.toString(),
                     icon: Icons.inventory_2,
-                    color: Colors.blue,
+                    color: AppColors.systemBlue,
                   ),
                 ),
               ],
@@ -127,7 +128,7 @@ class SalesChartCard extends StatelessWidget {
   Widget _buildGrowthIndicator(BuildContext context) {
     final growth = salesSummary.salesGrowth;
     final isPositive = growth >= 0;
-    final color = isPositive ? Colors.green : Colors.red;
+    final color = isPositive ? AppColors.systemGreen : AppColors.systemRed;
     final icon = isPositive ? Icons.trending_up : Icons.trending_down;
 
     return Container(
@@ -220,20 +221,20 @@ class SalesChartCard extends StatelessWidget {
               return BarTooltipItem(
                 '${day.dayLabel}\n',
                 theme.textTheme.bodySmall!.copyWith(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontWeight: FontWeight.bold,
                 ),
                 children: [
                   TextSpan(
                     text: Formatters.currency(day.sales),
                     style: theme.textTheme.bodySmall!.copyWith(
-                      color: Colors.white70,
+                      color: AppColors.themedWhite70,
                     ),
                   ),
                   TextSpan(
                     text: '\n${day.units} unidades',
                     style: theme.textTheme.bodySmall!.copyWith(
-                      color: Colors.white70,
+                      color: AppColors.themedWhite70,
                     ),
                   ),
                 ],

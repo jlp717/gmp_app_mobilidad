@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -124,8 +125,8 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
             children: [
               Text(
                 'RANKING DE ${_getRankingType(topItems)}',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0,
@@ -190,7 +191,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
         gridData: FlGridData(
           drawVerticalLine: false,
           getDrawingHorizontalLine: (value) => FlLine(
-            color: Colors.white.withValues(alpha: 0.05),
+            color: AppColors.themedWhite.withValues(alpha: 0.05),
             strokeWidth: 1,
           ),
         ),
@@ -212,8 +213,8 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
           final node = topItems[groupIndex];
           return BarTooltipItem(
             '${node.name}\n',
-            const TextStyle(
-              color: Colors.white,
+            TextStyle(
+              color: AppColors.themedWhite,
               fontWeight: FontWeight.bold,
               fontSize: 14,
             ),
@@ -276,7 +277,9 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: isTouched ? Colors.white : Colors.white54,
+                    color: isTouched
+                        ? AppColors.themedWhite
+                        : AppColors.themedWhite54,
                     fontWeight: isTouched ? FontWeight.bold : FontWeight.normal,
                     fontSize: 9,
                   ),
@@ -295,7 +298,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
             if (value == 0) return const SizedBox();
             return Text(
               CurrencyFormatter.formatWhole(value).replaceAll(' €', ''),
-              style: const TextStyle(color: Colors.white24, fontSize: 10),
+              style: TextStyle(color: AppColors.themedWhite24, fontSize: 10),
             );
           },
         ),
@@ -327,7 +330,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
             backDrawRodData: BackgroundBarChartRodData(
               show: true,
               toY: maxY,
-              color: Colors.white.withValues(alpha: 0.02),
+              color: AppColors.themedWhite.withValues(alpha: 0.02),
             ),
           ),
         ],
@@ -344,10 +347,10 @@ class _PerformanceOptimizedContainer extends StatelessWidget {
   static final _cachedDecoration = BoxDecoration(
     color: AppTheme.raisedSurface,
     borderRadius: BorderRadius.circular(16),
-    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+    border: Border.all(color: AppColors.themedWhite.withValues(alpha: 0.05)),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.2),
+        color: AppColors.systemBlack.withValues(alpha: 0.2),
         blurRadius: 20,
         offset: const Offset(0, 10),
       ),
@@ -404,14 +407,15 @@ class _PieChartV3State extends State<PieChartV3> {
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border:
+            Border.all(color: AppColors.themedWhite.withValues(alpha: 0.05)),
       ),
       child: Column(
         children: [
           Text(
             widget.title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.themedWhite,
               fontWeight: FontWeight.bold,
               fontSize: 16,
             ),
@@ -466,10 +470,10 @@ class _PieChartV3State extends State<PieChartV3> {
         value: node.sales,
         title: '${(percentage * 100).toStringAsFixed(0)}%',
         radius: isLarge ? 60 : 50,
-        titleStyle: const TextStyle(
+        titleStyle: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.bold,
-          color: Colors.white,
+          color: AppColors.themedWhite,
         ),
       );
     }).toList();
@@ -486,8 +490,8 @@ class _PieChartV3State extends State<PieChartV3> {
             const SizedBox(width: 4),
             Text(
               node.name,
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: AppColors.themedWhite70,
                 fontSize: 10,
               ),
             ),

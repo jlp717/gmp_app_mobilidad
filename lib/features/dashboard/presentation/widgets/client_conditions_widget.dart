@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 
 /// [ClientConditionsWidget] - Widget que muestra información de condiciones del cliente
 ///
@@ -41,11 +42,11 @@ class ClientConditionsWidget extends StatelessWidget {
   Widget _buildDiversosSection(BuildContext context, bool isDark) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : const Color(0xFF5B8FB9),
+        color: isDark ? AppColors.legacyFF1E293B : AppColors.legacyFF5B8FB9,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
+            color: AppColors.systemBlack.withValues(alpha: 0.15),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -58,16 +59,17 @@ class ClientConditionsWidget extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFF5B8FB9),
+              color:
+                  isDark ? AppColors.legacyFF1E293B : AppColors.legacyFF5B8FB9,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
               ),
             ),
-            child: const Text(
+            child: Text(
               'Diversos',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
@@ -77,7 +79,7 @@ class ClientConditionsWidget extends StatelessWidget {
           // Content: Medios y Congeladores
           Container(
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              color: isDark ? AppColors.legacyFF0F172A : AppColors.themedWhite,
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(12),
                 bottomRight: Radius.circular(12),
@@ -90,7 +92,7 @@ class ClientConditionsWidget extends StatelessWidget {
                 _buildDiversosItem(
                   context: context,
                   icon: Icons.payment_rounded,
-                  iconColor: const Color(0xFF10B981),
+                  iconColor: AppColors.legacyFF10B981,
                   title: 'Medios',
                   subtitle: '$mediosCount medios',
                   isDark: isDark,
@@ -105,7 +107,7 @@ class ClientConditionsWidget extends StatelessWidget {
                 _buildDiversosItem(
                   context: context,
                   icon: Icons.ac_unit_rounded,
-                  iconColor: const Color(0xFF3B82F6),
+                  iconColor: AppColors.legacyFF3B82F6,
                   title: 'Congeladores',
                   subtitle: '$congeladoresCount máquinas',
                   isDark: isDark,
@@ -131,7 +133,7 @@ class ClientConditionsWidget extends StatelessWidget {
     VoidCallback? onTap,
   }) {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
@@ -139,13 +141,13 @@ class ClientConditionsWidget extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: isDark
-                ? const Color(0xFF1E293B).withValues(alpha: 0.5)
-                : Colors.grey.shade50,
+                ? AppColors.legacyFF1E293B.withValues(alpha: 0.5)
+                : AppColors.systemGrey50,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isDark
-                  ? Colors.white.withValues(alpha: 0.1)
-                  : Colors.grey.shade200,
+                  ? AppColors.themedWhite.withValues(alpha: 0.1)
+                  : AppColors.systemGrey200,
             ),
           ),
           child: Row(
@@ -174,7 +176,9 @@ class ClientConditionsWidget extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        color: isDark
+                            ? AppColors.themedWhite
+                            : AppColors.legacyFF1E293B,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -184,8 +188,8 @@ class ClientConditionsWidget extends StatelessWidget {
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         color: isDark
-                            ? Colors.blue.shade300
-                            : const Color(0xFF3B82F6),
+                            ? AppColors.systemBlue300
+                            : AppColors.legacyFF3B82F6,
                       ),
                     ),
                   ],
@@ -195,8 +199,8 @@ class ClientConditionsWidget extends StatelessWidget {
               Icon(
                 Icons.chevron_right_rounded,
                 color: isDark
-                    ? Colors.white.withValues(alpha: 0.4)
-                    : Colors.grey.shade400,
+                    ? AppColors.themedWhite.withValues(alpha: 0.4)
+                    : AppColors.systemGrey400,
                 size: 20,
               ),
             ],
@@ -209,11 +213,11 @@ class ClientConditionsWidget extends StatelessWidget {
   Widget _buildCondicionesSection(BuildContext context, bool isDark) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : const Color(0xFF5B8FB9),
+        color: isDark ? AppColors.legacyFF1E293B : AppColors.legacyFF5B8FB9,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
+            color: AppColors.systemBlack.withValues(alpha: 0.15),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -226,16 +230,17 @@ class ClientConditionsWidget extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFF5B8FB9),
+              color:
+                  isDark ? AppColors.legacyFF1E293B : AppColors.legacyFF5B8FB9,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
               ),
             ),
-            child: const Text(
+            child: Text(
               'Condiciones',
               style: TextStyle(
-                color: Colors.white,
+                color: AppColors.themedWhite,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
@@ -245,7 +250,7 @@ class ClientConditionsWidget extends StatelessWidget {
           // Content
           Container(
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              color: isDark ? AppColors.legacyFF0F172A : AppColors.themedWhite,
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(12),
                 bottomRight: Radius.circular(12),
@@ -290,13 +295,13 @@ class ClientConditionsWidget extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDark
-            ? const Color(0xFF1E293B).withValues(alpha: 0.5)
-            : Colors.grey.shade50,
+            ? AppColors.legacyFF1E293B.withValues(alpha: 0.5)
+            : AppColors.systemGrey50,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.grey.shade200,
+              ? AppColors.themedWhite.withValues(alpha: 0.1)
+              : AppColors.systemGrey200,
         ),
       ),
       child: Row(
@@ -311,8 +316,8 @@ class ClientConditionsWidget extends StatelessWidget {
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: isDark
-                        ? Colors.white.withValues(alpha: 0.6)
-                        : Colors.grey.shade600,
+                        ? AppColors.themedWhite.withValues(alpha: 0.6)
+                        : AppColors.systemGrey600,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -321,8 +326,9 @@ class ClientConditionsWidget extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color:
-                        isDark ? Colors.blue.shade300 : const Color(0xFF1E40AF),
+                    color: isDark
+                        ? AppColors.systemBlue300
+                        : AppColors.legacyFF1E40AF,
                   ),
                 ),
               ],

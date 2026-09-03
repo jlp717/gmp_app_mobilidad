@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
@@ -204,7 +205,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         Text(
           'Analíticas Avanzadas',
           style: TextStyle(
-            color: Colors.white,
+            color: AppColors.themedWhite,
             fontSize: Responsive.fontSize(
               context,
               small: 18,
@@ -239,9 +240,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           const SizedBox(height: 12),
 
           // Year multi-select chips
-          const Text(
+          Text(
             'Años:',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
+            style: TextStyle(color: AppColors.themedWhite70, fontSize: 14),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -266,7 +267,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 backgroundColor: AppTheme.inkSurface,
                 selectedColor: AppTheme.info.withValues(alpha: 0.3),
                 labelStyle: TextStyle(
-                  color: isSelected ? AppTheme.info : Colors.white70,
+                  color: isSelected ? AppTheme.info : AppColors.themedWhite70,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 ),
                 checkmarkColor: AppTheme.info,
@@ -283,9 +284,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Mes:',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                      style: TextStyle(
+                          color: AppColors.themedWhite70, fontSize: 14),
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<int?>(
@@ -303,7 +305,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         ),
                       ),
                       dropdownColor: AppTheme.inkSurface,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: AppColors.themedWhite),
                       items: [
                         const DropdownMenuItem(child: Text('Todo el año')),
                         ...List.generate(12, (i) => i + 1).map(
@@ -328,9 +330,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Vista:',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                      style: TextStyle(
+                          color: AppColors.themedWhite70, fontSize: 14),
                     ),
                     const SizedBox(height: 8),
                     SegmentedButton<String>(
@@ -364,7 +367,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           if (states.contains(WidgetState.selected)) {
                             return AppTheme.info;
                           }
-                          return Colors.white70;
+                          return AppColors.themedWhite70;
                         }),
                       ),
                     ),
@@ -378,15 +381,15 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
           // YTD Toggle
           SwitchListTile(
-            title: const Text(
+            title: Text(
               'Hasta hoy (YTD)',
-              style: TextStyle(color: Colors.white, fontSize: 14),
+              style: TextStyle(color: AppColors.themedWhite, fontSize: 14),
             ),
             subtitle: Text(
               _upToToday
                   ? 'Comparando solo hasta la fecha actual'
                   : 'Comparando períodos completos',
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: TextStyle(color: AppColors.themedWhite54, fontSize: 12),
             ),
             value: _upToToday,
             onChanged: (value) {
@@ -412,7 +415,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 Expanded(
                   child: Text(
                     _buildFilterSummary(),
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style:
+                        TextStyle(color: AppColors.themedWhite70, fontSize: 12),
                   ),
                 ),
               ],
@@ -471,7 +475,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         Text(
           'Indicadores principales',
           style: TextStyle(
-            color: Colors.white,
+            color: AppColors.themedWhite,
             fontSize: Responsive.fontSize(context, small: 15, large: 18),
             fontWeight: FontWeight.bold,
           ),
@@ -534,7 +538,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           const SizedBox(height: 12),
           Text(
             title,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: TextStyle(color: AppColors.themedWhite70, fontSize: 12),
           ),
           const SizedBox(height: 4),
           Text(
@@ -576,7 +580,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               Text(
                 'Evolución de Ventas',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.themedWhite,
                   fontSize: Responsive.fontSize(context, small: 15, large: 18),
                   fontWeight: FontWeight.bold,
                 ),
@@ -611,13 +615,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             Container(
               width: 16,
               height: 3,
-              color: yearColors[year] ?? Colors.white,
+              color: yearColors[year] ?? AppColors.themedWhite,
             ),
             const SizedBox(width: 4),
             Text(
               year.toString(),
               style: TextStyle(
-                color: yearColors[year] ?? Colors.white,
+                color: yearColors[year] ?? AppColors.themedWhite,
                 fontSize: 12,
               ),
             ),
@@ -657,13 +661,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       return LineChartBarData(
         spots: entry.value..sort((a, b) => a.x.compareTo(b.x)),
         isCurved: true,
-        color: yearColors[entry.key] ?? Colors.white,
+        color: yearColors[entry.key] ?? AppColors.themedWhite,
         barWidth: 3,
         isStrokeCapRound: true,
         dotData: FlDotData(
           getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
             radius: 4,
-            color: yearColors[entry.key] ?? Colors.white,
+            color: yearColors[entry.key] ?? AppColors.themedWhite,
             strokeWidth: 2,
             strokeColor: AppTheme.inkSurface,
           ),
@@ -672,8 +676,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           show: true,
           gradient: LinearGradient(
             colors: [
-              (yearColors[entry.key] ?? Colors.white).withValues(alpha: 0.1),
-              (yearColors[entry.key] ?? Colors.white).withValues(alpha: 0),
+              (yearColors[entry.key] ?? AppColors.themedWhite)
+                  .withValues(alpha: 0.1),
+              (yearColors[entry.key] ?? AppColors.themedWhite)
+                  .withValues(alpha: 0),
             ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -700,7 +706,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             getTitlesWidget: (value, meta) {
               return Text(
                 CurrencyFormatter.formatAxis(value),
-                style: const TextStyle(color: Colors.white54, fontSize: 10),
+                style: TextStyle(color: AppColors.themedWhite54, fontSize: 10),
               );
             },
           ),
@@ -716,7 +722,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 if (week < 1 || week > 53) return const SizedBox();
                 return Text(
                   'S$week',
-                  style: const TextStyle(color: Colors.white54, fontSize: 10),
+                  style:
+                      TextStyle(color: AppColors.themedWhite54, fontSize: 10),
                 );
               } else {
                 // For monthly view, show month names
@@ -724,7 +731,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 if (month < 1 || month > 12) return const SizedBox();
                 return Text(
                   DateFormatter.getMonthName(month, short: true),
-                  style: const TextStyle(color: Colors.white54, fontSize: 10),
+                  style:
+                      TextStyle(color: AppColors.themedWhite54, fontSize: 10),
                 );
               }
             },
@@ -735,8 +743,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       ),
       gridData: FlGridData(
         drawVerticalLine: false,
-        getDrawingHorizontalLine: (value) => const FlLine(
-          color: Colors.white10,
+        getDrawingHorizontalLine: (value) => FlLine(
+          color: AppColors.themedWhite10,
           strokeWidth: 1,
         ),
       ),
@@ -794,7 +802,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           Text(
             'Comparativa Interanual',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.themedWhite,
               fontSize: Responsive.fontSize(context, small: 15, large: 18),
               fontWeight: FontWeight.bold,
             ),
@@ -814,7 +822,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 child: _buildYoYCard(
                   lastYear['year'].toString(),
                   CurrencyFormatter.formatWhole(lastSales),
-                  Colors.white54,
+                  AppColors.themedWhite54,
                 ),
               ),
               const SizedBox(width: 12),
@@ -902,7 +910,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           Text(
             'Análisis de Márgenes',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.themedWhite,
               fontSize: Responsive.fontSize(context, small: 15, large: 18),
               fontWeight: FontWeight.bold,
             ),
@@ -956,7 +964,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             getTitlesWidget: (value, meta) {
               return Text(
                 '${value.toStringAsFixed(0)}%',
-                style: const TextStyle(color: Colors.white54, fontSize: 10),
+                style: TextStyle(color: AppColors.themedWhite54, fontSize: 10),
               );
             },
           ),
@@ -969,7 +977,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               if (month < 1 || month > 12) return const SizedBox();
               return Text(
                 DateFormatter.getMonthName(month, short: true),
-                style: const TextStyle(color: Colors.white54, fontSize: 10),
+                style: TextStyle(color: AppColors.themedWhite54, fontSize: 10),
               );
             },
           ),
@@ -980,7 +988,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       gridData: FlGridData(
         drawVerticalLine: false,
         getDrawingHorizontalLine: (value) =>
-            const FlLine(color: Colors.white10, strokeWidth: 1),
+            FlLine(color: AppColors.themedWhite10, strokeWidth: 1),
       ),
       borderData: FlBorderData(show: false),
       barTouchData: BarTouchData(
@@ -1054,9 +1062,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ],
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Predicción basada en histórico de 6 meses',
-            style: TextStyle(color: Colors.white54, fontSize: 12),
+            style: TextStyle(color: AppColors.themedWhite54, fontSize: 12),
           ),
           const SizedBox(height: 8),
           Container(
@@ -1064,26 +1072,28 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             decoration: BoxDecoration(
               color: AppTheme.inkSurface.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white10),
+              border: Border.all(color: AppColors.themedWhite10),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.info_outline, size: 14, color: Colors.white54),
+                Icon(Icons.info_outline,
+                    size: 14, color: AppColors.themedWhite54),
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'Usamos regresión lineal sobre tus ventas de los últimos 6 meses para estimar los próximos 3 meses.',
-                    style: TextStyle(color: Colors.white54, fontSize: 11),
+                    style:
+                        TextStyle(color: AppColors.themedWhite54, fontSize: 11),
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
+          Text(
             'Ventas Estimadas Próximos 3 Meses',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.themedWhite,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -1128,8 +1138,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             children: [
               Text(
                 monthName,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
@@ -1150,7 +1160,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               Expanded(
                 child: LinearProgressIndicator(
                   value: confidence,
-                  backgroundColor: Colors.white10,
+                  backgroundColor: AppColors.themedWhite10,
                   color: trendColor.withValues(alpha: 0.7),
                   minHeight: 6,
                   borderRadius: BorderRadius.circular(3),
@@ -1159,7 +1169,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               const SizedBox(width: 8),
               Text(
                 'Confianza: ${(confidence * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
               ),
             ],
           ),
@@ -1190,10 +1200,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Top 10 Clientes',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.themedWhite,
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -1226,10 +1236,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Top 10 Productos',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.themedWhite,
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -1252,7 +1262,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   Widget _buildRankedListItem(int rank, String name, String value) {
-    var rankColor = Colors.white54;
+    var rankColor = AppColors.themedWhite54;
     if (rank == 1) rankColor = AppTheme.accentAmber;
     if (rank == 2) rankColor = AppTheme.textSecondary;
     if (rank == 3) rankColor = AppTheme.accentRose;
@@ -1283,7 +1293,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           Expanded(
             child: Text(
               name.length > 25 ? '${name.substring(0, 25)}...' : name,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: TextStyle(color: AppColors.themedWhite, fontSize: 13),
               overflow: TextOverflow.ellipsis,
             ),
           ),

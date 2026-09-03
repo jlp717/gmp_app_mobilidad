@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:signature/signature.dart';
@@ -51,7 +52,7 @@ class RuteroDetailSignature extends StatelessWidget {
               ? 120.0
               : Responsive.value(context, phone: 120, desktop: 160),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppColors.themedWhite,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: firmaError != null ? AppTheme.error : AppTheme.borderColor,
@@ -62,7 +63,7 @@ class RuteroDetailSignature extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             child: Signature(
               controller: signatureController,
-              backgroundColor: Colors.white,
+              backgroundColor: AppColors.themedWhite,
             ),
           ),
         ),
@@ -105,21 +106,21 @@ class RuteroDetailSignaturePanel extends StatelessWidget {
           onPressed: isSubmitting ? null : onSubmit,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.success,
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.themedWhite,
             disabledBackgroundColor: AppTheme.success,
-            disabledForegroundColor: Colors.white,
+            disabledForegroundColor: AppColors.themedWhite,
             padding: const EdgeInsets.symmetric(vertical: 18),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppTheme.radiusLg),
             ),
           ),
           child: isSubmitting
-              ? const SizedBox(
+              ? SizedBox(
                   height: 24,
                   width: 24,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: AppColors.themedWhite,
                   ),
                 )
               : const Row(
