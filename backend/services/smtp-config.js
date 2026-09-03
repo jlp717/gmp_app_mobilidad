@@ -47,28 +47,59 @@ function isNonSmtpFrontend(value) {
   return NON_SMTP_FRONTENDS.has(String(value || '').trim().toLowerCase());
 }
 
+function stripWrappingQuotes(value) {
+  const trimmed = String(value || '').trim().replace(/^\uFEFF/, '');
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function coerceHostname(value) {
+  const trimmed = stripWrappingQuotes(value);
+  if (!trimmed) return '';
+
+  let candidate = trimmed;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(candidate)) {
+    try {
+      candidate = new URL(candidate).hostname || '';
+    } catch (_error) {
+      candidate = trimmed.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split('/')[0];
+    }
+  }
+
+  if (candidate.startsWith('[') && candidate.includes(']')) {
+    candidate = candidate.slice(1, candidate.indexOf(']'));
+  } else if (net.isIP(candidate) === 0 && candidate.includes(':')) {
+    const maybePort = candidate.slice(candidate.lastIndexOf(':') + 1);
+    if (/^\d+$/.test(maybePort)) {
+      candidate = candidate.slice(0, candidate.lastIndexOf(':'));
+    }
+  }
+
+  return candidate.trim();
+}
+
 function resolveSmtpHost(configuredHost) {
-  const host = String(configuredHost || '').trim();
-  if (!host || isNonSmtpFrontend(host)) {
+  const host = coerceHostname(configuredHost);
+  if (!host || isNonSmtpFrontend(host) || !isValidServerName(host)) {
     return CERTIFIED_SMTP_IDENTITY;
   }
   return host;
 }
 
 function resolveTlsServername(explicitServername, host) {
-  const explicit = String(explicitServername || '').trim();
+  const explicit = coerceHostname(explicitServername);
   if (explicit) {
-    return isNonSmtpFrontend(explicit) ? CERTIFIED_SMTP_IDENTITY : explicit;
+    return isNonSmtpFrontend(explicit) || !isValidServerName(explicit)
+      ? CERTIFIED_SMTP_IDENTITY
+      : explicit;
   }
-  if (String(host || '').toLowerCase() === CERTIFIED_SMTP_IDENTITY) {
-    return CERTIFIED_SMTP_IDENTITY;
-  }
-  // Production must name the certificate identity explicitly when the
-  // connection host is not the verified mail server.
-  if (process.env.NODE_ENV === 'production') {
-    return '';
-  }
-  return host;
+  const resolvedHost = resolveSmtpHost(host);
+  return resolvedHost || CERTIFIED_SMTP_IDENTITY;
 }
 
 function buildSmtpConfig(options = {}) {

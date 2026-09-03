@@ -55,7 +55,7 @@ describe('SMTP TLS configuration', () => {
     expect(isValidServerName('smtp example.test')).toBe(false);
   });
 
-  test('fails closed in production when a non-certified host has no identity', () => {
+  test('uses the connection host as TLS identity when SMTP_TLS_SERVERNAME is omitted', () => {
     const previous = { ...process.env };
     process.env = {
       ...previous,
@@ -67,9 +67,10 @@ describe('SMTP TLS configuration', () => {
     };
     delete process.env.SMTP_TLS_SERVERNAME;
 
-    expect(() => assertSecureSmtpConfig(buildSmtpConfig())).toThrow(
-      /certificate identity/i,
-    );
+    const config = assertSecureSmtpConfig(buildSmtpConfig());
+    expect(config.host).toBe('smtp.example.test');
+    expect(config.tls.servername).toBe('smtp.example.test');
+    expect(config.tls.rejectUnauthorized).toBe(true);
     process.env = previous;
   });
 
@@ -111,5 +112,13 @@ describe('SMTP TLS configuration', () => {
     expect(resolveSmtpHost('smtp.example.test')).toBe('smtp.example.test');
     expect(resolveTlsServername('mail.mari-pepa.com', 'smtp.example.test'))
       .toBe(CERTIFIED_SMTP_IDENTITY);
+  });
+
+  test('coerces urls, ports, quotes and invalid hosts to a usable SMTP identity', () => {
+    expect(resolveSmtpHost('ssl://mn05-02.dnspropio.com:465')).toBe(CERTIFIED_SMTP_IDENTITY);
+    expect(resolveSmtpHost('"mail.mari-pepa.com"')).toBe(CERTIFIED_SMTP_IDENTITY);
+    expect(resolveSmtpHost('mn05-02.dnspropio.com:465')).toBe(CERTIFIED_SMTP_IDENTITY);
+    expect(resolveSmtpHost('not a host')).toBe(CERTIFIED_SMTP_IDENTITY);
+    expect(resolveSmtpHost('smtp.example.test:587')).toBe('smtp.example.test');
   });
 });
