@@ -21,6 +21,7 @@ const {
   buildRepartoMessageId,
   redactDeliverySummary,
 } = require('./reparto-email-delivery-policy');
+const { previousMadridIsoDate } = require('../utils/madrid-calendar');
 
 function notificationTables(env = process.env) {
   const runtime = resolveRepartoRuntime(env);
@@ -661,24 +662,6 @@ async function notifyAfterConfirm({
   }
 
   return { skipped: false, lineCount: lineas.length, ...sendResult, outboxId };
-}
-
-function previousMadridIsoDate(now = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Madrid',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(now);
-  const get = (type) => parts.find((part) => part.type === type)?.value;
-  const year = Number(get('year'));
-  const month = Number(get('month'));
-  const day = Number(get('day'));
-  const previous = new Date(Date.UTC(year, month - 1, day) - 24 * 60 * 60 * 1000);
-  const y = previous.getUTCFullYear();
-  const m = String(previous.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(previous.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
 }
 
 /**

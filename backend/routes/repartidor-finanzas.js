@@ -35,6 +35,7 @@ const {
   RepartoEmailDeliveryPolicyError,
   resolveRepartoEmailDelivery,
   buildRepartoMessageId,
+  normalizeEmail,
 } = require('../services/reparto-email-delivery-policy');
 const {
   recordDocumentEmailLedger,
@@ -909,7 +910,7 @@ router.post(
   requireCanonicalConfirmationRole,
   async (req, res) => {
     const parsed = z.object({
-      destinatario: z.string().trim().email().max(180),
+      destinatario: z.string().trim().max(180).refine((value) => Boolean(normalizeEmail(value))),
       repartidorId: z.string().optional(),
     }).strict().safeParse(req.body);
     if (!parsed.success) {

@@ -157,6 +157,20 @@ test('POST receipt email rejects invalid destinatario before rendering', async (
   expect(emailPdf.sendEmailWithPdf).not.toHaveBeenCalled();
 });
 
+test('POST receipt email accepts the isolated_test localhost sink', async () => {
+  const emailPdf = require('../services/emailPdfService');
+  inject();
+  emailPdf.sendEmailWithPdf.mockClear();
+  const res = await request(app())
+    .post('/finanzas/rutero/confirmations/7/receipt/email')
+    .send({ destinatario: 'reparto-test@localhost' });
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+  expect(emailPdf.sendEmailWithPdf).toHaveBeenCalledWith(expect.objectContaining({
+    to: 'reparto-test@localhost',
+  }));
+});
+
 test('POST receipt email sends the canonical PDF', async () => {
   const emailPdf = require('../services/emailPdfService');
   inject();

@@ -2,6 +2,7 @@
 
 const { validateFinanceTableMapping } = require('../config/reparto-runtime');
 const { RepartoPersistenceError } = require('../services/reparto-confirmation-service');
+const { madridCalendarParts } = require('../utils/madrid-calendar');
 
 const LEDGER_COLUMNS = Object.freeze([
   'ID', 'CODIGOCLIENTEALBARAN', 'CODIGOCLIENTEFACTURA', 'CODIGOVENDEDOR',
@@ -146,6 +147,7 @@ function integer(value, field) {
 }
 
 function normalizePayment(input, now) {
+  const cal = madridCalendarParts(now);
   const payment = Object.freeze({
     codigoCliente: normalizeText(input.codigoCliente),
     codigoRepartidor: normalizeText(input.codigoRepartidor),
@@ -165,9 +167,9 @@ function normalizePayment(input, now) {
     pantallaOrigen: normalizeText(input.pantallaOrigen) || 'RUTERO',
     operador: normalizeText(input.operador),
     notas: input.notas == null ? '' : normalizeText(input.notas).slice(0, 60),
-    diaCobro: now.getDate(),
-    mesCobro: now.getMonth() + 1,
-    anoCobro: now.getFullYear(),
+    diaCobro: cal.day,
+    mesCobro: cal.month,
+    anoCobro: cal.year,
   });
   const requiredText = [
     'codigoCliente', 'codigoRepartidor', 'tipoDocumento', 'origenDocumento',

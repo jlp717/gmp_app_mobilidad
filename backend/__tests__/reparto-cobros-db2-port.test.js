@@ -230,6 +230,22 @@ describe('reparto cobros DB2 transaction-bound port', () => {
     expect(crosscheck.params).toEqual(['C1', 'CVC:CAC:B:001:2026:A:1:8:1:1']);
     expect(fake.calls.some((call) => call.sql.startsWith('INSERT INTO'))).toBe(false);
   });
+
+  test('stamps DIACOBRO/MES/ANO with Europe/Madrid even when the process clock is UTC', async () => {
+    const fake = fakeConnection();
+    const port = createRepartoCobrosDb2Port({
+      runtime: runtime(),
+      now: () => new Date('2026-09-07T22:30:00.000Z'),
+      logger: { info: jest.fn() },
+    });
+    await port.assertCapabilities(fake.connection);
+    await expect(port.forConnection(fake.connection).insertCobro(payment())).resolves.toEqual({ id: '91', created: true });
+    const insert = fake.calls.find((call) => call.sql.startsWith('INSERT INTO'));
+    const columns = LEDGER_COLUMNS.slice(1);
+    expect(insert.params[columns.indexOf('DIACOBRO')]).toBe(8);
+    expect(insert.params[columns.indexOf('MESCOBRO')]).toBe(9);
+    expect(insert.params[columns.indexOf('ANOCOBRO')]).toBe(2026);
+  });
 });
 
   test.each([

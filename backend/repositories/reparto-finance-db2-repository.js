@@ -8,6 +8,7 @@
 
 const { queryWithParams, getPool, initDb } = require('../config/db');
 const logger = require('../middleware/logger');
+const { madridCalendarParts } = require('../utils/madrid-calendar');
 const {
   resolveRepartoRuntime,
   validateConfirmationTableMapping,
@@ -1543,7 +1544,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
     },
 
     async insertCobroRow(conn, info, input) {
-      const now = new Date();
+      const cal = madridCalendarParts(new Date());
       const columns = [];
       const params = [];
       const add = (column, value) => {
@@ -1569,9 +1570,9 @@ function createRepartoFinanceDb2Repository(options = {}) {
         add('IMPORTEVENCIMIENTO', roundMoney(input.importeCobrado));
         add('IMPORTEPENDIENTE', roundMoney(input.importePendiente));
         add('CODIGOFORMAPAGO', storagePaymentCode(input.formaPago, info));
-        add('DIACOBRO', now.getDate());
-        add('MESCOBRO', now.getMonth() + 1);
-        add('ANOCOBRO', now.getFullYear());
+        add('DIACOBRO', cal.day);
+        add('MESCOBRO', cal.month);
+        add('ANOCOBRO', cal.year);
         add('IDEMPOTENCY_TOKEN', input.idempotencyToken);
         add('PANTALLA_ORIGEN', input.pantallaOrigen || 'RUTERO');
         add('OPERADOR', input.operador || 'unknown');
