@@ -371,7 +371,7 @@ describe('repartidor-liquidacion-db2-repository', () => {
     expect(conn.commit).toHaveBeenCalledTimes(1);
     const sql = conn.query.mock.calls.map(([statement]) => statement).join('\n');
     expect(sql).toContain('NEXT VALUE FOR JAVIER.TEST_REPARTIDOR_LIQUIDACION_SEQ');
-    expect(sql).toContain('CODIGOVENDEDOR = ? AND DIACOBRO = ?');
+    expect(sql).toContain('TRIM(CODIGOVENDEDOR) = ? AND DIACOBRO = ?');
     expect(sql).not.toMatch(/LOCK TABLE|MAX\s*\(|DSEDAC/i);
     expect(conn.query.mock.calls.filter(([statement]) => statement.includes('ID IN (?)'))).toHaveLength(4);
   });

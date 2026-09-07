@@ -226,4 +226,47 @@ describe('Email PDF Service', () => {
         const { service } = loadService();
         await expect(service.verifySmtpConnection()).resolves.toBe(true);
     });
+
+    test('skips SMTP for isolated_test localhost sink', async () => {
+        const sendMail = jest.fn();
+        jest.resetModules();
+        process.env = {
+            ...originalEnv,
+            SMTP_PDF_HOST: 'smtp.test.local',
+            SMTP_PDF_PORT: '587',
+            SMTP_PDF_USER: 'noreply@test.local',
+            SMTP_PDF_PASS: 'secret',
+            SMTP_PDF_TLS_SERVERNAME: 'smtp.test.local',
+            SMTP_FROM: 'noreply@test.local',
+            REPARTO_TABLE_SET: 'isolated_test',
+        };
+        jest.doMock('nodemailer', () => ({
+            createTransport: jest.fn(() => ({
+                sendMail,
+                verify: jest.fn().mockResolvedValue(true),
+                close: jest.fn(),
+            })),
+        }));
+        jest.doMock('../middleware/logger', () => ({
+            info: jest.fn(),
+            error: jest.fn(),
+            warn: jest.fn(),
+            debug: jest.fn(),
+        }));
+        const service = require('../services/emailPdfService');
+        const result = await service.sendEmailWithPdf({
+            to: 'reparto-test@localhost',
+            subject: 'Recibo TEST',
+            htmlBody: '<p>ok</p>',
+            pdfBuffer: Buffer.from('%PDF-1.4'),
+            pdfFilename: 'recibo.pdf',
+            messageId: '<gmp-reparto-receipt-test@localhost>',
+        });
+        expect(result).toEqual({
+            success: true,
+            messageId: '<gmp-reparto-receipt-test@localhost>',
+            skippedSmtp: true,
+        });
+        expect(sendMail).not.toHaveBeenCalled();
+    });
 });

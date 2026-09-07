@@ -11,9 +11,13 @@ class RepartoEmailDeliveryPolicyError extends Error {
   }
 }
 
+const ISOLATED_TEST_DEFAULT_EMAIL = 'reparto-test@localhost';
+
 function normalizeEmail(value) {
   const email = String(value || '').trim().toLowerCase();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '';
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return email;
+  if (/^[^\s@]+@localhost$/.test(email)) return email;
+  return '';
 }
 
 function uniqueEmails(values) {
@@ -24,8 +28,30 @@ function isIsolatedTest(env) {
   return String(env?.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test';
 }
 
+function isolatedTestDefaultEmails() {
+  return uniqueEmails([ISOLATED_TEST_DEFAULT_EMAIL]);
+}
+
 function testAllowlist(env) {
-  return uniqueEmails(String(env?.REPARTO_EMAIL_TEST_ALLOWLIST || '').split(','));
+  const configured = uniqueEmails(String(env?.REPARTO_EMAIL_TEST_ALLOWLIST || '').split(','));
+  if (isIsolatedTest(env)) {
+    return uniqueEmails([...configured, ...isolatedTestDefaultEmails()]);
+  }
+  return configured;
+}
+
+function testSink(env) {
+  const configured = normalizeEmail(env?.REPARTO_EMAIL_TEST_SINK);
+  if (configured) return configured;
+  return isIsolatedTest(env) ? ISOLATED_TEST_DEFAULT_EMAIL : '';
+}
+
+function shouldSkipSmtpForIsolatedTest(email, env = process.env) {
+  const normalized = normalizeEmail(email);
+  if (!normalized || !isIsolatedTest(env)) return false;
+  return normalized.endsWith('.test')
+    || normalized.endsWith('@localhost')
+    || normalized.endsWith('.localhost');
 }
 
 /**
@@ -50,7 +76,7 @@ function resolveRepartoEmailDelivery({ recipients, env = process.env, mode = 'au
     };
   }
   const allowlist = testAllowlist(env);
-  const sink = normalizeEmail(env?.REPARTO_EMAIL_TEST_SINK);
+  const sink = testSink(env);
   if (!allowlist.length) {
     throw new RepartoEmailDeliveryPolicyError(
       'El correo de reparto en isolated_test requiere allowlist explícita',
@@ -116,4 +142,7 @@ module.exports = {
   resolveRepartoEmailDelivery,
   buildRepartoMessageId,
   redactDeliverySummary,
+  normalizeEmail,
+  shouldSkipSmtpForIsolatedTest,
+  ISOLATED_TEST_DEFAULT_EMAIL,
 };

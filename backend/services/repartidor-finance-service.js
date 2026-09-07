@@ -2386,12 +2386,92 @@ function getTopProducts(repartidorId, { limit = 10 } = {}) {
  * Devuelve el cobro anulado (snapshot previo al borrado) para que el frontend
  * pueda mostrar al usuario lo que se ha revertido.
  */
-async function reverseCobro() {
-  // The approved production ledger does not yet expose a verified soft-reversal
-  // column set plus transactional audit contract. Refuse before any DB action.
-  throw new FinanceSchemaUnavailableError(
-    'La reversi?n de cobros no est? disponible hasta validar el contrato de anulaci?n y auditor?a',
-  );
+async function reverseCobro({
+  idempotencyToken,
+  repartidorId,
+  operador,
+  reason,
+  allowAcrossRepartidores = false,
+} = {}) {
+  const runtime = assertFinanceRuntime();
+  if (!runtime.financeCapabilityApproved || !runtime.writesEnabled) {
+    throw new FinanceSchemaUnavailableError(
+      'La capacidad canonica de cobros no esta autorizada',
+    );
+  }
+  if (runtime.tableSet !== 'isolated_test') {
+    throw new FinanceSchemaUnavailableError(
+      'La anulacion de cobros solo esta habilitada en isolated_test',
+    );
+  }
+
+  const info = await getFinanceSchemaInfo();
+  if (!info.cobrosHasIdempotencyToken) {
+    throw new CobroNotFoundError();
+  }
+
+  const requestedOwner = String(repartidorId || '').trim();
+  const conn = await financeRepo.connect();
+  let begun = false;
+  try {
+    await financeRepo.beginWork(conn);
+    begun = true;
+    await lockCobrosForPayment(conn);
+    const rows = await financeRepo.selectCobroByToken(info, idempotencyToken, conn);
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new CobroNotFoundError();
+    }
+    const cobro = rows[0];
+    const owner = String(
+      value(cobro, 'CODIGOVENDEDOR', value(cobro, 'CODIGO_REPARTIDOR', '')),
+    ).trim();
+    if (owner && owner !== requestedOwner) {
+      throw new PaymentAuthzDeniedError(
+        allowAcrossRepartidores
+          ? 'El cobro no pertenece a este repartidor'
+          : 'No puedes anular cobros de otro repartidor',
+      );
+    }
+    const liquidado = String(value(cobro, 'LIQUIDADO_SN', 'N') || 'N').trim().toUpperCase();
+    if (liquidado === 'S') {
+      throw new CobroAlreadyLiquidadoError();
+    }
+
+    const deleted = await financeRepo.deleteOpenCobroByToken(info, {
+      idempotencyToken,
+      repartidorId: requestedOwner,
+    }, conn);
+    if (deleted === 0) {
+      throw new CobroAlreadyLiquidadoError();
+    }
+    await financeRepo.insertCobroReverseAudit(conn, {
+      operador,
+      repartidorId: requestedOwner,
+      reason,
+      idempotencyToken,
+    });
+    await financeRepo.commit(conn);
+    begun = false;
+    logger.info(
+      `[REPARTIDOR_FINANZAS] PAYMENT_REVERSED rep=${requestedOwner} token=${String(idempotencyToken).slice(0, 12)}`,
+    );
+    return {
+      reversed: true,
+      id: cobro.ID == null && cobro.id == null ? null : String(value(cobro, 'ID', '')),
+      snapshot: mapCobro({ ...cobro, IDEMPOTENCY_TOKEN: idempotencyToken }),
+    };
+  } catch (error) {
+    if (begun) {
+      try { await financeRepo.rollback(conn); } catch (rollbackError) {
+        logger.error(`[REPARTIDOR_FINANZAS] Reverse rollback failed: ${sanitizeErrorMessage(rollbackError)}`);
+      }
+    }
+    throw error;
+  } finally {
+    try { await conn.close(); } catch (closeError) {
+      logger.warn(`[REPARTIDOR_FINANZAS] Reverse connection close failed: ${sanitizeErrorMessage(closeError)}`);
+    }
+  }
 }
 
 module.exports = {

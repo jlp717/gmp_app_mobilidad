@@ -18,6 +18,10 @@ const nodemailer = require('nodemailer');
 const logger = require('../middleware/logger');
 const { smtpLogger, isSmtpDebugEnabled } = require('./smtpLogger');
 const { assertSecureSmtpConfig, buildSmtpConfig } = require('./smtp-config');
+const {
+    shouldSkipSmtpForIsolatedTest,
+    normalizeEmail: normalizeRepartoEmail,
+} = require('./reparto-email-delivery-policy');
 
 function redactEmailForLog(value) {
     const email = String(value || '').trim();
@@ -313,7 +317,8 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(to)) {
+    const normalizedTo = normalizeRepartoEmail(to);
+    if (!normalizedTo && !emailRegex.test(to)) {
         throw new Error('Email destinatario inválido');
     }
 
@@ -323,6 +328,18 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
 
     if (!pdfFilename) {
         throw new Error('Nombre del archivo PDF es requerido');
+    }
+
+    if (shouldSkipSmtpForIsolatedTest(to)) {
+        const skippedId = (typeof messageId === 'string' && messageId.trim())
+            ? messageId.trim()
+            : '<gmp-reparto-isolated-test@localhost>';
+        logger.info('SMTP skipped for isolated_test recipient', {
+            to: redactEmailForLog(to),
+            subject,
+            pdfFilename,
+        });
+        return { success: true, messageId: skippedId, skippedSmtp: true };
     }
 
     // Ports to try: [primaryPort, ...fallbackPorts]
@@ -479,12 +496,24 @@ async function sendHtmlEmail({ to, subject, htmlBody, textBody, messageId }) {
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(to)) {
+    const normalizedTo = normalizeRepartoEmail(to);
+    if (!normalizedTo && !emailRegex.test(to)) {
         throw new Error('Email destinatario inválido');
     }
 
     if (!htmlBody && !textBody) {
         throw new Error('htmlBody o textBody es requerido');
+    }
+
+    if (shouldSkipSmtpForIsolatedTest(to)) {
+        const skippedId = (typeof messageId === 'string' && messageId.trim())
+            ? messageId.trim()
+            : '<gmp-reparto-isolated-test@localhost>';
+        logger.info('SMTP skipped for isolated_test HTML recipient', {
+            to: redactEmailForLog(to),
+            subject,
+        });
+        return { success: true, messageId: skippedId, skippedSmtp: true };
     }
 
     const portsToTry = [SMTP_CONFIG.port, ...SMTP_FALLBACK_PORTS.filter((p) => p !== SMTP_CONFIG.port)];

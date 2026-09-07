@@ -1012,9 +1012,9 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
           `SELECT ID, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, CREATED_AT, `
             + 'CODIGOCLIENTEALBARAN, TIPODOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO '
             + `FROM ${finance.cobros} `
-            + 'WHERE CODIGOVENDEDOR = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
+            + 'WHERE TRIM(CODIGOVENDEDOR) = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
             + "AND COALESCE(LIQUIDADO_SN, 'N') <> 'S' ORDER BY ID FOR UPDATE WITH RS",
-          [repartidorId, day, month, year]);
+          [String(repartidorId).trim(), day, month, year]);
         const expenseRows = await rows(connection,
           `SELECT ID, IMPORTE, CATEGORIA FROM ${finance.expenses} WHERE CODIGO_REPARTIDOR = ? `
             + "AND DIA = ? AND MES = ? AND ANO = ? AND STATUS = 'PENDING' ORDER BY ID FOR UPDATE WITH RS",
@@ -1232,9 +1232,9 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         const { year, month, day } = dateParts(date);
         const result = await execute(connection,
           `UPDATE ${finance.cobros} SET LIQUIDADO_SN = ?, LIQUIDACION_TOKEN = ?, NUMEROLIQUIDACION = ? `
-            + 'WHERE CODIGOVENDEDOR = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
+            + 'WHERE TRIM(CODIGOVENDEDOR) = ? AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? '
             + `AND COALESCE(LIQUIDADO_SN, ?) <> ? AND ID IN (${placeholders(cobroIds.length)})`,
-          ['S', marker, numeroLiquidacion, repartidorId, day, month, year, 'N', 'S', ...cobroIds]);
+          ['S', marker, numeroLiquidacion, String(repartidorId).trim(), day, month, year, 'N', 'S', ...cobroIds]);
         const affected = affectedRows(result);
         if (affected === cobroIds.length) return;
         throw new LiquidacionRepositoryUnavailableError(

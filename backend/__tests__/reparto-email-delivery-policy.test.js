@@ -27,12 +27,21 @@ describe('reparto email delivery policy', () => {
     });
   });
 
-  test('isolated test fails closed even when strict flag is omitted', () => {
+  test('isolated test rejects external recipients even when the code default allowlist is active', () => {
     expect(() => resolveRepartoEmailDelivery({
       recipients: ['cliente@empresa.com'],
       env: { REPARTO_TABLE_SET: 'isolated_test' },
       mode: 'manual',
     })).toThrow(RepartoEmailDeliveryPolicyError);
+    try {
+      resolveRepartoEmailDelivery({
+        recipients: ['cliente@empresa.com'],
+        env: { REPARTO_TABLE_SET: 'isolated_test' },
+        mode: 'manual',
+      });
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'REPARTO_EMAIL_RECIPIENT_NOT_ALLOWED', statusCode: 403 });
+    }
   });
 
   test('automatic isolated messages preserve all allowlisted DB-resolved recipients', () => {
@@ -46,15 +55,46 @@ describe('reparto email delivery policy', () => {
     });
   });
 
-  test('isolated test fails closed without an explicit allowlist', () => {
-    expect(() => resolveRepartoEmailDelivery({
-      recipients: ['x@example.test'],
+  test('isolated test uses the code default allowlist when env is empty', () => {
+    expect(resolveRepartoEmailDelivery({
+      recipients: ['reparto-test@localhost'],
+      env: { REPARTO_TABLE_SET: 'isolated_test' },
+      mode: 'manual',
+    })).toEqual({
+      effectiveRecipients: ['reparto-test@localhost'],
+      redirected: false,
+      policy: 'isolated_test_allowlist',
+    });
+  });
+
+  test('isolated_test always keeps the code default sink even with a custom allowlist', () => {
+    expect(resolveRepartoEmailDelivery({
+      recipients: ['reparto-test@localhost'],
       env: {
         REPARTO_TABLE_SET: 'isolated_test',
-        REPARTO_EMAIL_STRICT_TEST_POLICY: 'true',
+        REPARTO_EMAIL_TEST_ALLOWLIST: 'sink@example.test',
       },
-    }))
-      .toThrow(RepartoEmailDeliveryPolicyError);
+      mode: 'manual',
+    })).toEqual({
+      effectiveRecipients: ['reparto-test@localhost'],
+      redirected: false,
+      policy: 'isolated_test_allowlist',
+    });
+  });
+
+  test('isolated test rejects non-default recipients when env allowlist is empty', () => {
+    try {
+      resolveRepartoEmailDelivery({
+        recipients: ['x@example.test'],
+        env: {
+          REPARTO_TABLE_SET: 'isolated_test',
+          REPARTO_EMAIL_STRICT_TEST_POLICY: 'true',
+        },
+      });
+      throw new Error('expected policy rejection');
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'REPARTO_EMAIL_RECIPIENT_NOT_ALLOWED', statusCode: 403 });
+    }
   });
 
   test('manual isolated messages reject non-allowlisted recipients', () => {

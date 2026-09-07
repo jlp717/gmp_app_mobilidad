@@ -283,6 +283,7 @@ function cobroReplaySelect(info) {
     'NOTAS',
     'LIQUIDADO_SN',
     'NUMEROLIQUIDACION',
+    'IDEMPOTENCY_TOKEN',
     'CREATED_AT',
   ];
   const columns = candidates.filter((column) => info.has('REPARTIDOR_COBROS', column));
@@ -1437,6 +1438,36 @@ function createRepartoFinanceDb2Repository(options = {}) {
       WHERE IDEMPOTENCY_TOKEN = ?
       FETCH FIRST 1 ROW ONLY
     `, [idempotencyToken]);
+    },
+
+    async deleteOpenCobroByToken(info, { idempotencyToken, repartidorId }, conn) {
+      assertIsolatedTestWriteTable(tables.cobros);
+      const ownerColumn = info.cobrosAligned ? 'CODIGOVENDEDOR' : 'CODIGO_REPARTIDOR';
+      const notLiquidated = cobrosNotLiquidatedCondition(info);
+      const result = await runOn(conn, `
+      DELETE FROM ${tables.cobros}
+      WHERE IDEMPOTENCY_TOKEN = ?
+        AND TRIM(${ownerColumn}) = ?
+        AND ${notLiquidated}
+    `, [idempotencyToken, String(repartidorId || '').trim()]);
+      const affected = Number(result?.count ?? result?.affectedRows ?? result?.rowCount ?? 0);
+      return Number.isFinite(affected) ? affected : 0;
+    },
+
+    async insertCobroReverseAudit(conn, { operador, repartidorId, reason, idempotencyToken }) {
+      assertIsolatedTestWriteTable(tables.audit);
+      const preview = String(reason || 'PAYMENT_REVERSED').trim().slice(0, 500);
+      const tokenPreview = String(idempotencyToken || '').trim().slice(0, 80);
+      await runOn(conn, `
+      INSERT INTO ${tables.audit} (
+        EVENT_TYPE, OPERADOR, CODIGO_REPARTIDOR, PAYLOAD_PREVIEW
+      ) VALUES (?, ?, ?, ?)
+    `, [
+        'PAYMENT_REVERSED',
+        String(operador || 'unknown').trim().slice(0, 40),
+        String(repartidorId || '').trim().slice(0, 10),
+        `${tokenPreview}|${preview}`.slice(0, 500),
+      ]);
     },
 
     async selectDeliveryStatusByToken(idempotencyToken) {
