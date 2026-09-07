@@ -53,5 +53,21 @@ void main() {
       ThemeData.estimateBrightnessForColor(dark.colorScheme.onSurface),
       Brightness.light,
     );
+    expect(
+      ThemeData.estimateBrightnessForColor(
+        light.dropdownMenuTheme.menuStyle!.backgroundColor!
+            .resolve(const <WidgetState>{})!,
+      ),
+      Brightness.light,
+    );
+    expect(
+      ThemeData.estimateBrightnessForColor(
+        dark.dropdownMenuTheme.menuStyle!.backgroundColor!
+            .resolve(const <WidgetState>{})!,
+      ),
+      Brightness.dark,
+    );
+    expect(light.datePickerTheme.backgroundColor, AppColors.surface);
+    expect(dark.datePickerTheme.backgroundColor, AppColors.darkSurfaceLayer);
   });
 }

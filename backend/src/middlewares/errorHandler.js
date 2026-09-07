@@ -94,9 +94,14 @@ function respondError(res, error, { style = 'legacy', action } = {}) {
     if (DB_UNAVAILABLE_CODES.has(error?.code)) {
         statusCode = 503;
         userMessage = 'Base de datos temporalmente no disponible';
+    } else if (Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599) {
+        statusCode = error.statusCode;
+        if (statusCode < 500 && error.expose !== false && error.message) {
+            userMessage = error.message;
+        }
     }
 
-    const responseExtras = {};
+    const responseExtras = { statusHint: statusCode };
     if (error?.code || res.locals?.errorCode) {
         responseExtras.code = error?.code || res.locals?.errorCode;
     }

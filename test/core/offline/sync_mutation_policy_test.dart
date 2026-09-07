@@ -93,6 +93,51 @@ void main() {
   });
 
   group('SyncMutationPolicy manual review', () {
+    test('register_cobro treats idempotency replay as success', () {
+      expect(
+        SyncMutationPolicy.isIdempotentConflict(
+          type: 'register_cobro',
+          statusCode: 409,
+          code: 'IDEMPOTENCY_CONFLICT',
+        ),
+        isTrue,
+      );
+      expect(
+        SyncMutationPolicy.isIdempotentConflict(
+          type: 'register_cobro',
+          statusCode: 409,
+          code: 'PAYMENT_ALREADY_REGISTERED',
+        ),
+        isTrue,
+      );
+      expect(
+        SyncMutationPolicy.isIdempotentConflict(
+          type: 'register_cobro',
+          statusCode: 409,
+          code: 'REPARTO_COBRO_IDEMPOTENCY_CONFLICT',
+        ),
+        isTrue,
+      );
+      expect(
+        SyncMutationPolicy.decideAttempt(
+          type: 'register_cobro',
+          attemptsBefore: 0,
+          now: DateTime(2026, 8, 12),
+          errorStatusCode: 409,
+          errorCode: 'IDEMPOTENCY_CONFLICT',
+        ),
+        SyncAttemptDecision.idempotentSuccess,
+      );
+      expect(
+        SyncMutationPolicy.isAcceptedSuccess(
+          type: 'register_cobro',
+          body: {'success': true, 'created': false, 'id': '42'},
+          httpStatus: 200,
+        ),
+        isTrue,
+      );
+    });
+
     test('409 DELIVERY_ALREADY_CONFIRMED is idempotent success', () {
       expect(
         SyncMutationPolicy.isIdempotentConflict(

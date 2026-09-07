@@ -5,6 +5,7 @@ const { verifyToken } = require('../middleware/auth');
 const logger = require('../middleware/logger');
 const evolutionService = require('../services/evolution.service');
 const { evolutionLimiter } = require('../middleware/security');
+const { handleRouteError } = require('../utils/common');
 
 const router = express.Router();
 router.use(verifyToken);
@@ -44,7 +45,10 @@ router.get('/monthly', async (req, res) => {
     } catch (error) {
         const requestId = req.headers['x-request-id'] || '';
         logger.error(`[EVOLUTION] GET /monthly error: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message, request_id: requestId });
+        return handleRouteError(error, res, 'Error obteniendo evolucion mensual', 500, {
+            code: 'EVOLUTION_MONTHLY_ERROR',
+            request_id: requestId,
+        });
     }
 });
 
@@ -62,7 +66,10 @@ router.get('/products', async (req, res) => {
     } catch (error) {
         const requestId = req.headers['x-request-id'] || '';
         logger.error(`[EVOLUTION] GET /products error: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message, request_id: requestId });
+        return handleRouteError(error, res, 'Error obteniendo evolucion de productos', 500, {
+            code: 'EVOLUTION_PRODUCTS_ERROR',
+            request_id: requestId,
+        });
     }
 });
 
@@ -80,7 +87,10 @@ router.get('/clients', async (req, res) => {
     } catch (error) {
         const requestId = req.headers['x-request-id'] || '';
         logger.error(`[EVOLUTION] GET /clients error: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message, request_id: requestId });
+        return handleRouteError(error, res, 'Error obteniendo evolucion de clientes', 500, {
+            code: 'EVOLUTION_CLIENTS_ERROR',
+            request_id: requestId,
+        });
     }
 });
 

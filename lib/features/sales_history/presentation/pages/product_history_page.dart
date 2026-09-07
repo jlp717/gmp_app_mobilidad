@@ -76,18 +76,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
       firstDate: DateTime(2023),
       lastDate: DateTime.now(),
       initialDateRange: _selectedDateRange,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.dark(
-              primary: AppColors.primary,
-              onPrimary: AppTheme.textPrimary,
-              surface: AppColors.cardColor,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      builder: AppTheme.pickerOverlay,
     );
 
     if (picked != null) {

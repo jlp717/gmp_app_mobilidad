@@ -118,15 +118,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       initialDate: initial,
       firstDate: DateTime(2015),
       lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: ColorScheme.dark(
-            primary: AppTheme.info,
-            surface: AppTheme.raisedSurface,
-          ),
-        ),
-        child: child ?? const SizedBox.shrink(),
-      ),
+      builder: AppTheme.pickerOverlay,
     );
     if (picked == null || !mounted) return;
     setState(() {

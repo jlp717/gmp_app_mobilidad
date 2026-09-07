@@ -46,6 +46,13 @@ class AppColors {
   // recurse whenever a widget asks for a tertiary colour.
   static Color get themedFaint => isDark ? darkMuted : faint;
 
+  /// Card / list-row fill. `themedWhite` is an on-surface text token and must
+  /// never be used as a background in light mode (it becomes ink).
+  static Color get themedCardFill => isDark ? raisedSurface : surface;
+  static Color get themedControlFill =>
+      isDark ? inkSurface.withValues(alpha: 0.34) : surface;
+  static Color get themedMenuFill => isDark ? surfaceOverlay : surface;
+
   static Color get themedInkSurface => isDark ? inkSurface : surface;
   static Color get themedRaisedSurface => isDark ? raisedSurface : surface;
   static Color get themedSoftPanel => isDark ? softPanel : panel;

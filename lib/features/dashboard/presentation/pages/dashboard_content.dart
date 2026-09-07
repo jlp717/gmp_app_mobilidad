@@ -20,6 +20,7 @@ import 'package:gmp_app_mobilidad/core/widgets/multi_select_dialog.dart';
 // SmartSyncHeader already imported in line 10 theoretically, but let's just keep one.
 // Step 1420 lines 10 & 11 were both SmartSyncHeader.
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
+import 'package:gmp_app_mobilidad/features/dashboard/domain/dashboard_load_policy.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/dashboard_chart_factory.dart'; // Add factory import
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/hierarchy_section.dart'; // New import
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/hierarchy_selector.dart';
@@ -130,10 +131,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   // REMOVED: _familiesDisponibles - now using FI API directly
 
   // HIERARCHY STATE - Supports any hierarchy combination with 2-step backend approach
-  List<String> _hierarchy = [
-    'vendor',
-    'client',
-  ]; // User can customize via HierarchySelector
+  late List<String> _hierarchy;
 
   // Data state
   Map<String, dynamic>? _kpiData;
@@ -153,6 +151,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   bool _isInitialized = false;
   ProviderSubscription<String?>? _vendorSubscription;
   int _loadGeneration = 0;
+  bool _vendedoresLoadScheduled = false;
 
   static const List<String> _monthNamesShort = [
     'Ene',
@@ -169,14 +168,42 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     'Dic',
   ];
 
+  bool _readIsJefeVentas() {
+    final user = ref.read(authProvider).value?.user;
+    if (user == null) return false;
+    return isDashboardManagerRole(
+      isJefeVentas: user.isJefeVentas,
+      role: user.role,
+    );
+  }
+
+  /// Vendedores share cache with CachePreWarmer; defer for jefe so matrix/metrics
+  /// win the radio and DB2 pool on cold start.
+  void _scheduleVendedoresLoadIfNeeded() {
+    if (_vendedoresLoadScheduled || _vendedoresDisponibles.isNotEmpty) return;
+    _vendedoresLoadScheduled = true;
+    unawaited(
+      Future<void>.delayed(const Duration(seconds: 4), () {
+        if (!mounted) return;
+        _loadVendedores();
+      }),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
+    final isJefeVentas = _readIsJefeVentas();
+    _hierarchy = defaultDashboardHierarchy(isJefeVentas: isJefeVentas);
     _pendingYears = Set.from(_selectedYears);
     _pendingMonths = Set.from(_selectedMonths);
     _selectedVendedor = ref.read(selectedVendorProvider);
     _isInitialized = true;
-    _loadVendedores();
+    if (isJefeVentas) {
+      _scheduleVendedoresLoadIfNeeded();
+    } else {
+      _loadVendedores();
+    }
     _fetchAllData();
 
     _vendorSubscription =
@@ -431,71 +458,58 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           .toString(); // Primary year for some legacy logic checks
 
       params['groupBy'] = _hierarchy.join(','); // Send full hierarchy
+      final monthsQuery = dashboardMonthsQuery(_selectedMonths);
+      if (monthsQuery.isNotEmpty) {
+        params['months'] = monthsQuery;
+      }
+      params['limit'] = dashboardMatrixRowLimit(_hierarchy).toString();
 
-      // Fetch data
-      final results = await Future.wait([
-        ApiClient.get(
-          '/dashboard/matrix-data',
-          queryParameters: params,
-          cacheKey: 'dash_matrix_${_cacheKeyFromParams(params)}_v2',
-          cacheTTL: const Duration(minutes: 60),
-          forceRefresh: forceRefresh,
-        ),
-        ApiClient.get(
-          '/dashboard/metrics',
-          queryParameters: params,
-          cacheKey: 'dash_metrics_${_cacheKeyFromParams(params)}',
-          cacheTTL: const Duration(minutes: 30),
-          receiveTimeout: const Duration(seconds: 20),
-          forceRefresh: forceRefresh,
-        ),
-      ]);
+      // Metrics (small JSON, current month) paint first; matrix is the heavy
+      // JEFE ALL payload and must not hide KPIs behind a full-screen spinner.
+      final matrixParams = Map<String, String>.from(params);
+      final metricsFuture = ApiClient.get(
+        '/dashboard/metrics',
+        queryParameters: params,
+        cacheKey: 'dash_metrics_${_cacheKeyFromParams(params)}',
+        cacheTTL: const Duration(minutes: 30),
+        receiveTimeout: const Duration(seconds: 20),
+        forceRefresh: forceRefresh,
+      );
+      final matrixFuture = ApiClient.get(
+        '/dashboard/matrix-data',
+        queryParameters: matrixParams,
+        cacheKey: 'dash_matrix_${_cacheKeyFromParams(matrixParams)}_v3',
+        cacheTTL: const Duration(minutes: 60),
+        receiveTimeout: const Duration(seconds: 45),
+        forceRefresh: forceRefresh,
+      );
 
+      try {
+        final metrics = await metricsFuture;
+        if (!mounted || generation != _loadGeneration) return;
+        setState(() {
+          _kpiData = Map<String, dynamic>.from(metrics);
+          _error = null;
+        });
+      } catch (e) {
+        debugPrint('Error fetching dashboard metrics: $e');
+      }
+
+      final matrixResponse = await matrixFuture;
       if (!mounted || generation != _loadGeneration) return;
 
-      // Safe type conversion for API response
-      final matrixData = Map<String, dynamic>.from(results[0] as Map);
+      final matrixData = Map<String, dynamic>.from(matrixResponse);
       final rawList = matrixData['rows'] ?? [];
-      final rawRows = (rawList as List)
-          .map((item) => Map<String, dynamic>.from(item as Map))
-          .toList();
 
-      // Filter by selected year and months
-      final filteredRows = rawRows.where((row) {
-        final dynamic yearVal = row['YEAR'] ?? row['year'];
-        final dynamic monthVal = row['MONTH'] ?? row['month'];
-
-        int? year;
-        int? month;
-
-        if (yearVal is int) {
-          year = yearVal;
-        } else if (yearVal is num)
-          year = yearVal.toInt();
-        else if (yearVal is String) year = int.tryParse(yearVal);
-
-        if (monthVal is int) {
-          month = monthVal;
-        } else if (monthVal is num)
-          month = monthVal.toInt();
-        else if (monthVal is String) month = int.tryParse(monthVal);
-
-        if (year == null ||
-            (_selectedYears.isNotEmpty && !_selectedYears.contains(year))) {
-          return false;
-        }
-
-        if (_selectedMonths.isNotEmpty && month != null) {
-          if (!_selectedMonths.contains(month)) return false;
-        }
-
-        return true;
-      }).toList();
-
-      // Process Flat Rows into Tree (Outside setState)
+      // Cast + filter + tree build off the UI isolate (matrix JSON is bulky).
       final treeData = await compute(
         buildTreeIsolate,
-        TreeBuildParams(rows: filteredRows, hierarchy: _hierarchy),
+        TreeBuildParams(
+          rawRows: rawList is List ? rawList : const [],
+          hierarchy: _hierarchy,
+          selectedYears: _selectedYears,
+          selectedMonths: _selectedMonths,
+        ),
       );
 
       if (!mounted || generation != _loadGeneration) return;
@@ -505,7 +519,6 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         _selectionPath = []; // Reset selection on new fetch
         _matrixPeriods =
             List<String>.from((matrixData['periods'] as List?) ?? []);
-        _kpiData = Map<String, dynamic>.from(results[1] as Map);
         _isLoading = false;
         _lastFetchTime = DateTime.now();
       });
@@ -572,7 +585,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       _selectedVendedor = null;
       _selectedClientCodes.clear();
       _fiFilters = const FiFilterState(); // Reset FI filters
-      _hierarchy = ['vendor', 'client']; // Reset hierarchy
+      _hierarchy = defaultDashboardHierarchy(isJefeVentas: _readIsJefeVentas());
       _selectedYears = {DateTime.now().year};
       _selectedMonths = {for (var i = 1; i <= DateTime.now().month; i++) i};
       _selectionPath = [];
@@ -601,10 +614,17 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
-    // select(): watching the whole AsyncValue rebuilt the dashboard Scaffold
-    // on every auth emission; only the director flag matters here.
-    final isJefeVentas =
-        ref.watch(authProvider.select((s) => s.value?.isDirector ?? false));
+    // select(): only rebuild filter chrome when jefe/admin authorization changes.
+    final isJefeVentas = ref.watch(
+      authProvider.select((s) {
+        final user = s.value?.user;
+        if (user == null) return false;
+        return isDashboardManagerRole(
+          isJefeVentas: user.isJefeVentas,
+          role: user.role,
+        );
+      }),
+    );
 
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
@@ -638,59 +658,64 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                     ],
                     _buildDateFilters(),
                     const SizedBox(height: 16),
-                    if (_isLoading && _matrixData.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(60),
-                        child:
-                            ModernLoading(message: 'Analizando tendencias...'),
-                      )
-                    else if (_error != null && _matrixData.isEmpty)
+                    if (_error != null &&
+                        _kpiData == null &&
+                        _matrixData.isEmpty)
                       _buildErrorWidget()
                     else ...[
                       if (_isLoading)
                         const LinearProgressIndicator(color: AppTheme.info),
-                      _buildKPISection(),
-                      const SizedBox(height: 16),
-                      // Chart Type Toggle
-                      _buildChartTypeToggle(),
-                      const SizedBox(height: 8),
-                      // Hierarchy Selector Replaces Fixed Breadcrumbs
-                      // Loading overlay indicator when hierarchy changes
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          HierarchySelector(
-                            currentHierarchy: _hierarchy,
-                            onChanged: (newHierarchy) {
-                              setState(() {
-                                _hierarchy = newHierarchy;
-                                _selectionPath =
-                                    []; // Clear selection on hierarchy change
-                              });
-                              _fetchAllData();
-                            },
+                      if (_kpiData != null) ...[
+                        RepaintBoundary(child: _buildKPISection()),
+                        const SizedBox(height: 16),
+                      ],
+                      if (_isLoading && _matrixData.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 36),
+                          child: ModernLoading(
+                            message: 'Cargando ranking comercial...',
                           ),
-                          if (_isLoading)
-                            Positioned.fill(
-                              child: ColoredBox(
-                                color: AppColors.systemBlack
-                                    .withValues(alpha: 0.3),
-                                child: const Center(
-                                  child: SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppTheme.info,
+                        )
+                      else if (_error != null && _matrixData.isEmpty)
+                        _buildErrorWidget()
+                      else ...[
+                        _buildChartTypeToggle(),
+                        const SizedBox(height: 8),
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            HierarchySelector(
+                              currentHierarchy: _hierarchy,
+                              onChanged: (newHierarchy) {
+                                setState(() {
+                                  _hierarchy = newHierarchy;
+                                  _selectionPath = [];
+                                });
+                                _fetchAllData();
+                              },
+                            ),
+                            if (_isLoading)
+                              Positioned.fill(
+                                child: ColoredBox(
+                                  color: AppColors.systemBlack
+                                      .withValues(alpha: 0.3),
+                                  child: const Center(
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppTheme.info,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (_matrixData.isNotEmpty) _buildCascadingSections(),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        if (_matrixData.isNotEmpty) _buildCascadingSections(),
+                      ],
                     ],
                   ],
                 ),
@@ -733,6 +758,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
               children: [
                 Text(
                   'Actividad comercial',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: AppColors.themedWhite,
                     fontSize: small ? 16 : 20,
@@ -1422,7 +1449,9 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
-            final cardWidth = (constraints.maxWidth - 24) / 3;
+            final columns = constraints.maxWidth < 480 ? 2 : 3;
+            final gap = 12.0 * (columns - 1);
+            final cardWidth = (constraints.maxWidth - gap) / columns;
             return Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -2111,14 +2140,52 @@ class _MutableNode {
 }
 
 class TreeBuildParams {
-  TreeBuildParams({required this.rows, required this.hierarchy});
-  final List<Map<String, dynamic>> rows;
+  TreeBuildParams({
+    required this.rawRows,
+    required this.hierarchy,
+    this.selectedYears = const {},
+    this.selectedMonths = const {},
+  });
+
+  final List<dynamic> rawRows;
   final List<String> hierarchy;
+  final Set<int> selectedYears;
+  final Set<int> selectedMonths;
+}
+
+int? _parsePeriodInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}
+
+List<Map<String, dynamic>> _castAndFilterMatrixRows(TreeBuildParams params) {
+  final rows = <Map<String, dynamic>>[];
+  for (final item in params.rawRows) {
+    if (item is! Map) continue;
+    final row = Map<String, dynamic>.from(item);
+    final year = _parsePeriodInt(row['YEAR'] ?? row['year']);
+    final month = _parsePeriodInt(row['MONTH'] ?? row['month']);
+    if (year == null) continue;
+    if (params.selectedYears.isNotEmpty &&
+        !params.selectedYears.contains(year)) {
+      continue;
+    }
+    if (params.selectedMonths.isNotEmpty &&
+        month != null &&
+        !params.selectedMonths.contains(month)) {
+      continue;
+    }
+    rows.add(row);
+  }
+  return rows;
 }
 
 // Top level function for compute
 List<MatrixNode> buildTreeIsolate(TreeBuildParams params) {
-  final rows = params.rows;
+  final rows = _castAndFilterMatrixRows(params);
   final hierarchy = params.hierarchy;
 
   if (rows.isEmpty || hierarchy.isEmpty) return [];

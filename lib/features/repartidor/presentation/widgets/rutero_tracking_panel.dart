@@ -63,17 +63,12 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final tracking = ref.watch(ruteroTrackingProvider);
-    final notifier = ref.read(ruteroTrackingProvider.notifier);
-    final canStop = tracking.sessionId != null &&
-        (tracking.isActive ||
-            tracking.status == RuteroTrackingStatus.error ||
-            tracking.status == RuteroTrackingStatus.stopping);
-    final busy = tracking.status == RuteroTrackingStatus.starting ||
-        tracking.status == RuteroTrackingStatus.stopping;
-    final accent = tracking.isActive ? AppTheme.success : AppTheme.info;
+    final isActive = ref.watch(
+      ruteroTrackingProvider.select((s) => s.isActive),
+    );
+    final accent = isActive ? AppTheme.success : AppTheme.info;
     final isPhone = Responsive.isPhone(context);
-    final toggleLabel = tracking.isActive
+    final toggleLabel = isActive
         ? 'Seguimiento activo. '
             '${_expanded ? 'Contraer' : 'Desplegar'} panel de seguimiento'
         : '${_expanded ? 'Contraer' : 'Desplegar'} panel de seguimiento';
@@ -111,32 +106,34 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
                   child: Row(
                     children: [
                       Icon(
-                        tracking.isActive
-                            ? Icons.my_location
-                            : Icons.location_searching,
+                        isActive ? Icons.my_location : Icons.location_searching,
                         color: accent,
                         size: isPhone ? 20 : 24,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          tracking.isActive
+                          isActive
                               ? 'Seguimiento activo'
                               : 'Seguimiento de ruta',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: AppTheme.textPrimary,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
-                      if (tracking.isActive)
-                        const ExcludeSemantics(
-                          child: Padding(
-                            padding: EdgeInsets.only(right: 4),
-                            child: Chip(
-                              label: Text('EN MARCHA'),
-                              visualDensity: VisualDensity.compact,
-                              labelStyle: TextStyle(fontSize: 10),
+                      if (isActive)
+                        const Flexible(
+                          child: ExcludeSemantics(
+                            child: Padding(
+                              padding: EdgeInsets.only(right: 4),
+                              child: Chip(
+                                label: Text('EN MARCHA'),
+                                visualDensity: VisualDensity.compact,
+                                labelStyle: TextStyle(fontSize: 10),
+                              ),
                             ),
                           ),
                         ),
@@ -154,135 +151,189 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
                 ),
               ),
             ),
-            if (_expanded) ...[
-              const SizedBox(height: 6),
-              Text(
-                tracking.isActive
-                    ? 'La ubicación se registra mientras repartes. '
-                        'Puedes seguir usando otras aplicaciones.'
-                    : 'Registra tu avance y recibe avisos sobre la próxima parada.',
-                style: TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 12,
-                ),
+            if (_expanded)
+              _TrackingPanelBody(
+                repartidorId: widget.repartidorId,
+                routeDate: widget.routeDate,
+                stops: widget.stops,
               ),
-              const SizedBox(height: 10),
-              if (tracking.nextStop != null)
-                _NextStopSummary(tracking: tracking)
-              else
-                Text(
-                  'No quedan paradas pendientes en esta ruta.',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                ),
-              if (tracking.position != null) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 4,
-                  children: [
-                    _Metric(
-                      icon: Icons.gps_fixed,
-                      text: 'Precisión ±' +
-                          tracking.position!.accuracy.toStringAsFixed(0) +
-                          ' m',
-                    ),
-                    if (tracking.position!.speedKmh != null)
-                      _Metric(
-                        icon: Icons.speed,
-                        text: tracking.position!.speedKmh!.toStringAsFixed(0) +
-                            ' km/h',
-                      ),
-                    if (tracking.lastSentAt != null)
-                      _Metric(
-                        icon: Icons.cloud_done,
-                        text: 'Sincronizado ' + _time(tracking.lastSentAt!),
-                      ),
-                  ],
-                ),
-              ],
-              if (tracking.pendingSamples > 0) ...[
-                const SizedBox(height: 4),
-                Text(
-                  tracking.pendingSamples.toString() +
-                      ' punto(s) pendiente(s) de sincronizar',
-                  style: const TextStyle(
-                    color: AppTheme.warning,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-              if (tracking.error != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  tracking.error!,
-                  key: const ValueKey('rutero-tracking-error'),
-                  style: const TextStyle(color: AppTheme.error, fontSize: 12),
-                ),
-                if (tracking.status == RuteroTrackingStatus.permissionDenied ||
-                    tracking.status == RuteroTrackingStatus.unavailable)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: _openLocationSettings,
-                      icon: const Icon(Icons.settings, size: 16),
-                      label: const Text('Abrir ajustes'),
-                    ),
-                  ),
-              ],
-              const Divider(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: busy
-                          ? null
-                          : canStop
-                              ? notifier.stop
-                              : () => notifier.start(
-                                    repartidorId: widget.repartidorId,
-                                    routeDate: widget.routeDate,
-                                    stops: widget.stops,
-                                  ),
-                      icon: Icon(canStop ? Icons.stop : Icons.play_arrow),
-                      label: Text(
-                        busy
-                            ? 'Procesando…'
-                            : canStop
-                                ? tracking.status == RuteroTrackingStatus.error
-                                    ? 'Reintentar cierre'
-                                    : 'Parar seguimiento'
-                                : 'Iniciar seguimiento',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Tooltip(
-                    message: 'Avisos de voz',
-                    child: Switch(
-                      value: tracking.voiceEnabled,
-                      onChanged: busy ? null : notifier.setVoiceEnabled,
-                    ),
-                  ),
-                  Icon(
-                    Icons.volume_up_outlined,
-                    color: AppTheme.textSecondary,
-                    size: 18,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'La distancia es aproximada en línea recta. Para indicaciones '
-                'de giro, usa el botón Navegar de la parada.',
-                style: TextStyle(
-                  color: AppTheme.textTertiary,
-                  fontSize: 10,
-                ),
-              ),
-            ],
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TrackingPanelBody extends ConsumerWidget {
+  const _TrackingPanelBody({
+    required this.repartidorId,
+    required this.routeDate,
+    required this.stops,
+  });
+
+  final String repartidorId;
+  final String routeDate;
+  final List<RuteroTrackingStop> stops;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tracking = ref.watch(
+      ruteroTrackingProvider.select(
+        (s) => (
+          isActive: s.isActive,
+          status: s.status,
+          sessionId: s.sessionId,
+          nextStop: s.nextStop,
+          distanceToNextStopKm: s.distanceToNextStopKm,
+          position: s.position,
+          pendingSamples: s.pendingSamples,
+          lastSentAt: s.lastSentAt,
+          error: s.error,
+          voiceEnabled: s.voiceEnabled,
+        ),
+      ),
+    );
+    final notifier = ref.read(ruteroTrackingProvider.notifier);
+    final canStop = tracking.sessionId != null &&
+        (tracking.isActive ||
+            tracking.status == RuteroTrackingStatus.error ||
+            tracking.status == RuteroTrackingStatus.stopping);
+    final busy = tracking.status == RuteroTrackingStatus.starting ||
+        tracking.status == RuteroTrackingStatus.stopping;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 6),
+        Text(
+          tracking.isActive
+              ? 'La ubicación se registra mientras repartes. '
+                  'Puedes seguir usando otras aplicaciones.'
+              : 'Registra tu avance y recibe avisos sobre la próxima parada.',
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (tracking.nextStop != null)
+          _NextStopSummary(
+            nextStop: tracking.nextStop!,
+            distanceToNextStopKm: tracking.distanceToNextStopKm,
+          )
+        else
+          Text(
+            'No quedan paradas pendientes en esta ruta.',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+        if (tracking.position != null) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              _Metric(
+                icon: Icons.gps_fixed,
+                text: 'Precisión ±' +
+                    tracking.position!.accuracy.toStringAsFixed(0) +
+                    ' m',
+              ),
+              if (tracking.position!.speedKmh != null)
+                _Metric(
+                  icon: Icons.speed,
+                  text:
+                      tracking.position!.speedKmh!.toStringAsFixed(0) + ' km/h',
+                ),
+              if (tracking.lastSentAt != null)
+                _Metric(
+                  icon: Icons.cloud_done,
+                  text: 'Sincronizado ' + _formatTime(tracking.lastSentAt!),
+                ),
+            ],
+          ),
+        ],
+        if (tracking.pendingSamples > 0) ...[
+          const SizedBox(height: 4),
+          Text(
+            tracking.pendingSamples.toString() +
+                ' punto(s) pendiente(s) de sincronizar',
+            style: const TextStyle(
+              color: AppTheme.warning,
+              fontSize: 11,
+            ),
+          ),
+        ],
+        if (tracking.error != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            tracking.error!,
+            key: const ValueKey('rutero-tracking-error'),
+            style: const TextStyle(color: AppTheme.error, fontSize: 12),
+          ),
+          if (tracking.status == RuteroTrackingStatus.permissionDenied ||
+              tracking.status == RuteroTrackingStatus.unavailable)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _openLocationSettings,
+                icon: const Icon(Icons.settings, size: 16),
+                label: const Text('Abrir ajustes'),
+              ),
+            ),
+        ],
+        const Divider(height: 18),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: busy
+                    ? null
+                    : canStop
+                        ? notifier.stop
+                        : () => notifier.start(
+                              repartidorId: repartidorId,
+                              routeDate: routeDate,
+                              stops: stops,
+                            ),
+                icon: Icon(canStop ? Icons.stop : Icons.play_arrow),
+                label: Text(
+                  busy
+                      ? 'Procesando…'
+                      : canStop
+                          ? tracking.status == RuteroTrackingStatus.error
+                              ? 'Reintentar cierre'
+                              : 'Parar seguimiento'
+                          : 'Iniciar seguimiento',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Avisos de voz',
+              child: Switch(
+                value: tracking.voiceEnabled,
+                onChanged: busy ? null : notifier.setVoiceEnabled,
+              ),
+            ),
+            Icon(
+              Icons.volume_up_outlined,
+              color: AppTheme.textSecondary,
+              size: 18,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'La distancia es aproximada en línea recta. Para indicaciones '
+          'de giro, usa el botón Navegar de la parada.',
+          style: TextStyle(
+            color: AppTheme.textTertiary,
+            fontSize: 10,
+          ),
+        ),
+      ],
     );
   }
 
@@ -291,7 +342,7 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
     if (!openedApp) await Geolocator.openLocationSettings();
   }
 
-  String _time(DateTime value) {
+  static String _formatTime(DateTime value) {
     final local = value.toLocal();
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
@@ -300,14 +351,18 @@ class _RuteroTrackingPanelState extends ConsumerState<RuteroTrackingPanel> {
 }
 
 class _NextStopSummary extends StatelessWidget {
-  const _NextStopSummary({required this.tracking});
+  const _NextStopSummary({
+    required this.nextStop,
+    required this.distanceToNextStopKm,
+  });
 
-  final RuteroTrackingState tracking;
+  final RuteroTrackingStop nextStop;
+  final double? distanceToNextStopKm;
 
   @override
   Widget build(BuildContext context) {
-    final stop = tracking.nextStop!;
-    final distance = tracking.distanceToNextStopKm;
+    final stop = nextStop;
+    final distance = distanceToNextStopKm;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
@@ -350,14 +405,19 @@ class _NextStopSummary extends StatelessWidget {
               ],
             ),
           ),
-          Text(
-            distance == null
-                ? 'GPS pendiente'
-                : distance.toStringAsFixed(1) + ' km aprox.',
-            style: const TextStyle(
-              color: AppTheme.accentMint,
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
+          Flexible(
+            child: Text(
+              distance == null
+                  ? 'GPS pendiente'
+                  : distance.toStringAsFixed(1) + ' km aprox.',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                color: AppTheme.accentMint,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
             ),
           ),
         ],

@@ -48,7 +48,49 @@ function buildVendedorFilterLACLAEParameterized(vendedorCodes, tableAlias = 'L',
     return { filter: `AND (${conditions.join(' OR ')})`, params };
 }
 
+/**
+ * Optional month IN-list for LAC/LACLAE. Invalid tokens are dropped.
+ * Empty / missing input => no filter (legacy: all months of the selected years).
+ */
+function buildMonthFilterParameterized(months, column = 'L.LCMMDC') {
+    if (months == null || String(months).trim().length === 0) {
+        return { filter: '', params: [] };
+    }
+    const unique = [...new Set(
+        String(months)
+            .split(',')
+            .map((token) => parseInt(token.trim(), 10))
+            .filter((month) => Number.isInteger(month) && month >= 1 && month <= 12),
+    )];
+    if (unique.length === 0) return { filter: '', params: [] };
+    const placeholders = unique.map(() => '?').join(',');
+    return {
+        filter: `AND ${column} IN (${placeholders})`,
+        params: unique,
+    };
+}
+
+/**
+ * FETCH FIRST for matrix-data. Client-supplied limit wins (clamped).
+ * Default shrinks with hierarchy depth so JEFE ALL vendor-only is ~vendors×months.
+ */
+function resolveMatrixFetchLimit(groupBy, requestedLimit) {
+    const parsed = parseInt(requestedLimit, 10);
+    if (Number.isInteger(parsed) && parsed > 0) {
+        return Math.max(1, Math.min(1000, parsed));
+    }
+    const depth = String(groupBy || 'vendor')
+        .split(',')
+        .map((level) => level.trim())
+        .filter(Boolean).length;
+    if (depth <= 1) return 240;
+    if (depth === 2) return 500;
+    return 1000;
+}
+
 module.exports = {
     buildVendedorFilterParameterized,
     buildVendedorFilterLACLAEParameterized,
+    buildMonthFilterParameterized,
+    resolveMatrixFetchLimit,
 };

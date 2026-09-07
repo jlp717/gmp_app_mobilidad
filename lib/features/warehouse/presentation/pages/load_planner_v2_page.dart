@@ -92,7 +92,11 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
             RepaintBoundary(
               child: Consumer(
                 builder: (_, ref, __) {
-                  final planner = ref.watch(loadPlannerProvider);
+                  final planner = ref.watch(
+                    loadPlannerProvider.select(
+                      (p) => (metrics: p.metrics, saveState: p.saveState),
+                    ),
+                  );
                   return MetricsBar(
                     metrics: planner.metrics,
                     saveState: planner.saveState,
@@ -105,15 +109,25 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
             Expanded(
               child: Consumer(
                 builder: (context, ref, _) {
-                  final planner = ref.watch(loadPlannerProvider);
-                  if (planner.isLoading) {
+                  final slice = ref.watch(
+                    loadPlannerProvider.select(
+                      (p) => (
+                        isLoading: p.isLoading,
+                        error: p.error,
+                        selectedBoxIndex: p.selectedBoxIndex,
+                        boxCount: p.placedBoxes.length,
+                      ),
+                    ),
+                  );
+                  if (slice.isLoading) {
                     return _buildShimmerLoading();
                   }
 
-                  if (planner.error != null) {
-                    return _buildError(planner.error!);
+                  if (slice.error != null) {
+                    return _buildError(slice.error!);
                   }
 
+                  final planner = ref.read(loadPlannerProvider);
                   if (isWide) {
                     return _buildTabletLayout(planner);
                   } else {

@@ -16,6 +16,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/email_form_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
@@ -42,7 +43,9 @@ class FacturasPage extends ConsumerStatefulWidget {
 }
 
 class _FacturasPageState extends ConsumerState<FacturasPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   // Filters
   int? _selectedYear;
   int? _selectedMonth;
@@ -108,6 +111,35 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   String _formatMoney(double value, {int decimals = 2}) {
     return '${value.toStringAsFixed(decimals)} \u20ac';
+  }
+
+  Color get _cardFill {
+    final theme = Theme.of(context);
+    return theme.brightness == Brightness.dark
+        ? AppTheme.raisedSurface
+        : theme.colorScheme.surface;
+  }
+
+  Color get _controlFill {
+    final theme = Theme.of(context);
+    return theme.brightness == Brightness.dark
+        ? AppTheme.inkSurface.withValues(alpha: 0.34)
+        : theme.colorScheme.surface;
+  }
+
+  Color get _menuFill => Theme.of(context).colorScheme.surface;
+
+  FacturaSummary get _visibleSummary {
+    final fromList = FacturaSummary.fromDocuments(_facturas);
+    final fromServer = _summary;
+    if (fromServer == null || fromServer.totalDocumentos == 0) {
+      return fromList;
+    }
+    if (_facturas.isNotEmpty &&
+        _facturas.length >= fromServer.totalDocumentos) {
+      return fromList;
+    }
+    return fromServer;
   }
 
   void _onSearchChanged() {
@@ -307,7 +339,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 ],
               )
             : null,
-        color: isDark ? null : AppColors.themedWhite,
+        color: isDark ? null : _cardFill,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -666,8 +698,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   Future<void> _refreshData({bool forceRefresh = false}) async {
     if (!mounted) return;
-    // Prevent redundant calls if already loading
-    if (_isLoading) return;
+    if (_vendedorCodes.isEmpty) return;
 
     try {
       final generation = ++_loadGeneration;
@@ -1101,6 +1132,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+    AppColors.syncWithTheme(context);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -1122,7 +1155,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 color: AppTheme.raisedSurface,
                 border: Border(
                   bottom: BorderSide(
-                      color: AppColors.themedWhite.withValues(alpha: 0.05)),
+                      color: isDark
+                          ? AppColors.themedWhite.withValues(alpha: 0.05)
+                          : AppColors.themedLine),
                 ),
                 boxShadow: const [
                   BoxShadow(
@@ -1135,36 +1170,45 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               child: Column(
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppTheme.accentMint.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color:
+                                    AppTheme.accentMint.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.receipt_long_outlined,
+                                color: AppTheme.accentMint,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.receipt_long_outlined,
-                              color: AppTheme.accentMint,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Facturas y albaranes',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Facturas y albaranes',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                      // Explicit Refresh Button
-                      IconButton(
-                        icon: const Icon(Icons.refresh),
-                        onPressed: () => _refreshData(forceRefresh: true),
-                        tooltip: 'Recargar datos',
+                      Semantics(
+                        button: true,
+                        label: 'Recargar facturas',
+                        child: IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed: () => _refreshData(forceRefresh: true),
+                          tooltip: 'Recargar datos',
+                        ),
                       ),
                     ],
                   ),
@@ -1198,11 +1242,13 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                         // OPTIMIZATION: Use SkeletonList for perceived performance
                         ? const SkeletonList(itemCount: 8, itemHeight: 100)
                         : _error != null
-                            ? Center(
-                                child: Text(
-                                  _error!,
-                                  style: const TextStyle(color: AppTheme.error),
-                                ),
+                            ? ErrorStateWidget(
+                                message: _error!,
+                                onRetry: () {
+                                  unawaited(
+                                    _refreshData(forceRefresh: true),
+                                  );
+                                },
                               )
                             : _facturas.isEmpty
                                 ? _buildEmptyState()
@@ -1231,7 +1277,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   }
 
   Widget _buildSummaryCards() {
-    if (_summary == null) return const SizedBox.shrink();
+    if (_isLoading && _facturas.isEmpty && _summary == null) {
+      return const SizedBox.shrink();
+    }
+
+    final summary = _visibleSummary;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -1241,7 +1291,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             child: _buildSummaryItem(
               icon: Icons.receipt_long,
               label: 'Docs',
-              value: '${_summary!.totalDocumentos}',
+              value: '${summary.totalDocumentos}',
               color: AppTheme.info,
             ),
           ),
@@ -1250,7 +1300,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             child: _buildSummaryItem(
               icon: Icons.calculate_outlined,
               label: 'Base',
-              value: _formatMoney(_summary!.totalBase, decimals: 0),
+              value: _formatMoney(summary.totalBase, decimals: 0),
               color: AppTheme.info,
             ),
           ),
@@ -1259,7 +1309,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             child: _buildSummaryItem(
               icon: Icons.euro,
               label: 'Total',
-              value: '${_summary!.totalImporte.toStringAsFixed(0)}€',
+              value: '${summary.totalImporte.toStringAsFixed(0)}€',
               color: AppTheme.success,
             ),
           ),
@@ -1268,7 +1318,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             child: _buildSummaryItem(
               icon: Icons.percent,
               label: 'IVA',
-              value: '${_summary!.totalIva.toStringAsFixed(0)}€',
+              value: '${summary.totalIva.toStringAsFixed(0)}€',
               color: AppTheme.warning,
             ),
           ),
@@ -1299,7 +1349,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 ],
               )
             : null,
-        color: isDark ? null : AppColors.themedWhite,
+        color: isDark ? null : _cardFill,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color:
@@ -1553,7 +1603,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               ? accentColor.withValues(alpha: 0.08)
               : (isDark
                   ? AppTheme.inkSurface.withValues(alpha: 0.34)
-                  : AppColors.themedWhite),
+                  : _controlFill),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isActive
@@ -1602,9 +1652,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: isDark
-            ? AppTheme.inkSurface.withValues(alpha: 0.34)
-            : AppColors.themedWhite,
+        color:
+            isDark ? AppTheme.inkSurface.withValues(alpha: 0.34) : _controlFill,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark
@@ -1654,8 +1703,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             Icons.arrow_drop_down,
             color: isDark ? AppColors.themedWhite38 : AppColors.systemGrey400,
           ),
-          dropdownColor:
-              isDark ? AppTheme.raisedSurface : AppColors.themedWhite,
+          dropdownColor: isDark ? AppTheme.raisedSurface : _menuFill,
           style: TextStyle(
             color: isDark ? AppColors.themedWhite : AppColors.systemBlack87,
             fontSize: 14,
@@ -1676,9 +1724,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: isDark
-            ? AppTheme.inkSurface.withValues(alpha: 0.34)
-            : AppColors.themedWhite,
+        color:
+            isDark ? AppTheme.inkSurface.withValues(alpha: 0.34) : _controlFill,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark
@@ -1728,9 +1775,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: isDark
-            ? AppTheme.inkSurface.withValues(alpha: 0.34)
-            : AppColors.themedWhite,
+        color:
+            isDark ? AppTheme.inkSurface.withValues(alpha: 0.34) : _controlFill,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark
@@ -1768,8 +1814,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             Icons.arrow_drop_down,
             color: isDark ? AppColors.themedWhite38 : AppColors.systemGrey400,
           ),
-          dropdownColor:
-              isDark ? AppTheme.raisedSurface : AppColors.themedWhite,
+          dropdownColor: isDark ? AppTheme.raisedSurface : _menuFill,
           style: TextStyle(
             color: isDark ? AppColors.themedWhite : AppColors.systemBlack87,
             fontSize: 14,

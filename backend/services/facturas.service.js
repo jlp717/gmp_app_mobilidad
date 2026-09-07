@@ -26,7 +26,7 @@ function boundedIntFromEnv(name, defaultValue, minValue, maxValue) {
 }
 
 const BATCH_SIZE = 15;
-const FACTURA_CACHE_VERSION = 'v4';
+const FACTURA_CACHE_VERSION = 'v5';
 const FACTURAS_LIST_BATCH_CONCURRENCY = boundedIntFromEnv('FACTURAS_LIST_BATCH_CONCURRENCY', 2, 1, 2);
 const FACTURAS_SUMMARY_BATCH_CONCURRENCY = boundedIntFromEnv('FACTURAS_SUMMARY_BATCH_CONCURRENCY', 1, 1, 2);
 const IN_FLIGHT_LIMIT = 200;
@@ -100,6 +100,24 @@ function normalizeSearchValue(value) {
         .replace(/[\u0000-\u001f\u007f]/g, '')
         .slice(0, 80)
         .toUpperCase();
+}
+
+function cacSlotSumSql(columnPrefix) {
+    return TAX_SLOTS
+        .map((slot) => `COALESCE(CAC.${columnPrefix}${slot}, 0)`)
+        .join(' + ');
+}
+
+function cacIvaSql() {
+    return `(${cacSlotSumSql('IMPORTEIVA')})`;
+}
+
+// Official taxable base (BI1-5). IMPORTEBRUTO is pre-discount and breaks
+// Base + IVA = Total on mixed factura/albaran KPI cards.
+function cacTaxableBaseSql() {
+    const bases = `(${cacSlotSumSql('IMPORTEBASEIMPONIBLE')})`;
+    const iva = cacIvaSql();
+    return `CASE WHEN ${bases} <> 0 THEN ${bases} ELSE (COALESCE(CAC.IMPORTETOTAL, 0) - ${iva}) END`;
 }
 
 function resolveOwnershipYear({ year, dateFromInt, dateFilterApplied }) {
@@ -619,8 +637,8 @@ class FacturasService {
         TRIM(CLI.NOMBREALTERNATIVO) as NOMBRE_COMERCIAL,
         TRIM(CLI.NOMBRECLIENTE) as NOMBRE_FISCAL,
         CAC.IMPORTETOTAL as TOTAL,
-        COALESCE(CAC.IMPORTEBRUTO, 0) as BASE,
-        COALESCE(CAC.IMPORTEIVA1, 0) + COALESCE(CAC.IMPORTEIVA2, 0) + COALESCE(CAC.IMPORTEIVA3, 0) + COALESCE(CAC.IMPORTEIVA4, 0) + COALESCE(CAC.IMPORTEIVA5, 0) as IVA
+        ${cacTaxableBaseSql()} as BASE,
+        ${cacIvaSql()} as IVA
       FROM DSEDAC.CAC CAC
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
       WHERE CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000
@@ -1067,8 +1085,8 @@ class FacturasService {
         'albaran' as DOCUMENT_TYPE,
         COUNT(DISTINCT CAC.EJERCICIOALBARAN || '-' || TRIM(CAC.SERIEALBARAN) || '-' || CAC.TERMINALALBARAN || '-' || CAC.NUMEROALBARAN) as NUM_DOCUMENTOS,
         SUM(CAC.IMPORTETOTAL) as TOTAL,
-        SUM(COALESCE(CAC.IMPORTEBRUTO, 0)) as BASE,
-        SUM(COALESCE(CAC.IMPORTEIVA1, 0) + COALESCE(CAC.IMPORTEIVA2, 0) + COALESCE(CAC.IMPORTEIVA3, 0) + COALESCE(CAC.IMPORTEIVA4, 0) + COALESCE(CAC.IMPORTEIVA5, 0)) as IVA
+        SUM(${cacTaxableBaseSql()}) as BASE,
+        SUM(${cacIvaSql()}) as IVA
       FROM DSEDAC.CAC CAC
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
       WHERE CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000

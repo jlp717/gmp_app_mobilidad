@@ -42,7 +42,10 @@ class RepartidorLiquidacionDiariaPage extends ConsumerStatefulWidget {
 }
 
 class _RepartidorLiquidacionDiariaPageState
-    extends ConsumerState<RepartidorLiquidacionDiariaPage> {
+    extends ConsumerState<RepartidorLiquidacionDiariaPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   late DateTime _sessionDate;
   late String _idempotencyToken;
   bool _saving = false;
@@ -86,6 +89,7 @@ class _RepartidorLiquidacionDiariaPageState
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     _refreshSessionDateIfSafe();
 
     if (widget.repartidorId.isEmpty) {

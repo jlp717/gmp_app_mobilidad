@@ -42,6 +42,7 @@ const {
     getVendorVisibilityScope,
     sanitizeCodeListForParams,
     sanitizeForSQL,
+    handleRouteError,
 } = require('../utils/common');
 const { queryWithParams, query } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
@@ -69,6 +70,34 @@ function canUseServerForceConfirm(req, body = {}) {
     const isAdmin = req.user?.isJefeVentas === true || role === 'JEFE_VENTAS' || role === 'ADMIN';
     const reason = String(body.forceConfirmReason || body.auditReason || '').trim();
     return isAdmin && reason.length >= 8;
+}
+
+function sendPedidosError(error, res, fallbackMessage = 'Error procesando pedido', fallbackCode = 'PEDIDOS_ERROR') {
+    const typedStatus = Number.isInteger(error?.statusCode)
+        ? error.statusCode
+        : (Number.isInteger(error?.status) ? error.status : null);
+    if (typedStatus && typedStatus >= 400 && typedStatus < 500) {
+        if (res.headersSent) return;
+        return res.status(typedStatus).json({
+            success: false,
+            code: error.code || fallbackCode,
+            error: error.message,
+        });
+    }
+    const msg = String(error?.message || '');
+    if (msg.includes('not found')) {
+        if (res.headersSent) return;
+        return res.status(404).json({ success: false, code: error?.code || 'NOT_FOUND', error: msg });
+    }
+    if (msg.includes('BORRADOR') || msg.includes('Fecha reparto')) {
+        if (res.headersSent) return;
+        return res.status(409).json({ success: false, code: error?.code || 'CONFLICT', error: msg });
+    }
+    if (msg.includes('no valido')) {
+        if (res.headersSent) return;
+        return res.status(400).json({ success: false, code: error?.code || 'VALIDATION_ERROR', error: msg });
+    }
+    return handleRouteError(error, res, fallbackMessage, 500, { code: fallbackCode, success: false });
 }
 
 function normalizePedidoSaleTypeForRoute(value) {
@@ -382,11 +411,11 @@ router.get('/products', async (req, res) => {
         const { vendedorCodes, clientCode, family, marca, prefamily } = req.query;
 
         if (!vendedorCodes) {
-            return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
+            return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', error: 'vendedorCodes is required' });
         }
 
         if (!clientCode) {
-            return res.status(400).json({ success: false, error: 'clientCode is required for product catalog access' });
+            return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', error: 'clientCode is required for product catalog access' });
         }
 
         const clientAccess = await authorizePedidoClientScope(req, clientCode, vendedorCodes, 'consultar catalogo');
@@ -416,7 +445,7 @@ router.get('/products', async (req, res) => {
         res.json({ success: true, products, count: result.count });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /products: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, code: 'PEDIDOS_CATALOG_ERROR', error: 'Error obteniendo productos' });
     }
 });
 
@@ -452,7 +481,7 @@ router.get('/products/:code', async (req, res) => {
         res.json({ success: true, product: stripMarginFromProduct(product, req.user) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /products/${req.params.code}: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, code: 'PEDIDOS_PRODUCT_ERROR', error: 'Error obteniendo producto' });
     }
 });
 
@@ -469,7 +498,7 @@ router.get('/products/:code/stock', async (req, res) => {
         res.json({ success: true, stock });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /products/${req.params.code}/stock: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -496,7 +525,7 @@ router.post('/products/stock-batch', async (req, res) => {
         res.json({ success: true, stock });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in POST /products/stock-batch: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -526,7 +555,7 @@ router.get('/client-prices/:clientCode', async (req, res) => {
         res.json({ success: true, pricing });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /client-prices/${req.params.clientCode}: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -545,7 +574,7 @@ router.get('/families', async (req, res) => {
         res.json({ success: true, families });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /families: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -560,7 +589,7 @@ router.get('/families/detailed', async (req, res) => {
         res.json({ success: true, families });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /families/detailed: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -581,7 +610,7 @@ router.get('/draft-status/:vendedorCode', async (req, res) => {
         res.json({ success: true, ...result });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /draft-status: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -599,7 +628,7 @@ router.post('/draft-status/:vendedorCode/auto-confirm', async (req, res) => {
         res.json({ success: true, ...result });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in POST /draft-status/auto-confirm: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -614,7 +643,7 @@ router.get('/brands', async (req, res) => {
         res.json({ success: true, brands });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /brands: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -637,7 +666,7 @@ router.get('/client-balance/:clientCode', async (req, res) => {
         res.json({ success: true, balance });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /client-balance: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -655,7 +684,7 @@ router.get('/analytics', async (req, res) => {
         res.json({ success: true, analytics });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /analytics: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -685,7 +714,7 @@ router.post('/complementary', async (req, res) => {
         res.json({ success: true, products });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in POST /complementary: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -720,7 +749,7 @@ router.get('/recommendations/:clientCode', async (req, res) => {
         });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /recommendations/${req.params.clientCode}: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -849,7 +878,7 @@ router.get('/product-history/:productCode/:clientCode', async (req, res) => {
         });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /product-history/${req.params.productCode}/${req.params.clientCode}: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -943,7 +972,7 @@ router.get('/', async (req, res) => {
         });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -966,7 +995,7 @@ router.get('/orders/stats', async (req, res) => {
         res.json({ success: true, stats });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /orders/stats: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -993,8 +1022,7 @@ router.get('/delivery-options', async (req, res) => {
         res.json({ success: true, options });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /delivery-options: ${error.message}`);
-        const status = error.message.includes('Fecha reparto') ? 409 : 500;
-        res.status(status).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error obteniendo opciones de reparto', 'PEDIDOS_DELIVERY_OPTIONS_ERROR');
     }
 });
 
@@ -1008,7 +1036,7 @@ router.get('/available-vehicles', async (req, res) => {
         res.json({ success: true, vehicles });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /available-vehicles: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -1028,7 +1056,7 @@ router.get('/:id/albaran', async (req, res) => {
         res.json({ success: true, albaranes });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /${req.params.id}/albaran: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -1048,7 +1076,7 @@ router.get('/:id/clone', async (req, res) => {
         res.json({ success: true, order: data });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /${req.params.id}/clone: ${error.message}`);
-        res.status(error.message.includes('not found') ? 404 : 500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error clonando pedido', 'PEDIDOS_CLONE_ERROR');
     }
 });
 
@@ -1068,7 +1096,7 @@ router.get('/:id/pdf', async (req, res) => {
         res.json({ success: true, order: detail });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /${req.params.id}/pdf: ${error.message}`);
-        res.status(error.message.includes('not found') ? 404 : 500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error generando PDF', 'PEDIDOS_PDF_ERROR');
     }
 });
 
@@ -1356,7 +1384,7 @@ router.get('/:id', async (req, res) => {
         res.json({ success: true, order: stripMarginFromOrder(order, req.user) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /${req.params.id}: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -1463,7 +1491,7 @@ router.post('/create', async (req, res) => {
         }
         logRouteTotal('error');
         logger.error(`[PEDIDOS] Error in POST /create: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -1517,8 +1545,7 @@ router.put('/:id/lines', async (req, res) => {
         res.json({ success: true, line });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/lines: ${error.message}`);
-        const status = error.message.includes('BORRADOR') ? 409 : 500;
-        res.status(status).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error anadiendo linea', 'PEDIDOS_LINE_ADD_ERROR');
     }
 });
 
@@ -1556,10 +1583,7 @@ router.put('/:id/lines/:lineId', async (req, res) => {
         res.json({ success: true, line });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/lines/${req.params.lineId}: ${error.message}`);
-        const status = error.message.includes('BORRADOR') ? 409
-            : error.message.includes('not found') ? 404
-            : 500;
-        res.status(status).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error actualizando linea', 'PEDIDOS_LINE_UPDATE_ERROR');
     }
 });
 
@@ -1585,10 +1609,7 @@ router.delete('/:id/lines/:lineId', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in DELETE /${req.params.id}/lines/${req.params.lineId}: ${error.message}`);
-        const status = error.message.includes('BORRADOR') ? 409
-            : error.message.includes('not found') ? 404
-            : 500;
-        res.status(status).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error eliminando linea', 'PEDIDOS_LINE_DELETE_ERROR');
     }
 });
 
@@ -1670,20 +1691,7 @@ router.put('/:id/confirm', async (req, res) => {
         res.json({ success: true, order: sanitizeOrderForRole(order, req.user?.role || req.user?.tipo || 'COMERCIAL') });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/confirm: ${error.message}`);
-        // Errores tipados (PEDIDO_ALREADY_CONFIRMING / PEDIDO_INVALID_STATE) traen
-        // error.status; respetamos eso y devolvemos error.code al cliente.
-        const status = (error.status && Number.isInteger(error.status))
-            ? error.status
-            : (error.message.includes('not found') ? 404
-                : error.message.includes('BORRADOR') ? 409
-                : error.message.includes('Fecha reparto') ? 409
-                : error.message.includes('reserva de stock') ? 500
-                : 500);
-        res.status(status).json({
-            success: false,
-            code: error.code || undefined,
-            error: error.message,
-        });
+        return sendPedidosError(error, res, 'Error confirmando pedido', error.code || 'PEDIDOS_CONFIRM_ERROR');
     }
 });
 
@@ -1708,10 +1716,7 @@ router.delete('/:id', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in DELETE /${req.params.id}: ${error.message}`);
-        const status = Number.isInteger(error.status) ? error.status
-            : error.message.includes('not found') ? 404
-                : 500;
-        res.status(status).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error eliminando pedido', 'PEDIDOS_DELETE_ERROR');
     }
 });
 
@@ -1731,9 +1736,7 @@ router.put('/:id/lines/:lineId/delete', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/lines/${req.params.lineId}/delete: ${error.message}`);
-        const status = error.message.includes('BORRADOR') ? 409
-            : error.message.includes('not found') ? 404 : 500;
-        res.status(status).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error eliminando linea', 'PEDIDOS_LINE_DELETE_ERROR');
     }
 });
 
@@ -1752,9 +1755,7 @@ router.put('/:id/cancel', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/cancel: ${error.message}`);
-        const status = Number.isInteger(error.status) ? error.status
-            : error.message.includes('not found') ? 404 : 500;
-        res.status(status).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error cancelando pedido', 'PEDIDOS_CANCEL_ERROR');
     }
 });
 
@@ -1781,10 +1782,7 @@ router.put('/:id/status', async (req, res) => {
         res.json({ success: true, order: result });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/status: ${error.message}`);
-        const status = Number.isInteger(error.status) ? error.status
-            : error.message.includes('not found') ? 404
-                : error.message.includes('no valido') ? 400 : 500;
-        res.status(status).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error actualizando estado', 'PEDIDOS_STATUS_ERROR');
     }
 });
 
@@ -1869,7 +1867,7 @@ router.post('/acciones-rapidas', async (req, res) => {
         });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in POST /acciones-rapidas: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -1891,7 +1889,7 @@ router.get('/similar-products/:code', async (req, res) => {
         res.json({ success: true, product: code.trim(), alternatives });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /similar-products/${req.params.code}: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -1913,7 +1911,7 @@ router.get('/search-products', async (req, res) => {
         res.json({ success: true, products });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /search-products: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -1981,7 +1979,7 @@ router.post('/debug/set-estado', debugMiddleware, async (req, res) => {
         res.json({ success: true, orderId, estado: canonicalEstado, storedEstado });
     } catch (error) {
         logger.error(`[DEBUG] Error set-estado: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
     }
 });
 
@@ -2316,12 +2314,7 @@ router.get('/purchase-history-global', async (req, res) => {
         const odbc0 = error.odbcErrors && error.odbcErrors[0];
         const odbcMsg = odbc0 ? `${odbc0.state} (${odbc0.code}): ${odbc0.message}` : '';
         logger.error(`[PEDIDOS] purchase-history-global ERROR: ${error.message}\n  ODBC: ${odbcMsg}\n  STACK: ${error.stack || ''}`);
-        res.status(500).json({
-            success: false,
-            error: 'Error obteniendo historico global',
-            detail: process.env.NODE_ENV !== 'production' ? error.message : undefined,
-            odbc: process.env.NODE_ENV !== 'production' ? odbcMsg : undefined,
-        });
+        return sendPedidosError(error, res, 'Error obteniendo historico global', 'PEDIDOS_HISTORY_GLOBAL_ERROR');
     }
 });
 

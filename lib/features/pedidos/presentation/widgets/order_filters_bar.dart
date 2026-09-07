@@ -571,18 +571,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
           : widget.dateTo ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
-      builder: (ctx, child) {
-        return Theme(
-          data: Theme.of(ctx).copyWith(
-            colorScheme: ColorScheme.dark(
-              primary: AppTheme.info,
-              onPrimary: AppColors.themedWhite,
-              surface: AppTheme.raisedSurface,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      builder: AppTheme.pickerOverlay,
     );
     if (picked != null) {
       if (isFrom) {

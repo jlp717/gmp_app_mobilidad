@@ -598,35 +598,43 @@ final repartidorFinanzasProvider =
 
 final repartidorFinanzasSummaryProvider =
     Provider<RepartidorCollectionSummary?>((ref) {
-  return ref.watch(repartidorFinanzasProvider).collectionSummary;
+  return ref.watch(
+    repartidorFinanzasProvider.select((s) => s.collectionSummary),
+  );
 });
 
 final repartidorFinanzasDailyProvider =
     Provider<List<DailyCollectionSnapshot>>((ref) {
-  return ref.watch(repartidorFinanzasProvider).dailyCollections;
+  return ref.watch(
+    repartidorFinanzasProvider.select((s) => s.dailyCollections),
+  );
 });
 
 final repartidorFinanzasClientsProvider =
     Provider<List<RepartidorHistoryClient>>((ref) {
-  return ref.watch(repartidorFinanzasProvider).clients;
+  return ref.watch(repartidorFinanzasProvider.select((s) => s.clients));
 });
 
 final repartidorFinanzasDocumentsProvider =
     Provider<List<RepartidorHistoryDocument>>((ref) {
-  return ref.watch(repartidorFinanzasProvider).selectedClientDocuments;
+  return ref.watch(
+    repartidorFinanzasProvider.select((s) => s.selectedClientDocuments),
+  );
 });
 
 final repartidorFinanzasObjectivesProvider =
     Provider<List<RepartidorMonthlyObjective>>((ref) {
-  return ref.watch(repartidorFinanzasProvider).monthlyObjectives;
+  return ref.watch(
+    repartidorFinanzasProvider.select((s) => s.monthlyObjectives),
+  );
 });
 
 final repartidorFinanzasLoadingProvider = Provider<bool>((ref) {
-  return ref.watch(repartidorFinanzasProvider).isLoading;
+  return ref.watch(repartidorFinanzasProvider.select((s) => s.isLoading));
 });
 
 final repartidorFinanzasErrorProvider = Provider<String?>((ref) {
-  return ref.watch(repartidorFinanzasProvider).error;
+  return ref.watch(repartidorFinanzasProvider.select((s) => s.error));
 });
 
 typedef DailySummaryArgs = ({

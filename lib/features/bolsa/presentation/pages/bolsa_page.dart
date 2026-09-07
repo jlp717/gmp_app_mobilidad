@@ -57,7 +57,11 @@ class BolsaPage extends ConsumerStatefulWidget {
   ConsumerState<BolsaPage> createState() => _BolsaPageState();
 }
 
-class _BolsaPageState extends ConsumerState<BolsaPage> {
+class _BolsaPageState extends ConsumerState<BolsaPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   String? _lastLoadedVendor;
 
   @override
@@ -166,14 +170,30 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Reaccionar a cambios de vendedor (solo JEFE_VENTAS).
+    super.build(context);
     ref.listen<String?>(selectedVendorProvider, (prev, next) {
       if (next != prev) _loadIfNeeded();
     });
-    final provider = ref.watch(bolsaProvider);
-    final authState = ref.watch(authProvider).value;
-    final user = authState?.user;
-    final canEdit = user?.isJefeVentas ?? false;
+    ref.watch(bolsaProvider.select((p) => (
+          p.isLoading,
+          p.error,
+          p.hasData,
+          p.status,
+          p.groupedSummary,
+          p.movements,
+          p.history,
+          p.tipoFilter,
+          p.searchQuery,
+          p.hasAdvancedFilters,
+          p.selectedYear,
+          p.selectedMonth,
+        )));
+    final provider = ref.read(bolsaProvider);
+    final isJefeVentas = ref.watch(
+      authProvider.select((s) => s.value?.user?.isJefeVentas ?? false),
+    );
+    final showVendorSelector = isJefeVentas || widget.forceShowVendorSelector;
+    final canEdit = isJefeVentas;
 
     return Scaffold(
       backgroundColor: AppColors.transparent,
@@ -181,16 +201,24 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
         title: const Text('Bolsa Comercial'),
         backgroundColor: AppTheme.inkSurface,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Recargar',
-            onPressed: provider.isLoading ? null : provider.refresh,
+          Semantics(
+            button: true,
+            label: 'Recargar bolsa comercial',
+            child: IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Recargar',
+              onPressed: provider.isLoading ? null : provider.refresh,
+            ),
           ),
           if (canEdit && provider.status != null)
-            IconButton(
-              icon: const Icon(Icons.tune),
-              tooltip: 'Configurar límite',
-              onPressed: () => _showConfigDialog(context, provider),
+            Semantics(
+              button: true,
+              label: 'Configurar límite de bolsa',
+              child: IconButton(
+                icon: const Icon(Icons.tune),
+                tooltip: 'Configurar límite',
+                onPressed: () => _showConfigDialog(context, provider),
+              ),
             ),
         ],
       ),
@@ -198,11 +226,9 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
         decoration: AppTheme.appBackground(),
         child: Column(
           children: [
-            // Selector "Ver como" para JEFE_VENTAS y perfiles comerciales
-            // con alcance de equipo, como Comercial 80.
-            if (user?.isJefeVentas ?? false || widget.forceShowVendorSelector)
+            if (showVendorSelector)
               GlobalVendorSelector(
-                isJefeVentas: user?.isJefeVentas ?? false,
+                isJefeVentas: isJefeVentas,
                 forceShow: widget.forceShowVendorSelector,
               ),
             Expanded(
@@ -1223,17 +1249,7 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
       initialDate: current ?? now,
       firstDate: DateTime(now.year - 3),
       lastDate: DateTime(now.year + 1),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.dark(
-              primary: AppTheme.info,
-              surface: AppTheme.raisedSurface,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      builder: AppTheme.pickerOverlay,
     );
     if (picked == null) return;
     if (from) {

@@ -107,9 +107,29 @@ describe('middlewares/errorHandler', () => {
     });
 
     test('jerarquia AppError expone statusCode correctos', () => {
-        const { ValidationError, NotFoundError, DatabaseError } = require('../../src/errors/AppError');
+        const { ValidationError, NotFoundError, DatabaseError, ConflictError } = require('../../src/errors/AppError');
         expect(new ValidationError().statusCode).toBe(400);
         expect(new NotFoundError().statusCode).toBe(404);
         expect(new DatabaseError().statusCode).toBe(503);
+        expect(new ConflictError().statusCode).toBe(409);
+        expect(new ConflictError('dup', { code: 'IDEMPOTENCY_CONFLICT' }).code).toBe('IDEMPOTENCY_CONFLICT');
+    });
+
+    test('estilo legacy: AppError 4xx expone mensaje y 5xx permanece opaco', async () => {
+        const { ValidationError, AppError } = require('../../src/errors/AppError');
+        const app = express();
+        app.get('/bad', (_req, _res, next) => next(new ValidationError('limit invalido')));
+        app.get('/boom', (_req, _res, next) => next(new AppError('SQL SELECT * FROM SECRET', { statusCode: 500, code: 'INTERNAL_ERROR' })));
+        app.use(errorHandler);
+
+        const bad = await request(app).get('/bad');
+        expect(bad.status).toBe(400);
+        expect(bad.body.error).toBe('limit invalido');
+        expect(bad.body.code).toBe('VALIDATION_ERROR');
+
+        const boom = await request(app).get('/boom');
+        expect(boom.status).toBe(500);
+        expect(JSON.stringify(boom.body)).not.toMatch(/SECRET|SELECT \*/);
+        expect(boom.body.error).toBe('Error interno del servidor');
     });
 });

@@ -12,9 +12,49 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 
+/// Which endpoints a role may pre-warm. Jefe first-paint owns the radio;
+/// catalogs wait until the dashboard matrix has had a chance to finish.
+enum CachePrewarmTarget {
+  facturas,
+  clients,
+  pedidosHeavy,
+  pedidosCatalog,
+  vendedores,
+  ruteroWeek,
+  commissions,
+}
+
 /// Service to pre-warm cache with critical data
 class CachePreWarmer {
   static bool _hasPreWarmed = false;
+  static int _warmGeneration = 0;
+
+  /// Idle gap so JEFE dashboard matrix/metrics get the DB2 pool and the
+  /// phone radio. Comercial still pre-warms immediately.
+  @visibleForTesting
+  static Duration jefeIdleDelay = const Duration(seconds: 8);
+
+  @visibleForTesting
+  static List<CachePrewarmTarget> immediateTargets({
+    required bool isJefeVentas,
+  }) {
+    if (isJefeVentas) return const <CachePrewarmTarget>[];
+    return const [
+      CachePrewarmTarget.facturas,
+      CachePrewarmTarget.clients,
+      CachePrewarmTarget.pedidosHeavy,
+      CachePrewarmTarget.pedidosCatalog,
+      CachePrewarmTarget.ruteroWeek,
+    ];
+  }
+
+  @visibleForTesting
+  static List<CachePrewarmTarget> deferredJefeTargets() {
+    return const [
+      CachePrewarmTarget.vendedores,
+      CachePrewarmTarget.pedidosCatalog,
+    ];
+  }
 
   /// Pre-warm cache with essential data for the current user
   /// Call this after successful login with auth state data
@@ -23,6 +63,24 @@ class CachePreWarmer {
     required bool isJefeVentas,
   }) async {
     if (_hasPreWarmed) return;
+    final generation = _warmGeneration;
+
+    if (isJefeVentas) {
+      await Future<void>.delayed(jefeIdleDelay);
+      if (generation != _warmGeneration || _hasPreWarmed) return;
+      debugPrint('[CachePreWarmer] Deferred jefe catalog pre-warm');
+      try {
+        await _preWarmVendedores();
+        await _preWarmPedidosCatalog();
+        if (generation != _warmGeneration) return;
+        _hasPreWarmed = true;
+        debugPrint('[CachePreWarmer] Jefe catalog pre-warm completed');
+      } catch (e) {
+        debugPrint('[CachePreWarmer] Jefe catalog pre-warm failed: $e');
+      }
+      return;
+    }
+
     if (vendedorCodes.isEmpty) return;
 
     debugPrint('[CachePreWarmer] Starting cache pre-warming...');
@@ -34,26 +92,25 @@ class CachePreWarmer {
         _preWarmFacturas(codes, currentYear, currentMonth),
         _preWarmClients(codes),
         _preWarmPedidos(codes),
-        if (isJefeVentas) _preWarmVendedores(),
         _preWarmRuteroWeek(codes, currentYear, currentMonth),
       ]);
 
       // Manager ALL commissions are intentionally not pre-warmed: the cold query
       // competes with objectives/rutero and can exhaust the DB pool.
-      if (!isJefeVentas) {
-        unawaited(
-          Future<void>.delayed(const Duration(seconds: 2), () async {
-            try {
-              await _preWarmCommissions(codes, currentYear);
-            } catch (e) {
-              debugPrint(
-                '[CachePreWarmer] Delayed commissions pre-warm failed: $e',
-              );
-            }
-          }),
-        );
-      }
+      unawaited(
+        Future<void>.delayed(const Duration(seconds: 2), () async {
+          if (generation != _warmGeneration) return;
+          try {
+            await _preWarmCommissions(codes, currentYear);
+          } catch (e) {
+            debugPrint(
+              '[CachePreWarmer] Delayed commissions pre-warm failed: $e',
+            );
+          }
+        }),
+      );
 
+      if (generation != _warmGeneration) return;
       _hasPreWarmed = true;
       debugPrint('[CachePreWarmer] Pre-warming completed');
     } catch (e) {
@@ -117,6 +174,18 @@ class CachePreWarmer {
     }
   }
 
+  static Future<void> _preWarmPedidosCatalog() async {
+    try {
+      await Future.wait([
+        PedidosService.getFamilies(),
+        PedidosService.getBrands(),
+      ]);
+      debugPrint('[CachePreWarmer] Pedidos catalog pre-warmed');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] Pedidos catalog pre-warm failed: $e');
+    }
+  }
+
   static Future<void> _preWarmPedidos(String vendorCodes) async {
     try {
       await Future.wait([
@@ -170,6 +239,7 @@ class CachePreWarmer {
 
   /// Reset pre-warm state (call on logout)
   static void reset() {
+    _warmGeneration++;
     _hasPreWarmed = false;
     CacheService.clearMemoryCache();
     debugPrint('[CachePreWarmer] Reset');

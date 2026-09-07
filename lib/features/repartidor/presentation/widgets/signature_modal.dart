@@ -54,7 +54,7 @@ class _SignatureModalState extends State<SignatureModal> {
   void initState() {
     super.initState();
     _controller = SignatureController(
-      exportBackgroundColor: AppColors.themedWhite,
+      exportBackgroundColor: AppColors.systemWhite,
     );
 
     _controller.addListener(() {
@@ -192,7 +192,7 @@ class _SignatureModalState extends State<SignatureModal> {
                     // Signature pad
                     Signature(
                       controller: _controller,
-                      backgroundColor: AppColors.themedWhite,
+                      backgroundColor: AppColors.systemWhite,
                     ),
 
                     // Placeholder text when empty

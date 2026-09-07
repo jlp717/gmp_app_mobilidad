@@ -117,9 +117,14 @@ Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero":
 ## Learned User Preferences
 
 - La rama de referencia de trabajo es `test`, no `main`.
-- El modo claro/oscuro debe aplicar el tema a filtros, tablas y matrices (no solo el chrome).
+- El modo claro/oscuro debe aplicar el tema a toda la app (filtros, tablas, matrices y páginas), no solo el chrome.
+- Para validar el perfil de reparto, usar REPARTIDOR: jefe de ventas en modo reparto y repartidor raso; no el perfil comercial.
+- Las pruebas de rendimiento deben hacerse en móvil con el rol jefe de ventas (el que más datos carga).
 
 ## Learned Workspace Facts
 
 - Objetivos comerciales usan R1_T8CDVD (quién tiene el cliente); LCCDVD es quién vendió. Comisiones: sales=LCCDVD, baseline de objetivo=R1_T8CDVD.
 - Comercial 80 es líder de equipo (72/73/81/83); su objetivo personal no es la suma del equipo.
+- La sección Cobros del perfil repartidor no es solo lectura: debe permitir registrar cobros pendientes o parciales del rutero.
+- El saldo cobrable de una entrega se limita al importe del documento (CPC), no a la deuda CVC del cliente; la UI distingue este albarán vs deuda del cliente.
+- En facturas, la lista debe mostrar totales agregados (importe, recuento, base con/sin IVA).

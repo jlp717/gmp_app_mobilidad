@@ -10,7 +10,7 @@ import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contr
 export '../../../core/models/estado_entrega.dart';
 
 const _deliveryLoadFailureMessage =
-    'No se pudieron cargar las entregas. Intentalo de nuevo.';
+    'No se pudieron cargar las entregas. Inténtalo de nuevo.';
 
 bool _selectedOwnerContains(String selection, String owner) {
   final target = owner.trim().toUpperCase();
@@ -113,6 +113,14 @@ int _optionalIntAlias(
   return defaultValue;
 }
 
+int? _optionalNullableInt(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    if (!json.containsKey(key) || json[key] == null) continue;
+    return _requiredIntAlias(json, <String>[key]);
+  }
+  return null;
+}
+
 String _requiredDate(Map<String, dynamic> json) {
   final value = _requiredText(json, 'fecha');
   final iso =
@@ -197,7 +205,7 @@ String _safeDeliveryError(Object error, {required bool detail}) {
         : 'Los datos de entregas recibidos no son válidos.';
   }
   return detail
-      ? 'No se pudo obtener el detalle del albaran.'
+      ? 'No se pudo obtener el detalle del albarán.'
       : _deliveryLoadFailureMessage;
 }
 
@@ -309,8 +317,13 @@ class AlbaranEntrega {
     this.formaPagoDesc = '',
     this.tipoPago = '',
     this.diasPago = 0,
+    this.subempresa = 'GMP',
     this.esCTR = false,
     this.puedeCobrarse = false,
+    this.cobroTipoDocumento = '',
+    this.cobroOrigenDocumento = '',
+    this.cobroXdeDocumento,
+    this.cobroDexDocumento,
     this.colorEstado = 'green',
     this.ruta = '',
     this.codigoVendedor = '',
@@ -335,6 +348,8 @@ class AlbaranEntrega {
     this.importeCobrado,
     this.importePendienteCobro,
     this.importeDisponibleCobro,
+    this.importeCvcPendiente,
+    this.cobroSaldoCapped = false,
     this.formaPagoCobro,
     this.cobroParcial = false,
   });
@@ -373,10 +388,31 @@ class AlbaranEntrega {
       importeIva: _optionalDoubleAlias(json, const <String>['ivaSum']),
       ivaBreakdown: _parseIvaBreakdown(json['ivaBreakdown']),
       checksum: json['checksum']?.toString(),
+      subempresa: (json['subempresa'] ?? json['subempresaDocumento'])
+              ?.toString()
+              .trim() ??
+          'GMP',
       formaPago: json['formaPago']?.toString() ?? '',
       formaPagoDesc: json['formaPagoDesc']?.toString() ?? '',
       tipoPago: json['tipoPago']?.toString() ?? '',
       diasPago: _optionalIntAlias(json, const <String>['diasPago']),
+      cobroTipoDocumento: (json['cobroTipoDocumento'] ?? json['tipoDocumento'])
+              ?.toString()
+              .trim() ??
+          '',
+      cobroOrigenDocumento:
+          (json['cobroOrigenDocumento'] ?? json['origenDocumento'])
+                  ?.toString()
+                  .trim() ??
+              '',
+      cobroXdeDocumento: _optionalNullableInt(
+        json,
+        const <String>['cobroXdeDocumento', 'xdeDocumento', 'xde'],
+      ),
+      cobroDexDocumento: _optionalNullableInt(
+        json,
+        const <String>['cobroDexDocumento', 'dexDocumento', 'dex'],
+      ),
       // esCTR is the canonical backend field. Keep the explicit alias for
       // older/staged responses so list and detail cannot diverge silently.
       esCTR: json['esCTR'] == true || json['cobroObligatorio'] == true,
@@ -416,6 +452,11 @@ class AlbaranEntrega {
         json,
         const <String>['importeDisponibleCobro'],
       ),
+      importeCvcPendiente: _optionalNullableDouble(
+        json,
+        const <String>['importeCvcPendiente'],
+      ),
+      cobroSaldoCapped: json['cobroSaldoCapped'] == true,
       formaPagoCobro: json['formaPagoCobro']?.toString(),
       cobroParcial: json['cobroParcial'] == true,
     );
@@ -449,8 +490,13 @@ class AlbaranEntrega {
   final String formaPagoDesc;
   final String tipoPago;
   final int diasPago;
+  final String subempresa;
   final bool esCTR;
   final bool puedeCobrarse;
+  final String cobroTipoDocumento;
+  final String cobroOrigenDocumento;
+  final int? cobroXdeDocumento;
+  final int? cobroDexDocumento;
   final String colorEstado;
   final String ruta;
   final String codigoVendedor;
@@ -475,6 +521,8 @@ class AlbaranEntrega {
   final double? importeCobrado;
   final double? importePendienteCobro;
   final double? importeDisponibleCobro;
+  final double? importeCvcPendiente;
+  final bool cobroSaldoCapped;
   final String? formaPagoCobro;
   final bool cobroParcial;
 
@@ -501,8 +549,13 @@ class AlbaranEntrega {
     String? formaPagoDesc,
     String? tipoPago,
     int? diasPago,
+    String? subempresa,
     bool? esCTR,
     bool? puedeCobrarse,
+    String? cobroTipoDocumento,
+    String? cobroOrigenDocumento,
+    int? cobroXdeDocumento,
+    int? cobroDexDocumento,
     String? colorEstado,
     double? latitud,
     double? longitud,
@@ -513,8 +566,12 @@ class AlbaranEntrega {
     String? cobroId,
     bool? cobrado,
     double? importeCobrado,
+    double? importePendienteCobro,
     double? importeDisponibleCobro,
+    double? importeCvcPendiente,
+    bool? cobroSaldoCapped,
     String? formaPagoCobro,
+    bool? cobroParcial,
     bool clearPaymentBalance = false,
   }) {
     return AlbaranEntrega(
@@ -547,8 +604,13 @@ class AlbaranEntrega {
       formaPagoDesc: formaPagoDesc ?? this.formaPagoDesc,
       tipoPago: tipoPago ?? this.tipoPago,
       diasPago: diasPago ?? this.diasPago,
+      subempresa: subempresa ?? this.subempresa,
       esCTR: esCTR ?? this.esCTR,
       puedeCobrarse: puedeCobrarse ?? this.puedeCobrarse,
+      cobroTipoDocumento: cobroTipoDocumento ?? this.cobroTipoDocumento,
+      cobroOrigenDocumento: cobroOrigenDocumento ?? this.cobroOrigenDocumento,
+      cobroXdeDocumento: cobroXdeDocumento ?? this.cobroXdeDocumento,
+      cobroDexDocumento: cobroDexDocumento ?? this.cobroDexDocumento,
       colorEstado: colorEstado ?? this.colorEstado,
       ruta: ruta,
       codigoVendedor: codigoVendedor,
@@ -571,12 +633,21 @@ class AlbaranEntrega {
       cobroId: cobroId ?? this.cobroId,
       cobrado: cobrado ?? this.cobrado,
       importeCobrado: importeCobrado ?? this.importeCobrado,
-      importePendienteCobro: clearPaymentBalance ? null : importePendienteCobro,
+      importePendienteCobro: clearPaymentBalance
+          ? null
+          : importePendienteCobro ?? this.importePendienteCobro,
       importeDisponibleCobro: clearPaymentBalance
           ? 0
           : importeDisponibleCobro ?? this.importeDisponibleCobro,
+      importeCvcPendiente: clearPaymentBalance
+          ? null
+          : importeCvcPendiente ?? this.importeCvcPendiente,
+      cobroSaldoCapped: clearPaymentBalance
+          ? false
+          : cobroSaldoCapped ?? this.cobroSaldoCapped,
       formaPagoCobro: formaPagoCobro ?? this.formaPagoCobro,
-      cobroParcial: clearPaymentBalance ? false : cobroParcial,
+      cobroParcial:
+          clearPaymentBalance ? false : cobroParcial ?? this.cobroParcial,
     );
   }
 
@@ -1048,7 +1119,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
         : (clientCodeFromDeliveryId(deliveryId) ?? '');
     if (resolvedCliente.isEmpty) {
       state = state.copyWith(
-        error: 'Falta el codigo de cliente para cargar el detalle.',
+        error: 'Falta el código de cliente para cargar el detalle.',
       );
       return null;
     }
@@ -1137,7 +1208,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
     String? nombre,
   }) async {
     state = state.copyWith(
-      error: 'Confirma la entrega desde el flujo canonico del rutero.',
+      error: 'Confirma la entrega desde el flujo canónico del rutero.',
     );
     return false;
   }
@@ -1207,7 +1278,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
     String? confirmationId,
   }) async {
     state = state.copyWith(
-      error: 'El envio por email no esta habilitado para recibos de reparto.',
+      error: 'El envío por email no está habilitado para recibos de reparto.',
     );
     return false;
   }
@@ -1248,7 +1319,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
     List<String>? fotos,
   }) async {
     state = state.copyWith(
-      error: 'Confirma la entrega desde el flujo canonico del rutero.',
+      error: 'Confirma la entrega desde el flujo canónico del rutero.',
     );
     return false;
   }
@@ -1266,9 +1337,9 @@ final entregasProvider =
 // ── Selectors ────────────────────────────────────────────────────────────────
 
 final entregasPendientesProvider = Provider<List<AlbaranEntrega>>((ref) {
-  return ref.watch(entregasProvider).albaranesPendientes;
+  return ref.watch(entregasProvider.select((s) => s.albaranesPendientes));
 });
 
 final entregasLoadingProvider = Provider<bool>((ref) {
-  return ref.watch(entregasProvider).isLoading;
+  return ref.watch(entregasProvider.select((s) => s.isLoading));
 });

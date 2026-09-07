@@ -70,7 +70,9 @@ class PedidosPage extends ConsumerStatefulWidget {
 }
 
 class _PedidosPageState extends ConsumerState<PedidosPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   late TabController _tabController;
   final ScrollController _catalogScrollController = ScrollController();
   Timer? _stockRefreshTimer;
@@ -681,6 +683,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: AppColors.transparent,
       appBar: AppBar(

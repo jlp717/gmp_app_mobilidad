@@ -24,6 +24,7 @@ const {
     buildCvcAvailabilityQuery,
     documentKey,
     mapCvcAvailabilityRows,
+    resolveDocumentCollectable,
 } = require('../services/delivery-cobro-availability');
 const {
     DeliveryStatusResolutionError,
@@ -221,6 +222,26 @@ function parseBoundedInteger(raw, { defaultValue, min, max }) {
     if (!/^\d+$/.test(String(raw))) return null;
     const value = Number(raw);
     return Number.isSafeInteger(value) && value >= min && value <= max ? value : null;
+}
+
+function parseAlbaranRouteIdentity(params, query) {
+    const numero = parseBoundedInteger(params?.numero, { defaultValue: null, min: 1, max: 999999999 });
+    const ejercicio = parseBoundedInteger(params?.ejercicio, { defaultValue: null, min: 1990, max: 2100 });
+    if (numero === null || ejercicio === null) return null;
+    const serieRaw = query?.serie;
+    const serie = serieRaw === undefined || serieRaw === null
+        ? undefined
+        : String(serieRaw).trim().slice(0, 5);
+    if (serie !== undefined && serie.length === 0) return null;
+    const terminalRaw = query?.terminal;
+    let terminal;
+    if (terminalRaw === undefined || terminalRaw === null || String(terminalRaw).length === 0) {
+        terminal = undefined;
+    } else {
+        terminal = parseBoundedInteger(terminalRaw, { defaultValue: null, min: 0, max: 999 });
+        if (terminal === null) return null;
+    }
+    return { numero, ejercicio, serie, terminal };
 }
 
 function sendEntregasUnavailable(res, code, message) {
@@ -742,31 +763,22 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             }
 
 
-            (clxRows.status === 'fulfilled' ? (clxRows.value || []) : []).forEach(row => {
+            (clxRows.value || []).forEach(row => {
                 const cliente = (row.CLIENTE || '').trim();
                 if (cliente) cobroRigurosoClientes.add(cliente);
             });
-            if (clxRows.status === 'rejected') {
-                logger.warn(`[ENTREGAS] Could not load CLX.COBRORIGUROSOSN: ${clxRows.reason?.message || clxRows.reason}`);
-            }
 
-            (clpRows.status === 'fulfilled' ? (clpRows.value || []) : []).forEach(row => {
+            (clpRows.value || []).forEach(row => {
                 const cliente = (row.CLIENTE || '').trim();
                 const limit = parseMoney(row.IMPORTELIMITERIESGO) ||
                     parseMoney(row.IMPORTELIMITERIESGOEMPRESA);
                 if (cliente && limit > 0) creditLimitByClient.set(cliente, limit);
             });
-            if (clpRows.status === 'rejected') {
-                logger.warn(`[ENTREGAS] Could not load CLP credit limits: ${clpRows.reason?.message || clpRows.reason}`);
-            }
 
-            (cvcRows.status === 'fulfilled' ? (cvcRows.value || []) : []).forEach(row => {
+            (cvcRows.value || []).forEach(row => {
                 const cliente = (row.CLIENTE || '').trim();
                 if (cliente) pendingDebtByClient.set(cliente, parseMoney(row.PENDIENTE));
             });
-            if (cvcRows.status === 'rejected') {
-                logger.warn(`[ENTREGAS] Could not load CVC pending debt for credit-limit check: ${cvcRows.reason?.message || cvcRows.reason}`);
-            }
             cvcAvailabilityByKey = mapCvcAvailabilityRows(
                 cvcDocumentRows.status === 'fulfilled' ? (cvcDocumentRows.value || []) : [],
                 cvcDocumentPlan?.documents || [],
@@ -858,11 +870,15 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 NUMEROALBARAN: row.NUMEROALBARAN,
                 CLIENTE: cliente,
             })) || { state: 'MISSING', importeDisponibleCobro: 0 };
-            const importeDisponibleCobro = cvcAvailability.state === 'AVAILABLE'
-                ? cvcAvailability.importeDisponibleCobro
-                : 0;
+            const collectable = resolveDocumentCollectable({
+                cvcState: cvcAvailability.state,
+                cvcPending: cvcAvailability.importeDisponibleCobro,
+                documentAmount: importeAlbaran,
+            });
+            const importeDisponibleCobro = collectable.importeDisponibleCobro;
             const esCTR = paymentInfo.mustCollect || cobroRiguroso;
-            const puedeCobrarse = importeDisponibleCobro > 0.004;
+            const puedeCobrarse = collectable.state === 'AVAILABLE'
+                && importeDisponibleCobro > 0.004;
 
             const numeroFactura = row.NUMEROFACTURA || 0;
             const serieFactura = (row.SERIEFACTURA || '').trim();
@@ -935,7 +951,9 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 cobroObligatorio: esCTR,
                 puedeCobrarse: puedeCobrarse,
                 importeDisponibleCobro,
-                cobroDocumentoEstado: cvcAvailability.state,
+                importeCvcPendiente: collectable.importeCvcPendiente,
+                cobroSaldoCapped: collectable.capped === true,
+                cobroDocumentoEstado: collectable.state,
                 cobroRiguroso: cobroRiguroso,
                 creditoSuperaLimite: creditoSuperaLimite,
                 limiteCredito: limiteCredito,
@@ -1382,17 +1400,23 @@ async function resolveClienteForDetail({ numero, ejercicio, serie, terminal, cli
 
 router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
     try {
-        const { numero, ejercicio } = req.params;
-        const serie = req.query.serie;
-        const terminal = req.query.terminal;
+        const identity = parseAlbaranRouteIdentity(req.params, req.query);
+        if (!identity) {
+            return res.status(400).json({
+                success: false,
+                code: 'INVALID_ALBARAN_IDENTITY',
+                error: 'numero, ejercicio, serie o terminal no son validos',
+            });
+        }
+        const { numero, ejercicio, serie, terminal } = identity;
         const ownerSelection = requireConcreteAlbaranOwner(req, res);
         if (!ownerSelection.allowed) return;
         // Accept canonical `cliente` and legacy `codigoCliente` alias.
         const cliente = await resolveClienteForDetail({
-            numero,
-            ejercicio,
+            numero: String(numero),
+            ejercicio: String(ejercicio),
             serie,
-            terminal,
+            terminal: terminal === undefined ? undefined : String(terminal),
             clienteHint: req.query.cliente || req.query.codigoCliente,
         });
         if (!cliente) {
@@ -1457,7 +1481,13 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
         `;
 
         const headers = await queryWithParams(headerSql, headerParams);
-        if (headers.length === 0) return res.status(404).json({ success: false, error: 'Albaran not found' });
+        if (headers.length === 0) {
+            return res.status(404).json({
+                success: false,
+                code: 'ALBARAN_NOT_FOUND',
+                error: 'Albaran not found',
+            });
+        }
         if (headers.length !== 1) return res.status(409).json({ success: false, code: 'AMBIGUOUS_DELIVERY_IDENTITY', error: 'La identidad del albarÃ¡n no es inequÃ­voca' });
 
         const header = { ...headers[0] };
@@ -1588,6 +1618,11 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             detailCvcPlan?.documents || [],
         ).get(documentKey(detailCvcPlan?.documents?.[0]))
             || { state: 'MISSING', importeDisponibleCobro: 0 };
+        const detailCollectable = resolveDocumentCollectable({
+            cvcState: detailCvcAvailability.state,
+            cvcPending: detailCvcAvailability.importeDisponibleCobro,
+            documentAmount: resolvedAmount.amount,
+        });
 
         const albaran = {
             id: documentId,
@@ -1615,10 +1650,12 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             diasPago: detailPaymentInfo.diasPago,
             esCTR: detailEsCTR,
             cobroObligatorio: detailEsCTR,
-            puedeCobrarse: detailCvcAvailability.state === 'AVAILABLE'
-                && detailCvcAvailability.importeDisponibleCobro > 0.004,
-            importeDisponibleCobro: detailCvcAvailability.importeDisponibleCobro,
-            cobroDocumentoEstado: detailCvcAvailability.state,
+            puedeCobrarse: detailCollectable.state === 'AVAILABLE'
+                && detailCollectable.importeDisponibleCobro > 0.004,
+            importeDisponibleCobro: detailCollectable.importeDisponibleCobro,
+            importeCvcPendiente: detailCollectable.importeCvcPendiente,
+            cobroSaldoCapped: detailCollectable.capped === true,
+            cobroDocumentoEstado: detailCollectable.state,
             items: albaranItems,
             confirmationAvailability: canonical.availability,
             confirmedAt: canonical.confirmation?.CONFIRMED_AT || null,

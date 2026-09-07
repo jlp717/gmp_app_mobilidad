@@ -49,7 +49,10 @@ class RepartidorClientesPage extends StatefulWidget {
   State<RepartidorClientesPage> createState() => _RepartidorClientesPageState();
 }
 
-class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
+class _RepartidorClientesPageState extends State<RepartidorClientesPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   static const int _pageSize = 100;
 
   final TextEditingController _searchController = TextEditingController();
@@ -223,6 +226,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final visibleClients = _filteredClients;
     final showFooter = _hasMore || _isLoadingMore || _loadMoreError;
 

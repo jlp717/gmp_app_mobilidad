@@ -131,6 +131,17 @@ describe('entregas route coverage gaps', () => {
     expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 
+  test('rejects invalid albaran identity before database access', async () => {
+    const badNumero = await authorized('get', '/albaran/abc/2026?serie=A&terminal=1&cliente=C1');
+    const emptySerie = await authorized('get', '/albaran/42/2026?serie=&terminal=1&cliente=C1');
+
+    expect(badNumero.status).toBe(400);
+    expect(badNumero.body.code).toBe('INVALID_ALBARAN_IDENTITY');
+    expect(emptySerie.status).toBe(400);
+    expect(emptySerie.body.code).toBe('INVALID_ALBARAN_IDENTITY');
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
   test('returns the authorized pending projection with deterministic identity and payment data', async () => {
     mockQueryWithParams.mockImplementation((sql) => {
       if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);

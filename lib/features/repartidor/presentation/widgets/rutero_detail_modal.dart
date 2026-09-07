@@ -27,8 +27,10 @@ import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_evidence_inbox.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_evidence_upload_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/rutero_cobro_api.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_delivery_validation.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_standalone_cobro.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_operation_safety.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_completed.dart';
@@ -38,6 +40,7 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/ruter
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_tab_bar.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_print_preview_dialog.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_printer_config.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/providers/repartidor_finanzas_providers.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -198,13 +201,13 @@ String? _paymentConfirmationErrorMessage(ApiException error) {
       return 'El importe cobrado supera lo pendiente de esta entrega. '
           'Ajusta la cantidad e inténtalo de nuevo.';
     case 'PAYMENT_DOCUMENT_UNAVAILABLE':
-      return 'No hay saldo cobrable para este documento. '
+      return 'Este albarán o factura no tiene saldo cobrable. '
           'Puedes entregar sin marcar cobro.';
     case 'REPARTO_COBROS_CAPABILITY_UNAVAILABLE':
       return 'El cobro no está disponible ahora mismo. '
           'Entrega sin cobro o reinténtalo más tarde.';
     case 'REPARTO_COBRO_COMMERCIAL_CONFLICT':
-      return 'Este documento ya tiene cobros en el ERP. '
+      return 'Este albarán o factura ya tiene cobros en el ERP. '
           'No se puede registrar otro cobro desde el rutero.';
     default:
       return null;
@@ -239,11 +242,13 @@ class RuteroDetailModal extends StatefulWidget {
     required this.albaran,
     required this.ref,
     this.confirmationJournalStore,
+    this.cobroApi,
     super.key,
   });
   final AlbaranEntrega albaran;
   final WidgetRef ref;
   final RepartoConfirmationJournalStore? confirmationJournalStore;
+  final RuteroCobroApi? cobroApi;
 
   @override
   State<RuteroDetailModal> createState() => _RuteroDetailModalState();
@@ -263,6 +268,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       TextEditingController();
   final TextEditingController _importeCobradoController =
       TextEditingController();
+  final TextEditingController _cobroNotasController = TextEditingController();
   final FocusNode _nombreFocusNode = FocusNode();
   final FocusNode _apellidosFocusNode = FocusNode();
   final FocusNode _dniFocusNode = FocusNode();
@@ -281,7 +287,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   final _finalizeScrollController = ScrollController();
 
   final SignatureController _signatureController = SignatureController(
-    exportBackgroundColor: AppColors.themedWhite,
+    exportBackgroundColor: AppColors.systemWhite,
   );
 
   final Map<String, bool> _productChecked = {};
@@ -295,6 +301,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   String _selectedPaymentMethod = 'EFECTIVO';
   bool _isPaid = false;
   bool _isSubmitting = false;
+  bool _isRegisteringCobro = false;
+  bool _sendCobroEmail = false;
+  String? _pendingStandaloneCobroToken;
   bool _allowProgrammaticDismiss = false;
   late final RepartoConfirmationJournal _confirmationJournal;
   late final RepartoPersistentConfirmationOperation _confirmationOperation;
@@ -364,6 +373,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (widget.albaran.esCTR) {
       _selectedPaymentMethod = 'EFECTIVO';
     }
+    _sendCobroEmail = widget.albaran.emailCliente.trim().isNotEmpty;
 
     _loadItems();
     _loadPrinterConfig();
@@ -631,6 +641,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             puedeCobrarse: albaranDetalle.puedeCobrarse,
             colorEstado: albaranDetalle.colorEstado,
             importeDisponibleCobro: albaranDetalle.importeDisponibleCobro,
+            importeCvcPendiente: albaranDetalle.importeCvcPendiente,
+            cobroSaldoCapped: albaranDetalle.cobroSaldoCapped,
             items: filtered,
           );
           if (!_isPaid) {
@@ -678,6 +690,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _apellidosController.dispose();
     _incidenciaMotivoController.dispose();
     _importeCobradoController.dispose();
+    _cobroNotasController.dispose();
     _nombreFocusNode.dispose();
     _apellidosFocusNode.dispose();
     _dniFocusNode.dispose();
@@ -727,6 +740,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         _ => false,
       };
 
+  bool get _canStandaloneCobro => canRegisterRuteroStandaloneCobro(_albaran);
+
+  /// Terminal outcomes stay read-only except when a collectible CVC balance
+  /// remains (partial cobro / crédito). Then the COBRO tab stays actionable.
+  bool get _showCompletedReadOnly => _isCompleted && !_canStandaloneCobro;
+
   Color get _terminalAccentColor => switch (widget.albaran.estado) {
         EstadoEntrega.entregado => AppTheme.success,
         EstadoEntrega.parcial || EstadoEntrega.noEntregado => AppTheme.warning,
@@ -769,8 +788,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               child: RepartidorExecutiveSheet(
                 height: Responsive.modalHeight(
                   context,
-                  portraitFraction: _isCompleted ? 0.70 : 0.92,
-                  landscapeFraction: _isCompleted ? 0.80 : 0.95,
+                  portraitFraction: _showCompletedReadOnly ? 0.70 : 0.92,
+                  landscapeFraction: _showCompletedReadOnly ? 0.80 : 0.95,
                 ),
                 accentColor: _isCompleted
                     ? _terminalAccentColor
@@ -783,8 +802,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       albaran: _albaran,
                       isCompleted: _isCompleted,
                     ),
-                    if (_isCompleted)
+                    if (_showCompletedReadOnly)
                       Expanded(child: _buildCompletedView())
+                    else if (_isCompleted && _canStandaloneCobro)
+                      Expanded(child: _buildPaymentTab())
                     else ...[
                       RuteroDetailTabBar(
                         tabController: _tabController,
@@ -960,7 +981,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             child: OutlinedButton.icon(
               onPressed: _isSubmitting ? null : _activateNoEntregaMode,
               icon: const Icon(Icons.storefront_outlined),
-              label: const Text('NO ENTREGA (cerrado / no disponible)'),
+              label: const Text('No entrega (cerrado o no disponible)'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.warning,
                 side: const BorderSide(color: AppTheme.warning),
@@ -1003,12 +1024,22 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       pagoError: _pagoError,
       importeCobradoController: _importeCobradoController,
       importeCobradoError: _importeCobradoError,
+      notasController: _cobroNotasController,
       importeFieldKey: _importeFieldKey,
       errorBannerKey: _paymentErrorKey,
       highlightPayment:
           _spotlightField == 'pago' || _spotlightField == 'importe',
       scrollController: _paymentScrollController,
       importeFocusNode: _importeFocusNode,
+      canRegisterCobro: _canStandaloneCobro && !_isRegisteringCobro,
+      isRegisteringCobro: _isRegisteringCobro,
+      sendEmail: _sendCobroEmail,
+      onSendEmailChanged: (value) {
+        setState(() => _sendCobroEmail = value);
+      },
+      onRegisterCobro: _registerStandaloneCobro,
+      showDeliveryPrepToggle: !_isCompleted,
+      showContinueToFinalize: !_isCompleted,
       onPaymentMethodChanged: (method) {
         setState(() => _selectedPaymentMethod = method);
       },
@@ -1016,7 +1047,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         if (!_albaran.tieneSaldoCobrable) {
           setState(() {
             _isPaid = false;
-            _pagoError = 'No hay saldo cobrable en CVC para este documento.';
+            _pagoError =
+                '${ruteroDocumentScopeTitle(_albaran)} no tiene saldo cobrable. '
+                'Puedes entregar sin cobrar.';
           });
           return;
         }
@@ -1298,7 +1331,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'EVIDENCIAS FOTOGRÁFICAS',
+                  'Evidencias fotográficas',
                   style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontWeight: FontWeight.bold,
@@ -1444,7 +1477,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('CERRAR'),
+            child: const Text('Cerrar'),
           ),
         ],
       ),
@@ -1467,7 +1500,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               ),
               SizedBox(width: 8),
               Text(
-                'DATOS DEL RECEPTOR',
+                'Datos del receptor',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontWeight: FontWeight.bold,
@@ -1611,7 +1644,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   ),
                   SizedBox(width: 8),
                   Text(
-                    'FIRMA DEL CLIENTE *',
+                    'Firma del cliente *',
                     style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontWeight: FontWeight.bold,
@@ -1642,7 +1675,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 borderRadius: BorderRadius.circular(AppTheme.radiusLg),
                 child: Signature(
                   controller: _signatureController,
-                  backgroundColor: AppColors.themedWhite,
+                  backgroundColor: AppColors.systemWhite,
                 ),
               ),
             ),
@@ -1688,7 +1721,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  noEntrega ? 'REGISTRAR NO ENTREGA' : 'CONFIRMAR ENTREGA',
+                  noEntrega ? 'Registrar no entrega' : 'Confirmar entrega',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -1795,7 +1828,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: Text(
-              'CANCELAR',
+              'Cancelar',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
           ),
@@ -1808,7 +1841,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               backgroundColor: AppTheme.info,
               foregroundColor: AppColors.themedWhite,
             ),
-            child: const Text('ACEPTAR'),
+            child: const Text('Aceptar'),
           ),
         ],
       ),
@@ -1884,7 +1917,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       await navigator.push<void>(
         MaterialPageRoute<void>(
           builder: (_) => Scaffold(
-            backgroundColor: AppColors.themedWhite,
+            backgroundColor: AppColors.themedCanvas,
             appBar: AppBar(
               title: Text(
                 'Ficha - ${linea.codigoArticulo.trim()}',
@@ -1931,13 +1964,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   String _getPaymentTypeLabel() {
     final code = widget.albaran.tipoPago.toUpperCase().trim();
     if (code == '01' || code == 'CNT' || code.contains('CONTADO')) {
-      return 'CONTADO';
+      return 'Contado';
     }
-    if (code.contains('REP')) return 'REPOSICIÓN';
-    if (code.contains('MEN')) return 'MENSUAL';
-    if (code.contains('CRE') || code == 'CR') return 'CRÉDITO';
-    if (code.contains('TAR')) return 'TARJETA';
-    if (code.contains('TRA')) return 'TRANSFERENCIA';
+    if (code.contains('REP')) return 'Reposición';
+    if (code.contains('MEN')) return 'Mensual';
+    if (code.contains('CRE') || code == 'CR') return 'Crédito';
+    if (code.contains('TAR')) return 'Tarjeta';
+    if (code.contains('TRA')) return 'Transferencia';
     return code;
   }
 
@@ -2160,7 +2193,195 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         importeCobrado: _parseMoney(_importeCobradoController.text)!,
         formaPago: _selectedPaymentMethod,
         entregaId: widget.albaran.id,
+        notas: _cobroNotasController.text.trim().isEmpty
+            ? null
+            : _cobroNotasController.text.trim(),
       );
+
+  Future<void> _registerStandaloneCobro() async {
+    if (_isRegisteringCobro || _isSubmitting) return;
+    if (!_canStandaloneCobro) {
+      setState(() {
+        _pagoError =
+            '${ruteroDocumentScopeTitle(_albaran)} no tiene saldo cobrable. '
+            'Puedes entregar sin cobrar.';
+      });
+      return;
+    }
+    final amount = parseRuteroMoney(_importeCobradoController.text);
+    final amountError = validateRuteroStandaloneCobroAmount(
+      amount: amount,
+      maxCollectable: effectiveDocumentCollectable(_albaran),
+    );
+    if (amountError != null) {
+      setState(() {
+        _importeCobradoError = amountError;
+        _spotlightField = 'importe';
+      });
+      return;
+    }
+    final repartidorIds = _repartidorIdsParaInvalidar();
+    final repartidorId = repartidorIds.isEmpty
+        ? _albaran.codigoRepartidor.trim()
+        : repartidorIds.first;
+    if (repartidorId.isEmpty || repartidorId.contains(',')) {
+      setState(() {
+        _pagoError = 'Selecciona un solo repartidor para registrar el cobro.';
+      });
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.raisedSurface,
+        title: Text(
+          'Confirmar cobro',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _albaran.nombreCliente,
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${amount!.toStringAsFixed(2).replaceAll('.', ',')} € · '
+              '${ruteroPaymentMethodLabel(_selectedPaymentMethod)}',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.success,
+              foregroundColor: AppColors.themedWhite,
+            ),
+            child: const Text('Cobrar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    _pendingStandaloneCobroToken ??=
+        createRuteroStandaloneCobroIdempotencyToken(
+      repartidorId,
+      _albaran.id,
+    );
+    setState(() {
+      _isRegisteringCobro = true;
+      _pagoError = null;
+      _importeCobradoError = null;
+    });
+    try {
+      final payload = buildRuteroStandaloneCobroPayload(
+        albaran: _albaran,
+        repartidorId: repartidorId,
+        importeCobrado: amount,
+        formaPago: _selectedPaymentMethod,
+        idempotencyToken: _pendingStandaloneCobroToken!,
+        notas: _cobroNotasController.text,
+      );
+      final api = widget.cobroApi ?? RuteroCobroApi();
+      final result = await api.register(payload);
+      if (!mounted) return;
+      if (result.queued) {
+        setState(() => _isRegisteringCobro = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Cobro en cola. No pulses de nuevo: se enviará el mismo cobro '
+              'al recuperar red.',
+            ),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
+        return;
+      }
+      final remaining = remainingCollectableAfter(
+        currentAvailable: effectiveDocumentCollectable(_albaran),
+        collected: amount,
+      );
+      final previousCollected = _albaran.importeCobrado ?? 0;
+      final collectedNow =
+          result.created ? previousCollected + amount : previousCollected;
+      setState(() {
+        _albaran = _albaran.copyWith(
+          cobrado: true,
+          cobroId: result.cobroId ?? _albaran.cobroId,
+          importeCobrado: collectedNow > 0.004 ? collectedNow : amount,
+          importeDisponibleCobro: remaining,
+          importePendienteCobro: remaining,
+          formaPagoCobro: _selectedPaymentMethod,
+          cobroParcial: remaining > 0.004,
+        );
+        _isPaid = false;
+        _isRegisteringCobro = false;
+        _pendingStandaloneCobroToken = null;
+        _importeCobradoController.text = remaining > 0.004
+            ? remaining.toStringAsFixed(2).replaceAll('.', ',')
+            : '';
+        _lastSuggestedImporteCobrado = remaining > 0.004 ? remaining : 0;
+        _cobroNotasController.clear();
+      });
+      unawaited(_invalidateFinanceForDelivery());
+      if (!mounted) return;
+      final message = remaining > 0.004
+          ? 'Cobro ${result.created ? 'registrado' : 'ya existía'}. Pendiente '
+              '${remaining.toStringAsFixed(2).replaceAll('.', ',')} €'
+          : (result.created
+              ? 'Cobro registrado'
+              : 'Este cobro ya estaba registrado');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+      if (_sendCobroEmail && _albaran.emailCliente.trim().isNotEmpty) {
+        await _emailCommercialFallback(_albaran.emailCliente);
+      }
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      final keepToken = error.statusCode == 0 || (error.statusCode ?? 0) >= 500;
+      if (!keepToken) _pendingStandaloneCobroToken = null;
+      setState(() {
+        _isRegisteringCobro = false;
+        _pagoError = financeErrorMessage(
+          error,
+          'No se pudo registrar el cobro.',
+        );
+        _spotlightField = 'pago';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isRegisteringCobro = false;
+        _pagoError = financeErrorMessage(
+          error,
+          'No se pudo registrar el cobro.',
+        );
+        _spotlightField = 'pago';
+      });
+    }
+  }
 
   /// Mirrors the backend assertPayment ceiling: a complete delivery may
   /// collect the whole pending balance, while a partial one is capped by
@@ -2171,11 +2392,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   double? _maxCollectableAmount() {
     final saldo = _albaran.importeDisponibleCobro;
     if (saldo == null || saldo <= 0.004) return saldo;
-    if (_deliveryStatus != RepartoDeliveryStatus.parcial) return saldo;
+    final documentCapped = capSaldoCobrableAlDocumento(
+      documentAmount: _albaran.importeTotal,
+      collectableAmount: saldo,
+    );
+    if (_deliveryStatus != RepartoDeliveryStatus.parcial) return documentCapped;
     final hasUnpricedLine = _items.any(
       (item) => (_itemUnitPrice(item) ?? 0) <= 0.004,
     );
-    if (_items.isEmpty || hasUnpricedLine) return saldo;
+    if (_items.isEmpty || hasUnpricedLine) return documentCapped;
     final byLines = _items.fold<double>(0, (sum, item) {
       final lineId = ruteroLineKey(item);
       final ordered = item.cantidadPedida;
@@ -2187,7 +2412,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       return sum + delivered * _itemUnitPrice(item)!;
     });
     final capped = double.parse(byLines.toStringAsFixed(2));
-    return capped < saldo ? capped : saldo;
+    return capped < documentCapped ? capped : documentCapped;
   }
 
   double? _itemUnitPrice(EntregaItem item) {
@@ -2477,7 +2702,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                noEntrega ? 'Registrar no entrega' : 'Confirmar Entrega',
+                noEntrega ? 'Registrar no entrega' : 'Confirmar entrega',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
@@ -2602,7 +2827,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: Text(
-              'CANCELAR',
+              'Cancelar',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
           ),
@@ -2612,7 +2837,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               backgroundColor: noEntrega ? AppTheme.warning : AppTheme.success,
               foregroundColor: AppColors.themedWhite,
             ),
-            child: Text(noEntrega ? 'REGISTRAR' : 'CONFIRMAR'),
+            child: Text(noEntrega ? 'Registrar' : 'Confirmar'),
           ),
         ],
       ),
@@ -2925,7 +3150,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               backgroundColor: AppTheme.info,
               foregroundColor: AppColors.themedWhite,
             ),
-            child: const Text('ENTENDIDO'),
+            child: const Text('Entendido'),
           ),
         ],
       ),

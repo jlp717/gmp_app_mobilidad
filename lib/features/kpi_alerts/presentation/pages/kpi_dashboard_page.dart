@@ -29,7 +29,11 @@ class KpiDashboardPage extends ConsumerStatefulWidget {
   ConsumerState<KpiDashboardPage> createState() => _KpiDashboardPageState();
 }
 
-class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
+class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   Map<String, dynamic>? _data;
   bool _loading = true;
   String? _error;
@@ -127,6 +131,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(

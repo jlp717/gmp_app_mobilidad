@@ -774,6 +774,29 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         [repartidorId, day, month, year])));
     }
 
+    async function ensureBalanceForUpdate(repartidorId) {
+      const code = String(repartidorId || '').trim();
+      const selectSql = `SELECT SALDO_PENDIENTE FROM ${finance.balances} `
+        + 'WHERE TRIM(CODIGO_REPARTIDOR) = ? FOR UPDATE WITH RS';
+      let balance = first(await rows(connection, selectSql, [code]));
+      if (!balance) {
+        try {
+          await execute(connection,
+            `INSERT INTO ${finance.balances} (CODIGO_REPARTIDOR, SALDO_PENDIENTE) VALUES (?, ?)`,
+            [code, 0]);
+        } catch (error) {
+          if (!uniqueConstraintError(error)) throw error;
+        }
+        balance = first(await rows(connection, selectSql, [code]));
+      }
+      if (!balance) {
+        throw new LiquidacionRepositoryUnavailableError(
+          'No existe el saldo autoritativo del repartidor', { repartidorId: code },
+        );
+      }
+      return Object.freeze({ saldo: money(rowValue(balance, 'SALDO_PENDIENTE')) });
+    }
+
     return Object.freeze({
       async getByIdempotencyToken(token) {
         if (isG4Testmovil()) {
@@ -844,15 +867,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
               + 'FETCH FIRST 1 ROW ONLY WITH RS', [String(repartidorId).trim()]));
           return Object.freeze({ saldo: money(last ? (rowValue(last, 'SALDO') ?? 0) : 0) });
         }
-        const balance = first(await rows(connection,
-          `SELECT SALDO_PENDIENTE FROM ${finance.balances} `
-            + 'WHERE CODIGO_REPARTIDOR = ? FOR UPDATE WITH RS', [repartidorId]));
-        if (!balance) {
-          throw new LiquidacionRepositoryUnavailableError(
-            'No existe el saldo autoritativo del repartidor', { repartidorId },
-          );
-        }
-        return Object.freeze({ saldo: money(rowValue(balance, 'SALDO_PENDIENTE')) });
+        return ensureBalanceForUpdate(repartidorId);
       },
       async getStructuredEntryByToken({ type, idempotencyToken }) {
         const config = entryType(type);
@@ -983,12 +998,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
           return { repartidorId, date, deliveries, payments, expenses, adjustments,
             bankDeposits, pending, openingBalance, breakdown, balance };
         }
-        const balanceRow = first(await rows(connection,
-          `SELECT SALDO_PENDIENTE FROM ${finance.balances} WHERE CODIGO_REPARTIDOR = ? FOR UPDATE WITH RS`,
-          [repartidorId]));
-        if (!balanceRow) {
-          throw new LiquidacionRepositoryUnavailableError('No existe el saldo inicial autoritativo del repartidor');
-        }
+        const lockedBalance = await ensureBalanceForUpdate(repartidorId);
         const deliveryRows = await rows(connection,
           `SELECT C.ID, C.STATUS, `
             + 'SUM(L.CANTIDAD_ENTREGADA * L.PRECIO_UNITARIO) AS IMPORTE_ENTREGADO, '
@@ -1061,7 +1071,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         const pending = deliveries.filter((delivery) => delivery.pendingAmount > 0)
           .map((delivery) => ({ id: delivery.id, amount: delivery.pendingAmount, reason: delivery.status }));
         const sum = (items, field = 'amount') => items.reduce((total, item) => total + item[field], 0);
-        const openingBalance = money(rowValue(balanceRow, 'SALDO_PENDIENTE'));
+        const openingBalance = lockedBalance.saldo;
         const breakdown = {
           deliveries: sum(deliveries), payments: sum(payments), expenses: sum(expenses),
           adjustments: sum(adjustments, 'signedAmount'), bankDeposits: sum(bankDeposits),

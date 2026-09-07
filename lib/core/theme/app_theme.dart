@@ -35,6 +35,9 @@ class AppTheme {
   static Color get surfaceCommand => AppColors.themedSurfaceCommand;
   static Color get surfaceOverlay => AppColors.themedSurfaceOverlay;
   static Color get surfaceGlass => AppColors.themedSurfaceGlass;
+  static Color get cardFill => AppColors.themedCardFill;
+  static Color get controlFill => AppColors.themedControlFill;
+  static Color get menuFill => AppColors.themedMenuFill;
   static const Color activeRing = AppColors.activeRing;
   static const Color focusRing = AppColors.focusRing;
   static const Color selectionRail = AppColors.selectionRail;
@@ -561,6 +564,15 @@ class AppTheme {
         ),
         textStyle: TextStyle(color: primaryText, fontSize: 13),
       ),
+      dropdownMenuTheme: DropdownMenuThemeData(
+        menuStyle: MenuStyle(
+          backgroundColor: WidgetStateProperty.all(
+            isDark ? AppColors.surfaceOverlay : surface,
+          ),
+          surfaceTintColor: WidgetStateProperty.all(AppColors.transparent),
+        ),
+        textStyle: TextStyle(color: primaryText, fontSize: 13),
+      ),
       iconButtonTheme: IconButtonThemeData(
         style: ButtonStyle(
           foregroundColor: WidgetStateProperty.resolveWith((states) {
@@ -648,6 +660,15 @@ class AppTheme {
   // ===========================================================================
   // CUSTOM DECORATIONS
   // ===========================================================================
+
+  /// Date and range pickers inherit the active Material theme.
+  /// Never wrap them with `ThemeData.dark` / `ColorScheme.dark`.
+  static Widget pickerOverlay(BuildContext context, Widget? child) {
+    return Theme(
+      data: Theme.of(context),
+      child: child ?? const SizedBox.shrink(),
+    );
+  }
 
   static BoxDecoration appBackground() => BoxDecoration(
         gradient: appShellGradient,

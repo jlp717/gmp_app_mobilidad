@@ -39,7 +39,12 @@ class RuteroPage extends ConsumerStatefulWidget {
 }
 
 class _RuteroPageState extends ConsumerState<RuteroPage>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   // Data state
   Map<String, int> _weekData = {};
   int _totalUniqueClients =
@@ -631,6 +636,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight < 850;
 

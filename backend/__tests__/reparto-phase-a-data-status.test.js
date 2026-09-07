@@ -21,4 +21,17 @@ describe('phase A reparto data/status contracts', () => {
     expect(source).toContain('lineSum: lineSumRounded,');
     expect(source).toContain('resolveDeliveryAmount({');
   });
+
+  test('list and detail cap CVC pending to the document (never raw CVC as cobro)', () => {
+    const source = read('routes/entregas.js');
+    expect(source).toContain('resolveDocumentCollectable({');
+    expect(source).not.toMatch(
+      /const importeDisponibleCobro = cvcAvailability\.state === 'AVAILABLE'/,
+    );
+    expect(source).not.toMatch(
+      /importeDisponibleCobro:\s*detailCvcAvailability\.importeDisponibleCobro/,
+    );
+    expect(source).toContain('documentAmount: importeAlbaran');
+    expect(source).toContain('documentAmount: resolvedAmount.amount');
+  });
 });

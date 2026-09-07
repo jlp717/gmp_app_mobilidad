@@ -79,7 +79,8 @@ class ClientConditionsWidget extends StatelessWidget {
           // Content: Medios y Congeladores
           Container(
             decoration: BoxDecoration(
-              color: isDark ? AppColors.legacyFF0F172A : AppColors.themedWhite,
+              color:
+                  isDark ? AppColors.legacyFF0F172A : AppColors.themedCardFill,
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(12),
                 bottomRight: Radius.circular(12),
@@ -250,7 +251,8 @@ class ClientConditionsWidget extends StatelessWidget {
           // Content
           Container(
             decoration: BoxDecoration(
-              color: isDark ? AppColors.legacyFF0F172A : AppColors.themedWhite,
+              color:
+                  isDark ? AppColors.legacyFF0F172A : AppColors.themedCardFill,
               borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(12),
                 bottomRight: Radius.circular(12),

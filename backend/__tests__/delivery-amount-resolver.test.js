@@ -91,6 +91,40 @@ describe('delivery-amount-resolver', () => {
     expect(resolved.amount).toBe(132.07);
     expect(resolved.source).toBe(AMOUNT_SOURCE.CPC_TAX_STACK);
   });
+
+  test('uses CAC tax stack when CPC header and tax stack are empty', () => {
+    const resolved = resolveDeliveryAmount({
+      cpcTotal: 0,
+      cacTotal: 0,
+      cpcNetoSum: 0,
+      cpcIvaSum: 0,
+      cacNetoSum: 80,
+      cacIvaSum: 16.8,
+      lacLineSum: 80,
+      qtyLines: 2,
+      zeroPriceQtyLines: 0,
+    });
+    expect(resolved.amount).toBe(96.8);
+    expect(resolved.source).toBe(AMOUNT_SOURCE.CAC_TAX_STACK);
+    expect(resolved.pricingState).toBe(PRICING_STATE.READY);
+  });
+
+  test('falls back to provisional LAC line sum when CPC and CAC headers are empty', () => {
+    const resolved = resolveDeliveryAmount({
+      cpcTotal: 0,
+      cacTotal: 0,
+      cpcNetoSum: 0,
+      cpcIvaSum: 0,
+      lacLineSum: 98.5,
+      qtyLines: 3,
+      zeroPriceQtyLines: 0,
+    });
+    expect(resolved.amount).toBe(98.5);
+    expect(resolved.source).toBe(AMOUNT_SOURCE.LAC_LINE_SUM_NET);
+    expect(resolved.pricingState).toBe(PRICING_STATE.PROVISIONAL_NET);
+    expect(resolved.isCollectable).toBe(true);
+    expect(resolved.isPendingPrice).toBe(false);
+  });
 });
 
 describe('delivery-line-amount-stats', () => {

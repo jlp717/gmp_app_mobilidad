@@ -51,6 +51,13 @@ class SyncMutationPolicy {
       return false;
     }
 
+    if (type == 'register_cobro') {
+      if (body['success'] == true) return true;
+      if (httpStatus == 201 || httpStatus == 200)
+        return body['success'] != false;
+      return false;
+    }
+
     // Generic mutations: 2xx is enough; if body declares success=false, reject.
     if (body.containsKey('success') && body['success'] != true) {
       return false;
@@ -68,6 +75,12 @@ class SyncMutationPolicy {
     if (statusCode != 409) return false;
     if (type == 'confirm_delivery') {
       return code == 'DELIVERY_ALREADY_CONFIRMED';
+    }
+    if (type == 'register_cobro') {
+      final normalized = (code ?? '').toUpperCase();
+      return normalized == 'IDEMPOTENCY_CONFLICT' ||
+          normalized == 'PAYMENT_ALREADY_REGISTERED' ||
+          normalized.startsWith('REPARTO_COBRO_IDEMPOTENCY');
     }
     final normalized = (code ?? '').toUpperCase();
     return normalized.contains('ALREADY') || normalized.contains('IDEMPOTENT');

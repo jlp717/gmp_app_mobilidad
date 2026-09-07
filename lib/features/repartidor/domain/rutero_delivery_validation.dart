@@ -90,8 +90,16 @@ class RuteroDeliveryValidationInput {
   final double? importeMaxCobrable;
 
   /// Effective ceiling applied to the payment field.
-  double get effectiveMaxCobro =>
-      importeMaxCobrable ?? importeDisponibleCobro ?? importeTotal;
+  /// Never exceeds this albarán/factura; CVC leftover above the document
+  /// belongs to other effects, not to this stop.
+  double get effectiveMaxCobro {
+    final uncapped =
+        importeMaxCobrable ?? importeDisponibleCobro ?? importeTotal;
+    return capSaldoCobrableAlDocumento(
+      documentAmount: importeTotal,
+      collectableAmount: uncapped,
+    );
+  }
 
   bool get hasDiscrepancy => anyQtyModified || anyUnchecked;
 }
@@ -134,6 +142,18 @@ bool isValidRuteroDniNie(String value) {
   final parsed = int.tryParse(numStr);
   if (parsed == null) return false;
   return cleaned[cleaned.length - 1] == letters[parsed % 23];
+}
+
+/// Caps a CVC/partial collectable to the document being delivered.
+double capSaldoCobrableAlDocumento({
+  required double documentAmount,
+  required double collectableAmount,
+}) {
+  if (collectableAmount <= 0.004) return 0;
+  if (documentAmount <= 0.004) return 0;
+  return collectableAmount < documentAmount
+      ? double.parse(collectableAmount.toStringAsFixed(2))
+      : double.parse(documentAmount.toStringAsFixed(2));
 }
 
 double? parseRuteroMoney(String value) {
@@ -252,7 +272,7 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
       const RuteroFieldIssue(
         tab: RuteroDeliveryTab.payment,
         field: 'pago',
-        message: 'No existe saldo cobrable en CVC para este documento.',
+        message: 'No existe saldo cobrable en este documento.',
       ),
     );
   } else if (input.isPaid) {
@@ -270,9 +290,11 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
       final importeCentimos = (importe * 100).round();
       final maxCobroCentimos = (maxCobro * 100).round();
       if (importeCentimos > maxCobroCentimos) {
-        final isPartialCeiling = input.importeMaxCobrable != null &&
-            input.importeDisponibleCobro != null &&
-            input.importeMaxCobrable! < input.importeDisponibleCobro!;
+        final isPartialCeiling =
+            input.status == RepartoDeliveryStatus.parcial &&
+                input.importeMaxCobrable != null &&
+                input.importeDisponibleCobro != null &&
+                input.importeMaxCobrable! < input.importeDisponibleCobro!;
         issues.add(
           RuteroFieldIssue(
             tab: RuteroDeliveryTab.payment,
@@ -283,8 +305,7 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
                           '.',
                           ',',
                         )} €).'
-                : 'El importe no puede superar el saldo cobrable del '
-                    'documento.',
+                : 'El importe no puede superar el saldo cobrable de este documento.',
           ),
         );
       }

@@ -114,6 +114,29 @@ describe('repartidor finance HTTP guard coverage', () => {
     expectNoInfrastructure(spy);
   });
 
+  test('cobros returns 409 details when payment exceeds the document cap', async () => {
+    const spy = jest.spyOn(financeService, 'registerCobro').mockRejectedValue(Object.assign(
+      new Error('El abono solicitado no coincide con el saldo pendiente disponible (49.56)'),
+      {
+        code: 'PAYMENT_EXCEEDS_OUTSTANDING',
+        details: { available: 49.56, requested: 84.68, expectedRemaining: 0 },
+      },
+    ));
+    const response = await request(server).post('/finanzas/cobros').send({
+      ...validCobro(),
+      importeCobrado: 84.68,
+      importePendiente: 0,
+    });
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      success: false,
+      code: 'PAYMENT_EXCEEDS_OUTSTANDING',
+      details: { available: 49.56, requested: 84.68, expectedRemaining: 0 },
+    });
+    expect(spy).toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
   test('cobros returns success without coupling the HTTP response to email resolution', async () => {
     const spy = jest.spyOn(financeService, 'registerCobro').mockResolvedValue({ created: true, cobro: { id: '1' } });
     const notifySpy = jest.spyOn(repartoVarianceNotificationService, 'notifyAfterCobro').mockResolvedValue({ skipped: false, attempted: 0 });

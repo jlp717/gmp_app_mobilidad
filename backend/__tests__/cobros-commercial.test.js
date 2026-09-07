@@ -1003,7 +1003,7 @@ describe('commercial cobros hardening', () => {
       userId: '01',
       userRole: 'COMERCIAL',
       idempotencyToken: 'cobro-token-conflict-001',
-    })).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+    })).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT', status: 409 });
   });
 
   test('registerPayment rejects commercial overpay', async () => {

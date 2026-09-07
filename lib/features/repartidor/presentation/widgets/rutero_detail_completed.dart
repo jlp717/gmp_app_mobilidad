@@ -62,39 +62,47 @@ class RuteroDetailCompleted extends StatelessWidget {
       };
 
   String get _outcomeTitle => switch (albaran.estado) {
-        EstadoEntrega.entregado => 'ENTREGA COMPLETADA',
-        EstadoEntrega.parcial => 'ENTREGA PARCIAL CONFIRMADA',
-        EstadoEntrega.noEntregado => 'NO ENTREGA CONFIRMADA',
-        EstadoEntrega.rechazado => 'ENTREGA RECHAZADA',
-        _ => 'RESULTADO DE ENTREGA',
+        EstadoEntrega.entregado => 'Entrega completada',
+        EstadoEntrega.parcial => 'Entrega parcial confirmada',
+        EstadoEntrega.noEntregado => 'No entrega confirmada',
+        EstadoEntrega.rechazado => 'Entrega rechazada',
+        _ => 'Resultado de entrega',
       };
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          _buildSuccessBanner(),
-          const SizedBox(height: 20),
-          _buildSummaryInfo(context),
-          const SizedBox(height: 24),
-          _buildDocumentsSection(),
-          if (!_isNoDelivery) ...[
-            const SizedBox(height: 16),
-            buildPrinterConfigSection(),
-            if (tieneImpresora && items.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _ShareButton(
-                icon: Icons.print,
-                label: 'Imprimir ticket térmico',
-                color: AppTheme.info,
-                onTap: onShowZebraPrintPreview,
-              ),
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          Responsive.padding(context, small: 14, large: 20),
+          16,
+          Responsive.padding(context, small: 14, large: 20),
+          16 + MediaQuery.paddingOf(context).bottom,
+        ),
+        child: Column(
+          children: [
+            _buildSuccessBanner(),
+            const SizedBox(height: 20),
+            _buildSummaryInfo(context),
+            const SizedBox(height: 24),
+            _buildDocumentsSection(),
+            if (!_isNoDelivery) ...[
+              const SizedBox(height: 16),
+              buildPrinterConfigSection(),
+              if (tieneImpresora && items.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _ShareButton(
+                  icon: Icons.print,
+                  label: 'Imprimir ticket térmico',
+                  color: AppTheme.info,
+                  onTap: onShowZebraPrintPreview,
+                ),
+              ],
             ],
+            const SizedBox(height: 24),
           ],
-          const SizedBox(height: 24),
-        ],
+        ),
       ),
     );
   }
@@ -296,7 +304,7 @@ class RuteroDetailCompleted extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _sectionTitle('NOTA DE ENTREGA'),
+        _sectionTitle('Nota de entrega'),
         Text(
           'Comprobante de la entrega con firma y líneas confirmadas.',
           style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
@@ -346,7 +354,7 @@ class RuteroDetailCompleted extends StatelessWidget {
         if (!_isNoDelivery) ...[
           const SizedBox(height: 22),
           _sectionTitle(
-            _isFactura ? 'FACTURA (CON FIRMA)' : 'ALBARÁN (CON FIRMA)',
+            _isFactura ? 'Factura (con firma)' : 'Albarán (con firma)',
           ),
           Text(
             'Documento comercial ERP. Incluye la firma cuando está disponible.',

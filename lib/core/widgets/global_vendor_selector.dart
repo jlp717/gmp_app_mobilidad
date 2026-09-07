@@ -34,6 +34,7 @@ class GlobalVendorSelector extends ConsumerStatefulWidget {
 class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
   List<Map<String, dynamic>> _vendedores = [];
   bool _isLoading = false;
+  bool _vendedoresLoadScheduled = false;
 
   List<String>? _effectiveAllowedCodes() {
     final authState = ref.read(authProvider).value;
@@ -59,8 +60,23 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
   void initState() {
     super.initState();
     if (widget.isJefeVentas || widget.forceShow) {
-      _loadVendedores();
+      _scheduleVendedoresLoad();
     }
+  }
+
+  /// Jefe cold-start: let dashboard matrix/metrics win the radio first.
+  void _scheduleVendedoresLoad() {
+    if (_vendedores.isNotEmpty || _isLoading || _vendedoresLoadScheduled) {
+      return;
+    }
+    _vendedoresLoadScheduled = true;
+    if (!widget.isJefeVentas) {
+      _loadVendedores();
+      return;
+    }
+    Future<void>.delayed(const Duration(seconds: 4), () {
+      if (mounted) _loadVendedores();
+    });
   }
 
   Future<void> _loadVendedores() async {
@@ -165,7 +181,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
 
     final shouldLoadVendors = widget.isJefeVentas || widget.forceShow;
     if (shouldLoadVendors && _vendedores.isEmpty && !_isLoading) {
-      _loadVendedores();
+      _scheduleVendedoresLoad();
     }
 
     final selectedVendor = ref.watch(selectedVendorProvider);
@@ -182,132 +198,136 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
     final currentValue = isValidSelection ? selectedVendor : null;
     final isCompact = Responsive.isLandscapeCompact(context);
 
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: isCompact ? 3 : 8,
-      ),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        border: Border(
-          bottom:
-              BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.9)),
+    return Semantics(
+      label: 'Selector de comercial. Ver como',
+      container: true,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: isCompact ? 3 : 8,
         ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: AppTheme.info.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-              border: Border.all(
-                color: AppTheme.info.withValues(alpha: 0.18),
-              ),
-            ),
-            child: const Icon(
-              Icons.visibility_rounded,
-              color: AppTheme.info,
-              size: 16,
-            ),
+        decoration: BoxDecoration(
+          color: AppTheme.raisedSurface,
+          border: Border(
+            bottom:
+                BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.9)),
           ),
-          const SizedBox(width: 8),
-          Text(
-            'Ver como:',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppTheme.textSecondary,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              height: 36 * Responsive.landscapeScale(context),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppTheme.raisedSurface,
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                color: AppTheme.info.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                 border: Border.all(
-                  color: AppTheme.borderColor.withValues(alpha: 0.9),
+                  color: AppTheme.info.withValues(alpha: 0.18),
                 ),
               ),
-              child: _isLoading
-                  ? const Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: currentValue,
-                        isExpanded: true,
-                        isDense: true,
-                        dropdownColor: AppTheme.raisedSurface,
-                        icon: const Icon(
-                          Icons.arrow_drop_down_rounded,
-                          color: AppTheme.info,
-                          size: 20,
+              child: const Icon(
+                Icons.visibility_rounded,
+                color: AppTheme.info,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Ver como:',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                height: 36 * Responsive.landscapeScale(context),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.raisedSurface,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  border: Border.all(
+                    color: AppTheme.borderColor.withValues(alpha: 0.9),
+                  ),
+                ),
+                child: _isLoading
+                    ? const Center(
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0,
-                        ),
-                        hint: Text(
-                          widget.includeAllOption
-                              ? _allOptionLabel
-                              : 'Selecciona comercial',
+                      )
+                    : DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: currentValue,
+                          isExpanded: true,
+                          isDense: true,
+                          dropdownColor: AppTheme.raisedSurface,
+                          icon: const Icon(
+                            Icons.arrow_drop_down_rounded,
+                            color: AppTheme.info,
+                            size: 20,
+                          ),
                           style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
                             fontSize: 13,
+                            fontWeight: FontWeight.w600,
                             letterSpacing: 0,
                           ),
-                        ),
-                        items: [
-                          if (widget.includeAllOption)
-                            DropdownMenuItem<String>(
-                              value: 'ALL',
-                              child: Text(
-                                _allOptionLabel,
-                                style: TextStyle(
-                                  color: AppTheme.textPrimary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                          hint: Text(
+                            widget.includeAllOption
+                                ? _allOptionLabel
+                                : 'Selecciona comercial',
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              letterSpacing: 0,
                             ),
-                          ..._vendedores.map((v) {
-                            final code = v['code']?.toString() ?? '';
-                            final name = v['name']?.toString() ?? '';
-                            final displayName = name.isNotEmpty
-                                ? '$code - $name'
-                                : 'Vendedor $code';
-                            return DropdownMenuItem<String>(
-                              value: code,
-                              child: Text(
-                                displayName,
-                                style: TextStyle(
-                                  color: AppTheme.textPrimary,
-                                  fontSize: 12,
+                          ),
+                          items: [
+                            if (widget.includeAllOption)
+                              DropdownMenuItem<String>(
+                                value: 'ALL',
+                                child: Text(
+                                  _allOptionLabel,
+                                  style: TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
-                            );
-                          }),
-                        ],
-                        onChanged: (value) {
-                          ref.read(filterProvider.notifier).setVendor(value);
-                          widget.onChanged?.call();
-                        },
+                            ..._vendedores.map((v) {
+                              final code = v['code']?.toString() ?? '';
+                              final name = v['name']?.toString() ?? '';
+                              final displayName = name.isNotEmpty
+                                  ? '$code - $name'
+                                  : 'Vendedor $code';
+                              return DropdownMenuItem<String>(
+                                value: code,
+                                child: Text(
+                                  displayName,
+                                  style: TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
+                          onChanged: (value) {
+                            ref.read(filterProvider.notifier).setVendor(value);
+                            widget.onChanged?.call();
+                          },
+                        ),
                       ),
-                    ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

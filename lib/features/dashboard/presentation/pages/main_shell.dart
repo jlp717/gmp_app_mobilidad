@@ -98,6 +98,15 @@ String? resolveFleetRepartidorId({
   return codes.join(',');
 }
 
+@visibleForTesting
+String? shellAuthIdentity(AuthState? state) {
+  final user = state?.user;
+  if (user == null) return null;
+  return '${user.code}|${user.role}|${user.claimsVersion}|'
+      '${state?.activeMode}|${(state?.vendedorCodes ?? const <String>[]).join(',')}|'
+      '${user.showCommissions}';
+}
+
 /// Main app shell with navigation rail for tablet mode
 /// Dashboard is only visible for Jefe de Ventas
 class MainShell extends ConsumerStatefulWidget {
@@ -451,7 +460,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         setState(() {
           _isLoadingRepartidores = false;
           _repartidoresError = 'No se ha podido cargar la lista de '
-              'repartidores. Pulsa Reintentar para preparar la sesion.';
+              'repartidores. Pulsa Reintentar para preparar la sesión.';
         });
       }
     }
@@ -516,10 +525,9 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    // PERFORMANCE: Use select() to only rebuild when user changes
-    final user = ref.watch(authProvider.select((state) => state.value?.user));
-    // The authorization role remains JEFE_VENTAS while this independent UI
-    // mode changes, so subscribe explicitly to rebuild the shell on switches.
+    final identity = ref.watch(
+      authProvider.select((state) => shellAuthIdentity(state.value)),
+    );
     ref.watch(
       authProvider.select((state) => state.value?.activeMode),
     );
@@ -542,11 +550,13 @@ class _MainShellState extends ConsumerState<MainShell> {
       _onSessionReady(nextUser!, next.value?.activeMode);
     });
 
-    if (user == null) {
+    if (identity == null) {
       return const Scaffold(
         body: Center(child: ModernLoading(message: 'Cargando...')),
       );
     }
+
+    final user = ref.read(authProvider).value!.user!;
 
     final isJefeVentas =
         user.isJefeVentas || user.role.trim().toUpperCase() == 'ADMIN';
@@ -565,9 +575,8 @@ class _MainShellState extends ConsumerState<MainShell> {
     });
 
     // PERFORMANCE: Use select() to only rebuild when vendedorCodes changes
-    final vendedorCodes = ref.watch(
-      authProvider.select((state) => state.value?.vendedorCodes ?? []),
-    );
+    final vendedorCodes =
+        ref.read(authProvider).value?.vendedorCodes ?? const <String>[];
     _ensureScopedVendorSelection(user, vendedorCodes);
     final navItems = _getNavItems(isJefeVentas, vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
@@ -1812,13 +1821,13 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget _buildRepartoPreparingPanel() {
     final isLoading = _isLoadingRepartidores;
     final message = _repartidoresError ??
-        'Preparando la sesion de reparto. '
+        'Preparando la sesión de reparto. '
             'Si el aviso no desaparece, pulsa Reintentar.';
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Semantics(
-          label: 'Estado de preparacion de la sesion de reparto',
+          label: 'Estado de preparación de la sesión de reparto',
           container: true,
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1843,7 +1852,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               const SizedBox(height: 16),
               Semantics(
                 button: true,
-                label: 'Reintentar preparar la sesion de reparto',
+                label: 'Reintentar preparar la sesión de reparto',
                 child: TextButton(
                   key: const ValueKey('reparto-preparing-retry'),
                   onPressed: isLoading ? null : _retryRepartoSession,
@@ -2050,30 +2059,70 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (isJefeVentas) {
       final vendedorCodes = ref.read(authProvider).value?.vendedorCodes ?? [];
       final employeeCode = vendedorCodes.join(',');
+      final jefeNav = _getNavItems(true, vendedorCodes);
+
+      Widget jefePageForIndex(int idx) {
+        final label = idx < jefeNav.length ? jefeNav[idx].label : '';
+        switch (label) {
+          case 'Panel':
+            return const DashboardContent();
+          case 'Clientes':
+            return SimpleClientListPage(
+              employeeCode: employeeCode,
+              isJefeVentas: true,
+            );
+          case 'Ruta':
+            return RuteroPage(employeeCode: employeeCode, isJefeVentas: true);
+          case 'Objetivos':
+            return ObjectivesPage(
+              employeeCode: employeeCode,
+              isJefeVentas: true,
+            );
+          case 'Comisiones':
+            return CommissionsPage(
+              employeeCode: employeeCode,
+              isJefeVentas: true,
+            );
+          case 'Facturas':
+            return const FacturasPage();
+          case 'Pedidos':
+            return PedidosPage(employeeCode: employeeCode, isJefeVentas: true);
+          case 'Alertas':
+            return KpiDashboardPage(
+              employeeCode: employeeCode,
+              isJefeVentas: true,
+            );
+          case 'Cobros':
+            return CobrosPage(employeeCode: employeeCode, isJefeVentas: true);
+          case 'Liquidación':
+            return ComercialLiquidacionDiariaPage(
+              employeeCode: employeeCode,
+              isJefeVentas: true,
+            );
+          case 'Bolsa':
+            return const BolsaPage();
+          case 'Evolución':
+            return ClientEvolutionPage(
+              employeeCode: employeeCode,
+              isJefeVentas: true,
+              forceShowVendorSelector: true,
+            );
+          case 'Asistente':
+            return ChatbotPage(vendedorCodes: vendedorCodes);
+          default:
+            return const Center(child: Text('Página no encontrada'));
+        }
+      }
+
       return LazyIndexedStack(
         index: _currentIndex,
-        children: [
-          const DashboardContent(),
-          SimpleClientListPage(employeeCode: employeeCode, isJefeVentas: true),
-          RuteroPage(employeeCode: employeeCode, isJefeVentas: true),
-          ObjectivesPage(employeeCode: employeeCode, isJefeVentas: true),
-          CommissionsPage(employeeCode: employeeCode, isJefeVentas: true),
-          const FacturasPage(),
-          PedidosPage(employeeCode: employeeCode, isJefeVentas: true),
-          KpiDashboardPage(employeeCode: employeeCode, isJefeVentas: true),
-          CobrosPage(employeeCode: employeeCode, isJefeVentas: true),
-          ComercialLiquidacionDiariaPage(
-            employeeCode: employeeCode,
-            isJefeVentas: true,
-          ),
-          const BolsaPage(),
-          ClientEvolutionPage(
-            employeeCode: employeeCode,
-            isJefeVentas: true,
-            forceShowVendorSelector: true,
-          ),
-          ChatbotPage(vendedorCodes: vendedorCodes),
-        ],
+        children: List.generate(jefeNav.length, (idx) {
+          final label = idx < jefeNav.length ? jefeNav[idx].label : '';
+          return KeyedSubtree(
+            key: ValueKey('jefe_tab_$label'),
+            child: jefePageForIndex(idx),
+          );
+        }),
       );
     }
 
@@ -2192,10 +2241,13 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     return LazyIndexedStack(
       index: _currentIndex,
-      children: List.generate(
-        comercialNav.length,
-        comercialPageForIndex,
-      ),
+      children: List.generate(comercialNav.length, (idx) {
+        final label = idx < comercialNav.length ? comercialNav[idx].label : '';
+        return KeyedSubtree(
+          key: ValueKey('comercial_tab_$label'),
+          child: comercialPageForIndex(idx),
+        );
+      }),
     );
   }
 }

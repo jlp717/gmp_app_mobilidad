@@ -19,6 +19,8 @@ const {
   resolveLiquidacionRecipients,
 } = require('./staff-email-directory-service');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
+const { resolveDocumentCollectable } = require('./delivery-cobro-availability');
+const { resolveDeliveryAmount } = require('./delivery-amount-resolver');
 const { validateFinanceTableMapping } = require('../config/reparto-runtime');
 const {
   createRepartoCobrosDb2Port,
@@ -689,11 +691,12 @@ class PaymentAlreadyRegisteredError extends Error {
 }
 
 class PaymentExceedsOutstandingError extends Error {
-  constructor(message = 'El importe supera el saldo pendiente del documento') {
+  constructor(message = 'El importe supera el saldo pendiente del documento', details = null) {
     super(message);
     this.name = 'PaymentExceedsOutstandingError';
     this.code = 'PAYMENT_EXCEEDS_OUTSTANDING';
     this.statusCode = 409;
+    if (details) this.details = details;
   }
 }
 
@@ -850,12 +853,8 @@ function assertCobroPayloadMatchesInput(row, expected) {
   ) {
     mismatches.push('IMPORTEVENCIMIENTO');
   }
-  if (
-    roundMoney(firstDefinedValue(row, ['IMPORTEPENDIENTE', 'IMPORTE_PENDIENTE'], expected.importePendiente || 0)) !==
-    roundMoney(expected.importePendiente || 0)
-  ) {
-    mismatches.push('IMPORTEPENDIENTE');
-  }
+  // importePendiente is server-derived (min(CVC, document) minus this cobro).
+  // Replay must not 409 because a stale GET offered raw CVC as remaining.
   const actualNotes = firstDefinedValue(row, ['OBSERVACIONES', 'NOTAS']);
   if (
     actualNotes !== undefined &&
@@ -876,26 +875,79 @@ async function lockCobrosForPayment(conn) {
   await financeRepo.lockCobrosTable(conn);
 }
 
-async function assertPaymentWithinOutstandingBalance(conn, info, input, documentRow) {
-  const erpPending = Number(value(documentRow, 'ERP_IMPORTEPENDIENTE'));
-  if (!Number.isFinite(erpPending) || erpPending < 0) {
-    throw new FinanceSchemaUnavailableError(
-      'El documento no expone un saldo pendiente valido para registrar el abono',
-    );
-  }
+function erpDocumentAmountFromRow(documentRow) {
+  const resolved = resolveDeliveryAmount({
+    cpcTotal: Number(value(documentRow, 'ERP_CPC_TOTAL')),
+    cacTotal: Number(value(documentRow, 'ERP_CAC_TOTAL')),
+    cpcNetoSum: Number(value(documentRow, 'ERP_CPC_NETO_SUM')),
+    cpcIvaSum: Number(value(documentRow, 'ERP_CPC_IVA_SUM')),
+    lacLineSum: Number(value(documentRow, 'ERP_LAC_LINE_SUM')),
+    qtyLines: Number(value(documentRow, 'ERP_LAC_QTY_LINES')),
+    zeroPriceQtyLines: Number(value(documentRow, 'ERP_LAC_ZERO_PRICE_LINES')),
+  });
+  const legacy = Number(value(documentRow, 'ERP_DOCUMENT_AMOUNT'));
+  if (resolved.amount > 0.004) return resolved.amount;
+  return Number.isFinite(legacy) && legacy > 0.004 ? legacy : resolved.amount;
+}
 
+function resolveStandaloneCobroAvailable(documentRow, appCollected = 0) {
+  const documentRows = Number(value(documentRow, 'ERP_DOCUMENT_ROWS'));
+  const cvcState = documentRows === 1
+    ? 'AVAILABLE'
+    : (documentRows > 1 ? 'AMBIGUOUS' : 'MISSING');
+  const collectable = resolveDocumentCollectable({
+    cvcState,
+    cvcPending: Number(value(documentRow, 'ERP_IMPORTEPENDIENTE')),
+    documentAmount: erpDocumentAmountFromRow(documentRow),
+  });
+  return roundMoney(Math.max(collectable.importeDisponibleCobro - roundMoney(appCollected), 0));
+}
+
+function evaluateStandaloneCobroRequest({
+  documentRow,
+  appCollected = 0,
+  requested,
+} = {}) {
+  const available = resolveStandaloneCobroAvailable(documentRow, appCollected);
+  const requestedMoney = roundMoney(requested);
+  const expectedRemaining = roundMoney(Math.max(available - requestedMoney, 0));
+  if (requestedMoney <= 0 || requestedMoney > available) {
+    return Object.freeze({
+      ok: false,
+      available,
+      requested: requestedMoney,
+      expectedRemaining,
+    });
+  }
+  return Object.freeze({
+    ok: true,
+    available,
+    requested: requestedMoney,
+    expectedRemaining,
+  });
+}
+
+async function assertPaymentWithinOutstandingBalance(conn, info, input, documentRow) {
   const totals = firstRow(await financeRepo.sumAppCollectedForDocument(conn, info, input));
   const appCollected = roundMoney(value(totals, 'APP_COLLECTED'));
-  const available = roundMoney(Math.max(erpPending - appCollected, 0));
-  const requested = roundMoney(input.importeCobrado);
-  const expectedRemaining = roundMoney(Math.max(available - requested, 0));
-  const submittedRemaining = roundMoney(input.importePendiente);
-
-  if (requested <= 0 || requested > available || submittedRemaining !== expectedRemaining) {
+  const result = evaluateStandaloneCobroRequest({
+    documentRow,
+    appCollected,
+    requested: input.importeCobrado,
+  });
+  if (!result.ok) {
     throw new PaymentExceedsOutstandingError(
-      `El abono solicitado no coincide con el saldo pendiente disponible (${available})`,
+      `El abono solicitado no coincide con el saldo pendiente disponible (${result.available})`,
+      {
+        available: result.available,
+        requested: result.requested,
+        expectedRemaining: result.expectedRemaining,
+      },
     );
   }
+  // Client importePendiente may still reflect uncapped CVC from a stale GET.
+  // Write path is authoritative: persist the document-capped remainder.
+  input.importePendiente = result.expectedRemaining;
 }
 
 async function assertDocumentNotCollectedByCommercial(conn, input) {
@@ -1477,22 +1529,17 @@ async function getVencimientos({
     nextCursor: hasMore ? encodeVencimientosCursor(nextOffset, fingerprint, todayYmd) : null,
   };
 }
-async function registerCobro(input) {
+async function registerCobroOnce(input) {
   const runtime = assertFinanceRuntime();
   if (!runtime.financeCapabilityApproved || !runtime.writesEnabled) {
     throw new FinanceSchemaUnavailableError('La capacidad canonica de cobros no esta autorizada');
   }
 
-  // Resolve the verified schema before opening the write transaction.
-  // Replays are handled from the same locked connection so they remain valid
-  // even if the ERP document is no longer visible.
   const info = await getFinanceSchemaInfo();
-
   const conn = await financeRepo.connect();
   let begun = false;
   try {
     const port = createRepartoCobrosDb2Port({ runtime, logger });
-    // The catalog/index capability gate deliberately runs before BEGIN WORK.
     await port.assertCapabilities(conn);
     await financeRepo.beginWork(conn);
     begun = true;
@@ -1522,7 +1569,7 @@ async function registerCobro(input) {
         logger.error(`[REPARTIDOR_FINANZAS] Cobro rollback failed: ${sanitizeErrorMessage(rollbackError)}`);
       }
     }
-    if (error instanceof RepartoCobrosCapabilityError || error instanceof RepartoCobrosIdempotencyRaceError) {
+    if (error instanceof RepartoCobrosCapabilityError) {
       throw error;
     }
     throw error;
@@ -1531,6 +1578,20 @@ async function registerCobro(input) {
       logger.warn(`[REPARTIDOR_FINANZAS] Cobro connection close failed: ${sanitizeErrorMessage(closeError)}`);
     }
   }
+}
+
+async function registerCobro(input) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await registerCobroOnce(input);
+    } catch (error) {
+      if (attempt === 0 && error instanceof RepartoCobrosIdempotencyRaceError) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new RepartoCobrosIdempotencyRaceError(new Error('cobro idempotency race exhausted'));
 }
 async function validateCobroDocument(input, conn = null) {
   const rows = await financeRepo.validateCobroDocument(input, conn);
@@ -1616,19 +1677,14 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
         throw new AlreadyDeliveredError(existingDelivery);
       }
 
-      const documentRow = await validateCobroDocument({
+      const cobroInput = {
         ...cobro,
         codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
-      }, conn);
+      };
+      const documentRow = await validateCobroDocument(cobroInput, conn);
 
-      await assertPaymentWithinOutstandingBalance(conn, info, {
-        ...cobro,
-        codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
-      }, documentRow);
-      await assertDocumentNotCollectedByCommercial(conn, {
-        ...cobro,
-        codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
-      });
+      await assertPaymentWithinOutstandingBalance(conn, info, cobroInput, documentRow);
+      await assertDocumentNotCollectedByCommercial(conn, cobroInput);
 
       const lat = toNumber(delivery.latitud);
       const lon = toNumber(delivery.longitud);
@@ -1661,14 +1717,14 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
       }
 
       await financeRepo.insertCobroRow(conn, info, {
-        ...cobro,
-        entregaId: cobro.entregaId || delivery.itemId,
-        codigoRepartidor: cobro.codigoRepartidor || repartidorId,
-        pantallaOrigen: cobro.pantallaOrigen || 'RUTERO',
-        operador: cobro.operador || 'unknown',
+        ...cobroInput,
+        entregaId: cobroInput.entregaId || delivery.itemId,
+        codigoRepartidor: cobroInput.codigoRepartidor || repartidorId,
+        pantallaOrigen: cobroInput.pantallaOrigen || 'RUTERO',
+        operador: cobroInput.operador || 'unknown',
       });
 
-      logger.info(`[AUDIT] RUTERO_DELIVERY_PAYMENT_REGISTERED | Delivery:${delivery.itemId} | Rep:${cobro.codigoRepartidor || repartidorId} | Amount:${roundMoney(cobro.importeCobrado)} | Token:${cobro.idempotencyToken}`);
+      logger.info(`[AUDIT] RUTERO_DELIVERY_PAYMENT_REGISTERED | Delivery:${delivery.itemId} | Rep:${cobroInput.codigoRepartidor || repartidorId} | Amount:${roundMoney(cobroInput.importeCobrado)} | Token:${cobroInput.idempotencyToken}`);
 
       return {
         created: true,
@@ -2363,6 +2419,10 @@ module.exports = {
   formatGmpLiquidacionDisplay,
   cashToDeposit,
   shadowLiquidacionPayments,
+  resolveStandaloneCobroAvailable,
+  evaluateStandaloneCobroRequest,
+  erpDocumentAmountFromRow,
+  PaymentExceedsOutstandingError,
   // Error classes (Req #16: facilita catch tipado en routes)
   AlreadyDeliveredError,
   IdempotencyConflictError,

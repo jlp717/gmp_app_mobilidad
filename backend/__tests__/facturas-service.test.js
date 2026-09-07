@@ -207,6 +207,8 @@ describe('facturas service fiscal totals', () => {
     expect(sql).toMatch(/FROM\s+DSEDAC\.CAC\s+CAC/i);
     expect(sql).toMatch(/NOT\s*\(\s*CAC\.NUMEROFACTURA\s+>\s+0/i);
     expect(sql).toMatch(/IMPORTEIVA5/i);
+    expect(sql).toMatch(/IMPORTEBASEIMPONIBLE5/i);
+    expect(sql).not.toMatch(/COALESCE\(CAC\.IMPORTEBRUTO,\s*0\)\s+as BASE/i);
   });
 
   test('getFacturasRaw bounds list queries with OFFSET/FETCH and clamps limit', async () => {
@@ -336,7 +338,7 @@ describe('facturas service fiscal totals', () => {
       totalIva: 316.41,
     });
     expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/FROM\s+DSEDAC\.CFC\s+CFC/i);
-    expect(mockRedisSet.mock.calls[0][1]).toMatch(/^facturas:summary:v4:/);
+    expect(mockRedisSet.mock.calls[0][1]).toMatch(/^facturas:summary:v5:/);
   });
 
   test('getSummary totals albaran base and all IVA slots from CAC', async () => {
@@ -369,6 +371,8 @@ describe('facturas service fiscal totals', () => {
     const sql = mockQueryWithParams.mock.calls[0][0];
     expect(sql).toMatch(/FROM\s+DSEDAC\.CAC\s+CAC/i);
     expect(sql).toMatch(/IMPORTEIVA5/i);
+    expect(sql).toMatch(/IMPORTEBASEIMPONIBLE5/i);
+    expect(sql).not.toMatch(/SUM\(COALESCE\(CAC\.IMPORTEBRUTO/i);
   });
 
   test('getAlbaranDetailForPdf resolves standalone albaran from CAC and LAC', async () => {

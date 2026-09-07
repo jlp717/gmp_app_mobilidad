@@ -680,6 +680,43 @@ describe('transactional reparto confirmation service', () => {
       importePendiente: 0,
     });
   });
+
+  test('never accepts cobro above the document when CVC pending is larger', async () => {
+    const repository = createFakeRepository({
+      planned: plannedDelivery({
+        importeTotal: 2841.76,
+        importePendiente: 3279.61,
+      }),
+    });
+    const service = createRepartoConfirmationService({ repository, now: fixedNow });
+
+    await expect(service.confirm(command({
+      cobro: payment({ importeCobrado: 3279.61 }),
+    }))).rejects.toMatchObject({
+      code: 'INVALID_PAYMENT_AMOUNT',
+      details: { maxCollectable: 2841.76 },
+    });
+    expect(repository.snapshot().events).toEqual([]);
+  });
+
+  test('accepts document-capped cobro and keeps remaining against uncapped CVC', async () => {
+    const repository = createFakeRepository({
+      planned: plannedDelivery({
+        importeTotal: 2841.76,
+        importePendiente: 3279.61,
+      }),
+    });
+    const service = createRepartoConfirmationService({ repository, now: fixedNow });
+
+    const result = await service.confirm(command({
+      cobro: payment({ importeCobrado: 2841.76 }),
+    }));
+    expect(result).toMatchObject({ created: true, cobroId: '91' });
+    expect(repository.snapshot().cobros[0]).toMatchObject({
+      importeCobrado: 2841.76,
+      importePendiente: 0,
+    });
+  });
   test.each(['MISSING', 'AMBIGUOUS'])(
     'rejects payment before writes when the financial document is %s',
     async (financialDocumentState) => {

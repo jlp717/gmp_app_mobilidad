@@ -67,7 +67,11 @@ class ClientEvolutionPage extends ConsumerStatefulWidget {
       _ClientEvolutionPageState();
 }
 
-class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
+class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   bool _isLoading = false;
   bool _isLoadingClients = false;
   String? _error;
@@ -295,6 +299,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(

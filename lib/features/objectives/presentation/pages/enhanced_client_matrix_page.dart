@@ -647,36 +647,34 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 Expanded(
                   child: SizedBox(
                     height: 26,
-                    child: ListView(
+                    child: ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      children: List.generate(
-                        12,
-                        (i) => Padding(
-                          padding: const EdgeInsets.only(right: 3),
-                          child: ChoiceChip(
-                            label: Text(
-                              _mNames[i],
-                              style: const TextStyle(fontSize: 8),
-                            ),
-                            selected: _pendingMonths.contains(i + 1),
-                            onSelected: (s) {
-                              setState(() {
-                                if (s) {
-                                  _pendingMonths.add(i + 1);
-                                } else if (_pendingMonths.length > 1) {
-                                  _pendingMonths.remove(i + 1);
-                                }
-                                _filtersDirty = true;
-                              });
-                              _scheduleFilterLoad();
-                            },
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                            labelPadding:
-                                const EdgeInsets.symmetric(horizontal: 3),
-                            selectedColor:
-                                AppTheme.accentIndigo.withValues(alpha: 0.3),
+                      itemCount: 12,
+                      itemBuilder: (context, i) => Padding(
+                        padding: const EdgeInsets.only(right: 3),
+                        child: ChoiceChip(
+                          label: Text(
+                            _mNames[i],
+                            style: const TextStyle(fontSize: 8),
                           ),
+                          selected: _pendingMonths.contains(i + 1),
+                          onSelected: (s) {
+                            setState(() {
+                              if (s) {
+                                _pendingMonths.add(i + 1);
+                              } else if (_pendingMonths.length > 1) {
+                                _pendingMonths.remove(i + 1);
+                              }
+                              _filtersDirty = true;
+                            });
+                            _scheduleFilterLoad();
+                          },
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          labelPadding:
+                              const EdgeInsets.symmetric(horizontal: 3),
+                          selectedColor:
+                              AppTheme.accentIndigo.withValues(alpha: 0.3),
                         ),
                       ),
                     ),

@@ -18,6 +18,7 @@ const {
     normalizeCvcTipoDocumentoFilter,
 } = require('../utils/common');
 const crypto = require('crypto');
+const { parsePage, paginationContract, db2OffsetFetch } = require('../src/utils/pagination');
 
 const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS');
@@ -68,6 +69,20 @@ function limitRegistrarCobro(req, res, next) {
 function sanitizeCode(val) {
     if (val == null) return '';
     return String(val).trim();
+}
+
+function sendCobrosError(res, error, { code, message } = {}) {
+    const typedStatus = Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599
+        ? error.statusCode
+        : (Number.isInteger(error?.status) ? error.status : 500);
+    const status = typedStatus >= 400 && typedStatus <= 599 ? typedStatus : 500;
+    logger.error(`[COBROS] ${code || 'INTERNAL_SERVER_ERROR'}: ${error?.message || error}`);
+    if (res.headersSent) return;
+    return res.status(status).json({
+        success: false,
+        code: status >= 500 ? (code || 'INTERNAL_SERVER_ERROR') : (error?.code || code || 'REQUEST_ERROR'),
+        error: status >= 500 ? (message || 'Error interno del servidor') : (error?.message || message),
+    });
 }
 
 function db2StringLiteral(value) {
@@ -441,6 +456,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         }
         logger.info(`[COBROS] Obteniendo pendientes para cliente: ${codigoCliente}`);
 
+        const pendientesPage = parsePage(req.query, { defaultLimit: 100, maxLimit: 100 });
         const tipoDocumento = req.query.tipoDocumento
             ? String(req.query.tipoDocumento).trim().toUpperCase()
             : '';
@@ -517,9 +533,9 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
               AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
               ${docFilterSql}
             ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC
-            FETCH FIRST 100 ROWS ONLY`;
+            ${db2OffsetFetch(pendientesPage)}`;
 
-        const cacheKey = `cobros:pendientes:cvc:${codigoCliente}:${tipoDocumentoCodes.join(',')}:${fechaDesde}:${fechaHasta}`;
+        const cacheKey = `cobros:pendientes:cvc:${codigoCliente}:${tipoDocumentoCodes.join(',')}:${fechaDesde}:${fechaHasta}:l${pendientesPage.limit}:o${pendientesPage.offset}`;
         let resultado;
         try {
             resultado = await cachedQuery(
@@ -540,7 +556,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                   AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
                   AND PC.IMPORTETOTAL > 0
                 ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC
-                FETCH FIRST 100 ROWS ONLY`;
+                ${db2OffsetFetch(pendientesPage)}`;
             resultado = await queryWithParams(fallbackSql, [codigoCliente]);
         }
 
@@ -692,11 +708,11 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 numVencidos,
                 documentos: { cantidad: cobros.length, total },
                 source: resultado?.[0]?.IMPORTE_PENDIENTE !== undefined ? 'CVC' : 'PEDIDOS_CAB'
-            }
+            },
+            pagination: paginationContract(pendientesPage, cobros),
         });
     } catch (error) {
-        logger.error('[COBROS] Error: ' + error.message);
-        res.status(500).json({ success: false, error: 'Error interno del servidor' });
+        return sendCobrosError(res, error, { code: 'COBROS_PENDIENTES_ERROR', message: 'Error interno del servidor' });
     }
 });
 
@@ -712,8 +728,7 @@ router.get('/:codigoCliente/historico', async (req, res) => {
             return res.status(clientScope.status).json(clientScope.body);
         }
 
-        const safeLimit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
-        const safeOffset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+        const page = parsePage(req.query, { defaultLimit: 20, maxLimit: 100 });
         const sql = `
             SELECT
                 C.ID, C.CODIGO_CLIENTE, C.IMPORTE, C.FORMA_PAGO,
@@ -721,9 +736,9 @@ router.get('/:codigoCliente/historico', async (req, res) => {
             FROM ${APP_SCHEMA}.COBROS C
             WHERE TRIM(C.CODIGO_CLIENTE) = ?
             ORDER BY C.FECHA DESC
-            OFFSET ${safeOffset} ROWS FETCH FIRST ${safeLimit} ROWS ONLY`;
+            ${db2OffsetFetch(page)}`;
 
-        const cacheKey = `cobros:historico:${codigoCliente}:${safeLimit}:${safeOffset}`;
+        const cacheKey = `cobros:historico:${codigoCliente}:${page.limit}:${page.offset}`;
         const rows = await cachedQuery(
             (sqlText) => queryWithParams(sqlText, [codigoCliente]),
             sql,
@@ -732,10 +747,13 @@ router.get('/:codigoCliente/historico', async (req, res) => {
         );
         const historico = (rows || []).map(mapHistoricoRow);
 
-        res.json({ success: true, historico });
+        res.json({
+            success: true,
+            historico,
+            pagination: paginationContract(page, historico),
+        });
     } catch (error) {
-        logger.error('[COBROS] Error historico: ' + error.message);
-        res.status(500).json({ success: false, error: 'Error obteniendo historico de cobros' });
+        return sendCobrosError(res, error, { code: 'COBROS_HISTORICO_ERROR', message: 'Error obteniendo historico de cobros' });
     }
 });
 
@@ -778,7 +796,7 @@ router.get('/:codigoCliente/estado', async (req, res) => {
                 totalPendiente = parseFloat(rows?.[0]?.TOTAL_PENDIENTE) || 0;
                 numPedidos = parseInt(rows?.[0]?.NUM_PEDIDOS) || 0;
             } catch (e) {
-                logger.warn('[COBROS] Error calculando estado: ' + e.message);
+                logger.warn('[COBROS] Error calculando estado (PEDIDOS_CAB fallback): ' + e.message);
             }
         }
 
@@ -803,7 +821,10 @@ router.get('/:codigoCliente/estado', async (req, res) => {
                 SELECT LIMITECREDITO FROM DSEDAC.CLI
                 WHERE TRIM(CODIGOCLIENTE) = ?
                 FETCH FIRST 1 ROW ONLY
-            `, [codigoCliente], []).catch(() => []),
+            `, [codigoCliente], []).catch((cliErr) => {
+                logger.warn('[COBROS] Error leyendo limite credito CLI: ' + cliErr.message);
+                return [];
+            }),
         ]);
 
         const totalApp = parseFloat(appRows?.[0]?.TOTAL_APP) || 0;
@@ -828,8 +849,7 @@ router.get('/:codigoCliente/estado', async (req, res) => {
             }
         });
     } catch (error) {
-        logger.error('[COBROS] Error estado: ' + error.message);
-        res.status(500).json({ success: false, error: 'Error obteniendo estado del cliente' });
+        return sendCobrosError(res, error, { code: 'COBROS_ESTADO_ERROR', message: 'Error obteniendo estado del cliente' });
     }
 });
 
@@ -1053,8 +1073,7 @@ router.post('/:codigoCliente/registrar', limitRegistrarCobro, async (req, res) =
         res.json({ success: true, mensaje: 'Cobro registrado correctamente', id: paymentId });
 
     } catch (error) {
-        logger.error('[COBROS] Error registrando: ' + error.message);
-        res.status(500).json({ success: false, error: 'Error registrando cobro' });
+        return sendCobrosError(res, error, { code: 'COBROS_REGISTER_ERROR', message: 'Error registrando cobro' });
     }
 });
 
@@ -1294,8 +1313,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error('[COBROS] Error pending-summary: ' + error.message);
-        res.status(500).json({ success: false, error: 'Error obteniendo resumen' });
+        return sendCobrosError(res, error, { code: 'COBROS_SUMMARY_ERROR', message: 'Error obteniendo resumen' });
     }
 });
 

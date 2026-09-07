@@ -18,7 +18,10 @@ class PersonnelPage extends StatefulWidget {
   State<PersonnelPage> createState() => _PersonnelPageState();
 }
 
-class _PersonnelPageState extends State<PersonnelPage> {
+class _PersonnelPageState extends State<PersonnelPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   List<WarehousePerson> _personnel = [];
   bool _loading = true;
 
@@ -193,6 +196,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
       body: WarehouseUi.pageShell(

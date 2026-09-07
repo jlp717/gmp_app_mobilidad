@@ -47,7 +47,11 @@ enum _ClientSortOrder {
   cityAsc,
 }
 
-class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
+class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   List<Map<String, dynamic>> _clients = [];
   bool _isLoading = true;
   String? _error;
@@ -258,21 +262,22 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
       final normalizedQuery = query?.trim();
       final isSearchLoad =
           normalizedQuery != null && normalizedQuery.isNotEmpty;
+      final isJefeAllCartera = widget.isJefeVentas &&
+          (codesToPass == null || codesToPass.isEmpty || codesToPass == 'ALL');
+      final needsAlertFilter = _onlyWithAlerts || _selectedAlertType != 'ALL';
       final needsAlertPrefetch =
-          !isSearchLoad || _onlyWithAlerts || _selectedAlertType != 'ALL';
+          needsAlertFilter || (!isSearchLoad && !isJefeAllCartera);
 
       final results = await ClientsService.getClientsList(
         vendedorCodes: codesToPass,
         search: normalizedQuery,
-        limit: isSearchLoad ? 80 : 200,
+        limit: isSearchLoad || isJefeAllCartera ? 80 : 200,
         forceRefresh: forceRefresh,
       );
 
-      // Batch-compatible KPI prefetch: one request per list load, never one
-      // request per client row. Compact row badges consume this set only.
       var alertCodesSet = _clientsWithAlertsCodes;
       var alertsPrefetchLoaded = _alertsPrefetchLoaded;
-      if (needsAlertPrefetch) {
+      if (needsAlertFilter) {
         try {
           final alertCodes =
               await KpiAlertsService.instance.getClientsWithAlerts(
@@ -289,7 +294,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
       }
 
       var filteredResults = results;
-      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
+      if (needsAlertFilter) {
         filteredResults = results.where((c) {
           final code = c['code']?.toString() ?? '';
           return alertCodesSet.contains(code);
@@ -304,11 +309,43 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         _isLoading = false;
         _lastFetchTime = DateTime.now();
       });
+
+      if (needsAlertPrefetch && !needsAlertFilter) {
+        unawaited(_prefetchAlertBadges(
+          codesToPass: codesToPass,
+          forceRefresh: forceRefresh,
+          generation: generation,
+        ));
+      }
     } catch (e) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _prefetchAlertBadges({
+    required String? codesToPass,
+    required bool forceRefresh,
+    required int generation,
+  }) async {
+    try {
+      final alertCodes = await KpiAlertsService.instance.getClientsWithAlerts(
+        vendedorCodes: codesToPass,
+        type: _selectedAlertType,
+        forceRefresh: forceRefresh,
+      );
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _clientsWithAlertsCodes = alertCodes.toSet();
+        _alertsPrefetchLoaded = true;
+      });
+    } catch (_) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _alertsPrefetchLoaded = false;
       });
     }
   }
@@ -499,6 +536,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final pagePadding = Responsive.padding(context, small: 12, large: 16);
 
     return Column(

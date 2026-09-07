@@ -34,6 +34,14 @@ const Map<String, String> _financeErrorCodeMessages = <String, String>{
       'La lista ha cambiado. Actualiza para volver a cargarla.',
   'REPARTO_SCHEMA_UNAVAILABLE':
       'El servicio financiero no está disponible temporalmente.',
+  'PAYMENT_DOCUMENT_UNAVAILABLE':
+      'Este albarán o factura no tiene saldo cobrable. Puedes entregar sin cobrar.',
+  'INVALID_PAYMENT_AMOUNT':
+      'El importe supera el saldo cobrable de este albarán o factura.',
+  'REPARTO_COBROS_CAPABILITY_UNAVAILABLE':
+      'El cobro no está disponible ahora. Entrega sin cobro o reinténtalo más tarde.',
+  'REPARTO_COBRO_COMMERCIAL_CONFLICT':
+      'Este albarán o factura ya tiene cobros en el ERP. No se puede cobrar otra vez desde el rutero.',
 };
 
 /// Returns a safe, actionable user-facing message for finance API failures.

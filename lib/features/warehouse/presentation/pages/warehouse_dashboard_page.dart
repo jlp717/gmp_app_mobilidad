@@ -23,7 +23,11 @@ class WarehouseDashboardPage extends StatefulWidget {
   State<WarehouseDashboardPage> createState() => _WarehouseDashboardPageState();
 }
 
-class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
+class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   List<TruckSummary> _trucks = [];
   bool _loading = true;
   String? _error;
@@ -73,6 +77,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
       body: WarehouseUi.pageShell(
@@ -143,6 +148,8 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
                 ),
                 Text(
                   '${_trucks.length} camiones · ${_trucks.fold<int>(0, (s, t) => s + t.orderCount)} pedidos',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
@@ -210,70 +217,66 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
           ),
           Expanded(
             child: Center(
-              child: GestureDetector(
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: _selectedDate,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime(2030),
-                    builder: (ctx, child) => Theme(
-                      data: ThemeData.dark().copyWith(
-                        colorScheme: ColorScheme.dark(
-                          primary: AppTheme.info,
-                          surface: AppTheme.raisedSurface,
+              child: Semantics(
+                button: true,
+                label: 'Seleccionar fecha de expedición',
+                child: GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2030),
+                      builder: AppTheme.pickerOverlay,
+                    );
+                    if (picked != null) {
+                      setState(() => _selectedDate = picked);
+                      _loadDashboard();
+                    }
+                  },
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.calendar_today_rounded,
+                          color: AppTheme.info,
+                          size: 18,
                         ),
-                      ),
-                      child: child!,
-                    ),
-                  );
-                  if (picked != null) {
-                    setState(() => _selectedDate = picked);
-                    _loadDashboard();
-                  }
-                },
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.calendar_today_rounded,
-                        color: AppTheme.info,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '$dayName ${_selectedDate.day} ${months[_selectedDate.month]} ${_selectedDate.year}',
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (isToday) ...[
                         const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
+                        Text(
+                          '$dayName ${_selectedDate.day} ${months[_selectedDate.month]} ${_selectedDate.year}',
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                           ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.success.withValues(alpha: 0.14),
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.radiusSm),
-                          ),
-                          child: const Text(
-                            'HOY',
-                            style: TextStyle(
-                              color: AppTheme.success,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
+                        ),
+                        if (isToday) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.success.withValues(alpha: 0.14),
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusSm),
+                            ),
+                            child: const Text(
+                              'HOY',
+                              style: TextStyle(
+                                color: AppTheme.success,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -537,12 +540,23 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
         accentAlpha: 0.05,
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _kpiItem('$totalPedidos', 'Pedidos', AppTheme.info),
-          _kpiItem('$totalLineas', 'Lineas', AppTheme.accentIndigo),
-          _kpiItem('$totalCamiones', 'Vehiculos', AppTheme.success),
-          _kpiItem(totalPeso.toStringAsFixed(0), 'kg cap.', AppTheme.warning),
+          Expanded(
+            child: _kpiItem('$totalPedidos', 'Pedidos', AppTheme.info),
+          ),
+          Expanded(
+            child: _kpiItem('$totalLineas', 'Lineas', AppTheme.accentIndigo),
+          ),
+          Expanded(
+            child: _kpiItem('$totalCamiones', 'Vehiculos', AppTheme.success),
+          ),
+          Expanded(
+            child: _kpiItem(
+              totalPeso.toStringAsFixed(0),
+              'kg cap.',
+              AppTheme.warning,
+            ),
+          ),
         ],
       ),
     );
@@ -552,17 +566,24 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: Responsive.fontSize(context, small: 14, large: 18),
-            fontWeight: FontWeight.w800,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: Responsive.fontSize(context, small: 14, large: 18),
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
         const SizedBox(height: 2),
         Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(color: AppTheme.textTertiary, fontSize: 9),
         ),
       ],

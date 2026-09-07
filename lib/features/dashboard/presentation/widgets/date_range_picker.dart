@@ -15,15 +15,19 @@ class DateRangePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      icon: Icon(
-        Icons.calendar_month,
-        color: (startDate != null && endDate != null)
-            ? AppTheme.success
-            : AppTheme.textSecondary,
+    return Semantics(
+      button: true,
+      label: 'Seleccionar rango de fechas',
+      child: IconButton(
+        icon: Icon(
+          Icons.calendar_month,
+          color: (startDate != null && endDate != null)
+              ? AppTheme.success
+              : AppTheme.textSecondary,
+        ),
+        tooltip: 'Seleccionar rango de fechas',
+        onPressed: () => _showDateRangePicker(context),
       ),
-      tooltip: 'Seleccionar rango de fechas',
-      onPressed: () => _showDateRangePicker(context),
     );
   }
 
@@ -36,6 +40,11 @@ class DateRangePicker extends StatelessWidget {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           backgroundColor: AppTheme.raisedSurface,
+          scrollable: true,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           title: Text(
             'Rango de Fechas',
             style: TextStyle(color: AppTheme.textPrimary),
@@ -72,10 +81,10 @@ class DateRangePicker extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              // Date selection
-              Row(
+              Column(
                 children: [
-                  Expanded(
+                  SizedBox(
+                    width: double.infinity,
                     child: _buildDateButton(
                       context,
                       'Desde',
@@ -83,8 +92,9 @@ class DateRangePicker extends StatelessWidget {
                       (date) => setState(() => tempStart = date),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
                     child: _buildDateButton(
                       context,
                       'Hasta',
@@ -96,6 +106,9 @@ class DateRangePicker extends StatelessWidget {
               ),
             ],
           ),
+          actionsAlignment: MainAxisAlignment.end,
+          actionsOverflowButtonSpacing: 8,
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           actions: [
             TextButton(
               onPressed: () {
@@ -154,17 +167,7 @@ class DateRangePicker extends StatelessWidget {
           initialDate: date ?? DateTime.now(),
           firstDate: DateTime(2020),
           lastDate: DateTime(2030),
-          builder: (context, child) {
-            return Theme(
-              data: ThemeData.dark().copyWith(
-                colorScheme: ColorScheme.dark(
-                  primary: AppTheme.info,
-                  surface: AppTheme.raisedSurface,
-                ),
-              ),
-              child: child!,
-            );
-          },
+          builder: AppTheme.pickerOverlay,
         );
         if (picked != null) {
           onDateSelected(picked);

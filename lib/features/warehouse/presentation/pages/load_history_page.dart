@@ -15,7 +15,11 @@ class LoadHistoryPage extends StatefulWidget {
   State<LoadHistoryPage> createState() => _LoadHistoryPageState();
 }
 
-class _LoadHistoryPageState extends State<LoadHistoryPage> {
+class _LoadHistoryPageState extends State<LoadHistoryPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   List<LoadHistoryEntry> _entries = [];
   List<VehicleConfig> _vehicles = [];
   bool _loading = true;
@@ -149,18 +153,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
           ? DateTimeRange(start: _dateFrom!, end: _dateTo!)
           : null,
       locale: const Locale('es', 'ES'),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: ColorScheme.dark(
-              primary: AppTheme.info,
-              onPrimary: AppTheme.textPrimary,
-              surface: AppTheme.raisedSurface,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      builder: AppTheme.pickerOverlay,
     );
     if (range != null) {
       setState(() {
@@ -179,6 +172,7 @@ class _LoadHistoryPageState extends State<LoadHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return WarehouseUi.pageShell(
       child: SafeArea(
         child: Column(

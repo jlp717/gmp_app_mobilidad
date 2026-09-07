@@ -1275,9 +1275,95 @@ function createRepartoFinanceDb2Repository(options = {}) {
     },
 
     async validateCobroDocument(input, conn = null) {
+      const docWhere = `
+        CPC.SUBEMPRESAALBARAN = ?
+        AND CPC.EJERCICIOALBARAN = ?
+        AND TRIM(CPC.SERIEALBARAN) = ?
+        AND CPC.TERMINALALBARAN = ?
+        AND CPC.NUMEROALBARAN = ?
+        AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?
+        AND TRIM(OPP.CODIGOREPARTIDOR) = ?
+      `;
+      const lacWhere = `
+        L.EJERCICIOALBARAN = ?
+        AND TRIM(L.SERIEALBARAN) = ?
+        AND L.TERMINALALBARAN = ?
+        AND L.NUMEROALBARAN = ?
+        AND TRIM(L.CODIGOCLIENTEALBARAN) = ?
+      `;
       const sql = `
         SELECT COUNT(*) AS ERP_DOCUMENT_ROWS,
-               COALESCE(SUM(CVC.IMPORTEPENDIENTE), 0) AS ERP_IMPORTEPENDIENTE
+               COALESCE(SUM(CVC.IMPORTEPENDIENTE), 0) AS ERP_IMPORTEPENDIENTE,
+               (
+                 SELECT COALESCE(MAX(CPC.IMPORTETOTAL), 0)
+                 FROM ${erpDataSchema}.CPC CPC
+                 INNER JOIN ${erpDataSchema}.OPP OPP
+                   ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+                   AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
+                 WHERE ${docWhere}
+               ) AS ERP_CPC_TOTAL,
+               (
+                 SELECT COALESCE(MAX(CAC.IMPORTETOTAL), 0)
+                 FROM ${erpDataSchema}.CPC CPC
+                 INNER JOIN ${erpDataSchema}.OPP OPP
+                   ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+                   AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
+                 LEFT JOIN ${erpDataSchema}.CAC CAC
+                   ON CAC.SUBEMPRESAALBARAN = CPC.SUBEMPRESAALBARAN
+                  AND CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                  AND TRIM(CAC.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
+                  AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
+                  AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
+                 WHERE ${docWhere}
+               ) AS ERP_CAC_TOTAL,
+               (
+                 SELECT COALESCE(MAX(CPC.IMPORTEBASEIMPONIBLE1), 0)
+                      + COALESCE(MAX(CPC.IMPORTEBASEIMPONIBLE2), 0)
+                      + COALESCE(MAX(CPC.IMPORTEBASEIMPONIBLE3), 0)
+                 FROM ${erpDataSchema}.CPC CPC
+                 INNER JOIN ${erpDataSchema}.OPP OPP
+                   ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+                   AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
+                 WHERE ${docWhere}
+               ) AS ERP_CPC_NETO_SUM,
+               (
+                 SELECT COALESCE(MAX(CPC.IMPORTEIVA1), 0)
+                      + COALESCE(MAX(CPC.IMPORTEIVA2), 0)
+                      + COALESCE(MAX(CPC.IMPORTEIVA3), 0)
+                 FROM ${erpDataSchema}.CPC CPC
+                 INNER JOIN ${erpDataSchema}.OPP OPP
+                   ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+                   AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
+                 WHERE ${docWhere}
+               ) AS ERP_CPC_IVA_SUM,
+               (
+                 SELECT COALESCE(SUM(L.IMPORTEVENTA), 0)
+                 FROM ${erpDataSchema}.LAC L
+                 WHERE ${lacWhere}
+               ) AS ERP_LAC_LINE_SUM,
+               (
+                 SELECT COALESCE(SUM(
+                   CASE
+                     WHEN COALESCE(L.CANTIDADUNIDADES, 0) > 0
+                       OR COALESCE(L.CANTIDADENVASES, 0) > 0 THEN 1
+                     ELSE 0
+                   END
+                 ), 0)
+                 FROM ${erpDataSchema}.LAC L
+                 WHERE ${lacWhere}
+               ) AS ERP_LAC_QTY_LINES,
+               (
+                 SELECT COALESCE(SUM(
+                   CASE
+                     WHEN (COALESCE(L.CANTIDADUNIDADES, 0) > 0
+                       OR COALESCE(L.CANTIDADENVASES, 0) > 0)
+                       AND COALESCE(L.IMPORTEVENTA, 0) = 0 THEN 1
+                     ELSE 0
+                   END
+                 ), 0)
+                 FROM ${erpDataSchema}.LAC L
+                 WHERE ${lacWhere}
+               ) AS ERP_LAC_ZERO_PRICE_LINES
         FROM ${erpDataSchema}.CVC CVC
         WHERE TRIM(CVC.TIPODOCUMENTO) = ?
           AND TRIM(CVC.ORIGENDOCUMENTO) = ?
@@ -1303,10 +1389,35 @@ function createRepartoFinanceDb2Repository(options = {}) {
               AND TRIM(OPP.CODIGOREPARTIDOR) = ?
           )
       `;
+      const subempresa = input.subempresaDocumento || 'GMP';
+      const origen = input.origenDocumento || 'B';
+      const docParams = [
+        subempresa,
+        input.ejercicioDocumento,
+        input.serieDocumento,
+        input.terminalDocumento,
+        input.numeroDocumento,
+        input.codigoCliente,
+        input.codigoRepartidor,
+      ];
+      const lacParams = [
+        input.ejercicioDocumento,
+        input.serieDocumento,
+        input.terminalDocumento,
+        input.numeroDocumento,
+        input.codigoCliente,
+      ];
       const params = [
+        ...docParams,
+        ...docParams,
+        ...docParams,
+        ...docParams,
+        ...lacParams,
+        ...lacParams,
+        ...lacParams,
         normalizeTipoDocumento(input.tipoDocumento),
-        input.origenDocumento || 'B',
-        input.subempresaDocumento || 'GMP',
+        origen,
+        subempresa,
         input.ejercicioDocumento,
         input.serieDocumento,
         input.terminalDocumento,

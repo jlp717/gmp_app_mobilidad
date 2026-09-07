@@ -32,6 +32,20 @@ class RuteroOrdenSchemaError extends Error {
   }
 }
 
+class RuteroOrderReadTimeoutError extends Error {
+  constructor() {
+    super('La lectura del orden de rutero excedio el tiempo maximo');
+    this.name = 'RuteroOrderReadTimeoutError';
+    this.code = 'RUTERO_ORDER_READ_TIMEOUT';
+    this.statusCode = 503;
+  }
+}
+
+const ORDER_READ_TIMEOUT_MS = 8000;
+const ORDER_READ_SQL = 'SELECT DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY'
+  + ' FROM %TABLE% WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ?'
+  + ' ORDER BY ORDEN ASC, DOCUMENT_ID ASC WITH UR';
+
 function resolveOrderTable(env = process.env) {
   const runtime = resolveRepartoRuntime(env);
   const table = runtime?.tables?.routing?.order;
@@ -47,22 +61,39 @@ function resolveOrderTable(env = process.env) {
   return table;
 }
 
+async function withDedicatedConnection(work, timeoutMs = 0) {
+  const connection = await acquireConfiguredConnection();
+  let timer = null;
+  let timedOut = false;
+  const run = Promise.resolve().then(() => work(connection));
+  try {
+    if (!timeoutMs) return await run;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        reject(new RuteroOrderReadTimeoutError());
+      }, timeoutMs);
+    });
+    return await Promise.race([run, timeout]);
+  } catch (error) {
+    if (timedOut) run.catch(() => { /* query aborted by close() */ });
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+    try { await connection.close(); } catch (_) { /* best effort */ }
+  }
+}
+
+async function queryOrderRows(connection, sql, params) {
+  const result = typeof connection.query === 'function'
+    ? await connection.query(sql, params)
+    : await connection.execute(sql, params);
+  return rowsOf(result);
+}
+
 async function listOrder(repartidorId, fechaRuta, env = process.env) {
-  const table = resolveOrderTable(env);
-  const rows = await queryWithParams(
-    `SELECT DOCUMENT_ID, CLIENTE_CODIGO, ORDEN
-     FROM ${table}
-     WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ?
-     ORDER BY ORDEN ASC, DOCUMENT_ID ASC`,
-    [repartidorId, fechaRuta],
-    false,
-    false,
-  );
-  return (rows || []).map((row) => ({
-    documentId: String(row.DOCUMENT_ID || '').trim(),
-    cliente: String(row.CLIENTE_CODIGO || '').trim() || null,
-    posicion: Number(row.ORDEN),
-  }));
+  const state = await readOrderState(repartidorId, fechaRuta, env);
+  return state.orden;
 }
 
 function rowsOf(result) { return Array.isArray(result) ? result : (result?.rows || []); }
@@ -70,7 +101,11 @@ function orderFromRows(rows) { return rows.map((row) => ({ documentId: String(ro
 function revisionForRows(rows) { return Buffer.from(JSON.stringify(rows.map((row) => [String(row.DOCUMENT_ID || row.document_id || '').trim(), String(row.CLIENTE_CODIGO || row.cliente_codigo || '').trim(), Number(row.ORDEN ?? row.orden ?? 0), String(row.UPDATED_AT || row.updated_at || ''), String(row.UPDATED_BY || row.updated_by || '')]))).toString('base64url'); }
 async function readOrderState(repartidorId, fechaRuta, env = process.env) {
   const table = resolveOrderTable(env);
-  const rows = await queryWithParams(`SELECT DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY FROM ${table} WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ? ORDER BY ORDEN ASC, DOCUMENT_ID ASC`, [repartidorId, fechaRuta], false, false);
+  const sql = ORDER_READ_SQL.replace('%TABLE%', table);
+  const rows = await withDedicatedConnection(
+    (connection) => queryOrderRows(connection, sql, [repartidorId, fechaRuta]),
+    ORDER_READ_TIMEOUT_MS,
+  );
   return { orden: orderFromRows(rows || []), revision: revisionForRows(rows || []) };
 }
 async function replaceOrder(repartidorId, fechaRuta, orden, updatedBy, baseRevision, env = process.env) {
@@ -293,6 +328,7 @@ module.exports = {
   RuteroOrderConflictError,
   RuteroOrderTransactionError,
   RuteroOrdenSchemaError,
+  RuteroOrderReadTimeoutError,
   resolveOrderTable,
   listOrder,
   readOrderState,

@@ -17,6 +17,7 @@ const {
   buildLaclaeBoundedClientCodesSql,
   buildClientVendorParamFilter,
 } = require('../utils/common');
+const { parsePage, paginationContract, db2OffsetFetch } = require('../src/utils/pagination');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const { getClientDays } = require('../services/laclae');
@@ -157,13 +158,14 @@ function isForceRefreshRequest(req) {
 const getClientsHandler = async (req, res) => {
   const startTime = Date.now();
   try {
-    let { vendedorCodes, search, limit = 100, offset = 0 } = req.query;
+    let { vendedorCodes, search, limit, offset } = req.query;
     const scoped = resolveClientsVendedorCodes(req, vendedorCodes);
     if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
     vendedorCodes = scoped.vendedorCodes;
     const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
-    const safeLimit = boundedInt(limit, 1, 200, 100);
-    const safeOffset = boundedInt(offset, 0, 100000, 0);
+    const page = parsePage({ limit, offset }, { defaultLimit: 100, maxLimit: 200, maxOffset: 100000 });
+    const safeLimit = page.limit;
+    const safeOffset = page.offset;
     const safeSearch = normalizeClientSearch(search);
     const isSearchQuery = safeSearch.length > 0;
     const searchClause = buildClientSearchFilter(safeSearch, 'C');
@@ -264,8 +266,7 @@ const getClientsHandler = async (req, res) => {
         ${clientCodesFilter || vendorScopedCliFilter}
         ${searchClause.clause}
       ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
-      OFFSET ${safeOffset} ROWS
-      FETCH FIRST ${safeLimit} ROWS ONLY
+      ${db2OffsetFetch(page)}
     `, {
       cacheKey,
       ttl: cacheTTL,
@@ -305,32 +306,16 @@ const getClientsHandler = async (req, res) => {
         const cachedDays = getClientDays(assignedVendor, c.CODE?.trim());
 
         if (cachedDays) {
-          // Cache hit - use robust data
           visitDays = cachedDays.visitDays;
           visitDaysShort = cachedDays.visitDaysShort;
           deliveryDays = cachedDays.deliveryDays;
           deliveryDaysShort = cachedDays.deliveryDaysShort;
 
-          // If we found the client in a vendor's cache but had no vendor in SQL (no sales), update it
           if (!assignedVendor && cachedDays.foundVendor) {
             assignedVendor = cachedDays.foundVendor;
           }
-        } else {
-          // Fallback to SQL columns (Legacy)
-          if (c.VISL === 'S') { visitDays.push('lunes'); visitDaysShort += 'L'; }
-          if (c.VISM === 'S') { visitDays.push('martes'); visitDaysShort += 'M'; }
-          if (c.VISX === 'S') { visitDays.push('miercoles'); visitDaysShort += 'X'; }
-          if (c.VISJ === 'S') { visitDays.push('jueves'); visitDaysShort += 'J'; }
-          if (c.VISV === 'S') { visitDays.push('viernes'); visitDaysShort += 'V'; }
-          if (c.VISS === 'S') { visitDays.push('sabado'); visitDaysShort += 'S'; }
-
-          if (c.DELL === 'S') { deliveryDays.push('lunes'); deliveryDaysShort += 'L'; }
-          if (c.DELM === 'S') { deliveryDays.push('martes'); deliveryDaysShort += 'M'; }
-          if (c.DELX === 'S') { deliveryDays.push('miercoles'); deliveryDaysShort += 'X'; }
-          if (c.DELJ === 'S') { deliveryDays.push('jueves'); deliveryDaysShort += 'J'; }
-          if (c.DELV === 'S') { deliveryDays.push('viernes'); deliveryDaysShort += 'V'; }
-          if (c.DELS === 'S') { deliveryDays.push('sabado'); deliveryDaysShort += 'S'; }
         }
+        // Dias de visita viven en DSEDAC.CDVI (cache laclae), no en columnas VISL de este SELECT.
 
         return {
           code: c.CODE?.trim(),
@@ -359,14 +344,15 @@ const getClientsHandler = async (req, res) => {
           deliveryDaysShort: deliveryDaysShort
         };
       }),
-      hasMore: clients.length === safeLimit
+      hasMore: clients.length === safeLimit,
+      pagination: paginationContract(page, clients),
     });
 
     const totalDuration = Date.now() - startTime;
     logger.info(`[CLIENTS] Total response time: ${totalDuration}ms for ${clients.length} clients`);
 
   } catch (error) {
-    handleRouteError(error, res, 'Error obteniendo clientes', 500);
+    handleRouteError(error, res, 'Error obteniendo clientes', 500, { code: 'CLIENTS_LIST_ERROR' });
   }
 };
 
@@ -761,7 +747,7 @@ router.get('/:code/notes', verifyToken, async (req, res) => {
         )
       `, false);
     } catch (e) {
-      // Table may already exist
+      logger.warn(`[CLIENTS] CLIENT_NOTES ensure table: ${e.message}`);
     }
 
     const result = await queryWithParams(`
@@ -781,7 +767,7 @@ router.get('/:code/notes', verifyToken, async (req, res) => {
     }
   } catch (error) {
     logger.error(`Get notes error: ${error.message}`);
-    res.status(500).json({ error: 'Error obteniendo notas' });
+    handleRouteError(error, res, 'Error obteniendo notas', 500, { code: 'CLIENTS_NOTES_ERROR' });
   }
 });
 
@@ -808,7 +794,7 @@ router.put('/:code/notes', verifyToken, async (req, res) => {
         )
       `, false);
     } catch (e) {
-      // Table may already exist
+      logger.warn(`[CLIENTS] CLIENT_NOTES ensure table: ${e.message}`);
     }
 
     // UPSERT: Update if exists, insert if not (MERGE statement for DB2)
@@ -852,7 +838,8 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
     const safeFamily3 = family3 ? family3.replace(/[^a-zA-Z0-9]/g, '') : null;
     const parsedLevel = Number.parseInt(groupLevel, 10);
     const level = [1, 2, 3, 13].includes(parsedLevel) ? parsedLevel : 1;
-    const safeLimit = boundedInt(limit, 1, 300, 100);
+    const page = parsePage({ limit }, { defaultLimit: 100, maxLimit: 300 });
+    const safeLimit = page.limit;
     const vendedorFilter = buildVendedorParamFilter(vendedorCodes, 'L.CODIGOVENDEDOR');
 
     const whereParts = [
@@ -890,7 +877,7 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
       WHERE ${whereParts.join(' AND ')}
       GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO, L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, L.CODIGOVENDEDOR
       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
-      FETCH FIRST ${safeLimit} ROWS ONLY
+      ${db2OffsetFetch(page)}
     `, params, false);
 
     res.json({
@@ -903,12 +890,13 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
         amount: formatCurrency(p.AMOUNT),
         margin: formatCurrency(p.MARGIN),
         vendedor: p.VENDEDOR?.trim()
-      }))
+      })),
+      pagination: paginationContract(page, products),
     });
 
   } catch (error) {
     logger.error(`Products by family error: ${error.message}`);
-    handleRouteError(error, res, 'Error obteniendo productos por familia', 500);
+    handleRouteError(error, res, 'Error obteniendo productos por familia', 500, { code: 'CLIENTS_FAMILY_PRODUCTS_ERROR' });
   }
 });
 
@@ -929,8 +917,9 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
     }
     const parsedFamilyLevel = Number.parseInt(groupByFamily, 10) || 0;
     const familyLevel = [0, 1, 2, 3, 13].includes(parsedFamilyLevel) ? parsedFamilyLevel : 0;
-    const safeLimit = boundedInt(limit, 1, 300, 50);
-    const safeOffset = boundedInt(offset, 0, 100000, 0);
+    const page = parsePage({ limit, offset }, { defaultLimit: 50, maxLimit: 300, maxOffset: 100000 });
+    const safeLimit = page.limit;
+    const safeOffset = page.offset;
     const vendedorFilter = buildVendedorParamFilter(vendedorCodes, 'CODIGOVENDEDOR');
 
     let sales;
@@ -952,8 +941,7 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
           AND SERIEALBARAN NOT IN ('N', 'Z')
           ${vendedorFilter.clause}
         ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
-        OFFSET ${safeOffset} ROWS
-        FETCH FIRST ${safeLimit} ROWS ONLY
+        ${db2OffsetFetch(page)}
       `, [safeClientCode, MIN_YEAR, ...vendedorFilter.params], false);
       hasMore = sales.length === safeLimit;
 
@@ -969,7 +957,8 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
           vendedor: s.VENDEDOR?.trim()
         })),
         hasMore,
-        grouped: false
+        grouped: false,
+        pagination: paginationContract(page, sales),
       });
     } else {
       // Group by family level(s)
@@ -1012,7 +1001,7 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
           ${groupedVendorFilter.clause}
         GROUP BY ${groupByClause}
         ORDER BY amount DESC
-        FETCH FIRST ${safeLimit} ROWS ONLY
+        ${db2OffsetFetch(page)}
       `, [safeClientCode, MIN_YEAR, ...groupedVendorFilter.params], false);
 
       res.json({
@@ -1032,13 +1021,14 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
         }),
         hasMore: false,
         grouped: true,
-        groupLevel: familyLevel
+        groupLevel: familyLevel,
+        pagination: paginationContract(page, sales),
       });
     }
 
   } catch (error) {
     logger.error(`Client history error: ${error.message}`);
-    handleRouteError(error, res, 'Error obteniendo historial', 500);
+    handleRouteError(error, res, 'Error obteniendo historial', 500, { code: 'CLIENTS_SALES_HISTORY_ERROR' });
   }
 });
 

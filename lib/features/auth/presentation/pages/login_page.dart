@@ -556,8 +556,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             // Login button
             Consumer(
               builder: (context, ref, _) {
-                final authState = ref.watch(authProvider);
-                final isLoading = authState.isLoading;
+                final isLoading =
+                    ref.watch(authProvider.select((s) => s.isLoading));
                 return MouseRegion(
                   onEnter: (_) => setState(() => _isButtonHovered = true),
                   onExit: (_) => setState(() => _isButtonHovered = false),

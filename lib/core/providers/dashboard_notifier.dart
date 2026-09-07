@@ -372,30 +372,41 @@ final dashboardProvider =
 // ============================================================
 
 final dashboardMetricsProvider = Provider<DashboardMetrics?>((ref) {
-  return ref.watch(dashboardProvider).value?.metrics;
+  return ref.watch(dashboardProvider.select((async) => async.value?.metrics));
 });
 
 final dashboardRecentSalesProvider = Provider<List<RecentSale>>((ref) {
-  return ref.watch(dashboardProvider).value?.recentSales ?? [];
+  return ref.watch(
+    dashboardProvider.select((async) => async.value?.recentSales ?? const []),
+  );
 });
 
 final dashboardSalesEvolutionProvider =
     Provider<List<SalesEvolutionPoint>>((ref) {
-  return ref.watch(dashboardProvider).value?.salesEvolution ?? [];
+  return ref.watch(
+    dashboardProvider
+        .select((async) => async.value?.salesEvolution ?? const []),
+  );
 });
 
 final dashboardTopProductsProvider = Provider<List<TopProduct>>((ref) {
-  return ref.watch(dashboardProvider).value?.topProducts ?? [];
+  return ref.watch(
+    dashboardProvider.select((async) => async.value?.topProducts ?? const []),
+  );
 });
 
 final dashboardTopClientsProvider = Provider<List<TopClient>>((ref) {
-  return ref.watch(dashboardProvider).value?.topClients ?? [];
+  return ref.watch(
+    dashboardProvider.select((async) => async.value?.topClients ?? const []),
+  );
 });
 
 final dashboardLoadingProvider = Provider<bool>((ref) {
-  return ref.watch(dashboardProvider).isLoading;
+  return ref.watch(dashboardProvider.select((async) => async.isLoading));
 });
 
 final dashboardHasDataProvider = Provider<bool>((ref) {
-  return ref.watch(dashboardProvider).value?.hasData ?? false;
+  return ref.watch(
+    dashboardProvider.select((async) => async.value?.hasData ?? false),
+  );
 });

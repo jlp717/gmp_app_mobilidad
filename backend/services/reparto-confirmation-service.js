@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { allowsEmptyPlannedLines, PRICING_STATE } = require('./delivery-amount-resolver');
+const { resolveDocumentCollectable } = require('./delivery-cobro-availability');
 const { invalidateCachePattern } = require('./redis-cache');
 const logger = require('../middleware/logger');
 
@@ -250,7 +251,13 @@ function assertPayment(planned, command, actualLines, document) {
   if (!command.cobro) return null;
   const input = command.cobro;
 
-  const amountPending = roundMoney(planned.importePendiente);
+  const erpPending = roundMoney(planned.importePendiente);
+  const collectable = resolveDocumentCollectable({
+    cvcState: planned.financialDocumentState,
+    cvcPending: erpPending,
+    documentAmount: planned.importeTotal,
+  });
+  const amountPending = collectable.importeDisponibleCobro;
   const amountByDeliveredLines = actualLines.every((line) => line.precioUnitario !== null)
     ? roundMoney(actualLines.reduce(
       (sum, line) => sum + (line.cantidadEntregada * line.precioUnitario),
@@ -286,7 +293,7 @@ function assertPayment(planned, command, actualLines, document) {
     xdeDocumento: Number(document.xde),
     dexDocumento: Number(document.dex),
     importeCobrado: amount,
-    importePendiente: roundMoney(amountPending - amount),
+    importePendiente: roundMoney(Math.max(amountPending - amount, 0)),
     formaPago: normalizeText(input.formaPago).toUpperCase(),
     pantallaOrigen: 'RUTERO',
     operador: normalizeText(command.actor.userId),

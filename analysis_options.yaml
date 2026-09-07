@@ -1,10 +1,15 @@
 include: package:very_good_analysis/analysis_options.yaml
 
+# custom_lint (tool/gmp_custom_lints) no se activa: hive_generator pincha
+# analyzer <7 vs custom_lint. Gate equivalente: npm run check:domain
+# (scripts/check_domain_imports.mjs).
+
 analyzer:
   exclude:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
     - "**/*.gr.dart"
+    - "**/*.mocks.dart"
     - "lib/generated/**"
 
   language:

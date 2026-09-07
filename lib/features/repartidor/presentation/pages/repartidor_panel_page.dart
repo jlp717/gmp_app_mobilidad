@@ -53,7 +53,10 @@ class _PanelLoadResult<T> {
   final Object? error;
 }
 
-class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
+class _RepartidorPanelPageState extends State<RepartidorPanelPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   bool _isLoading = true;
   bool _isPartial = false;
   bool _isEmpty = false;
@@ -158,6 +161,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
       body: Column(

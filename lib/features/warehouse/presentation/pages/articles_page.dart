@@ -17,7 +17,10 @@ class ArticlesPage extends StatefulWidget {
   State<ArticlesPage> createState() => _ArticlesPageState();
 }
 
-class _ArticlesPageState extends State<ArticlesPage> {
+class _ArticlesPageState extends State<ArticlesPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   List<ArticleDimension> _articles = [];
   bool _loading = false;
   bool _onlyWithDims = false;
@@ -209,6 +212,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return WarehouseUi.pageShell(
       child: SafeArea(
         child: Column(

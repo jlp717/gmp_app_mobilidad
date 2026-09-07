@@ -283,7 +283,19 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, child) {
-        final planner = ref.watch(loadPlannerProvider);
+        ref.watch(
+          loadPlannerProvider.select(
+            (p) => (
+              p.truck,
+              p.placedBoxes.length,
+              p.overflowBoxes.length,
+              p.selectedBoxIndex,
+              p.viewMode,
+              p.colorMode,
+            ),
+          ),
+        );
+        final planner = ref.read(loadPlannerProvider);
         // Push state changes to JS when provider updates
         if (_sceneReady && planner.truck != null) {
           // Use post-frame callback to avoid calling JS during build
@@ -305,8 +317,8 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(color: AppTheme.info),
-                      SizedBox(height: 16),
+                      const CircularProgressIndicator(color: AppTheme.info),
+                      const SizedBox(height: 16),
                       Text(
                         'Cargando escena 3D...',
                         style: TextStyle(

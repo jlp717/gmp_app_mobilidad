@@ -37,7 +37,10 @@ class ComercialLiquidacionDiariaPage extends ConsumerStatefulWidget {
 }
 
 class _ComercialLiquidacionDiariaPageState
-    extends ConsumerState<ComercialLiquidacionDiariaPage> {
+    extends ConsumerState<ComercialLiquidacionDiariaPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final _formKey = GlobalKey<FormState>();
   final _ingresoBancoController = TextEditingController();
   final _entregadoController = TextEditingController();
@@ -93,6 +96,7 @@ class _ComercialLiquidacionDiariaPageState
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final draft = _draft;
     final status = _LiquidacionStatus.fromDraft(
       draft,

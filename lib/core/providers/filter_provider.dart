@@ -66,5 +66,5 @@ final filterProvider = NotifierProvider<FilterNotifier, FilterState>(
 // ── Selectors ────────────────────────────────────────────────────────────────
 
 final selectedVendorProvider = Provider<String?>((ref) {
-  return ref.watch(filterProvider).selectedVendor;
+  return ref.watch(filterProvider.select((s) => s.selectedVendor));
 });

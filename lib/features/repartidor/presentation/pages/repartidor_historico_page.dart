@@ -145,7 +145,11 @@ class RepartidorHistoricoPage extends StatefulWidget {
       _RepartidorHistoricoPageState();
 }
 
-class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
+class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _docSearchController = TextEditingController();
   bool _isLoading = false;
@@ -699,6 +703,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
@@ -3746,15 +3751,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
       initialDateRange: _dateFrom != null && _dateTo != null
           ? DateTimeRange(start: _dateFrom!, end: _dateTo!)
           : null,
-      builder: (context, child) => Theme(
-        data: ThemeData.dark().copyWith(
-          colorScheme: ColorScheme.dark(
-            onPrimary: AppColors.themedWhite,
-            surface: AppTheme.raisedSurface,
-          ),
-        ),
-        child: child!,
-      ),
+      builder: AppTheme.pickerOverlay,
     );
 
     if (picked != null) {

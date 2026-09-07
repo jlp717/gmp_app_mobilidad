@@ -28,7 +28,10 @@ class ChatbotPage extends ConsumerStatefulWidget {
 }
 
 class _ChatbotPageState extends ConsumerState<ChatbotPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   static final _background = AppTheme.inkSurface;
   static final _surface = AppTheme.raisedSurface;
   static final _surfaceRaised = AppTheme.softPanel;
@@ -347,13 +350,18 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
 
   @override
   Widget build(BuildContext context) {
-    // Check role for custom message
-    final authState = ref.watch(authProvider).value;
-    _restoreSessionFor(
-      authState?.user?.code ?? authState?.user?.vendedorCode,
+    super.build(context);
+    final authSlice = ref.watch(
+      authProvider.select(
+        (s) => (
+          s.value?.user?.code,
+          s.value?.user?.vendedorCode,
+          s.value?.user?.isDirector ?? false,
+        ),
+      ),
     );
-    final isJefe = (authState?.user?.isDirector ?? false) ||
-        widget.vendedorCodes.length > 1;
+    _restoreSessionFor(authSlice.$1 ?? authSlice.$2);
+    final isJefe = authSlice.$3 || widget.vendedorCodes.length > 1;
 
     final chatbotState = ref.watch(chatbotProvider.select((state) => (
           state.isLoading,

@@ -64,7 +64,16 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, _) {
-        final planner = ref.watch(loadPlannerProvider);
+        ref.watch(
+          loadPlannerProvider.select(
+            (p) => (
+              p.placedBoxes,
+              p.overflowBoxes,
+              p.excludedOrders,
+            ),
+          ),
+        );
+        final planner = ref.read(loadPlannerProvider);
         return Container(
           decoration: WarehouseUi.executiveSurface(
             accent: AppTheme.info,

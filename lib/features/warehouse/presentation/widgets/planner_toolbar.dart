@@ -18,7 +18,19 @@ class PlannerToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, _) {
-        final planner = ref.watch(loadPlannerProvider);
+        final planner = ref.watch(
+          loadPlannerProvider.select(
+            (p) => (
+              viewMode: p.viewMode,
+              colorMode: p.colorMode,
+              isOptimizing: p.isOptimizing,
+              canUndo: p.canUndo,
+              canRedo: p.canRedo,
+              hasManualChanges: p.hasManualChanges,
+              hasBoxes: p.placedBoxes.isNotEmpty,
+            ),
+          ),
+        );
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: WarehouseUi.executiveSurface(
@@ -66,7 +78,7 @@ class PlannerToolbar extends StatelessWidget {
                   },
                 ),
 
-                const Spacer(),
+                const SizedBox(width: 12),
 
                 // Profit optimizer – glow on hover
                 _GlowToolButton(
@@ -85,7 +97,7 @@ class PlannerToolbar extends StatelessWidget {
                 _GlowToolButton(
                   icon: Icons.view_in_ar_rounded,
                   tooltip: 'Reordenar cajas (bin packing 3D)',
-                  enabled: onRepack != null && planner.placedBoxes.isNotEmpty,
+                  enabled: onRepack != null && planner.hasBoxes,
                   onPressed: () {
                     HapticFeedback.mediumImpact();
                     onRepack?.call();

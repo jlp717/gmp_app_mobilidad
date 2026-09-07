@@ -156,6 +156,10 @@ analyze_output*.txt
 build_output*.txt
 build_errors*.txt
 *.stackdump
+*.tmp
+*.bak
+*.orig
+/Sin*.canvas
 albaran_*.json
 Screenshot_*.jpg
 WhatsApp Image*.jpeg
@@ -241,6 +245,7 @@ V3_*.md
 # Backend temp directories
 backend/reports/
 backend/tmp/
+backend/kpi/tmp/
 backend/audit/
 backend/coverage/
 backend/test-results/

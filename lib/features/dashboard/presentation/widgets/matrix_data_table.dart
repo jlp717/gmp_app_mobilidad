@@ -148,6 +148,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
       );
     }
 
+    final flatRows = _flatRows();
+
     return Card(
       elevation: 0,
       shadowColor: AppColors.transparent,
@@ -240,13 +242,17 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               ),
             ),
 
-            // Tree List — one flat Column of rows (see _flatRows note).
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final row in _flatRows())
-                  RepaintBoundary(child: _buildNodeRow(row.key, row.value)),
-              ],
+            // Tree List — lazy rows; parent scroll view owns vertical physics.
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: flatRows.length,
+              itemBuilder: (context, index) {
+                final row = flatRows[index];
+                return RepaintBoundary(
+                  child: _buildNodeRow(row.key, row.value),
+                );
+              },
             ),
 
             // TOTAL ROW (ORANGE)
@@ -470,6 +476,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               child: Text(
                 CurrencyFormatter.format(node.sales),
                 textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: level == 0 ? 13 : 12,
@@ -484,6 +492,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               child: Text(
                 '${marginPercent.toStringAsFixed(1)}%',
                 textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: marginColor, fontSize: 11),
               ),
             ),
@@ -499,6 +509,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                   return Text(
                     displayOrders.toString(),
                     textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: hasChildren ? levelColor : AppTheme.textSecondary,
                       fontSize: 12,

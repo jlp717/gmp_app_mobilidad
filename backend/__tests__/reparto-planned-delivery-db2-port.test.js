@@ -131,7 +131,9 @@ describe('DB2 planned delivery read port', () => {
       financials: [financial(), financial({ XDEDOCUMENTO: 4 })],
     })).getPlannedDelivery('2026-A-2-42-CLI-01', 'REP-1');
     expect(missing).toMatchObject({ financialDocumentState: 'MISSING', financialDocument: null, importePendiente: 0 });
+    expect(missing.lineas).toHaveLength(1);
     expect(ambiguous).toMatchObject({ financialDocumentState: 'AMBIGUOUS', financialDocument: null, importePendiente: null });
+    expect(ambiguous.lineas).toHaveLength(1);
   });
 
   test('fails closed for invalid identity, source error, missing document and ambiguous four-part identity', async () => {

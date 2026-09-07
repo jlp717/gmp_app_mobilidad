@@ -645,6 +645,25 @@ router.post('/cobros', verifyToken, requireRepartidorAccess((req) => req.body.co
         code: error.code,
       });
     }
+    if (error && error.code === 'PAYMENT_EXCEEDS_OUTSTANDING') {
+      return res.status(409).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+        ...(error.details ? { details: error.details } : {}),
+      });
+    }
+    if (error && (
+      error.code === 'REPARTO_COBRO_IDEMPOTENCY_CONFLICT'
+      || error.code === 'REPARTO_COBRO_IDEMPOTENCY_RACE'
+      || error.code === 'REPARTO_COBRO_COMMERCIAL_CONFLICT'
+    )) {
+      return res.status(409).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
     return sendError(res, error, { action: 'POST /cobros', body: req.body });
   }
 });

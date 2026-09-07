@@ -3,6 +3,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
@@ -300,7 +301,7 @@ class RuteroDetailProducts extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  checked == total ? '✓ COMPLETO' : 'PENDIENTE',
+                  checked == total ? 'Completo' : 'Pendiente',
                   style: TextStyle(
                     color:
                         checked == total ? AppTheme.success : AppTheme.warning,
@@ -340,43 +341,87 @@ class RuteroDetailProducts extends StatelessWidget {
   Widget _buildConfirmButton(BuildContext context) {
     final allChecked = items.isNotEmpty &&
         items.every((item) => productChecked[ruteroLineKey(item)] ?? false);
+    final compact = Responsive.isSmall(context);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        border: Border(top: BorderSide(color: AppTheme.borderColor)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: onConfirmAll,
-              icon: Icon(
-                allChecked ? Icons.check_box : Icons.check_box_outline_blank,
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.raisedSurface,
+          border: Border(top: BorderSide(color: AppTheme.borderColor)),
+        ),
+        child: compact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: onConfirmAll,
+                    icon: Icon(
+                      allChecked
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                    ),
+                    label: Text(allChecked ? 'Desmarcar todo' : 'Marcar todo'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.info,
+                      side: BorderSide(
+                        color: AppTheme.info.withValues(alpha: 0.5),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton.icon(
+                    onPressed: onContinueToPayment,
+                    icon: const Icon(Icons.arrow_forward),
+                    label: const Text('Continuar al cobro'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.info,
+                      foregroundColor: AppColors.themedWhite,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onConfirmAll,
+                      icon: Icon(
+                        allChecked
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank,
+                      ),
+                      label:
+                          Text(allChecked ? 'Desmarcar todo' : 'Marcar todo'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.info,
+                        side: BorderSide(
+                          color: AppTheme.info.withValues(alpha: 0.5),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: onContinueToPayment,
+                      icon: const Icon(Icons.arrow_forward),
+                      label: const Text('Continuar'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.info,
+                        foregroundColor: AppColors.themedWhite,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              label: Text(allChecked ? 'DESMARCAR TODO' : 'MARCAR TODO'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.info,
-                side: BorderSide(color: AppTheme.info.withValues(alpha: 0.5)),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: onContinueToPayment,
-              icon: const Icon(Icons.arrow_forward),
-              label: const Text('CONTINUAR'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.info,
-                foregroundColor: AppColors.themedWhite,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -517,7 +562,7 @@ class _ProductCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Text(
-                  'MODIFICADO',
+                  'Modificado',
                   style: TextStyle(
                     color: AppTheme.warning,
                     fontSize: 8,

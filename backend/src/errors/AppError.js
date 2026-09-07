@@ -47,6 +47,12 @@ class ForbiddenError extends AppError {
     }
 }
 
+class ConflictError extends AppError {
+    constructor(message = 'Conflicto de idempotencia', options = {}) {
+        super(message, { statusCode: 409, code: options.code || 'CONFLICT', ...options });
+    }
+}
+
 function isAppError(error) {
     return error instanceof AppError;
 }
@@ -57,5 +63,6 @@ module.exports = {
     NotFoundError,
     DatabaseError,
     ForbiddenError,
+    ConflictError,
     isAppError,
 };

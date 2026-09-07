@@ -7,6 +7,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/api/isolate_transformer.dart';
+import 'package:gmp_app_mobilidad/core/api/json_map_cast.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/security/certificate_pinning.dart';
 import 'package:gmp_app_mobilidad/core/services/device_fingerprint.dart';
@@ -644,19 +645,18 @@ class ApiClient {
     return requestEpoch is int && requestEpoch != _authEpoch;
   }
 
-  /// Converts nested dynamic maps to string-keyed maps recursively.
-  /// Hive deserialization returns _Map<dynamic,dynamic> for nested objects;
-  /// a shallow Map.from() only fixes the top level.
-  static Map<String, dynamic> _deepCastMap(Map<Object?, Object?> src) {
-    return src.map((k, v) => MapEntry(k.toString(), _deepCastValue(v)));
-  }
-
-  static Object? _deepCastValue(Object? value) {
-    if (value is Map<Object?, Object?>) return _deepCastMap(value);
-    if (value is List<Object?>) {
-      return value.map(_deepCastValue).toList();
+  /// Converts nested dynamic maps to string-keyed maps.
+  /// Already-typed Dio maps skip the copy; bulky Hive maps go to an isolate.
+  static Future<Map<String, dynamic>> _castResponseMap(Object src) async {
+    if (src is Map<String, dynamic>) return src;
+    if (src is! Map) {
+      throw ApiException('Expected Map response but got ${src.runtimeType}');
     }
-    return value;
+    final dynamicMap = Map<dynamic, dynamic>.from(src);
+    if (isBulkyJsonMap(dynamicMap)) {
+      return compute(deepCastJsonMap, dynamicMap);
+    }
+    return deepCastJsonMap(dynamicMap);
   }
 
   static Options? _getOptionsForRead({
@@ -723,8 +723,8 @@ class ApiClient {
       if (effectiveCacheKey != null && !forceRefresh) {
         try {
           final cached = CacheService.get<Object?>(effectiveCacheKey);
-          if (cached is Map<Object?, Object?>) {
-            return _deepCastMap(cached);
+          if (cached is Map) {
+            return _castResponseMap(cached);
           }
         } catch (e) {
           // Continue to network request
@@ -742,15 +742,15 @@ class ApiClient {
           ),
         );
         final rawData = response.data;
-        if (rawData is! Map<Object?, Object?>) {
-          if (rawData is List) {
-            throw ApiException('Response is a List, use getList() instead');
-          }
+        if (rawData is List) {
+          throw ApiException('Response is a List, use getList() instead');
+        }
+        if (rawData is! Map) {
           throw ApiException(
             'Expected Map response but got ${rawData.runtimeType}',
           );
         }
-        final data = _deepCastMap(rawData);
+        final data = await _castResponseMap(rawData);
 
         // Cache the response if cacheKey provided
         if (effectiveCacheKey != null) {
@@ -768,8 +768,8 @@ class ApiClient {
               effectiveCacheKey,
               maxStale: maxStale,
             );
-            if (cached is Map<Object?, Object?>) {
-              return _deepCastMap(cached);
+            if (cached is Map) {
+              return _castResponseMap(cached);
             }
           } catch (_) {}
         }

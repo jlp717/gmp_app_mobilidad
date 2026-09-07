@@ -425,6 +425,53 @@ describe('repartidor-liquidacion-db2-repository', () => {
     expect(sql).not.toMatch(/\bDELETE\b|LIQUIDADO_SN|IDEMPOTENCY_KEY/i);
   });
 
+  test('lockBalance seeds a zero row when the driver has no saldo and catalog is verified', async () => {
+    const conn = connection();
+    const inner = conn.query.getMockImplementation();
+    let seeded = false;
+    conn.query.mockImplementation(async (sql, params) => {
+      if (sql.includes('SELECT SALDO_PENDIENTE') && sql.includes('FINANCIAL_BALANCES')) {
+        return seeded ? [{ SALDO_PENDIENTE: '0' }] : [];
+      }
+      if (/INSERT INTO .*FINANCIAL_BALANCES/i.test(sql)) {
+        expect(params).toEqual(['08', 0]);
+        seeded = true;
+        return [];
+      }
+      return inner(sql, params);
+    });
+    const repository = createRepartidorLiquidacionDb2Repository({
+      runtime: runtime(), connectionFactory: async () => conn,
+    });
+    await repository.withTransaction(async (tx) => {
+      await expect(tx.lockBalance({ repartidorId: '08' })).resolves.toEqual({ saldo: 0 });
+    });
+    expect(seeded).toBe(true);
+  });
+
+  test('lockBalance recovers when a concurrent seed hits SQL0803', async () => {
+    const conn = connection();
+    const inner = conn.query.getMockImplementation();
+    let selects = 0;
+    conn.query.mockImplementation(async (sql) => {
+      if (sql.includes('SELECT SALDO_PENDIENTE') && sql.includes('FINANCIAL_BALANCES')) {
+        selects += 1;
+        return selects === 1 ? [] : [{ SALDO_PENDIENTE: '0' }];
+      }
+      if (/INSERT INTO .*FINANCIAL_BALANCES/i.test(sql)) {
+        throw Object.assign(new Error('duplicate'), { sqlState: '23505' });
+      }
+      return inner(sql);
+    });
+    const repository = createRepartidorLiquidacionDb2Repository({
+      runtime: runtime(), connectionFactory: async () => conn,
+    });
+    await repository.withTransaction(async (tx) => {
+      await expect(tx.lockBalance({ repartidorId: '08' })).resolves.toEqual({ saldo: 0 });
+    });
+    expect(selects).toBe(2);
+  });
+
   test('rolls back and retries once on SQL0803/23505', async () => {
     const conn = connection({ uniqueOnce: true });
     const repository = createRepartidorLiquidacionDb2Repository({ runtime: runtime(), connectionFactory: async () => conn });

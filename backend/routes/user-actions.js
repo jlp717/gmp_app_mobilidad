@@ -9,10 +9,37 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
 
-// Log directory
 const LOG_DIR = path.join(__dirname, '../logs/user-actions');
+const ACTION_MAX = 80;
+const SCREEN_MAX = 80;
+
 if (!fs.existsSync(LOG_DIR)) {
     fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+
+function clip(value, max) {
+    return String(value || '').trim().slice(0, max);
+}
+
+function sanitizeLogBody(body = {}) {
+    return {
+        userId: clip(body.userId, 40),
+        action: clip(body.action, ACTION_MAX),
+        screen: clip(body.screen, SCREEN_MAX),
+        appVersion: clip(body.appVersion, 32),
+        deviceModel: clip(body.deviceModel || body.deviceInfo, 64),
+        osVersion: clip(body.osVersion, 32),
+    };
+}
+
+function sendLogError(res, error, code) {
+    logger.error(`[USER-ACTIONS] ${code}: ${error.message}`);
+    if (res.headersSent) return;
+    return res.status(500).json({
+        success: false,
+        code,
+        error: 'No se pudo registrar la actividad',
+    });
 }
 
 /**
@@ -21,38 +48,34 @@ if (!fs.existsSync(LOG_DIR)) {
  */
 router.post('/user-action', async (req, res) => {
     try {
-        const {
-            userId,
-            userEmail,
-            action,
-            screen,
-            metadata = {},
-            appVersion,
-            deviceInfo
-        } = req.body;
+        const action = clip(req.body?.action, ACTION_MAX);
+        const screen = clip(req.body?.screen, SCREEN_MAX);
+        if (!action || !screen) {
+            return res.status(400).json({
+                success: false,
+                code: 'INVALID_USER_ACTION',
+                error: 'action y screen son obligatorios',
+            });
+        }
 
+        const safe = sanitizeLogBody(req.body);
         const logEntry = {
             timestamp: new Date().toISOString(),
-            userId,
-            userEmail,
-            action,
-            screen,
-            metadata,
-            appVersion,
-            deviceInfo,
-            ip: req.ip || req.socket?.remoteAddress || 'unknown'
+            userId: safe.userId,
+            action: safe.action,
+            screen: safe.screen,
+            appVersion: safe.appVersion,
+            ip: req.ip || req.socket?.remoteAddress || 'unknown',
         };
 
-        // Write to daily log file (async to avoid blocking event loop)
         const dateStr = new Date().toISOString().split('T')[0];
         const logFile = path.join(LOG_DIR, `actions-${dateStr}.json`);
         await fsPromises.appendFile(logFile, JSON.stringify(logEntry) + '\n');
 
-        logger.info(`📱 Action: ${userId} → ${action} @ ${screen}`);
+        logger.info(`Action: ${safe.userId || 'anon'} → ${safe.action} @ ${safe.screen}`);
         res.json({ success: true });
     } catch (error) {
-        logger.error(`Logging error: ${error.message}`);
-        res.status(500).json({ error: error.message });
+        return sendLogError(res, error, 'USER_ACTION_LOG_ERROR');
     }
 });
 
@@ -62,34 +85,25 @@ router.post('/user-action', async (req, res) => {
  */
 router.post('/app-install', async (req, res) => {
     try {
-        const {
-            userId,
-            userEmail,
-            appVersion,
-            deviceModel,
-            osVersion
-        } = req.body;
-
+        const safe = sanitizeLogBody(req.body);
         const logEntry = {
             timestamp: new Date().toISOString(),
             event: 'APP_INSTALL',
-            userId,
-            userEmail,
-            appVersion,
-            deviceModel,
-            osVersion,
-            ip: req.ip
+            userId: safe.userId,
+            appVersion: safe.appVersion,
+            deviceModel: safe.deviceModel,
+            osVersion: safe.osVersion,
+            ip: req.ip || req.socket?.remoteAddress || 'unknown',
         };
 
         const dateStr = new Date().toISOString().split('T')[0];
         const logFile = path.join(LOG_DIR, `installs-${dateStr}.json`);
         await fsPromises.appendFile(logFile, JSON.stringify(logEntry) + '\n');
 
-        logger.info(`📲 NEW INSTALL: ${userEmail} v${appVersion} on ${deviceModel}`);
+        logger.info(`NEW INSTALL v${safe.appVersion || '?'} device=${safe.deviceModel || '?'}`);
         res.json({ success: true, registered: true });
     } catch (error) {
-        logger.error(`Install log error: ${error.message}`);
-        res.status(500).json({ error: error.message });
+        return sendLogError(res, error, 'APP_INSTALL_LOG_ERROR');
     }
 });
 
@@ -103,16 +117,20 @@ router.get('/stats', async (req, res) => {
         const actionsFile = path.join(LOG_DIR, `actions-${dateStr}.json`);
         const installsFile = path.join(LOG_DIR, `installs-${dateStr}.json`);
 
-        let actionsCount = 0, installsCount = 0, uniqueUsers = new Set();
+        let actionsCount = 0;
+        let installsCount = 0;
+        const uniqueUsers = new Set();
 
         if (fs.existsSync(actionsFile)) {
             const lines = (await fsPromises.readFile(actionsFile, 'utf8')).split('\n').filter(Boolean);
             actionsCount = lines.length;
-            lines.forEach(line => {
+            lines.forEach((line) => {
                 try {
                     const entry = JSON.parse(line);
                     if (entry.userId) uniqueUsers.add(entry.userId);
-                } catch (e) { }
+                } catch (parseErr) {
+                    logger.warn(`[USER-ACTIONS] stats skipped malformed line: ${parseErr.message}`);
+                }
             });
         }
         if (fs.existsSync(installsFile)) {
@@ -123,10 +141,10 @@ router.get('/stats', async (req, res) => {
             date: dateStr,
             actionsToday: actionsCount,
             installsToday: installsCount,
-            uniqueUsersToday: uniqueUsers.size
+            uniqueUsersToday: uniqueUsers.size,
         });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        return sendLogError(res, error, 'USER_ACTION_STATS_ERROR');
     }
 });
 

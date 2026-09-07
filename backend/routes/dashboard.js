@@ -31,7 +31,9 @@ const {
 } = require('../src/utils/dashboardScope');
 const {
     buildVendedorFilterParameterized,
-    buildVendedorFilterLACLAEParameterized
+    buildVendedorFilterLACLAEParameterized,
+    buildMonthFilterParameterized,
+    resolveMatrixFetchLimit,
 } = require('../src/utils/dashboardFilters');
 const {
     metricsController,
@@ -95,13 +97,13 @@ router.get('/metrics', verifyToken, (req, res, next) => metricsController(req, r
 
 router.get('/matrix-data', verifyToken, async (req, res) => {
     try {
-        let { vendedorCodes, groupBy = 'vendor', year, years, clientCodes, productCodes, familyCodes } = req.query;
+        let { vendedorCodes, groupBy = 'vendor', year, years, months, clientCodes, productCodes, familyCodes } = req.query;
         
         const scoped = resolveDashboardVendedorCodes(req, vendedorCodes);
         if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
         vendedorCodes = scoped.vendedorCodes;
         
-        const cacheKey = `dashboard:matrix:v3:${canonicalQueryKey(req.query, {
+        const cacheKey = `dashboard:matrix:v4:${canonicalQueryKey(req.query, {
             vendedorCodes: vendedorCodes || 'ALL',
             userRole: req.user?.role || '',
             userCode: req.user?.code || req.user?.id || ''
@@ -144,6 +146,9 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
 
         const vendedorResult = buildVendedorFilterParameterized(vendedorCodes);
         const vendedorParams = vendedorResult.params;
+        const monthResult = buildMonthFilterParameterized(months);
+        const monthParams = monthResult.params;
+        const rowLimit = resolveMatrixFetchLimit(groupBy, req.query.limit);
 
         let clientFilter = '';
         let clientParams = [];
@@ -256,15 +261,16 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
               WHERE 1=1
               AND ${LAC_SALES_FILTER}
               ${yearFilter}
+              ${monthResult.filter}
               ${vendedorResult.filter}
               ${clientFilter}
               ${productFilter}
               ${familyProductFilter}
             GROUP BY ${groupClauses.join(', ')}
             ORDER BY SUM(L.LCIMVT) DESC
-            FETCH FIRST 1000 ROWS ONLY
+            FETCH FIRST ${rowLimit} ROWS ONLY
         `;
-        const aggregateParams = [...yearParams, ...vendedorParams, ...clientParams, ...productParams, ...familyProductParams];
+        const aggregateParams = [...yearParams, ...monthParams, ...vendedorParams, ...clientParams, ...productParams, ...familyProductParams];
 
         logger.info(`[MATRIX] Full SQL (${aggregateSQL.replace(/\s+/g, ' ').length} chars)`);
 
@@ -404,9 +410,8 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
     } catch (error) {
         const odbcInfo = error.odbcErrors ? ` ODBC: ${JSON.stringify(error.odbcErrors)}` : '';
         logger.error(`Matrix data error: ${error.message}${odbcInfo}`);
-        res.status(500).json({
-            error: 'Error obteniendo datos matriciales',
-            detail: process.env.NODE_ENV !== 'production' ? error.message : undefined
+        return handleRouteError(error, res, 'Error obteniendo datos matriciales', 500, {
+            code: 'DASHBOARD_MATRIX_ERROR',
         });
     }
 });

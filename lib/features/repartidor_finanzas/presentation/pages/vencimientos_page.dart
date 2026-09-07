@@ -303,7 +303,10 @@ class RepartidorCobrosPage extends RepartidorVencimientosPage {
 }
 
 class _RepartidorVencimientosPageState
-    extends ConsumerState<RepartidorVencimientosPage> {
+    extends ConsumerState<RepartidorVencimientosPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   static const _pageSize = 100;
 
   final List<RepartidorVencimiento> _items = [];
@@ -502,6 +505,7 @@ class _RepartidorVencimientosPageState
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (widget.repartidorId.isEmpty) {
       return Scaffold(
         backgroundColor: AppTheme.inkSurface,

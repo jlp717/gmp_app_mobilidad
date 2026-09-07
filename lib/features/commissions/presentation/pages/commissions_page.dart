@@ -68,7 +68,11 @@ class CommissionsPage extends ConsumerStatefulWidget {
   ConsumerState<CommissionsPage> createState() => _CommissionsPageState();
 }
 
-class _CommissionsPageState extends ConsumerState<CommissionsPage> {
+class _CommissionsPageState extends ConsumerState<CommissionsPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   bool _isLoading = true;
   String? _error;
   Map<String, dynamic>? _data;
@@ -1504,6 +1508,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final commissionsHidden = ref.watch(
       authProvider.select(
         (state) => state.value?.user?.showCommissions == false,

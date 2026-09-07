@@ -39,7 +39,9 @@ void main() {
       AppColors.setBrightness(Brightness.dark);
     });
 
-    test('legacy white overlays adapt instead of becoming invisible in light mode', () {
+    test(
+        'legacy white overlays adapt instead of becoming invisible in light mode',
+        () {
       AppColors.setBrightness(Brightness.dark);
       expect(AppColors.themedWhite, equals(AppColors.systemWhite));
       expect(AppColors.themedWhite70.a, closeTo(0.70, 0.01));
@@ -49,6 +51,17 @@ void main() {
       expect(AppColors.themedWhite24.a, closeTo(0.24, 0.01));
 
       AppColors.setBrightness(Brightness.dark);
+    });
+
+    test('card and control fills stay light in light mode', () {
+      AppColors.setBrightness(Brightness.light);
+      expect(AppColors.themedCardFill, equals(AppColors.surface));
+      expect(AppColors.themedControlFill, equals(AppColors.surface));
+      expect(AppColors.themedMenuFill, equals(AppColors.surface));
+      expect(AppColors.themedCardFill, isNot(equals(AppColors.themedWhite)));
+
+      AppColors.setBrightness(Brightness.dark);
+      expect(AppColors.themedCardFill, equals(AppColors.raisedSurface));
     });
 
     test('neon colors are defined', () {

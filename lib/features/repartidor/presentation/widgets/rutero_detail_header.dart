@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:intl/intl.dart';
@@ -35,17 +36,20 @@ class RuteroDetailHeader extends StatelessWidget {
       };
 
   String get _terminalLabel => switch (albaran.estado) {
-        EstadoEntrega.entregado => 'ENTREGADO',
-        EstadoEntrega.parcial => 'ENTREGA PARCIAL',
-        EstadoEntrega.noEntregado => 'NO ENTREGADO',
-        EstadoEntrega.rechazado => 'RECHAZADO',
-        _ => 'CONFIRMADO',
+        EstadoEntrega.entregado => 'Entregado',
+        EstadoEntrega.parcial => 'Entrega parcial',
+        EstadoEntrega.noEntregado => 'No entregado',
+        EstadoEntrega.rechazado => 'Rechazado',
+        _ => 'Confirmado',
       };
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: Responsive.padding(context, small: 14, large: 20),
+        vertical: 12,
+      ),
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         border: Border(
@@ -166,8 +170,8 @@ class RuteroDetailHeader extends StatelessWidget {
           Flexible(
             child: Text(
               _isFactura
-                  ? 'FACTURA ${albaran.serieFactura.isNotEmpty ? "${albaran.serieFactura}-" : ""}${albaran.numeroFactura}'
-                  : 'ALBARÁN ${albaran.serie.isNotEmpty ? albaran.serie : "A"}${albaran.terminal > 0 ? "-${albaran.terminal}" : ""}-${albaran.numeroAlbaran}',
+                  ? 'Factura ${albaran.serieFactura.isNotEmpty ? "${albaran.serieFactura}-" : ""}${albaran.numeroFactura}'
+                  : 'Albarán ${albaran.serie.isNotEmpty ? albaran.serie : "A"}${albaran.terminal > 0 ? "-${albaran.terminal}" : ""}-${albaran.numeroAlbaran}',
               style: TextStyle(
                 color: badgeColor,
                 fontWeight: FontWeight.bold,
@@ -220,12 +224,12 @@ class RuteroDetailHeader extends StatelessWidget {
             ),
             child: Text(
               pendingPrice
-                  ? 'PRECIO PENDIENTE'
+                  ? 'Precio pendiente'
                   : _isTerminal
                       ? _terminalLabel
                       : _isUrgent
-                          ? '⚠ COBRO OBLIGATORIO'
-                          : '✓ COBRO OPCIONAL',
+                          ? 'Cobro obligatorio'
+                          : 'Cobro opcional',
               style: TextStyle(
                 color: pendingPrice
                     ? AppTheme.warning

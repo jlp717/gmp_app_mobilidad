@@ -396,6 +396,13 @@ describe('legacy cobros route DB2 contracts', () => {
     });
     const historicoSql = mockQueryWithParams.mock.calls.find(([sql]) => /FROM\s+JAVIER\.COBROS\s+C/i.test(sql))[0];
     expect(historicoSql).toMatch(/OFFSET\s+0\s+ROWS\s+FETCH\s+FIRST\s+10\s+ROWS\s+ONLY/i);
+    expect(res.body.pagination).toEqual({
+      limit: 10,
+      offset: 0,
+      page: 1,
+      returned: 1,
+      hasMore: false,
+    });
   });
 
   test('GET /:cliente/historico rejects COMERCIAL outside assigned client scope before DB reads', async () => {

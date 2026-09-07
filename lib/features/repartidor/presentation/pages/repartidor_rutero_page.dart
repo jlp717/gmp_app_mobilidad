@@ -58,7 +58,9 @@ class RepartidorRuteroPage extends ConsumerStatefulWidget {
 }
 
 class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   DateTime _selectedDate = DateTime.now();
   List<Map<String, dynamic>> _weekDays = [];
   bool _isLoadingWeek = false;
@@ -280,6 +282,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final authState = ref.watch(authProvider.select((s) => s.value));
 
     final isLoading = ref.watch(entregasProvider.select((s) => s.isLoading));

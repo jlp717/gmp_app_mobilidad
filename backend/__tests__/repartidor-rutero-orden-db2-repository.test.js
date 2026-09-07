@@ -86,4 +86,41 @@ describe('repartidor-rutero-orden-db2-repository', () => {
     expect(calls).toEqual(['begin', 'lock', 'select', 'delete', 'insert', 'select', 'commit', 'close']);
     expect(db.close).toHaveBeenCalledTimes(1);
   });
+
+  test('readOrderState uses a dedicated connection WITH UR and skips the shared pool', async () => {
+    const calls = [];
+    const db = connection([prior], calls);
+    mockAcquire.mockResolvedValue(db);
+    const state = await repo.readOrderState('50', '2026-09-07');
+    expect(state.orden).toEqual([{ documentId: 'DOC-1', cliente: 'C1', posicion: 0 }]);
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+    expect(db.query.mock.calls[0][0]).toMatch(/WITH UR/);
+    expect(db.query.mock.calls[0][0]).toMatch(/TEST_REPARTIDOR_RUTERO_ORDEN/);
+    expect(db.query.mock.calls[0][1]).toEqual(['50', '2026-09-07']);
+    expect(db.close).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(['select', 'close']);
+  });
+
+  test('readOrderState fails fast and closes the connection when the query hangs', async () => {
+    jest.useFakeTimers();
+    let rejectQuery;
+    const query = jest.fn(() => new Promise((_, reject) => { rejectQuery = reject; }));
+    const close = jest.fn(async () => {
+      if (rejectQuery) rejectQuery(new Error('closed'));
+    });
+    mockAcquire.mockResolvedValue({ query, close });
+    try {
+      const pending = repo.readOrderState('50', '2026-09-07');
+      const assertion = expect(pending).rejects.toMatchObject({
+        code: 'RUTERO_ORDER_READ_TIMEOUT', statusCode: 503,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(8000);
+      await assertion;
+      expect(close).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

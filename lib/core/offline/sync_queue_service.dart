@@ -415,6 +415,7 @@ class SyncQueueService {
             op.headers == null ? null : Map<String, String>.from(op.headers!),
         extra: <String, dynamic>{
           if (op.type == 'confirm_delivery' ||
+              op.type == 'register_cobro' ||
               (op.headers?.containsKey('Idempotency-Key') ?? false))
             'idempotent': true,
         },

@@ -37,7 +37,10 @@ class RepartidorEvolutionPage extends StatefulWidget {
       _RepartidorEvolutionPageState();
 }
 
-class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
+class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   bool _isLoading = true;
   RepartidorEvolutionData? _data;
   Object? _error;
@@ -100,6 +103,7 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoading && _data == null) {
       return Scaffold(
         backgroundColor: AppTheme.inkSurface,

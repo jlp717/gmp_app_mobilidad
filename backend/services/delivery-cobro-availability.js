@@ -134,9 +134,67 @@ function mapCvcAvailabilityRows(rows, documents) {
   return result;
 }
 
+function roundCollectable(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed * 100) / 100;
+}
+
+// Document-scoped cobro in rutero must never exceed the albarán/factura being
+// delivered. CVC.IMPORTEPENDIENTE can be a grouped invoice or leftover client
+// effect that matches the same identity; that remaining stays on the ERP write
+// path, but the amount offered/accepted for THIS stop is min(CVC, documento).
+// Client-level debt lives in VISTA_DEUDA_BASE / DSEDAC.CVC by cliente — do not
+// mix it into importeDisponibleCobro.
+function resolveDocumentCollectable({
+  cvcState,
+  cvcPending,
+  documentAmount,
+} = {}) {
+  const normalizedState = String(cvcState || 'MISSING').trim().toUpperCase();
+  const document = roundCollectable(documentAmount);
+  const pending = roundCollectable(cvcPending);
+  if (normalizedState === 'AMBIGUOUS') {
+    return Object.freeze({
+      state: 'AMBIGUOUS',
+      importeDisponibleCobro: 0,
+      importeDocumento: document,
+      importeCvcPendiente: pending,
+      capped: false,
+    });
+  }
+  if (normalizedState !== 'AVAILABLE' || pending <= 0.004) {
+    return Object.freeze({
+      state: 'MISSING',
+      importeDisponibleCobro: 0,
+      importeDocumento: document,
+      importeCvcPendiente: pending,
+      capped: false,
+    });
+  }
+  if (document <= 0.004) {
+    return Object.freeze({
+      state: 'MISSING',
+      importeDisponibleCobro: 0,
+      importeDocumento: document,
+      importeCvcPendiente: pending,
+      capped: pending > 0.004,
+    });
+  }
+  const capped = pending > document + 0.004;
+  return Object.freeze({
+    state: 'AVAILABLE',
+    importeDisponibleCobro: capped ? document : pending,
+    importeDocumento: document,
+    importeCvcPendiente: pending,
+    capped,
+  });
+}
+
 module.exports = {
   buildCvcAvailabilityQuery,
   documentKey,
   mapCvcAvailabilityRows,
   normalizeDocument,
+  resolveDocumentCollectable,
 };

@@ -52,7 +52,7 @@ class RuteroDetailSignature extends StatelessWidget {
               ? 120.0
               : Responsive.value(context, phone: 120, desktop: 160),
           decoration: BoxDecoration(
-            color: AppColors.themedWhite,
+            color: AppColors.systemWhite,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: firmaError != null ? AppTheme.error : AppTheme.borderColor,
@@ -63,7 +63,7 @@ class RuteroDetailSignature extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             child: Signature(
               controller: signatureController,
-              backgroundColor: AppColors.themedWhite,
+              backgroundColor: AppColors.systemWhite,
             ),
           ),
         ),

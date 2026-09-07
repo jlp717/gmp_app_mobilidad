@@ -24,6 +24,7 @@ import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/services/auth_session_persistence.dart';
 import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/domain/dashboard_load_policy.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
 import 'package:gmp_app_mobilidad/core/services/session_scope.dart';
 
@@ -953,7 +954,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         unawaited(
           CachePreWarmer.preWarmCache(
             vendedorCodes: vendedorCodes,
-            isJefeVentas: user.isJefeVentas,
+            isJefeVentas: isDashboardManagerRole(
+              isJefeVentas: user.isJefeVentas,
+              role: user.role,
+            ),
           ),
         );
 
@@ -1081,7 +1085,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     unawaited(
       CachePreWarmer.preWarmCache(
         vendedorCodes: authenticated.vendedorCodes,
-        isJefeVentas: authenticated.user!.isJefeVentas,
+        isJefeVentas: isDashboardManagerRole(
+          isJefeVentas: authenticated.user!.isJefeVentas,
+          role: authenticated.user!.role,
+        ),
       ),
     );
   }
@@ -1257,35 +1264,46 @@ final authProvider = AsyncNotifierProvider<AuthNotifier, AuthState>(
 // ============================================================
 
 final isAuthenticatedProvider = Provider<bool>((ref) {
-  return ref.watch(authProvider).value?.isAuthenticated ?? false;
+  return ref.watch(
+    authProvider.select((s) => s.value?.isAuthenticated ?? false),
+  );
 });
 
 final currentUserProvider = Provider<UserModel?>((ref) {
-  return ref.watch(authProvider).value?.user;
+  return ref.watch(authProvider.select((s) => s.value?.user));
 });
 
 final vendedorCodesProvider = Provider<List<String>>((ref) {
-  return ref.watch(authProvider).value?.vendedorCodes ?? [];
+  return ref.watch(
+    authProvider.select((s) => s.value?.vendedorCodes ?? const <String>[]),
+  );
 });
 
 final isJefeVentasProvider = Provider<bool>((ref) {
-  return ref.watch(authProvider).value?.isDirector ?? false;
+  return ref.watch(
+    authProvider.select((s) => s.value?.isDirector ?? false),
+  );
 });
 
 final isInitializedProvider = Provider<bool>((ref) {
-  return ref.watch(authProvider).value?.isInitialized ?? false;
+  return ref.watch(
+    authProvider.select((s) => s.value?.isInitialized ?? false),
+  );
 });
 
 final authErrorProvider = Provider<String?>((ref) {
-  return ref.watch(authProvider).value?.error;
+  return ref.watch(authProvider.select((s) => s.value?.error));
 });
 
 final updateCheckProvider =
     Provider<({bool available, bool mandatory, String message})>((ref) {
-  final state = ref.watch(authProvider).value;
-  return (
-    available: state?.updateAvailable ?? false,
-    mandatory: state?.isMandatoryUpdate ?? false,
-    message: state?.updateMessage ?? '',
+  return ref.watch(
+    authProvider.select(
+      (s) => (
+        available: s.value?.updateAvailable ?? false,
+        mandatory: s.value?.isMandatoryUpdate ?? false,
+        message: s.value?.updateMessage ?? '',
+      ),
+    ),
   );
 });

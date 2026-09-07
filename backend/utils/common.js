@@ -987,20 +987,30 @@ function sanitizeErrorMessage(error, fallbackMessage = 'Error interno del servid
  * @returns {object} Safe error response object
  */
 function createErrorResponse(error, userMessage = 'Error interno del servidor', extras = {}) {
-    const safeMessage = sanitizeErrorMessage(error, userMessage);
-    
+    // 5xx: nunca devolver el texto interno. 4xx: sanitizar si el caller
+    // paso el mensaje de negocio como userMessage.
+    const statusHint = Number(extras.statusHint);
+    const clientMessage = statusHint >= 500
+        ? userMessage
+        : sanitizeErrorMessage(error, userMessage);
+
     const response = {
-        error: safeMessage,
+        error: clientMessage,
         code: extras.code || 'INTERNAL_ERROR',
-        ...extras
     };
-    
-    // Only include 'details' if the error is safe (doesn't contain sensitive info)
+
+    if (extras.success === false) {
+        response.success = false;
+    }
+    Object.keys(extras).forEach((key) => {
+        if (key === 'statusHint' || key === 'code' || key === 'success') return;
+        response[key] = extras[key];
+    });
+
     if (error instanceof Error && !containsSensitiveInfo(error.message)) {
-        // Include a generic indicator, not the actual message
         response.details = 'Ver logs internos para más información';
     }
-    
+
     return response;
 }
 
@@ -1016,25 +1026,30 @@ function createErrorResponse(error, userMessage = 'Error interno del servidor', 
  */
 function handleRouteError(error, res, userMessage = 'Error interno del servidor', statusCode = 500, extras = {}) {
     // Log full error details internally (never sent to client)
-    logger.error(`[ROUTE ERROR] ${error.message}${error.stack ? '\n' + error.stack.substring(0, 500) : ''}`);
+    logger.error(`[ROUTE ERROR] ${error?.message || error}${error?.stack ? '\n' + error.stack.substring(0, 500) : ''}`);
 
     if (res.headersSent || res.writableEnded || res.locals?.requestTimedOut) {
-        logger.warn(`[ROUTE ERROR] Response already completed; suppressing duplicate error response: ${error.message}`);
+        logger.warn(`[ROUTE ERROR] Response already completed; suppressing duplicate error response: ${error?.message}`);
         return;
     }
 
     const dbUnavailableCodes = new Set(['DB_CIRCUIT_OPEN', 'DB_QUERY_QUEUE_TIMEOUT', 'DB_QUERY_TIMEOUT']);
-    const safeStatusCode = dbUnavailableCodes.has(error?.code) ? 503 : statusCode;
-    const safeUserMessage = dbUnavailableCodes.has(error?.code)
-        ? 'Base de datos temporalmente no disponible'
-        : userMessage;
-    
-    const responseExtras = { ...extras };
+    const typedStatus = Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599
+        ? error.statusCode
+        : statusCode;
+    const safeStatusCode = dbUnavailableCodes.has(error?.code) ? 503 : typedStatus;
+    let safeUserMessage = userMessage;
+    if (dbUnavailableCodes.has(error?.code)) {
+        safeUserMessage = 'Base de datos temporalmente no disponible';
+    } else if (safeStatusCode < 500 && error?.expose !== false && error?.message) {
+        safeUserMessage = sanitizeErrorMessage(error, userMessage);
+    }
+
+    const responseExtras = { ...extras, statusHint: safeStatusCode };
     if (error?.code || extras.code) {
         responseExtras.code = error?.code || extras.code;
     }
 
-    // Send safe response to client
     res.status(safeStatusCode).json(createErrorResponse(error, safeUserMessage, responseExtras));
 }
 

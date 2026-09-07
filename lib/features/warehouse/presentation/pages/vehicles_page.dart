@@ -19,7 +19,10 @@ class VehiclesPage extends StatefulWidget {
   State<VehiclesPage> createState() => _VehiclesPageState();
 }
 
-class _VehiclesPageState extends State<VehiclesPage> {
+class _VehiclesPageState extends State<VehiclesPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   List<VehicleConfig> _vehicles = [];
   bool _loading = true;
   String? _error;
@@ -57,6 +60,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return WarehouseUi.pageShell(
       child: SafeArea(
         child: Column(

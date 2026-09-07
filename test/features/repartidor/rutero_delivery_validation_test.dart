@@ -106,6 +106,46 @@ void main() {
     expect(result.messageFor('importe'), contains('saldo cobrable'));
   });
 
+  test('never allows cobro above the document when CVC pending is larger', () {
+    expect(
+      capSaldoCobrableAlDocumento(
+        documentAmount: 2841.76,
+        collectableAmount: 3279.61,
+      ),
+      2841.76,
+    );
+    final over = validateRuteroDeliveryForm(
+      _base(
+        importeTotal: 2841.76,
+        importeDisponibleCobro: 3279.61,
+        isPaid: true,
+        importeCobradoText: '3279,61',
+      ),
+    );
+    expect(over.messageFor('importe'), contains('saldo cobrable'));
+    final exact = validateRuteroDeliveryForm(
+      _base(
+        importeTotal: 2841.76,
+        importeDisponibleCobro: 3279.61,
+        isPaid: true,
+        importeCobradoText: '2841,76',
+      ),
+    );
+    expect(exact.messageFor('importe'), isNull);
+  });
+
+  test('empty CVC does not hide a delivery that still has lines', () {
+    final result = validateRuteroDeliveryForm(
+      _base(
+        hasItems: true,
+        importeTotal: 2841.76,
+        importeDisponibleCobro: 0,
+      ),
+    );
+    expect(result.messageFor('items'), isNull);
+    expect(result.messageFor('pago'), isNull);
+  });
+
   test('partial delivery caps payment by delivered lines, not CVC balance', () {
     final result = validateRuteroDeliveryForm(
       _base(

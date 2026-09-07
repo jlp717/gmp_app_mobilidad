@@ -282,6 +282,36 @@ class FacturaSummary {
     required this.totalIva,
   });
 
+  factory FacturaSummary.fromDocuments(List<Factura> documents) {
+    var totalBase = 0.0;
+    var totalIva = 0.0;
+    var totalImporte = 0.0;
+    var totalFacturasEmitidas = 0;
+    var totalAlbaranes = 0;
+
+    for (final document in documents) {
+      totalBase += document.base;
+      totalIva += document.iva;
+      totalImporte += document.total;
+      if (document.isAlbaran) {
+        totalAlbaranes += 1;
+      } else {
+        totalFacturasEmitidas += 1;
+      }
+    }
+
+    final totalDocumentos = documents.length;
+    return FacturaSummary(
+      totalFacturas: totalDocumentos,
+      totalDocumentos: totalDocumentos,
+      totalFacturasEmitidas: totalFacturasEmitidas,
+      totalAlbaranes: totalAlbaranes,
+      totalImporte: totalImporte,
+      totalBase: totalBase,
+      totalIva: totalIva,
+    );
+  }
+
   factory FacturaSummary.fromJson(Map<String, dynamic> json) {
     return FacturaSummary(
       totalFacturas: json['totalFacturas'] is int

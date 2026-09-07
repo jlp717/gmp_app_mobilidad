@@ -8,7 +8,9 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobro_detail_screen.dart';
 import 'package:gmp_app_mobilidad/features/cobros/providers/cobros_provider.dart';
@@ -29,7 +31,11 @@ class CobrosPage extends ConsumerStatefulWidget {
   ConsumerState<CobrosPage> createState() => _CobrosPageState();
 }
 
-class _CobrosPageState extends ConsumerState<CobrosPage> {
+class _CobrosPageState extends ConsumerState<CobrosPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   static final NumberFormat _moneyFormat =
       NumberFormat.currency(locale: 'es_ES', symbol: '€');
   List<Map<String, dynamic>> _foundClients = [];
@@ -107,15 +113,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       initialDate: initial,
       firstDate: DateTime(2015),
       lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: ColorScheme.dark(
-            primary: AppTheme.info,
-            surface: AppTheme.raisedSurface,
-          ),
-        ),
-        child: child ?? const SizedBox.shrink(),
-      ),
+      builder: AppTheme.pickerOverlay,
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -283,6 +281,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     // Watch pendingSummary to trigger rebuilds only when pending data changes
     ref.watch(
       cobrosProvider(CobrosParams(employeeCode: widget.employeeCode))
@@ -312,36 +311,17 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               // Loading state para pendingSummary
               if (_isLoadingSummary && cobros.pendingSummary.isEmpty)
                 const Expanded(
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(
+                    child: ModernLoading(message: 'Cargando cobros…'),
+                  ),
                 )
               else if (_loadError != null)
                 Expanded(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            color: AppTheme.error,
-                            size: 48,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            _loadError!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: AppTheme.error),
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            onPressed: _onRefresh,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Reintentar'),
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: ErrorStateWidget(
+                    message: _loadError!,
+                    onRetry: () {
+                      unawaited(_onRefresh());
+                    },
                   ),
                 )
               else ...[

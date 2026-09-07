@@ -36,7 +36,9 @@ class ObjectivesPage extends ConsumerStatefulWidget {
 }
 
 class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   // Data
   Map<String, dynamic> _objectives = {};
   List<Map<String, dynamic>> _clientsObjectives = [];
@@ -1045,6 +1047,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Column(
       children: [
         // Header with filter button

@@ -210,42 +210,49 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     return Row(
       children: [
         // Document type badge
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: _isFactura
-                ? AppTheme.accentIndigo.withValues(alpha: 0.14)
-                : AppTheme.softPanel,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
               color: _isFactura
-                  ? AppTheme.accentIndigo.withValues(alpha: 0.32)
-                  : AppTheme.borderColor,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _isFactura ? Icons.receipt_long : Icons.description_outlined,
-                size: 14,
-                color:
-                    _isFactura ? AppTheme.accentIndigo : AppTheme.textSecondary,
+                  ? AppTheme.accentIndigo.withValues(alpha: 0.14)
+                  : AppTheme.softPanel,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: _isFactura
+                    ? AppTheme.accentIndigo.withValues(alpha: 0.32)
+                    : AppTheme.borderColor,
               ),
-              const SizedBox(width: 6),
-              Text(
-                _isFactura
-                    ? '${widget.albaran.serieFactura.isNotEmpty ? widget.albaran.serieFactura : "F"}-${widget.albaran.numeroFactura}'
-                    : '${widget.albaran.serie.isNotEmpty ? widget.albaran.serie : "A"}${widget.albaran.terminal > 0 ? "-${widget.albaran.terminal}" : ""}-${widget.albaran.numeroAlbaran}',
-                style: TextStyle(
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _isFactura ? Icons.receipt_long : Icons.description_outlined,
+                  size: 14,
                   color: _isFactura
                       ? AppTheme.accentIndigo
                       : AppTheme.textSecondary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: Responsive.isSmall(context) ? 10 : 12,
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    _isFactura
+                        ? '${widget.albaran.serieFactura.isNotEmpty ? widget.albaran.serieFactura : "F"}-${widget.albaran.numeroFactura}'
+                        : '${widget.albaran.serie.isNotEmpty ? widget.albaran.serie : "A"}${widget.albaran.terminal > 0 ? "-${widget.albaran.terminal}" : ""}-${widget.albaran.numeroAlbaran}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: _isFactura
+                          ? AppTheme.accentIndigo
+                          : AppTheme.textSecondary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: Responsive.isSmall(context) ? 10 : 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
 
@@ -270,72 +277,80 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             ),
           ),
 
-        const Spacer(),
+        const SizedBox(width: 8),
 
         // Amount
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              widget.albaran.isPendingPrice
-                  ? 'Pendiente'
-                  : NumberFormat.currency(symbol: '€', locale: 'es_ES')
-                      .format(widget.albaran.importeTotal),
-              style: TextStyle(
-                color: widget.albaran.isPendingPrice
-                    ? AppTheme.warning
-                    : _isUrgent
-                        ? AppTheme.obligatorio
-                        : AppTheme.textPrimary,
-                fontSize: Responsive.isSmall(context) ? 17 : 20,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0,
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                widget.albaran.isPendingPrice
+                    ? 'Pendiente'
+                    : NumberFormat.currency(symbol: '€', locale: 'es_ES')
+                        .format(widget.albaran.importeTotal),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: widget.albaran.isPendingPrice
+                      ? AppTheme.warning
+                      : _isUrgent
+                          ? AppTheme.obligatorio
+                          : AppTheme.textPrimary,
+                  fontSize: Responsive.isSmall(context) ? 17 : 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0,
+                ),
               ),
-            ),
-            // Payment badge
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: (widget.albaran.isPendingPrice
-                        ? AppTheme.warning
-                        : _getPaymentColor())
-                    .withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
+              // Payment badge
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
                   color: (widget.albaran.isPendingPrice
                           ? AppTheme.warning
                           : _getPaymentColor())
-                      .withValues(alpha: 0.4),
+                      .withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: (widget.albaran.isPendingPrice
+                            ? AppTheme.warning
+                            : _getPaymentColor())
+                        .withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_isUrgent && !widget.albaran.isPendingPrice) ...[
+                      Icon(
+                        Icons.priority_high,
+                        size: 10,
+                        color: _getPaymentColor(),
+                      ),
+                      const SizedBox(width: 2),
+                    ],
+                    Flexible(
+                      child: Text(
+                        widget.albaran.isPendingPrice
+                            ? 'Precio pendiente'
+                            : _getPaymentLabel(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.albaran.isPendingPrice
+                              ? AppTheme.warning
+                              : _getPaymentColor(),
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_isUrgent && !widget.albaran.isPendingPrice) ...[
-                    Icon(
-                      Icons.priority_high,
-                      size: 10,
-                      color: _getPaymentColor(),
-                    ),
-                    const SizedBox(width: 2),
-                  ],
-                  Text(
-                    widget.albaran.isPendingPrice
-                        ? 'PRECIO PENDIENTE'
-                        : _getPaymentLabel(),
-                    style: TextStyle(
-                      color: widget.albaran.isPendingPrice
-                          ? AppTheme.warning
-                          : _getPaymentColor(),
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -464,7 +479,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         // Detail button
         _buildActionButton(
           icon: Icons.assignment_outlined,
-          label: 'DETALLE',
+          label: 'Detalle',
           onTap: widget.onTap,
         ),
 
@@ -474,7 +489,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         if (_isUrgent && !_isTerminal)
           _buildActionButton(
             icon: Icons.payment,
-            label: 'COBRAR',
+            label: 'Cobrar',
             color: AppTheme.obligatorio,
             onTap: widget.onTap,
           ),
@@ -528,22 +543,22 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     if (widget.albaran.hasAppCobro) {
       final method = (widget.albaran.formaPagoCobro ?? '').trim();
       final kind = widget.albaran.cobroParcial
-          ? 'COBRO PARCIAL'
+          ? 'Cobro parcial'
           : widget.albaran.importePendienteCobro == null
-              ? 'COBRO REGISTRADO'
-              : 'COBRADO';
+              ? 'Cobro registrado'
+              : 'Cobrado';
       if (method.isEmpty) return kind;
       return '$kind · $method';
     }
     final code = widget.albaran.tipoPago.toUpperCase().trim();
     if (code == '01' || code == 'CNT' || code.contains('CONTADO')) {
-      return 'CONTADO';
+      return 'Contado';
     }
-    if (code.contains('REP')) return 'REPOSICIÓN';
-    if (code.contains('MEN')) return 'MENSUAL';
-    if (code.contains('CRE') || code == 'CR') return 'CRÉDITO';
-    if (code.contains('TAR')) return 'TARJETA';
-    if (code.contains('TRA')) return 'TRANSFER';
+    if (code.contains('REP')) return 'Reposición';
+    if (code.contains('MEN')) return 'Mensual';
+    if (code.contains('CRE') || code == 'CR') return 'Crédito';
+    if (code.contains('TAR')) return 'Tarjeta';
+    if (code.contains('TRA')) return 'Transferencia';
     return code.length > 8 ? code.substring(0, 8) : code;
   }
 

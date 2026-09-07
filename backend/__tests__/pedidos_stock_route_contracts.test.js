@@ -103,6 +103,18 @@ describe('pedidos stock batch route contract', () => {
     });
   });
 
+  test('POST /products/stock-batch 500 does not leak driver SQL', async () => {
+    mockGetStockBatch.mockRejectedValueOnce(new Error('SQL0204N SELECT * FROM DSEDAC.STK'));
+    const res = await request(makeApp())
+      .post('/products/stock-batch')
+      .send({ codes: ['ART001'] });
+
+    expect(res.status).toBe(500);
+    expect(res.body.code).toBe('PEDIDOS_ERROR');
+    expect(res.body.error).toBe('Error procesando pedido');
+    expect(JSON.stringify(res.body)).not.toMatch(/SQL0204N|SELECT \*|DSEDAC/);
+  });
+
   test('POST /products/stock-batch truncates long article codes before getStockBatch', async () => {
     mockGetStockBatch.mockResolvedValueOnce(new Map());
     const longCode = 'ART00123456_EXTRA';

@@ -47,6 +47,10 @@ module.exports = [
       'assets/load_planner/lib/**',
       '**/*.min.js',
       '**/*.global.js',
+      '**/*.tmp',
+      '**/*.bak',
+      '**/*.orig',
+      'backend/kpi/tmp/**',
     ],
   },
   {

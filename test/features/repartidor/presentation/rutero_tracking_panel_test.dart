@@ -191,4 +191,20 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('tracking panel fits a 320px phone without overflow',
+      (tester) async {
+    await _pumpPanel(
+      tester,
+      mediaQuerySize: const Size(320, 568),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Seguimiento activo'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('rutero-tracking-collapse')),
+      findsOneWidget,
+    );
+  });
 }

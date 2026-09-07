@@ -40,8 +40,8 @@ void main() {
       ),
     );
 
-    expect(find.text('NOTA DE ENTREGA'), findsOneWidget);
-    expect(find.text('ALBARÁN (CON FIRMA)'), findsOneWidget);
+    expect(find.text('Nota de entrega'), findsOneWidget);
+    expect(find.text('Albarán (con firma)'), findsOneWidget);
     expect(find.text('Ver nota de entrega'), findsOneWidget);
     expect(find.text('Ver Albarán'), findsOneWidget);
 
@@ -90,11 +90,11 @@ void main() {
       ),
     );
 
-    expect(find.text('NO ENTREGA CONFIRMADA'), findsOneWidget);
+    expect(find.text('No entrega confirmada'), findsOneWidget);
     expect(find.text('Orden prep.'), findsOneWidget);
     expect(find.text('991'), findsOneWidget);
     expect(find.text('Nota por WhatsApp'), findsOneWidget);
-    expect(find.text('ALBARÁN (CON FIRMA)'), findsNothing);
+    expect(find.text('Albarán (con firma)'), findsNothing);
     expect(find.text('Ver Albarán'), findsNothing);
     expect(find.text('Compartir Albarán'), findsNothing);
     expect(find.text('Albarán por WhatsApp'), findsNothing);
@@ -142,9 +142,9 @@ void main() {
       ),
     );
 
-    expect(find.text('ENTREGA RECHAZADA'), findsOneWidget);
-    expect(find.text('NOTA DE ENTREGA'), findsOneWidget);
-    expect(find.text('FACTURA (CON FIRMA)'), findsNothing);
+    expect(find.text('Entrega rechazada'), findsOneWidget);
+    expect(find.text('Nota de entrega'), findsOneWidget);
+    expect(find.text('Factura (con firma)'), findsNothing);
     expect(find.text('Ver Factura'), findsNothing);
     expect(find.text('PRINTER CONFIG'), findsNothing);
     expect(find.text('Imprimir ticket térmico'), findsNothing);
@@ -186,8 +186,8 @@ void main() {
       ),
     );
 
-    expect(find.text('FACTURA (CON FIRMA)'), findsOneWidget);
+    expect(find.text('Factura (con firma)'), findsOneWidget);
     expect(find.text('Ver Factura'), findsOneWidget);
-    expect(find.text('NOTA DE ENTREGA'), findsOneWidget);
+    expect(find.text('Nota de entrega'), findsOneWidget);
   });
 }

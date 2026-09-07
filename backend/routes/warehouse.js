@@ -14,6 +14,7 @@ const { query, queryWithParams, getPool } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const { sanitizeForSQL, handleRouteError } = require('../utils/common');
+const { parsePage, paginationContract, db2OffsetFetch } = require('../src/utils/pagination');
 const loadPlanner = require('../services/loadPlanner');
 const estimateBoxDimensions = loadPlanner.estimateBoxDimensions;
 const { CircuitBreaker } = require('../services/circuit-breaker');
@@ -25,6 +26,22 @@ const warehouseBreaker = new CircuitBreaker({
     timeout: 10000
 });
 const WAREHOUSE_BULK_INSERT_CHUNK_SIZE = Math.max(1, parseInt(process.env.WAREHOUSE_BULK_INSERT_CHUNK_SIZE, 10) || 50);
+
+async function closeQuiet(conn) {
+    if (!conn) return;
+    try {
+        await conn.close();
+    } catch (closeErr) {
+        logger.debug(`[WAREHOUSE] connection close: ${closeErr.message}`);
+    }
+}
+
+function sendWarehouseError(error, res, message, statusCode = 500, extras = {}) {
+    return handleRouteError(error, res, message, statusCode, {
+        code: extras.code || 'WAREHOUSE_ERROR',
+        ...extras,
+    });
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // AUTO-CREATE JAVIER.* WAREHOUSE TABLES (safe, idempotent)
@@ -54,7 +71,7 @@ async function safeCreateTable(name, ddl) {
         // Table exists — nothing to do
     } catch (probeErr) {
         // Close dirty connection first
-        if (conn) try { await conn.close(); } catch (_) { }
+        if (conn) await closeQuiet(conn);
         conn = null;
 
         if (!isTableNotFound(probeErr)) return; // some other error, skip
@@ -73,7 +90,7 @@ async function safeCreateTable(name, ddl) {
             }
         }
     } finally {
-        if (conn) try { await conn.close(); } catch (_) { }
+        if (conn) await closeQuiet(conn);
     }
 }
 
@@ -185,7 +202,7 @@ async function initWarehouseTables() {
             conn = await pool.connect();
             await conn.query(`SELECT ${ac.col} FROM ${ac.table} FETCH FIRST 1 ROWS ONLY`);
         } catch (probeErr) {
-            if (conn) try { await conn.close(); } catch (_) { }
+            if (conn) await closeQuiet(conn);
             conn = null;
             try {
                 conn = await pool.connect();
@@ -197,7 +214,7 @@ async function initWarehouseTables() {
                 }
             }
         } finally {
-            if (conn) try { await conn.close(); } catch (_) { }
+            if (conn) await closeQuiet(conn);
         }
     }
 
@@ -350,7 +367,7 @@ router.get('/dashboard', verifyToken, async (req, res) => {
         if (isTableNotFound(error)) {
             return res.json({ date: { year, month, day }, totalTrucks: 0, trucks: [] });
         }
-        handleRouteError(error, res, 'Error cargando dashboard almacén', 500);
+        sendWarehouseError(error, res, 'Error cargando dashboard almacén', 500);
     }
 });
 
@@ -461,7 +478,7 @@ router.post('/load-plan', verifyToken, async (req, res) => {
         const odbcDetail = (error.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
         logger.error(`Load plan error: ${odbcDetail || error.message}`);
         logger.error(`Load plan stack: ${error.stack}`);
-        handleRouteError(error, res, 'Error planificando carga', 500);
+        sendWarehouseError(error, res, 'Error planificando carga', 500);
     }
 });
 
@@ -484,7 +501,7 @@ router.post('/load-plan/optimize', verifyToken, async (req, res) => {
         const result = await loadPlanner.optimizeForProfit(vehicleCode, y, m, d);
         res.json(result);
     } catch (error) {
-        handleRouteError(error, res, 'Error optimizando carga', 500);
+        sendWarehouseError(error, res, 'Error optimizando carga', 500);
     }
 });
 
@@ -508,7 +525,7 @@ router.post('/load-plan/smart-optimize', verifyToken, async (req, res) => {
         res.json(result);
     } catch (error) {
         logger.error(`Smart optimize error: ${error.message}`);
-        handleRouteError(error, res, 'Error en optimización inteligente', 500);
+        sendWarehouseError(error, res, 'Error en optimización inteligente', 500);
     }
 });
 
@@ -527,7 +544,7 @@ router.post('/load-plan/axle-balance', verifyToken, async (req, res) => {
         res.json(result);
     } catch (error) {
         logger.error(`Axle balance error: ${error.message}`);
-        handleRouteError(error, res, 'Error calculando equilibrio de ejes', 500);
+        sendWarehouseError(error, res, 'Error calculando equilibrio de ejes', 500);
     }
 });
 
@@ -546,7 +563,7 @@ router.post('/load-plan-manual', verifyToken, async (req, res) => {
         res.json(result);
     } catch (error) {
         logger.error(`Manual load plan error: ${error.message}`);
-        handleRouteError(error, res, 'Error en simulación de carga', 500);
+        sendWarehouseError(error, res, 'Error en simulación de carga', 500);
     }
 });
 
@@ -626,7 +643,7 @@ router.get('/vehicles', verifyToken, async (req, res) => {
         });
     } catch (error) {
         logger.error(`Vehicles error: ${error.message}`);
-        handleRouteError(error, res, 'Error obteniendo vehículos', 500);
+        sendWarehouseError(error, res, 'Error obteniendo vehículos', 500);
     }
 });
 
@@ -640,7 +657,7 @@ router.get('/truck-config/:vehicleCode', verifyToken, async (req, res) => {
         res.json(config);
     } catch (error) {
         logger.error(`Truck config error: ${error.message}`);
-        handleRouteError(error, res, 'Error obteniendo config camión', 500);
+        sendWarehouseError(error, res, 'Error obteniendo config camión', 500);
     }
 });
 
@@ -695,7 +712,7 @@ router.put('/truck-config/:vehicleCode', verifyToken, requireRoles('JEFE_VENTAS'
         res.json(updated);
     } catch (error) {
         logger.error(`Update truck config error: ${error.message}`);
-        handleRouteError(error, res, 'Error actualizando config', 500);
+        sendWarehouseError(error, res, 'Error actualizando config', 500);
     }
 });
 
@@ -737,7 +754,7 @@ router.get('/personnel', verifyToken, async (req, res) => {
             return res.json({ personnel: [] });
         }
         logger.error(`Personnel error: ${error.message}`);
-        handleRouteError(error, res, 'Error obteniendo personal', 500);
+        sendWarehouseError(error, res, 'Error obteniendo personal', 500);
     }
 });
 
@@ -764,7 +781,7 @@ router.post('/personnel', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), asy
         res.json({ success: true, message: 'Operario añadido' });
     } catch (error) {
         logger.error(`Add personnel error: ${error.message}`);
-        handleRouteError(error, res, 'Error añadiendo operario', 500);
+        sendWarehouseError(error, res, 'Error añadiendo operario', 500);
     }
 });
 
@@ -791,7 +808,7 @@ router.put('/personnel/:id', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), 
         res.json({ success: true });
     } catch (error) {
         logger.error(`Update personnel error: ${error.message}`);
-        handleRouteError(error, res, 'Error actualizando operario', 500);
+        sendWarehouseError(error, res, 'Error actualizando operario', 500);
     }
 });
 
@@ -805,7 +822,7 @@ router.post('/personnel/:id/delete', verifyToken, requireRoles('JEFE_VENTAS', 'A
         res.json({ success: true });
     } catch (error) {
         logger.error(`Delete personnel error: ${error.message}`);
-        handleRouteError(error, res, 'Error eliminando operario', 500);
+        sendWarehouseError(error, res, 'Error eliminando operario', 500);
     }
 });
 
@@ -818,7 +835,8 @@ router.post('/personnel/:id/delete', verifyToken, requireRoles('JEFE_VENTAS', 'A
  */
 router.get('/articles', verifyToken, async (req, res) => {
     try {
-        const { search, onlyWithDimensions, limit = 500 } = req.query;
+        const { search, onlyWithDimensions, limit, offset } = req.query;
+        const page = parsePage({ limit, offset }, { defaultLimit: 500, maxLimit: 500 });
         let where = "TRIM(A.CODIGOARTICULO) <> '' AND (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)";
 
         const garbageKeywords = [
@@ -880,7 +898,6 @@ router.get('/articles', verifyToken, async (req, res) => {
             orderBy = 'CASE WHEN D.CODIGOARTICULO IS NOT NULL THEN 0 ELSE 1 END, A.CODIGOARTICULO';
         }
 
-        let limitVal = parseInt(limit);
         const rows = await queryWithParams(`
             SELECT TRIM(A.CODIGOARTICULO) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
                    COALESCE(A.PESO, 0) AS PESO, COALESCE(A.UNIDADESCAJA, 1) AS UNIDADESCAJA,
@@ -889,48 +906,52 @@ router.get('/articles', verifyToken, async (req, res) => {
             LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
             WHERE ${where}
             ORDER BY ${orderBy}
-            FETCH FIRST ? ROWS ONLY
-        `, [...queryParams, limitVal]);
+            ${db2OffsetFetch(page)}
+        `, queryParams);
 
         const estimateFn = estimateBoxDimensions;
+        const articles = (rows || []).map((r) => {
+            const hasReal = r.LARGO_CM != null;
+            let estLargo = null, estAncho = null, estAlto = null;
+            if (!hasReal && estimateFn) {
+                try {
+                    const est = estimateFn(
+                        parseFloat(r.PESO) || 0,
+                        parseInt(r.UNIDADESCAJA) || 1,
+                        (r.NOMBRE || '')
+                    );
+                    estLargo = est.largo;
+                    estAncho = est.ancho;
+                    estAlto = est.alto;
+                } catch (estErr) {
+                    logger.warn(`[WAREHOUSE] estimateBoxDimensions failed for ${r.CODE}: ${estErr.message}`);
+                }
+            }
+            return {
+                code: (r.CODE || '').trim(),
+                name: (r.NOMBRE || '').trim(),
+                weight: parseFloat(r.PESO) || 0,
+                unitsPerBox: parseInt(r.UNIDADESCAJA) || 1,
+                hasRealDimensions: hasReal,
+                largoCm: parseFloat(r.LARGO_CM) || null,
+                anchoCm: parseFloat(r.ANCHO_CM) || null,
+                altoCm: parseFloat(r.ALTO_CM) || null,
+                estLargoCm: estLargo,
+                estAnchoCm: estAncho,
+                estAltoCm: estAlto,
+                pesoOverrideKg: parseFloat(r.PESO_CAJA_KG) || null,
+                notas: (r.NOTAS || '').trim(),
+                inRecentOrders: recentArticleCodes.has((r.CODE || '').trim()),
+            };
+        });
 
         res.json({
-            articles: rows.map(r => {
-                const hasReal = r.LARGO_CM != null;
-                let estLargo = null, estAncho = null, estAlto = null;
-                if (!hasReal && estimateFn) {
-                    try {
-                        const est = estimateFn(
-                            parseFloat(r.PESO) || 0,
-                            parseInt(r.UNIDADESCAJA) || 1,
-                            (r.NOMBRE || '')
-                        );
-                        estLargo = est.largo;
-                        estAncho = est.ancho;
-                        estAlto = est.alto;
-                    } catch(e) { /* ignore */ }
-                }
-                return {
-                    code: (r.CODE || '').trim(),
-                    name: (r.NOMBRE || '').trim(),
-                    weight: parseFloat(r.PESO) || 0,
-                    unitsPerBox: parseInt(r.UNIDADESCAJA) || 1,
-                    hasRealDimensions: hasReal,
-                    largoCm: parseFloat(r.LARGO_CM) || null,
-                    anchoCm: parseFloat(r.ANCHO_CM) || null,
-                    altoCm: parseFloat(r.ALTO_CM) || null,
-                    estLargoCm: estLargo,
-                    estAnchoCm: estAncho,
-                    estAltoCm: estAlto,
-                    pesoOverrideKg: parseFloat(r.PESO_CAJA_KG) || null,
-                    notas: (r.NOTAS || '').trim(),
-                    inRecentOrders: recentArticleCodes.has((r.CODE || '').trim()),
-                };
-            }),
+            articles,
+            pagination: paginationContract(page, articles),
         });
     } catch (error) {
         logger.error(`Articles list error: ${error.message}`);
-        handleRouteError(error, res, 'Error obteniendo artículos', 500);
+        sendWarehouseError(error, res, 'Error obteniendo artículos', 500, { code: 'WAREHOUSE_ARTICLES_ERROR' });
     }
 });
 
@@ -974,7 +995,7 @@ router.get('/article-dimensions/:code', verifyToken, async (req, res) => {
         });
     } catch (error) {
         logger.error(`Article dims error: ${error.message}`);
-        handleRouteError(error, res, 'Error obteniendo dimensiones', 500);
+        sendWarehouseError(error, res, 'Error obteniendo dimensiones', 500);
     }
 });
 
@@ -990,7 +1011,9 @@ router.put('/article-dimensions/:code', verifyToken, requireRoles('JEFE_VENTAS',
         // Upsert via DELETE + INSERT (DB2 i5/OS compatible)
         try {
             await queryWithParams(`DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES WHERE CODIGOARTICULO = ?`, [code]);
-        } catch (e) { /* might not exist */ }
+        } catch (deleteErr) {
+            logger.warn(`[WAREHOUSE] pre-insert delete dimensions ${code}: ${deleteErr.message}`);
+        }
 
         await queryWithParams(`
       INSERT INTO JAVIER.ALMACEN_ART_DIMENSIONES
@@ -1009,7 +1032,7 @@ router.put('/article-dimensions/:code', verifyToken, requireRoles('JEFE_VENTAS',
         res.json({ success: true, message: 'Dimensiones actualizadas' });
     } catch (error) {
         logger.error(`Update article dims error: ${error.message}`);
-        handleRouteError(error, res, 'Error actualizando dimensiones', 500);
+        sendWarehouseError(error, res, 'Error actualizando dimensiones', 500);
     }
 });
 
@@ -1024,7 +1047,7 @@ router.post('/article-dimensions/:code/delete', verifyToken, requireRoles('JEFE_
         res.json({ success: true, message: 'Dimensiones eliminadas, vuelve a estimado' });
     } catch (error) {
         logger.error(`Delete article dims error: ${error.message}`);
-        handleRouteError(error, res, 'Error eliminando dimensiones', 500);
+        sendWarehouseError(error, res, 'Error eliminando dimensiones', 500);
     }
 });
 
@@ -1042,7 +1065,7 @@ router.post('/articles/reset-all-dimensions', verifyToken, requireRoles('JEFE_VE
         res.json({ success: true, deleted: total, message: `${total} dimensiones reales eliminadas` });
     } catch (error) {
         logger.error(`Reset all dims error: ${error.message}`);
-        handleRouteError(error, res, 'Error reseteando dimensiones', 500);
+        sendWarehouseError(error, res, 'Error reseteando dimensiones', 500);
     }
 });
 
@@ -1110,7 +1133,7 @@ router.get('/vehicle-photo/:code', verifyToken, async (req, res) => {
         });
     } catch (error) {
         logger.error(`Vehicle photo proxy error: ${error.message}`);
-        handleRouteError(error, res, 'Error obteniendo foto', 500);
+        sendWarehouseError(error, res, 'Error obteniendo foto', 500);
     }
 });
 
@@ -1129,7 +1152,7 @@ router.post('/personnel/cleanup-test', verifyToken, requireRoles('JEFE_VENTAS', 
         res.json({ success: true, message: 'Entradas de test desactivadas' });
     } catch (error) {
         logger.error(`Cleanup test personnel error: ${error.message}`);
-        handleRouteError(error, res, 'Error limpiando personal test', 500);
+        sendWarehouseError(error, res, 'Error limpiando personal test', 500);
     }
 });
 
@@ -1159,7 +1182,9 @@ router.post('/articles/bulk-estimate', verifyToken, requireRoles('JEFE_VENTAS', 
                 if (!code) continue;
                 const pesoCaja = (parseFloat(r.PESO) || 0) * Math.max(parseInt(r.UNIDADESCAJA) || 1, 1);
                 estimates.push([code, est.largo, est.ancho, est.alto, parseFloat(pesoCaja.toFixed(2))]);
-            } catch(e) { /* skip individual estimation errors */ }
+            } catch (estErr) {
+                logger.warn(`[WAREHOUSE] skip estimate ${r.CODE}: ${estErr.message}`);
+            }
         }
 
         let saved = 0;
@@ -1192,14 +1217,16 @@ router.post('/articles/bulk-estimate', verifyToken, requireRoles('JEFE_VENTAS', 
                             VALUES (?, ?, ?, ?, ?, 'Auto-estimado por familia/peso', 'SYSTEM')
                         `, row);
                         saved++;
-                    } catch(e) { /* skip individual errors */ }
+                    } catch (rowErr) {
+                        logger.warn(`[WAREHOUSE] skip bulk row ${row[0]}: ${rowErr.message}`);
+                    }
                 }
             }
         }
         res.json({ success: true, estimated: saved, total: rows.length });
     } catch (error) {
         logger.error(`Bulk estimate error: ${error.message}`);
-        handleRouteError(error, res, 'Error en estimacion masiva', 500);
+        sendWarehouseError(error, res, 'Error en estimacion masiva', 500);
     }
 });
 
@@ -1274,7 +1301,7 @@ router.get('/truck/:vehicleCode/orders', verifyToken, async (req, res) => {
     } catch (error) {
         const odbcDetail = (error.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
         logger.error(`Truck orders error: ${odbcDetail || error.message}`);
-        handleRouteError(error, res, 'Error obteniendo órdenes', 500);
+        sendWarehouseError(error, res, 'Error obteniendo órdenes', 500);
     }
 });
 
@@ -1286,8 +1313,9 @@ router.get('/truck/:vehicleCode/orders', verifyToken, async (req, res) => {
  * GET /warehouse/load-history?vehicleCode=&limit=20
  */
 router.get('/load-history', verifyToken, async (req, res) => {
+    const page = parsePage(req.query, { defaultLimit: 50, maxLimit: 200 });
     try {
-        const { vehicleCode, dateFrom, dateTo, limit = 50 } = req.query;
+        const { vehicleCode, dateFrom, dateTo } = req.query;
         let where = '1=1';
         let params = [];
         if (vehicleCode) {
@@ -1302,7 +1330,6 @@ router.get('/load-history', verifyToken, async (req, res) => {
             where += ' AND H.FECHA_PLANIFICACION <= ?';
             params.push(dateTo);
         }
-        let limitVal = parseInt(limit);
         const rows = await queryWithParams(`
             SELECT H.ID, H.CODIGOVEHICULO, H.FECHA_PLANIFICACION,
                    H.PESO_TOTAL_KG, H.VOLUMEN_TOTAL_CM3, H.PCT_VOLUMEN, H.PCT_PESO,
@@ -1316,52 +1343,54 @@ router.get('/load-history', verifyToken, async (req, res) => {
             LEFT JOIN DSEDAC.VEH V ON TRIM(H.CODIGOVEHICULO) = TRIM(V.CODIGOVEHICULO)
             WHERE ${where}
             ORDER BY H.CREATED_AT DESC
-            FETCH FIRST ? ROWS ONLY
-        `, [...params, limitVal]);
+            ${db2OffsetFetch(page)}
+        `, params);
+        const history = rows.map(r => {
+            let detalles = null;
+            try {
+                const raw = r.DETALLES_JSON;
+                if (raw && raw !== '{}' && String(raw).trim().length > 2) {
+                    detalles = JSON.parse(raw);
+                }
+            } catch (parseErr) {
+                logger.warn(`[WAREHOUSE] DETALLES_JSON invalido id=${r.ID}: ${parseErr.message}`);
+            }
+            return {
+                id: r.ID,
+                vehicleCode: (r.CODIGOVEHICULO || '').trim(),
+                vehicleDesc: (r.DESC_VEHICULO || '').trim(),
+                matricula: (r.MATRICULA || '').trim(),
+                date: r.FECHA_PLANIFICACION,
+                weightKg: parseFloat(r.PESO_TOTAL_KG) || 0,
+                volumeCm3: parseFloat(r.VOLUMEN_TOTAL_CM3) || 0,
+                volumePct: parseFloat(r.PCT_VOLUMEN) || 0,
+                weightPct: parseFloat(r.PCT_PESO) || 0,
+                orderCount: r.NUM_ORDENES,
+                boxCount: r.NUM_BULTOS,
+                status: (r.ESTADO || '').trim(),
+                importeTotal: parseFloat(r.IMPORTE_TOTAL) || 0,
+                margenTotal: parseFloat(r.MARGEN_TOTAL) || 0,
+                detalles,
+                createdBy: (r.CREATED_BY || '').trim(),
+                createdAt: r.CREATED_AT,
+            };
+        });
         res.json({
-            history: rows.map(r => {
-                let detalles = null;
-                try {
-                    const raw = r.DETALLES_JSON;
-                    if (raw && raw !== '{}' && String(raw).trim().length > 2) {
-                        detalles = JSON.parse(raw);
-                    }
-                } catch(e) { /* ignore */ }
-                return {
-                    id: r.ID,
-                    vehicleCode: (r.CODIGOVEHICULO || '').trim(),
-                    vehicleDesc: (r.DESC_VEHICULO || '').trim(),
-                    matricula: (r.MATRICULA || '').trim(),
-                    date: r.FECHA_PLANIFICACION,
-                    weightKg: parseFloat(r.PESO_TOTAL_KG) || 0,
-                    volumeCm3: parseFloat(r.VOLUMEN_TOTAL_CM3) || 0,
-                    volumePct: parseFloat(r.PCT_VOLUMEN) || 0,
-                    weightPct: parseFloat(r.PCT_PESO) || 0,
-                    orderCount: r.NUM_ORDENES,
-                    boxCount: r.NUM_BULTOS,
-                    status: (r.ESTADO || '').trim(),
-                    importeTotal: parseFloat(r.IMPORTE_TOTAL) || 0,
-                    margenTotal: parseFloat(r.MARGEN_TOTAL) || 0,
-                    detalles,
-                    createdBy: (r.CREATED_BY || '').trim(),
-                    createdAt: r.CREATED_AT,
-                };
-            }),
+            history,
+            pagination: paginationContract(page, history),
         });
     } catch (error) {
         if (isTableNotFound(error)) {
-            return res.json({ history: [] });
+            return res.json({ history: [], pagination: paginationContract(page, []) });
         }
-        // Fallback without new columns
         try {
-            const { vehicleCode, limit = 50 } = req.query;
+            const { vehicleCode } = req.query;
             let where = '1=1';
             let params = [];
             if (vehicleCode) {
                 where = 'CODIGOVEHICULO = ?';
                 params.push(vehicleCode);
             }
-            let limitVal = parseInt(limit);
             const rows = await queryWithParams(`
                 SELECT ID, CODIGOVEHICULO, FECHA_PLANIFICACION,
                        PESO_TOTAL_KG, VOLUMEN_TOTAL_CM3, PCT_VOLUMEN, PCT_PESO,
@@ -1369,25 +1398,27 @@ router.get('/load-history', verifyToken, async (req, res) => {
                 FROM JAVIER.ALMACEN_CARGA_HISTORICO
                 WHERE ${where}
                 ORDER BY CREATED_AT DESC
-                FETCH FIRST ? ROWS ONLY
-            `, [...params, limitVal]);
+                ${db2OffsetFetch(page)}
+            `, params);
+            const history = rows.map(r => ({
+                id: r.ID, vehicleCode: (r.CODIGOVEHICULO || '').trim(),
+                date: r.FECHA_PLANIFICACION,
+                weightKg: parseFloat(r.PESO_TOTAL_KG) || 0,
+                volumeCm3: parseFloat(r.VOLUMEN_TOTAL_CM3) || 0,
+                volumePct: parseFloat(r.PCT_VOLUMEN) || 0,
+                weightPct: parseFloat(r.PCT_PESO) || 0,
+                orderCount: r.NUM_ORDENES, boxCount: r.NUM_BULTOS,
+                status: (r.ESTADO || '').trim(),
+                importeTotal: 0, margenTotal: 0, detalles: null,
+                createdBy: (r.CREATED_BY || '').trim(), createdAt: r.CREATED_AT,
+            }));
             return res.json({
-                history: rows.map(r => ({
-                    id: r.ID, vehicleCode: (r.CODIGOVEHICULO || '').trim(),
-                    date: r.FECHA_PLANIFICACION,
-                    weightKg: parseFloat(r.PESO_TOTAL_KG) || 0,
-                    volumeCm3: parseFloat(r.VOLUMEN_TOTAL_CM3) || 0,
-                    volumePct: parseFloat(r.PCT_VOLUMEN) || 0,
-                    weightPct: parseFloat(r.PCT_PESO) || 0,
-                    orderCount: r.NUM_ORDENES, boxCount: r.NUM_BULTOS,
-                    status: (r.ESTADO || '').trim(),
-                    importeTotal: 0, margenTotal: 0, detalles: null,
-                    createdBy: (r.CREATED_BY || '').trim(), createdAt: r.CREATED_AT,
-                })),
+                history,
+                pagination: paginationContract(page, history),
             });
         } catch (err2) {
             logger.error(`Load history fallback error: ${err2.message}`);
-            res.status(500).json({ error: 'Error obteniendo historial', details: err2.message });
+            return sendWarehouseError(err2, res, 'Error obteniendo historial', 500, { code: 'WAREHOUSE_LOAD_HISTORY_ERROR' });
         }
     }
 });
@@ -1420,8 +1451,14 @@ router.get('/manual-layout/:vehicleCode/:date', verifyToken, async (req, res) =>
         const r = rows[0];
         let layoutData = {};
         let metricsData = {};
-        try { layoutData = JSON.parse(r.LAYOUT_JSON || '{}'); } catch (e) { /* ignore */ }
-        try { metricsData = JSON.parse(r.METRICS_JSON || '{}'); } catch (e) { /* ignore */ }
+        try { layoutData = JSON.parse(r.LAYOUT_JSON || '{}'); } catch (parseErr) {
+            logger.warn(`[WAREHOUSE] LAYOUT_JSON invalido id=${r.ID}: ${parseErr.message}`);
+            layoutData = {};
+        }
+        try { metricsData = JSON.parse(r.METRICS_JSON || '{}'); } catch (parseErr) {
+            logger.warn(`[WAREHOUSE] METRICS_JSON invalido id=${r.ID}: ${parseErr.message}`);
+            metricsData = {};
+        }
 
         res.json({
             found: true,
@@ -1492,7 +1529,7 @@ router.post('/manual-layout', verifyToken, async (req, res) => {
             return res.status(503).json({ error: 'Tabla ALMACEN_CARGA_MANUAL no disponible. Reinicia el servidor para crearla.' });
         }
         logger.error(`Save manual layout error: ${error.message}`);
-        handleRouteError(error, res, 'Error guardando layout manual', 500);
+        sendWarehouseError(error, res, 'Error guardando layout manual', 500);
     }
 });
 
@@ -1512,7 +1549,7 @@ router.post('/manual-layout/:id/delete', verifyToken, async (req, res) => {
             return res.json({ success: true }); // nothing to delete
         }
         logger.error(`Delete manual layout error: ${error.message}`);
-        handleRouteError(error, res, 'Error eliminando layout', 500);
+        sendWarehouseError(error, res, 'Error eliminando layout', 500);
     }
 });
 
@@ -1540,7 +1577,7 @@ router.get('/config', verifyToken, async (req, res) => {
             return res.json({ config: {} });
         }
         logger.error(`Config get error: ${error.message}`);
-        handleRouteError(error, res, 'Error obteniendo configuración', 500);
+        sendWarehouseError(error, res, 'Error obteniendo configuración', 500);
     }
 });
 
@@ -1588,7 +1625,7 @@ router.put('/config', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (
         res.json({ success: true });
     } catch (error) {
         logger.error(`Config update error: ${error.message}`);
-        handleRouteError(error, res, 'Error actualizando configuración', 500);
+        sendWarehouseError(error, res, 'Error actualizando configuración', 500);
     }
 });
 
@@ -1617,8 +1654,8 @@ router.post('/config/seed', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), a
                     [d.key, d.value, d.desc, 'SYSTEM']
                 );
                 inserted++;
-            } catch (e) {
-                // Ya existe — ignorar (SQL0803 duplicate key)
+            } catch (dupErr) {
+                logger.debug(`[WAREHOUSE] config seed skip ${d.key}: ${dupErr.message}`);
             }
         }
         res.json({ success: true, inserted, total: defaults.length });
@@ -1627,7 +1664,7 @@ router.post('/config/seed', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), a
             return res.status(503).json({ error: 'Tabla ALMACEN_CONFIG_GLOBAL no disponible. Reinicia el servidor.' });
         }
         logger.error(`Config seed error: ${error.message}`);
-        handleRouteError(error, res, 'Error sembrando configuración', 500);
+        sendWarehouseError(error, res, 'Error sembrando configuración', 500);
     }
 });
 
@@ -1722,7 +1759,7 @@ router.post('/save-load', verifyToken, async (req, res) => {
             return res.status(503).json({ error: 'Tabla de histórico no disponible. Reinicia el servidor.' });
         }
         logger.error(`Save load error: ${error.message}`);
-        handleRouteError(error, res, 'Error guardando carga', 500);
+        sendWarehouseError(error, res, 'Error guardando carga', 500);
     }
 });
 
