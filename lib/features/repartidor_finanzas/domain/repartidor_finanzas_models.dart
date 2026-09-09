@@ -1538,6 +1538,57 @@ class RepartidorLiquidacionResult {
   bool get isReplay => !created;
 }
 
+class RepartidorLiquidacionEmailResend {
+  const RepartidorLiquidacionEmailResend({
+    required this.requeued,
+    required this.outboxId,
+    required this.recipients,
+    this.redirected = false,
+  });
+
+  factory RepartidorLiquidacionEmailResend.fromJson(JsonMap json) {
+    final requeued = json['requeued'];
+    final outboxId = json['outboxId']?.toString().trim() ?? '';
+    final recipientsRaw = json['recipients'];
+    if (json['success'] != true ||
+        requeued != true ||
+        outboxId.isEmpty ||
+        recipientsRaw is! Map) {
+      throw const FormatException(
+        'Respuesta de reenvio de liquidacion incompleta o invalida',
+      );
+    }
+    List<String> rolesOf(Object? raw) {
+      if (raw is! List) return const <String>[];
+      return raw
+          .whereType<Map>()
+          .map((item) => item['role']?.toString().trim() ?? '')
+          .where((role) => role.isNotEmpty)
+          .toList(growable: false);
+    }
+
+    final recipients = Map<String, dynamic>.from(recipientsRaw);
+    final toRoles = rolesOf(recipients['to']);
+    final ccRoles = rolesOf(recipients['cc']);
+    if (toRoles.isEmpty || ccRoles.isEmpty) {
+      throw const FormatException(
+        'El reenvio no listo los roles to/cc de producto',
+      );
+    }
+    return RepartidorLiquidacionEmailResend(
+      requeued: true,
+      outboxId: outboxId,
+      redirected: json['redirected'] == true,
+      recipients: recipients,
+    );
+  }
+
+  final bool requeued;
+  final String outboxId;
+  final bool redirected;
+  final JsonMap recipients;
+}
+
 class RepartidorLiquidacionEntry {
   const RepartidorLiquidacionEntry({
     required this.id,

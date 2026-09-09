@@ -360,6 +360,24 @@ class RepartidorFinanzasService {
     return result;
   }
 
+  Future<RepartidorLiquidacionEmailResend> resendLiquidacionEmails({
+    required String idempotencyToken,
+  }) async {
+    final token = idempotencyToken.trim();
+    if (!RegExp(r'^[A-Za-z0-9_.:-]{8,128}$').hasMatch(token)) {
+      throw const RepartidorLiquidacionInputException(
+        'INVALID_LIQUIDACION_TOKEN',
+        'La liquidacion cerrada no tiene una clave valida para reenviar correos',
+      );
+    }
+    final response = await ApiClient.post(
+      '/repartidor-finanzas/liquidaciones/'
+      '${Uri.encodeComponent(token)}/resend-emails',
+      const <String, dynamic>{},
+    );
+    return RepartidorLiquidacionEmailResend.fromJson(response);
+  }
+
   /// Retrieves the immutable server PDF for an already closed settlement.
   Future<RepartidorLiquidacionPdf> getClosedLiquidacionPdf({
     required RepartidorLiquidacionResult liquidacion,

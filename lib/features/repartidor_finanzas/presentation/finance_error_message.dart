@@ -42,6 +42,13 @@ const Map<String, String> _financeErrorCodeMessages = <String, String>{
       'El cobro no está disponible ahora. Entrega sin cobro o reinténtalo más tarde.',
   'REPARTO_COBRO_COMMERCIAL_CONFLICT':
       'Este albarán o factura ya tiene cobros en el ERP. No se puede cobrar otra vez desde el rutero.',
+  'LIQUIDACION_OUTBOX_NOT_FOUND':
+      'Esta liquidación no tiene un correo para reenviar.',
+  'LIQUIDACION_OUTBOX_IN_FLIGHT':
+      'El correo de liquidación se está enviando. Espera un momento y vuelve a intentar.',
+  'LIQUIDACION_OUTBOX_NOT_RETRYABLE': 'Este correo no se puede reenviar ahora.',
+  'LIQUIDACION_OUTBOX_DELIVERY_FAILED':
+      'El reenvío quedó registrado, pero el correo no se completó. Reintenta.',
 };
 
 /// Returns a safe, actionable user-facing message for finance API failures.

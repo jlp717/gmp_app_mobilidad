@@ -243,7 +243,7 @@ describe('staff-email-directory-service', () => {
     REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
   };
 
-  test('resolveLiquidacionRecipients includes only required roles and repartidor', async () => {
+  test('resolveLiquidacionRecipients includes day comerciales as optional CC and product to/cc', async () => {
     const query = jest.fn(async (sql, params) => {
       if (sql.includes('ROLE_TARGETS')) {
         return [
@@ -273,9 +273,21 @@ describe('staff-email-directory-service', () => {
 
     expect(result.emails.sort()).toEqual([
       'carlos@example.test',
+      'com15@example.test',
+      'com80@example.test',
       'rep@example.test',
     ].sort());
     expect(result.details.find((d) => d.label === 'comercial:08')).toBeUndefined();
+    expect(result.details.filter((d) => d.label === 'comercial').map((d) => d.vendorCode).sort())
+      .toEqual(['15', '80']);
+    expect(result.recipients).toEqual({
+      to: [{ role: 'repartidor', present: true }],
+      cc: [
+        { role: 'comercial', present: true },
+        { role: 'CARLOS_CORBALAN', present: true },
+        { role: 'JAVIER_LACAL', present: false },
+      ],
+    });
   });
 
   test('resolveDayRouteComercialCodes unions confirmations and cobros of the day', async () => {

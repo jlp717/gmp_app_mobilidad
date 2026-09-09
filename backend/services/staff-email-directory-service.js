@@ -36,6 +36,12 @@ const PRODUCT_DELIVERY_CC_ROLES = Object.freeze([
   'CARLOS_CORBALAN',
   'JAVIER_LACAL',
 ]);
+const PRODUCT_LIQUIDACION_TO_ROLES = Object.freeze(['repartidor']);
+const PRODUCT_LIQUIDACION_CC_ROLES = Object.freeze([
+  'comercial',
+  'CARLOS_CORBALAN',
+  'JAVIER_LACAL',
+]);
 
 /** @type {Map<string, { value: any, expiresAt: number }>} */
 const cache = new Map();
@@ -348,18 +354,28 @@ async function resolveClientEmail(clienteCodigo, { query = queryWithParams } = {
   }
 }
 
-function publicDeliveryRecipientPlan(details = []) {
-  const byLabel = new Map(
-    (Array.isArray(details) ? details : []).map((detail) => [detail.label, detail]),
-  );
+function publicRecipientPlan(toRoles, ccRoles, details = []) {
+  const rows = Array.isArray(details) ? details : [];
   const slot = (role) => ({
     role,
-    present: Boolean(byLabel.get(role)?.email),
+    present: rows.some((detail) => detail?.label === role && Boolean(detail.email)),
   });
   return {
-    to: PRODUCT_DELIVERY_TO_ROLES.map(slot),
-    cc: PRODUCT_DELIVERY_CC_ROLES.map(slot),
+    to: (toRoles || []).map(slot),
+    cc: (ccRoles || []).map(slot),
   };
+}
+
+function publicDeliveryRecipientPlan(details = []) {
+  return publicRecipientPlan(PRODUCT_DELIVERY_TO_ROLES, PRODUCT_DELIVERY_CC_ROLES, details);
+}
+
+function publicLiquidacionRecipientPlan(details = []) {
+  return publicRecipientPlan(
+    PRODUCT_LIQUIDACION_TO_ROLES,
+    PRODUCT_LIQUIDACION_CC_ROLES,
+    details,
+  );
 }
 
 function emptyDeliveryRecipientPlan() {
@@ -568,6 +584,8 @@ async function resolveDayRouteComercialCodes({
 
 async function resolveLiquidacionRecipients({
   repartidorId,
+  date,
+  comercialCodes,
 } = {}, {
   query = queryWithParams,
   env = process.env,
@@ -575,13 +593,14 @@ async function resolveLiquidacionRecipients({
   const emails = new Set();
   const details = [];
 
-  async function addVendor(label, code) {
+  async function addVendor(label, code, { optional = false } = {}) {
     const profile = await resolveVendorProfile(code, { query });
     details.push({
       label,
       vendorCode: profile.vendorCode,
       email: profile.email,
       nombre: profile.nombre,
+      optional,
     });
     if (profile.email) emails.add(profile.email.toLowerCase());
   }
@@ -598,6 +617,20 @@ async function resolveLiquidacionRecipients({
     });
   }
 
+  let dayCodes = uniqueVendorCodes(comercialCodes);
+  if (date) {
+    const lookedUp = await resolveDayRouteComercialCodes({
+      repartidorId,
+      date,
+    }, { query, env });
+    dayCodes = uniqueVendorCodes([...dayCodes, ...lookedUp]);
+  }
+  for (const code of dayCodes) {
+    if (code && code !== driver) {
+      await addVendor('comercial', code, { optional: true });
+    }
+  }
+
   const roles = await resolveRoleEmails([...LIQUIDACION_ROLE_KEYS], { query, env });
   for (const role of roles) {
     details.push({
@@ -610,8 +643,15 @@ async function resolveLiquidacionRecipients({
     if (role.email) emails.add(role.email.toLowerCase());
   }
 
-  const missingRequired = details.filter((detail) => !detail.email).map((detail) => detail.label);
-  return { emails: [...emails], details, missingRequired };
+  const missingRequired = details
+    .filter((detail) => !detail.email && detail.optional !== true)
+    .map((detail) => detail.label);
+  return {
+    emails: [...emails],
+    details,
+    missingRequired,
+    recipients: publicLiquidacionRecipientPlan(details),
+  };
 }
 
 module.exports = {
@@ -620,6 +660,8 @@ module.exports = {
   LIQUIDACION_ROLE_KEYS,
   PRODUCT_DELIVERY_TO_ROLES,
   PRODUCT_DELIVERY_CC_ROLES,
+  PRODUCT_LIQUIDACION_TO_ROLES,
+  PRODUCT_LIQUIDACION_CC_ROLES,
   resolveVendorEmail,
   resolveVendorProfile,
   resolveVendorByNameMatch,
@@ -627,6 +669,7 @@ module.exports = {
   resolveClientEmail,
   resolveDeliveryVarianceRecipients,
   publicDeliveryRecipientPlan,
+  publicLiquidacionRecipientPlan,
   emptyDeliveryRecipientPlan,
   safeDeliveryRecipientPlan,
   resolveDayRouteComercialCodes,

@@ -17,6 +17,7 @@ const {
 } = require('./liquidacion-pdf-service');
 const {
   resolveLiquidacionRecipients,
+  publicLiquidacionRecipientPlan,
 } = require('./staff-email-directory-service');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { resolveDocumentCollectable } = require('./delivery-cobro-availability');
@@ -1917,6 +1918,7 @@ async function sendLiquidacionEmails({
 
   const directory = await resolveLiquidacionRecipients({
     repartidorId,
+    date: liquidacion.date,
   });
   if (directory.missingRequired?.length) {
     throw new LiquidacionEmailRecipientRequiredError();
@@ -2040,6 +2042,10 @@ async function sendLiquidacionEmails({
       results.push({ to, success: false, error: error.message });
     }
   }
+  results.recipients = directory.recipients || publicLiquidacionRecipientPlan(directory.details);
+  results.deliveryPolicy = delivery.policy;
+  results.redirected = Boolean(delivery.redirected);
+  results.intendedRecipients = delivery.intendedRecipients || [];
   return results;
 }
 

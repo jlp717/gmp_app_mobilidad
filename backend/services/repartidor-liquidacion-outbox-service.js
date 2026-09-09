@@ -377,7 +377,15 @@ async function processLiquidacionOutboxIntent({
       }, { query, tables });
       if (!completed) return { sent: 0, skipped: true, reason: 'outbox_claim_lost' };
     }
-    return { sent: summary.sent, results, delivery: summary, skipped: false };
+    return {
+      sent: summary.sent,
+      results,
+      delivery: summary,
+      skipped: false,
+      recipients: results.recipients,
+      redirected: Boolean(results.redirected),
+      deliveryPolicy: results.deliveryPolicy,
+    };
   } catch (error) {
     const redactedError = redactOutboxError(error);
     logger.error(`[liq-outbox] send failed: ${redactedError}`);
@@ -467,7 +475,10 @@ async function requeueFailedLiquidacionOutbox({ idempotencyToken, canAccessRepar
 } = {}) {
   const tables = financeTables(env);
   const rows = await query(
-    `SELECT O.ID, O.STATUS, O.PAYLOAD_JSON, L.CODIGOVENDEDOR
+    `SELECT O.ID, O.STATUS, O.PAYLOAD_JSON,
+            L.ID AS OPS_ID, L.CODIGOVENDEDOR, L.DIALIQUIDACION, L.MESLIQUIDACION,
+            L.ANOLIQUIDACION, L.NUMEROLIQUIDACION, L.STATUS AS LIQUIDACION_STATUS,
+            L.SNAPSHOT_JSON, L.REPLAY_IDENTITY_JSON
        FROM ${tables.liquidationOutbox} O
        JOIN ${tables.liquidationOps} L ON L.ID = O.LIQUIDACION_ID
       WHERE L.IDEMPOTENCY_TOKEN = ?
@@ -481,13 +492,15 @@ async function requeueFailedLiquidacionOutbox({ idempotencyToken, canAccessRepar
   if (!repartidorId || typeof canAccessRepartidor !== 'function' || !canAccessRepartidor(repartidorId)) {
     return { requeued: false, reason: 'forbidden' };
   }
-  if (String(rowValue(row, 'STATUS') || '').trim() !== 'FAILED') {
+  const status = String(rowValue(row, 'STATUS') || '').trim();
+  if (status === 'PENDING') return { requeued: false, reason: 'claimed' };
+  if (status !== 'FAILED' && status !== 'SENT') {
     return { requeued: false, reason: 'not_failed' };
   }
   // A FAILED row containing a claim is possibly in-flight. Never requeue it:
   // doing so could race an SMTP call and create a duplicate delivery.
   const currentPayload = rowValue(row, 'PAYLOAD_JSON');
-  if (hasOutboxClaim(currentPayload)) return { requeued: false, reason: 'claimed' };
+  if (status === 'FAILED' && hasOutboxClaim(currentPayload)) return { requeued: false, reason: 'claimed' };
   const requeueToken = crypto.randomBytes(18).toString('base64url');
   const requeuedPayload = buildOutboxRequeue(currentPayload, requeueToken);
   if (!requeuedPayload) return { requeued: false, reason: 'unsafe_payload' };
@@ -495,7 +508,7 @@ async function requeueFailedLiquidacionOutbox({ idempotencyToken, canAccessRepar
   await query(
     `UPDATE ${tables.liquidationOutbox}
         SET STATUS = 'PENDING', PAYLOAD_JSON = ?
-      WHERE ID = ? AND STATUS = 'FAILED' AND PAYLOAD_JSON = ?`,
+      WHERE ID = ? AND STATUS IN ('FAILED', 'SENT') AND PAYLOAD_JSON = ?`,
     [requeuedPayload, id, currentPayload],
   );
   const verified = await query(
@@ -507,9 +520,18 @@ async function requeueFailedLiquidacionOutbox({ idempotencyToken, canAccessRepar
   const requeued = Boolean(verified?.length) && hasOutboxRequeue(
     rowValue(verified[0], 'PAYLOAD_JSON'), requeueToken,
   );
-  return requeued
-    ? { requeued: true, outboxId: String(id), repartidorId }
-    : { requeued: false, reason: 'requeue_lost' };
+  if (!requeued) return { requeued: false, reason: 'requeue_lost' };
+  const liquidacion = mapLiquidacionFromOps({
+    ...row,
+    ID: rowValue(row, 'OPS_ID') || rowValue(row, 'LIQUIDACION_ID'),
+    STATUS: rowValue(row, 'LIQUIDACION_STATUS') || 'CLOSED',
+  });
+  return {
+    requeued: true,
+    outboxId: String(id),
+    repartidorId,
+    liquidacion,
+  };
 }
 
 module.exports = {

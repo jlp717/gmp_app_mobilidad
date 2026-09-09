@@ -50,6 +50,7 @@ class _RepartidorLiquidacionDiariaPageState
   late String _idempotencyToken;
   bool _saving = false;
   bool _submittingEntry = false;
+  bool _resendingEmails = false;
   final Map<String, String> _entryTokens = <String, String>{};
   RepartidorLiquidacionResult? _closedResult;
   final _ingresoBancoController = TextEditingController();
@@ -169,6 +170,7 @@ class _RepartidorLiquidacionDiariaPageState
       onPreviewPdf:
           closed ? () => unawaited(_generatePdf(_closedResult!)) : null,
       onSharePdf: closed ? () => unawaited(_sharePdf(_closedResult!)) : null,
+      onResendEmails: closed ? () => unawaited(_resendEmails()) : null,
       cobrosPanel: summary.cobros.isEmpty
           ? RepartidorExecutivePanel(
               accentColor: AppColors.textSecondary,
@@ -388,6 +390,38 @@ class _RepartidorLiquidacionDiariaPageState
       ],
       subject: 'Liquidación diaria $repartidorId',
     );
+  }
+
+  Future<void> _resendEmails() async {
+    if (_resendingEmails || _closedResult == null) return;
+    setState(() => _resendingEmails = true);
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Reenviando correos de liquidación...',
+    );
+    try {
+      final result = await ref
+          .read(repartidorFinanzasServiceProvider)
+          .resendLiquidacionEmails(idempotencyToken: _idempotencyToken);
+      if (!mounted) return;
+      modal.success(
+        result.redirected
+            ? 'Correos reenviados al buzón de prueba.'
+            : 'Correos de liquidación reenviados.',
+      );
+    } catch (error, stackTrace) {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+      if (!mounted) return;
+      modal.error(
+        financeErrorMessage(
+          error,
+          'No se pudo reenviar el correo de liquidación.',
+        ),
+        onRetry: _resendEmails,
+      );
+    } finally {
+      if (mounted) setState(() => _resendingEmails = false);
+    }
   }
 
   Future<void> _save(

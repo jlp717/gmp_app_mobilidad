@@ -41,6 +41,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
     required this.onAdjustment,
     required this.onPreviewPdf,
     required this.onSharePdf,
+    this.onResendEmails,
     required this.cobrosPanel,
     required this.ledgerPanel,
     super.key,
@@ -64,6 +65,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
   final VoidCallback onAdjustment;
   final VoidCallback? onPreviewPdf;
   final VoidCallback? onSharePdf;
+  final VoidCallback? onResendEmails;
   final Widget cobrosPanel;
   final Widget? ledgerPanel;
 
@@ -157,6 +159,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
                   result: closedResult!,
                   onPreview: onPreviewPdf,
                   onShare: onSharePdf,
+                  onResendEmails: onResendEmails,
                 ),
               ],
             ],
@@ -883,11 +886,13 @@ class _LiquidacionClosedCard extends StatelessWidget {
     required this.result,
     this.onPreview,
     this.onShare,
+    this.onResendEmails,
   });
 
   final RepartidorLiquidacionResult result;
   final VoidCallback? onPreview;
   final VoidCallback? onShare;
+  final VoidCallback? onResendEmails;
 
   @override
   Widget build(BuildContext context) {
@@ -934,6 +939,18 @@ class _LiquidacionClosedCard extends StatelessWidget {
               onPressed: onShare,
               icon: const Icon(Icons.share_outlined),
               color: LiquidacionBrand.navy,
+            ),
+          if (onResendEmails != null)
+            Semantics(
+              button: true,
+              label: 'Reenviar correos de liquidación',
+              child: IconButton(
+                key: const Key('liquidacion-resend-emails'),
+                tooltip: 'Reenviar correos',
+                onPressed: onResendEmails,
+                icon: const Icon(Icons.mark_email_unread_outlined),
+                color: LiquidacionBrand.navy,
+              ),
             ),
         ],
       ),

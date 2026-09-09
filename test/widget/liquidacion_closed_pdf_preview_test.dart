@@ -91,6 +91,7 @@ void main() {
                     );
                   },
                   onSharePdf: () {},
+                  onResendEmails: () {},
                   cobrosPanel: const SizedBox.shrink(),
                   ledgerPanel: null,
                 ),
@@ -104,6 +105,8 @@ void main() {
 
     expect(find.text('Ver PDF'), findsNothing);
     expect(find.byTooltip('Ver PDF'), findsOneWidget);
+    expect(find.byTooltip('Reenviar correos'), findsOneWidget);
+    expect(find.byKey(const Key('liquidacion-resend-emails')), findsOneWidget);
     expect(find.byType(PdfPreviewScreen), findsNothing);
 
     final previewButton = find.ancestor(

@@ -120,12 +120,43 @@ describe('repartidor liquidacion outbox delivery', () => {
     expect(results.filter((result) => result.reason === 'requeue_lost')).toHaveLength(1);
   });
 
-  test('refuses a non-failed outbox without updating or delivering', async () => {
-    const query = jest.fn(async () => [{ ID: 72, STATUS: 'SENT', PAYLOAD_JSON: '{}', CODIGOVENDEDOR: '94' }]);
+  test('requeues a SENT closed-day outbox without requiring a prior failure', async () => {
+    const state = { status: 'SENT', payload: JSON.stringify({ identity: 'daily-sent' }) };
+    const query = jest.fn(async (sql, params = []) => {
+      const statement = String(sql);
+      if (statement.includes('JOIN') && statement.includes('IDEMPOTENCY_TOKEN')) {
+        return [{
+          ID: 80, STATUS: state.status, PAYLOAD_JSON: state.payload, CODIGOVENDEDOR: '94',
+          OPS_ID: 701, DIALIQUIDACION: 9, MESLIQUIDACION: 8, ANOLIQUIDACION: 2026,
+          NUMEROLIQUIDACION: 701, LIQUIDACION_STATUS: 'CLOSED', SNAPSHOT_JSON: '{}',
+        }];
+      }
+      if (statement.includes("SET STATUS = 'PENDING'")) {
+        if (['FAILED', 'SENT'].includes(state.status) && state.payload === params[2]) {
+          state.status = 'PENDING';
+          state.payload = params[0];
+        }
+        return [];
+      }
+      if (statement.includes("WHERE ID = ? AND STATUS = 'PENDING'")) {
+        return state.status === 'PENDING' ? [{ STATUS: state.status, PAYLOAD_JSON: state.payload }] : [];
+      }
+      return [];
+    });
     const result = await requeueFailedLiquidacionOutbox({
       idempotencyToken: 'liquidacion-route-test-0001', canAccessRepartidor: () => true,
     }, { query, env: runtimeEnv });
-    expect(result).toEqual({ requeued: false, reason: 'not_failed' });
+    expect(result.requeued).toBe(true);
+    expect(result.liquidacion).toMatchObject({ id: '701', repartidorId: '94', date: '2026-08-09' });
+    expect(state.status).toBe('PENDING');
+  });
+
+  test('refuses a pending outbox without updating or delivering', async () => {
+    const query = jest.fn(async () => [{ ID: 72, STATUS: 'PENDING', PAYLOAD_JSON: '{}', CODIGOVENDEDOR: '94' }]);
+    const result = await requeueFailedLiquidacionOutbox({
+      idempotencyToken: 'liquidacion-route-test-0001', canAccessRepartidor: () => true,
+    }, { query, env: runtimeEnv });
+    expect(result).toEqual({ requeued: false, reason: 'claimed' });
     expect(query.mock.calls.some(([sql]) => String(sql).includes('SET STATUS'))).toBe(false);
   });
 });

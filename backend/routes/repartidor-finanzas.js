@@ -1396,12 +1396,42 @@ router.post('/liquidaciones/:idempotencyToken/resend-emails', verifyToken, async
       const [status, code, error] = responses[result.reason] || responses.requeue_lost;
       return res.status(status).json({ success: false, code, error });
     }
-    // The scheduler owns delivery. This endpoint only makes an existing
-    // failed intent eligible once more; it never invokes SMTP directly.
-    return res.status(202).json({
+    const delivery = await processLiquidacionOutboxIntent({
+      liquidacion: result.liquidacion,
+      repartidorId: result.repartidorId,
+      outboxId: result.outboxId,
+    });
+    if (delivery?.skipped) {
+      return res.status(409).json({
+        success: false,
+        code: 'LIQUIDACION_OUTBOX_IN_FLIGHT',
+        error: 'El envio esta en curso y no puede reenviarse',
+      });
+    }
+    const summary = delivery?.delivery || {};
+    if (summary.allSucceeded === false || Number(delivery?.sent || 0) <= 0) {
+      return res.status(503).json({
+        success: false,
+        code: 'LIQUIDACION_OUTBOX_DELIVERY_FAILED',
+        error: 'El reenvio quedo registrado pero el correo no se completo',
+        outboxId: result.outboxId,
+        recipients: delivery?.recipients,
+      });
+    }
+    return res.status(200).json({
       success: true,
       requeued: true,
       outboxId: result.outboxId,
+      redirected: Boolean(delivery?.redirected),
+      deliveryPolicy: delivery?.deliveryPolicy || null,
+      recipients: delivery?.recipients || {
+        to: [{ role: 'repartidor', present: false }],
+        cc: [
+          { role: 'comercial', present: false },
+          { role: 'CARLOS_CORBALAN', present: false },
+          { role: 'JAVIER_LACAL', present: false },
+        ],
+      },
     });
   } catch (error) {
     return sendError(res, error, { action: 'POST /liquidaciones/resend-emails', params: req.params });

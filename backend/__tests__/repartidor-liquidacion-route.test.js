@@ -263,15 +263,44 @@ describe('repartidor liquidation route boundary', () => {
     expect(result.body.canReverseCobros).toBe(false);
   });
 
-  test('requeues a failed owned outbox with 202 and never invokes SMTP delivery', async () => {
+  test('requeues a closed-day outbox with 200, delivers, and lists product to/cc', async () => {
     mockOutbox.requeueFailedLiquidacionOutbox.mockResolvedValue({
       requeued: true, outboxId: '71', repartidorId: '94',
+      liquidacion: { id: '701', repartidorId: '94', date: '2026-08-09', status: 'CLOSED' },
+    });
+    mockOutbox.processLiquidacionOutboxIntent.mockResolvedValue({
+      sent: 1,
+      skipped: false,
+      redirected: true,
+      deliveryPolicy: 'isolated_test_redirect',
+      delivery: { attempted: 1, sent: 1, failed: 0, allSucceeded: true },
+      recipients: {
+        to: [{ role: 'repartidor', present: true }],
+        cc: [
+          { role: 'comercial', present: true },
+          { role: 'CARLOS_CORBALAN', present: true },
+          { role: 'JAVIER_LACAL', present: true },
+        ],
+      },
     });
     const result = await request(makeApp())
       .post('/finanzas/liquidaciones/liquidacion-route-test-0001/resend-emails').send({});
-    expect(result.status).toBe(202);
-    expect(result.body).toMatchObject({ success: true, requeued: true, outboxId: '71' });
-    expect(mockOutbox.processLiquidacionOutboxIntent).not.toHaveBeenCalled();
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      success: true,
+      requeued: true,
+      outboxId: '71',
+      redirected: true,
+      recipients: {
+        to: [{ role: 'repartidor', present: true }],
+        cc: [
+          { role: 'comercial', present: true },
+          { role: 'CARLOS_CORBALAN', present: true },
+          { role: 'JAVIER_LACAL', present: true },
+        ],
+      },
+    });
+    expect(mockOutbox.processLiquidacionOutboxIntent).toHaveBeenCalledTimes(1);
   });
 
   test.each([

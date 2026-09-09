@@ -486,7 +486,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
         final parsedDate = DateTime.tryParse(d.date);
         return _DocumentItem(
           id: d.id,
-          type: d.type == 'factura' ? _DocType.factura : _DocType.albaran,
+          type: (d.type == 'factura' || (d.facturaNumber ?? 0) > 0)
+              ? _DocType.factura
+              : _DocType.albaran,
           number: d.number,
           serie: d.serie,
           ejercicio: d.ejercicio,
