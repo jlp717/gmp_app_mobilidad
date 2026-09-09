@@ -506,6 +506,10 @@ class _RepartidorVencimientosPageState
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    ref.listen<int>(repartidorCobrosListTickProvider, (previous, next) {
+      if (previous == next) return;
+      _loadFirstPage(forceRefresh: true);
+    });
     if (widget.repartidorId.isEmpty) {
       return Scaffold(
         backgroundColor: AppTheme.inkSurface,
@@ -793,6 +797,7 @@ class _RepartidorVencimientosPageState
                     ..invalidate(repartidorVencimientosProvider)
                     ..invalidate(repartidorDailySummaryProvider)
                     ..invalidate(repartidorCommissionSummaryProvider);
+                  ref.read(repartidorCobrosListTickProvider.notifier).state++;
                   onSaved();
                 }
                 if (!dialogContext.mounted) return;

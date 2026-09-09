@@ -710,6 +710,10 @@ final repartidorVencimientosProvider =
   },
 );
 
+/// KeepAlive Cobros tab holds a local list; bump after a cobro so the
+/// remainder (or pending 0) reloads without waiting for a remount.
+final repartidorCobrosListTickProvider = StateProvider<int>((ref) => 0);
+
 final repartidorCommissionSummaryProvider =
     FutureProvider.family<RepartidorCommissionSummary, CommissionSummaryArgs>(
   (ref, args) {
@@ -775,6 +779,7 @@ class RepartidorLiquidacionActions {
       )
       ..invalidate(repartidorVencimientosProvider)
       ..invalidate(repartidorCommissionSummaryProvider);
+    _ref.read(repartidorCobrosListTickProvider.notifier).state++;
     return result;
   }
 

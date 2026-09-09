@@ -2067,7 +2067,7 @@ async function getDetalleVencimiento(docKey) {
   const rows = await financeRepo.selectDetalleVencimiento({ params, repartidorId });
   if (!rows || rows.length === 0) return null;
   const row = rows[0];
-  return {
+  const detalle = {
     docKey: {
       tipo: value(row, 'TIPODOCUMENTO'),
       origen: value(row, 'ORIGENDOCUMENTO'),
@@ -2106,6 +2106,34 @@ async function getDetalleVencimiento(docKey) {
     },
     anulado: (value(row, 'ANULADOSN') || '').toUpperCase() === 'S',
   };
+
+  try {
+    const cobroInput = {
+      codigoRepartidor: repartidorId,
+      codigoCliente: detalle.cliente.codigo,
+      tipoDocumento: detalle.docKey.tipo,
+      origenDocumento: detalle.docKey.origen,
+      subempresaDocumento: detalle.docKey.subempresa,
+      ejercicioDocumento: detalle.docKey.ejercicio,
+      serieDocumento: detalle.docKey.serie,
+      terminalDocumento: detalle.docKey.terminal,
+      numeroDocumento: detalle.docKey.numero,
+      xdeDocumento: detalle.docKey.xde,
+      dexDocumento: detalle.docKey.dex,
+    };
+    const documentRow = await validateCobroDocument(cobroInput);
+    const info = await getFinanceSchemaInfo();
+    const totals = firstRow(await financeRepo.sumAppCollectedForDocument(null, info, cobroInput));
+    detalle.importes.pendiente = resolveStandaloneCobroAvailable(
+      documentRow,
+      roundMoney(value(totals, 'APP_COLLECTED')),
+    );
+  } catch (error) {
+    logger.warn(
+      `[REPARTIDOR_FINANZAS] Detalle vencimiento pending cap skipped: ${sanitizeErrorMessage(error)}`,
+    );
+  }
+  return detalle;
 }
 
 /**

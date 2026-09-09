@@ -1997,6 +1997,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       ..invalidate(repartidorDailySummaryProvider)
       ..invalidate(repartidorVencimientosProvider)
       ..invalidate(repartidorCommissionSummaryProvider);
+    widget.ref.read(repartidorCobrosListTickProvider.notifier).state++;
   }
 
   void _refreshAfterAcknowledgedDelivery() {

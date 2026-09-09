@@ -627,6 +627,12 @@ describe('Repartidor finanzas routes', () => {
     expect(sql).toContain('CLCL1.DIASLIMITECREDITOCONFECHAALB');
     expect(sql).toContain('CLI.NOMBRECLIENTE');
     expect(sql).toContain('TRIM(CVC.TIPODOCUMENTO) = ?');
+    expect(sql).toContain('CPC.IMPORTETOTAL');
+    expect(sql).toContain('APP_COBROS.IMPORTE_COBRADO_APP');
+    expect(sql).toMatch(/CVC\.IMPORTEPENDIENTE > CPC\.IMPORTETOTAL/);
+    expect(sql).not.toMatch(
+      /CAST\(CVC\.IMPORTEPENDIENTE - COALESCE\(APP_COBROS\.IMPORTE_COBRADO_APP, 0\) AS DECIMAL\(15,2\)\) AS IMPORTEPENDIENTE/,
+    );
     expect(sql).toContain('WHERE 1 = 1');
     expect(sql).toMatch(/BETWEEN \? AND \? OR[\s\S]*IS NULL/);
     expect(params).toEqual(['94', 20260401, 20260430, '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', 'CAC', 0, 25]);

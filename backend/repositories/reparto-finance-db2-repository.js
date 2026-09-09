@@ -352,6 +352,22 @@ function cobroDocumentCriteria(info, input) {
   };
 }
 
+// Cobros (repartidor) must never offer the leftover CVC/client effect.
+// Same ceiling as resolveDocumentCollectable: min(CVC, CPC.IMPORTETOTAL)
+// minus app ledger cobros, floored at 0.
+function documentCappedPendingExpression(appCollectedExpr) {
+  const collected = appCollectedExpr
+    ? `COALESCE(${appCollectedExpr}, 0)`
+    : '0';
+  const collectable = '(CASE'
+    + ' WHEN COALESCE(CPC.IMPORTETOTAL, 0) > 0.004'
+    + ' AND CVC.IMPORTEPENDIENTE > CPC.IMPORTETOTAL'
+    + ' THEN CPC.IMPORTETOTAL'
+    + ' ELSE CVC.IMPORTEPENDIENTE END)';
+  const remaining = `(${collectable} - ${collected})`;
+  return `CAST(CASE WHEN ${remaining} < 0 THEN 0 ELSE ${remaining} END AS DECIMAL(15,2)) AS IMPORTEPENDIENTE`;
+}
+
 function db2DateFromParts(yearExpression, monthExpression, dayExpression) {
   return `DATE(
     DIGITS(DECIMAL(${yearExpression}, 4, 0)) || '-' ||
@@ -427,6 +443,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
       liquidacionCollectedExpression,
       cobroReplaySelect,
       cobroDocumentCriteria,
+      documentCappedPendingExpression,
       vencimientosDueYmdExpression,
       storagePaymentCode,
       normalizeTipoDocumento,
@@ -1104,9 +1121,9 @@ function createRepartoFinanceDb2Repository(options = {}) {
       }
       params.push(offset, offset + pageLimit);
 
-      const pendingExpr = hasAppDocs
-        ? 'CAST(CVC.IMPORTEPENDIENTE - COALESCE(APP_COBROS.IMPORTE_COBRADO_APP, 0) AS DECIMAL(15,2)) AS IMPORTEPENDIENTE'
-        : 'CAST(CVC.IMPORTEPENDIENTE AS DECIMAL(15,2)) AS IMPORTEPENDIENTE';
+      const pendingExpr = documentCappedPendingExpression(
+        hasAppDocs ? 'APP_COBROS.IMPORTE_COBRADO_APP' : null,
+      );
       const appCobroColumns = info.cobrosAligned
         ? {
           code: 'CODIGOVENDEDOR', client: 'CODIGOCLIENTEALBARAN', type: 'TIPODOCUMENTO',
@@ -1934,4 +1951,5 @@ module.exports = {
   FinanceRepoSchemaError,
   skipIsolatedTestFinanceSeed,
   assertIsolatedTestWriteTable,
+  documentCappedPendingExpression,
 };

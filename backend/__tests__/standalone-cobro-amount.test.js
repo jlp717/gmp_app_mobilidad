@@ -13,6 +13,7 @@ const {
   resolveStandaloneCobroAvailable,
 } = require('../services/repartidor-finance-service');
 const { resolveDocumentCollectable } = require('../services/delivery-cobro-availability');
+const { documentCappedPendingExpression } = require('../repositories/reparto-finance-db2-repository');
 
 describe('standalone cobro amount (read/write parity)', () => {
   test('caps P-93-1532 style document to CPC total against higher CVC', () => {
@@ -169,5 +170,16 @@ describe('standalone cobro amount (read/write parity)', () => {
     });
     expect(accepted.ok).toBe(true);
     expect(accepted.expectedRemaining).toBe(49.55);
+  });
+
+  test('GET vencimientos pending SQL caps at CPC.IMPORTETOTAL then subtracts app cobros', () => {
+    const withApp = documentCappedPendingExpression('APP_COBROS.IMPORTE_COBRADO_APP');
+    expect(withApp).toContain('CPC.IMPORTETOTAL');
+    expect(withApp).toContain('APP_COBROS.IMPORTE_COBRADO_APP');
+    expect(withApp).toMatch(/CVC\.IMPORTEPENDIENTE > CPC\.IMPORTETOTAL/);
+    expect(withApp).toMatch(/AS IMPORTEPENDIENTE$/);
+    const withoutApp = documentCappedPendingExpression(null);
+    expect(withoutApp).toContain('CPC.IMPORTETOTAL');
+    expect(withoutApp).not.toContain('APP_COBROS');
   });
 });
