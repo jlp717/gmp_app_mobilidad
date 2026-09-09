@@ -59,6 +59,20 @@ function shouldSkipSmtpForIsolatedTest(email, env = process.env) {
  * allowlist/sink. This is deliberately fail-closed so a missing PM2 flag cannot
  * turn a test run into an external production mail delivery.
  */
+function deliveryResult({
+  intendedRecipients,
+  effectiveRecipients,
+  redirected,
+  policy,
+}) {
+  return {
+    intendedRecipients,
+    effectiveRecipients,
+    redirected,
+    policy,
+  };
+}
+
 function resolveRepartoEmailDelivery({ recipients, env = process.env, mode = 'automatic' } = {}) {
   const requestedRecipients = uniqueEmails(recipients);
   if (mode === 'manual' && requestedRecipients.length === 0) {
@@ -69,11 +83,12 @@ function resolveRepartoEmailDelivery({ recipients, env = process.env, mode = 'au
     );
   }
   if (!isIsolatedTest(env)) {
-    return {
+    return deliveryResult({
+      intendedRecipients: requestedRecipients,
       effectiveRecipients: requestedRecipients,
       redirected: false,
       policy: 'direct',
-    };
+    });
   }
   const allowlist = testAllowlist(env);
   const sink = testSink(env);
@@ -93,26 +108,45 @@ function resolveRepartoEmailDelivery({ recipients, env = process.env, mode = 'au
         503,
       );
     }
-    return {
+    return deliveryResult({
+      intendedRecipients: [],
       effectiveRecipients: [sink],
       redirected: false,
       policy: 'isolated_test_empty_recipient_fallback',
-    };
+    });
   }
 
   const notAllowed = requestedRecipients.filter((email) => !allowlist.includes(email));
-  if (notAllowed.length) {
+  if (mode === 'manual' && notAllowed.length) {
     throw new RepartoEmailDeliveryPolicyError(
       'Todos los destinatarios de correo de reparto deben estar autorizados en isolated_test',
       'REPARTO_EMAIL_RECIPIENT_NOT_ALLOWED',
       403,
     );
   }
-  return {
-    effectiveRecipients: requestedRecipients,
-    redirected: false,
-    policy: 'isolated_test_allowlist',
-  };
+  if (!notAllowed.length) {
+    return deliveryResult({
+      intendedRecipients: requestedRecipients,
+      effectiveRecipients: requestedRecipients,
+      redirected: false,
+      policy: 'isolated_test_allowlist',
+    });
+  }
+  // Automatic isolated_test: never SMTP to product mailboxes. Keep the
+  // intended to/cc list for JSON/logs and deliver only to the local sink.
+  if (!sink || !allowlist.includes(sink)) {
+    throw new RepartoEmailDeliveryPolicyError(
+      'El fallback técnico de correo en isolated_test requiere sink incluido en allowlist',
+      'REPARTO_EMAIL_TEST_POLICY_UNCONFIGURED',
+      503,
+    );
+  }
+  return deliveryResult({
+    intendedRecipients: requestedRecipients,
+    effectiveRecipients: [sink],
+    redirected: true,
+    policy: 'isolated_test_redirect',
+  });
 }
 
 function safeToken(value, fallback) {
@@ -143,6 +177,8 @@ module.exports = {
   buildRepartoMessageId,
   redactDeliverySummary,
   normalizeEmail,
+  uniqueEmails,
   shouldSkipSmtpForIsolatedTest,
+  isIsolatedTest,
   ISOLATED_TEST_DEFAULT_EMAIL,
 };

@@ -15,6 +15,8 @@ const logger = require('../middleware/logger');
 const { sanitizeCodeListForParams, sanitizeForSQL } = require('../utils/common');
 const repartidorDb = require('../repositories/repartidor-route-db2-repository');
 const { generateInvoicePDF } = require('../app/services/pdfService');
+const { safeDeliveryRecipientPlan } = require('../services/staff-email-directory-service');
+const { resolveDocumentComercialCode } = require('../services/reparto-variance-notification-service');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
 const { redisCache, TTL } = require('../services/redis-cache');
@@ -23,6 +25,7 @@ const {
     RepartoEmailDeliveryPolicyError,
     resolveRepartoEmailDelivery,
     buildRepartoMessageId,
+    isIsolatedTest,
 } = require('../services/reparto-email-delivery-policy');
 const {
     verifyToken,
@@ -549,6 +552,28 @@ router.post('/document/send-email', verifyToken, async (req, res) => {
                 'REPARTO_EMAIL_RECIPIENT_REQUIRED',
             );
         }
+        const clienteCodigo = String(header.CODIGOCLIENTEFACTURA || header.CODIGOCLIENTE || '').trim();
+        const documentId = [
+            key.year,
+            key.series,
+            key.terminal || 0,
+            key.number,
+            clienteCodigo,
+        ].filter((part) => part !== '' && part !== undefined && part !== null).join('-');
+        let comercialCode = '';
+        try {
+            comercialCode = await resolveDocumentComercialCode(documentId);
+        } catch (_error) {
+            comercialCode = '';
+        }
+        const directory = await safeDeliveryRecipientPlan({
+            repartidorId: req.documentOwnerId,
+            comercialCode,
+            clienteCodigo,
+        });
+        const cc = isIsolatedTest()
+            ? []
+            : (directory.emails || []).filter((email) => email !== effectiveRecipient);
         const logicalKey = `document:${isAlbaran ? 'albaran' : 'factura'}:${key.year}:${key.series}:${key.terminal || ''}:${key.number}`;
         const expectedMessageId = buildRepartoMessageId({
             kind: 'document',
@@ -557,6 +582,7 @@ router.post('/document/send-email', verifyToken, async (req, res) => {
         });
         const result = await sendEmailWithPdf({
             to: effectiveRecipient,
+            cc,
             subject: asunto || `${label} ${key.series}-${key.number} - Granja Mari Pepa`,
             htmlBody,
             pdfBuffer,
@@ -583,6 +609,8 @@ router.post('/document/send-email', verifyToken, async (req, res) => {
             messageId,
             ledgerWritten: true,
             deliveryPolicy: delivery.policy,
+            redirected: Boolean(delivery.redirected),
+            recipients: directory.plan,
         });
     } catch (error) {
         if (error instanceof RepartoEmailDeliveryPolicyError) {

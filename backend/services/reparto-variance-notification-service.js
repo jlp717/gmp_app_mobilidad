@@ -15,6 +15,7 @@ const {
   resolveDeliveryVarianceRecipients,
   resolveLiquidacionRecipients,
   normalizeVendorCode,
+  publicDeliveryRecipientPlan,
 } = require('./staff-email-directory-service');
 const {
   resolveRepartoEmailDelivery,
@@ -618,22 +619,36 @@ async function notifyAfterConfirm({
     };
   }
 
-  const { emails, details, missingRequired = [] } = await resolveRecipients({ repartidorId, comercialCode }, { query, env });
+  const { emails, details, missingRequired = [], recipients: recipientPlan } = await resolveRecipients({
+    repartidorId,
+    comercialCode,
+    clienteCodigo,
+  }, { query, env });
   const repartidorDetail = details.find((d) => d.label === 'repartidor');
   const comercialDetail = details.find((d) => d.label === 'comercial');
   payload.repartidorNombre = repartidorDetail?.nombre || '';
   payload.comercialNombre = comercialDetail?.nombre || '';
+  payload.recipients = recipientPlan || publicDeliveryRecipientPlan(details);
 
+  const blockingMissing = (details || []).filter((detail) => (
+    detail.optional !== true && !detail.email
+  ));
   let delivery;
-  if ((missingRequired || []).length > 0 || details.some((detail) => !detail.email)) {
+  if ((missingRequired || []).length > 0 || blockingMissing.length) {
     logger.warn('[variance] delivery deferred: unresolved required DB recipient');
-    delivery = { effectiveRecipients: [] };
+    delivery = { effectiveRecipients: [], intendedRecipients: emails };
   } else try {
     delivery = resolveRepartoEmailDelivery({ recipients: emails, env, mode: 'automatic' });
   } catch (error) {
     logger.warn(`[variance] delivery policy rejected message: ${error.code || error.message}`);
-    delivery = { effectiveRecipients: [] };
+    delivery = { effectiveRecipients: [], intendedRecipients: emails };
   }
+  payload.deliveryPolicy = {
+    policy: delivery.policy || 'deferred',
+    redirected: Boolean(delivery.redirected),
+    intendedCount: (delivery.intendedRecipients || emails || []).length,
+    smtpCount: (delivery.effectiveRecipients || []).length,
+  };
   const sendResult = await sendVarianceEmail(payload, delivery.effectiveRecipients, { sendEmail });
   payload.delivery = redactDeliverySummary(sendResult.results);
 
@@ -661,7 +676,14 @@ async function notifyAfterConfirm({
     }
   }
 
-  return { skipped: false, lineCount: lineas.length, ...sendResult, outboxId };
+  return {
+    skipped: false,
+    lineCount: lineas.length,
+    ...sendResult,
+    outboxId,
+    recipients: payload.recipients,
+    deliveryPolicy: payload.deliveryPolicy,
+  };
 }
 
 /**

@@ -21,6 +21,7 @@ void main() {
       isFalse,
     );
     expect(isValidRepartoReceiptEmailAddress('driver@gmp.es'), isTrue);
+    expect(isValidRepartoReceiptEmailAddress('reparto-test@localhost'), isTrue);
   });
 
   test('delivery-note fallback is limited to a not-found response', () {

@@ -23,6 +23,7 @@ const {
     RepartoEmailDeliveryPolicyError,
     resolveRepartoEmailDelivery,
     buildRepartoMessageId,
+    normalizeEmail,
 } = require('../services/reparto-email-delivery-policy');
 const {
     verifyToken,
@@ -373,7 +374,7 @@ function validateDocumentEmailRequest(req, res, next) {
     const destinatario = String(req.body?.destinatario || '').trim();
     const asunto = String(req.body?.asunto || '').trim();
     const cuerpo = String(req.body?.cuerpo || '').trim();
-    if (destinatario.length > 180 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatario)) {
+    if (destinatario.length > 180 || !normalizeEmail(destinatario)) {
         return sendRouteError(res, 422, 'EMAIL_INVALID');
     }
     if (asunto.length > 200 || cuerpo.length > 5000) {

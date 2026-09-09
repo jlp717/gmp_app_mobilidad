@@ -335,9 +335,24 @@ describe('reparto-variance-notification-service', () => {
         'carlos@example.test',
         'driver@example.test',
         'comercial@example.test',
+        'cliente@example.test',
       ],
-      details: [],
+      details: [
+        { label: 'cliente', email: 'cliente@example.test', optional: true },
+        { label: 'repartidor', email: 'driver@example.test' },
+        { label: 'comercial', email: 'comercial@example.test' },
+        { label: 'CARLOS_CORBALAN', email: 'carlos@example.test' },
+        { label: 'JAVIER_LACAL', email: 'javier@example.test' },
+      ],
       missingRequired: [],
+      recipients: {
+        to: [{ role: 'cliente', present: true }],
+        cc: [
+          { role: 'comercial', present: true },
+          { role: 'CARLOS_CORBALAN', present: true },
+          { role: 'JAVIER_LACAL', present: true },
+        ],
+      },
     }));
     const resolveComercial = jest.fn(async () => '15');
 
@@ -345,7 +360,7 @@ describe('reparto-variance-notification-service', () => {
       NODE_ENV: 'test',
       REPARTO_ENVIRONMENT: 'test',
       REPARTO_TABLE_SET: 'isolated_test',
-      REPARTO_EMAIL_TEST_ALLOWLIST: 'javier@example.test,carlos@example.test,driver@example.test,comercial@example.test',
+      REPARTO_EMAIL_TEST_ALLOWLIST: 'javier@example.test,carlos@example.test,driver@example.test,comercial@example.test,cliente@example.test',
       ODBC_DSN: 'GMP',
       REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
       REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
@@ -389,12 +404,13 @@ describe('reparto-variance-notification-service', () => {
 
     expect(resolveComercial).toHaveBeenCalledWith('2026-A-1-100-4300001', expect.any(Object));
     expect(resolveRecipients).toHaveBeenCalledWith(
-      { repartidorId: '94', comercialCode: '15' },
+      { repartidorId: '94', comercialCode: '15', clienteCodigo: '4300001' },
       expect.any(Object),
     );
-    expect(sendEmail).toHaveBeenCalledTimes(4);
+    expect(sendEmail).toHaveBeenCalledTimes(5);
     expect(sendEmail.mock.calls.map(([message]) => message.to).sort()).toEqual([
       'carlos@example.test',
+      'cliente@example.test',
       'comercial@example.test',
       'driver@example.test',
       'javier@example.test',
@@ -405,7 +421,15 @@ describe('reparto-variance-notification-service', () => {
       pdfFilename: expect.stringContaining('Diferencia_entrega_'),
     }));
     expect(result.skipped).toBe(false);
-    expect(result.sent).toBe(4);
+    expect(result.sent).toBe(5);
+    expect(result.recipients).toEqual({
+      to: [{ role: 'cliente', present: true }],
+      cc: [
+        { role: 'comercial', present: true },
+        { role: 'CARLOS_CORBALAN', present: true },
+        { role: 'JAVIER_LACAL', present: true },
+      ],
+    });
     expect(query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO'))).toBe(true);
   });
 
@@ -611,5 +635,74 @@ describe('reparto-variance-notification-service', () => {
     expect(query.mock.calls.some(([sql]) => String(sql).includes("SET DIGEST_INCLUDED = 'S'"))).toBe(false);
     const pendingUpdate = query.mock.calls.find(([sql]) => String(sql).includes('SET ERROR = ?'));
     expect(pendingUpdate?.[1]).toEqual(['Digest pending: 0/1 delivered', 12]);
+  });
+
+  test('notifyAfterConfirm redirects isolated_test product mailboxes to the sink and keeps intended roles', async () => {
+    const query = jest.fn(async () => []);
+    const sendEmail = jest.fn(async () => ({ success: true, messageId: 'sink-1' }));
+    const env = {
+      NODE_ENV: 'test',
+      REPARTO_ENVIRONMENT: 'test',
+      REPARTO_TABLE_SET: 'isolated_test',
+      ODBC_DSN: 'GMP',
+      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+      REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+      REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+      REPARTO_WRITES_ENABLED: 'false',
+      REPARTO_PRODUCTION_WRITES_APPROVED: 'false',
+      REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false',
+      REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'false',
+      REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'false',
+      REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'false',
+      REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+    };
+    const result = await notifyAfterConfirm({
+      command: {
+        delivery: {
+          itemId: '2026-A-1-100-4300001',
+          status: 'PARCIAL',
+          lineas: [{ lineaId: '1', codigoArticulo: 'SKU1', cantidadPedida: 2, cantidadEntregada: 1 }],
+        },
+        actor: { repartidorId: '94' },
+        cobro: { codigoCliente: '4300001', nombreCliente: 'Cliente' },
+      },
+      result: { created: true, confirmationId: '91', deliveryStatus: 'PARCIAL' },
+    }, {
+      query,
+      env,
+      sendEmail,
+      resolveComercial: jest.fn(async () => '15'),
+      resolveRecipients: jest.fn(async () => ({
+        emails: ['cliente@empresa.com', 'com@empresa.com', 'carlos@empresa.com', 'javier@empresa.com'],
+        details: [
+          { label: 'cliente', email: 'cliente@empresa.com', optional: true },
+          { label: 'comercial', email: 'com@empresa.com' },
+          { label: 'CARLOS_CORBALAN', email: 'carlos@empresa.com' },
+          { label: 'JAVIER_LACAL', email: 'javier@empresa.com' },
+        ],
+        missingRequired: [],
+        recipients: {
+          to: [{ role: 'cliente', present: true }],
+          cc: [
+            { role: 'comercial', present: true },
+            { role: 'CARLOS_CORBALAN', present: true },
+            { role: 'JAVIER_LACAL', present: true },
+          ],
+        },
+      })),
+    });
+
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'reparto-test@localhost' }));
+    expect(result.deliveryPolicy).toMatchObject({
+      policy: 'isolated_test_redirect',
+      redirected: true,
+    });
+    expect(result.recipients.to.map((item) => item.role)).toEqual(['cliente']);
+    expect(result.recipients.cc.map((item) => item.role)).toEqual([
+      'comercial',
+      'CARLOS_CORBALAN',
+      'JAVIER_LACAL',
+    ]);
   });
 });

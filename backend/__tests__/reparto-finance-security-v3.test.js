@@ -33,6 +33,20 @@ jest.mock('../services/repartidor-finance-service', () => mockFinance);
 jest.mock('../services/redis-cache', () => ({
   deleteCachePattern: jest.fn().mockResolvedValue(undefined), invalidateCache: jest.fn(),
 }));
+jest.mock('../services/staff-email-directory-service', () => ({
+  safeDeliveryRecipientPlan: jest.fn(async () => ({
+    plan: {
+      to: [{ role: 'cliente', present: true }],
+      cc: [
+        { role: 'comercial', present: true },
+        { role: 'CARLOS_CORBALAN', present: true },
+        { role: 'JAVIER_LACAL', present: true },
+      ],
+    },
+    emails: ['cliente@example.com'],
+    details: [],
+  })),
+}));
 jest.mock('../services/emailPdfService', () => ({
   sendEmailWithPdf: mockSendEmailWithPdf,
   generateDeliveryEmailHtml: jest.fn().mockReturnValue('<p>receipt</p>'),

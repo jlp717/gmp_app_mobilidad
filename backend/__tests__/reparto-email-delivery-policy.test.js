@@ -21,6 +21,7 @@ describe('reparto email delivery policy', () => {
       env: { REPARTO_TABLE_SET: 'production' },
       mode: 'manual',
     })).toEqual({
+      intendedRecipients: ['cliente@empresa.com'],
       effectiveRecipients: ['cliente@empresa.com'],
       redirected: false,
       policy: 'direct',
@@ -49,6 +50,7 @@ describe('reparto email delivery policy', () => {
       recipients: ['sink@example.test', 'auditor@example.test', 'sink@example.test'],
       env: isolatedEnv,
     })).toEqual({
+      intendedRecipients: ['sink@example.test', 'auditor@example.test'],
       effectiveRecipients: ['sink@example.test', 'auditor@example.test'],
       redirected: false,
       policy: 'isolated_test_allowlist',
@@ -61,6 +63,7 @@ describe('reparto email delivery policy', () => {
       env: { REPARTO_TABLE_SET: 'isolated_test' },
       mode: 'manual',
     })).toEqual({
+      intendedRecipients: ['reparto-test@localhost'],
       effectiveRecipients: ['reparto-test@localhost'],
       redirected: false,
       policy: 'isolated_test_allowlist',
@@ -76,25 +79,38 @@ describe('reparto email delivery policy', () => {
       },
       mode: 'manual',
     })).toEqual({
+      intendedRecipients: ['reparto-test@localhost'],
       effectiveRecipients: ['reparto-test@localhost'],
       redirected: false,
       policy: 'isolated_test_allowlist',
     });
   });
 
-  test('isolated test rejects non-default recipients when env allowlist is empty', () => {
-    try {
-      resolveRepartoEmailDelivery({
-        recipients: ['x@example.test'],
-        env: {
-          REPARTO_TABLE_SET: 'isolated_test',
-          REPARTO_EMAIL_STRICT_TEST_POLICY: 'true',
-        },
-      });
-      throw new Error('expected policy rejection');
-    } catch (error) {
-      expect(error).toMatchObject({ code: 'REPARTO_EMAIL_RECIPIENT_NOT_ALLOWED', statusCode: 403 });
-    }
+  test('automatic isolated_test redirects product mailboxes to the sink and keeps intended to/cc', () => {
+    expect(resolveRepartoEmailDelivery({
+      recipients: ['cliente@empresa.com', 'comercial@empresa.com', 'interno@empresa.com'],
+      env: { REPARTO_TABLE_SET: 'isolated_test' },
+    })).toEqual({
+      intendedRecipients: ['cliente@empresa.com', 'comercial@empresa.com', 'interno@empresa.com'],
+      effectiveRecipients: ['reparto-test@localhost'],
+      redirected: true,
+      policy: 'isolated_test_redirect',
+    });
+  });
+
+  test('automatic isolated_test redirects non-allowlisted product recipients to the sink', () => {
+    expect(resolveRepartoEmailDelivery({
+      recipients: ['x@example.test'],
+      env: {
+        REPARTO_TABLE_SET: 'isolated_test',
+        REPARTO_EMAIL_STRICT_TEST_POLICY: 'true',
+      },
+    })).toEqual({
+      intendedRecipients: ['x@example.test'],
+      effectiveRecipients: ['reparto-test@localhost'],
+      redirected: true,
+      policy: 'isolated_test_redirect',
+    });
   });
 
   test('manual isolated messages reject non-allowlisted recipients', () => {

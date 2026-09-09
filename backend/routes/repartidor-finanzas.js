@@ -36,10 +36,12 @@ const {
   resolveRepartoEmailDelivery,
   buildRepartoMessageId,
   normalizeEmail,
+  isIsolatedTest,
 } = require('../services/reparto-email-delivery-policy');
 const {
   recordDocumentEmailLedger,
 } = require('../repositories/repartidor-route-db2-repository');
+const { safeDeliveryRecipientPlan } = require('../services/staff-email-directory-service');
 
 let Sentry = null;
 try {
@@ -942,6 +944,22 @@ router.post(
           'REPARTO_EMAIL_RECIPIENT_REQUIRED',
         );
       }
+      let comercialCode = '';
+      try {
+        comercialCode = await repartoVarianceNotificationService.resolveDocumentComercialCode(
+          receipt.documentId,
+        );
+      } catch (_error) {
+        comercialCode = '';
+      }
+      const directory = await safeDeliveryRecipientPlan({
+        repartidorId: receipt.repartidorId,
+        comercialCode,
+        clienteCodigo: receipt.cliente?.codigo,
+      });
+      const cc = isIsolatedTest()
+        ? []
+        : (directory.emails || []).filter((email) => email !== effectiveRecipient);
       const logicalKey = `receipt:${receipt.confirmationId}`;
       const expectedMessageId = buildRepartoMessageId({
         kind: 'receipt',
@@ -950,6 +968,7 @@ router.post(
       });
       const sent = await sendEmailWithPdf({
         to: effectiveRecipient,
+        cc,
         subject: `Nota de entrega ${serie}-${numero} - Granja Mari Pepa`,
         htmlBody: generateDeliveryEmailHtml({
           numero,
@@ -985,6 +1004,8 @@ router.post(
         messageId,
         ledgerWritten: true,
         deliveryPolicy: delivery.policy,
+        redirected: Boolean(delivery.redirected),
+        recipients: directory.plan,
       });
     } catch (error) {
       if (error instanceof RepartoEmailDeliveryPolicyError) {

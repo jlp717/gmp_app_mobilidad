@@ -45,6 +45,20 @@ jest.mock('../services/emailPdfService', () => ({
   cachePdf: jest.fn(),
   getCachedPdf: jest.fn(),
 }));
+jest.mock('../services/staff-email-directory-service', () => ({
+  safeDeliveryRecipientPlan: jest.fn(async () => ({
+    plan: {
+      to: [{ role: 'cliente', present: true }],
+      cc: [
+        { role: 'comercial', present: true },
+        { role: 'CARLOS_CORBALAN', present: true },
+        { role: 'JAVIER_LACAL', present: true },
+      ],
+    },
+    emails: [],
+    details: [],
+  })),
+}));
 jest.mock('../services/whatsappCloudService', () => ({
   isConfigured: jest.fn(() => false),
   isEnabled: jest.fn(() => false),
@@ -548,20 +562,33 @@ describe('document ownership and side-effect contracts', () => {
         NUMEROALBARAN: 1, SERIEALBARAN: 'A', IMPORTETOTAL: 10, NOMBRECLIENTEFACTURA: 'Cliente',
       }])
       .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
 
     try {
       const response = await authenticatedPost('/repartidor/document/send-email', {
         ...albaranBody,
-        destinatario: 'cliente@example.test',
+        destinatario: 'reparto-test@localhost',
         repartidorId: '05',
       });
 
       expect(response.status).toBe(200);
-      expect(response.body).toMatchObject({ success: true, messageId: 'mid-1', ledgerWritten: true });
+      expect(response.body).toMatchObject({
+        success: true,
+        messageId: 'mid-1',
+        ledgerWritten: true,
+        recipients: {
+          to: [{ role: 'cliente', present: true }],
+          cc: [
+            { role: 'comercial', present: true },
+            { role: 'CARLOS_CORBALAN', present: true },
+            { role: 'JAVIER_LACAL', present: true },
+          ],
+        },
+      });
       expect(mockSendEmailWithPdf).toHaveBeenCalledTimes(1);
       expect(mockSendEmailWithPdf.mock.calls[0][0]).toMatchObject({
-        to: 'cliente@example.test',
+        to: 'reparto-test@localhost',
         pdfFilename: expect.stringMatching(/Albaran_A-1\.pdf/i),
       });
       const ledgerCall = mockQueryWithParams.mock.calls.find(([sql]) =>
@@ -659,15 +686,16 @@ describe('document ownership and side-effect contracts', () => {
       .mockResolvedValueOnce([{
         NUMEROALBARAN: 1, SERIEALBARAN: 'A', IMPORTETOTAL: 10, NOMBRECLIENTEFACTURA: 'Cliente',
       }])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
     const response = await authenticatedPost('/repartidor/document/send-email', {
       ...albaranBody,
-      destinatario: 'cliente@example.test',
+      destinatario: 'reparto-test@localhost',
       repartidorId: '05',
     });
     expect(response.status).toBe(503);
     expect(response.body.code).toBe('DOCUMENT_EMAIL_MESSAGE_ID_REQUIRED');
-    expect(mockQueryWithParams).toHaveBeenCalledTimes(3);
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(4);
   });
 
   test('email fails closed when TEST ledger write fails', async () => {
@@ -682,11 +710,12 @@ describe('document ownership and side-effect contracts', () => {
         NUMEROALBARAN: 1, SERIEALBARAN: 'A', IMPORTETOTAL: 10, NOMBRECLIENTEFACTURA: 'Cliente',
       }])
       .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
       .mockRejectedValueOnce(new Error('ledger unavailable'));
     try {
       const response = await authenticatedPost('/repartidor/document/send-email', {
         ...albaranBody,
-        destinatario: 'cliente@example.test',
+        destinatario: 'reparto-test@localhost',
         repartidorId: '05',
       });
       expect(response.status).toBe(503);

@@ -30,6 +30,13 @@ const LIQUIDACION_ROLE_KEYS = Object.freeze([  'CARLOS_CORBALAN',
   'JAVIER_LACAL',
 ]);
 
+const PRODUCT_DELIVERY_TO_ROLES = Object.freeze(['cliente']);
+const PRODUCT_DELIVERY_CC_ROLES = Object.freeze([
+  'comercial',
+  'CARLOS_CORBALAN',
+  'JAVIER_LACAL',
+]);
+
 /** @type {Map<string, { value: any, expiresAt: number }>} */
 const cache = new Map();
 
@@ -314,9 +321,73 @@ async function resolveRoleEmails(roleKeys, {
   return cacheSet(cacheKey, results);
 }
 
+async function resolveClientEmail(clienteCodigo, { query = queryWithParams } = {}) {
+  const code = normalizeText(clienteCodigo);
+  if (!code) return null;
+
+  const cacheKey = `clientEmail:${code}`;
+  const cached = cacheGet(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const sql = `
+    SELECT TRIM(CORREOELECTRONICOCLIENTE) AS EMAIL
+      FROM DSEDAC.CLX
+     WHERE TRIM(CODIGOCLIENTE) = ?
+     FETCH FIRST 1 ROW ONLY
+  `;
+  try {
+    const rows = await query(sql, [code]);
+    const email = isValidEmail(rowValue(rows?.[0], 'EMAIL'));
+    if (!email) {
+      logger.warn(`[staff-email] No live email for client ${code} — skip cliente TO`);
+    }
+    return cacheSet(cacheKey, email || null);
+  } catch (error) {
+    logger.warn(`[staff-email] CLX client email lookup failed: ${error.message}`);
+    return cacheSet(cacheKey, null);
+  }
+}
+
+function publicDeliveryRecipientPlan(details = []) {
+  const byLabel = new Map(
+    (Array.isArray(details) ? details : []).map((detail) => [detail.label, detail]),
+  );
+  const slot = (role) => ({
+    role,
+    present: Boolean(byLabel.get(role)?.email),
+  });
+  return {
+    to: PRODUCT_DELIVERY_TO_ROLES.map(slot),
+    cc: PRODUCT_DELIVERY_CC_ROLES.map(slot),
+  };
+}
+
+function emptyDeliveryRecipientPlan() {
+  return publicDeliveryRecipientPlan([]);
+}
+
+async function safeDeliveryRecipientPlan(args, opts = {}) {
+  try {
+    const resolved = await resolveDeliveryVarianceRecipients(args, opts);
+    return {
+      plan: resolved.recipients || publicDeliveryRecipientPlan(resolved.details),
+      emails: resolved.emails || [],
+      details: resolved.details || [],
+    };
+  } catch (error) {
+    logger.warn(`[staff-email] delivery recipient plan failed: ${String(error?.message || error).slice(0, 180)}`);
+    return {
+      plan: emptyDeliveryRecipientPlan(),
+      emails: [],
+      details: [],
+    };
+  }
+}
+
 async function resolveDeliveryVarianceRecipients({
   repartidorId,
   comercialCode,
+  clienteCodigo,
 } = {}, {
   query = queryWithParams,
   env = process.env,
@@ -324,37 +395,55 @@ async function resolveDeliveryVarianceRecipients({
   const emails = new Set();
   const details = [];
 
-  async function addVendor(label, code) {
+  async function addVendor(label, code, { optional = false } = {}) {
     const profile = await resolveVendorProfile(code, { query });
     details.push({
       label,
       vendorCode: profile.vendorCode,
       email: profile.email,
       nombre: profile.nombre,
+      optional,
     });
     if (profile.email) emails.add(profile.email.toLowerCase());
   }
 
-  function addMissingRequired(label, value) {
+  function addMissing(label, value, { optional = false } = {}) {
     details.push({
       label,
       vendorCode: normalizeVendorCode(value),
       email: null,
       nombre: null,
+      optional,
     });
+  }
+
+  if (clienteCodigo !== undefined) {
+    const clientEmail = await resolveClientEmail(clienteCodigo, { query });
+    details.push({
+      label: 'cliente',
+      vendorCode: '',
+      email: clientEmail,
+      nombre: null,
+      optional: true,
+    });
+    if (clientEmail) emails.add(clientEmail.toLowerCase());
+  } else {
+    addMissing('cliente', '', { optional: true });
   }
 
   const repartidorCode = normalizeVendorCode(repartidorId);
   if (repartidorCode) {
     await addVendor('repartidor', repartidorCode);
   } else if (repartidorId !== undefined) {
-    addMissingRequired('repartidor', repartidorId);
+    addMissing('repartidor', repartidorId);
   }
   const comercial = normalizeVendorCode(comercialCode);
   if (comercial) {
     await addVendor('comercial', comercial);
   } else if (comercialCode !== undefined) {
-    addMissingRequired('comercial', comercialCode);
+    addMissing('comercial', comercialCode);
+  } else {
+    addMissing('comercial', '', { optional: true });
   }
 
   const roles = await resolveRoleEmails([...VARIANCE_ROLE_KEYS], { query, env });
@@ -369,8 +458,15 @@ async function resolveDeliveryVarianceRecipients({
     if (role.email) emails.add(role.email.toLowerCase());
   }
 
-  const missingRequired = details.filter((detail) => !detail.email).map((detail) => detail.label);
-  return { emails: [...emails], details, missingRequired };
+  const missingRequired = details
+    .filter((detail) => !detail.email && detail.optional !== true)
+    .map((detail) => detail.label);
+  return {
+    emails: [...emails],
+    details,
+    missingRequired,
+    recipients: publicDeliveryRecipientPlan(details),
+  };
 }
 
 function parseIsoDateParts(value) {
@@ -522,11 +618,17 @@ module.exports = {
   CACHE_TTL_MS,
   VARIANCE_ROLE_KEYS,
   LIQUIDACION_ROLE_KEYS,
+  PRODUCT_DELIVERY_TO_ROLES,
+  PRODUCT_DELIVERY_CC_ROLES,
   resolveVendorEmail,
   resolveVendorProfile,
   resolveVendorByNameMatch,
   resolveRoleEmails,
+  resolveClientEmail,
   resolveDeliveryVarianceRecipients,
+  publicDeliveryRecipientPlan,
+  emptyDeliveryRecipientPlan,
+  safeDeliveryRecipientPlan,
   resolveDayRouteComercialCodes,
   resolveLiquidacionRecipients,
   clearCache,

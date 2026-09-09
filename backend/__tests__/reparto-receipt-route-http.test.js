@@ -20,6 +20,20 @@ jest.mock('../services/whatsappGatewayService', () => ({
 jest.mock('../middleware/auth', () => ({ verifyToken: (req, _res, next) => { req.user = mockUser; next(); }, requireRoles: () => (_req, _res, next) => next() }));
 jest.mock('../services/repartidor-finance-service', () => ({}));
 jest.mock('../services/redis-cache', () => ({ deleteCachePattern: jest.fn(), invalidateCache: jest.fn() }));
+jest.mock('../services/staff-email-directory-service', () => ({
+  safeDeliveryRecipientPlan: jest.fn(async () => ({
+    plan: {
+      to: [{ role: 'cliente', present: true }],
+      cc: [
+        { role: 'comercial', present: true },
+        { role: 'CARLOS_CORBALAN', present: true },
+        { role: 'JAVIER_LACAL', present: true },
+      ],
+    },
+    emails: ['cliente@empresa.com'],
+    details: [],
+  })),
+}));
 const routes = require('../routes/repartidor-finanzas');
 const sig = `ev_${'a'.repeat(64)}`;
 function app() { const value = express(); value.use(express.json()); value.use('/finanzas', routes); return value; }
@@ -166,6 +180,14 @@ test('POST receipt email accepts the isolated_test localhost sink', async () => 
     .send({ destinatario: 'reparto-test@localhost' });
   expect(res.status).toBe(200);
   expect(res.body.success).toBe(true);
+  expect(res.body.recipients).toEqual({
+    to: [{ role: 'cliente', present: true }],
+    cc: [
+      { role: 'comercial', present: true },
+      { role: 'CARLOS_CORBALAN', present: true },
+      { role: 'JAVIER_LACAL', present: true },
+    ],
+  });
   expect(emailPdf.sendEmailWithPdf).toHaveBeenCalledWith(expect.objectContaining({
     to: 'reparto-test@localhost',
   }));

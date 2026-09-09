@@ -100,8 +100,11 @@ class RepartoReceiptEmailResult {
   bool get delivered => success && messageId.isNotEmpty && ledgerWritten;
 }
 
-bool isValidRepartoReceiptEmailAddress(String value) =>
-    RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value.trim());
+bool isValidRepartoReceiptEmailAddress(String value) {
+  final email = value.trim();
+  return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email) ||
+      RegExp(r'^[^\s@]+@localhost$').hasMatch(email);
+}
 
 String requireConcreteRepartoOwner(String? value) {
   if (value == null || !isValidRepartoOwnerId(value)) {

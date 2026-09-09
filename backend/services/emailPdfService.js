@@ -21,6 +21,7 @@ const { assertSecureSmtpConfig, buildSmtpConfig } = require('./smtp-config');
 const {
     shouldSkipSmtpForIsolatedTest,
     normalizeEmail: normalizeRepartoEmail,
+    uniqueEmails,
 } = require('./reparto-email-delivery-policy');
 
 function redactEmailForLog(value) {
@@ -310,7 +311,7 @@ function getCachedPdf(key) {
  * @param {string} params.pdfFilename - Nombre del archivo PDF
  * @returns {Promise<{success: boolean, messageId: string}>}
  */
-async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pdfFilename, messageId }) {
+async function sendEmailWithPdf({ to, cc, subject, htmlBody, textBody, pdfBuffer, pdfFilename, messageId }) {
     // Validación de inputs
     if (!to || typeof to !== 'string') {
         throw new Error('Destinatario (to) es requerido');
@@ -321,6 +322,8 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
     if (!normalizedTo && !emailRegex.test(to)) {
         throw new Error('Email destinatario inválido');
     }
+    const ccList = uniqueEmails(Array.isArray(cc) ? cc : (cc ? [cc] : []))
+        .filter((email) => email && email !== normalizedTo);
 
     if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
         throw new Error('PDF buffer es requerido');
@@ -336,6 +339,7 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
             : '<gmp-reparto-isolated-test@localhost>';
         logger.info('SMTP skipped for isolated_test recipient', {
             to: redactEmailForLog(to),
+            ccCount: ccList.length,
             subject,
             pdfFilename,
         });
@@ -383,6 +387,7 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
                 from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
                 replyTo: REPLY_TO,
                 to: to,
+                ...(ccList.length ? { cc: ccList.join(', ') } : {}),
                 subject: subject || `Documento - ${FROM_NAME}`,
                 html: effectiveHtml,
                 text: textBody || [
