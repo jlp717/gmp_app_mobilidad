@@ -2221,6 +2221,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       });
       return;
     }
+    // Dart 3 does not promote amount through the later async/closures.
+    final cobroAmount = amount!;
     final repartidorIds = _repartidorIdsParaInvalidar();
     final repartidorId = repartidorIds.isEmpty
         ? _albaran.codigoRepartidor.trim()
@@ -2250,7 +2252,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
             const SizedBox(height: 8),
             Text(
-              '${amount!.toStringAsFixed(2).replaceAll('.', ',')} € · '
+              '${cobroAmount.toStringAsFixed(2).replaceAll('.', ',')} € · '
               '${ruteroPaymentMethodLabel(_selectedPaymentMethod)}',
               style: TextStyle(
                 color: AppTheme.textPrimary,
@@ -2295,7 +2297,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final payload = buildRuteroStandaloneCobroPayload(
         albaran: _albaran,
         repartidorId: repartidorId,
-        importeCobrado: amount,
+        importeCobrado: cobroAmount,
         formaPago: _selectedPaymentMethod,
         idempotencyToken: _pendingStandaloneCobroToken!,
         notas: _cobroNotasController.text,
@@ -2318,16 +2320,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       }
       final remaining = remainingCollectableAfter(
         currentAvailable: effectiveDocumentCollectable(_albaran),
-        collected: amount,
+        collected: cobroAmount,
       );
       final previousCollected = _albaran.importeCobrado ?? 0;
       final collectedNow =
-          result.created ? previousCollected + amount : previousCollected;
+          result.created ? previousCollected + cobroAmount : previousCollected;
       setState(() {
         _albaran = _albaran.copyWith(
           cobrado: true,
           cobroId: result.cobroId ?? _albaran.cobroId,
-          importeCobrado: collectedNow > 0.004 ? collectedNow : amount,
+          importeCobrado: collectedNow > 0.004 ? collectedNow : cobroAmount,
           importeDisponibleCobro: remaining,
           importePendienteCobro: remaining,
           formaPagoCobro: _selectedPaymentMethod,
