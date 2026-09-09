@@ -100,7 +100,7 @@ describe('repartidor liquidacion outbox delivery', () => {
         return [{ ID: 71, STATUS: state.status, PAYLOAD_JSON: state.payload, CODIGOVENDEDOR: '94' }];
       }
       if (statement.includes("SET STATUS = 'PENDING'")) {
-        if (state.status === 'FAILED' && state.payload === params[2]) {
+        if (state.status === 'FAILED') {
           state.status = 'PENDING';
           state.payload = params[0];
         }
@@ -132,7 +132,7 @@ describe('repartidor liquidacion outbox delivery', () => {
         }];
       }
       if (statement.includes("SET STATUS = 'PENDING'")) {
-        if (['FAILED', 'SENT'].includes(state.status) && state.payload === params[2]) {
+        if (['FAILED', 'SENT'].includes(state.status)) {
           state.status = 'PENDING';
           state.payload = params[0];
         }
@@ -148,6 +148,49 @@ describe('repartidor liquidacion outbox delivery', () => {
     }, { query, env: runtimeEnv });
     expect(result.requeued).toBe(true);
     expect(result.liquidacion).toMatchObject({ id: '701', repartidorId: '94', date: '2026-08-09' });
+    expect(state.status).toBe('PENDING');
+  });
+
+  test('requeues SENT even if the JOIN collides STATUS with CLOSED ops', async () => {
+    const state = { status: 'SENT', payload: JSON.stringify({ identity: 'daily-collision' }) };
+    const query = jest.fn(async (sql, params = []) => {
+      const statement = String(sql);
+      if (statement.includes('JOIN') && statement.includes('IDEMPOTENCY_TOKEN')) {
+        return [{
+          OUTBOX_ID: 81,
+          OUTBOX_STATUS: 'SENT',
+          STATUS: 'CLOSED',
+          ID: 8153,
+          PAYLOAD_JSON: state.payload,
+          CODIGOVENDEDOR: '08',
+          OPS_ID: 8153,
+          DIALIQUIDACION: 8,
+          MESLIQUIDACION: 9,
+          ANOLIQUIDACION: 2026,
+          NUMEROLIQUIDACION: 1,
+          LIQUIDACION_STATUS: 'CLOSED',
+          SNAPSHOT_JSON: '{}',
+        }];
+      }
+      if (statement.includes("SET STATUS = 'PENDING'")) {
+        expect(params[1]).toBe(81);
+        if (['FAILED', 'SENT'].includes(state.status)) {
+          state.status = 'PENDING';
+          state.payload = params[0];
+        }
+        return [];
+      }
+      if (statement.includes("WHERE ID = ? AND STATUS = 'PENDING'")) {
+        expect(params[0]).toBe(81);
+        return state.status === 'PENDING' ? [{ STATUS: state.status, PAYLOAD_JSON: state.payload }] : [];
+      }
+      return [];
+    });
+    const result = await requeueFailedLiquidacionOutbox({
+      idempotencyToken: 'liq-jefe-hitmtrtpv1i', canAccessRepartidor: () => true,
+    }, { query, env: runtimeEnv });
+    expect(result.requeued).toBe(true);
+    expect(result.outboxId).toBe('81');
     expect(state.status).toBe('PENDING');
   });
 

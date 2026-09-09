@@ -51,6 +51,7 @@ class _RepartidorLiquidacionDiariaPageState
   bool _saving = false;
   bool _submittingEntry = false;
   bool _resendingEmails = false;
+  bool _knownClosedFromLedger = false;
   final Map<String, String> _entryTokens = <String, String>{};
   RepartidorLiquidacionResult? _closedResult;
   final _ingresoBancoController = TextEditingController();
@@ -83,6 +84,7 @@ class _RepartidorLiquidacionDiariaPageState
               _sessionDate,
             );
       _closedResult = null;
+      _knownClosedFromLedger = false;
       _entryTokens.clear();
       _seededClassicFields = false;
     }
@@ -139,7 +141,12 @@ class _RepartidorLiquidacionDiariaPageState
     LiquidacionLedgerArgs ledgerArgs,
   ) {
     final isAggregate = widget.repartidorId.contains(',');
-    final closed = _closedResult != null;
+    final ledgerClosed = asyncLedger?.valueOrNull?.status == 'CLOSED';
+    _rememberLedgerClosed(ledgerClosed);
+    final closed =
+        _closedResult != null || ledgerClosed || _knownClosedFromLedger;
+    final closedCard =
+        _closedResult ?? (closed ? _placeholderClosedResult(summary) : null);
     if (!_seededClassicFields) {
       _ingresoBancoController.text = _classicMoney(summary.ingresoBanco);
       _seededClassicFields = true;
@@ -159,7 +166,7 @@ class _RepartidorLiquidacionDiariaPageState
       isSaving: _saving,
       canCreateAdjustments: widget.canCreateAdjustments,
       isSubmittingEntry: _submittingEntry,
-      closedResult: _closedResult,
+      closedResult: closedCard,
       onBack: Navigator.of(context).canPop()
           ? () => Navigator.of(context).pop()
           : null,
@@ -167,9 +174,12 @@ class _RepartidorLiquidacionDiariaPageState
       onExpense: () => unawaited(_showEntryDialog(_EntryKind.expense)),
       onBankDeposit: () => unawaited(_showEntryDialog(_EntryKind.bankDeposit)),
       onAdjustment: () => unawaited(_showEntryDialog(_EntryKind.adjustment)),
-      onPreviewPdf:
-          closed ? () => unawaited(_generatePdf(_closedResult!)) : null,
-      onSharePdf: closed ? () => unawaited(_sharePdf(_closedResult!)) : null,
+      onPreviewPdf: _closedResult != null
+          ? () => unawaited(_generatePdf(_closedResult!))
+          : null,
+      onSharePdf: _closedResult != null
+          ? () => unawaited(_sharePdf(_closedResult!))
+          : null,
       onResendEmails: closed ? () => unawaited(_resendEmails()) : null,
       cobrosPanel: summary.cobros.isEmpty
           ? RepartidorExecutivePanel(
@@ -393,7 +403,10 @@ class _RepartidorLiquidacionDiariaPageState
   }
 
   Future<void> _resendEmails() async {
-    if (_resendingEmails || _closedResult == null) return;
+    if (_resendingEmails ||
+        (_closedResult == null && !_knownClosedFromLedger)) {
+      return;
+    }
     setState(() => _resendingEmails = true);
     final modal = AsyncOperationModal.show(
       context,
@@ -522,7 +535,12 @@ class _RepartidorLiquidacionDiariaPageState
   }
 
   Future<void> _showEntryDialog(_EntryKind kind) async {
-    if (_saving || _submittingEntry || _closedResult != null) return;
+    if (_saving ||
+        _submittingEntry ||
+        _closedResult != null ||
+        _knownClosedFromLedger) {
+      return;
+    }
     final result =
         await showDialog<({double amount, String detail, String? observation})>(
       context: context,
@@ -538,7 +556,9 @@ class _RepartidorLiquidacionDiariaPageState
     String detail,
     String? observation,
   ) async {
-    if (_submittingEntry || _closedResult != null) return;
+    if (_submittingEntry || _closedResult != null || _knownClosedFromLedger) {
+      return;
+    }
     final fingerprint = buildLiquidacionEntryFingerprint(
       widget.repartidorId,
       _sessionDate,
@@ -665,9 +685,51 @@ class _RepartidorLiquidacionDiariaPageState
     return DateTime(now.year, now.month, now.day);
   }
 
+  String _sessionIsoDate() {
+    final month = _sessionDate.month.toString().padLeft(2, '0');
+    final day = _sessionDate.day.toString().padLeft(2, '0');
+    return '${_sessionDate.year}-$month-$day';
+  }
+
+  void _rememberLedgerClosed(bool closed) {
+    if (closed == _knownClosedFromLedger) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _knownClosedFromLedger == closed) return;
+      setState(() => _knownClosedFromLedger = closed);
+    });
+  }
+
+  RepartidorLiquidacionResult _placeholderClosedResult(
+    RepartidorDailySummary summary,
+  ) {
+    return RepartidorLiquidacionResult(
+      created: false,
+      id: _idempotencyToken,
+      marker: _idempotencyToken,
+      repartidorId: widget.repartidorId,
+      date: _sessionIsoDate(),
+      status: 'CLOSED',
+      snapshot: RepartidorLiquidacionSnapshot(
+        deliveries: summary.totalCobrosDia,
+        payments: summary.totalCobrosDia,
+        expenses: summary.gastos,
+        adjustments: summary.ajustes,
+        bankDeposits: summary.ingresoBanco,
+        pending: summary.deudaPendiente,
+        openingBalance: 0,
+        balance: summary.saldoActual,
+      ),
+    );
+  }
+
   void _refreshSessionDateIfSafe() {
     final today = _today();
-    if (_saving || _closedResult != null || _sessionDate == today) return;
+    if (_saving ||
+        _closedResult != null ||
+        _knownClosedFromLedger ||
+        _sessionDate == today) {
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _saving) return;
       setState(() {

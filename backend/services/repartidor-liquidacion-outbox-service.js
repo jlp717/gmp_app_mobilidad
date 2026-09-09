@@ -475,7 +475,7 @@ async function requeueFailedLiquidacionOutbox({ idempotencyToken, canAccessRepar
 } = {}) {
   const tables = financeTables(env);
   const rows = await query(
-    `SELECT O.ID, O.STATUS, O.PAYLOAD_JSON,
+    `SELECT O.ID AS OUTBOX_ID, O.STATUS AS OUTBOX_STATUS, O.PAYLOAD_JSON,
             L.ID AS OPS_ID, L.CODIGOVENDEDOR, L.DIALIQUIDACION, L.MESLIQUIDACION,
             L.ANOLIQUIDACION, L.NUMEROLIQUIDACION, L.STATUS AS LIQUIDACION_STATUS,
             L.SNAPSHOT_JSON, L.REPLAY_IDENTITY_JSON
@@ -492,7 +492,9 @@ async function requeueFailedLiquidacionOutbox({ idempotencyToken, canAccessRepar
   if (!repartidorId || typeof canAccessRepartidor !== 'function' || !canAccessRepartidor(repartidorId)) {
     return { requeued: false, reason: 'forbidden' };
   }
-  const status = String(rowValue(row, 'STATUS') || '').trim();
+  const status = String(
+    rowValue(row, 'OUTBOX_STATUS') || rowValue(row, 'STATUS') || '',
+  ).trim();
   if (status === 'PENDING') return { requeued: false, reason: 'claimed' };
   if (status !== 'FAILED' && status !== 'SENT') {
     return { requeued: false, reason: 'not_failed' };
@@ -504,12 +506,12 @@ async function requeueFailedLiquidacionOutbox({ idempotencyToken, canAccessRepar
   const requeueToken = crypto.randomBytes(18).toString('base64url');
   const requeuedPayload = buildOutboxRequeue(currentPayload, requeueToken);
   if (!requeuedPayload) return { requeued: false, reason: 'unsafe_payload' };
-  const id = rowValue(row, 'ID');
+  const id = rowValue(row, 'OUTBOX_ID') || rowValue(row, 'ID');
   await query(
     `UPDATE ${tables.liquidationOutbox}
         SET STATUS = 'PENDING', PAYLOAD_JSON = ?
-      WHERE ID = ? AND STATUS IN ('FAILED', 'SENT') AND PAYLOAD_JSON = ?`,
-    [requeuedPayload, id, currentPayload],
+      WHERE ID = ? AND STATUS IN ('FAILED', 'SENT')`,
+    [requeuedPayload, id],
   );
   const verified = await query(
     `SELECT STATUS, PAYLOAD_JSON FROM ${tables.liquidationOutbox}

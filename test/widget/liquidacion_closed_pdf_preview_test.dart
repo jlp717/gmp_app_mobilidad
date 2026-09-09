@@ -120,4 +120,87 @@ void main() {
 
     expect(find.byType(PdfPreviewScreen), findsOneWidget);
   });
+
+  testWidgets('persisted CLOSED day shows Reenviar without close-in-session',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final ingreso = TextEditingController(text: '0.00');
+    addTearDown(ingreso.dispose);
+    var resendTapped = false;
+
+    const closed = RepartidorLiquidacionResult(
+      created: false,
+      id: 'liq_94_20260819',
+      marker: 'liq_94_20260819',
+      repartidorId: '94',
+      date: '2026-08-19',
+      status: 'CLOSED',
+      snapshot: RepartidorLiquidacionSnapshot(
+        deliveries: 100,
+        payments: 100,
+        expenses: 0,
+        adjustments: 0,
+        bankDeposits: 0,
+        pending: 0,
+        openingBalance: 0,
+        balance: 100,
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: LiquidacionDiariaScreen(
+              gmpRef: 'GMP-94',
+              repartidorId: '94',
+              sessionDate: DateTime(2026, 8, 19),
+              summary: RepartidorDailySummary(
+                repartidorId: '94',
+                date: '2026-08-19',
+                totalEfectivo: 100,
+                totalCheques: 0,
+                totalTarjeta: 0,
+                totalPostdatados: 0,
+                saldoActual: 0,
+                totalCobrosDia: 100,
+                gastos: 0,
+                totalAIngresar: 100,
+                cobrosCount: 0,
+              ),
+              ingresoBancoController: ingreso,
+              isClosed: true,
+              isAggregate: false,
+              isSaving: false,
+              canCreateAdjustments: false,
+              isSubmittingEntry: false,
+              closedResult: closed,
+              onBack: null,
+              onSave: () {},
+              onExpense: () {},
+              onBankDeposit: () {},
+              onAdjustment: () {},
+              onPreviewPdf: null,
+              onSharePdf: null,
+              onResendEmails: () => resendTapped = true,
+              cobrosPanel: const SizedBox.shrink(),
+              ledgerPanel: null,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byTooltip('Ver PDF'), findsNothing);
+    expect(find.byTooltip('Reenviar correos'), findsOneWidget);
+    expect(find.byKey(const Key('liquidacion-resend-emails')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('liquidacion-resend-emails')));
+    await tester.pump();
+    expect(resendTapped, isTrue);
+  });
 }
