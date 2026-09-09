@@ -651,6 +651,15 @@ async function notifyAfterConfirm({
   };
   const sendResult = await sendVarianceEmail(payload, delivery.effectiveRecipients, { sendEmail });
   payload.delivery = redactDeliverySummary(sendResult.results);
+  logger.info('[variance] delivery planned', {
+    policy: payload.deliveryPolicy.policy,
+    redirected: Boolean(payload.deliveryPolicy.redirected),
+    intendedCount: payload.deliveryPolicy.intendedCount,
+    smtpCount: payload.deliveryPolicy.smtpCount,
+    sent: payload.delivery.sent,
+    toRoles: (payload.recipients?.to || []).map((slot) => `${slot.role}:${slot.present ? 'si' : 'no'}`).join(','),
+    ccRoles: (payload.recipients?.cc || []).map((slot) => `${slot.role}:${slot.present ? 'si' : 'no'}`).join(','),
+  });
 
   if (outboxId != null) {
     try {

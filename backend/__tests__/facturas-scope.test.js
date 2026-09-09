@@ -320,6 +320,25 @@ describe('POST /api/facturas/send-email recipient restriction', () => {
     expect(res.body.success).toBe(true);
   });
 
+  test('jefe ventas can send to the isolated_test localhost sink', async () => {
+    mockUser = { id: '97', code: '97', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['ALL'] };
+
+    const res = await request(makeApp())
+      .post('/api/facturas/send-email')
+      .send({
+        serie: 'F',
+        numero: 4306,
+        ejercicio: 2026,
+        destinatario: 'reparto-test@localhost',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockSendEmailWithPdf).toHaveBeenCalledWith(expect.objectContaining({
+      to: 'reparto-test@localhost',
+    }));
+  });
+
   test('document without client email on file fails closed for comercial (422)', async () => {
     const res = await request(makeApp())
       .post('/api/facturas/send-email')

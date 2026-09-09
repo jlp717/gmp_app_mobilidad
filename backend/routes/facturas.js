@@ -15,6 +15,7 @@ const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, c
 const { verifyToken } = require('../middleware/auth');
 const { authorizeVendorScope, isFinancialRole, userScopeCodes, normalizeCode } = require('../middleware/vendor-scope');
 const { emailLimiter } = require('../middleware/security');
+const { normalizeEmail } = require('../services/reparto-email-delivery-policy');
 
 const FACTURA_PDF_CACHE_VERSION = 'v4';
 const FACTURA_DEFAULT_LIMIT = 250;
@@ -652,8 +653,7 @@ router.post('/send-email', verifyToken, emailLimiter, async (req, res, next) => 
             return res.status(400).json({ success: false, error: 'Campos requeridos: serie, numero, ejercicio, destinatario' });
         }
 
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(destinatario)) {
+        if (!normalizeEmail(destinatario)) {
             return res.status(400).json({ success: false, error: 'Email destinatario inválido' });
         }
 
@@ -718,8 +718,7 @@ router.post('/share/email', verifyToken, emailLimiter, async (req, res, next) =>
             return res.status(400).json({ success: false, error: 'Missing required fields' });
         }
 
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(destinatario)) {
+        if (!normalizeEmail(destinatario)) {
             return res.status(400).json({ success: false, error: 'Email inválido' });
         }
 
