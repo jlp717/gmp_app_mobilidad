@@ -72,6 +72,83 @@ void main() {
       expect(ApiClient.lastTokenRefreshFailedDueToConnectivity, isTrue);
       expect(diverged, isFalse);
     });
+
+    test('does not wipe a switch-role session when a concurrent refresh 401s',
+        () async {
+      ApiClient.resetForTesting();
+      ApiClient.authSessionExpiresAt =
+          DateTime.now().add(const Duration(hours: 1));
+      ApiClient.setAuthToken('switching-token');
+      ApiClient.refreshTokenReaderOverride = () async => 'stale-refresh';
+
+      var diverged = false;
+      var unauthorized = false;
+      ApiClient.onAuthSessionDiverged = () => diverged = true;
+      ApiClient.onUnauthorized = () => unauthorized = true;
+      ApiClient.dio.httpClientAdapter = _UnauthorizedRefreshAdapter();
+
+      ApiClient.startLogin();
+      expect(await ApiClient.refreshAccessToken(), isFalse);
+      ApiClient.endLogin();
+
+      expect(diverged, isFalse);
+      expect(unauthorized, isFalse);
+      expect(ApiClient.authToken, 'switching-token');
+    });
+
+    test('does not retry commercial evolution with a delivery JWT after switch',
+        () async {
+      ApiClient.resetForTesting();
+      ApiClient.authSessionExpiresAt =
+          DateTime.now().add(const Duration(hours: 1));
+      ApiClient.setAuthToken('commercial-token');
+      ApiClient.setAuthMode('COMERCIAL');
+
+      var unauthorized = false;
+      ApiClient.onUnauthorized = () => unauthorized = true;
+      final adapter = _SwitchRoleEvolutionAdapter();
+      ApiClient.dio.httpClientAdapter = adapter;
+
+      ApiException? caught;
+      try {
+        await ApiClient.get('/objectives/evolution');
+        fail('Expected ApiException');
+      } on ApiException catch (error) {
+        caught = error;
+      }
+
+      expect(caught, isNotNull);
+      expect(caught!.statusCode, 401);
+      expect(caught.code, 'SESSION_REVOKED');
+      expect(adapter.authorizationHeaders, equals(['Bearer commercial-token']));
+      expect(unauthorized, isFalse);
+      expect(ApiClient.authToken, 'delivery-token');
+    });
+
+    test('does not logout on leftover commercial 401 in delivery mode',
+        () async {
+      ApiClient.resetForTesting();
+      ApiClient.authSessionExpiresAt =
+          DateTime.now().add(const Duration(hours: 1));
+      ApiClient.setAuthToken('delivery-token');
+      ApiClient.setAuthMode('REPARTIDOR');
+
+      var unauthorized = false;
+      ApiClient.onUnauthorized = () => unauthorized = true;
+      ApiClient.dio.httpClientAdapter = _UnauthorizedRefreshAdapter();
+
+      ApiException? caught;
+      try {
+        await ApiClient.get('/objectives/evolution');
+        fail('Expected ApiException');
+      } on ApiException catch (error) {
+        caught = error;
+      }
+
+      expect(caught, isNotNull);
+      expect(caught!.statusCode, 401);
+      expect(unauthorized, isFalse);
+    });
   });
 
   group('Access token TTL contract', () {
@@ -166,6 +243,56 @@ class _OfflineRefreshAdapter implements HttpClientAdapter {
     throw DioException.connectionError(
       requestOptions: options,
       reason: 'offline',
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _UnauthorizedRefreshAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return ResponseBody.fromString(
+      jsonEncode({'error': 'expired'}),
+      401,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _SwitchRoleEvolutionAdapter implements HttpClientAdapter {
+  final authorizationHeaders = <String?>[];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    authorizationHeaders.add(options.headers['Authorization']?.toString());
+    ApiClient.startLogin();
+    ApiClient.setAuthToken('delivery-token');
+    ApiClient.setAuthMode('REPARTIDOR');
+    ApiClient.endLogin();
+    return ResponseBody.fromString(
+      jsonEncode({
+        'error': 'Sesión revocada.',
+        'code': 'SESSION_REVOKED',
+      }),
+      401,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
     );
   }
 

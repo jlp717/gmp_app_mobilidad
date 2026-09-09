@@ -1060,6 +1060,9 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
         });
 
         const pendientesRaw = totalAlbaranes - totalEntregados - totalNoEntregados - totalParciales;
+        const pctEntrega = totalAlbaranes > 0
+            ? parseFloat(((Math.min(totalEntregados, totalAlbaranes) / totalAlbaranes) * 100).toFixed(1))
+            : 0;
         res.json({
             success: true,
             period: { year: selectedYear, month: selectedMonth },
@@ -1069,7 +1072,8 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
                 noEntregados: totalNoEntregados,
                 parciales: totalParciales,
                 pendientes: Math.max(0, pendientesRaw),
-                importeTotal: parseFloat(totalImporte.toFixed(2))
+                importeTotal: parseFloat(totalImporte.toFixed(2)),
+                pctEntrega,
             },
             daily
         });

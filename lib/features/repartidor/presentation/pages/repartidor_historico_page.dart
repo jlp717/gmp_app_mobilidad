@@ -2297,186 +2297,204 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.transparent,
-      builder: (ctx) => RepartidorExecutiveSheet(
-        accentColor: isFactura ? AppTheme.accentIndigo : AppTheme.info,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
+      isScrollControlled: true,
+      builder: (ctx) {
+        final maxHeight = MediaQuery.sizeOf(ctx).height * 0.88;
+        return RepartidorExecutiveSheet(
+          accentColor: isFactura ? AppTheme.accentIndigo : AppTheme.info,
+          height: maxHeight,
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: isFactura
-                          ? AppTheme.accentIndigo.withValues(alpha: 0.2)
-                          : AppTheme.info.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      isFactura ? Icons.receipt_long : Icons.description,
-                      color: isFactura ? AppTheme.accentIndigo : AppTheme.info,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
                       children: [
-                        Text(
-                          isFactura && doc.facturaNumber != null
-                              ? 'Factura F-${doc.facturaNumber} (Alb: ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number})'
-                              : 'Albarán ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textPrimary,
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isFactura
+                                ? AppTheme.accentIndigo.withValues(alpha: 0.2)
+                                : AppTheme.info.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            isFactura ? Icons.receipt_long : Icons.description,
+                            color: isFactura
+                                ? AppTheme.accentIndigo
+                                : AppTheme.info,
+                            size: 22,
                           ),
                         ),
-                        Text(
-                          doc.hasValidDate
-                              ? '${DateFormat('dd/MM/yyyy').format(doc.date!)} · ${CurrencyFormatter.format(doc.amount)}'
-                              : 'Sin fecha · ${CurrencyFormatter.format(doc.amount)}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppTheme.textSecondary,
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isFactura && doc.facturaNumber != null
+                                    ? 'Factura F-${doc.facturaNumber} (Alb: ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number})'
+                                    : 'Albarán ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                doc.hasValidDate
+                                    ? '${DateFormat('dd/MM/yyyy').format(doc.date!)} · ${CurrencyFormatter.format(doc.amount)}'
+                                    : 'Sin fecha · ${CurrencyFormatter.format(doc.amount)}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                              if (doc.hasAppCobro) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  [
+                                    if (doc.cobroParcial)
+                                      'Cobro parcial'
+                                    else
+                                      'Cobrado',
+                                    CurrencyFormatter.format(
+                                        doc.importeCobrado!),
+                                    if ((doc.formaPagoCobro ?? '')
+                                        .trim()
+                                        .isNotEmpty)
+                                      doc.formaPagoCobro!.trim(),
+                                    if (doc.importePendienteCobro != null &&
+                                        doc.importePendienteCobro! > 0.004)
+                                      'pend. ${CurrencyFormatter.format(doc.importePendienteCobro!)}',
+                                  ].join(' · '),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.success,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ] else if (doc.status ==
+                                      _DeliveryStatus.delivered ||
+                                  doc.status == _DeliveryStatus.partial) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Sin cobro en ruta',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
-                        if (doc.hasAppCobro) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            [
-                              if (doc.cobroParcial)
-                                'Cobro parcial'
-                              else
-                                'Cobrado',
-                              CurrencyFormatter.format(doc.importeCobrado!),
-                              if ((doc.formaPagoCobro ?? '').trim().isNotEmpty)
-                                doc.formaPagoCobro!.trim(),
-                              if (doc.importePendienteCobro != null &&
-                                  doc.importePendienteCobro! > 0.004)
-                                'pend. ${CurrencyFormatter.format(doc.importePendienteCobro!)}',
-                            ].join(' · '),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.success,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ] else if (doc.status == _DeliveryStatus.delivered ||
-                            doc.status == _DeliveryStatus.partial) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            'Sin cobro en ruta',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
+
+                  // Actions that require a trustworthy document date stay disabled
+                  // when the backend date cannot be parsed. This prevents silently
+                  // substituting a synthetic year in document keys.
+                  if (!doc.hasValidDate)
+                    Padding(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      child: Text(
+                        'Acciones no disponibles: el documento no tiene una fecha válida',
+                        key: ValueKey('invalid-document-date-actions-disabled'),
+                        style: TextStyle(color: AppTheme.textSecondary),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  if (doc.hasValidDate) ...[
+                    _buildActionTile(
+                      icon: Icons.visibility,
+                      label:
+                          isFactura ? 'Ver factura / albarán' : 'Ver albarán',
+                      color: AppTheme.info,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _previewDocument(doc);
+                      },
+                    ),
+                    _buildActionTile(
+                      icon: Icons.receipt_long,
+                      label: 'Ver nota de entrega',
+                      color: AppTheme.success,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _previewDeliveryNote(doc);
+                      },
+                    ),
+                    _buildActionTile(
+                      icon: Icons.share_outlined,
+                      label: 'Compartir',
+                      subtitle: widget.canEmailDocuments
+                          ? 'WhatsApp, Email, Guardar'
+                          : 'WhatsApp, Guardar',
+                      color: AppTheme.accentIndigo,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _showShareOptions(doc);
+                      },
+                    ),
+                    _buildActionTile(
+                      icon: Icons.print,
+                      label: 'Imprimir nota de entrega',
+                      color: AppTheme.success,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _printDeliveryNote(doc);
+                      },
+                    ),
+                    if (widget.canEmailDocuments) ...[
+                      _buildActionTile(
+                        icon: Icons.email_outlined,
+                        label: isFactura
+                            ? 'Email factura / albarán'
+                            : 'Email albarán',
+                        color: AppTheme.info,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _emailCommercialDocument(doc);
+                        },
+                      ),
+                      _buildActionTile(
+                        icon: Icons.outgoing_mail,
+                        label: 'Email nota de entrega',
+                        color: AppTheme.accentIndigo,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _emailHistoryDeliveryNote(doc);
+                        },
+                      ),
+                    ],
+                    if (hasAnySignature)
+                      _buildActionTile(
+                        icon: Icons.draw,
+                        label: 'Ver Firma',
+                        subtitle: doc.legacySignatureName != null &&
+                                doc.legacySignatureName!.trim().isNotEmpty
+                            ? 'Firmado por: ${doc.legacySignatureName!.trim()}'
+                            : null,
+                        color: AppTheme.accentAmber,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _showSignatureDialog(doc);
+                        },
+                      ),
+                  ],
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
-
-            // Actions that require a trustworthy document date stay disabled
-            // when the backend date cannot be parsed. This prevents silently
-            // substituting a synthetic year in document keys.
-            if (!doc.hasValidDate)
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Text(
-                  'Acciones no disponibles: el documento no tiene una fecha válida',
-                  key: ValueKey('invalid-document-date-actions-disabled'),
-                  style: TextStyle(color: AppTheme.textSecondary),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            if (doc.hasValidDate) ...[
-              _buildActionTile(
-                icon: Icons.visibility,
-                label: isFactura ? 'Ver factura / albarán' : 'Ver albarán',
-                color: AppTheme.info,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _previewDocument(doc);
-                },
-              ),
-              _buildActionTile(
-                icon: Icons.receipt_long,
-                label: 'Ver nota de entrega',
-                color: AppTheme.success,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _previewDeliveryNote(doc);
-                },
-              ),
-              _buildActionTile(
-                icon: Icons.share_outlined,
-                label: 'Compartir',
-                subtitle: widget.canEmailDocuments
-                    ? 'WhatsApp, Email, Guardar'
-                    : 'WhatsApp, Guardar',
-                color: AppTheme.accentIndigo,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showShareOptions(doc);
-                },
-              ),
-              _buildActionTile(
-                icon: Icons.print,
-                label: 'Imprimir nota de entrega',
-                color: AppTheme.success,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _printDeliveryNote(doc);
-                },
-              ),
-              if (widget.canEmailDocuments) ...[
-                _buildActionTile(
-                  icon: Icons.email_outlined,
-                  label:
-                      isFactura ? 'Email factura / albarán' : 'Email albarán',
-                  color: AppTheme.info,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _emailCommercialDocument(doc);
-                  },
-                ),
-                _buildActionTile(
-                  icon: Icons.outgoing_mail,
-                  label: 'Email nota de entrega',
-                  color: AppTheme.accentIndigo,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _emailHistoryDeliveryNote(doc);
-                  },
-                ),
-              ],
-              if (hasAnySignature)
-                _buildActionTile(
-                  icon: Icons.draw,
-                  label: 'Ver Firma',
-                  subtitle: doc.legacySignatureName != null &&
-                          doc.legacySignatureName!.trim().isNotEmpty
-                      ? 'Firmado por: ${doc.legacySignatureName!.trim()}'
-                      : null,
-                  color: AppTheme.accentAmber,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _showSignatureDialog(doc);
-                  },
-                ),
-            ],
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -2490,82 +2508,113 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.transparent,
-      builder: (context) => RepartidorExecutiveSheet(
-        accentColor: AppTheme.accentIndigo,
-        child: SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12, top: 8),
-                  child: Text(
-                    'Compartir documentos',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.themedWhite,
-                        ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
+      isScrollControlled: true,
+      builder: (sheetCtx) {
+        final maxHeight = MediaQuery.sizeOf(sheetCtx).height * 0.88;
+        return RepartidorExecutiveSheet(
+          accentColor: AppTheme.accentIndigo,
+          height: maxHeight,
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12, top: 8),
                     child: Text(
-                      'NOTA DE ENTREGA',
-                      style: TextStyle(
-                        color: AppTheme.success.withValues(alpha: 0.95),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                        letterSpacing: 0.6,
+                      'Compartir documentos',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.themedWhite,
+                          ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'NOTA DE ENTREGA',
+                        style: TextStyle(
+                          color: AppTheme.success.withValues(alpha: 0.95),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                          letterSpacing: 0.6,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                ListTile(
-                  enabled: noteActionAvailable,
-                  leading: CircleAvatar(
-                    backgroundColor: noteActionAvailable
-                        ? AppColors.whatsappGreen
-                        : AppTheme.mutedPanel,
-                    child: Icon(Icons.chat,
-                        color: AppColors.themedWhite, size: 20),
-                  ),
-                  title: Text(
-                    'WhatsApp · nota de entrega',
-                    style: TextStyle(
-                      color: noteActionAvailable
-                          ? AppColors.themedWhite
-                          : AppTheme.textSecondary,
-                    ),
-                  ),
-                  subtitle: Text(
-                    hasDeliveryNote
-                        ? 'PDF firmado de la entrega'
-                        : 'Si no existe, se compartirá el documento comercial',
-                  ),
-                  onTap: noteActionAvailable
-                      ? () {
-                          Navigator.pop(context);
-                          _shareDeliveryNoteWhatsApp(doc);
-                        }
-                      : null,
-                ),
-                if (widget.canEmailDocuments)
                   ListTile(
                     enabled: noteActionAvailable,
                     leading: CircleAvatar(
                       backgroundColor: noteActionAvailable
-                          ? AppTheme.info
+                          ? AppColors.whatsappGreen
+                          : AppTheme.mutedPanel,
+                      child: Icon(Icons.chat,
+                          color: AppColors.themedWhite, size: 20),
+                    ),
+                    title: Text(
+                      'WhatsApp · nota de entrega',
+                      style: TextStyle(
+                        color: noteActionAvailable
+                            ? AppColors.themedWhite
+                            : AppTheme.textSecondary,
+                      ),
+                    ),
+                    subtitle: Text(
+                      hasDeliveryNote
+                          ? 'PDF firmado de la entrega'
+                          : 'Si no existe, se compartirá el documento comercial',
+                    ),
+                    onTap: noteActionAvailable
+                        ? () {
+                            Navigator.pop(context);
+                            _shareDeliveryNoteWhatsApp(doc);
+                          }
+                        : null,
+                  ),
+                  if (widget.canEmailDocuments)
+                    ListTile(
+                      enabled: noteActionAvailable,
+                      leading: CircleAvatar(
+                        backgroundColor: noteActionAvailable
+                            ? AppTheme.info
+                            : AppTheme.mutedPanel,
+                        child: Icon(
+                          Icons.email_outlined,
+                          color: AppColors.themedWhite,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        'Email · nota de entrega',
+                        style: TextStyle(
+                          color: noteActionAvailable
+                              ? AppColors.themedWhite
+                              : AppTheme.textSecondary,
+                        ),
+                      ),
+                      onTap: noteActionAvailable
+                          ? () {
+                              Navigator.pop(context);
+                              _emailHistoryDeliveryNote(doc);
+                            }
+                          : null,
+                    ),
+                  ListTile(
+                    enabled: noteActionAvailable,
+                    leading: CircleAvatar(
+                      backgroundColor: noteActionAvailable
+                          ? AppTheme.success
                           : AppTheme.mutedPanel,
                       child: Icon(
-                        Icons.email_outlined,
+                        Icons.download_rounded,
                         color: AppColors.themedWhite,
                         size: 20,
                       ),
                     ),
                     title: Text(
-                      'Email · nota de entrega',
+                      'Guardar · nota de entrega',
                       style: TextStyle(
                         color: noteActionAvailable
                             ? AppColors.themedWhite
@@ -2575,112 +2624,86 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
                     onTap: noteActionAvailable
                         ? () {
                             Navigator.pop(context);
-                            _emailHistoryDeliveryNote(doc);
+                            _downloadDeliveryNote(doc);
                           }
                         : null,
                   ),
-                ListTile(
-                  enabled: noteActionAvailable,
-                  leading: CircleAvatar(
-                    backgroundColor: noteActionAvailable
-                        ? AppTheme.success
-                        : AppTheme.mutedPanel,
-                    child: Icon(
-                      Icons.download_rounded,
-                      color: AppColors.themedWhite,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    'Guardar · nota de entrega',
-                    style: TextStyle(
-                      color: noteActionAvailable
-                          ? AppColors.themedWhite
-                          : AppTheme.textSecondary,
-                    ),
-                  ),
-                  onTap: noteActionAvailable
-                      ? () {
-                          Navigator.pop(context);
-                          _downloadDeliveryNote(doc);
-                        }
-                      : null,
-                ),
-                const Divider(height: 24),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      commercialLabel.toUpperCase(),
-                      style: TextStyle(
-                        color: AppTheme.info.withValues(alpha: 0.95),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                        letterSpacing: 0.6,
+                  const Divider(height: 24),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        commercialLabel.toUpperCase(),
+                        style: TextStyle(
+                          color: AppTheme.info.withValues(alpha: 0.95),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                          letterSpacing: 0.6,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: AppColors.whatsappGreen,
-                    child: Icon(Icons.chat,
-                        color: AppColors.themedWhite, size: 20),
-                  ),
-                  title: Text(
-                    'WhatsApp · documento comercial',
-                    style: TextStyle(color: AppColors.themedWhite),
-                  ),
-                  subtitle: const Text('Albarán o factura del ERP'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _shareCommercialWhatsApp(doc);
-                  },
-                ),
-                if (widget.canEmailDocuments)
                   ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: AppTheme.info,
+                      backgroundColor: AppColors.whatsappGreen,
+                      child: Icon(Icons.chat,
+                          color: AppColors.themedWhite, size: 20),
+                    ),
+                    title: Text(
+                      'WhatsApp · documento comercial',
+                      style: TextStyle(color: AppColors.themedWhite),
+                    ),
+                    subtitle: const Text('Albarán o factura del ERP'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _shareCommercialWhatsApp(doc);
+                    },
+                  ),
+                  if (widget.canEmailDocuments)
+                    ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppTheme.info,
+                        child: Icon(
+                          Icons.email_outlined,
+                          color: AppColors.themedWhite,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        'Email · documento comercial',
+                        style: TextStyle(color: AppColors.themedWhite),
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _emailCommercialDocument(doc);
+                      },
+                    ),
+                  ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: AppTheme.success,
                       child: Icon(
-                        Icons.email_outlined,
+                        Icons.download_rounded,
                         color: AppColors.themedWhite,
                         size: 20,
                       ),
                     ),
                     title: Text(
-                      'Email · documento comercial',
+                      'Guardar · documento comercial',
                       style: TextStyle(color: AppColors.themedWhite),
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      _emailCommercialDocument(doc);
+                      _downloadCommercialDocument(doc);
                     },
                   ),
-                ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: AppTheme.success,
-                    child: Icon(
-                      Icons.download_rounded,
-                      color: AppColors.themedWhite,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    'Guardar · documento comercial',
-                    style: TextStyle(color: AppColors.themedWhite),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _downloadCommercialDocument(doc);
-                  },
-                ),
-                const SizedBox(height: 20),
-              ],
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

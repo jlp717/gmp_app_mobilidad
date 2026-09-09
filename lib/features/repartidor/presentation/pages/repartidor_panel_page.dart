@@ -29,6 +29,20 @@ typedef RepartidorMonthlySummaryLoader = Future<RepartidorMonthlySummary>
   required int month,
 });
 
+@visibleForTesting
+double deliveryCompletionPercent({
+  required num entregados,
+  required num totalAlbaranes,
+  num? pctEntrega,
+}) {
+  if (totalAlbaranes > 0) {
+    return (entregados.toDouble() / totalAlbaranes.toDouble()) * 100;
+  }
+  final provided = pctEntrega?.toDouble();
+  if (provided != null && provided.isFinite) return provided;
+  return 0.0;
+}
+
 class RepartidorPanelPage extends StatefulWidget {
   const RepartidorPanelPage({
     required this.repartidorId,
@@ -429,8 +443,14 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage>
     final pendientes = _deliverySummary['pendientes'] ?? 0;
     final importe =
         (_deliverySummary['importeTotal'] as num?)?.toDouble() ?? 0.0;
-    final pctEntrega =
-        (_deliverySummary['pctEntrega'] as num?)?.toDouble() ?? 0.0;
+    final totalNum = total is num ? total : num.tryParse('$total') ?? 0;
+    final entregadosNum =
+        entregados is num ? entregados : num.tryParse('$entregados') ?? 0;
+    final pctEntrega = deliveryCompletionPercent(
+      entregados: entregadosNum,
+      totalAlbaranes: totalNum,
+      pctEntrega: _deliverySummary['pctEntrega'] as num?,
+    );
 
     return Wrap(
       spacing: 12,

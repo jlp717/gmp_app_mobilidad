@@ -344,25 +344,32 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       ),
       child: SafeArea(
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _buildActionButton(
-              icon: Icons.download_rounded,
-              label: 'Descargar',
-              color: AppTheme.success,
-              onTap: _downloadPdf,
+            Expanded(
+              child: _buildActionButton(
+                icon: Icons.download_rounded,
+                label: 'Descargar',
+                color: AppTheme.success,
+                onTap: _downloadPdf,
+              ),
             ),
-            _buildActionButton(
-              icon: Icons.email_outlined,
-              label: 'Email',
-              color: AppTheme.info,
-              onTap: widget.onEmailTap,
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildActionButton(
+                icon: Icons.email_outlined,
+                label: 'Email',
+                color: AppTheme.info,
+                onTap: widget.onEmailTap,
+              ),
             ),
-            _buildActionButton(
-              icon: Icons.chat,
-              label: 'WhatsApp',
-              color: AppColors.whatsappGreen,
-              onTap: widget.onWhatsAppTap,
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildActionButton(
+                icon: Icons.chat,
+                label: 'WhatsApp',
+                color: AppColors.whatsappGreen,
+                onTap: widget.onWhatsAppTap,
+              ),
             ),
           ],
         ),
@@ -382,26 +389,30 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: color.withValues(alpha: 0.3)),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

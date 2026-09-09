@@ -611,7 +611,7 @@ describe('delivery summary canonical status precedence', () => {
     const response = await get('/history/delivery-summary/05').query({ year: 2025, month: 4 });
 
     expect(response.status).toBe(200);
-    expect(response.body.summary).toMatchObject({ totalAlbaranes: 4, entregados: 1, noEntregados: 2, parciales: 1, pendientes: 0 });
+    expect(response.body.summary).toMatchObject({ totalAlbaranes: 4, entregados: 1, noEntregados: 2, parciales: 1, pendientes: 0, pctEntrega: 25 });
     const [sql] = mockQueryWithParams.mock.calls[0];
     expect(sql).toMatch(/FINAL_STATUS/i);
     expect(sql).toMatch(/RECHAZAD[AO]|RECHAZADO/i);
@@ -645,6 +645,7 @@ describe('delivery summary canonical status precedence', () => {
       parciales: 0,
       pendientes: 0,
       importeTotal: 30,
+      pctEntrega: 50,
     });
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
   });

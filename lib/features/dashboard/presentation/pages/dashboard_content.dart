@@ -193,18 +193,9 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   @override
   void initState() {
     super.initState();
-    final isJefeVentas = _readIsJefeVentas();
-    _hierarchy = defaultDashboardHierarchy(isJefeVentas: isJefeVentas);
+    _hierarchy = defaultDashboardHierarchy(isJefeVentas: false);
     _pendingYears = Set.from(_selectedYears);
     _pendingMonths = Set.from(_selectedMonths);
-    _selectedVendedor = ref.read(selectedVendorProvider);
-    _isInitialized = true;
-    if (isJefeVentas) {
-      _scheduleVendedoresLoadIfNeeded();
-    } else {
-      _loadVendedores();
-    }
-    _fetchAllData();
 
     _vendorSubscription =
         ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
@@ -219,6 +210,27 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         _fetchAllData();
       }
     });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _bootstrapDashboard();
+    });
+  }
+
+  void _bootstrapDashboard() {
+    final mode = ref.read(authProvider).value?.activeMode;
+    if (mode == 'REPARTIDOR') return;
+
+    final isJefeVentas = _readIsJefeVentas();
+    _hierarchy = defaultDashboardHierarchy(isJefeVentas: isJefeVentas);
+    _selectedVendedor = ref.read(selectedVendorProvider);
+    _isInitialized = true;
+    if (isJefeVentas) {
+      _scheduleVendedoresLoadIfNeeded();
+    } else {
+      _loadVendedores();
+    }
+    _fetchAllData();
   }
 
   @override

@@ -24,6 +24,8 @@ class ApiClient {
   static String? _savedAuthToken;
   static Future<bool>? _refreshInFlight;
   static int _authEpoch = 0;
+  static int _sessionGeneration = 0;
+  static String? _authMode;
   static bool _lastTokenRefreshFailedDueToConnectivity = false;
 
   @visibleForTesting
@@ -129,6 +131,37 @@ class ApiClient {
     _isLoggingIn = true;
     _pendingRequests.clear();
     _authEpoch++;
+    _sessionGeneration++;
+  }
+
+  /// Tracks the authorized UI mode so leftover commercial traffic cannot
+  /// be retried with a delivery JWT after switch-role.
+  static void setAuthMode(String? mode) {
+    final normalized = mode?.trim().toUpperCase();
+    _authMode = (normalized == null || normalized.isEmpty) ? null : normalized;
+  }
+
+  /// Sales-only paths that a REPARTIDOR JWT must not retry.
+  @visibleForTesting
+  static bool isCommercialOnlyPath(String path) {
+    final normalized = path.toLowerCase();
+    return normalized.contains('/objectives') ||
+        normalized.contains('/commissions') ||
+        normalized.contains('/dashboard/') ||
+        normalized.contains('/kpi') ||
+        normalized.contains('/bolsa');
+  }
+
+  static bool get _isDeliverySession => _authMode == 'REPARTIDOR';
+
+  static bool _shouldDropCrossSessionRetry(RequestOptions options) {
+    if (_isLoggingIn) return true;
+    final stamp = options.extra['sessionGeneration'];
+    if (stamp is int && stamp != _sessionGeneration) return true;
+    if (_isDeliverySession && isCommercialOnlyPath(options.path)) {
+      return true;
+    }
+    return false;
   }
 
   /// Call when login completes (success or failure) to re-enable 401â†’logout.
@@ -262,12 +295,14 @@ class ApiClient {
         onRequest: (options, handler) {
           final token = _savedAuthToken;
           options.extra['authEpoch'] = _authEpoch;
+          options.extra['sessionGeneration'] = _sessionGeneration;
           options.extra['hadAuthToken'] = token != null;
           if (token != null) {
             if (isAuthSessionExpired &&
                 options.extra['allowExpiredAuthForLogout'] != true) {
               _savedAuthToken = null;
               _authEpoch++;
+              _sessionGeneration++;
               options.headers.remove('Authorization');
               handler.reject(
                 DioException(
@@ -314,7 +349,9 @@ class ApiClient {
                 _savedAuthToken != null ? 'Bearer $_savedAuthToken' : null;
             final isStaleRequest = _isStaleUnauthorized(error);
 
-            if (isStaleRequest && currentAuth != null) {
+            if (isStaleRequest &&
+                currentAuth != null &&
+                !_shouldDropCrossSessionRetry(error.requestOptions)) {
               try {
                 error.requestOptions.extra['authRetried'] = true;
                 error.requestOptions.headers['Authorization'] = currentAuth;
@@ -324,7 +361,10 @@ class ApiClient {
               } catch (_) {
                 // Fall through to normal 401 handling below.
               }
-            } else if (!isStaleRequest && await refreshAccessToken()) {
+            } else if (!isStaleRequest &&
+                !_isLoggingIn &&
+                !_shouldDropCrossSessionRetry(error.requestOptions) &&
+                await refreshAccessToken()) {
               try {
                 error.requestOptions.extra['authRetried'] = true;
                 error.requestOptions.headers['Authorization'] =
@@ -427,9 +467,11 @@ class ApiClient {
     final changed = _savedAuthToken != null || authSessionExpiresAt != null;
     _savedAuthToken = null;
     authSessionExpiresAt = null;
+    _authMode = null;
     dio.options.headers.remove('Authorization');
     if (changed) {
       _authEpoch++;
+      _sessionGeneration++;
       _pendingRequests.clear();
     }
   }
@@ -495,6 +537,15 @@ class ApiClient {
       return false;
     }
 
+    // switch-role / login already called startLogin(). A concurrent refresh
+    // with the previous refresh token 401s and must not wipe the new session.
+    if (_isLoggingIn) {
+      debugPrint(
+        '[ApiClient] Token refresh skipped: login/switch in progress',
+      );
+      return false;
+    }
+
     final refreshToken = await (refreshTokenReaderOverride?.call() ??
         SecureStorage.readSecureData('refresh_token'));
     if (refreshToken == null || refreshToken.isEmpty) {
@@ -503,6 +554,7 @@ class ApiClient {
       return false;
     }
 
+    final epochAtStart = _authEpoch;
     try {
       _isLoggingIn = true;
       final response = await dio.post<Map<String, dynamic>>(
@@ -535,15 +587,20 @@ class ApiClient {
       return true;
     } on DioException catch (e) {
       _lastTokenRefreshFailedDueToConnectivity = _isNetworkError(e);
-      if (!_lastTokenRefreshFailedDueToConnectivity) {
+      final sessionMoved =
+          epochAtStart != _authEpoch || _isStaleUnauthorized(e);
+      if (!_lastTokenRefreshFailedDueToConnectivity && !sessionMoved) {
         final diverged = onAuthSessionDiverged;
         if (diverged != null) await diverged();
       }
       debugPrint('[ApiClient] Token refresh failed');
       return false;
     } catch (_) {
-      final diverged = onAuthSessionDiverged;
-      if (diverged != null) await diverged();
+      final sessionMoved = epochAtStart != _authEpoch;
+      if (!sessionMoved) {
+        final diverged = onAuthSessionDiverged;
+        if (diverged != null) await diverged();
+      }
       debugPrint('[ApiClient] Token refresh failed');
       return false;
     } finally {
@@ -559,6 +616,8 @@ class ApiClient {
     _savedAuthToken = null;
     _refreshInFlight = null;
     _authEpoch = 0;
+    _sessionGeneration = 0;
+    _authMode = null;
     _lastTokenRefreshFailedDueToConnectivity = false;
     refreshTokenReaderOverride = null;
     authSessionExpiresAt = null;
@@ -1137,10 +1196,13 @@ class ApiClient {
         // If they differ, this 401 is from a STALE request (previous session)
         // and must NOT trigger a logout that would wipe the fresh new token.
         final isStaleRequest = _isStaleUnauthorized(e);
+        final leftoverCommercialInDelivery =
+            _isDeliverySession && isCommercialOnlyPath(e.requestOptions.path);
         if (!isLoginRequest &&
             !_isLoggingOut &&
             !_isLoggingIn &&
-            !isStaleRequest) {
+            !isStaleRequest &&
+            !leftoverCommercialInDelivery) {
           _isLoggingOut = true;
           debugPrint('[ApiClient] 401 detected - triggering logout');
           onUnauthorized?.call();
@@ -1300,6 +1362,10 @@ class _RetryInterceptor extends Interceptor {
 
   bool _shouldRetry(DioException err) {
     if (err.requestOptions.extra['skipRetry'] == true) {
+      return false;
+    }
+
+    if (ApiClient._shouldDropCrossSessionRetry(err.requestOptions)) {
       return false;
     }
 

@@ -120,16 +120,11 @@ void main() async {
     );
   }
 
-  runZonedGuarded(
-    () {
-      const app = ProviderScope(child: GMPSalesAnalyticsApp());
-      runApp(sentryDsn.isEmpty ? app : SentryWidget(child: app));
-    },
-    (error, stackTrace) async {
-      await Sentry.captureException(error, stackTrace: stackTrace);
-      debugPrint('[ZONE_ERROR] $error\n$stackTrace');
-    },
-  );
+  // Bindings were initialized on this zone; wrapping runApp in a new
+  // runZonedGuarded zone throws "Zone mismatch" in debug and can drop
+  // the first frame. PlatformDispatcher.onError already captures async errors.
+  const app = ProviderScope(child: GMPSalesAnalyticsApp());
+  runApp(sentryDsn.isEmpty ? app : SentryWidget(child: app));
 }
 
 class GMPSalesAnalyticsApp extends ConsumerStatefulWidget {

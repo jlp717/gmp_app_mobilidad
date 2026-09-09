@@ -37,8 +37,9 @@ class CachePreWarmer {
   @visibleForTesting
   static List<CachePrewarmTarget> immediateTargets({
     required bool isJefeVentas,
+    bool isRepartidor = false,
   }) {
-    if (isJefeVentas) return const <CachePrewarmTarget>[];
+    if (isRepartidor || isJefeVentas) return const <CachePrewarmTarget>[];
     return const [
       CachePrewarmTarget.facturas,
       CachePrewarmTarget.clients,
@@ -61,9 +62,17 @@ class CachePreWarmer {
   static Future<void> preWarmCache({
     required List<String> vendedorCodes,
     required bool isJefeVentas,
+    bool isRepartidor = false,
   }) async {
     if (_hasPreWarmed) return;
     final generation = _warmGeneration;
+
+    if (isRepartidor) {
+      debugPrint(
+        '[CachePreWarmer] Skip commercial pre-warm in delivery session',
+      );
+      return;
+    }
 
     if (isJefeVentas) {
       await Future<void>.delayed(jefeIdleDelay);
@@ -247,6 +256,10 @@ class CachePreWarmer {
 
   /// Backward-compatible wrapper for older call sites.
   static Future<void> preWarmCacheForCodes(List<String> vendedorCodes) async {
-    await preWarmCache(vendedorCodes: vendedorCodes, isJefeVentas: false);
+    await preWarmCache(
+      vendedorCodes: vendedorCodes,
+      isJefeVentas: false,
+      isRepartidor: false,
+    );
   }
 }

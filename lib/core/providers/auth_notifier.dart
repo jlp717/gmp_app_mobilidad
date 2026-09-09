@@ -705,6 +705,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
     // Publish bearer and UI only after every local write succeeded.
     ApiClient.setAuthToken(rotation.accessToken);
+    ApiClient.setAuthMode(projection.activeMode);
     _applySessionDeadline(localExpiresAt);
     await _clearLocalSessionCache();
     _applyCacheScope(projection.user, projection.vendedorCodes);
@@ -948,6 +949,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         );
         final vendedorCodes = codes;
         final activeMode = restoreAuthorizedActiveMode(savedMode, user);
+        ApiClient.setAuthMode(activeMode);
         _applyCacheScope(user, vendedorCodes);
 
         // Pre-warm cache in background
@@ -958,6 +960,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
               isJefeVentas: user.isJefeVentas,
               role: user.role,
             ),
+            isRepartidor: activeMode == 'REPARTIDOR' || user.isRepartidor,
           ),
         );
 
@@ -1082,13 +1085,16 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
   @protected
   void preWarmAuthenticatedSession(AuthState authenticated) {
+    final user = authenticated.user!;
     unawaited(
       CachePreWarmer.preWarmCache(
         vendedorCodes: authenticated.vendedorCodes,
         isJefeVentas: isDashboardManagerRole(
-          isJefeVentas: authenticated.user!.isJefeVentas,
-          role: authenticated.user!.role,
+          isJefeVentas: user.isJefeVentas,
+          role: user.role,
         ),
+        isRepartidor:
+            authenticated.activeMode == 'REPARTIDOR' || user.isRepartidor,
       ),
     );
   }

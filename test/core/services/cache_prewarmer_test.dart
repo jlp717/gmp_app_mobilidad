@@ -10,6 +10,16 @@ void main() {
       );
     });
 
+    test('repartidor skips all commercial prewarm', () {
+      expect(
+        CachePreWarmer.immediateTargets(
+          isJefeVentas: false,
+          isRepartidor: true,
+        ),
+        isEmpty,
+      );
+    });
+
     test('comercial prewarms core tabs', () {
       expect(
         CachePreWarmer.immediateTargets(isJefeVentas: false),
