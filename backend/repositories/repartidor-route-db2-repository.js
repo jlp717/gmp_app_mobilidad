@@ -292,14 +292,16 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
               TRIM(C.REPARTIDOR_ID) AS REPARTIDOR_ID,
               TRIM(C.STATUS) AS STATUS,
               C.ID,
-              C.FIRMA_EVIDENCE_ID
+              C.FIRMA_EVIDENCE_ID,
+              (SELECT COALESCE(SUM(L.CANTIDAD_ENTREGADA * COALESCE(L.PRECIO_UNITARIO, 0)), 0)
+                 FROM ${tables.lines} L
+                WHERE L.CONFIRMACION_ID = C.ID) AS IMPORTE_ENTREGADO
               ${paymentSelect}
          FROM ${tables.confirmations} C
          ${paymentJoin}
         WHERE TRIM(C.DOCUMENT_ID) IN (${documentPlaceholders})
-          AND TRIM(C.REPARTIDOR_ID) IN (${driverPlaceholders})
          ORDER BY TRIM(C.DOCUMENT_ID), TRIM(C.STATUS), C.ID`,
-        [...documentIds, ...drivers],
+        [...documentIds],
         false,
       );
       allConfirmRows.push(...(Array.isArray(confirmRows) ? confirmRows : []));
@@ -315,7 +317,7 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
     if (allConfirmRows.length && !canonicalRows.length) return rows;
 
     const byId = new Map();
-    for (const [id, match] of resolveCanonicalDeliveryStatuses(canonicalRows, { byOwner: true })) {
+    for (const [id, match] of resolveCanonicalDeliveryStatuses(canonicalRows, { byOwner: false })) {
       const importeCobrado = Number(match.importeCobrado);
       const importePendienteCobro = Number(match.importePendienteCobro);
       const hasCobro = Number.isFinite(importeCobrado) && importeCobrado > 0.004;
@@ -345,6 +347,9 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
         cobroParcial: hasCobro
           && Number.isFinite(importePendienteCobro)
           && importePendienteCobro > 0.004,
+        importeEntregado: Number.isFinite(Number(match.importeEntregado))
+          ? Math.round(Number(match.importeEntregado) * 100) / 100
+          : null,
       });
     }
     if (!byId.size) return rows;
@@ -357,7 +362,7 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
         || row.delivery_repartidor
         || ''
       ).trim();
-      const match = byId.get(`${ownerId}\u001f${documentId}`) || byId.get(`\u001f${documentId}`);
+      const match = byId.get(documentId) || byId.get(`${ownerId}\u001f${documentId}`);
       const safe = jsonSafeRow(row);
       if (!match) return safe;
       return {
@@ -371,6 +376,11 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
         CANONICAL_IMPORTE_PENDIENTE_COBRO: match.importePendienteCobro,
         CANONICAL_FORMA_PAGO_COBRO: match.formaPagoCobro,
         CANONICAL_COBRO_PARCIAL: match.cobroParcial,
+        CANONICAL_IMPORTE_ENTREGADO: match.importeEntregado,
+        ...(match.importeEntregado != null ? {
+          IMPORTETOTAL: match.importeEntregado,
+          IMPORTE: match.importeEntregado,
+        } : {}),
       };
     });
   } catch (error) {

@@ -41,6 +41,23 @@ double quantityStepForLine({required num cantidadPedida, String? unit}) {
 
 bool isWeightLikeUnit(String? unit) => quantityStepForUnit(unit) < 1;
 
+/// Over-delivery ceiling: up to 10× the ordered quantity (sanity cap 9999).
+double ruteroMaxDeliverableQuantity(num ordered) {
+  final base = ordered.toDouble();
+  if (base <= 0) return 9999;
+  final cap = base * 10;
+  return cap > 9999 ? 9999 : cap;
+}
+
+/// Live line amount from delivered quantity × unit price.
+double ruteroLineDeliveredAmount({
+  required EntregaItem item,
+  required double deliveredQty,
+}) {
+  final unit = item.precioUnitario > 0.004 ? item.precioUnitario : 0.0;
+  return double.parse((deliveredQty * unit).toStringAsFixed(2));
+}
+
 /// Returns the only valid UI identity for a delivery line.
 String ruteroLineKey(EntregaItem item) => item.itemId.trim();
 
@@ -94,6 +111,7 @@ class RuteroDetailProducts extends StatelessWidget {
     required this.onOpenFicha,
     required this.onShowFullscreenImage,
     this.scrollController,
+    this.readOnly = false,
     super.key,
   });
 
@@ -113,6 +131,7 @@ class RuteroDetailProducts extends StatelessWidget {
   final void Function(EntregaItem linea) onOpenFicha;
   final void Function(String imageUrl, String name) onShowFullscreenImage;
   final ScrollController? scrollController;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -148,6 +167,7 @@ class RuteroDetailProducts extends StatelessWidget {
                 linea: linea,
                 isChecked: productChecked[lineId] ?? false,
                 quantity: productQuantities[lineId] ?? linea.cantidadPedida,
+                readOnly: readOnly,
                 onCheckedChanged: (value) =>
                     onProductCheckedChanged(lineId, value),
                 onQuantityChanged: (value) => onQuantityChanged(lineId, value),
@@ -272,6 +292,11 @@ class RuteroDetailProducts extends StatelessWidget {
         .where((item) => productChecked[ruteroLineKey(item)] ?? false)
         .length;
     final total = items.length;
+    final liveTotal = items.fold<double>(0, (sum, item) {
+      final qty = productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida;
+      return sum +
+          ruteroLineDeliveredAmount(item: item, deliveredQty: qty.toDouble());
+    });
 
     return RepartidorExecutivePanel(
       margin: const EdgeInsets.all(16),
@@ -333,12 +358,24 @@ class RuteroDetailProducts extends StatelessWidget {
               ],
             ),
           ],
+          if (liveTotal > 0.004) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Importe según unidades: ${liveTotal.toStringAsFixed(2).replaceAll('.', ',')} €',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildConfirmButton(BuildContext context) {
+    if (readOnly) return const SizedBox.shrink();
     final allChecked = items.isNotEmpty &&
         items.every((item) => productChecked[ruteroLineKey(item)] ?? false);
     final compact = Responsive.isSmall(context);
@@ -437,6 +474,7 @@ class _ProductCard extends StatelessWidget {
     required this.onShowEditDialog,
     required this.onOpenFicha,
     required this.onShowFullscreenImage,
+    this.readOnly = false,
   });
 
   final EntregaItem linea;
@@ -447,6 +485,7 @@ class _ProductCard extends StatelessWidget {
   final VoidCallback onShowEditDialog;
   final VoidCallback onOpenFicha;
   final VoidCallback onShowFullscreenImage;
+  final bool readOnly;
 
   bool get isModified => (quantity - linea.cantidadPedida).abs() > 0.0001;
 
@@ -457,10 +496,12 @@ class _ProductCard extends StatelessWidget {
       accentColor: isChecked ? AppTheme.success : AppTheme.warning,
       selected: isChecked,
       padding: EdgeInsets.zero,
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onCheckedChanged(!isChecked);
-      },
+      onTap: readOnly
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              onCheckedChanged(!isChecked);
+            },
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
@@ -620,69 +661,90 @@ class _ProductCard extends StatelessWidget {
   }
 
   Widget _buildQuantityControls(BuildContext context) {
+    final maxQty = ruteroMaxDeliverableQuantity(linea.cantidadPedida);
     final step = quantityStepForLine(
       unit: linea.unit,
       cantidadPedida: linea.cantidadPedida,
     );
     final unitLabel = (linea.unit ?? '').trim();
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.softPanel,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _QuantityButton(
-            icon: Icons.remove,
-            onTap: quantity > 0
-                ? () {
-                    HapticFeedback.selectionClick();
-                    onQuantityChanged(
-                      (quantity - step).clamp(0.0, linea.cantidadPedida),
-                    );
-                  }
-                : null,
+    final lineAmount = ruteroLineDeliveredAmount(
+      item: linea,
+      deliveredQty: quantity,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: AppTheme.softPanel,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppTheme.borderColor),
           ),
-          GestureDetector(
-            onTap: onShowEditDialog,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 64),
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              alignment: Alignment.center,
-              child: Text(
-                unitLabel.isEmpty
-                    ? _deliveryQuantityText(quantity)
-                    : '${_deliveryQuantityText(quantity)} $unitLabel',
-                style: TextStyle(
-                  color: isModified ? AppTheme.warning : AppTheme.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  decoration: TextDecoration.underline,
-                  decorationStyle: TextDecorationStyle.dotted,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _QuantityButton(
+                icon: Icons.remove,
+                onTap: readOnly || quantity <= 0
+                    ? null
+                    : () {
+                        HapticFeedback.selectionClick();
+                        onQuantityChanged(
+                          (quantity - step).clamp(0.0, maxQty),
+                        );
+                      },
+              ),
+              GestureDetector(
+                onTap: readOnly ? null : onShowEditDialog,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 64),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  alignment: Alignment.center,
+                  child: Text(
+                    unitLabel.isEmpty
+                        ? _deliveryQuantityText(quantity)
+                        : '${_deliveryQuantityText(quantity)} $unitLabel',
+                    style: TextStyle(
+                      color:
+                          isModified ? AppTheme.warning : AppTheme.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      decoration: readOnly ? null : TextDecoration.underline,
+                      decorationStyle: TextDecorationStyle.dotted,
+                    ),
+                  ),
                 ),
               ),
+              _QuantityButton(
+                icon: Icons.add,
+                onTap: readOnly || quantity + 0.0001 >= maxQty
+                    ? null
+                    : () {
+                        HapticFeedback.selectionClick();
+                        final next = quantity + step;
+                        onQuantityChanged(next > maxQty ? maxQty : next);
+                      },
+              ),
+            ],
+          ),
+        ),
+        if (lineAmount > 0.004) ...[
+          const SizedBox(height: 4),
+          Text(
+            '${lineAmount.toStringAsFixed(2).replaceAll('.', ',')} €',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          _QuantityButton(
-            icon: Icons.add,
-            onTap: quantity + 0.0001 < linea.cantidadPedida
-                ? () {
-                    HapticFeedback.selectionClick();
-                    final next = quantity + step;
-                    onQuantityChanged(
-                      next > linea.cantidadPedida ? linea.cantidadPedida : next,
-                    );
-                  }
-                : null,
-          ),
         ],
-      ),
+      ],
     );
   }
 
   Widget _buildEditIcon() {
+    if (readOnly) return const SizedBox.shrink();
     return GestureDetector(
       onTap: onShowEditDialog,
       child: Icon(

@@ -11,6 +11,7 @@ const PDFDocument = require('pdfkit');
 const logger = require('../middleware/logger');
 const { drawCompanyHeader } = require('./company-header');
 const { CircuitBreaker } = require('./circuit-breaker');
+const { formatErpDocumentLabelFromHeader } = require('../utils/erp-document-label');
 
 const pdfBreaker = new CircuitBreaker({
     name: 'pdf-generation',
@@ -139,7 +140,8 @@ async function generateInvoicePDF(facturaData) {
             throw new Error('Factura sin número o serie — datos incompletos');
         }
 
-        logger.info(`📄 Generando PDF factura - Diseño Profesional v2.0 para ${header.serie}-${header.numero}`);
+        const documentLabel = formatErpDocumentLabelFromHeader(header);
+        logger.info(`📄 Generando PDF factura - Diseño Profesional v2.0 para ${documentLabel}`);
 
         return new Promise((resolve, reject) => {
             const doc = new PDFDocument({
@@ -147,7 +149,7 @@ async function generateInvoicePDF(facturaData) {
                 margin: 40,
                 bufferPages: true,
                 info: {
-                    Title: `Factura ${header.serie}-${header.numero}`,
+                    Title: `Factura ${documentLabel}`,
                     Author: `${EMPRESA.nombre} ${EMPRESA.slogan}`,
                     Subject: `Factura para ${header.clienteNombre}`,
                     Keywords: 'Factura, Mari Pepa, Food & Frozen, Hostelería'
@@ -171,7 +173,7 @@ async function generateInvoicePDF(facturaData) {
                 .fillColor(COLORS.white)
                 .text('FACTURA', 50, y + 10);
 
-            const numFactura = `${header.serie}-${header.numero}`;
+            const numFactura = documentLabel;
             doc.fontSize(16)
                 .text(numFactura, 400, y + 10, { width: 145, align: 'right' });
 

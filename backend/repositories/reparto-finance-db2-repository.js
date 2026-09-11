@@ -1594,6 +1594,18 @@ function createRepartoFinanceDb2Repository(options = {}) {
         add('PANTALLA_ORIGEN', input.pantallaOrigen || 'RUTERO');
         add('OPERADOR', input.operador || 'unknown');
         add('OBSERVACIONES', normalizeText(input.notas).slice(0, 60));
+        if (normalizeText(input.numeroTalon)) {
+          add('NUMEROTALON', normalizeText(input.numeroTalon).slice(0, 10));
+          add('CUENTATALONES', normalizeText(input.numeroTalon).slice(0, 10));
+          add('CODIGOENTIDADBANCARIA', normalizeText(input.codigoEntidadBancaria).slice(0, 4));
+          add('CUENTABANCO', normalizeText(input.codigoEntidadBancaria).slice(0, 10));
+          add('NOMBREENTIDADBANCARIA', normalizeText(input.nombreBanco).slice(0, 40));
+          add('DIAVENCIMIENTO', input.diaVencimientoTalon || null);
+          add('MESVENCIMIENTO', input.mesVencimientoTalon || null);
+          add('ANOVENCIMIENTO', input.anoVencimientoTalon || null);
+          add('EFECTIVOTALON', 'T');
+          add('IMPORTETOTALTALONES', roundMoney(input.importeCobrado));
+        }
       } else {
         add('CODIGO_CLIENTE', input.codigoCliente);
         add('NOMBRE_CLIENTE', input.nombreCliente || '');

@@ -13,7 +13,18 @@ const LEDGER_COLUMNS = Object.freeze([
   'MESCOBRO', 'ANOCOBRO', 'IDEMPOTENCY_TOKEN', 'PANTALLA_ORIGEN', 'OPERADOR',
   'OBSERVACIONES',
 ]);
-const COMMERCIAL_COLUMNS = Object.freeze(['CODIGO_CLIENTE', 'REFERENCIA', 'IMPORTE']);
+const OPTIONAL_TALON_COLUMNS = Object.freeze([
+  'CUENTATALONES',
+  'CUENTABANCO',
+  'DIAVENCIMIENTO',
+  'MESVENCIMIENTO',
+  'ANOVENCIMIENTO',
+  'IMPORTETOTALTALONES',
+  'NUMEROTALON',
+  'CODIGOENTIDADBANCARIA',
+  'EFECTIVOTALON',
+  'NOMBREENTIDADBANCARIA',
+]);
 
 class RepartoCobrosCapabilityError extends RepartoPersistenceError {
   constructor(message, details) {
@@ -146,8 +157,18 @@ function integer(value, field) {
   return parsed;
 }
 
+function parseDueParts(value) {
+  const raw = normalizeText(value);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (iso) return { year: Number(iso[1]), month: Number(iso[2]), day: Number(iso[3]) };
+  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(raw);
+  if (slash) return { day: Number(slash[1]), month: Number(slash[2]), year: Number(slash[3]) };
+  return null;
+}
+
 function normalizePayment(input, now) {
   const cal = madridCalendarParts(now);
+  const due = parseDueParts(input.fechaVencimientoTalon);
   const payment = Object.freeze({
     codigoCliente: normalizeText(input.codigoCliente),
     codigoRepartidor: normalizeText(input.codigoRepartidor),
@@ -170,6 +191,18 @@ function normalizePayment(input, now) {
     diaCobro: cal.day,
     mesCobro: cal.month,
     anoCobro: cal.year,
+    numeroTalon: normalizeText(input.numeroTalon).slice(0, 10),
+    codigoEntidadBancaria: normalizeText(input.codigoEntidadBancaria).slice(0, 4),
+    nombreBanco: normalizeText(input.nombreBanco).slice(0, 40),
+    diaVencimientoTalon: input.diaVencimientoTalon != null
+      ? integer(input.diaVencimientoTalon, 'diaVencimientoTalon')
+      : due?.day ?? null,
+    mesVencimientoTalon: input.mesVencimientoTalon != null
+      ? integer(input.mesVencimientoTalon, 'mesVencimientoTalon')
+      : due?.month ?? null,
+    anoVencimientoTalon: input.anoVencimientoTalon != null
+      ? integer(input.anoVencimientoTalon, 'anoVencimientoTalon')
+      : due?.year ?? null,
   });
   const requiredText = [
     'codigoCliente', 'codigoRepartidor', 'tipoDocumento', 'origenDocumento',
@@ -226,6 +259,7 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger = 
   const ledger = parseQualified(runtime.tables.finance.cobros);
   const commercial = parseQualified(runtime.tables.finance.commercialCobros);
   const approvedConnections = new WeakSet();
+  const optionalTalonColumnsByConnection = new WeakMap();
 
   async function assertCapabilities(connection) {
     if (!connection || (typeof connection.query !== 'function' && typeof connection.execute !== 'function')) {
@@ -260,6 +294,11 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger = 
     if (missingColumns.length) {
       throw new RepartoCobrosCapabilityError('Faltan columnas verificadas para el ledger de cobros', { missingColumns });
     }
+    const ledgerCols = available.get(`${ledger.schema}.${ledger.table}`) || new Set();
+    optionalTalonColumnsByConnection.set(
+      connection,
+      OPTIONAL_TALON_COLUMNS.filter((column) => ledgerCols.has(column)),
+    );
 
     const uniqueRows = await rows(connection, `
       SELECT I.INDEX_SCHEMA, I.INDEX_NAME
@@ -329,6 +368,33 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger = 
         const identityRows = await rows(connection, 'SELECT IDENTITY_VAL_LOCAL() AS ID FROM SYSIBM.SYSDUMMY1');
         const id = rowValue(identityRows[0], 'ID');
         if (id == null) throw new RepartoCobrosCapabilityError('DB2 no devolvio el identificador del cobro');
+        const talonColumns = optionalTalonColumnsByConnection.get(connection) || [];
+        if (payment.numeroTalon && talonColumns.length) {
+          const assignments = [];
+          const params = [];
+          const put = (column, value) => {
+            if (!talonColumns.includes(column) || value == null || value === '') return;
+            assignments.push(`${column} = ?`);
+            params.push(value);
+          };
+          put('NUMEROTALON', payment.numeroTalon);
+          put('CUENTATALONES', payment.numeroTalon);
+          put('CODIGOENTIDADBANCARIA', payment.codigoEntidadBancaria);
+          put('CUENTABANCO', payment.codigoEntidadBancaria);
+          put('NOMBREENTIDADBANCARIA', payment.nombreBanco);
+          put('DIAVENCIMIENTO', payment.diaVencimientoTalon);
+          put('MESVENCIMIENTO', payment.mesVencimientoTalon);
+          put('ANOVENCIMIENTO', payment.anoVencimientoTalon);
+          put('EFECTIVOTALON', 'T');
+          put('IMPORTETOTALTALONES', payment.importeCobrado);
+          if (assignments.length) {
+            await execute(
+              connection,
+              `UPDATE ${runtime.tables.finance.cobros} SET ${assignments.join(', ')} WHERE IDEMPOTENCY_TOKEN = ?`,
+              [...params, payment.idempotencyToken],
+            );
+          }
+        }
         logger.info?.('reparto cobro inserted', { tableSet: runtime.tableSet });
         return Object.freeze({ id: String(id).trim(), created: true });
       },

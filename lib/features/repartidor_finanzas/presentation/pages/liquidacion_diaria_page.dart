@@ -10,6 +10,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_confirm_dialog.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/liquidacion_pdf_builder.dart';
@@ -407,6 +408,14 @@ class _RepartidorLiquidacionDiariaPageState
         (_closedResult == null && !_knownClosedFromLedger)) {
       return;
     }
+    final confirmed = await confirmRepartidorAction(
+      context,
+      title: '¿Estás seguro de reenviar el email?',
+      message:
+          'Se reenviará el correo de liquidación diaria a Carlos, Javier y al repartidor.',
+      confirmLabel: 'Sí, reenviar',
+    );
+    if (!confirmed || !mounted) return;
     setState(() => _resendingEmails = true);
     final modal = AsyncOperationModal.show(
       context,
@@ -475,6 +484,14 @@ class _RepartidorLiquidacionDiariaPageState
       );
       return;
     }
+    final confirmed = await confirmRepartidorAction(
+      context,
+      title: '¿Estás seguro de enviar la liquidación diaria?',
+      message:
+          'Se grabará el cierre del día y se enviará el correo de liquidación.',
+      confirmLabel: 'Sí, grabar',
+    );
+    if (!confirmed || !mounted) return;
     setState(() => _saving = true);
 
     final modal = AsyncOperationModal.show(

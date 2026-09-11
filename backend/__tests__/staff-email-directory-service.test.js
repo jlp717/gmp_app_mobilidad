@@ -212,6 +212,7 @@ describe('staff-email-directory-service', () => {
     expect(result.recipients).toEqual({
       to: [{ role: 'cliente', present: true }],
       cc: [
+        { role: 'repartidor', present: true },
         { role: 'comercial', present: true },
         { role: 'CARLOS_CORBALAN', present: true },
         { role: 'JAVIER_LACAL', present: true },
@@ -219,6 +220,7 @@ describe('staff-email-directory-service', () => {
     });
     expect(PRODUCT_DELIVERY_TO_ROLES).toEqual(['cliente']);
     expect(PRODUCT_DELIVERY_CC_ROLES).toEqual([
+      'repartidor',
       'comercial',
       'CARLOS_CORBALAN',
       'JAVIER_LACAL',

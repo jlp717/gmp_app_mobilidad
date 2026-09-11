@@ -558,7 +558,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     if (code.contains('MEN')) return 'Mensual';
     if (code.contains('CRE') || code == 'CR') return 'Crédito';
     if (code.contains('TAR')) return 'Tarjeta';
-    if (code.contains('TRA')) return 'Transferencia';
+    if (code.contains('TRA') || code.contains('TAL') || code.contains('CHE')) {
+      return 'Talón';
+    }
     return code.length > 8 ? code.substring(0, 8) : code;
   }
 

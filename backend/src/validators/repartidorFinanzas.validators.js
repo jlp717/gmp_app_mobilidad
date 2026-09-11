@@ -97,6 +97,21 @@ const cobroSchema = z.object({
   pantallaOrigen: z.enum(['RUTERO', 'VENCIMIENTOS']).default('RUTERO'),
   idempotencyToken: idempotencyTokenSchema,
   notas: z.string().trim().max(60).optional(),
+  numeroTalon: z.string().trim().min(1).max(10).optional(),
+  fechaVencimientoTalon: z.string().trim().min(8).max(12).optional(),
+  codigoEntidadBancaria: z.string().trim().min(4).max(4).optional(),
+  nombreBanco: z.string().trim().min(3).max(40).optional(),
+}).superRefine((value, ctx) => {
+  const method = String(value.formaPago || '').trim().toUpperCase();
+  if (['TALON', 'TALÓN', 'CHEQUE', 'CH', 'TALON BANCARIO'].includes(method)) {
+    if (!value.numeroTalon || !value.fechaVencimientoTalon || !(value.codigoEntidadBancaria || value.nombreBanco)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['numeroTalon'],
+        message: 'El talón requiere número, vencimiento y banco',
+      });
+    }
+  }
 });
 
 const legacyLiquidacionSchema = z.object({

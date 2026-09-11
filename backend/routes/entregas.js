@@ -1243,7 +1243,7 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
     if (!Array.isArray(albaranes) || !albaranes.length) return albaranes;
     const documentIds = [...new Set(albaranes.map((item) => String(item.id || '').trim()).filter(Boolean))];
     const drivers = [...new Set((repartidorIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
-    if (!documentIds.length || !drivers.length) return albaranes;
+    if (!documentIds.length) return albaranes;
 
     const tables = confirmationTables();
     if (!tables?.confirmations) {
@@ -1257,7 +1257,9 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
     const cobrosTable = financeCobrosTable();
     try {
         const documentPlaceholders = documentIds.map(() => '?').join(', ');
-        const driverPlaceholders = drivers.map(() => '?').join(', ');
+        const deliveredAmountSql = tables.lines
+            ? `, (SELECT COALESCE(SUM(L.CANTIDAD_ENTREGADA * COALESCE(L.PRECIO_UNITARIO, 0)), 0) FROM ${tables.lines} L WHERE L.CONFIRMACION_ID = C.ID) AS IMPORTE_ENTREGADO`
+            : ', CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_ENTREGADO';
         const paymentSelect = cobrosTable
             ? [
                 ', C.ID AS CONFIRMATION_ID',
@@ -1265,6 +1267,7 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
                 ', CO.IMPORTEVENCIMIENTO AS IMPORTE_COBRADO',
                 ', CO.IMPORTEPENDIENTE AS IMPORTE_PENDIENTE_COBRO',
                 ', TRIM(CO.CODIGOFORMAPAGO) AS FORMA_PAGO_COBRO',
+                deliveredAmountSql,
             ].join('\n')
             : [
                 ', C.ID AS CONFIRMATION_ID',
@@ -1272,6 +1275,7 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
                 ', CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_COBRADO',
                 ', CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_PENDIENTE_COBRO',
                 ', CAST(NULL AS VARCHAR(10)) AS FORMA_PAGO_COBRO',
+                deliveredAmountSql,
             ].join('\n');
         const paymentJoin = cobrosTable
             ? [
@@ -1287,15 +1291,13 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
             'FROM ' + tables.confirmations + ' C',
             paymentJoin,
             'WHERE TRIM(C.DOCUMENT_ID) IN (' + documentPlaceholders + ')',
-            '  AND TRIM(C.REPARTIDOR_ID) IN (' + driverPlaceholders + ')',
             'ORDER BY TRIM(C.DOCUMENT_ID), TRIM(C.STATUS), C.ID',
         ].filter(Boolean).join('\n');
-        // Read the canonical state directly. A cached confirmation can hide a
-        // just-persisted terminal state; the DB2 unique document index keeps
-        // this bounded and deterministic.
-        const rows = await queryWithParams(sql, [...documentIds, ...drivers], false, false);
+        // Match by DOCUMENT_ID only: the unique index is per document, so a
+        // jefe viewing the driver's route still sees the persisted status.
+        const rows = await queryWithParams(sql, [...documentIds], false, false);
         const byId = new Map();
-        for (const [id, match] of resolveCanonicalDeliveryStatuses(rows, { byOwner: true })) {
+        for (const [id, match] of resolveCanonicalDeliveryStatuses(rows, { byOwner: false })) {
             const importeCobrado = Number(match.importeCobrado);
             const importePendienteCobro = Number(match.importePendienteCobro);
             const hasCobro = Number.isFinite(importeCobrado) && importeCobrado > 0.004;
@@ -1312,6 +1314,9 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
                 cobroParcial: hasCobro
                     && Number.isFinite(importePendienteCobro)
                     && importePendienteCobro > 0.004,
+                importeEntregado: Number.isFinite(Number(match.importeEntregado))
+                    ? Math.round(Number(match.importeEntregado) * 100) / 100
+                    : null,
             });
         }
         if (!byId.size) return albaranes;
@@ -1319,7 +1324,7 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
         return albaranes.map((item) => {
             const documentId = String(item.id || '').trim();
             const ownerId = String(item.codigoRepartidor || '').trim();
-            const match = byId.get(`${ownerId}\u001f${documentId}`) || byId.get(`\u001f${documentId}`);
+            const match = byId.get(documentId) || byId.get(`${ownerId}\u001f${documentId}`);
             if (!match) return item;
             return {
                 ...item,
@@ -1332,6 +1337,7 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
                 importePendienteCobro: match.importePendienteCobro,
                 formaPagoCobro: match.formaPagoCobro,
                 cobroParcial: match.cobroParcial,
+                ...(match.importeEntregado != null ? { importe: match.importeEntregado } : {}),
             };
         });
     } catch (error) {
@@ -1367,10 +1373,9 @@ async function loadCanonicalDetailProjection(documentId, repartidorId, clientCod
                    C.CONFIRMED_AT
             FROM ${tables.confirmations} C
             WHERE TRIM(C.DOCUMENT_ID) = ?
-              AND TRIM(C.REPARTIDOR_ID) = ?
               AND TRIM(C.CLIENTE_CODIGO) = ?
             ORDER BY TRIM(C.STATUS), C.ID
-        `, [documentId, repartidorId, clientCode], false, false);
+        `, [documentId, clientCode], false, false);
         if (confirmations.length === 0) {
             return { availability: 'NONE', confirmation: null, linesById: new Map() };
         }

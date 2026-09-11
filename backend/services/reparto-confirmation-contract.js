@@ -88,7 +88,16 @@ const lineSchema = z.object({
   observaciones: z.string().trim().max(500).optional(),
 }).strict().superRefine((line, ctx) => {
   const accounted = line.cantidadEntregada + line.cantidadRechazada + line.cantidadPendiente;
-  if (Math.abs(accounted - line.cantidadPedida) > 0.0001) {
+  const overDelivery = line.cantidadEntregada - line.cantidadPedida > 0.0001;
+  if (overDelivery) {
+    if (line.cantidadRechazada > 0.0001 || line.cantidadPendiente > 0.0001) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cantidadEntregada'],
+        message: 'Si se entrega de más, no puede haber unidades rechazadas o pendientes',
+      });
+    }
+  } else if (Math.abs(accounted - line.cantidadPedida) > 0.0001) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['cantidadEntregada'],
@@ -223,7 +232,22 @@ const paymentSchema = z.object({
   importeCobrado: z.number().finite().positive().max(99999999),
   formaPago: strictText(20),
   notas: z.string().trim().max(500).optional(),
-}).strict();
+  numeroTalon: z.string().trim().min(1).max(10).optional(),
+  fechaVencimientoTalon: z.string().trim().min(8).max(12).optional(),
+  codigoEntidadBancaria: z.string().trim().min(4).max(4).optional(),
+  nombreBanco: z.string().trim().min(3).max(40).optional(),
+}).strict().superRefine((payment, ctx) => {
+  const method = String(payment.formaPago || '').trim().toUpperCase();
+  if (['TALON', 'TALÓN', 'CHEQUE', 'CH', 'TALON BANCARIO'].includes(method)) {
+    if (!payment.numeroTalon || !payment.fechaVencimientoTalon || !(payment.codigoEntidadBancaria || payment.nombreBanco)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['numeroTalon'],
+        message: 'El talón requiere número, vencimiento y banco',
+      });
+    }
+  }
+});
 const confirmationSchema = z.object({
   delivery: deliverySchema,
   cobro: paymentSchema.optional(),

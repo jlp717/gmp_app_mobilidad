@@ -148,6 +148,10 @@ Map<String, dynamic> buildRuteroStandaloneCobroPayload({
   required String formaPago,
   required String idempotencyToken,
   String? notas,
+  String? numeroTalon,
+  String? fechaVencimientoTalon,
+  String? codigoEntidadBancaria,
+  String? nombreBanco,
 }) {
   final keys = cobroKeysFromAlbaran(albaran);
   if (keys == null) {
@@ -180,6 +184,14 @@ Map<String, dynamic> buildRuteroStandaloneCobroPayload({
     'pantallaOrigen': 'RUTERO',
     'idempotencyToken': idempotencyToken,
     if (trimmedNotes.isNotEmpty) 'notas': trimmedNotes,
+    if ((numeroTalon ?? '').trim().isNotEmpty)
+      'numeroTalon': numeroTalon!.trim(),
+    if ((fechaVencimientoTalon ?? '').trim().isNotEmpty)
+      'fechaVencimientoTalon': fechaVencimientoTalon!.trim(),
+    if ((codigoEntidadBancaria ?? '').trim().isNotEmpty)
+      'codigoEntidadBancaria': codigoEntidadBancaria!.trim(),
+    if ((nombreBanco ?? '').trim().isNotEmpty)
+      'nombreBanco': nombreBanco!.trim(),
   };
 }
 

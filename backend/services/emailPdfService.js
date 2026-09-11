@@ -24,6 +24,8 @@ const {
     uniqueEmails,
 } = require('./reparto-email-delivery-policy');
 
+const { formatErpDocumentLabel } = require('../utils/erp-document-label');
+
 function redactEmailForLog(value) {
     const email = String(value || '').trim();
     const at = email.indexOf('@');
@@ -594,12 +596,12 @@ async function sendHtmlEmail({ to, subject, htmlBody, textBody, messageId }) {
 /**
  * Generar HTML personalizado para facturas
  */
-function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, customBody }) {
-    const safeSerie = escapeHtml(serie);
-    const safeNumero = escapeHtml(numero);
+function generateInvoiceEmailHtml({ serie, numero, terminal, fecha, total, clienteNombre, customBody }) {
+    const documentLabel = formatErpDocumentLabel({ serie, terminal, numero });
+    const safeSerieNumero = escapeHtml(documentLabel);
     const safeCliente = escapeHtml(clienteNombre || 'cliente');
     const safeFecha = escapeHtml(fecha || '');
-    const title = `Factura ${safeSerie}-${safeNumero}`;
+    const title = `Factura ${safeSerieNumero}`;
 
     let bodyHtml;
     if (customBody) {
@@ -614,7 +616,7 @@ function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, 
             Estimado/a <strong>${safeCliente}</strong>,
           </p>
           <p style="font-size: 14px; color: #3d4f63; line-height: 1.6; margin: 0 0 12px 0;">
-            Adjunto le remitimos la factura <strong>${safeSerie}-${safeNumero}</strong>
+            Adjunto le remitimos la factura <strong>${safeSerieNumero}</strong>
             emitida por ${escapeHtml(FROM_NAME)}.
           </p>
           ${safeFecha ? `<p style="font-size: 13px; color: #5a6b7d; margin: 0 0 12px 0;">Fecha: <strong>${safeFecha}</strong></p>` : ''}
@@ -639,12 +641,12 @@ function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, 
 /**
  * Generar HTML personalizado para albaranes/notas de entrega
  */
-function generateDeliveryEmailHtml({ numero, serie, fecha, total, clienteNombre, customBody }) {
-    const safeSerie = escapeHtml(serie);
-    const safeNumero = escapeHtml(numero);
+function generateDeliveryEmailHtml({ numero, serie, terminal, fecha, total, clienteNombre, customBody }) {
+    const documentLabel = formatErpDocumentLabel({ serie, terminal, numero });
+    const safeSerieNumero = escapeHtml(documentLabel);
     const safeCliente = escapeHtml(clienteNombre || 'cliente');
     const safeFecha = escapeHtml(fecha || '');
-    const title = `Albarán ${safeSerie}-${safeNumero}`;
+    const title = `Albarán ${safeSerieNumero}`;
 
     let bodyHtml;
     if (customBody) {
@@ -659,7 +661,7 @@ function generateDeliveryEmailHtml({ numero, serie, fecha, total, clienteNombre,
             Estimado/a <strong>${safeCliente}</strong>,
           </p>
           <p style="font-size: 14px; color: #3d4f63; line-height: 1.6; margin: 0 0 12px 0;">
-            Adjunto le remitimos el albarán <strong>${safeSerie}-${safeNumero}</strong>${safeFecha ? ` con fecha <strong>${safeFecha}</strong>` : ''}
+            Adjunto le remitimos el albarán <strong>${safeSerieNumero}</strong>${safeFecha ? ` con fecha <strong>${safeFecha}</strong>` : ''}
             desde ${escapeHtml(FROM_NAME)}.
           </p>
           ${total ? `

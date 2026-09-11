@@ -9,6 +9,7 @@
 
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
+const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 const { CircuitBreaker } = require('./circuit-breaker');
 const { redisCache, TTL } = require('./redis-cache');
 
@@ -1536,9 +1537,10 @@ class FacturasService {
         }
     }
 
-    generateWhatsAppMessage(serie, numero, fecha, total, clienteNombre) {
+    generateWhatsAppMessage(serie, numero, fecha, total, clienteNombre, terminal) {
+        const documentLabel = formatErpDocumentLabel({ serie, terminal, numero });
         return `Granja Mari Pepa\n\n` +
-            `Factura: ${serie}-${numero}\n` +
+            `Factura: ${documentLabel}\n` +
             `Fecha: ${fecha}\n` +
             `Total: ${total.toFixed(2)} EUR\n\n` +
             `Cliente: ${clienteNombre}\n\n` +

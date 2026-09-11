@@ -887,8 +887,8 @@ class _RepartidorVencimientosPageState
                         ),
                         DropdownMenuItem(value: 'BIZUM', child: Text('Bizum')),
                         DropdownMenuItem(
-                          value: 'TRANSFERENCIA',
-                          child: Text('Transferencia'),
+                          value: 'TALON',
+                          child: Text('Talón'),
                         ),
                         DropdownMenuItem(
                             value: 'CHEQUE', child: Text('Cheque')),

@@ -5,6 +5,7 @@ const { allowsEmptyPlannedLines, PRICING_STATE } = require('./delivery-amount-re
 const { resolveDocumentCollectable } = require('./delivery-cobro-availability');
 const { invalidateCachePattern } = require('./redis-cache');
 const logger = require('../middleware/logger');
+const { assertTalonPayment } = require('./reparto-bank-catalog');
 
 class RepartoPersistenceError extends Error {
   constructor(message, { code, statusCode = 409, details } = {}) {
@@ -97,6 +98,10 @@ function confirmationFingerprint(command) {
     importeCobrado: command.cobro.importeCobrado,
     formaPago: command.cobro.formaPago,
     notas: command.cobro.notas,
+    numeroTalon: command.cobro.numeroTalon || null,
+    fechaVencimientoTalon: command.cobro.fechaVencimientoTalon || null,
+    codigoEntidadBancaria: command.cobro.codigoEntidadBancaria || null,
+    nombreBanco: command.cobro.nombreBanco || null,
   } : null;
   const canonical = stableValue({
     repartidorId: command.actor?.repartidorId,
@@ -298,6 +303,10 @@ function assertPayment(planned, command, actualLines, document) {
     pantallaOrigen: 'RUTERO',
     operador: normalizeText(command.actor.userId),
     notas: input.notas || null,
+    numeroTalon: input.numeroTalon || null,
+    fechaVencimientoTalon: input.fechaVencimientoTalon || null,
+    codigoEntidadBancaria: input.codigoEntidadBancaria || null,
+    nombreBanco: input.nombreBanco || null,
   };
 }
 
@@ -461,7 +470,19 @@ function createRepartoConfirmationService({ repository, now = () => new Date() }
       const documentSnapshot = plannedDocumentSnapshot(planned, {
         requireFinancialIdentity: Boolean(command.cobro),
       });
-      const payment = assertPayment(planned, command, actualLines, documentSnapshot);
+      let payment = assertPayment(planned, command, actualLines, documentSnapshot);
+      if (payment) {
+        const talon = await assertTalonPayment(payment);
+        if (talon) {
+          payment = {
+            ...payment,
+            numeroTalon: talon.numeroTalon,
+            codigoEntidadBancaria: talon.codigoEntidadBancaria,
+            nombreBanco: talon.nombreBanco,
+            fechaVencimientoTalon: `${String(talon.anoVencimiento).padStart(4, '0')}-${String(talon.mesVencimiento).padStart(2, '0')}-${String(talon.diaVencimiento).padStart(2, '0')}`,
+          };
+        }
+      }
       const confirmedAt = now().toISOString();
       const confirmation = buildPersistedConfirmation({
         command,

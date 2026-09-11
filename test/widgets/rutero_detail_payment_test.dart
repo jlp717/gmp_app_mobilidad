@@ -72,7 +72,7 @@ void main() {
         RuteroDetailPayment(
           albaran:
               _collectableAlbaran(saldo: 40, deudaCliente: 40, capped: false),
-          selectedPaymentMethod: 'TRANSFERENCIA',
+          selectedPaymentMethod: 'TALON',
           isPaid: false,
           pagoError: null,
           importeCobradoController: controller,
@@ -88,7 +88,7 @@ void main() {
     expect(find.text('Efectivo'), findsOneWidget);
     expect(find.text('Tarjeta'), findsOneWidget);
     expect(find.text('Bizum'), findsOneWidget);
-    expect(find.text('Transf.'), findsOneWidget);
+    expect(find.text('Talón'), findsOneWidget);
 
     expect(tester.takeException(), isNull);
   });
@@ -156,5 +156,69 @@ void main() {
     expect(find.textContaining('Sin saldo cobrable en este albarán'),
         findsOneWidget);
     expect(find.text('Registrar cobro'), findsNothing);
+  });
+
+  testWidgets('cobro obligatorio aparece marcado y no se desmarca',
+      (tester) async {
+    final controller = TextEditingController(text: '120,50');
+    var taps = 0;
+    await tester.pumpWidget(
+      _wrap(
+        RuteroDetailPayment(
+          albaran: _collectableAlbaran(),
+          selectedPaymentMethod: 'EFECTIVO',
+          isPaid: true,
+          pagoError: null,
+          importeCobradoController: controller,
+          importeCobradoError: null,
+          paymentLocked: true,
+          onPaymentMethodChanged: (_) {},
+          onPaidChanged: () => taps += 1,
+          onContinueToFinalize: () {},
+          getPaymentTypeLabel: () => 'Contado',
+        ),
+      ),
+    );
+
+    expect(find.text('Voy a cobrar este documento'), findsOneWidget);
+    expect(find.textContaining('Cobro obligatorio'), findsWidgets);
+    await tester.tap(find.text('Voy a cobrar este documento'));
+    await tester.pump();
+    expect(taps, 0);
+  });
+
+  testWidgets('talón pide número, vencimiento y banco', (tester) async {
+    final controller = TextEditingController(text: '40,00');
+    final numero = TextEditingController();
+    final vencimiento = TextEditingController();
+    final codigo = TextEditingController();
+    final banco = TextEditingController();
+    await tester.pumpWidget(
+      _wrap(
+        RuteroDetailPayment(
+          albaran:
+              _collectableAlbaran(saldo: 40, deudaCliente: 40, capped: false),
+          selectedPaymentMethod: 'TALON',
+          isPaid: true,
+          pagoError: null,
+          importeCobradoController: controller,
+          importeCobradoError: null,
+          numeroTalonController: numero,
+          fechaVencimientoTalonController: vencimiento,
+          bancoCodigoController: codigo,
+          bancoNombreController: banco,
+          onPaymentMethodChanged: (_) {},
+          onPaidChanged: () {},
+          onContinueToFinalize: () {},
+          getPaymentTypeLabel: () => 'Contado',
+        ),
+      ),
+    );
+
+    expect(find.text('Datos del talón'), findsOneWidget);
+    expect(find.text('Número de talón'), findsOneWidget);
+    expect(find.text('Fecha de vencimiento'), findsOneWidget);
+    expect(find.textContaining('Código de entidad'), findsOneWidget);
+    expect(find.text('Nombre del banco'), findsOneWidget);
   });
 }

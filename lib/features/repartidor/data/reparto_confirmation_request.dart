@@ -131,12 +131,20 @@ class RepartoPayment {
     required this.formaPago,
     this.entregaId,
     this.notas,
+    this.numeroTalon,
+    this.fechaVencimientoTalon,
+    this.codigoEntidadBancaria,
+    this.nombreBanco,
   });
 
   final String? entregaId;
   final num importeCobrado;
   final String formaPago;
   final String? notas;
+  final String? numeroTalon;
+  final String? fechaVencimientoTalon;
+  final String? codigoEntidadBancaria;
+  final String? nombreBanco;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         if (entregaId?.trim().isNotEmpty ?? false)
@@ -144,6 +152,14 @@ class RepartoPayment {
         'importeCobrado': importeCobrado,
         'formaPago': formaPago.trim(),
         if (notas?.trim().isNotEmpty ?? false) 'notas': notas!.trim(),
+        if (numeroTalon?.trim().isNotEmpty ?? false)
+          'numeroTalon': numeroTalon!.trim(),
+        if (fechaVencimientoTalon?.trim().isNotEmpty ?? false)
+          'fechaVencimientoTalon': fechaVencimientoTalon!.trim(),
+        if (codigoEntidadBancaria?.trim().isNotEmpty ?? false)
+          'codigoEntidadBancaria': codigoEntidadBancaria!.trim(),
+        if (nombreBanco?.trim().isNotEmpty ?? false)
+          'nombreBanco': nombreBanco!.trim(),
       };
 }
 

@@ -37,6 +37,7 @@ function shouldSeedLegacyDeliveryOverlay(args = process.argv.slice(2)) {
 }
 
 const APPLY = process.argv.includes('--apply');
+const REPLACE_CONFIRMATIONS = process.argv.includes('--replace-confirmations');
 const RECONCILE_TEST_SCHEMA = process.argv.includes('--reconcile-test-schema');
 const SCHEMA_ONLY = process.argv.includes('--schema-only');
 const SKIP_CVC = process.argv.includes('--skip-cvc');
@@ -2305,10 +2306,12 @@ async function main() {
 
     // 2) Isomorphic TABLE_MAPPINGS pairs (skip ERP-seeded keys)
     const confirmationPairs = pairs.filter((pair) => pair.group === 'confirmation' && pair.objectType === 'TABLE' && pairSelected(pair));
-    if (confirmationPairs.length) {
+    if (confirmationPairs.length && REPLACE_CONFIRMATIONS) {
       await runTableStep('ISO confirmation bundle', confirmationPairs[0].dst, async () => {
         await copyConfirmationBundle(confirmationPairs);
       });
+    } else if (confirmationPairs.length) {
+      console.log('SKIP confirmation bundle (preserves TEST confirmations; pass --replace-confirmations to wipe)');
     }
 
     for (const p of pairs) {

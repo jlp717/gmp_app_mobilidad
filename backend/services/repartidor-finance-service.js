@@ -19,6 +19,7 @@ const {
   resolveLiquidacionRecipients,
   publicLiquidacionRecipientPlan,
 } = require('./staff-email-directory-service');
+const { assertTalonPayment } = require('./reparto-bank-catalog');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { resolveDocumentCollectable } = require('./delivery-cobro-availability');
 const { resolveDeliveryAmount } = require('./delivery-amount-resolver');
@@ -1559,7 +1560,9 @@ async function registerCobroOnce(input) {
     const documentRow = await validateCobroDocument(input, conn);
     await assertPaymentWithinOutstandingBalance(conn, info, input, documentRow);
     await assertDocumentNotCollectedByCommercial(conn, input);
-    const result = await port.forConnection(conn).insertCobro(input);
+    const talon = await assertTalonPayment(input);
+    const paymentInput = talon ? { ...input, ...talon } : input;
+    const result = await port.forConnection(conn).insertCobro(paymentInput);
     await financeRepo.commit(conn);
     begun = false;
     logger.info(`[REPARTIDOR_FINANZAS] PAYMENT_REGISTERED rep=${normalizeText(input.codigoRepartidor)} amount=${roundMoney(input.importeCobrado)} created=${result.created}`);

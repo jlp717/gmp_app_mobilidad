@@ -65,12 +65,22 @@ function deliveryResult({
   redirected,
   policy,
 }) {
-  return {
+  const result = {
     intendedRecipients,
     effectiveRecipients,
     redirected,
     policy,
   };
+  try {
+    // eslint-disable-next-line global-require
+    const logger = require('../middleware/logger');
+    logger.info(
+      `[reparto-email] intended=${(intendedRecipients || []).join(',')} smtp=${(effectiveRecipients || []).join(',')} policy=${policy} redirected=${Boolean(redirected)}`,
+    );
+  } catch (_error) {
+    // logging must never break mail resolution
+  }
+  return result;
 }
 
 function resolveRepartoEmailDelivery({ recipients, env = process.env, mode = 'automatic' } = {}) {

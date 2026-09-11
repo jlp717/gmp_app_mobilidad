@@ -18,8 +18,12 @@ String ruteroPaymentMethodLabel(String method, {bool compact = false}) {
       return 'Tarjeta';
     case 'BIZUM':
       return 'Bizum';
+    case 'TALON':
+    case 'TALÓN':
+    case 'CHEQUE':
+      return compact ? 'Talón' : 'Talón';
     case 'TRANSFERENCIA':
-      return compact ? 'Transf.' : 'Transferencia';
+      return compact ? 'Talón' : 'Talón';
     default:
       return method;
   }
@@ -57,6 +61,12 @@ class RuteroDetailPayment extends StatelessWidget {
     this.onRegisterCobro,
     this.showDeliveryPrepToggle = true,
     this.showContinueToFinalize = true,
+    this.paymentLocked = false,
+    this.readOnly = false,
+    this.numeroTalonController,
+    this.fechaVencimientoTalonController,
+    this.bancoCodigoController,
+    this.bancoNombreController,
     super.key,
   });
 
@@ -83,11 +93,23 @@ class RuteroDetailPayment extends StatelessWidget {
   final VoidCallback? onRegisterCobro;
   final bool showDeliveryPrepToggle;
   final bool showContinueToFinalize;
+  final bool paymentLocked;
+  final bool readOnly;
+  final TextEditingController? numeroTalonController;
+  final TextEditingController? fechaVencimientoTalonController;
+  final TextEditingController? bancoCodigoController;
+  final TextEditingController? bancoNombreController;
 
   bool get _isUrgent => albaran.esCTR;
   bool get _hasCollectibleBalance => albaran.tieneSaldoCobrable;
+  bool get _isTalon =>
+      selectedPaymentMethod == 'TALON' ||
+      selectedPaymentMethod == 'TALÓN' ||
+      selectedPaymentMethod == 'CHEQUE' ||
+      selectedPaymentMethod == 'TRANSFERENCIA';
 
-  bool get _methodsEnabled => _hasCollectibleBalance && !isRegisteringCobro;
+  bool get _methodsEnabled =>
+      _hasCollectibleBalance && !isRegisteringCobro && !readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +145,10 @@ class RuteroDetailPayment extends StatelessWidget {
             _buildAmountCard(context),
             const SizedBox(height: 20),
             _buildPaymentMethodSelector(context),
+            if (_isTalon && _hasCollectibleBalance) ...[
+              const SizedBox(height: 16),
+              _buildTalonFields(context),
+            ],
             if (_hasCollectibleBalance) ...[
               const SizedBox(height: 20),
               _buildCollectedAmountField(),
@@ -346,7 +372,7 @@ class RuteroDetailPayment extends StatelessWidget {
             Expanded(
               child: _buildPaymentOption(
                 context,
-                'TRANSFERENCIA',
+                'TALON',
                 Icons.account_balance,
               ),
             ),
@@ -356,13 +382,107 @@ class RuteroDetailPayment extends StatelessWidget {
     );
   }
 
+  Widget _buildTalonFields(BuildContext context) {
+    InputDecoration decoration(String label, {String? hint}) {
+      return InputDecoration(
+        labelText: label,
+        hintText: hint,
+        filled: true,
+        fillColor: AppTheme.softPanel,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      );
+    }
+
+    return Semantics(
+      label: 'Datos del talón: número, vencimiento y banco',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Datos del talón',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: numeroTalonController,
+            enabled: _methodsEnabled,
+            maxLength: 10,
+            keyboardType: TextInputType.visiblePassword,
+            style: TextStyle(color: AppTheme.textPrimary),
+            decoration: decoration('Número de talón', hint: 'Ej: 123456'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: fechaVencimientoTalonController,
+            enabled: _methodsEnabled,
+            readOnly: true,
+            onTap: !_methodsEnabled
+                ? null
+                : () async {
+                    final now = DateTime.now();
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: now,
+                      firstDate: now.subtract(const Duration(days: 1)),
+                      lastDate: now.add(const Duration(days: 365 * 3)),
+                    );
+                    if (picked == null) return;
+                    fechaVencimientoTalonController?.text =
+                        '${picked.year.toString().padLeft(4, '0')}-'
+                        '${picked.month.toString().padLeft(2, '0')}-'
+                        '${picked.day.toString().padLeft(2, '0')}';
+                  },
+            style: TextStyle(color: AppTheme.textPrimary),
+            decoration: decoration(
+              'Fecha de vencimiento',
+              hint: 'AAAA-MM-DD',
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: bancoCodigoController,
+            enabled: _methodsEnabled,
+            maxLength: 4,
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(4),
+            ],
+            style: TextStyle(color: AppTheme.textPrimary),
+            decoration: decoration(
+              'Código de entidad (ENB)',
+              hint: 'Ej: 0049',
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: bancoNombreController,
+            enabled: _methodsEnabled,
+            maxLength: 40,
+            textCapitalization: TextCapitalization.characters,
+            style: TextStyle(color: AppTheme.textPrimary),
+            decoration: decoration(
+              'Nombre del banco',
+              hint: 'Ej: SANTANDER',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPaymentOption(
     BuildContext context,
     String method,
     IconData icon,
   ) {
     final compact = Responsive.isSmall(context);
-    final isSelected = selectedPaymentMethod == method;
+    final isSelected =
+        selectedPaymentMethod == method || (method == 'TALON' && _isTalon);
     final visibleLabel = ruteroPaymentMethodLabel(method, compact: compact);
 
     return Semantics(
@@ -417,17 +537,21 @@ class RuteroDetailPayment extends StatelessWidget {
     final scopePhrase = ruteroDocumentScopePhrase(albaran);
     final scopeTitle = ruteroDocumentScopeTitle(albaran);
     final methodLabel = ruteroPaymentMethodLabel(selectedPaymentMethod);
+    final locked = paymentLocked && _hasCollectibleBalance;
+    final canToggle = _methodsEnabled && !locked;
     return Semantics(
       button: true,
       toggled: isPaid && _hasCollectibleBalance,
-      enabled: _methodsEnabled,
+      enabled: canToggle,
       label: !_hasCollectibleBalance
           ? 'Sin saldo cobrable. Entrega sin cobro'
-          : isPaid
-              ? 'Cobro preparado con $methodLabel'
-              : 'Preparar cobro con la entrega',
+          : locked
+              ? 'Voy a cobrar este documento. Cobro obligatorio, no se puede desmarcar'
+              : isPaid
+                  ? 'Voy a cobrar este documento con $methodLabel'
+                  : 'Marcar voy a cobrar este documento',
       child: InkWell(
-        onTap: _methodsEnabled
+        onTap: canToggle
             ? () {
                 HapticFeedback.selectionClick();
                 onPaidChanged();
@@ -468,7 +592,7 @@ class RuteroDetailPayment extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Preparar cobro con la entrega',
+                      'Voy a cobrar este documento',
                       style: TextStyle(
                         color: isPaid && _hasCollectibleBalance
                             ? AppTheme.success
@@ -480,9 +604,11 @@ class RuteroDetailPayment extends StatelessWidget {
                     Text(
                       !_hasCollectibleBalance
                           ? '$scopeTitle no tiene saldo cobrable. Puedes entregar sin cobrar.'
-                          : isPaid
-                              ? 'Cobro preparado con $methodLabel'
-                              : 'Opcional salvo cobro obligatorio. No registra el cobro hasta confirmar.',
+                          : locked
+                              ? 'Cobro obligatorio. Queda marcado y no se puede desmarcar.'
+                              : isPaid
+                                  ? 'Se registrará el cobro con $methodLabel al confirmar.'
+                                  : 'Márcalo solo si vas a cobrar $scopePhrase ahora.',
                       style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 11,

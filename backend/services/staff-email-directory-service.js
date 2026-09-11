@@ -32,6 +32,7 @@ const LIQUIDACION_ROLE_KEYS = Object.freeze([  'CARLOS_CORBALAN',
 
 const PRODUCT_DELIVERY_TO_ROLES = Object.freeze(['cliente']);
 const PRODUCT_DELIVERY_CC_ROLES = Object.freeze([
+  'repartidor',
   'comercial',
   'CARLOS_CORBALAN',
   'JAVIER_LACAL',
@@ -296,16 +297,31 @@ async function resolveRoleEmails(roleKeys, {
       continue;
     }
 
-    const { token, requireName } = parseNameMatch(target.nameMatch);
+    const coercedNameMatch = roleKey === 'CARLOS_CORBALAN'
+      && parseNameMatch(target.nameMatch).token === 'CARLOS'
+      && !parseNameMatch(target.nameMatch).requireName
+      ? 'CORBALAN'
+      : target.nameMatch;
+    const { token, requireName } = parseNameMatch(
+      roleKey === 'CARLOS_CORBALAN' && coercedNameMatch === 'CORBALAN'
+        ? 'CORBALAN'
+        : target.nameMatch,
+    );
+    const carlosBroadMatch = roleKey === 'CARLOS_CORBALAN'
+      && parseNameMatch(target.nameMatch).token === 'CARLOS'
+      && !parseNameMatch(target.nameMatch).requireName;
     let profile = null;
     let resolvedVia = null;
 
-    if (token) {
+    if (carlosBroadMatch) {
+      profile = await resolveVendorByNameMatch('CORBALAN', { query });
+      if (profile) resolvedVia = 'NAME_MATCH';
+    } else if (token) {
       profile = await resolveVendorByNameMatch(token, { query });
       if (profile) resolvedVia = 'NAME_MATCH';
     }
 
-    if (!profile && !requireName && target.vendorCode) {
+    if (!profile && (!requireName || carlosBroadMatch) && target.vendorCode) {
       profile = await resolveVendorProfile(target.vendorCode, { query });
       resolvedVia = 'VENDOR_CODE';
     } else if (!profile && requireName) {
@@ -385,9 +401,13 @@ function emptyDeliveryRecipientPlan() {
 async function safeDeliveryRecipientPlan(args, opts = {}) {
   try {
     const resolved = await resolveDeliveryVarianceRecipients(args, opts);
+    const emails = resolved.emails || [];
+    logger.info(
+      `[staff-email] delivery intended=${emails.join(',')} actor=${args?.repartidorId || ''} roles=${(resolved.details || []).map((row) => `${row.label}:${row.email ? 'yes' : 'no'}`).join(',')}`,
+    );
     return {
       plan: resolved.recipients || publicDeliveryRecipientPlan(resolved.details),
-      emails: resolved.emails || [],
+      emails,
       details: resolved.details || [],
     };
   } catch (error) {
