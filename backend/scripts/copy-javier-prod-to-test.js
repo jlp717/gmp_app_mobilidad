@@ -394,6 +394,26 @@ function buildOperationalContractPlan(pair, sourceContracts, destinationContract
     });
 }
 
+/**
+ * TEST-only additive columns that copy-prod must keep (never DROP TABLE).
+ * Talón extras live on JAVIER.TEST_REPARTIDOR_COBROS after 044; production
+ * peer may lag. Generic extras such as EXTRA still block reconciliation.
+ */
+const TEST_ONLY_EXTRA_COLUMNS = Object.freeze({
+  'finance.cobros': Object.freeze([
+    'NUMEROTALON',
+    'CODIGOENTIDADBANCARIA',
+    'NOMBREENTIDADBANCARIA',
+    'DIAVENCIMIENTO',
+    'MESVENCIMIENTO',
+    'ANOVENCIMIENTO',
+    'EFECTIVOTALON',
+    'CUENTATALONES',
+    'CUENTABANCO',
+    'IMPORTETOTALTALONES',
+  ]),
+});
+
 const RUNTIME_INSERT_COLUMNS = Object.freeze({
   'routing.tracking': Object.freeze([Object.freeze([
     'SESSION_ID', 'EVENT_ID', 'REPARTIDOR_ID', 'ROUTE_DATE', 'EVENT_TYPE',
@@ -534,7 +554,9 @@ function buildReconciliationPlan(pair, sourceColumns, destinationColumns, {
       rebuildReasons.push(`default=${delta.name}:implicit`);
     }
   }
-  if (comparison.extra.length) rebuildReasons.push(`extra=[${comparison.extra.join(',')}]`);
+  const allowedExtra = new Set(TEST_ONLY_EXTRA_COLUMNS[`${pair.group}.${pair.key}`] || []);
+  const blockingExtra = comparison.extra.filter((name) => !allowedExtra.has(name));
+  if (blockingExtra.length) rebuildReasons.push(`extra=[${blockingExtra.join(',')}]`);
   for (const name of comparison.missing) {
     const source = sourceByName.get(name);
     if (allowTestTableRebuild && source.isNullable === 'NO' && !source.hasDefault && destinationRowCount > 0) {
@@ -2451,4 +2473,5 @@ module.exports = {
   assertLqdCobrosSeedCoverage,
   lqdCobrosSplitCte,
   lqdCobrosInsertSql,
+  TEST_ONLY_EXTRA_COLUMNS,
 };

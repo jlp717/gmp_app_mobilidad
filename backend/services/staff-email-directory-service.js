@@ -7,6 +7,7 @@
  * NAME_MATCH rules:
  * - plain "LACAL" → search by name first, then vendor code fallback
  * - "!CORBALAN" → name required; if no match, skip (never wrong vendor fallback)
+ * - plain "CARLOS" on CARLOS_CORBALAN → try CORBALAN, then CARLOS, then vendor code
  */
 
 const { queryWithParams } = require('../config/db');
@@ -316,6 +317,10 @@ async function resolveRoleEmails(roleKeys, {
     if (carlosBroadMatch) {
       profile = await resolveVendorByNameMatch('CORBALAN', { query });
       if (profile) resolvedVia = 'NAME_MATCH';
+      if (!profile) {
+        profile = await resolveVendorByNameMatch('CARLOS', { query });
+        if (profile) resolvedVia = 'NAME_MATCH';
+      }
     } else if (token) {
       profile = await resolveVendorByNameMatch(token, { query });
       if (profile) resolvedVia = 'NAME_MATCH';

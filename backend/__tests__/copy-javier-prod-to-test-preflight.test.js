@@ -267,6 +267,20 @@ describe('TEST-only schema reconciliation', () => {
       .toThrow('SCHEMA RECONCILE BLOCK');
   });
 
+  test('keeps TEST-only talon columns without rebuild', () => {
+    expect(buildReconciliationPlan(pair, [column()], [
+      column(),
+      column({
+        name: 'NUMEROTALON', dataType: 'CHAR', length: '10',
+        numericPrecision: '', numericScale: '', isNullable: 'YES',
+      }),
+      column({
+        name: 'CODIGOENTIDADBANCARIA', dataType: 'CHAR', length: '4',
+        numericPrecision: '', numericScale: '', isNullable: 'YES',
+      }),
+    ], { destinationRowCount: 1 })).toEqual([]);
+  });
+
   test('plans an explicit backed TEST-only rebuild for extra columns when authorized', () => {
     const plan = buildReconciliationPlan(
       pair,
