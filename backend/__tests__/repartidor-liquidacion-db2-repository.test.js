@@ -352,6 +352,9 @@ describe('repartidor-liquidacion-db2-repository', () => {
       const snapshot = await tx.deriveDaySnapshot({ repartidorId: '94', date: '2026-08-09' });
       expect(snapshot).toMatchObject({ openingBalance: 4, balance: 21,
         breakdown: { deliveries: 25, payments: 25, expenses: 3, adjustments: -1, bankDeposits: 4, pending: 2 } });
+      expect(snapshot.deliveries).toEqual([
+        expect.objectContaining({ status: 'PARCIAL', amount: 25, pendingAmount: 2 }),
+      ]);
       const operation = await tx.insertOperation({
         idempotencyToken: 'token-12345678', marker: 'LQD_123', repartidorId: '94', date: '2026-08-09',
         replayIdentity: { repartidorId: '94' }, snapshot, actorId: 'U-1', actorRole: 'ADMIN',

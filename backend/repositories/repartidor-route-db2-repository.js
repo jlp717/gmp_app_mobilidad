@@ -328,11 +328,9 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
           ? 'TARJETA'
           : ['BI', 'BIZUM'].includes(formaRaw)
             ? 'BIZUM'
-            : ['TR', 'TRANSFERENCIA', 'TRANSFER', 'T0'].includes(formaRaw)
-              ? 'TRANSFERENCIA'
-              : ['CH', 'CHEQUE', 'TALON'].includes(formaRaw)
-                ? 'CHEQUE'
-                : formaRaw || null;
+            : ['TR', 'TRANSFERENCIA', 'TRANSFER', 'T0', 'CH', 'CHEQUE', 'TALON'].includes(formaRaw)
+              ? 'TALON'
+              : formaRaw || null;
       byId.set(id, {
         status: match.status,
         confirmationId: jsonSafeScalar(match.confirmationId),

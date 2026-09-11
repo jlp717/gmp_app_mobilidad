@@ -275,7 +275,7 @@ describe('entregas route coverage gaps', () => {
       .map(([sql]) => sql)
       .find((sql) => String(sql).includes('TEST_REPARTO_CONFIRMACIONES'));
     expect(overlaySql).toContain('TRIM(C.DOCUMENT_ID) IN');
-    expect(overlaySql).toContain('TRIM(C.REPARTIDOR_ID) IN');
+    expect(overlaySql).not.toContain('TRIM(C.REPARTIDOR_ID) IN');
   });
 
   test('keeps canonical NO_ENTREGADO distinct from an unclicked red stop', async () => {
@@ -317,12 +317,13 @@ describe('entregas route coverage gaps', () => {
     }
   });
 
-  test('does not apply another repartidor canonical state to the current stop', async () => {
+  test('jefe overlay keeps ENTREGADO when the confirmation owner differs', async () => {
     mockQueryWithParams.mockImplementation((sql) => {
       if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);
       if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) {
         return Promise.resolve([{
           DOCUMENT_ID: '2026-A-1-42-C1', REPARTIDOR_ID: '95', STATUS: 'ENTREGADO', ID: 99,
+          IMPORTE_ENTREGADO: '37.50',
         }]);
       }
       return Promise.resolve([]);
@@ -331,7 +332,11 @@ describe('entregas route coverage gaps', () => {
     const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
 
     expect(response.status).toBe(200);
-    expect(response.body.albaranes[0]).toMatchObject({ estado: 'PENDIENTE', colorEstado: 'red' });
+    expect(response.body.albaranes[0]).toMatchObject({
+      estado: 'ENTREGADO',
+      colorEstado: 'green',
+      importe: 37.5,
+    });
   });
   test('returns a typed redacted error when the authorized pending query fails', async () => {
     mockQueryWithParams.mockRejectedValueOnce(new Error('DB2 diagnostic must not leak'));

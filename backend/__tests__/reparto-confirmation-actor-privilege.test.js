@@ -81,4 +81,34 @@ describe('canonical reparto actor privilege', () => {
       expect(error).toMatchObject({ code: 'DELIVERY_OWNERSHIP_REQUIRED', statusCode: 403 });
     }
   });
+
+  test('accepts ENTREGADO with more units than ordered and no pending', () => {
+    const command = buildConfirmationCommand({
+      user: { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] },
+      headers: { 'idempotency-key': 'over-delivery-key1' },
+      body: {
+        delivery: {
+          itemId: '2026-A-1-1-C1',
+          repartidorId: '94',
+          status: 'ENTREGADO',
+          occurredAt: new Date().toISOString(),
+          receiver: { nombre: 'Ana', apellidos: 'Lopez Ruiz', dni: '12345678Z' },
+          firma: `ev_${'a'.repeat(64)}`,
+          lineas: [{
+            lineaId: '1',
+            codigoArticulo: 'ART-1',
+            cantidadPedida: 2,
+            cantidadEntregada: 5,
+            cantidadRechazada: 0,
+            cantidadPendiente: 0,
+          }],
+        },
+      },
+    });
+    expect(command.delivery.lineas[0]).toMatchObject({
+      cantidadPedida: 2,
+      cantidadEntregada: 5,
+      cantidadPendiente: 0,
+    });
+  });
 });

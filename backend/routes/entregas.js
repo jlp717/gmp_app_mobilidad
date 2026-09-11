@@ -1234,8 +1234,9 @@ function paymentMethodLabel(code) {
     if (['EF', 'EFECTIVO', 'CONTADO', 'F0'].includes(normalized)) return 'EFECTIVO';
     if (['TJ', 'TARJETA', 'TPV'].includes(normalized)) return 'TARJETA';
     if (['BI', 'BIZUM'].includes(normalized)) return 'BIZUM';
-    if (['TR', 'TRANSFERENCIA', 'TRANSFER', 'T0'].includes(normalized)) return 'TRANSFERENCIA';
-    if (['CH', 'CHEQUE', 'TALON'].includes(normalized)) return 'CHEQUE';
+    if (['TR', 'TRANSFERENCIA', 'TRANSFER', 'T0', 'CH', 'CHEQUE', 'TALON'].includes(normalized)) {
+      return 'TALON';
+    }
     return normalized || null;
 }
 
