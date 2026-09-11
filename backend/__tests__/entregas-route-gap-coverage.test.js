@@ -229,6 +229,8 @@ describe('entregas route coverage gaps', () => {
 
     const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=10');
     expect(response.status).toBe(200);
+    expect(response.body.pedidos_overlay).toBe(1);
+    expect(response.body.resumen.pedidos_overlay).toBe(1);
     expect(response.body.albaranes).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'PED-77-C9',
@@ -237,6 +239,21 @@ describe('entregas route coverage gaps', () => {
         codigoCliente: 'C9',
       }),
     ]));
+  });
+
+  test('exposes numeric pedidos_overlay even when the anteroom overlay is empty', async () => {
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (typeof sql !== 'string') return Promise.resolve([]);
+      if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);
+      return Promise.resolve([]);
+    });
+
+    const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
+    expect(response.status).toBe(200);
+    expect(response.body.pedidos_overlay).toBe(0);
+    expect(response.body.resumen.pedidos_overlay).toBe(0);
+    expect(typeof response.body.pedidos_overlay).toBe('number');
+    expect(response.body.albaranes.every((item) => item.documentoTipo !== 'PEDIDO')).toBe(true);
   });
 
   test('overlays canonical confirmation status onto the pending list', async () => {

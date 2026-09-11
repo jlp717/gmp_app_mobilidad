@@ -1131,6 +1131,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             totalIsExact
         };
         const totalUnfiltered = albaranes.length;
+        const pedidosOverlayCount = anteroomProjected.length;
 
         logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} â†’ albaranes=${paginatedAlbaranes.length} (offset=${pageOffset}, limit=${pageLimit}), totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}, completed=${completedCount}`);
 
@@ -1139,6 +1140,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             albaranes: paginatedAlbaranes,
             total: exactTotal,
             originalTotal: totalUnfiltered,
+            pedidos_overlay: pedidosOverlayCount,
             limit: pageLimit,
             offset: pageOffset,
             hasMore,
@@ -1149,7 +1151,8 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 totalBruto: Math.round(totalBruto * 100) / 100,
                 totalACobrar: Math.round(totalACobrar * 100) / 100,
                 totalOpcional: Math.round(totalOpcional * 100) / 100,
-                completedCount
+                completedCount,
+                pedidos_overlay: pedidosOverlayCount,
             }
         });
     } catch (error) {
