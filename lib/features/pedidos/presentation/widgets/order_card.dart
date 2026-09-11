@@ -76,6 +76,33 @@ class OrderCard extends StatelessWidget {
                 Row(
                   children: [
                     OrderStatusBadge(estado: displayEstado, fontSize: 10),
+                    if (order.isPendienteErp) ...[
+                      const SizedBox(width: 6),
+                      Semantics(
+                        label: 'Pedido pendiente de envio al ERP',
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.info.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppColors.info.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Text(
+                            'Pendiente ERP',
+                            style: TextStyle(
+                              color: AppColors.info,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     const Spacer(),
                     Icon(
                       Icons.calendar_today_outlined,

@@ -10,6 +10,7 @@ const { resolveFinanceWriteTables } = require('../repositories/repartidor-route-
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const dayMoveRepo = require('../repositories/repartidor-rutero-day-move-db2-repository');
 const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
+const pedidosService = require('../services/pedidos.service');
 const { applySavedOrder, applyDayMovePositions } = require('../services/repartidor-rutero-orden-service');
 const {
     resolveDeliveryAmount,
@@ -298,11 +299,23 @@ async function loadPaymentConditions() {
     }
 }
 
-function resolvePaymentCondition(paymentConditions, rawCode) {
+function unknownPaymentCondition(code) {
+    return {
+        desc: code || 'PENDIENTE',
+        type: 'CREDITO',
+        diasPago: 0,
+        mustCollect: false,
+        canCollect: false,
+        color: 'green',
+    };
+}
+
+function resolvePaymentCondition(paymentConditions, rawCode, { allowUnknown = false } = {}) {
     const code = normalizeCode(rawCode).toUpperCase();
     const numericCode = /^\d+$/.test(code) ? String(Number(code)) : '';
     const condition = paymentConditions[code] || paymentConditions[numericCode];
     if (!condition) {
+        if (allowUnknown) return unknownPaymentCondition(code);
         throw new RepartoHttpError(
             503,
             'PAYMENT_CONDITION_UNKNOWN',
@@ -667,6 +680,25 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 // Usually status is the same per Albaran ID.
             }
         });
+        try {
+            const anteroomRows = await pedidosService.getConfirmedPedidosForRutero({
+                repartidorIds: idList,
+                day: dia,
+                month: mes,
+                year: ano,
+            });
+            for (const row of anteroomRows || []) {
+                const cliente = (row.CLIENTE || '').trim();
+                const id = row.PEDIDO_ID
+                    ? `PED-${row.PEDIDO_ID}-${cliente}`
+                    : `${row.EJERCICIOALBARAN}-${(row.SERIEALBARAN || '').trim()}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${cliente}`;
+                if (!aggregatedMap.has(id)) {
+                    aggregatedMap.set(id, { ...row, _anteroomId: id });
+                }
+            }
+        } catch (anteroomErr) {
+            logger.warn(`[ENTREGAS] Anteroom pedidos overlay skipped: ${anteroomErr.message}`);
+        }
         const uniqueRows = Array.from(aggregatedMap.values());
 
         const clientCodes = Array.from(new Set(
@@ -719,7 +751,9 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 60,
                 params,
             );
-            const cvcDocumentPlan = buildCvcAvailabilityQuery(uniqueRows);
+            const cvcDocumentPlan = buildCvcAvailabilityQuery(
+                uniqueRows.filter((row) => (row.ANTEROOM_DOC_TIPO || '').trim() !== 'PEDIDO'),
+            );
             const cvcDocumentCacheKey = cvcDocumentPlan
                 ? cvcDocumentPlan.documents.map(documentKey).sort().join(',')
                 : 'empty';
@@ -818,6 +852,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         }
         // Process rows
         const projectedAlbaranes = uniqueRows.map(row => {
+            try {
             const serie = (row.SERIEALBARAN || '').trim();
             const cliente = (row.CLIENTE || '').trim();
             const base1 = parseMoney(row.CPC_BASE1);
@@ -855,7 +890,10 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             const cobroRiguroso =
                 cobroRigurosoClientes.has(cliente) || creditoSuperaLimite;
             const fp = (row.FORMA_PAGO || '').toUpperCase().trim();
-            const paymentInfo = resolvePaymentCondition(paymentConditions, fp);
+            const esPedidoAnteroom = (row.ANTEROOM_DOC_TIPO || '').trim() === 'PEDIDO';
+            const paymentInfo = resolvePaymentCondition(paymentConditions, fp, {
+                allowUnknown: esPedidoAnteroom,
+            });
 
             // The payment catalog determines whether collection is mandatory,
             // but the actual collectability comes from the unique active CVC
@@ -882,7 +920,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
 
             const numeroFactura = row.NUMEROFACTURA || 0;
             const serieFactura = (row.SERIEFACTURA || '').trim();
-            const esFactura = numeroFactura > 0;
+            const esFactura = !esPedidoAnteroom && numeroFactura > 0;
 
             // --- DELIVERY STATUS LOGIC ---
             // A legacy ERP signal can only describe a non-terminal route state.
@@ -916,7 +954,9 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             if (base3 > 0) ivaBreakdown.push({ base: base3, pct: pctIva3, iva: iva3 });
 
             return {
-                id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${cliente}`,
+                id: esPedidoAnteroom
+                    ? (row._anteroomId || `PED-${row.PEDIDO_ID}-${cliente}`)
+                    : `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${cliente}`,
                 subempresa: row.SUBEMPRESAALBARAN,
                 ejercicio: row.EJERCICIOALBARAN,
                 serie: serie,
@@ -924,7 +964,8 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 numero: row.NUMEROALBARAN,
                 numeroFactura: numeroFactura,
                 serieFactura: serieFactura,
-                documentoTipo: esFactura ? 'FACTURA' : 'ALBARAN',
+                documentoTipo: esPedidoAnteroom ? 'PEDIDO' : (esFactura ? 'FACTURA' : 'ALBARAN'),
+                pedidoId: esPedidoAnteroom ? row.PEDIDO_ID : null,
                 codigoCliente: cliente,
                 nombreCliente: (row.NOMBRE_CLIENTE || '').trim() || cliente || 'CLIENTE',
                 nombreComercial: (row.NOMBRE_COMERCIAL || '').trim() || row.NOMBRE_CLIENTE?.trim(),
@@ -969,8 +1010,17 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 observaciones: row.DS_OBS,
                 firma: row.DS_FIRMA
             };
-        });
-        const albaranes = await overlayCanonicalConfirmationStatuses(projectedAlbaranes, idList);
+            } catch (projectErr) {
+                logger.warn(`[ENTREGAS] Skip delivery projection: ${projectErr.message}`);
+                return null;
+            }
+        }).filter(Boolean);
+        const erpProjected = projectedAlbaranes.filter((item) => item.documentoTipo !== 'PEDIDO');
+        const anteroomProjected = projectedAlbaranes.filter((item) => item.documentoTipo === 'PEDIDO');
+        const albaranes = [
+            ...(await overlayCanonicalConfirmationStatuses(erpProjected, idList)),
+            ...anteroomProjected,
+        ];
 
         // --- FILTERING: Search by client name, code, albarÃ¡n or factura number ---
         const searchQuery = req.query.search?.toLowerCase().trim() || '';

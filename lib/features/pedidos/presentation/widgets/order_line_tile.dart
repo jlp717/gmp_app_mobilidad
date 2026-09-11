@@ -536,11 +536,12 @@ class _LineDiscountChip extends StatelessWidget {
   final ValueChanged<double> onChanged;
 
   Future<void> _editDiscount(BuildContext context) async {
-    final controller = TextEditingController(
+    final pctController = TextEditingController(
       text: line.lineDiscountPct > 0
           ? line.lineDiscountPct.toStringAsFixed(2)
           : '',
     );
+    final euroController = TextEditingController();
     final result = await showDialog<double>(
       context: context,
       builder: (ctx) {
@@ -550,20 +551,46 @@ class _LineDiscountChip extends StatelessWidget {
             'Descuento de línea',
             style: TextStyle(color: AppColors.themedWhite),
           ),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: TextStyle(color: AppColors.themedWhite),
-            decoration: InputDecoration(
-              hintText: '0 - 100',
-              suffixText: '%',
-              hintStyle: TextStyle(color: AppColors.themedWhite38),
-            ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Semantics(
+                label: 'Descuento de linea en porcentaje',
+                textField: true,
+                child: TextField(
+                  controller: pctController,
+                  autofocus: true,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  style: TextStyle(color: AppColors.themedWhite),
+                  decoration: InputDecoration(
+                    hintText: '0 - 100',
+                    suffixText: '%',
+                    hintStyle: TextStyle(color: AppColors.themedWhite38),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Semantics(
+                label: 'Descuento de linea en euros',
+                textField: true,
+                child: TextField(
+                  controller: euroController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  style: TextStyle(color: AppColors.themedWhite),
+                  decoration: InputDecoration(
+                    hintText: 'Importe a descontar',
+                    suffixText: '€',
+                    hintStyle: TextStyle(color: AppColors.themedWhite38),
+                  ),
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, 0),
+              onPressed: () => Navigator.pop(ctx, 0.0),
               child: const Text('Quitar'),
             ),
             TextButton(
@@ -572,10 +599,20 @@ class _LineDiscountChip extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () {
-                final raw = controller.text.replaceAll(',', '.').trim();
-                final parsed = double.tryParse(raw) ?? 0;
-                final clamped = parsed.clamp(0.0, 100.0);
-                Navigator.pop(ctx, clamped);
+                var parsed = double.tryParse(
+                      pctController.text.replaceAll(',', '.').trim(),
+                    ) ??
+                    0;
+                final euro = double.tryParse(
+                  euroController.text.replaceAll(',', '.').trim(),
+                );
+                if (euro != null && euro > 0 && line.importeVenta > 0) {
+                  final gross = line.lineDiscountPct > 0
+                      ? line.importeVenta / (1 - line.lineDiscountPct / 100)
+                      : line.importeVenta;
+                  parsed = gross > 0 ? (euro / gross) * 100 : parsed;
+                }
+                Navigator.pop(ctx, parsed.clamp(0.0, 100.0));
               },
               child: const Text('Aplicar'),
             ),
@@ -591,43 +628,50 @@ class _LineDiscountChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasDiscount = line.lineDiscountPct > 0;
-    return InkWell(
-      borderRadius: BorderRadius.circular(6),
-      onTap: () => _editDiscount(context),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: hasDiscount
-              ? AppTheme.success.withValues(alpha: 0.18)
-              : AppColors.themedWhite.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
+    return Semantics(
+      button: true,
+      label: hasDiscount
+          ? 'Descuento de linea ${line.lineDiscountPct.toStringAsFixed(1)} por ciento'
+          : 'Anadir descuento de linea',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => _editDiscount(context),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
             color: hasDiscount
-                ? AppTheme.success.withValues(alpha: 0.6)
-                : AppColors.themedWhite24,
-            width: 0.5,
+                ? AppTheme.success.withValues(alpha: 0.18)
+                : AppColors.themedWhite.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: hasDiscount
+                  ? AppTheme.success.withValues(alpha: 0.6)
+                  : AppColors.themedWhite24,
+              width: 0.5,
+            ),
           ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              hasDiscount ? Icons.percent : Icons.local_offer_outlined,
-              size: 11,
-              color: hasDiscount ? AppTheme.success : AppColors.themedWhite54,
-            ),
-            const SizedBox(width: 3),
-            Text(
-              hasDiscount
-                  ? '-${line.lineDiscountPct.toStringAsFixed(line.lineDiscountPct % 1 == 0 ? 0 : 1)}%'
-                  : 'Dto',
-              style: TextStyle(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                hasDiscount ? Icons.percent : Icons.local_offer_outlined,
+                size: 11,
                 color: hasDiscount ? AppTheme.success : AppColors.themedWhite54,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
               ),
-            ),
-          ],
+              const SizedBox(width: 3),
+              Text(
+                hasDiscount
+                    ? '-${line.lineDiscountPct.toStringAsFixed(line.lineDiscountPct % 1 == 0 ? 0 : 1)}%'
+                    : 'Dto',
+                style: TextStyle(
+                  color:
+                      hasDiscount ? AppTheme.success : AppColors.themedWhite54,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

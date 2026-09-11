@@ -50,6 +50,15 @@ const repArg = process.argv.find((a) => a.startsWith('--repartidor='));
 const REPARTIDOR = repArg ? String(repArg.split('=')[1] || '').trim() : '';
 const copyRunArg = process.argv.find((a) => a.startsWith('--copy-run-id='));
 const COPY_RUN_ID = copyRunArg ? String(copyRunArg.split('=')[1] || '').trim().toUpperCase() : '';
+const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+const ONLY_KEYS = onlyArg
+  ? new Set(onlyArg.split('=')[1].split(',').map((token) => token.trim()).filter(Boolean))
+  : null;
+
+function pairSelected(pair) {
+  if (!ONLY_KEYS || ONLY_KEYS.size === 0) return true;
+  return ONLY_KEYS.has(pair.key) || ONLY_KEYS.has(`${pair.group}.${pair.key}`);
+}
 
 /** Keys filled from ERP read-only seeds instead of empty JAVIER isomorphic tables. */
 const ERP_SEEDED_KEYS = new Set(['liquidationOps', 'cobros']);
@@ -413,6 +422,8 @@ const RUNTIME_INSERT_COLUMNS = Object.freeze({
 const CURRENT_RUNTIME_READ_ONLY_KEYS = new Set([
   'finance.liquidationEmails',
   'finance.commercialCobros',
+  'commercial.pedidosCab',
+  'commercial.pedidosLin',
   'notifications.roleTargets',
 ]);
 
@@ -692,7 +703,13 @@ async function reconcileMappingPairs(pairs, {
     const sourceContracts = sourceExists && auditOperationalContracts ? await operationalContractsOfFn(pair.src) : [];
     const destinationContracts = destinationExists && !destinationWillBeRebuilt && auditOperationalContracts
       ? await operationalContractsOfFn(pair.dst) : [];
-    const fullPlan = [...plan, ...buildOperationalContractPlan(pair, sourceContracts, destinationContracts)];
+    const seenSql = new Set();
+    const fullPlan = [...plan, ...buildOperationalContractPlan(pair, sourceContracts, destinationContracts)]
+      .filter((operation) => {
+        if (seenSql.has(operation.sql)) return false;
+        seenSql.add(operation.sql);
+        return true;
+      });
     // Index/constraint parity does not alter the INSERT column contract. Only
     // structural column changes require an audited runtime INSERT manifest.
     assertRuntimeWriteCoverage(pair, sourceColumns, plan);
@@ -2205,7 +2222,7 @@ async function main() {
   }
   if (APPLY) validateCopyRunId(COPY_RUN_ID);
   const runId = COPY_RUN_ID || 'DRY_RUN';
-  console.log(`Mode=${APPLY ? 'APPLY' : 'DRY-RUN'} runId=${runId} days=${DAYS} repartidor=${REPARTIDOR || 'ALL'} skipCvc=${SKIP_CVC} resumeFirmas=${RESUME_FIRMAS} legacyDeliveryOverlay=${LEGACY_BKP_DELIVERY_OVERLAY}`);
+  console.log(`Mode=${APPLY ? 'APPLY' : 'DRY-RUN'} runId=${runId} days=${DAYS} repartidor=${REPARTIDOR || 'ALL'} skipCvc=${SKIP_CVC} resumeFirmas=${RESUME_FIRMAS} legacyDeliveryOverlay=${LEGACY_BKP_DELIVERY_OVERLAY} only=${ONLY_KEYS ? [...ONLY_KEYS].join(',') : 'ALL'}`);
   console.log('RULE: never touch DSEDAC/DSED writes. Only JAVIER.TEST_* writes.');
   if (ALLOW_TEST_ROW_CLEAR && (!APPLY || !RECONCILE_TEST_SCHEMA)) {
     throw new Error('--allow-test-row-clear requires --apply --reconcile-test-schema');
@@ -2266,7 +2283,11 @@ async function main() {
       }
     } else {
       await preflightMappingPairs(tablePairs);
-      await backupNonSchemaCopyDestinations(tablePairs, runId, { apply: APPLY });
+      await backupNonSchemaCopyDestinations(
+        tablePairs.filter(pairSelected),
+        runId,
+        { apply: APPLY },
+      );
     }
     if (sequenceBlocks.length) throw new Error(sequenceBlocks.join('; '));
     if (RESUME_FIRMAS) {
@@ -2283,7 +2304,7 @@ async function main() {
     if (LEGACY_BKP_DELIVERY_OVERLAY) await ensureTestDeliveryStatus();
 
     // 2) Isomorphic TABLE_MAPPINGS pairs (skip ERP-seeded keys)
-    const confirmationPairs = pairs.filter((pair) => pair.group === 'confirmation' && pair.objectType === 'TABLE');
+    const confirmationPairs = pairs.filter((pair) => pair.group === 'confirmation' && pair.objectType === 'TABLE' && pairSelected(pair));
     if (confirmationPairs.length) {
       await runTableStep('ISO confirmation bundle', confirmationPairs[0].dst, async () => {
         await copyConfirmationBundle(confirmationPairs);
@@ -2291,6 +2312,10 @@ async function main() {
     }
 
     for (const p of pairs) {
+      if (!pairSelected(p)) {
+        console.log(`SKIP --only filter ${p.group}.${p.key}`);
+        continue;
+      }
       if (p.group === 'confirmation') continue;
       if (p.objectType === 'SEQUENCE') {
         console.log(`PREFLIGHT ONLY sequence ${p.src} -> ${p.dst}; no row copy`);
@@ -2314,6 +2339,16 @@ async function main() {
           params.push(REPARTIDOR);
         }
       }
+      if (p.group === 'finance' && p.key === 'commercialCobros') {
+        whereSql = `FECHA >= CURRENT DATE - ${Number(DAYS)} DAYS`;
+      }
+      if (p.group === 'commercial' && p.key === 'pedidosCab') {
+        whereSql = `${ymdNumericExpr('ANODOCUMENTO', 'MESDOCUMENTO', 'DIADOCUMENTO')} >= ${cutoffYmdSql(DAYS)}`;
+      }
+      if (p.group === 'commercial' && p.key === 'pedidosLin') {
+        whereSql = `PEDIDO_ID IN (SELECT ID FROM ${TABLE_MAPPINGS.production.commercial.pedidosCab} `
+          + `WHERE ${ymdNumericExpr('ANODOCUMENTO', 'MESDOCUMENTO', 'DIADOCUMENTO')} >= ${cutoffYmdSql(DAYS)})`;
+      }
 
       await runTableStep(`ISO ${p.group}.${p.key}`, p.dst, async () => {
         await clearTestRows(p.dst);
@@ -2325,6 +2360,9 @@ async function main() {
       });
     }
 
+    if (ONLY_KEYS && ONLY_KEYS.size > 0) {
+      console.log('SKIP ERP LQD/firmas seeds because --only is set (commercial TEST copy only)');
+    } else {
     // 3) ERP seeds (read-only DSEDAC → TEST)
     await runTableStep('ERP LQD -> liquidationOps', TABLE_MAPPINGS.isolated_test.finance.liquidationOps, seedLqdToLiquidacionOps);
     await runTableStep('ERP LQD -> cobros', TABLE_MAPPINGS.isolated_test.finance.cobros, seedLqdDerivedCobros);
@@ -2339,6 +2377,7 @@ async function main() {
       await runTableStep('BKP delivery overlay', TEST_DELIVERY, overlayDeliveryStatus);
     } else {
       console.log('SKIP legacy BKP delivery overlay (disabled by default)');
+    }
     }
 
     // 5) Notification role targets were already copied as an isomorphic pair.

@@ -1097,6 +1097,7 @@ class OrderLine {
           'promotionCode': promotionCode,
         if (isAutoGift) 'isAutoGift': true,
         'lineDiscountPct': lineDiscountPct,
+        'descuentoLinea': lineDiscountPct,
       };
 
   double get billingQuantity {
@@ -1249,6 +1250,7 @@ class OrderSummary {
     this.deudaEstado = '',
     this.bolsaGenerada,
     this.bolsaNeto = 0,
+    this.syncStatus = '',
   });
 
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
@@ -1306,6 +1308,8 @@ class OrderSummary {
           .trim(),
       bolsaGenerada: _parseBolsaGenerada(json),
       bolsaNeto: _parseBolsaNeto(json),
+      syncStatus:
+          (json['syncStatus'] ?? json['SYNC_STATUS'] ?? '').toString().trim(),
     );
   }
 
@@ -1379,6 +1383,13 @@ class OrderSummary {
   /// null = desconocido en listado (ver detalle); true/false cuando API lo envía.
   final bool? bolsaGenerada;
   final double bolsaNeto;
+  final String syncStatus;
+
+  bool get isPendienteErp {
+    final estadoUp = estado.toUpperCase();
+    final sync = syncStatus.toUpperCase();
+    return estadoUp == 'CONFIRMADO' && (sync.isEmpty || sync == 'LOCAL');
+  }
 }
 
 /// Delivery date + provisional truck options before confirming an order.
@@ -1912,6 +1923,7 @@ class PedidosService {
     int tarifa = 1,
     String observaciones = '',
     String? clientRequestId,
+    double descuentoGlobal = 0,
   }) async {
     try {
       final payload = <String, dynamic>{
@@ -1922,6 +1934,8 @@ class PedidosService {
         'almacen': almacen,
         'tarifa': tarifa,
         'observaciones': observaciones,
+        'descuentoGlobal': descuentoGlobal,
+        'globalDiscountPct': descuentoGlobal,
         'lines': lines.map((l) => l.toJson()).toList(),
       };
       if (clientRequestId != null && clientRequestId.trim().isNotEmpty) {
@@ -2229,6 +2243,7 @@ class PedidosService {
     String? vehicleCode,
     String? driverCode,
     String? routeCode,
+    bool cobroPropio = false,
   }) async {
     try {
       final data = <String, dynamic>{'saleType': saleType};
@@ -2243,6 +2258,10 @@ class PedidosService {
       }
       if (routeCode != null && routeCode.trim().isNotEmpty) {
         data['routeCode'] = routeCode.trim();
+      }
+      if (cobroPropio) {
+        data['cobroPropio'] = true;
+        data['cobroEnMano'] = true;
       }
       final response = await ApiClient.put(
         '$_base/$orderId/confirm',

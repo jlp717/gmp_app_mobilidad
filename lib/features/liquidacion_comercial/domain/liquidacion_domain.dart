@@ -6,6 +6,8 @@ class ComercialLiquidacionSummary {
     this.totalCheques = 0,
     this.totalPostdatados = 0,
     this.saldoActual = 0,
+    this.devolucionesYaCobradas = 0,
+    this.source = 'COBROS',
     double? totalAIngresar,
   }) : totalAIngresar = totalAIngresar ??
             totalEfectivo + totalCheques + totalPostdatados + saldoActual;
@@ -22,8 +24,45 @@ class ComercialLiquidacionSummary {
   /// Outstanding balance carried into the settlement.
   final double saldoActual;
 
+  /// Absolute amount of merchandise returns. Shown apart; never subtracted from LQD.
+  final double devolucionesYaCobradas;
+
+  /// Source of deposit total: DSEDAC.LQD or app cobros.
+  final String source;
+
   /// Total amount the commercial employee must deposit.
   final double totalAIngresar;
+}
+
+/// One merchandise return that affects commercial settlement.
+class ComercialDevolucionItem {
+  /// Creates a return document visible in daily settlement.
+  const ComercialDevolucionItem({
+    required this.documento,
+    required this.cliente,
+    required this.amount,
+    this.date,
+    this.vendedor = '',
+    this.yaCobrada = false,
+  });
+
+  /// Document key, typically series-number.
+  final String documento;
+
+  /// Client code owning the return.
+  final String cliente;
+
+  /// Signed LACLAE amount; cash impact uses the absolute value.
+  final double amount;
+
+  /// Business date of the return document.
+  final String? date;
+
+  /// Vendor who sold the original document.
+  final String vendedor;
+
+  /// True when CVC marks the return as already collected (PG / pendiente 0).
+  final bool yaCobrada;
 }
 
 /// Editable values for one commercial settlement.

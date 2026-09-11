@@ -145,7 +145,7 @@ let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
   userActionsRoutes, facturasRoutes, warehouseRoutes,
   productsRoutes, bolsaRoutes, evolutionRoutes,
-  pedidosRoutes, cobrosRoutes, kpiModule;
+  pedidosRoutes, cobrosRoutes, comercialLiquidacionRoutes, kpiModule;
 
 if (USE_TS_ROUTES) {
   // ==================== COMPILED TYPESCRIPT ROUTES ====================
@@ -216,6 +216,7 @@ if (!USE_TS_ROUTES) {
   evolutionRoutes = require('./routes/evolution');
   pedidosRoutes = require('./routes/pedidos');
   cobrosRoutes = require('./routes/cobros');
+  comercialLiquidacionRoutes = require('./routes/comercial-liquidacion');
   // Módulo KPI Glacius (DB2/ODBC + Redis)
   try {
     kpiModule = require('./kpi');
@@ -784,6 +785,9 @@ if (USE_TS_ROUTES && global.__TS_APP__) {
   app.use('/api/warehouse', warehouseRoutes);
   if (bolsaRoutes) app.use('/api/bolsa', bolsaRoutes);
   if (evolutionRoutes) app.use('/api/evolution', evolutionRoutes);
+  if (comercialLiquidacionRoutes) {
+    app.use('/api/comercial-liquidacion', comercialLiquidacionRoutes);
+  }
 
   // DDD routes for domains whose public contracts remain canonical in DDD mode.
   if (USE_DDD_ROUTES) {

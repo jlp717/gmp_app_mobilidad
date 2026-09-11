@@ -14,6 +14,7 @@ abstract class PedidosOrderApi {
     required List<OrderLine> lines,
     required String observaciones,
     String? clientRequestId,
+    double descuentoGlobal = 0,
   });
 
   /// Confirms an existing order and returns the backend confirmation response.
@@ -24,6 +25,7 @@ abstract class PedidosOrderApi {
     String? vehicleCode,
     String? driverCode,
     String? routeCode,
+    bool cobroPropio = false,
   });
 }
 
@@ -41,6 +43,7 @@ class PedidosServiceOrderApi implements PedidosOrderApi {
     required List<OrderLine> lines,
     required String observaciones,
     String? clientRequestId,
+    double descuentoGlobal = 0,
   }) {
     return PedidosService.createOrder(
       clientCode: clientCode,
@@ -50,6 +53,7 @@ class PedidosServiceOrderApi implements PedidosOrderApi {
       lines: lines,
       observaciones: observaciones,
       clientRequestId: clientRequestId,
+      descuentoGlobal: descuentoGlobal,
     );
   }
 
@@ -61,6 +65,7 @@ class PedidosServiceOrderApi implements PedidosOrderApi {
     String? vehicleCode,
     String? driverCode,
     String? routeCode,
+    bool cobroPropio = false,
   }) {
     return PedidosService.confirmOrder(
       orderId,
@@ -69,6 +74,7 @@ class PedidosServiceOrderApi implements PedidosOrderApi {
       vehicleCode: vehicleCode,
       driverCode: driverCode,
       routeCode: routeCode,
+      cobroPropio: cobroPropio,
     );
   }
 }

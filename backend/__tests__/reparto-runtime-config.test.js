@@ -73,6 +73,8 @@ describe('central reparto runtime configuration', () => {
     expect(Object.isFrozen(runtime.tables.finance)).toBe(true);
     expect(runtime.tables.confirmation).not.toHaveProperty('payments');
     expect(runtime.tables.finance.cobros).toBe('JAVIER.TEST_REPARTIDOR_COBROS');
+    expect(runtime.tables.finance.commercialCobros).toBe('JAVIER.TEST_COBROS');
+    expect(runtime.tables.commercial.pedidosCab).toBe('JAVIER.TEST_PEDIDOS_CAB');
   });
 
   test('defaults finance capability to false when the flag is absent', () => {

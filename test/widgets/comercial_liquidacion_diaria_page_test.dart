@@ -5,13 +5,17 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/presentation/pages/comercial_liquidacion_diaria_page.dart';
 
 void main() {
-  Widget buildPage({ComercialLiquidacionSummary? summary}) {
+  Widget buildPage({
+    ComercialLiquidacionSummary? summary,
+    List<ComercialDevolucionItem> returns = const [],
+  }) {
     return ProviderScope(
       child: MaterialApp(
         theme: AppTheme.darkTheme,
         home: ComercialLiquidacionDiariaPage(
           employeeCode: '57',
           initialSummary: summary ?? const ComercialLiquidacionSummary(),
+          initialReturns: returns,
         ),
       ),
     );
@@ -30,6 +34,45 @@ void main() {
       find.byKey(const ValueKey('comercial-liquidacion-save-button')),
     );
     expect(button.onPressed, isNull);
+  });
+
+  testWidgets('shows already-collected returns in daily settlement',
+      (tester) async {
+    await tester.pumpWidget(
+      buildPage(
+        summary: const ComercialLiquidacionSummary(
+          totalEfectivo: 1000,
+          devolucionesYaCobradas: 1000,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Devoluciones (aparte)'), findsWidgets);
+    expect(
+        find.text('Sin devoluciones de mercancía en el día'), findsOneWidget);
+  });
+
+  testWidgets('lists return documents that already hit cash', (tester) async {
+    await tester.pumpWidget(
+      buildPage(
+        summary: const ComercialLiquidacionSummary(
+          totalEfectivo: 1000,
+          devolucionesYaCobradas: 1000,
+        ),
+        returns: const [
+          ComercialDevolucionItem(
+            documento: 'D-1',
+            cliente: '4300000354',
+            amount: -1000,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('D-1 · 4300000354'), findsOneWidget);
+    expect(find.text('Sin devoluciones de mercancía en el día'), findsNothing);
   });
 
   testWidgets('enables save and shows balanced state with valid amounts',

@@ -7,8 +7,8 @@
 const { CobrosRepository } = require('../domain/cobros-repository');
 const { query, queryWithParams } = require('../../../../config/db');
 const logger = require('../../../../middleware/logger');
-const { db2QualifiedTable, db2InsertSql } = require('../../../../utils/db2-identifiers');
-const { getDb2WriteSchema } = require('../../../../utils/db2-schemas');
+const { db2InsertSql } = require('../../../../utils/db2-identifiers');
+const { getDb2WriteSchema, db2AppTable } = require('../../../../utils/db2-schemas');
 const {
   buildCvcVendorScopeFilter,
   getVendorColumnExpr,
@@ -19,10 +19,17 @@ const { getClientCodesFromCache } = require('../../../../services/laclae');
 const {
   DEBT_VIEW,
   boundDebtFetchFirst,
+  cvcDocumentJoins,
+  cvcCliJoin,
+  cvcLiveTypeSql,
+  cvcPendingPredicate,
+  formaPagoLabel,
+  isBelowMinCobro,
 } = require('../../../../services/debt-view-contract');
 
 const APP_SCHEMA = getDb2WriteSchema();
-const COBROS_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS');
+const COBROS_TABLE = db2AppTable('COBROS');
+const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
 const COBROS_HEALTHCHECK_SQL = ['SELECT 1 FROM', COBROS_TABLE, 'FETCH FIRST 1 ROW ONLY'].join(' ');
 
 const FORMAS_PAGO_REPARTIDOR = ['01', 'CO', 'CTR', 'EF'];
@@ -563,6 +570,8 @@ function buildCobrosDocumentFilters(filters = {}, alias = 'C') {
   if (tipoDocumentoCodes.length > 0) {
     clauses.push(`AND TRIM(${alias}.TIPODOCUMENTO) IN (${tipoDocumentoCodes.map(() => '?').join(',')})`);
     params.push(...tipoDocumentoCodes);
+  } else {
+    clauses.push(cvcLiveTypeSql(alias));
   }
   const desde = parseYmdInt(filters.fechaDesde);
   if (desde != null) {
@@ -669,7 +678,7 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
   const erpPendienteCents = toCents(row.IMPORTE_PENDIENTE);
   const appPaidCents = toCents(appPaid);
   const pendingCents = Math.max(0, erpPendienteCents - appPaidCents);
-  const vencidoCents = row.IMPORTE_VENCIDO == null
+    const vencidoCents = row.IMPORTE_VENCIDO == null
     ? null
     : Math.max(0, toCents(row.IMPORTE_VENCIDO) - appPaidCents);
   const estado = pendingCents <= 1
@@ -677,9 +686,12 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
     : (vencidoCents == null
       ? computeEstadoVencimiento(fechaVencimiento)
       : (vencidoCents > 0 ? 'VENCIDO' : 'PENDIENTE'));
+  const cobroRiguroso = row.COBRO_RIGUROSO === true || trim(row.COBRO_RIGUROSO).toUpperCase() === 'S';
+  const porcentajeMinimoCobro = Number(row.PORCENTAJE_MINIMO_COBRO) || 0;
   return {
     id: stableReference,
     tipo: tipoDoc === 'CAC' ? 'albaran' : 'factura',
+    tipoDocumento: tipoDoc || null,
     referencia: docKey,
     fecha,
     fechaVencimiento,
@@ -687,7 +699,9 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
     importePendiente: fromCents(pendingCents),
     importeCobrado: fromCents(toCents(row.IMPORTE_COBRADO) + appPaidCents),
     estado,
-    formaPago: trim(row.FORMA_PAGO) || null,
+    formaPago: formaPagoLabel(row.FORMA_PAGO, row.FORMA_PAGO_DESC),
+    cobroRiguroso,
+    porcentajeMinimoCobro: cobroRiguroso ? porcentajeMinimoCobro : 0,
     descripcion: `${tipoDoc} ${docKey}`,
     docKey: {
       source: 'CVC',
@@ -741,21 +755,27 @@ class Db2CobrosRepository extends CobrosRepository {
             C.DIAVENCIMIENTO AS DIA_VENCIMIENTO,
             TRIM(C.SUBEMPRESADOCUMENTO) AS SUBEMPRESA,
             TRIM(C.TIPODOCUMENTO) AS TIPO_DOCUMENTO,
-            TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO
+            TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO,
+            TRIM(FPG.DESCRIPCIONFORMAPAGO) AS FORMA_PAGO_DESC
         FROM ${DEBT_VIEW} C
+        ${cvcDocumentJoins('C')}
         WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
-          AND C.IMPORTEPENDIENTE > 0.01
-          AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
+          AND ${cvcPendingPredicate('C')}
           ${docFilters.clause}
           ${access.clause}
         ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC`;
 
-      const [rows, appCobrosByDoc, repartidorByDoc] = await Promise.all([
+      const [rows, appCobrosByDoc, repartidorByDoc, cobroMinimo] = await Promise.all([
         queryWithParams(cvcSql, [trim(clientCode), ...docFilters.params, ...access.params], []),
         this.getAppSideCobrosByDoc(clientCode),
         this.getAppSideRepartidorByDoc(clientCode),
+        this.getClientCobroRiguroso(clientCode, context),
       ]);
-      const groupedRows = groupCvcRowsByDocument(rows);
+      const groupedRows = groupCvcRowsByDocument(rows).map((row) => ({
+        ...row,
+        COBRO_RIGUROSO: cobroMinimo.cobroRiguroso,
+        PORCENTAJE_MINIMO_COBRO: cobroMinimo.porcentajeMinimoCobro,
+      }));
       const adjustmentVendorCodes = normalizeVendorCodeList(
         context.adjustmentVendorCode
           ? [context.adjustmentVendorCode]
@@ -802,6 +822,8 @@ class Db2CobrosRepository extends CobrosRepository {
           numDocumentos: mergedCobros.length,
           numVencidos: mergedCobros.filter((c) => c.estado === 'VENCIDO').length,
           documentos: { cantidad: mergedCobros.length, total: totalPendiente },
+          cobroRiguroso: cobroMinimo.cobroRiguroso,
+          porcentajeMinimoCobro: cobroMinimo.porcentajeMinimoCobro,
           cvc: { cantidad: cobros.length, total: cvcTotalPendiente },
           pedidosApp: {
             cantidad: appOrders?.resumen?.pedidos?.cantidad || 0,
@@ -811,7 +833,7 @@ class Db2CobrosRepository extends CobrosRepository {
         },
       };
     } catch (cvcErr) {
-      logger.warn(`[COBROS_REPO] CVC pendientes failed for ${clientCode}; using ${APP_SCHEMA}.PEDIDOS_CAB fallback: ${cvcErr.message}`);
+      logger.warn(`[COBROS_REPO] CVC pendientes failed for ${clientCode}; using ${PEDIDOS_CAB_TABLE} fallback: ${cvcErr.message}`);
     }
 
     return this.getAppOrderPendientes(clientCode, context);
@@ -819,10 +841,14 @@ class Db2CobrosRepository extends CobrosRepository {
 
   async getPedidoCabOptionalColumns() {
     const optionalColumns = new Set();
+    const [schema, table] = String(PEDIDOS_CAB_TABLE).split('.');
+    if (!/^[A-Z][A-Z0-9_]*$/.test(schema || '') || !/^[A-Z][A-Z0-9_]*$/.test(table || '')) {
+      return optionalColumns;
+    }
     try {
       const columnRows = await query(`
         SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
-        WHERE TABLE_SCHEMA = '${APP_SCHEMA}' AND TABLE_NAME = 'PEDIDOS_CAB'
+        WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${table}'
           AND COLUMN_NAME IN (
             'ORIGEN', 'NUMEROALBARAN', 'NUMEROFACTURA', 'PROCESADOSN',
             'SITUACIONALBARAN', 'IMPORTECOBRADO', 'SYSTEM_NUMEROPEDIDO',
@@ -832,8 +858,8 @@ class Db2CobrosRepository extends CobrosRepository {
       for (const row of columnRows || []) optionalColumns.add(trim(row.COLUMN_NAME).toUpperCase());
     } catch (e) {
       logger.debug('[COBROS_REPO] PEDIDOS_CAB optional column detection skipped', {
-        schema: APP_SCHEMA,
-        table: 'PEDIDOS_CAB',
+        schema,
+        table,
         reason: e?.code || e?.message || 'unknown',
       });
     }
@@ -870,7 +896,7 @@ class Db2CobrosRepository extends CobrosRepository {
         ${optionalSelect.systemNumero} AS SYSTEM_NUMEROPEDIDO,
         ${optionalSelect.systemSerie} AS SYSTEM_SERIEPEDIDO,
         ${optionalSelect.systemTerminal} AS SYSTEM_TERMINALPEDIDO
-      FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
+      FROM ${PEDIDOS_CAB_TABLE} PC
       WHERE TRIM(PC.CODIGOCLIENTE) = ?
         ${origenFilter}
         AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
@@ -950,7 +976,7 @@ class Db2CobrosRepository extends CobrosRepository {
           PC.ID AS PEDIDO_ID,
           TRIM(PC.SERIEPEDIDO) || '-' || TRIM(CAST(PC.NUMEROPEDIDO AS VARCHAR(20))) AS DOC_KEY,
           COALESCE(PC.IMPORTETOTAL, 0) AS IMPORTE_TOTAL
-        FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
+        FROM ${PEDIDOS_CAB_TABLE} PC
         WHERE PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
           AND PC.IMPORTETOTAL > 0
           AND TRIM(PC.CODIGOCLIENTE) <> ''
@@ -962,7 +988,7 @@ class Db2CobrosRepository extends CobrosRepository {
         SELECT D.CLIENTE, D.PEDIDO_ID, D.DOC_KEY, D.NOMBRE, D.IMPORTE_TOTAL,
                COALESCE(SUM(C.IMPORTE), 0) AS IMPORTE_COBRADO
           FROM APP_DOCS D
-          LEFT JOIN ${APP_SCHEMA}.COBROS C
+          LEFT JOIN ${COBROS_TABLE} C
             ON TRIM(C.CODIGO_CLIENTE) = D.CLIENTE
            AND (
              TRIM(C.REFERENCIA) = D.DOC_KEY
@@ -1092,8 +1118,8 @@ class Db2CobrosRepository extends CobrosRepository {
       WITH CVC_CLIENTS AS (
         SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
                COALESCE(
-                 NULLIF(MIN(TRIM(CVC.NOMBREALTERNATIVO)), ''),
-                 MIN(TRIM(CVC.NOMBRECLIENTE)),
+                 NULLIF(MIN(TRIM(CLI.NOMBREALTERNATIVO)), ''),
+                 MIN(TRIM(CLI.NOMBRECLIENTE)),
                  MIN(TRIM(CVC.CODIGOCLIENTEALBARAN))
                ) AS NOMBRE,
                COUNT(*) AS DOC_COUNT,
@@ -1102,8 +1128,8 @@ class Db2CobrosRepository extends CobrosRepository {
                    <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
          FROM ${DEBT_VIEW} CVC
-         WHERE CVC.IMPORTEPENDIENTE > 0.01
-           AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+         ${cvcCliJoin('CVC')}
+         WHERE ${cvcPendingPredicate('CVC')}
            ${docFilters.clause}
            ${emptyClientFilter}
            ${vendorClause}
@@ -1244,13 +1270,12 @@ class Db2CobrosRepository extends CobrosRepository {
         SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,
                TRIM(C.REFERENCIA) AS REF,
                COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
-          FROM ${APP_SCHEMA}.COBROS C
+          FROM ${COBROS_TABLE} C
          WHERE EXISTS (
            SELECT 1
             FROM ${DEBT_VIEW} CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
-              AND CVC.IMPORTEPENDIENTE > 0.01
-              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+              AND ${cvcPendingPredicate('CVC')}
               ${vendorClause}
          )
          GROUP BY TRIM(C.CODIGO_CLIENTE), TRIM(C.REFERENCIA)`;
@@ -1282,8 +1307,7 @@ class Db2CobrosRepository extends CobrosRepository {
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)
               AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(R.SERIEDOCUMENTO)
               AND TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) = TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))
-              AND CVC.IMPORTEPENDIENTE > 0.01
-              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+              AND ${cvcPendingPredicate('CVC')}
               ${vendorClause}
          )
          GROUP BY TRIM(R.CODIGOCLIENTEALBARAN), TRIM(R.TIPODOCUMENTO), TRIM(R.ORIGENDOCUMENTO),
@@ -1313,13 +1337,12 @@ class Db2CobrosRepository extends CobrosRepository {
       const comercialSql = `
         SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,
                COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
-          FROM ${APP_SCHEMA}.COBROS C
+          FROM ${COBROS_TABLE} C
          WHERE EXISTS (
            SELECT 1
             FROM ${DEBT_VIEW} CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
-              AND CVC.IMPORTEPENDIENTE > 0.01
-              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+              AND ${cvcPendingPredicate('CVC')}
               ${vendorClause}
          )
          GROUP BY TRIM(C.CODIGO_CLIENTE)`;
@@ -1340,8 +1363,7 @@ class Db2CobrosRepository extends CobrosRepository {
            SELECT 1
             FROM ${DEBT_VIEW} CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)
-              AND CVC.IMPORTEPENDIENTE > 0.01
-              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+              AND ${cvcPendingPredicate('CVC')}
               ${vendorClause}
          )
          GROUP BY R.CODIGOCLIENTEALBARAN`;
@@ -1393,7 +1415,7 @@ class Db2CobrosRepository extends CobrosRepository {
     try {
       const comercialRows = await queryWithParams(
         `SELECT TRIM(REFERENCIA) AS REF, COALESCE(SUM(IMPORTE), 0) AS TOTAL
-           FROM ${APP_SCHEMA}.COBROS
+           FROM ${COBROS_TABLE}
           WHERE TRIM(CODIGO_CLIENTE) = ?
           GROUP BY TRIM(REFERENCIA)`,
         [trim(clientCode)],
@@ -1456,7 +1478,7 @@ class Db2CobrosRepository extends CobrosRepository {
     const cvcLegacyIsSafe = !isCvcOrder || !cvcStableReference || ((parseInt(order.LEGACY_COLLISION_COUNT, 10) || 1) <= 1);
     const existingRows = await queryWithParams(
       `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
-         FROM ${APP_SCHEMA}.COBROS WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
+         FROM ${COBROS_TABLE} WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
       [id, normalizedIdempotencyToken],
       [],
     ) || [];
@@ -1489,7 +1511,7 @@ class Db2CobrosRepository extends CobrosRepository {
     const uniquePaymentReferences = [...new Set(paymentReferences.map(trim).filter(Boolean))];
     const paidRows = await queryWithParams(
       `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_COBRADO
-         FROM ${APP_SCHEMA}.COBROS
+         FROM ${COBROS_TABLE}
          WHERE TRIM(CODIGO_CLIENTE) = ?
            AND TRIM(REFERENCIA) IN (${uniquePaymentReferences.map(() => '?').join(',')})`,
       [normalizedClient, ...uniquePaymentReferences],
@@ -1554,6 +1576,22 @@ class Db2CobrosRepository extends CobrosRepository {
       );
     }
     const pendingAfterCents = pendingBeforeCents - amountCents;
+    const cobroMinimo = await this.getClientCobroRiguroso(normalizedClient, {
+      userId: normalizedUserId,
+      vendorCodes: [normalizedUserId],
+    });
+    if (isBelowMinCobro({
+      cobroRiguroso: cobroMinimo.cobroRiguroso,
+      porcentajeMinimoCobro: cobroMinimo.porcentajeMinimoCobro,
+      pendingAmount: fromCents(pendingBeforeCents),
+      amount: fromCents(amountCents),
+    })) {
+      throw new CommercialCobrosError(
+        'BELOW_MIN_COBRO',
+        `El cobro no alcanza el minimo riguroso del ${cobroMinimo.porcentajeMinimoCobro}%`,
+        409,
+      );
+    }
     if (pendingAfterCents < 0) {
       if (!manager || allowOverpay !== true) {
         throw new CommercialCobrosError('OVERPAY_NOT_ALLOWED', 'El importe supera el pendiente', 409);
@@ -1584,7 +1622,7 @@ class Db2CobrosRepository extends CobrosRepository {
       if (/DUPLICATE|PRIMARY|UNIQUE|SQL0803/i.test(msg)) {
         const replayRows = await queryWithParams(
           `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
-             FROM ${APP_SCHEMA}.COBROS WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
+             FROM ${COBROS_TABLE} WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
           [id, normalizedIdempotencyToken],
           false,
           false,
@@ -1670,7 +1708,7 @@ class Db2CobrosRepository extends CobrosRepository {
       await queryWithParams(insert.sql, insert.params, false, false);
     } catch (erpInsertErr) {
       if (!includeErpColumns || !isColumnNotFound(erpInsertErr)) throw erpInsertErr;
-      logger.warn(`[COBROS_REPO] ERP-compatible columns missing in ${APP_SCHEMA}.COBROS, using legacy insert`);
+      logger.warn(`[COBROS_REPO] ERP-compatible columns missing in ${COBROS_TABLE}, using legacy insert`);
       insert = buildCobroInsert({
         id,
         idempotencyToken,
@@ -1689,11 +1727,66 @@ class Db2CobrosRepository extends CobrosRepository {
     }
   }
 
+  async getClientCobroRiguroso(clientCode, context = {}) {
+    const client = trim(clientCode);
+    const empty = { cobroRiguroso: false, porcentajeMinimoCobro: 0 };
+    if (!client) return empty;
+    try {
+      const clxRows = await queryWithParams(`
+        SELECT TRIM(COBRORIGUROSOSN) AS SN,
+               COALESCE(PORCENTAJECOBRORIGUROSO, 0) AS PCT
+          FROM DSEDAC.CLX
+         WHERE TRIM(CODIGOCLIENTE) = ?
+         FETCH FIRST 1 ROW ONLY
+      `, [client], []);
+      const sn = trim(clxRows?.[0]?.SN).toUpperCase() === 'S';
+      let pct = Number(clxRows?.[0]?.PCT) || 0;
+      if (sn && pct <= 0) {
+        pct = await this.getVendorMinimoCobro(context);
+      }
+      return { cobroRiguroso: sn, porcentajeMinimoCobro: sn ? pct : 0 };
+    } catch (error) {
+      logger.warn(`[COBROS_REPO] CLX cobro riguroso skipped: ${error.message}`);
+      return empty;
+    }
+  }
+
+  async getVendorMinimoCobro(context = {}) {
+    const vendor = trim(context.userId || context.userCode || (context.vendorCodes || [])[0]);
+    if (!vendor) return 0;
+    if (Db2CobrosRepository._vddxMinColumn === false) return 0;
+    try {
+      if (Db2CobrosRepository._vddxMinColumn == null) {
+        const cols = await queryWithParams(`
+          SELECT COLUMN_NAME
+            FROM QSYS2.SYSCOLUMNS
+           WHERE TABLE_SCHEMA = 'DSEDAC'
+             AND TABLE_NAME = 'VDDX'
+             AND COLUMN_NAME = 'PORCENTAJEMINIMOCOBRO'
+           FETCH FIRST 1 ROW ONLY
+        `, [], []);
+        Db2CobrosRepository._vddxMinColumn = (cols || []).length > 0;
+      }
+      if (!Db2CobrosRepository._vddxMinColumn) return 0;
+      const rows = await queryWithParams(`
+        SELECT COALESCE(PORCENTAJEMINIMOCOBRO, 0) AS PCT
+          FROM DSEDAC.VDDX
+         WHERE TRIM(CODIGOVENDEDOR) = ?
+         FETCH FIRST 1 ROW ONLY
+      `, [vendor], []);
+      return Number(rows?.[0]?.PCT) || 0;
+    } catch (error) {
+      Db2CobrosRepository._vddxMinColumn = false;
+      logger.warn(`[COBROS_REPO] VDDX minimo cobro skipped: ${error.message}`);
+      return 0;
+    }
+  }
+
   async ensureCobrosTable() {
     try {
       await query(COBROS_HEALTHCHECK_SQL);
     } catch (error) {
-      logger.error(`[COBROS] Tabla ${APP_SCHEMA}.COBROS no disponible: ${error.message}`);
+      logger.error(`[COBROS] Tabla ${COBROS_TABLE} no disponible: ${error.message}`);
       throw new CommercialCobrosError(
         'COBROS_TABLE_UNAVAILABLE',
         'Servicio de cobros no disponible: tabla de cobros no configurada',
@@ -1705,7 +1798,7 @@ class Db2CobrosRepository extends CobrosRepository {
   async getPaymentsForClient(clientCode) {
     return await queryWithParams(`
       SELECT REFERENCIA, SUM(IMPORTE) AS TOTAL_IMPORTE
-      FROM ${APP_SCHEMA}.COBROS
+      FROM ${COBROS_TABLE}
       WHERE TRIM(CODIGO_CLIENTE) = ?
       GROUP BY REFERENCIA
     `, [trim(clientCode)], []) || [];
@@ -1714,7 +1807,7 @@ class Db2CobrosRepository extends CobrosRepository {
   async getAllPayments() {
     return await queryWithParams(`
       SELECT TRIM(CODIGO_CLIENTE) AS CODIGO_CLIENTE, REFERENCIA, SUM(IMPORTE) AS TOTAL_IMPORTE
-      FROM ${APP_SCHEMA}.COBROS
+      FROM ${COBROS_TABLE}
       GROUP BY TRIM(CODIGO_CLIENTE), REFERENCIA
     `, [], []) || [];
   }
@@ -1730,7 +1823,7 @@ class Db2CobrosRepository extends CobrosRepository {
         PC.NUMEROPEDIDO,
         PC.IMPORTETOTAL,
         TRIM(PC.ESTADO) AS ESTADO
-      FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
+      FROM ${PEDIDOS_CAB_TABLE} PC
       WHERE TRIM(PC.CODIGOCLIENTE) = ?
         AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
         AND PC.IMPORTETOTAL > 0
@@ -1788,13 +1881,11 @@ class Db2CobrosRepository extends CobrosRepository {
             FROM ${DEBT_VIEW} C2
            WHERE TRIM(C2.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGOCLIENTEALBARAN)
              AND ${cvcLegacyReferenceSql('C2')} = ${cvcLegacyReferenceSql('C')}
-             AND C2.IMPORTEPENDIENTE > 0.01
-             AND (C2.ANULADOSN IS NULL OR C2.ANULADOSN <> 'S')
+             AND ${cvcPendingPredicate('C2')}
         ) AS LEGACY_COLLISION_COUNT
       FROM ${DEBT_VIEW} C
       WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
-        AND C.IMPORTEPENDIENTE > 0.01
-        AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
+        AND ${cvcPendingPredicate('C')}
         AND ${cvcRefWhere}
       FETCH FIRST 1 ROW ONLY
     `, [clientCode, ...cvcRefParams], []);
@@ -1814,7 +1905,7 @@ class Db2CobrosRepository extends CobrosRepository {
       SELECT
         C.ID, C.CODIGO_CLIENTE, C.IMPORTE, C.FORMA_PAGO,
         C.REFERENCIA, C.OBSERVACIONES, C.FECHA
-      FROM ${APP_SCHEMA}.COBROS C
+      FROM ${COBROS_TABLE} C
       WHERE TRIM(C.CODIGO_CLIENTE) = ?
       ORDER BY C.FECHA DESC
       OFFSET ${safeOffset} ROWS FETCH FIRST ${safeLimit} ROWS ONLY
@@ -1833,7 +1924,7 @@ class Db2CobrosRepository extends CobrosRepository {
         COUNT(*) as TOTAL_COBROS,
         SUM(IMPORTE) as TOTAL_IMPORTE,
         AVG(IMPORTE) as PROMEDIO
-      FROM ${APP_SCHEMA}.COBROS
+      FROM ${COBROS_TABLE}
       WHERE CODIGO_USUARIO = ?
     `;
 
@@ -1841,5 +1932,7 @@ class Db2CobrosRepository extends CobrosRepository {
     return result[0] || {};
   }
 }
+
+Db2CobrosRepository._vddxMinColumn = null;
 
 module.exports = { Db2CobrosRepository };

@@ -441,6 +441,18 @@ describe('runtime INSERT compatibility gate', () => {
       column({ name: 'IDENTITY_ID', identity: true, hasDefault: false }),
     ], operations)).toEqual([]);
   });
+
+  test('treats commercial pedidos TEST tables as copy-schema read-only', () => {
+    const operations = [{ kind: 'CREATE_LIKE' }];
+    expect(runtimeWriteCoverageGaps({
+      group: 'commercial', key: 'pedidosCab', objectType: 'TABLE',
+      src: 'JAVIER.PEDIDOS_CAB', dst: 'JAVIER.TEST_PEDIDOS_CAB',
+    }, [column({ name: 'CODIGOCLIENTE', hasDefault: false })], operations)).toEqual([]);
+    expect(runtimeWriteCoverageGaps({
+      group: 'commercial', key: 'pedidosLin', objectType: 'TABLE',
+      src: 'JAVIER.PEDIDOS_LIN', dst: 'JAVIER.TEST_PEDIDOS_LIN',
+    }, [column({ name: 'CODIGOARTICULO', hasDefault: false })], operations)).toEqual([]);
+  });
 });
 
 describe('operational identity and key contracts', () => {

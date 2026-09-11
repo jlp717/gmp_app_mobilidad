@@ -171,6 +171,74 @@ describe('entregas route coverage gaps', () => {
     expect(deliveryQuery[1].slice(-2)).toEqual([0, 501]);
   });
 
+  test('overlays confirmed anteroom pedidos into pendientes with documentoTipo PEDIDO', async () => {
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (typeof sql !== 'string') return Promise.resolve([]);
+      if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);
+      if (sql.includes('RUTERO_CONFIG') && /PEDIDOS_CAB/.test(sql)) {
+        return Promise.resolve([{
+          SUBEMPRESAALBARAN: 'GMP',
+          EJERCICIOALBARAN: 2026,
+          SERIEALBARAN: 'M',
+          TERMINALALBARAN: 0,
+          NUMEROALBARAN: 9001,
+          NUMEROFACTURA: 0,
+          SERIEFACTURA: '',
+          CLIENTE: 'C9',
+          NOMBRE_CLIENTE: 'Cliente Pedido',
+          NOMBRE_COMERCIAL: 'Cliente Pedido',
+          NOMBRE_FISCAL: '',
+          DIRECCION: '',
+          POBLACION: '',
+          TELEFONO: '',
+          TELEFONO2: '',
+          IMPORTETOTAL: 44,
+          CAC_IMPORTETOTAL: 44,
+          IMPORTEBRUTO: 40,
+          CPC_BASE1: 40,
+          CPC_BASE2: 0,
+          CPC_BASE3: 0,
+          CPC_PCTIVA1: 0,
+          CPC_PCTIVA2: 0,
+          CPC_PCTIVA3: 0,
+          CPC_IVA1: 4,
+          CPC_IVA2: 0,
+          CPC_IVA3: 0,
+          FORMA_PAGO: '02',
+          DIADOCUMENTO: 3,
+          MESDOCUMENTO: 8,
+          ANODOCUMENTO: 2026,
+          RUTA: '',
+          CODIGO_REPARTIDOR: '94',
+          ROUTE_MOVE_POSITION: null,
+          ORDEN_PREPARACION: 77,
+          NOMBRE_REPARTIDOR: '94',
+          DIALLEGADA: 0,
+          HORALLEGADA: 0,
+          CONFORMADO: 'N',
+          DS_STATUS: null,
+          DS_OBS: null,
+          DS_FIRMA: null,
+          ANTEROOM_DOC_TIPO: 'PEDIDO',
+          PEDIDO_ID: 77,
+        }]);
+      }
+      if (sql.includes('CVC_ROW_COUNT')) return Promise.resolve([]);
+      return Promise.resolve([]);
+    });
+
+    const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=10');
+    expect(response.status).toBe(200);
+    expect(response.body.albaranes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'PED-77-C9',
+        documentoTipo: 'PEDIDO',
+        pedidoId: 77,
+        codigoCliente: 'C9',
+      }),
+    ]));
+  });
+
   test('overlays canonical confirmation status onto the pending list', async () => {
     mockQueryWithParams.mockImplementation((sql) => {
       if (sql.includes('FROM DSEDAC.OPP OPP')) return Promise.resolve([pendingRow()]);

@@ -120,6 +120,8 @@ Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero":
 - El modo claro/oscuro debe aplicar el tema a toda la app (filtros, tablas, matrices y páginas), no solo el chrome.
 - Para validar el perfil de reparto, usar REPARTIDOR: jefe de ventas en modo reparto y repartidor raso; no el perfil comercial.
 - Las pruebas de rendimiento deben hacerse en móvil con el rol jefe de ventas (el que más datos carga).
+- No declarar el perfil de reparto cerrado al 100% mientras queden huecos o no se haya validado en emulador.
+- El perfil comercial es un workstream aparte del de reparto (pedidos, devoluciones y liquidación diaria); no mezclar su validación con la de REPARTIDOR.
 
 ## Learned Workspace Facts
 
@@ -128,3 +130,5 @@ Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero":
 - La sección Cobros del perfil repartidor no es solo lectura: debe permitir registrar cobros pendientes o parciales del rutero.
 - El saldo cobrable de una entrega se limita al importe del documento (CPC), no a la deuda CVC del cliente; la UI distingue este albarán vs deuda del cliente.
 - En facturas, la lista debe mostrar totales agregados (importe, recuento, base con/sin IVA).
+- Las escrituras a base de datos van solo a TEST (isolated_test / JAVIER.TEST_*); DSEDAC es lectura o copia hacia test, nunca escritura.
+- En isolated_test, el correo usa sink/allowlist y no debe enviarse a bandejas reales de clientes ERP; la lista to/cc de producto debe construirse completa igual.

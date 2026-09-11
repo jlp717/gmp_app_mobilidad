@@ -8,7 +8,7 @@ const rateLimit = require('express-rate-limit');
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, invalidateCache: invalidateCachePattern } = require('../services/redis-cache');
-const { DEBT_VIEW } = require('../services/debt-view-contract');
+const { DEBT_VIEW, cvcDocumentJoins, cvcCliJoin, cvcLiveTypeSql, cvcPendingPredicate, formaPagoLabel } = require('../services/debt-view-contract');
 const logger = require('../middleware/logger');
 const { db2QualifiedTable, db2InsertSql } = require('../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../utils/db2-schemas');
@@ -499,6 +499,8 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         if (tipoDocumentoCodes.length > 0) {
             docFilterSql += ` AND TRIM(C.TIPODOCUMENTO) IN (${tipoDocumentoCodes.map(() => '?').join(',')})`;
             sqlParams.push(...tipoDocumentoCodes);
+        } else {
+            docFilterSql += ` ${cvcLiveTypeSql('C')}`;
         }
         if (desdeInt != null) {
             docFilterSql += ' AND (C.ANOVENCIMIENTO * 10000 + C.MESVENCIMIENTO * 100 + C.DIAVENCIMIENTO) >= ?';
@@ -526,11 +528,12 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 C.DIAVENCIMIENTO AS DIA_VENCIMIENTO,
                 TRIM(C.SUBEMPRESADOCUMENTO) AS SUBEMPRESA,
                 TRIM(C.TIPODOCUMENTO) AS TIPO_DOCUMENTO,
-                TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO
+                TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO,
+                TRIM(FPG.DESCRIPCIONFORMAPAGO) AS FORMA_PAGO_DESC
             FROM ${DEBT_VIEW} C
+            ${cvcDocumentJoins('C')}
             WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
-              AND C.IMPORTEPENDIENTE > 0.01
-              AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
+              AND ${cvcPendingPredicate('C')}
               ${docFilterSql}
             ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC
             ${db2OffsetFetch(pendientesPage)}`;
@@ -636,12 +639,13 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 const erpCobrado = parseFloat(row.IMPORTE_COBRADO) || 0;
                 const importePendienteAjustado = Math.max(0, erpPendiente - appPaid);
                 const importeCobradoAjustado = erpCobrado + appPaid;
-                const formaPago = (row.FORMA_PAGO || '').trim() || null;
+                const formaPago = formaPagoLabel(row.FORMA_PAGO, row.FORMA_PAGO_DESC);
                 const cobradoPorRepartidor = isCobradoPorRepartidor({ repartidorPaid, formaPago });
                 const esCTR = isFormaPagoRepartidorResponsibility(formaPago);
                 return {
                     id: `cvc_${serie}_${numero}_${row.XDE || 1}`,
                     tipo: tipoDoc === 'CAC' ? 'albaran' : 'factura',
+                    tipoDocumento: tipoDoc || null,
                     referencia: docKey,
                     fecha: fechaDoc,
                     fechaVencimiento,
@@ -777,8 +781,7 @@ router.get('/:codigoCliente/estado', async (req, res) => {
                        COUNT(*) AS NUM_DOCS
                 FROM ${DEBT_VIEW} C
                 WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
-                  AND C.IMPORTEPENDIENTE > 0.01
-                  AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
+                  AND ${cvcPendingPredicate('C')}
             `, [codigoCliente], false);
             totalPendiente = parseFloat(rows?.[0]?.TOTAL_PENDIENTE) || 0;
             numPedidos = parseInt(rows?.[0]?.NUM_DOCS) || 0;
@@ -1157,8 +1160,8 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                      <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                      THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
             FROM ${DEBT_VIEW} CVC
-            WHERE CVC.IMPORTEPENDIENTE <> 0
-              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+            WHERE ${cvcPendingPredicate('CVC')}
+              ${cvcLiveTypeSql('CVC')}
               ${emptyClientFilter}
               ${vendorClause}
             GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), CVC.NUMERODOCUMENTO
@@ -1172,11 +1175,12 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                  SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
                      <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                      THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO,
-                 TRIM(MIN(CVC.NOMBREALTERNATIVO)) AS NOMBRE_ALT,
-                 TRIM(MIN(CVC.NOMBRECLIENTE)) AS NOMBRE_CLI
+                 TRIM(MIN(CLI.NOMBREALTERNATIVO)) AS NOMBRE_ALT,
+                 TRIM(MIN(CLI.NOMBRECLIENTE)) AS NOMBRE_CLI
             FROM ${DEBT_VIEW} CVC
-            WHERE CVC.IMPORTEPENDIENTE <> 0
-              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+            ${cvcCliJoin('CVC')}
+            WHERE ${cvcPendingPredicate('CVC')}
+              ${cvcLiveTypeSql('CVC')}
               ${emptyClientFilter}
               ${vendorClause}
             GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), CVC.NUMERODOCUMENTO

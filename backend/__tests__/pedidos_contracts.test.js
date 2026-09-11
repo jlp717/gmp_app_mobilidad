@@ -532,7 +532,35 @@ describe('pedidos create order persistence contract', () => {
     expect(lineCall[0]).toContain('SECUENCIAPEDIDO');
     expect(lineCall[0]).toContain('CODIGOCLIENTEFACTURA');
     expect(lineCall[0]).toContain('CODIGOIVA');
-    expect(lineCall[1][8]).toBe(9);
+    expect(lineCall[1][8]).toBe(10);
+    expect(lineCall[1][13]).toBe(18);
+    expect(lineCall[1][17]).toBe(10);
+    expect(lineCall[0]).toMatch(/PORCENTAJEDESCUENTO/i);
+  });
+
+  test('createOrder accepts Flutter lineDiscountPct alias without baking pie into price', async () => {
+    mockCreateOrderFlow();
+
+    await pedidosService.createOrder({
+      clientCode: 'C001',
+      clientName: 'Cliente',
+      vendedorCode: '01',
+      descuentoGlobal: 10,
+      lines: [{
+        codigoArticulo: 'ART001',
+        descripcion: 'Producto',
+        cantidadEnvases: 2,
+        precio: 10,
+        precioCosto: 4,
+        lineDiscountPct: 10,
+      }],
+    });
+
+    const lineCall = mockQueryWithParams.mock.calls.find(([sql]) =>
+      /INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql),
+    );
+    expect(lineCall).toBeDefined();
+    expect(lineCall[1][8]).toBe(10);
     expect(lineCall[1][13]).toBe(18);
     expect(lineCall[1][17]).toBe(10);
   });

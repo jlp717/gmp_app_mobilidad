@@ -352,6 +352,7 @@ class AlbaranEntrega {
     this.cobroSaldoCapped = false,
     this.formaPagoCobro,
     this.cobroParcial = false,
+    this.documentoTipo = '',
   });
 
   factory AlbaranEntrega.fromJson(Map<String, dynamic> json) {
@@ -459,6 +460,7 @@ class AlbaranEntrega {
       cobroSaldoCapped: json['cobroSaldoCapped'] == true,
       formaPagoCobro: json['formaPagoCobro']?.toString(),
       cobroParcial: json['cobroParcial'] == true,
+      documentoTipo: (json['documentoTipo'] ?? '').toString().trim(),
     );
   }
   final String id;
@@ -525,6 +527,9 @@ class AlbaranEntrega {
   final bool cobroSaldoCapped;
   final String? formaPagoCobro;
   final bool cobroParcial;
+  final String documentoTipo;
+
+  bool get isPedidoAnteroom => documentoTipo.toUpperCase() == 'PEDIDO';
 
   bool get isPendingPrice => pricingState == 'PENDING_PRICE';
   bool get isZeroEmpty => pricingState == 'ZERO_EMPTY';
@@ -648,6 +653,7 @@ class AlbaranEntrega {
       formaPagoCobro: formaPagoCobro ?? this.formaPagoCobro,
       cobroParcial:
           clearPaymentBalance ? false : cobroParcial ?? this.cobroParcial,
+      documentoTipo: documentoTipo,
     );
   }
 

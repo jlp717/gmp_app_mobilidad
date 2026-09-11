@@ -20,4 +20,5 @@ module.exports = {
     getAvailableVehicles: impl.getAvailableVehicles,
     getDefaultTruckAssignment: impl.getDefaultTruckAssignment,
     getClientOrderDefaults: impl.getClientOrderDefaults,
+    getConfirmedPedidosForRutero: impl.getConfirmedPedidosForRutero,
 };

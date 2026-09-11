@@ -1409,7 +1409,7 @@ router.post('/create', async (req, res) => {
         const {
             clientCode, clientName, vendedorCode,
             tipoventa, almacen, tarifa, formaPago, observaciones,
-            descuentoGlobal, lines
+            descuentoGlobal, globalDiscountPct, lines
         } = req.body;
 
         // Validation
@@ -1450,7 +1450,9 @@ router.post('/create', async (req, res) => {
                 almacen: almacen ? String(almacen).trim() : undefined,
                 tarifa: tarifa ? String(tarifa).trim() : undefined,
                 formaPago: formaPago ? String(formaPago).trim() : undefined,
-                descuentoGlobal: descuentoGlobal ? parseFloat(descuentoGlobal) : 0,
+                descuentoGlobal: descuentoGlobal != null
+                    ? parseFloat(descuentoGlobal)
+                    : (globalDiscountPct != null ? parseFloat(globalDiscountPct) : 0),
                 observaciones: observaciones ? String(observaciones).trim() : '',
                 lines,
                 userId: vendorAccess.vendedorCode,
@@ -1633,7 +1635,7 @@ router.put('/:id/confirm', async (req, res) => {
             return res.status(ownership.status).json(ownership.body);
         }
 
-        const { saleType, deliveryDate, vehicleCode, driverCode, routeCode } = req.body;
+        const { saleType, deliveryDate, vehicleCode, driverCode, routeCode, cobroPropio, cobroEnMano } = req.body;
         let normalizedSaleType;
         try {
             normalizedSaleType = normalizePedidoSaleTypeForRoute(saleType);
@@ -1651,6 +1653,7 @@ router.put('/:id/confirm', async (req, res) => {
             vehicleCode: vehicleCode ? String(vehicleCode).trim() : undefined,
             driverCode: driverCode ? String(driverCode).trim() : undefined,
             routeCode: routeCode ? String(routeCode).trim() : undefined,
+            cobroPropio: cobroPropio === true || cobroEnMano === true,
         };
         const order = await pedidosService.confirmOrder(id, normalizedSaleType, options);
 

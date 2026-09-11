@@ -15,6 +15,19 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_li
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_preview_sheet.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
+double _resolveLineDiscountPct({
+  required String pctText,
+  required String euroText,
+  required double grossAmount,
+}) {
+  var pct = double.tryParse(pctText.replaceAll(',', '.').trim()) ?? 0;
+  final euro = double.tryParse(euroText.replaceAll(',', '.').trim());
+  if (euro != null && euro > 0 && grossAmount > 0) {
+    pct = (euro / grossAmount) * 100;
+  }
+  return pct.clamp(0, 100);
+}
+
 class OrderSummaryWidget extends ConsumerStatefulWidget {
   const OrderSummaryWidget({
     required this.vendedorCode,
@@ -295,6 +308,17 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           },
           onClaseLineaToggle: (clase) =>
               provider.updateLineClaseLinea(i, clase),
+          onDiscountChanged: (pct) {
+            final error = provider.updateLine(i, lineDiscountPct: pct);
+            if (error != null && context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(error),
+                  backgroundColor: AppTheme.error,
+                ),
+              );
+            }
+          },
         );
       },
     );
@@ -415,42 +439,47 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                SizedBox(
-                  width: 64,
-                  child: TextField(
-                    controller: _discountCtrl,
-                    focusNode: _discountFocusNode,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-                    onChanged: (v) {
-                      final normalized = v.replaceAll(',', '.').trim();
-                      provider
-                          .setGlobalDiscount(double.tryParse(normalized) ?? 0);
-                    },
-                    decoration: InputDecoration(
-                      suffixText: '%',
-                      suffixStyle:
-                          TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-                      filled: true,
-                      fillColor: AppTheme.softPanel,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 6,
-                      ),
-                      isDense: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.borderColor),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.borderColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.info),
+                Semantics(
+                  label: 'Descuento pie del pedido en porcentaje',
+                  textField: true,
+                  child: SizedBox(
+                    width: 64,
+                    child: TextField(
+                      controller: _discountCtrl,
+                      focusNode: _discountFocusNode,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      textAlign: TextAlign.center,
+                      style:
+                          TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                      onChanged: (v) {
+                        final normalized = v.replaceAll(',', '.').trim();
+                        provider.setGlobalDiscount(
+                            double.tryParse(normalized) ?? 0);
+                      },
+                      decoration: InputDecoration(
+                        suffixText: '%',
+                        suffixStyle: TextStyle(
+                            color: AppTheme.textTertiary, fontSize: 12),
+                        filled: true,
+                        fillColor: AppTheme.softPanel,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: AppTheme.borderColor),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: AppTheme.borderColor),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: AppTheme.info),
+                        ),
                       ),
                     ),
                   ),
@@ -791,6 +820,14 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     );
     final priceController =
         TextEditingController(text: line.precioVenta.toStringAsFixed(3));
+    final discountPctController = TextEditingController(
+      text: line.lineDiscountPct > 0
+          ? line.lineDiscountPct.toStringAsFixed(
+              line.lineDiscountPct % 1 == 0 ? 0 : 2,
+            )
+          : '',
+    );
+    final discountEuroController = TextEditingController();
 
     final unitLabel = Product.unitLabel(line.unidadMedida);
     final equivText = line.unidadesCaja > 1
@@ -1097,6 +1134,88 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                     ],
                   ),
                 ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Semantics(
+                        label: 'Descuento de linea en porcentaje',
+                        textField: true,
+                        child: TextField(
+                          controller: discountPctController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          style: TextStyle(color: AppTheme.textPrimary),
+                          decoration: InputDecoration(
+                            labelText: 'Dto. %',
+                            suffixText: '%',
+                            labelStyle:
+                                TextStyle(color: AppTheme.textSecondary),
+                            filled: true,
+                            fillColor: AppTheme.softPanel,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: AppTheme.borderColor,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: AppTheme.borderColor,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: AppTheme.info),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Semantics(
+                        label: 'Descuento de linea en euros',
+                        textField: true,
+                        child: TextField(
+                          controller: discountEuroController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          style: TextStyle(color: AppTheme.textPrimary),
+                          decoration: InputDecoration(
+                            labelText: 'Dto. €',
+                            suffixText: ' \u20AC',
+                            labelStyle:
+                                TextStyle(color: AppTheme.textSecondary),
+                            filled: true,
+                            fillColor: AppTheme.softPanel,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: AppTheme.borderColor,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: AppTheme.borderColor,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide:
+                                  const BorderSide(color: AppTheme.info),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 if (provider.isMarginVisible && line.precioMinimo > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
@@ -1184,11 +1303,20 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                                 );
                                 return;
                               }
+                              final billingQty = c +
+                                  (line.unidadesCaja > 0
+                                      ? u / line.unidadesCaja
+                                      : 0);
                               final err = provider.updateLine(
                                 index,
                                 cantidadEnvases: c,
                                 cantidadUnidades: u,
                                 precioVenta: price,
+                                lineDiscountPct: _resolveLineDiscountPct(
+                                  pctText: discountPctController.text,
+                                  euroText: discountEuroController.text,
+                                  grossAmount: price * billingQty,
+                                ),
                               );
                               if (err != null) {
                                 showValidation(err);
@@ -1211,6 +1339,11 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                                 cantidadEnvases: isBoxes ? qty : null,
                                 cantidadUnidades: isBoxes ? null : qty,
                                 precioVenta: price,
+                                lineDiscountPct: _resolveLineDiscountPct(
+                                  pctText: discountPctController.text,
+                                  euroText: discountEuroController.text,
+                                  grossAmount: price * qty,
+                                ),
                               );
                               if (err != null) {
                                 showValidation(err);
@@ -1432,6 +1565,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
         vehicleCode,
         driverCode,
         routeCode,
+        cobroPropio = false,
       }) async {
         final result = await provider.confirmOrder(
           widget.vendedorCode,
@@ -1441,6 +1575,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           vehicleCode: vehicleCode,
           driverCode: driverCode,
           routeCode: routeCode,
+          cobroPropio: cobroPropio,
         );
         if (result != null && context.mounted) {
           if (_handleBlockedOrUnconfirmedResult(context, result)) return result;

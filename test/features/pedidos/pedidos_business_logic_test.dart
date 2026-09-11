@@ -20,6 +20,9 @@ class _RecordingOrderApi implements PedidosOrderApi {
   String? confirmedDriverCode;
   String? confirmedRouteCode;
   String? createdClientRequestId;
+  double? createdDescuentoGlobal;
+  List<OrderLine>? createdLines;
+  bool confirmedCobroPropio = false;
 
   @override
   Future<Map<String, dynamic>> createOrder({
@@ -30,8 +33,11 @@ class _RecordingOrderApi implements PedidosOrderApi {
     required List<OrderLine> lines,
     required String observaciones,
     String? clientRequestId,
+    double descuentoGlobal = 0,
   }) async {
     createdClientRequestId = clientRequestId;
+    createdDescuentoGlobal = descuentoGlobal;
+    createdLines = List<OrderLine>.from(lines);
     return {
       'id': 42,
       'estado': 'BORRADOR',
@@ -47,6 +53,7 @@ class _RecordingOrderApi implements PedidosOrderApi {
     String? vehicleCode,
     String? driverCode,
     String? routeCode,
+    bool cobroPropio = false,
   }) async {
     confirmedOrderId = orderId;
     confirmedSaleType = saleType;
@@ -54,6 +61,7 @@ class _RecordingOrderApi implements PedidosOrderApi {
     confirmedVehicleCode = vehicleCode;
     confirmedDriverCode = driverCode;
     confirmedRouteCode = routeCode;
+    confirmedCobroPropio = cobroPropio;
     return {
       'header': {
         'id': orderId,
@@ -82,6 +90,7 @@ class _BlockingOrderApi implements PedidosOrderApi {
     required List<OrderLine> lines,
     required String observaciones,
     String? clientRequestId,
+    double descuentoGlobal = 0,
   }) {
     createOrderCalls++;
     return createCompleter.future;
@@ -95,6 +104,7 @@ class _BlockingOrderApi implements PedidosOrderApi {
     String? vehicleCode,
     String? driverCode,
     String? routeCode,
+    bool cobroPropio = false,
   }) async {
     confirmOrderCalls++;
     return {
@@ -117,6 +127,7 @@ class _QueuedCreateOrderApi implements PedidosOrderApi {
     required List<OrderLine> lines,
     required String observaciones,
     String? clientRequestId,
+    double descuentoGlobal = 0,
   }) async {
     createOrderCalls++;
     createdClientRequestId = clientRequestId;
@@ -135,6 +146,7 @@ class _QueuedCreateOrderApi implements PedidosOrderApi {
     String? vehicleCode,
     String? driverCode,
     String? routeCode,
+    bool cobroPropio = false,
   }) async {
     confirmOrderCalls++;
     return {
@@ -239,6 +251,40 @@ void main() {
       expect(line.importeCosto, 6);
       expect(line.importeMargen, -6);
       expect(line.toJson()['tipoLinea'], 'G');
+    });
+
+    test('serializes line and pie discount without baking pie into unit price',
+        () {
+      final line = OrderLine(
+        codigoArticulo: 'P010',
+        descripcion: 'Producto dto',
+        cantidadEnvases: 2,
+        unidadMedida: 'CAJAS',
+        unidadesCaja: 1,
+        precioVenta: 10,
+        precioCosto: 4,
+        lineDiscountPct: 10,
+      );
+      line.recalculate();
+      final json = line.toJson();
+      expect(json['lineDiscountPct'], 10);
+      expect(json['descuentoLinea'], 10);
+      expect(json['precioVenta'], 10);
+      expect(line.importeVenta, 18);
+
+      final summary = OrderSummary(
+        id: 1,
+        numeroPedido: 1,
+        clienteCode: 'C1',
+        clienteName: 'Cliente',
+        vendedorCode: '57',
+        fecha: '2026-09-10',
+        estado: 'CONFIRMADO',
+        tipoVenta: 'CC',
+        total: 18,
+        syncStatus: 'LOCAL',
+      );
+      expect(summary.isPendienteErp, isTrue);
     });
 
     test('charges caja price once when units are only the box equivalence', () {
@@ -882,11 +928,50 @@ void main() {
       expect(api.confirmedDriverCode, '88');
       expect(api.confirmedRouteCode, 'R9');
       expect(api.createdClientRequestId, isNotNull);
+      expect(api.createdDescuentoGlobal, 0);
+      expect(api.confirmedCobroPropio, isFalse);
       expect(
         api.createdClientRequestId,
         matches(RegExp(r'^[A-Za-z0-9]{8,28}$')),
       );
     });
+
+    test('sends pie discount as field and cobro propio without baking prices',
+        () async {
+      final api = _RecordingOrderApi();
+      final provider = PedidosProvider(
+        orderApi: api,
+        refreshAfterConfirm: false,
+      );
+      provider.setClient('4300010363', 'SUSHI LORCA, S.L.');
+      provider.addLine(
+        Product(
+          code: 'ART-DTO',
+          name: 'Producto dto',
+          stockEnvases: 10,
+          precioTarifa1: 20,
+        ),
+        1,
+        0,
+        'CAJAS',
+        20,
+      );
+      provider.setGlobalDiscount(10);
+      provider.updateLine(0, lineDiscountPct: 5);
+
+      final result = await provider.confirmOrder(
+        '57',
+        cobroPropio: true,
+      );
+
+      expect(result, isNotNull);
+      expect(api.createdDescuentoGlobal, 10);
+      expect(api.confirmedCobroPropio, isTrue);
+      expect(api.createdLines, isNotNull);
+      expect(api.createdLines!.single.precioVenta, 20);
+      expect(api.createdLines!.single.lineDiscountPct, 5);
+    });
+
     test('keeps queued create as a local draft and does not confirm offline',
         () async {
       final api = _QueuedCreateOrderApi();
@@ -949,8 +1034,10 @@ void main() {
 
       expect(result?['queued'], isTrue);
       expect(pending['globalDiscountPct'], 10);
-      expect(queuedLine['precioVenta'], 18);
-      expect(pending['observaciones'].toString(), contains('[DTO 10.0%]'));
+      expect(queuedLine['precioVenta'], 20);
+      expect(queuedLine['lineDiscountPct'], 0);
+      expect(queuedLine['descuentoLinea'], 0);
+      expect(pending['observaciones'].toString(), isNot(contains('[DTO')));
     });
 
     test('guards reentrant confirmation while a save is already in progress',
@@ -1031,6 +1118,7 @@ void main() {
         required List lines,
         required String observaciones,
         required String? clientRequestId,
+        double descuentoGlobal = 0,
       }) async {
         calls++;
         requestIds.add(clientRequestId);
@@ -1044,6 +1132,7 @@ void main() {
         String? vehicleCode,
         String? driverCode,
         String? routeCode,
+        bool cobroPropio = false,
       }) async {
         confirmCalls++;
         return {'id': orderId, 'estado': 'CONFIRMADO'};
@@ -1093,6 +1182,7 @@ void main() {
         required List lines,
         required String observaciones,
         required String? clientRequestId,
+        double descuentoGlobal = 0,
       }) async {
         return {'queued': true, 'syncId': 'transport_queue_1'};
       });
@@ -1103,6 +1193,7 @@ void main() {
         String? vehicleCode,
         String? driverCode,
         String? routeCode,
+        bool cobroPropio = false,
       }) async {
         return {'id': orderId, 'estado': 'CONFIRMADO'};
       });

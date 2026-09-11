@@ -29,6 +29,10 @@ const TABLE_MAPPINGS = Object.freeze({
       liquidationSequence: 'JAVIER.TEST_REPARTIDOR_LIQUIDACION_SEQ',
       commercialCobros: 'JAVIER.TEST_COBROS',
     }),
+    commercial: Object.freeze({
+      pedidosCab: 'JAVIER.TEST_PEDIDOS_CAB',
+      pedidosLin: 'JAVIER.TEST_PEDIDOS_LIN',
+    }),
     routing: Object.freeze({
       order: 'JAVIER.TEST_REPARTIDOR_RUTERO_ORDEN',
       dayOverride: 'JAVIER.TEST_REPARTIDOR_RUTERO_DIA_OVERRIDE',
@@ -62,6 +66,10 @@ const TABLE_MAPPINGS = Object.freeze({
       liquidationSequence: 'JAVIER.REPARTIDOR_LIQUIDACION_SEQ',
       commercialCobros: 'JAVIER.COBROS',
     }),
+    commercial: Object.freeze({
+      pedidosCab: 'JAVIER.PEDIDOS_CAB',
+      pedidosLin: 'JAVIER.PEDIDOS_LIN',
+    }),
     routing: Object.freeze({
       order: 'JAVIER.REPARTIDOR_RUTERO_ORDEN',
       dayOverride: 'JAVIER.REPARTIDOR_RUTERO_DIA_OVERRIDE',
@@ -94,6 +102,10 @@ const TABLE_MAPPINGS = Object.freeze({
       liquidationOutbox: 'TESTMOVIL.LIQDIACUE',
       liquidationSequence: 'TESTMOVIL.LIQDIACUE',
       commercialCobros: 'TESTMOVIL.COBROCABEC',
+    }),
+    commercial: Object.freeze({
+      pedidosCab: 'TESTMOVIL.LIQDIACUE',
+      pedidosLin: 'TESTMOVIL.LIQDIACUE',
     }),
     routing: Object.freeze({
       order: 'TESTMOVIL.LIQUIDIARI',

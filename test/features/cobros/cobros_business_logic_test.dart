@@ -78,6 +78,29 @@ void main() {
       expect(appOrder.paymentReference, 'PEDIDO:22:M-7');
       expect(appOrder.isPedidoAppProvisional, isTrue);
     });
+
+    test('parses cobro riguroso and blocks amounts below the minimum', () {
+      final cobro = CobroPendiente.fromJson({
+        'id': 'cvc_M_1',
+        'referencia': 'M-1',
+        'tipo': 'factura',
+        'tipoDocumento': 'COB',
+        'fecha': '2026-06-10T00:00:00.000Z',
+        'fechaVencimiento': '2026-07-10T00:00:00.000Z',
+        'importeTotal': 100,
+        'importePendiente': 100,
+        'formaPago': 'PG',
+        'cobroRiguroso': true,
+        'porcentajeMinimoCobro': 50,
+      });
+
+      expect(cobro.tipoDocumento, 'COB');
+      expect(cobro.formaPago, 'PG');
+      expect(cobro.cobroRiguroso, isTrue);
+      expect(isValidCobroPaymentAmount(cobro, 20), isFalse);
+      expect(isValidCobroPaymentAmount(cobro, 50), isTrue);
+      expect(isValidCobroPaymentAmount(cobro, 100), isTrue);
+    });
   });
 
   group('Cobros provider params', () {

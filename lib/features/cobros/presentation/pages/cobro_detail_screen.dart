@@ -11,6 +11,14 @@ import 'package:intl/intl.dart';
 /// Smallest balance treated as real payable debt.
 const double cobroPayableEpsilon = 0.0001;
 
+/// Minimum amount allowed when the client has cobro riguroso.
+double minimumCobroAmount(CobroPendiente cobro) {
+  if (!cobro.cobroRiguroso || cobro.porcentajeMinimoCobro <= 0) {
+    return 0;
+  }
+  return cobro.importePendiente * cobro.porcentajeMinimoCobro / 100;
+}
+
 /// Returns true when a document may still be charged.
 bool isCobroPayable(CobroPendiente cobro) {
   return cobro.estado != EstadoCobro.alDia &&
@@ -31,9 +39,15 @@ List<CobroPendiente> cobrosNonPayableItems(Iterable<CobroPendiente> cobros) {
 
 /// Validates a full or partial payment amount before submit.
 bool isValidCobroPaymentAmount(CobroPendiente cobro, double amount) {
-  return isCobroPayable(cobro) &&
-      amount > cobroPayableEpsilon &&
-      amount <= cobro.importePendiente;
+  if (!isCobroPayable(cobro) ||
+      amount <= cobroPayableEpsilon ||
+      amount > cobro.importePendiente) {
+    return false;
+  }
+  final min = minimumCobroAmount(cobro);
+  if (min <= cobroPayableEpsilon) return true;
+  if (amount + cobroPayableEpsilon >= cobro.importePendiente) return true;
+  return amount + cobroPayableEpsilon >= min;
 }
 
 /// Removes successful or no-longer-payable documents after submit.
@@ -86,6 +100,11 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     null: 'Todos',
     'COB': 'Factura directa',
     'CAC': 'Albarán',
+    'PGC': 'PGC',
+    'PGP': 'PGP',
+    'PAG': 'Pagaré',
+    'CNP': 'CNP',
+    'DEV': 'Devolución',
   };
 
   String? _formatDate(DateTime? value) {
@@ -259,8 +278,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       // solo cantidades válidas.
       _partialAmounts.remove(cobroId);
     } else if (!isValidCobroPaymentAmount(cobro, amount)) {
-      _partialErrors[cobroId] =
-          'Maximo: ${_currencyFormat.format(cobro.importePendiente)}';
+      final min = minimumCobroAmount(cobro);
+      _partialErrors[cobroId] = cobro.cobroRiguroso && min > cobroPayableEpsilon
+          ? 'Minimo ${cobro.porcentajeMinimoCobro.toStringAsFixed(0)}%: ${_currencyFormat.format(min)}'
+          : 'Maximo: ${_currencyFormat.format(cobro.importePendiente)}';
       _partialAmounts.remove(cobroId);
     } else {
       _partialErrors.remove(cobroId);
@@ -497,6 +518,30 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
     // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si los documentos crecen mucho.
     final detailRows = <Widget>[
+      if (payableCobros.any((c) => c.cobroRiguroso)) ...[
+        Semantics(
+          label: 'Aviso cobro minimo riguroso',
+          child: Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.warning.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+              border:
+                  Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
+            ),
+            child: Text(
+              'Cliente con cobro riguroso. El importe parcial no puede bajar del minimo.',
+              style: TextStyle(
+                color: AppColors.themedWhite,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ),
+      ],
       if (payableCobros.isNotEmpty) ...[
         _buildSectionHeader(
           'Pendientes de cobro',
@@ -967,11 +1012,14 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     final state = _itemStates[cobro.id] ?? 'NONE';
     final isPartial = state == 'PARCIAL';
     final subtitle = [
+      if (cobro.tipoDocumento.isNotEmpty) cobro.tipoDocumento,
       '${cobro.tipo.label} ${cobro.referencia.isNotEmpty ? cobro.referencia : cobro.id}',
       if (cobro.isPedidoAppProvisional) 'pendiente de ERP',
-      'Vencimiento: ${cobro.fechaVencimiento != null ? DateFormat('dd/MM/yyyy').format(cobro.fechaVencimiento!) : 'N/A'}',
+      'Vto: ${cobro.fechaVencimiento != null ? DateFormat('dd/MM/yyyy').format(cobro.fechaVencimiento!) : 'N/A'}',
+      if ((cobro.formaPago ?? '').isNotEmpty) 'FP: ${cobro.formaPago}',
+      'Pendiente: ${_currencyFormat.format(cobro.importePendiente)}',
       if (cobro.isVencido) 'Mora ${cobro.diasMora}d',
-    ].join(' - ');
+    ].join(' · ');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),

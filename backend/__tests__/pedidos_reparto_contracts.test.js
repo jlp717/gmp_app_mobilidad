@@ -224,6 +224,46 @@ describe('pedidos reparto confirmation contract', () => {
     expect(params).toEqual(expect.arrayContaining(['2026-05-05', 5, 5, 2026, '02', '57']));
   });
 
+  test('cobro propio leaves driver empty so the order stays out of rutero', async () => {
+    mockGetClientDays.mockReturnValue({
+      visitDays: ['lunes'],
+      deliveryDays: ['martes', 'jueves'],
+      deliveryDaysShort: 'MJ',
+    });
+    mockSuccessfulConfirmationQueries();
+
+    await pedidosService.confirmOrder(42, 'CC', {
+      deliveryDate: '2026-05-05',
+      cobroPropio: true,
+    });
+
+    const updateCall = mockQueryWithParams.mock.calls.find(([sql]) =>
+      /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql),
+    );
+    expect(updateCall).toBeDefined();
+    const params = updateCall[1];
+    expect(params).toEqual(expect.arrayContaining(['2026-05-05', 5, 5, 2026, '', '']));
+    expect(params).not.toEqual(expect.arrayContaining(['02', '57']));
+  });
+
+  test('rutero overlay reads confirmed anteroom pedidos excluding RUTERO_CONFIG ORDEN < 0', async () => {
+    mockQueryWithParams.mockResolvedValue([]);
+    await pedidosService.getConfirmedPedidosForRutero({
+      repartidorIds: ['57'],
+      day: 10,
+      month: 9,
+      year: 2026,
+    });
+    const overlayCall = mockQueryWithParams.mock.calls.find(([sql]) =>
+      /FROM\s+JAVIER\.PEDIDOS_CAB\s+C/i.test(sql) && /RUTERO_CONFIG/i.test(sql),
+    );
+    expect(overlayCall).toBeDefined();
+    expect(overlayCall[0]).toMatch(/TRIM\(C\.ESTADO\)\s*=\s*'CONFIRMADO'/i);
+    expect(overlayCall[0]).toMatch(/ORDEN\s*<\s*0/i);
+    expect(overlayCall[0]).toMatch(/CODIGOREPARTIDOR/i);
+    expect(overlayCall[1]).toEqual(['57', 10, 9, 2026]);
+  });
+
   test('default confirmation target stays in JAVIER and does not write DSEDAC order tables', async () => {
     mockGetClientDays.mockReturnValue({
       deliveryDays: ['martes', 'jueves'],

@@ -6,6 +6,12 @@
  */
 
 const crypto = require('crypto');
+const {
+    parseLineDiscountPct,
+    parseGlobalDiscountPct,
+    applyPctToAmount,
+    isCobroPropio,
+} = require('./discounts');
 const { query, queryWithParams, getPool, initDb } = require('../../config/db');
 const {
     db2Schema,
@@ -16,6 +22,7 @@ const {
     db2InsertSql,
 } = require('../../utils/db2-identifiers');
 const {
+    db2AppTable,
     getDb2WriteSchema,
     getDb2WriteSchemaRequested,
     getDb2WriteSchemaDiagnostic,
@@ -24,6 +31,8 @@ const {
     assertMoneyFitsWriteSchema,
 } = require('../../utils/db2-schemas');
 const ERP_SCHEMA = getDb2WriteSchema();
+const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
+const PEDIDOS_LIN_TABLE = db2AppTable('PEDIDOS_LIN');
 const PRICING_CONFIG_SCHEMA = 'JAVIER';
 const BOLSA_PRODUCT_PRICE_TABLE = `${PRICING_CONFIG_SCHEMA}.BOLSA_PRODUCTO_PRECIO`;
 const CLIENT_SPECIAL_PRICE_TABLE = 'DSEDAC.PES';
@@ -45,7 +54,7 @@ const ACTIVE_STOCK_RESERVATION_CONDITION = `
 )`;
 const SELECT_ORDER_VENDOR_FOR_AUTH_SQL = ERP_SCHEMA === 'DSEDAC'
     ? 'SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR, TRIM(CODIGOCLIENTEALBARAN) AS CODIGOCLIENTE FROM DSEDAC.PEDIDOS_CAB WHERE ID = ?'
-    : "SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR, TRIM(COALESCE(NULLIF(CODIGOCLIENTE, ''), CODIGOCLIENTEALBARAN)) AS CODIGOCLIENTE FROM JAVIER.PEDIDOS_CAB WHERE ID = ?";
+    : `SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR, TRIM(COALESCE(NULLIF(CODIGOCLIENTE, ''), CODIGOCLIENTEALBARAN)) AS CODIGOCLIENTE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`;
 const logger = require('../../middleware/logger');
 const { cachedQuery, invalidateOnMutation } = require('../query-optimizer');
 const { redisCache, TTL } = require('../redis-cache');
@@ -92,7 +101,7 @@ const productsBreaker = new CircuitBreaker({
 // ============================================================================
 
 const CREATE_PEDIDOS_CAB = `
-CREATE TABLE ${ERP_SCHEMA}.PEDIDOS_CAB (
+CREATE TABLE ${PEDIDOS_CAB_TABLE} (
     ID INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     SUBEMPRESA CHAR(3) DEFAULT 'GMP',
     EJERCICIO NUMERIC(4) NOT NULL,
@@ -142,7 +151,7 @@ CREATE TABLE ${ERP_SCHEMA}.PEDIDOS_CAB (
 )`;
 
 const CREATE_PEDIDOS_LIN = `
-CREATE TABLE ${ERP_SCHEMA}.PEDIDOS_LIN (
+CREATE TABLE ${PEDIDOS_LIN_TABLE} (
     ID INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     PEDIDO_ID INTEGER NOT NULL,
     SECUENCIA NUMERIC(4) DEFAULT 1,
@@ -462,7 +471,7 @@ function buildCreateOrderPayloadHash({
         precioVenta: Number(parseFloat(line.precioVenta ?? line.precio ?? line.PRECIOVENTA) || 0).toFixed(4),
         unidadMedida: trimString(line.unidadMedida || line.UNIDADMEDIDA || 'CAJAS'),
         claseLinea: trimString(line.claseLinea || line.CLASELINEA || 'VT'),
-        descuentoLinea: Number(parseFloat(line.descuentoLinea ?? line.DESCUENTO_LINEA) || 0).toFixed(2),
+        descuentoLinea: Number(parseLineDiscountPct(line)).toFixed(2),
     })).sort((a, b) => a.codigoArticulo.localeCompare(b.codigoArticulo));
 
     const payload = {
@@ -470,7 +479,7 @@ function buildCreateOrderPayloadHash({
         vendedorCode: resolvePedidoActorCodes({ CODIGOVENDEDOR: vendedorCode }).vendedor,
         tipoventa: normalizePedidoSaleType(tipoventa),
         observaciones: trimString(observaciones),
-        descuentoGlobal: Number(parseFloat(descuentoGlobal) || 0).toFixed(2),
+        descuentoGlobal: Number(parseGlobalDiscountPct({ descuentoGlobal })).toFixed(2),
         lines: canonicalLines,
     };
 
@@ -652,7 +661,7 @@ async function getOrderVendorForAuth(orderId) {
 
 async function getOrderStatusForUpdate(orderId) {
     const rows = await queryWithParams(
-        `SELECT TRIM(ESTADO) AS ESTADO FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`,
+        `SELECT TRIM(ESTADO) AS ESTADO FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
         [orderId],
     );
     if (!rows || rows.length === 0) {
@@ -1683,6 +1692,7 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
         'CODIGORUTA',
         'CODIGOFORMAPAGO', 'CODIGOTARIFA', 'CODIGOALMACEN', 'RECARGOSN',
         'IMPORTEBASEIMPONIBLEBRUTA1', 'IMPORTEBASEIMPONIBLE1', 'IMPORTEBRUTO',
+        'PORCENTAJEDESCUENTO1',
         'IMPORTETOTAL', 'IMPORTECOSTO', 'IMPORTEMARGEN',
         'SITUACIONPEDIDO', 'CODIGOOPERACION', 'OBSERVACION1', 'OBSERVACION2',
         'DIACREACION', 'MESCREACION', 'ANOCREACION', 'HORACREACION',
@@ -1698,6 +1708,7 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
         truncate(header.CODIGOFORMAPAGO || '02', 2),
         integerValue(header.CODIGOTARIFA) || 1, integerValue(header.CODIGOALMACEN) || 1, 'N',
         base, base, base,
+        parseGlobalDiscountPct(header),
         total, costo, margen,
         target.situacionPedido, target.codigoOperacion, observaciones[0], observaciones[1],
         docDay, docMonth, docYear, hora,
@@ -1729,7 +1740,7 @@ function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, r
         'CODIGORUTA', 'CODIGOFORMAPAGO', 'CODIGOTARIFA', 'CODIGOALMACEN', 'RECARGOSN',
         'TIPOLINEA', 'TIPOVENTA', 'CLASELINEA', 'CODIGOARTICULO', 'DESCRIPCION',
         'CODIGOIVA',
-        'CANTIDADENVASES', 'CANTIDADUNIDADES', 'PRECIOVENTA', 'IMPORTEVENTA',
+        'CANTIDADENVASES', 'CANTIDADUNIDADES', 'PRECIOVENTA', 'PORCENTAJEDESCUENTO', 'IMPORTEVENTA',
         'PRECIOCOSTO', 'IMPORTECOSTO', 'CAJASUNIDADES', 'PRECIOTARIFACLIENTE',
         'PRECIOTARIFA01', 'CODIGOESTADO',
     ];
@@ -1750,6 +1761,7 @@ function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, r
         numberValue(line.CANTIDADENVASES),
         numberValue(line.CANTIDADUNIDADES),
         numberValue(line.PRECIOVENTA),
+        parseLineDiscountPct(line),
         roundMoney(line.IMPORTEVENTA),
         numberValue(line.PRECIOCOSTO),
         roundMoney(line.IMPORTECOSTO),
@@ -1892,7 +1904,7 @@ function buildConfirmOrderUpdate({ id, deliveryPlan, vehicleCode, driverCode, ro
         integerValue(ref.terminal),
         integerValue(ref.numero),
     ];
-    let sql = `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB SET ESTADO = 'CONFIRMADO',
+    let sql = `UPDATE ${PEDIDOS_CAB_TABLE} SET ESTADO = 'CONFIRMADO',
         UPDATED_AT = CURRENT_TIMESTAMP,
         FECHAREPARTO = ?,
         DIAREPARTO = ?,
@@ -1970,8 +1982,8 @@ async function refreshDraftStockReservation(orderId, executor = (sql, params) =>
         `SELECT TRIM(L.CODIGOARTICULO) AS CODIGOARTICULO,
                 SUM(L.CANTIDADENVASES) AS CANTIDADENVASES,
                 SUM(L.CANTIDADUNIDADES) AS CANTIDADUNIDADES
-           FROM ${ERP_SCHEMA}.PEDIDOS_LIN L
-           JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON C.ID = L.PEDIDO_ID
+           FROM ${PEDIDOS_LIN_TABLE} L
+           JOIN ${PEDIDOS_CAB_TABLE} C ON C.ID = L.PEDIDO_ID
           WHERE L.PEDIDO_ID = ?
             AND TRIM(C.ESTADO) IN (${DRAFT_STOCK_RESERVATION_STATES_SQL})
           GROUP BY TRIM(L.CODIGOARTICULO)`,
@@ -1988,9 +2000,11 @@ async function initPedidosTables() {
     const pool = getPool();
     if (!pool) { logger.warn('[PEDIDOS] No DB pool available for init'); return; }
 
+    const [pedidosCabSchema, pedidosCabTable] = PEDIDOS_CAB_TABLE.split('.');
+    const [pedidosLinSchema, pedidosLinTable] = PEDIDOS_LIN_TABLE.split('.');
     const tables = [
-        { schema: ERP_SCHEMA, table: 'PEDIDOS_CAB', name: `${ERP_SCHEMA}.PEDIDOS_CAB`, ddl: CREATE_PEDIDOS_CAB },
-        { schema: ERP_SCHEMA, table: 'PEDIDOS_LIN', name: `${ERP_SCHEMA}.PEDIDOS_LIN`, ddl: CREATE_PEDIDOS_LIN },
+        { schema: pedidosCabSchema, table: pedidosCabTable, name: PEDIDOS_CAB_TABLE, ddl: CREATE_PEDIDOS_CAB },
+        { schema: pedidosLinSchema, table: pedidosLinTable, name: PEDIDOS_LIN_TABLE, ddl: CREATE_PEDIDOS_LIN },
         { schema: ERP_SCHEMA, table: 'PEDIDOS_SEQ', name: `${ERP_SCHEMA}.PEDIDOS_SEQ`, ddl: CREATE_PEDIDOS_SEQ },
         { schema: ERP_SCHEMA, table: 'PEDIDOS_STOCK_RESERVE', name: `${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE`, ddl: CREATE_PEDIDOS_STOCK_RESERVE },
         { schema: ERP_SCHEMA, table: 'PEDIDO_IDEMPOTENCY', name: `${ERP_SCHEMA}.PEDIDO_IDEMPOTENCY`, ddl: CREATE_PEDIDO_IDEMPOTENCY },
@@ -2015,38 +2029,41 @@ async function initPedidosTables() {
 
         // Ensure additive PEDIDOS_CAB columns exist in older JAVIER installs.
         const additiveColumns = [
-            { table: 'PEDIDOS_CAB', name: 'DESCUENTO_GLOBAL', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN DESCUENTO_GLOBAL DECIMAL(5,2) DEFAULT 0` },
-            { table: 'PEDIDOS_CAB', name: 'ORIGEN', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN ORIGEN CHAR(1) DEFAULT 'A'` },
-            { table: 'PEDIDOS_CAB', name: 'FECHAREPARTO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN FECHAREPARTO DATE` },
-            { table: 'PEDIDOS_CAB', name: 'DIAREPARTO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN DIAREPARTO NUMERIC(2) DEFAULT 0` },
-            { table: 'PEDIDOS_CAB', name: 'MESREPARTO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN MESREPARTO NUMERIC(2) DEFAULT 0` },
-            { table: 'PEDIDOS_CAB', name: 'ANOREPARTO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN ANOREPARTO NUMERIC(4) DEFAULT 0` },
-            { table: 'PEDIDOS_CAB', name: 'CODIGOREPARTIDOR', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN CODIGOREPARTIDOR CHAR(2) DEFAULT ' '` },
-            { table: 'PEDIDOS_CAB', name: 'CODIGOVEHICULO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN CODIGOVEHICULO CHAR(10) DEFAULT ' '` },
-            { table: 'PEDIDOS_CAB', name: 'RUTA', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN RUTA VARCHAR(10) DEFAULT ''` },
-            { table: 'PEDIDOS_CAB', name: 'DIASREPARTO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN DIASREPARTO VARCHAR(80) DEFAULT ''` },
-            { table: 'PEDIDOS_CAB', name: 'REPARTO_VALIDADO_SN', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN REPARTO_VALIDADO_SN CHAR(1) DEFAULT 'N'` },
-            { table: 'PEDIDOS_CAB', name: 'REPARTO_VALIDADO_AT', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN REPARTO_VALIDADO_AT TIMESTAMP` },
-            { table: 'PEDIDOS_CAB', name: 'TARGET_SCHEMA', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN TARGET_SCHEMA CHAR(10) DEFAULT 'JAVIER'` },
-            { table: 'PEDIDOS_CAB', name: 'SYNC_STATUS', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN SYNC_STATUS VARCHAR(16) DEFAULT 'LOCAL'` },
-            { table: 'PEDIDOS_CAB', name: 'SYNC_AT', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN SYNC_AT TIMESTAMP` },
-            { table: 'PEDIDOS_CAB', name: 'SYSTEM_SUBEMPRESAPEDIDO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN SYSTEM_SUBEMPRESAPEDIDO CHAR(3) DEFAULT ' '` },
-            { table: 'PEDIDOS_CAB', name: 'SYSTEM_EJERCICIOPEDIDO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN SYSTEM_EJERCICIOPEDIDO NUMERIC(4) DEFAULT 0` },
-            { table: 'PEDIDOS_CAB', name: 'SYSTEM_SERIEPEDIDO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN SYSTEM_SERIEPEDIDO CHAR(1) DEFAULT ' '` },
-            { table: 'PEDIDOS_CAB', name: 'SYSTEM_TERMINALPEDIDO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN SYSTEM_TERMINALPEDIDO NUMERIC(3) DEFAULT 0` },
-            { table: 'PEDIDOS_CAB', name: 'SYSTEM_NUMEROPEDIDO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN SYSTEM_NUMEROPEDIDO NUMERIC(6) DEFAULT 0` },
-            { table: 'PEDIDOS_LIN', name: 'DESCUENTO_LINEA', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_LIN ADD COLUMN DESCUENTO_LINEA DECIMAL(5,2) DEFAULT 0` },
-            { table: 'PEDIDOS_LIN', name: 'UNIDADESFRACCION', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_LIN ADD COLUMN UNIDADESFRACCION NUMERIC(10,5) DEFAULT 0` },
-            { table: 'PEDIDOS_LIN', name: 'CODIGOIVA', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_LIN ADD COLUMN CODIGOIVA CHAR(1) DEFAULT '2'` },
+            { table: 'PEDIDOS_CAB', name: 'DESCUENTO_GLOBAL', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN DESCUENTO_GLOBAL DECIMAL(5,2) DEFAULT 0` },
+            { table: 'PEDIDOS_CAB', name: 'ORIGEN', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN ORIGEN CHAR(1) DEFAULT 'A'` },
+            { table: 'PEDIDOS_CAB', name: 'FECHAREPARTO', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN FECHAREPARTO DATE` },
+            { table: 'PEDIDOS_CAB', name: 'DIAREPARTO', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN DIAREPARTO NUMERIC(2) DEFAULT 0` },
+            { table: 'PEDIDOS_CAB', name: 'MESREPARTO', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN MESREPARTO NUMERIC(2) DEFAULT 0` },
+            { table: 'PEDIDOS_CAB', name: 'ANOREPARTO', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN ANOREPARTO NUMERIC(4) DEFAULT 0` },
+            { table: 'PEDIDOS_CAB', name: 'CODIGOREPARTIDOR', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN CODIGOREPARTIDOR CHAR(2) DEFAULT ' '` },
+            { table: 'PEDIDOS_CAB', name: 'CODIGOVEHICULO', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN CODIGOVEHICULO CHAR(10) DEFAULT ' '` },
+            { table: 'PEDIDOS_CAB', name: 'RUTA', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN RUTA VARCHAR(10) DEFAULT ''` },
+            { table: 'PEDIDOS_CAB', name: 'DIASREPARTO', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN DIASREPARTO VARCHAR(80) DEFAULT ''` },
+            { table: 'PEDIDOS_CAB', name: 'REPARTO_VALIDADO_SN', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN REPARTO_VALIDADO_SN CHAR(1) DEFAULT 'N'` },
+            { table: 'PEDIDOS_CAB', name: 'REPARTO_VALIDADO_AT', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN REPARTO_VALIDADO_AT TIMESTAMP` },
+            { table: 'PEDIDOS_CAB', name: 'TARGET_SCHEMA', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN TARGET_SCHEMA CHAR(10) DEFAULT 'JAVIER'` },
+            { table: 'PEDIDOS_CAB', name: 'SYNC_STATUS', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN SYNC_STATUS VARCHAR(16) DEFAULT 'LOCAL'` },
+            { table: 'PEDIDOS_CAB', name: 'SYNC_AT', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN SYNC_AT TIMESTAMP` },
+            { table: 'PEDIDOS_CAB', name: 'SYSTEM_SUBEMPRESAPEDIDO', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN SYSTEM_SUBEMPRESAPEDIDO CHAR(3) DEFAULT ' '` },
+            { table: 'PEDIDOS_CAB', name: 'SYSTEM_EJERCICIOPEDIDO', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN SYSTEM_EJERCICIOPEDIDO NUMERIC(4) DEFAULT 0` },
+            { table: 'PEDIDOS_CAB', name: 'SYSTEM_SERIEPEDIDO', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN SYSTEM_SERIEPEDIDO CHAR(1) DEFAULT ' '` },
+            { table: 'PEDIDOS_CAB', name: 'SYSTEM_TERMINALPEDIDO', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN SYSTEM_TERMINALPEDIDO NUMERIC(3) DEFAULT 0` },
+            { table: 'PEDIDOS_CAB', name: 'SYSTEM_NUMEROPEDIDO', ddl: `ALTER TABLE ${PEDIDOS_CAB_TABLE} ADD COLUMN SYSTEM_NUMEROPEDIDO NUMERIC(6) DEFAULT 0` },
+            { table: 'PEDIDOS_LIN', name: 'DESCUENTO_LINEA', ddl: `ALTER TABLE ${PEDIDOS_LIN_TABLE} ADD COLUMN DESCUENTO_LINEA DECIMAL(5,2) DEFAULT 0` },
+            { table: 'PEDIDOS_LIN', name: 'PORCENTAJEDESCUENTO', ddl: `ALTER TABLE ${PEDIDOS_LIN_TABLE} ADD COLUMN PORCENTAJEDESCUENTO NUMERIC(5,2) DEFAULT 0` },
+            { table: 'PEDIDOS_LIN', name: 'UNIDADESFRACCION', ddl: `ALTER TABLE ${PEDIDOS_LIN_TABLE} ADD COLUMN UNIDADESFRACCION NUMERIC(10,5) DEFAULT 0` },
+            { table: 'PEDIDOS_LIN', name: 'CODIGOIVA', ddl: `ALTER TABLE ${PEDIDOS_LIN_TABLE} ADD COLUMN CODIGOIVA CHAR(1) DEFAULT '2'` },
         ];
 
         for (const col of additiveColumns) {
+            const targetSchema = col.table === 'PEDIDOS_LIN' ? pedidosLinSchema : pedidosCabSchema;
+            const targetTable = col.table === 'PEDIDOS_LIN' ? pedidosLinTable : pedidosCabTable;
             try {
-                if (await columnExists(conn, ERP_SCHEMA, col.table, col.name)) continue;
+                if (await columnExists(conn, targetSchema, targetTable, col.name)) continue;
                 await conn.query(col.ddl);
-                logger.info(`[PEDIDOS] Added missing ${col.name} column to ${col.table}`);
+                logger.info(`[PEDIDOS] Added missing ${col.name} column to ${targetSchema}.${targetTable}`);
             } catch (colErr) {
-                logger.warn(`[PEDIDOS] Could not add ${col.name} column to ${col.table}: ${colErr.message}`);
+                logger.warn(`[PEDIDOS] Could not add ${col.name} column to ${targetTable}: ${colErr.message}`);
                 try { await conn.close(); } catch (_) { /* ignore */ }
                 conn = await pool.connect();
             }
@@ -2199,7 +2216,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
                 SUM(SR.CANTIDADENVASES) AS RES_ENV,
                 SUM(SR.CANTIDADUNIDADES) AS RES_UNI
             FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
-            JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
+            JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
             JOIN ART_PAGE P ON SR.CODIGOARTICULO = P.CODIGOARTICULO
             GROUP BY SR.CODIGOARTICULO
         ), LAST_COST AS (
@@ -2591,7 +2608,7 @@ async function getStock(code, almacen = 1, options = {}) {
             SELECT COALESCE(SUM(SR.CANTIDADENVASES), 0) AS RES_ENVASES,
                    COALESCE(SUM(SR.CANTIDADUNIDADES), 0) AS RES_UNIDADES
             FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
-            JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID
+            JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID
             WHERE TRIM(SR.CODIGOARTICULO) = ?
               AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
               ${excludeCurrentPedidoSql}
@@ -2654,7 +2671,7 @@ async function getStockBatch(codes, almacen = 1, options = {}) {
                            COALESCE(SUM(SR.CANTIDADENVASES), 0) AS RES_ENVASES,
                            COALESCE(SUM(SR.CANTIDADUNIDADES), 0) AS RES_UNIDADES
                      FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
-                      JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID
+                      JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID
                      WHERE ${ACTIVE_STOCK_RESERVATION_CONDITION}
                        AND TRIM(SR.CODIGOARTICULO) IN (${placeholders})
                        ${excludeCurrentPedidoSql}
@@ -2801,7 +2818,7 @@ function buildLocalPedidoCabInsert({
     ];
 
     return {
-        sql: db2InsertSql(`${ERP_SCHEMA}.PEDIDOS_CAB`, columns),
+        sql: db2InsertSql(`${PEDIDOS_CAB_TABLE}`, columns),
         params,
     };
 }
@@ -2843,7 +2860,7 @@ function buildLegacyPedidoCabInsert({
     }
 
     return {
-        sql: db2InsertSql(`${ERP_SCHEMA}.PEDIDOS_CAB`, columns),
+        sql: db2InsertSql(`${PEDIDOS_CAB_TABLE}`, columns),
         params,
     };
 }
@@ -2887,6 +2904,7 @@ function buildLocalPedidoLineInsert({
         'CODIGOVENDEDORCOBRO', 'CODIGOPROMOTORPREVENTA', 'CODIGOCOMERCIAL',
         'CODIGOFORMAPAGO', 'CODIGOTARIFA', 'CODIGOALMACEN', 'RECARGOSN',
         'CAJASUNIDADES', 'PRECIOTARIFA01', 'CODIGOESTADO',
+        'PORCENTAJEDESCUENTO',
     ];
     const params = [
         pedidoId, sequence,
@@ -2907,12 +2925,13 @@ function buildLocalPedidoLineInsert({
         actor.vendedorCobro, actor.promotor, actor.comercial,
         formaPago, tarifa, almacen, 'N',
         cajaUnidadFlag(amounts.unidadMedida), parseFloat(line.precioTarifa) || 0, '',
+        amounts.descuentoLinea,
     ];
 
     return {
-        table: `${ERP_SCHEMA}.PEDIDOS_LIN`,
+        table: `${PEDIDOS_LIN_TABLE}`,
         columns,
-        sql: db2InsertSql(`${ERP_SCHEMA}.PEDIDOS_LIN`, columns),
+        sql: db2InsertSql(`${PEDIDOS_LIN_TABLE}`, columns),
         params,
     };
 }
@@ -2948,9 +2967,9 @@ function buildLegacyPedidoLineInsert({
     ];
 
     return {
-        table: `${ERP_SCHEMA}.PEDIDOS_LIN`,
+        table: `${PEDIDOS_LIN_TABLE}`,
         columns,
-        sql: db2InsertSql(`${ERP_SCHEMA}.PEDIDOS_LIN`, columns),
+        sql: db2InsertSql(`${PEDIDOS_LIN_TABLE}`, columns),
         params,
     };
 }
@@ -3051,6 +3070,10 @@ async function createOrder({
     const effectiveFormaPago = truncate(trimString(formaPago) || clientDefaults.formaPago || '02', 2);
     const effectiveTarifa = integerValue(tarifa) || clientDefaults.tarifa || 1;
     const effectiveAlmacen = integerValue(almacen) || 1;
+    const effectiveDescuentoGlobal = parseGlobalDiscountPct({
+        descuentoGlobal,
+        globalDiscountPct: arguments[0] && arguments[0].globalDiscountPct,
+    });
 
     const normalizedIdempotencyKey = idempotencyKey
         ? normalizePedidoIdempotencyKey(idempotencyKey)
@@ -3065,7 +3088,7 @@ async function createOrder({
         vendedorCode: effectiveVendedorCode,
         tipoventa: effectiveSaleType,
         observaciones,
-        descuentoGlobal,
+        descuentoGlobal: effectiveDescuentoGlobal,
         lines,
     });
     logger.info(`[PEDIDOS] createOrder stage=idempotency_lookup lineCount=${lineCount} durationMs=${Date.now() - idempotencyT0}`);
@@ -3108,7 +3131,7 @@ async function createOrder({
             almacen: effectiveAlmacen,
             tipoventa: effectiveSaleType,
             observaciones,
-            descuentoGlobal,
+            descuentoGlobal: effectiveDescuentoGlobal,
             origen,
             userId,
         }));
@@ -3116,7 +3139,7 @@ async function createOrder({
     } catch (cabErr) {
         // If column not found (42S22), retry without ORIGEN
         if (isColumnNotFound(cabErr)) {
-            logger.warn(`[PEDIDOS] ERP-compatible columns missing in ${ERP_SCHEMA}.PEDIDOS_CAB, using legacy insert`);
+            logger.warn(`[PEDIDOS] ERP-compatible columns missing in ${PEDIDOS_CAB_TABLE}, using legacy insert`);
             ({ sql: cabSql, params: cabParams } = buildLegacyPedidoCabInsert({
                 ejercicio,
                 numeroPedido,
@@ -3132,7 +3155,7 @@ async function createOrder({
                 almacen: effectiveAlmacen,
                 tipoventa: effectiveSaleType,
                 observaciones,
-                descuentoGlobal,
+                descuentoGlobal: effectiveDescuentoGlobal,
                 origen,
                 includeOrigen: true,
             }));
@@ -3146,7 +3169,7 @@ async function createOrder({
     // Retrieve the generated ID
     const idLookupT0 = Date.now();
     const idRows = await queryWithParams(
-        `SELECT ID FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE EJERCICIO = ? AND NUMEROPEDIDO = ? ORDER BY ID DESC FETCH FIRST 1 ROW ONLY`,
+        `SELECT ID FROM ${PEDIDOS_CAB_TABLE} WHERE EJERCICIO = ? AND NUMEROPEDIDO = ? ORDER BY ID DESC FETCH FIRST 1 ROW ONLY`,
         [ejercicio, numeroPedido]
     );
     const pedidoId = idRows[0]?.ID;
@@ -3183,17 +3206,18 @@ async function createOrder({
         let cantidadUnidades = parseFloat(line.cantidadUnidades) || parseFloat(line.cantidad) || 0;
         let unidadesCaja = parseFloat(line.unidadesCaja) || 1;
         let unidadMedida = line.unidadMedida || 'CAJAS';
-        const descuentoLinea = Math.min(100, Math.max(0, parseFloat(line.descuentoLinea) || 0));
+        const descuentoLinea = parseLineDiscountPct(line);
         const precioBase = parseFloat(line.precio) || parseFloat(line.precioVenta) || 0;
-        let precio = descuentoLinea > 0 ? Math.round(precioBase * (1 - descuentoLinea / 100) * 10000) / 10000 : precioBase;
+        const precio = precioBase;
 
-        const importeVenta = calculateLineImporte({
+        const importeBruto = calculateLineImporte({
             unidadMedida,
             cantidadEnvases,
             cantidadUnidades,
             unidadesCaja,
             precioVenta: precio
         });
+        const importeVenta = applyPctToAmount(importeBruto, descuentoLinea);
         const billingQty = isBoxUnidadMedida(unidadMedida) ? cantidadEnvases : cantidadUnidades;
         const importeCosto = parseFloat(line.importeCosto) || Math.round((billingQty * (parseFloat(line.precioCosto) || 0)) * 100) / 100;
         const importeMargen = importeVenta - importeCosto;
@@ -3244,11 +3268,11 @@ async function createOrder({
         try {
             await executeBulkInsert((sql, params) => queryWithParams(sql, params, false), lineInserts, {
                 chunkSize: DB2_BULK_INSERT_CHUNK_SIZE,
-                label: `${ERP_SCHEMA}.PEDIDOS_LIN`,
+                label: `${PEDIDOS_LIN_TABLE}`,
             });
         } catch (lineInsertErr) {
             if (!isColumnNotFound(lineInsertErr)) throw lineInsertErr;
-            logger.warn(`[PEDIDOS] ERP-compatible columns missing in ${ERP_SCHEMA}.PEDIDOS_LIN, using legacy line bulk insert`);
+            logger.warn(`[PEDIDOS] ERP-compatible columns missing in ${PEDIDOS_LIN_TABLE}, using legacy line bulk insert`);
             const legacyLineInserts = lineContexts.map(({ line, amounts, sequence }) => buildLegacyPedidoLineInsert({
                 pedidoId,
                 sequence,
@@ -3258,7 +3282,7 @@ async function createOrder({
             }));
             await executeBulkInsert((sql, params) => queryWithParams(sql, params, false), legacyLineInserts, {
                 chunkSize: DB2_BULK_INSERT_CHUNK_SIZE,
-                label: `${ERP_SCHEMA}.PEDIDOS_LIN_LEGACY`,
+                label: `${PEDIDOS_LIN_TABLE}_LEGACY`,
             });
         }
         logger.info(`[PEDIDOS] createOrder stage=line_inserts pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - lineInsertT0}`);
@@ -3266,8 +3290,8 @@ async function createOrder({
         // COMPENSATION: If lines fail, delete the header to avoid orphaned orders
         logger.error(`[PEDIDOS] Failed to insert lines for order ${pedidoId}, rolling back header: ${linErr.message}`);
         try {
-            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE PEDIDO_ID = ?`, [pedidoId], false);
-            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`, [pedidoId], false);
+            await queryWithParams(`DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
+            await queryWithParams(`DELETE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`, [pedidoId], false);
             logger.info(`[PEDIDOS] Successfully rolled back orphaned header ID=${pedidoId}`);
         } catch (delErr) {
             logger.error(`[PEDIDOS] CRITICAL: Failed to rollback orphaned header ID=${pedidoId}: ${delErr.message}`);
@@ -3284,8 +3308,8 @@ async function createOrder({
     } catch (totalErr) {
         logger.error(`[PEDIDOS] Failed to recalculate totals for order ${pedidoId}, rolling back draft: ${totalErr.message}`);
         try {
-            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE PEDIDO_ID = ?`, [pedidoId], false);
-            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`, [pedidoId], false);
+            await queryWithParams(`DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
+            await queryWithParams(`DELETE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`, [pedidoId], false);
             logger.info(`[PEDIDOS] Successfully rolled back draft ID=${pedidoId} after totals failure`);
         } catch (rollbackErr) {
             logger.error(`[PEDIDOS] CRITICAL: Failed to rollback draft ID=${pedidoId} after totals failure: ${rollbackErr.message}`);
@@ -3307,8 +3331,8 @@ async function createOrder({
         logger.error(`[PEDIDOS] Failed to reserve stock for draft ${pedidoId}, rolling back draft: ${reserveErr.message}`);
         try {
             await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [pedidoId], false);
-            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE PEDIDO_ID = ?`, [pedidoId], false);
-            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`, [pedidoId], false);
+            await queryWithParams(`DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
+            await queryWithParams(`DELETE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`, [pedidoId], false);
             logger.info(`[PEDIDOS] Successfully rolled back draft ID=${pedidoId} after stock reservation failure`);
         } catch (rollbackErr) {
             logger.error(`[PEDIDOS] CRITICAL: Failed to rollback draft ID=${pedidoId} after stock reservation failure: ${rollbackErr.message}`);
@@ -3348,8 +3372,8 @@ async function createOrder({
             logger.error(`[PEDIDOS] Failed to persist dedupe key for draft ${pedidoId}, rolling back draft: ${storeErr.message}`);
             try {
                 await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [pedidoId], false);
-                await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE PEDIDO_ID = ?`, [pedidoId], false);
-                await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`, [pedidoId], false);
+                await queryWithParams(`DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
+                await queryWithParams(`DELETE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`, [pedidoId], false);
                 logger.info(`[PEDIDOS] Successfully rolled back draft ID=${pedidoId} after idempotency store failure`);
             } catch (rollbackErr) {
                 logger.error(`[PEDIDOS] CRITICAL: Failed to rollback draft ID=${pedidoId} after idempotency store failure: ${rollbackErr.message}`);
@@ -3408,17 +3432,18 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             TRIM(C.SYSTEM_SUBEMPRESAPEDIDO) AS SYSTEM_SUBEMPRESAPEDIDO,
             C.SYSTEM_EJERCICIOPEDIDO, TRIM(C.SYSTEM_SERIEPEDIDO) AS SYSTEM_SERIEPEDIDO,
             C.SYSTEM_TERMINALPEDIDO, C.SYSTEM_NUMEROPEDIDO,
+            COALESCE(C.DESCUENTO_GLOBAL, 0) AS DESCUENTO_GLOBAL,
             C.CREATED_AT, C.UPDATED_AT,
             COALESCE(LC.LINE_COUNT, 0) AS LINE_COUNT,
             COALESCE(BM.BOLSA_MOV_COUNT, 0) AS BOLSA_MOV_COUNT,
             COALESCE(BM.BOLSA_NETO, 0) AS BOLSA_NETO
-        FROM ${ERP_SCHEMA}.PEDIDOS_CAB C
+        FROM ${PEDIDOS_CAB_TABLE} C
         LEFT JOIN (
             SELECT PEDIDO_ID,
                    COUNT(*) AS LINE_COUNT,
                    COALESCE(SUM(IMPORTEVENTA), 0) AS LINE_TOTAL,
                    COALESCE(SUM(IMPORTECOSTO), 0) AS LINE_COST
-            FROM ${ERP_SCHEMA}.PEDIDOS_LIN
+            FROM ${PEDIDOS_LIN_TABLE}
             GROUP BY PEDIDO_ID
         ) LC ON C.ID = LC.PEDIDO_ID
         LEFT JOIN (
@@ -3726,7 +3751,7 @@ async function getOrderDetail(orderId, options = {}) {
             SYSTEM_EJERCICIOPEDIDO, TRIM(SYSTEM_SERIEPEDIDO) AS SYSTEM_SERIEPEDIDO,
             SYSTEM_TERMINALPEDIDO, SYSTEM_NUMEROPEDIDO,
             CREATED_AT, UPDATED_AT
-        FROM ${ERP_SCHEMA}.PEDIDOS_CAB
+        FROM ${PEDIDOS_CAB_TABLE}
         WHERE ID = ?`;
 
     const linSql = `
@@ -3741,8 +3766,9 @@ async function getOrderDetail(orderId, options = {}) {
             TRIM(TIPOVENTA) AS TIPOVENTA,
             TRIM(CLASELINEA) AS CLASELINEA,
             TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA,
+            COALESCE(DESCUENTO_LINEA, 0) AS DESCUENTO_LINEA,
             ORDEN, CREATED_AT
-        FROM ${ERP_SCHEMA}.PEDIDOS_LIN
+        FROM ${PEDIDOS_LIN_TABLE}
         WHERE PEDIDO_ID = ?
         ORDER BY SECUENCIA`;
 
@@ -3814,6 +3840,7 @@ async function getOrderDetail(orderId, options = {}) {
                 ruta: cab.RUTA || '',
                 diasReparto: cab.DIASREPARTO || '',
                 repartoValidado: (cab.REPARTO_VALIDADO_SN || '').trim() === 'S',
+                descuentoGlobal: parseFloat(cab.DESCUENTO_GLOBAL) || 0,
                 createdAt: cab.CREATED_AT,
                 updatedAt: cab.UPDATED_AT,
             },
@@ -3844,6 +3871,8 @@ async function getOrderDetail(orderId, options = {}) {
                     tipoventa: l.TIPOVENTA,
                     claseLinea: l.CLASELINEA,
                     orden: l.ORDEN,
+                    descuentoLinea: parseFloat(l.DESCUENTO_LINEA) || 0,
+                    lineDiscountPct: parseFloat(l.DESCUENTO_LINEA) || 0,
                     createdAt: l.CREATED_AT,
                     bolsaMovements: movements,
                     bolsaImpact: summarizeLineBolsaMovements(movements),
@@ -3931,7 +3960,7 @@ async function addOrderLine(pedidoId, lineData) {
 
     // Get next secuencia
     const seqRows = await queryWithParams(
-        `SELECT COALESCE(MAX(SECUENCIA), 0) + 1 AS NEXT_SEQ FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE PEDIDO_ID = ?`,
+        `SELECT COALESCE(MAX(SECUENCIA), 0) + 1 AS NEXT_SEQ FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`,
         [id]
     );
     const nextSeq = seqRows[0]?.NEXT_SEQ || 1;
@@ -3939,8 +3968,8 @@ async function addOrderLine(pedidoId, lineData) {
     const cantidadEnvases = parseFloat(lineData.cantidadEnvases) || 0;
     const cantidadUnidades = parseFloat(lineData.cantidadUnidades || lineData.cantidad) || 0;
     const precioBase = parseFloat(lineData.precio || lineData.precioVenta) || 0;
-    const descuentoLinea = Math.min(100, Math.max(0, parseFloat(lineData.descuentoLinea) || 0));
-    const precio = descuentoLinea > 0 ? Math.round(precioBase * (1 - descuentoLinea / 100) * 10000) / 10000 : precioBase;
+    const descuentoLinea = parseLineDiscountPct(lineData);
+    const precio = precioBase;
     const precioCosto = parseFloat(lineData.precioCosto) || 0;
     const unidadesCaja = parseFloat(lineData.unidadesCaja) || 1;
     const unidadMedida = lineData.unidadMedida || 'CAJAS';
@@ -3950,14 +3979,15 @@ async function addOrderLine(pedidoId, lineData) {
         : resolveIvaFromLine(lineData);
 
     // P1-A: Use shared calculator for consistent importe across add/create
-    const importeVenta = calculateLineImporte({ unidadMedida, cantidadEnvases, cantidadUnidades, unidadesCaja, precioVenta: precio });
+    const importeBruto = calculateLineImporte({ unidadMedida, cantidadEnvases, cantidadUnidades, unidadesCaja, precioVenta: precio });
+    const importeVenta = applyPctToAmount(importeBruto, descuentoLinea);
     const billingQty = isBoxUnidadMedida(unidadMedida) ? cantidadEnvases : cantidadUnidades;
     const importeCosto = Math.round((billingQty * precioCosto) * 100) / 100;
     const importeMargen = importeVenta - importeCosto;
     const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
 
     const sql = `
-        INSERT INTO ${ERP_SCHEMA}.PEDIDOS_LIN (
+        INSERT INTO ${PEDIDOS_LIN_TABLE} (
             PEDIDO_ID, SECUENCIA, CODIGOARTICULO, DESCRIPCION,
             CANTIDADENVASES, CANTIDADUNIDADES, UNIDADMEDIDA, UNIDADESCAJA,
             PRECIOVENTA, PRECIOCOSTO, PRECIOTARIFA, PRECIOTARIFACLIENTE, PRECIOMINIMO,
@@ -3997,6 +4027,8 @@ async function updateOrderLine(lineId, {
     unidadMedida,
     precioCosto,
     claseLinea,
+    descuentoLinea,
+    lineDiscountPct,
 }) {
     const id = parseInt(lineId);
     if (isNaN(id)) throw new Error('Invalid lineId');
@@ -4007,7 +4039,7 @@ async function updateOrderLine(lineId, {
 
     // Fetch current line to get pedidoId and defaults
     const currentRows = await queryWithParams(
-        `SELECT PEDIDO_ID, CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO, UNIDADMEDIDA, UNIDADESCAJA, CLASELINEA, TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE ID = ?`,
+        `SELECT PEDIDO_ID, CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO, UNIDADMEDIDA, UNIDADESCAJA, CLASELINEA, COALESCE(DESCUENTO_LINEA, 0) AS DESCUENTO_LINEA, TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ?`,
         [id]
     );
     if (!currentRows || currentRows.length === 0) throw new Error('Line not found');
@@ -4028,29 +4060,42 @@ async function updateOrderLine(lineId, {
     const newCosto = precioCosto != null ? parseFloat(precioCosto) : parseFloat(current.PRECIOCOSTO) || 0;
     const newUM = unidadMedida || current.UNIDADMEDIDA;
     const unidadesCaja = parseFloat(current.UNIDADESCAJA) || 1;
+    const newDiscount = (descuentoLinea != null || lineDiscountPct != null)
+        ? parseLineDiscountPct({ descuentoLinea, lineDiscountPct })
+        : parseLineDiscountPct({ DESCUENTO_LINEA: current.DESCUENTO_LINEA });
 
-    const importeVenta = newClase === 'SC' ? 0 : calculateLineImporte({
+    const importeBruto = newClase === 'SC' ? 0 : calculateLineImporte({
         unidadMedida: newUM,
         cantidadEnvases: newEnvases,
         cantidadUnidades: newUnidades,
         unidadesCaja,
         precioVenta: newPrecio,
     });
+    const importeVenta = applyPctToAmount(importeBruto, newDiscount);
     const billingQty = newUM === 'CAJAS' ? newEnvases : newUnidades;
     const importeCosto = billingQty * newCosto;
     const importeMargen = importeVenta - importeCosto;
     const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
 
     await queryWithParams(
-        `UPDATE ${ERP_SCHEMA}.PEDIDOS_LIN SET
+        `UPDATE ${PEDIDOS_LIN_TABLE} SET
             CANTIDADENVASES = ?, CANTIDADUNIDADES = ?, PRECIOVENTA = ?, PRECIOCOSTO = ?, UNIDADMEDIDA = ?,
             IMPORTEVENTA = ?, IMPORTECOSTO = ?, IMPORTEMARGEN = ?, PORCENTAJEMARGEN = ?,
-            CLASELINEA = ?
+            CLASELINEA = ?, DESCUENTO_LINEA = ?
         WHERE ID = ?`,
         [newEnvases, newUnidades, newPrecio, newCosto, newUM, importeVenta, importeCosto, importeMargen,
-            Math.round(pctMargen * 100) / 100, newClase, id],
+            Math.round(pctMargen * 100) / 100, newClase, newDiscount, id],
         false
     );
+    try {
+        await queryWithParams(
+            `UPDATE ${PEDIDOS_LIN_TABLE} SET PORCENTAJEDESCUENTO = ? WHERE ID = ?`,
+            [newDiscount, id],
+            false
+        );
+    } catch (erpDiscountErr) {
+        if (!isColumnNotFound(erpDiscountErr)) throw erpDiscountErr;
+    }
 
     await recalculateOrderTotals(pedidoId);
     await refreshDraftStockReservation(pedidoId);
@@ -4067,7 +4112,7 @@ async function deleteOrderLine(lineId, pedidoId) {
     await assertOrderEditable(pid);
 
     const lineRows = await queryWithParams(
-        `SELECT ID FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE ID = ? AND PEDIDO_ID = ?`,
+        `SELECT ID FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ? AND PEDIDO_ID = ?`,
         [lid, pid], false
     );
     if (!lineRows || lineRows.length === 0) {
@@ -4075,7 +4120,7 @@ async function deleteOrderLine(lineId, pedidoId) {
     }
 
     await queryWithParams(
-        `DELETE FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE ID = ? AND PEDIDO_ID = ?`,
+        `DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ? AND PEDIDO_ID = ?`,
         [lid, pid], false
     );
 
@@ -4106,8 +4151,8 @@ async function recalculateOrderTotals(pedidoId) {
                 ELSE L.IMPORTEVENTA * 0.21
             END), 0) as RAW_IVA,
             COALESCE(MAX(C.DESCUENTO_GLOBAL), 0) as DESCUENTO_GLOBAL
-         FROM ${ERP_SCHEMA}.PEDIDOS_CAB C
-         LEFT JOIN ${ERP_SCHEMA}.PEDIDOS_LIN L ON L.PEDIDO_ID = C.ID
+         FROM ${PEDIDOS_CAB_TABLE} C
+         LEFT JOIN ${PEDIDOS_LIN_TABLE} L ON L.PEDIDO_ID = C.ID
          WHERE C.ID = ?`,
         [id]
     );
@@ -4130,7 +4175,7 @@ async function recalculateOrderTotals(pedidoId) {
     assertMoneyFitsWriteSchema(importeMargen, 'IMPORTEMARGEN', `pedido ${id}`);
 
     await queryWithParams(
-        `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB SET
+        `UPDATE ${PEDIDOS_CAB_TABLE} SET
             IMPORTEBASE = ?,
             IMPORTECOSTO = ?,
             IMPORTETOTAL = ?,
@@ -4141,18 +4186,21 @@ async function recalculateOrderTotals(pedidoId) {
         [importeBase, importeCosto, importeTotal, importeMargen, importeIva, id], false
     );
 
-    try {
+        try {
         await queryWithParams(
-            `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB SET
+            `UPDATE ${PEDIDOS_CAB_TABLE} SET
                 IMPORTEBASEIMPONIBLEBRUTA1 = ?,
                 IMPORTEBASEIMPONIBLE1 = ?,
-                IMPORTEBRUTO = ?
+                IMPORTEBRUTO = ?,
+                PORCENTAJEDESCUENTO1 = ?,
+                IMPORTEDESCUENTO1 = ?
              WHERE ID = ?`,
-            [importeBaseBruta, importeBase, importeBaseBruta, id], false
+            [importeBaseBruta, importeBase, importeBaseBruta, descuentoGlobal,
+                roundMoney(importeBaseBruta - importeBase), id], false
         );
     } catch (erpColumnErr) {
         if (!isColumnNotFound(erpColumnErr)) throw erpColumnErr;
-        logger.warn(`[PEDIDOS] ERP-compatible total columns missing in ${ERP_SCHEMA}.PEDIDOS_CAB, totals kept in legacy columns`);
+        logger.warn(`[PEDIDOS] ERP-compatible total columns missing in ${PEDIDOS_CAB_TABLE}, totals kept in legacy columns`);
     }
 }
 
@@ -4173,7 +4221,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     // Si el UPDATE no afecta filas, otro request ya tomo el pedido (o el estado
     // no es BORRADOR), y abortamos con un error claro.
     const reserveResult = await queryWithParams(
-        `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB
+        `UPDATE ${PEDIDOS_CAB_TABLE}
             SET ESTADO = 'CONFIRMANDO',
                 UPDATED_AT = CURRENT_TIMESTAMP
           WHERE ID = ?
@@ -4197,7 +4245,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
                 TRIM(TIPOVENTA) AS TIPOVENTA,
                 IMPORTETOTAL, IMPORTEBASE, IMPORTEIVA, IMPORTECOSTO, IMPORTEMARGEN,
                 TRIM(OBSERVACIONES) AS OBSERVACIONES
-         FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`,
+         FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
         [id], false
     );
 
@@ -4240,7 +4288,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     const revertConfirming = async (reasonTag) => {
         try {
             await queryWithParams(
-                `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB
+                `UPDATE ${PEDIDOS_CAB_TABLE}
                     SET ESTADO = 'BORRADOR', UPDATED_AT = CURRENT_TIMESTAMP
                   WHERE ID = ? AND ESTADO = 'CONFIRMANDO'`,
                 [id], false
@@ -4264,9 +4312,16 @@ async function confirmOrder(orderId, saleType, options = {}) {
         deliveryDate: deliveryPlan.date.iso,
         routeCode: options.routeCode,
     });
-    const vehicleCode = trimString(options.vehicleCode || inferredAssignment.vehicleCode).substring(0, 10);
-    const driverCode = trimString(options.driverCode || inferredAssignment.driverCode).substring(0, 2);
-    const routeCode = trimString(options.routeCode || inferredAssignment.routeCode).substring(0, 10);
+    const cobroPropio = isCobroPropio(options, currentRows[0]);
+    const vehicleCode = cobroPropio
+        ? ''
+        : trimString(options.vehicleCode || inferredAssignment.vehicleCode).substring(0, 10);
+    const driverCode = cobroPropio
+        ? ''
+        : trimString(options.driverCode || inferredAssignment.driverCode).substring(0, 2);
+    const routeCode = cobroPropio
+        ? trimString(options.routeCode || inferredAssignment.routeCode).substring(0, 10)
+        : trimString(options.routeCode || inferredAssignment.routeCode).substring(0, 10);
 
     // P0-C: Validate stock BEFORE confirming - block if insufficient
     const lines = await queryWithParams(
@@ -4282,7 +4337,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
                 TRIM(CLASELINEA) AS CLASELINEA,
                 TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA,
                 ORDEN
-         FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE PEDIDO_ID = ?`, [id]);
+         FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [id]);
 
     const stockWarnings = [];
     const outOfStockProducts = [];
@@ -4436,7 +4491,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
         // P0-B: Rollback order status if stock reservation fails after confirmation.
         try {
             await queryWithParams(
-                `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB SET ESTADO = 'BORRADOR', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
+                `UPDATE ${PEDIDOS_CAB_TABLE} SET ESTADO = 'BORRADOR', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
                 [id], false
             );
             await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id], false);
@@ -4468,6 +4523,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             vehicleCode,
             driverCode,
             routeCode,
+            cobroPropio,
             lineCount: lines.length,
             stockWarningCount: stockWarnings.length,
             forceConfirm: effectiveForceConfirm,
@@ -4500,7 +4556,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             if (!target.shouldExportToSystem) {
                 try {
                     await queryWithParams(
-                        `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB
+                        `UPDATE ${PEDIDOS_CAB_TABLE}
                             SET ESTADO = 'BORRADOR',
                                 UPDATED_AT = CURRENT_TIMESTAMP
                           WHERE ID = ?
@@ -4532,7 +4588,12 @@ async function confirmOrder(orderId, saleType, options = {}) {
     // Invalida cache tras confirmacion (cambia ESTADO, importes y stock reservas).
     invalidatePedidosCache(id);
 
-    return { ...order, stockWarnings };
+    if (order?.header) {
+        order.header.cobroPropio = cobroPropio;
+        order.header.repartoDestino = cobroPropio ? 'COMERCIAL' : 'RUTERO';
+    }
+
+    return { ...order, stockWarnings, cobroPropio };
 }
 
 async function cancelOrder(orderId, options = {}) {
@@ -4540,7 +4601,7 @@ async function cancelOrder(orderId, options = {}) {
     if (isNaN(id)) throw new Error('Invalid orderId');
 
     const currentRows = await queryWithParams(
-        `SELECT ESTADO, CODIGOCLIENTE, IMPORTETOTAL FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`,
+        `SELECT ESTADO, CODIGOCLIENTE, IMPORTETOTAL FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
         [id], false
     );
 
@@ -4567,7 +4628,7 @@ async function cancelOrder(orderId, options = {}) {
     }
 
     const draftStateExists = `EXISTS (
-              SELECT 1 FROM ${ERP_SCHEMA}.PEDIDOS_CAB C
+              SELECT 1 FROM ${PEDIDOS_CAB_TABLE} C
                WHERE C.ID = ?
                  AND TRIM(C.ESTADO) IN ('BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION')
             )`;
@@ -4579,13 +4640,13 @@ async function cancelOrder(orderId, options = {}) {
     )
         .catch(e => logger.warn(`[PEDIDOS] Stock reservation cleanup for draft #${id}: ${e.message}`));
     await queryWithParams(
-        `DELETE FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE PEDIDO_ID = ? AND ${draftStateExists}`,
+        `DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ? AND ${draftStateExists}`,
         [id, id],
         false,
     );
 
     const deleteResult = await queryWithParams(
-        `DELETE FROM ${ERP_SCHEMA}.PEDIDOS_CAB
+        `DELETE FROM ${PEDIDOS_CAB_TABLE}
           WHERE ID = ?
             AND TRIM(ESTADO) IN ('BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION')`,
         [id], false
@@ -4596,7 +4657,7 @@ async function cancelOrder(orderId, options = {}) {
 
     if (deleteRowsAffected === 0) {
         const conflictRows = await queryWithParams(
-            `SELECT ESTADO, CODIGOCLIENTE, IMPORTETOTAL FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`,
+            `SELECT ESTADO, CODIGOCLIENTE, IMPORTETOTAL FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
             [id], false
         );
         if (!conflictRows || conflictRows.length === 0) {
@@ -4660,7 +4721,7 @@ async function updateOrderStatus(orderId, newStatus, options = {}) {
     const orderBefore = { header: { estado: currentStatus } };
 
     await queryWithParams(
-        `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB SET ESTADO = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
+        `UPDATE ${PEDIDOS_CAB_TABLE} SET ESTADO = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
         [status, id], false
     );
 
@@ -4744,18 +4805,18 @@ async function getOrderStats(vendedorCodes, dateFrom, dateTo) {
             COALESCE(SUM(IMPORTEIVA), 0) AS TOTALIVA,
             CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(IMPORTEMARGEN) * 100.0 / NULLIF(SUM(IMPORTEBASE), 0), 0) ELSE 0 END AS AVGMARGIN,
             CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(IMPORTETOTAL) * 1.0 / COUNT(*), 0) ELSE 0 END AS AVGTICKET
-        FROM ${ERP_SCHEMA}.PEDIDOS_CAB ${where}`;
+        FROM ${PEDIDOS_CAB_TABLE} ${where}`;
 
     const statusSql = `
         SELECT TRIM(ESTADO) AS ESTADO, COUNT(*) AS CNT
-        FROM ${ERP_SCHEMA}.PEDIDOS_CAB ${where}
+        FROM ${PEDIDOS_CAB_TABLE} ${where}
         GROUP BY ESTADO
         ORDER BY ESTADO`;
 
     const trendSql = `
         SELECT ANODOCUMENTO AS Y, MESDOCUMENTO AS M, DIADOCUMENTO AS D,
             COUNT(*) AS ORDERS, COALESCE(SUM(IMPORTETOTAL), 0) AS AMOUNT
-        FROM ${ERP_SCHEMA}.PEDIDOS_CAB ${where ? where + ' AND' : 'WHERE'} ANODOCUMENTO > 0
+        FROM ${PEDIDOS_CAB_TABLE} ${where ? where + ' AND' : 'WHERE'} ANODOCUMENTO > 0
         GROUP BY ANODOCUMENTO, MESDOCUMENTO, DIADOCUMENTO
         ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
         FETCH FIRST 7 ROWS ONLY`;
@@ -4763,7 +4824,7 @@ async function getOrderStats(vendedorCodes, dateFrom, dateTo) {
     const topSql = `
         SELECT TRIM(CODIGOCLIENTE) AS CODE, TRIM(NOMBRECLIENTE) AS NAME,
             COUNT(*) AS ORDERS, COALESCE(SUM(IMPORTETOTAL), 0) AS AMOUNT
-        FROM ${ERP_SCHEMA}.PEDIDOS_CAB ${where ? where + ' AND' : 'WHERE'} CODIGOCLIENTE <> ''
+        FROM ${PEDIDOS_CAB_TABLE} ${where ? where + ' AND' : 'WHERE'} CODIGOCLIENTE <> ''
         GROUP BY CODIGOCLIENTE, NOMBRECLIENTE
         ORDER BY AMOUNT DESC
         FETCH FIRST 5 ROWS ONLY`;
@@ -4826,7 +4887,7 @@ async function getOrderAlbaran(orderId) {
                 EJERCICIO, SERIEPEDIDO, TERMINAL, NUMEROPEDIDO,
                 SYSTEM_SUBEMPRESAPEDIDO, SYSTEM_EJERCICIOPEDIDO, SYSTEM_SERIEPEDIDO,
                 SYSTEM_TERMINALPEDIDO, SYSTEM_NUMEROPEDIDO
-         FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`,
+         FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
         [id]
     );
     if (!orderRows || orderRows.length === 0) throw new Error('Pedido no encontrado');
@@ -5182,7 +5243,7 @@ async function checkDraftAccumulation(vendedorCode, { autoConfirm = false, thres
         drafts = await queryWithParams(
             `SELECT ID, NUMEROPEDIDO, TRIM(CODIGOCLIENTE) AS CODIGOCLIENTE,
                     TRIM(NOMBRECLIENTE) AS NOMBRECLIENTE, IMPORTETOTAL, CREATED_AT
-             FROM ${ERP_SCHEMA}.PEDIDOS_CAB
+             FROM ${PEDIDOS_CAB_TABLE}
              WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
                AND TRIM(ESTADO) = 'BORRADOR'
              ORDER BY ID ASC`,
@@ -5807,6 +5868,72 @@ function dedupePromotionItemsV2(promotions) {
 // ============================================================================
 
 // Alias wrappers for route compatibility
+async function getConfirmedPedidosForRutero({ repartidorIds, day, month, year }) {
+    const ids = [...new Set((repartidorIds || [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean))];
+    if (!ids.length) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    const sql = `
+        SELECT
+            'GMP' AS SUBEMPRESAALBARAN,
+            C.EJERCICIO AS EJERCICIOALBARAN,
+            TRIM(COALESCE(NULLIF(TRIM(C.SERIEPEDIDO), ''), 'M')) AS SERIEALBARAN,
+            COALESCE(C.TERMINAL, C.TERMINALPEDIDO, 0) AS TERMINALALBARAN,
+            C.NUMEROPEDIDO AS NUMEROALBARAN,
+            0 AS NUMEROFACTURA,
+            CAST('' AS CHAR(1)) AS SERIEFACTURA,
+            TRIM(C.CODIGOCLIENTE) AS CLIENTE,
+            TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, C.NOMBRECLIENTE, 'CLIENTE')) AS NOMBRE_CLIENTE,
+            TRIM(CLI.NOMBREALTERNATIVO) AS NOMBRE_COMERCIAL,
+            TRIM(COALESCE(CLI.NOMBRECLIENTE, C.NOMBRECLIENTE, '')) AS NOMBRE_FISCAL,
+            TRIM(COALESCE(CLI.DIRECCION, '')) AS DIRECCION,
+            TRIM(COALESCE(CLI.POBLACION, '')) AS POBLACION,
+            TRIM(COALESCE(CLI.TELEFONO1, '')) AS TELEFONO,
+            TRIM(COALESCE(CLI.TELEFONO2, '')) AS TELEFONO2,
+            C.IMPORTETOTAL,
+            C.IMPORTETOTAL AS CAC_IMPORTETOTAL,
+            COALESCE(C.IMPORTEBASE, C.IMPORTETOTAL) AS IMPORTEBRUTO,
+            COALESCE(C.IMPORTEBASE, C.IMPORTETOTAL) AS CPC_BASE1,
+            0 AS CPC_BASE2,
+            0 AS CPC_BASE3,
+            0 AS CPC_PCTIVA1,
+            0 AS CPC_PCTIVA2,
+            0 AS CPC_PCTIVA3,
+            COALESCE(C.IMPORTEIVA, 0) AS CPC_IVA1,
+            0 AS CPC_IVA2,
+            0 AS CPC_IVA3,
+            TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO,
+            C.DIADOCUMENTO, C.MESDOCUMENTO, C.ANODOCUMENTO,
+            TRIM(C.RUTA) AS RUTA,
+            TRIM(C.CODIGOREPARTIDOR) AS CODIGO_REPARTIDOR,
+            CAST(NULL AS INTEGER) AS ROUTE_MOVE_POSITION,
+            C.ID AS ORDEN_PREPARACION,
+            TRIM(C.CODIGOREPARTIDOR) AS NOMBRE_REPARTIDOR,
+            0 AS DIALLEGADA, 0 AS HORALLEGADA,
+            'N' AS CONFORMADO,
+            CAST(NULL AS VARCHAR(20)) AS DS_STATUS,
+            CAST(NULL AS VARCHAR(512)) AS DS_OBS,
+            CAST(NULL AS VARCHAR(255)) AS DS_FIRMA,
+            'PEDIDO' AS ANTEROOM_DOC_TIPO,
+            C.ID AS PEDIDO_ID
+        FROM ${PEDIDOS_CAB_TABLE} C
+        LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(C.CODIGOCLIENTE)
+        WHERE TRIM(C.ESTADO) = 'CONFIRMADO'
+          AND TRIM(C.CODIGOREPARTIDOR) IN (${placeholders})
+          AND TRIM(C.CODIGOREPARTIDOR) <> ''
+          AND C.DIAREPARTO = ?
+          AND C.MESREPARTO = ?
+          AND C.ANOREPARTO = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM JAVIER.RUTERO_CONFIG RC
+            WHERE TRIM(RC.CLIENTE) = TRIM(C.CODIGOCLIENTE)
+              AND RC.ORDEN < 0
+          )
+    `;
+    return queryWithParams(sql, [...ids, day, month, year], false);
+}
+
 async function searchProducts(params) { const products = await getProducts(params); return { products, count: products.length }; }
 async function getProductStock(code) { return getStock(code); }
 async function getClientPricing(clientCode) {
@@ -6406,7 +6533,7 @@ async function getSimilarProducts(productCode) {
                     SUM(SR.CANTIDADENVASES) AS RES_ENV,
                     SUM(SR.CANTIDADUNIDADES) AS RES_UNI
                 FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
-                JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
+                JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
             LEFT JOIN DSEDAC.ARA T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
@@ -6449,7 +6576,7 @@ async function getSimilarProducts(productCode) {
                     SUM(SR.CANTIDADENVASES) AS RES_ENV,
                     SUM(SR.CANTIDADUNIDADES) AS RES_UNI
                 FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
-                JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
+                JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
             LEFT JOIN DSEDAC.ARA T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
@@ -6568,7 +6695,7 @@ async function getOrderAnalytics(vendedorCodes) {
             SUM(IMPORTEMARGEN) AS totalMargin,
             AVG(IMPORTETOTAL) AS avgOrderValue,
             COUNT(DISTINCT CODIGOCLIENTE) AS uniqueClients
-        FROM ${ERP_SCHEMA}.PEDIDOS_CAB
+        FROM ${PEDIDOS_CAB_TABLE}
         WHERE ESTADO IN ('CONFIRMADO','ENVIADO')
           AND EJERCICIO = YEAR(CURRENT_DATE)
           ${monthlyVendorFilter.clause}
@@ -6583,8 +6710,8 @@ async function getOrderAnalytics(vendedorCodes) {
                SUM(L.IMPORTEVENTA) AS totalSales,
                SUM(L.CANTIDADENVASES) AS totalEnvases,
                COUNT(*) AS lineCount
-        FROM ${ERP_SCHEMA}.PEDIDOS_LIN L
-        JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON C.ID = L.PEDIDO_ID
+        FROM ${PEDIDOS_LIN_TABLE} L
+        JOIN ${PEDIDOS_CAB_TABLE} C ON C.ID = L.PEDIDO_ID
         WHERE C.ESTADO IN ('CONFIRMADO','ENVIADO')
           AND C.EJERCICIO = YEAR(CURRENT_DATE)
           ${topVendorFilter.clause}
@@ -6595,7 +6722,7 @@ async function getOrderAnalytics(vendedorCodes) {
 
     const statusSql = `
         SELECT TRIM(ESTADO) AS status, COUNT(*) AS count
-        FROM ${ERP_SCHEMA}.PEDIDOS_CAB
+        FROM ${PEDIDOS_CAB_TABLE}
         WHERE EJERCICIO = YEAR(CURRENT_DATE)
           ${statusVendorFilter.clause}
         GROUP BY ESTADO
@@ -6742,7 +6869,7 @@ async function searchProductsWithStock(searchTerm, limit = 20) {
                     SUM(SR.CANTIDADENVASES) AS RES_ENV,
                     SUM(SR.CANTIDADUNIDADES) AS RES_UNI
                 FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
-                JOIN ${ERP_SCHEMA}.PEDIDOS_CAB C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
+                JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
             LEFT JOIN DSEDAC.ARA T ON A.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
@@ -6819,6 +6946,7 @@ module.exports = {
     confirmOrder,
     cancelOrder,
     updateOrderStatus,
+    getConfirmedPedidosForRutero,
     getRecommendations,
     getFamilies,
     getFamiliesDetailed,

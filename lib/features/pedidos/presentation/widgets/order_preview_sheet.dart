@@ -19,6 +19,7 @@ typedef OrderPreviewConfirm = Future<dynamic> Function(
   String? vehicleCode,
   String? driverCode,
   String? routeCode,
+  bool cobroPropio,
 });
 
 /// Shows the order preview as a centered dialog. Returns the confirmation
@@ -64,6 +65,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
   DateTime? _selectedDeliveryDate;
   String? _deliveryError;
   String? _confirmStatusMessage;
+  bool _cobroPropio = false;
 
   @override
   void initState() {
@@ -1054,6 +1056,38 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Semantics(
+              label: _cobroPropio
+                  ? 'Cobro en mano del comercial. No sale en el rutero'
+                  : 'El pedido ira al rutero del repartidor',
+              toggled: _cobroPropio,
+              child: SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                value: _cobroPropio,
+                onChanged: _isConfirming
+                    ? null
+                    : (value) => setState(() => _cobroPropio = value),
+                activeColor: AppTheme.warning,
+                title: Text(
+                  'Cobro en mano (yo lo cobro)',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  _cobroPropio
+                      ? 'No aparece en el rutero del repartidor'
+                      : 'Sale en el rutero del repartidor',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             if (_confirmStatusMessage != null) ...[
               _buildConfirmStatusBanner(),
               const SizedBox(height: 12),
@@ -1448,6 +1482,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         vehicleCode: _deliveryOptions?.vehicleCode,
         driverCode: _deliveryOptions?.driverCode,
         routeCode: _deliveryOptions?.routeCode,
+        cobroPropio: _cobroPropio,
       );
       if (!mounted) return;
       final resultMap = result is Map<String, dynamic> ? result : null;

@@ -39,7 +39,7 @@ function orderRow(overrides = {}) {
 function setupRegisterPaymentMocks({ existingToken = [], paid = '0.00', order = orderRow(), repartidorPaid = '0.00' } = {}) {
   return async (sql) => {
     if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return order ? [order] : [];
-    if (/FROM JAVIER\.VISTA_DEUDA_BASE C/i.test(sql)) return [];
+    if (/FROM DSEDAC\.CVC C/i.test(sql)) return [];
     if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) return existingToken;
     if (/COALESCE\(SUM\(IMPORTE\)/i.test(sql)) return [{ TOTAL_COBRADO: paid }];
     if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: repartidorPaid }];
@@ -168,7 +168,7 @@ describe('commercial cobros hardening', () => {
     });
 
     const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
-    expect(sql).toMatch(/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+CVC/i);
+    expect(sql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
     expect(sql).not.toMatch(/\bJOIN\s+DSEDAC\.CLP/i);
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
@@ -353,7 +353,7 @@ describe('commercial cobros hardening', () => {
     expect(result.cvcGrandTotalVencido).toBe(50);
     expect(result.appOrdersTotal).toBe(0);
     const summarySql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
-    expect(summarySql).toMatch(/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+CVC/i);
+    expect(summarySql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
   });
 
   test('getPendingSummary uses one CVC summary query across pagination', async () => {
@@ -396,7 +396,7 @@ describe('commercial cobros hardening', () => {
       isJefeVentas: true,
     });
 
-    const sql = findRepoSqlCall((candidate) => /FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+CVC/i.test(candidate));
+    const sql = findRepoSqlCall((candidate) => /FROM\s+DSEDAC\.CVC\s+CVC/i.test(candidate));
     expect(sql).toMatch(/<=\s*\(YEAR\(CURRENT_DATE\) \* 10000 \+ MONTH\(CURRENT_DATE\) \* 100 \+ DAY\(CURRENT_DATE\)\)/i);
   });
 
@@ -446,7 +446,7 @@ describe('commercial cobros hardening', () => {
     });
 
     const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
-    expect(sql).toMatch(/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+CVC/i);
+    expect(sql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s+IN\s*\(/i);
     expect(sql).toMatch(/SELECT\s+TRIM\(CLP\.CODIGOCLIENTE\)\s+FROM\s+DSEDAC\.CLP\s+CLP/i);
     expect(sql).toMatch(/UNION\s+SELECT\s+DISTINCT\s+TRIM\(LAC\.LCCDCL\)/i);
@@ -516,7 +516,7 @@ describe('commercial cobros hardening', () => {
   test('getPendientes subtracts repartidor collections from pending total', async () => {
     mockQuery.mockResolvedValue([{ 1: 1 }]);
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql)) {
+      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
         return [{
           SERIE_DOCUMENTO: 'M',
           NUMERO_DOCUMENTO: 9,
@@ -558,7 +558,7 @@ describe('commercial cobros hardening', () => {
   test('getPendientes reads CVC detail and subtracts app-side payments by document', async () => {
     mockQuery.mockResolvedValue([{ 1: 1 }]);
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql)) {
+      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
         return [{
           SERIE_DOCUMENTO: 'M',
           NUMERO_DOCUMENTO: 123,
@@ -600,9 +600,13 @@ describe('commercial cobros hardening', () => {
       descripcion: 'FAC M-123',
     });
     const [cvcSql, params] = mockQueryWithParams.mock.calls.find(([sql]) =>
-      /FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql),
+      /FROM\s+DSEDAC\.CVC\s+C/i.test(sql),
     );
     expect(cvcSql).toMatch(/DSEDAC\.CLP/);
+    expect(cvcSql).toMatch(/DSEDAC\.CAC/);
+    expect(cvcSql).toMatch(/DSEDAC\.CPC/);
+    expect(cvcSql).toMatch(/DSEDAC\.FPG/);
+    expect(cvcSql).not.toMatch(/VISTA_DEUDA_BASE/i);
     expect(cvcSql).toMatch(/DSED\.LACLAE/);
     expect(cvcSql).toMatch(/IN\s*\('01','1'\)/i);
     expect(cvcSql).not.toMatch(/FETCH\s+FIRST\s+100\s+ROWS\s+ONLY/i);
@@ -612,7 +616,7 @@ describe('commercial cobros hardening', () => {
   test('getPendientes groups duplicate CVC rows by document reference', async () => {
     mockQuery.mockResolvedValue([{ 1: 1 }]);
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql)) {
+      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
         return [
           {
             SERIE_DOCUMENTO: 'M',
@@ -676,7 +680,7 @@ describe('commercial cobros hardening', () => {
   test('getPendientes keeps CVC documents distinct when full ERP key differs', async () => {
     mockQuery.mockResolvedValue([{ 1: 1 }]);
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql)) {
+      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
         return [
           {
             SERIE_DOCUMENTO: 'C',
@@ -752,7 +756,7 @@ describe('commercial cobros hardening', () => {
       return [{ 1: 1 }];
     });
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (/FROM\s+JAVIER\.VISTA_DEUDA_BASE\s+C/i.test(sql)) {
+      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
         return [{
           SERIE_DOCUMENTO: 'M',
           NUMERO_DOCUMENTO: 123,
@@ -945,7 +949,7 @@ describe('commercial cobros hardening', () => {
     let insertAttempts = 0;
     mockQueryWithParams.mockImplementation(async (sql, params) => {
       if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return [orderRow()];
-      if (/FROM JAVIER\.VISTA_DEUDA_BASE C/i.test(sql)) return [];
+      if (/FROM DSEDAC\.CVC C/i.test(sql)) return [];
       if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) {
         if (insertAttempts > 0) {
           return [{
@@ -1085,7 +1089,7 @@ describe('commercial cobros hardening', () => {
     mockQuery.mockResolvedValue([{ 1: 1 }]);
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return [];
-      if (/FROM JAVIER\.VISTA_DEUDA_BASE C/i.test(sql)) {
+      if (/FROM DSEDAC\.CVC C/i.test(sql)) {
         return [{
           ID: 'CVC:M-123',
           SOURCE: 'CVC',
@@ -1135,5 +1139,42 @@ describe('commercial cobros hardening', () => {
     );
     expect(repartidorCall).toBeDefined();
     expect(repartidorCall[1]).toEqual(['C001', 'M', '123']);
+  });
+
+  test('registerPayment blocks amounts below CLX cobro riguroso minimum', async () => {
+    mockQuery.mockResolvedValue([{ 1: 1 }]);
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return [];
+      if (/FROM DSEDAC\.CVC C/i.test(sql)) {
+        return [{
+          ID: 'CVC:M-123',
+          SOURCE: 'CVC',
+          CODIGOCLIENTE: 'C001',
+          CODIGOVENDEDOR: '01',
+          SERIEPEDIDO: 'M',
+          NUMEROPEDIDO: 123,
+          IMPORTETOTAL: '100.00',
+          ESTADO: 'PENDIENTE',
+        }];
+      }
+      if (/FROM DSEDAC\.CLX/i.test(sql)) {
+        return [{ SN: 'S', PCT: 50 }];
+      }
+      if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) return [];
+      if (/COALESCE\(SUM\(IMPORTE\)/i.test(sql)) return [{ TOTAL_COBRADO: '0.00' }];
+      if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: '0.00' }];
+      return [];
+    });
+    const repo = new Db2CobrosRepository();
+
+    await expect(repo.registerPayment({
+      clientCode: 'C001',
+      amount: 20,
+      paymentMethod: 'CONTADO',
+      reference: 'CVC:M-123',
+      userId: '01',
+      userRole: 'COMERCIAL',
+      idempotencyToken: 'cobro-token-min-001',
+    })).rejects.toMatchObject({ code: 'BELOW_MIN_COBRO', status: 409 });
   });
 });

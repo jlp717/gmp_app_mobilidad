@@ -24,6 +24,7 @@ import 'package:gmp_app_mobilidad/features/commissions/presentation/pages/commis
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/dashboard_content.dart';
 import 'package:gmp_app_mobilidad/features/facturas/presentation/pages/facturas_page.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
+import 'package:gmp_app_mobilidad/features/liquidacion_comercial/data/comercial_liquidacion_service.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/presentation/pages/comercial_liquidacion_diaria_page.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/client_evolution_page.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/objectives_page.dart';
@@ -2098,6 +2099,8 @@ class _MainShellState extends ConsumerState<MainShell> {
             return ComercialLiquidacionDiariaPage(
               employeeCode: employeeCode,
               isJefeVentas: true,
+              snapshotLoader: () => const ComercialLiquidacionService()
+                  .fetchDaily(employeeCode: employeeCode),
             );
           case 'Bolsa':
             return const BolsaPage();
@@ -2220,6 +2223,8 @@ class _MainShellState extends ConsumerState<MainShell> {
             employeeCode: empCode,
             isJefeVentas: isTeamAggregateView,
             forceShowVendorSelector: hasScopedVendorAccess,
+            snapshotLoader: () => const ComercialLiquidacionService()
+                .fetchDaily(employeeCode: empCode),
           );
         case 'Bolsa':
           return BolsaPage(forceShowVendorSelector: hasScopedVendorAccess);

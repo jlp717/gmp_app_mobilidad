@@ -1690,45 +1690,57 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (_isAcknowledgedTombstone && !_isCompleted) {
       debugPrint('[RUTERO] ignoring stale tombstone, confirm stays enabled');
     }
-    return ElevatedButton(
-      onPressed: _isSubmitting ? null : _submitDelivery,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: noEntrega ? AppTheme.warning : AppTheme.success,
-        foregroundColor: AppColors.themedWhite,
-        disabledBackgroundColor:
-            noEntrega ? AppTheme.warning : AppTheme.success,
-        disabledForegroundColor: AppColors.themedWhite,
-        padding: const EdgeInsets.symmetric(vertical: 18),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+    return Semantics(
+      button: true,
+      label: _albaran.isPedidoAnteroom
+          ? 'Pedido pendiente de ERP. No se puede confirmar la entrega'
+          : (noEntrega ? 'Registrar no entrega' : 'Confirmar entrega'),
+      child: ElevatedButton(
+        onPressed: (_isSubmitting || _albaran.isPedidoAnteroom)
+            ? null
+            : _submitDelivery,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: noEntrega ? AppTheme.warning : AppTheme.success,
+          foregroundColor: AppColors.themedWhite,
+          disabledBackgroundColor:
+              noEntrega ? AppTheme.warning : AppTheme.success,
+          disabledForegroundColor: AppColors.themedWhite,
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          ),
         ),
-      ),
-      child: _isSubmitting
-          ? SizedBox(
-              height: 24,
-              width: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.themedWhite,
-              ),
-            )
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  noEntrega ? Icons.cancel_outlined : Icons.check_circle,
-                  size: 24,
+        child: _isSubmitting
+            ? SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.themedWhite,
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  noEntrega ? 'Registrar no entrega' : 'Confirmar entrega',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    noEntrega ? Icons.cancel_outlined : Icons.check_circle,
+                    size: 24,
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 12),
+                  Text(
+                    _albaran.isPedidoAnteroom
+                        ? 'Pedido pendiente ERP'
+                        : noEntrega
+                            ? 'Registrar no entrega'
+                            : 'Confirmar entrega',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 
@@ -2862,6 +2874,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<void> _submitDelivery() async {
+    if (_albaran.isPedidoAnteroom) {
+      _showError(
+        'Este pedido esta pendiente de ERP. No se puede confirmar la entrega todavia.',
+      );
+      return;
+    }
     if (_isSubmitting) return;
     if (_isJournalBlocked) {
       try {

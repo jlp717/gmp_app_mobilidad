@@ -3,10 +3,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/features/liquidacion_comercial/data/comercial_liquidacion_service.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/domain/liquidacion_domain.dart';
 import 'package:intl/intl.dart';
 
@@ -22,6 +23,8 @@ class ComercialLiquidacionDiariaPage extends ConsumerStatefulWidget {
     this.isJefeVentas = false,
     this.forceShowVendorSelector = false,
     this.initialSummary = const ComercialLiquidacionSummary(),
+    this.initialReturns = const [],
+    this.snapshotLoader,
     this.onSubmit,
   });
 
@@ -29,6 +32,8 @@ class ComercialLiquidacionDiariaPage extends ConsumerStatefulWidget {
   final bool isJefeVentas;
   final bool forceShowVendorSelector;
   final ComercialLiquidacionSummary initialSummary;
+  final List<ComercialDevolucionItem> initialReturns;
+  final Future<ComercialLiquidacionDailySnapshot> Function()? snapshotLoader;
   final FutureOr<void> Function(ComercialLiquidacionDraft draft)? onSubmit;
 
   @override
@@ -48,15 +53,24 @@ class _ComercialLiquidacionDiariaPageState
   final _entregadoFocus = FocusNode();
 
   late DateTime _sessionDate;
+  late ComercialLiquidacionSummary _summary;
+  late List<ComercialDevolucionItem> _returns;
   bool _isSaving = false;
+  bool _isLoadingRemote = false;
+  String? _loadError;
   DateTime? _lastSavedAt;
 
   @override
   void initState() {
     super.initState();
     _sessionDate = DateTime.now();
+    _summary = widget.initialSummary;
+    _returns = List<ComercialDevolucionItem>.from(widget.initialReturns);
     _ingresoBancoController.addListener(_markDirty);
     _entregadoController.addListener(_markDirty);
+    if (widget.snapshotLoader != null) {
+      _loadRemote();
+    }
   }
 
   @override
@@ -79,10 +93,34 @@ class _ComercialLiquidacionDiariaPageState
   ComercialLiquidacionDraft get _draft => ComercialLiquidacionDraft(
         employeeCode: widget.employeeCode,
         date: _sessionDate,
-        expectedTotal: widget.initialSummary.totalAIngresar,
+        expectedTotal: _summary.totalAIngresar,
         ingresoBanco: _amount(_ingresoBancoController.text),
         entregado: _amount(_entregadoController.text),
       );
+
+  Future<void> _loadRemote() async {
+    final loader = widget.snapshotLoader;
+    if (loader == null) return;
+    setState(() {
+      _isLoadingRemote = true;
+      _loadError = null;
+    });
+    try {
+      final snapshot = await loader();
+      if (!mounted) return;
+      setState(() {
+        _summary = snapshot.summary;
+        _returns = snapshot.returns;
+        _isLoadingRemote = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingRemote = false;
+        _loadError = error.toString();
+      });
+    }
+  }
 
   bool get _hasInput =>
       _ingresoBancoController.text.trim().isNotEmpty ||
@@ -110,6 +148,14 @@ class _ComercialLiquidacionDiariaPageState
         title: const Text('Liquidación diaria'),
         backgroundColor: AppTheme.inkSurface,
         actions: [
+          if (widget.snapshotLoader != null)
+            Tooltip(
+              message: 'Actualizar cobros y devoluciones',
+              child: IconButton(
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: _isLoadingRemote || _isSaving ? null : _loadRemote,
+              ),
+            ),
           Tooltip(
             message: 'Limpiar importes',
             child: IconButton(
@@ -142,11 +188,19 @@ class _ComercialLiquidacionDiariaPageState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              if (_isLoadingRemote)
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 12),
+                                  child: LinearProgressIndicator(),
+                                ),
+                              if (_loadError != null)
+                                _DevolucionesLoadError(
+                                  onRetry: _loadRemote,
+                                ),
                               _LiquidacionHero(
                                 date: _sessionDate,
                                 employeeCode: widget.employeeCode,
-                                totalAIngresar:
-                                    widget.initialSummary.totalAIngresar,
+                                totalAIngresar: _summary.totalAIngresar,
                                 status: status,
                               ),
                               const SizedBox(height: 16),
@@ -155,30 +209,37 @@ class _ComercialLiquidacionDiariaPageState
                                   _MetricData(
                                     icon: Icons.payments_outlined,
                                     label: 'Total efectivo',
-                                    value: widget.initialSummary.totalEfectivo,
+                                    value: _summary.totalEfectivo,
                                     color: AppTheme.success,
                                   ),
                                   _MetricData(
                                     icon: Icons.receipt_long_outlined,
                                     label: 'Total cheques',
-                                    value: widget.initialSummary.totalCheques,
+                                    value: _summary.totalCheques,
                                     color: AppTheme.info,
                                   ),
                                   _MetricData(
                                     icon: Icons.event_repeat_outlined,
                                     label: 'Total postdatados',
-                                    value:
-                                        widget.initialSummary.totalPostdatados,
+                                    value: _summary.totalPostdatados,
                                     color: AppTheme.warning,
                                   ),
                                   _MetricData(
                                     icon: Icons.account_balance_wallet_outlined,
                                     label: 'Saldo actual',
-                                    value: widget.initialSummary.saldoActual,
+                                    value: _summary.saldoActual,
                                     color: AppTheme.accentIndigo,
+                                  ),
+                                  _MetricData(
+                                    icon: Icons.assignment_return_outlined,
+                                    label: 'Devoluciones (aparte)',
+                                    value: _summary.devolucionesYaCobradas,
+                                    color: AppTheme.error,
                                   ),
                                 ],
                               ),
+                              const SizedBox(height: 16),
+                              _DevolucionesList(returns: _returns),
                               const SizedBox(height: 16),
                               _LiquidacionWorkspace(
                                 ingresoBancoController: _ingresoBancoController,
@@ -1017,6 +1078,123 @@ class _StatusPill extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DevolucionesLoadError extends StatelessWidget {
+  const _DevolucionesLoadError({
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Error al cargar cobros y devoluciones',
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.error.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.error.withValues(alpha: 0.28)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: AppTheme.error),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'No se pudieron cargar cobros y devoluciones',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: onRetry,
+              child: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DevolucionesList extends StatelessWidget {
+  const _DevolucionesList({required this.returns});
+
+  final List<ComercialDevolucionItem> returns;
+
+  @override
+  Widget build(BuildContext context) {
+    if (returns.isEmpty) {
+      return Semantics(
+        label: 'Sin devoluciones de mercancía en el día',
+        child: Text(
+          'Sin devoluciones de mercancía en el día',
+          style: TextStyle(
+            color: AppTheme.textSecondary.withValues(alpha: 0.86),
+            fontSize: 13,
+          ),
+        ),
+      );
+    }
+
+    return Semantics(
+      label: 'Devoluciones ya cobradas del día',
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.softPanel,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.error.withValues(alpha: 0.24)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Devoluciones de mercancía (bloque aparte; no restan de LQD)',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final item in returns)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${item.documento} · ${item.cliente}'
+                        '${item.yaCobrada ? ' · ya cobrada (LIQ.Vd)' : ''}',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      _moneyFormat.format(item.amount.abs()),
+                      style: TextStyle(
+                        color: AppTheme.error,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

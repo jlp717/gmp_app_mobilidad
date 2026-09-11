@@ -70,6 +70,18 @@ void main() {
       expect(calculated.totalAIngresar, 100);
       expect(overridden.totalAIngresar, 75);
     });
+
+    test(
+        'does not subtract already-collected returns from the amount to deposit',
+        () {
+      const withReturns = ComercialLiquidacionSummary(
+        totalEfectivo: 1000,
+        devolucionesYaCobradas: 1000,
+      );
+
+      expect(withReturns.devolucionesYaCobradas, 1000);
+      expect(withReturns.totalAIngresar, 1000);
+    });
   });
 
   group('classifyLiquidacionStatus', () {

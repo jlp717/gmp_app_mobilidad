@@ -934,6 +934,7 @@ class PedidosProvider with ChangeNotifier {
     double? cantidadUnidades,
     double? precioVenta,
     String? unidadMedida,
+    double? lineDiscountPct,
   }) {
     if (index < 0 || index >= _lines.length) return 'Line not found';
     final line = _lines[index];
@@ -1013,6 +1014,9 @@ class PedidosProvider with ChangeNotifier {
     final shouldSyncGifts =
         !line.isAutoGift && line.tipoLinea.trim().toUpperCase() != 'G';
     if (precioVenta != null) line.precioVenta = precioVenta;
+    if (lineDiscountPct != null) {
+      line.lineDiscountPct = lineDiscountPct.clamp(0, 100);
+    }
     if (product != null) {
       line.unidadesCaja = product.quantityPerBoxForUnit(nextUnit);
       line.precioCosto = product.costForUnit(nextUnit);
@@ -1097,40 +1101,7 @@ class PedidosProvider with ChangeNotifier {
   }
 
   List<OrderLine> _buildLinesForSubmit() {
-    if (_globalDiscountPct <= 0) return _lines;
-
-    final factor = _discountFactor;
-    return _lines.map((line) {
-      final discountedPrice =
-          double.parse((line.precioVenta * factor).toStringAsFixed(4));
-      final copy = OrderLine(
-        id: line.id,
-        codigoArticulo: line.codigoArticulo,
-        descripcion: line.descripcion,
-        cantidadEnvases: line.cantidadEnvases,
-        cantidadUnidades: line.cantidadUnidades,
-        unidadMedida: line.unidadMedida,
-        unidadesCaja: line.unidadesCaja,
-        unidadesFraccion: line.unidadesFraccion,
-        precioVenta: discountedPrice,
-        precioCosto: line.precioCosto,
-        precioTarifa: line.precioTarifa,
-        precioTarifaCliente: line.precioTarifaCliente,
-        precioMinimo: line.precioMinimo,
-        precioClienteSource: line.precioClienteSource,
-        precioMinimoSource: line.precioMinimoSource,
-        precioEspecialCliente: line.precioEspecialCliente,
-        permiteBajoMinimo: line.permiteBajoMinimo,
-        codigoIva: line.codigoIva,
-        ivaRate: line.ivaRate,
-        claseLinea: line.claseLinea,
-        tipoLinea: line.tipoLinea,
-        promotionCode: line.promotionCode,
-        isAutoGift: line.isAutoGift,
-      );
-      copy.recalculate();
-      return copy;
-    }).toList();
+    return List<OrderLine>.unmodifiable(List<OrderLine>.from(_lines));
   }
 
   String _promotionProductCode(PromotionItem promo) {
@@ -1303,6 +1274,7 @@ class PedidosProvider with ChangeNotifier {
     String? vehicleCode,
     String? driverCode,
     String? routeCode,
+    bool cobroPropio = false,
   }) async {
     if (_isSaving) {
       return null;
@@ -1323,11 +1295,6 @@ class PedidosProvider with ChangeNotifier {
       _debugLog('[confirmOrder] Step 1/3: Building lines for submit');
       final linesForSubmit = _buildLinesForSubmit();
       final obs = observaciones.trim();
-      final discountTag = _globalDiscountPct > 0
-          ? '[DTO ${_globalDiscountPct.toStringAsFixed(1)}%]'
-          : '';
-      final fullObservaciones =
-          [discountTag, obs].where((s) => s.isNotEmpty).join(' ').trim();
       final clientRequestId = _activeCheckoutClientRequestId ??=
           _newCheckoutClientRequestId(vendedorCode);
       queuedSyncKey = await PedidosOfflineService.queueOrderForSync(
@@ -1337,12 +1304,13 @@ class PedidosProvider with ChangeNotifier {
         saleType: _saleType,
         lines: linesForSubmit,
         globalDiscountPct: _globalDiscountPct,
-        observaciones: fullObservaciones,
+        observaciones: obs,
         deliveryDate: deliveryDate,
         vehicleCode: vehicleCode,
         driverCode: driverCode,
         routeCode: routeCode,
         clientRequestId: clientRequestId,
+        cobroPropio: cobroPropio,
         notifyQueued: false,
       );
 
@@ -1375,8 +1343,9 @@ class PedidosProvider with ChangeNotifier {
         vendedorCode: vendedorCode,
         tipoVenta: _saleType,
         lines: linesForSubmit,
-        observaciones: fullObservaciones,
+        observaciones: obs,
         clientRequestId: clientRequestId,
+        descuentoGlobal: _globalDiscountPct,
       );
       _debugLog('[confirmOrder] createOrder result id=${createResult['id']}');
 
@@ -1411,6 +1380,7 @@ class PedidosProvider with ChangeNotifier {
         vehicleCode: vehicleCode,
         driverCode: driverCode,
         routeCode: routeCode,
+        cobroPropio: cobroPropio,
       );
       _debugLog(
         '[confirmOrder] confirmOrder result keys=${confirmedResult.keys.toList()}',

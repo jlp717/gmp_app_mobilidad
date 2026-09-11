@@ -36,6 +36,7 @@ class PedidosOfflineService {
     required List lines,
     required String observaciones,
     required String? clientRequestId,
+    double descuentoGlobal,
   }) _createOrder = _defaultCreateOrder;
   static Future<Map<String, dynamic>> Function(
     int orderId,
@@ -44,6 +45,7 @@ class PedidosOfflineService {
     String? vehicleCode,
     String? driverCode,
     String? routeCode,
+    bool cobroPropio,
   }) _confirmOrder = PedidosService.confirmOrder;
 
   static Future<void> Function()? onChanged;
@@ -231,6 +233,7 @@ class PedidosOfflineService {
     String? routeCode,
     String? clientRequestId,
     double globalDiscountPct = 0,
+    bool cobroPropio = false,
     bool notifyQueued = true,
   }) async {
     final box = await _syncQueue();
@@ -247,6 +250,7 @@ class PedidosOfflineService {
       'saleType': saleType,
       'observaciones': observaciones,
       'globalDiscountPct': globalDiscountPct,
+      'cobroPropio': cobroPropio,
       'lines': lineJson,
       'deliveryDate': deliveryDate,
       'vehicleCode': vehicleCode,
@@ -352,6 +356,8 @@ class PedidosOfflineService {
             lines: _decodeOrderLines(prepared['lines']),
             observaciones: prepared['observaciones']?.toString() ?? '',
             clientRequestId: prepared['clientRequestId'] as String?,
+            descuentoGlobal:
+                (prepared['globalDiscountPct'] as num?)?.toDouble() ?? 0,
           );
           if (response is Map && response['queued'] == true) {
             throw StateError(
@@ -374,6 +380,7 @@ class PedidosOfflineService {
           vehicleCode: prepared['vehicleCode'] as String?,
           driverCode: prepared['driverCode'] as String?,
           routeCode: prepared['routeCode'] as String?,
+          cobroPropio: prepared['cobroPropio'] == true,
         );
         if (confirmResult['queued'] == true) {
           throw StateError(
@@ -452,6 +459,7 @@ class PedidosOfflineService {
       required List lines,
       required String observaciones,
       required String? clientRequestId,
+      double descuentoGlobal,
     }) createOrder,
   ) {
     _createOrder = createOrder;
@@ -471,6 +479,7 @@ class PedidosOfflineService {
       String? vehicleCode,
       String? driverCode,
       String? routeCode,
+      bool cobroPropio,
     }) confirmOrder,
   ) {
     _confirmOrder = confirmOrder;
@@ -489,6 +498,7 @@ class PedidosOfflineService {
     required List lines,
     required String observaciones,
     required String? clientRequestId,
+    double descuentoGlobal = 0,
   }) {
     return PedidosService.createOrder(
       clientCode: clientCode,
@@ -498,6 +508,7 @@ class PedidosOfflineService {
       lines: lines.cast(),
       observaciones: observaciones,
       clientRequestId: clientRequestId,
+      descuentoGlobal: descuentoGlobal,
     );
   }
 

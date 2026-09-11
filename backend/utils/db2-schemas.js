@@ -103,6 +103,38 @@ function assertMoneyFitsWriteSchema(value, fieldName, context) {
   }
 }
 
+function resolveCommercialRuntimeTable(kind) {
+  try {
+    const { resolveRepartoRuntime } = require('../config/reparto-runtime');
+    const runtime = resolveRepartoRuntime(process.env);
+    if (!runtime?.valid) return null;
+    if (kind === 'cobros') return runtime.tables?.finance?.commercialCobros || null;
+    if (kind === 'pedidosCab') return runtime.tables?.commercial?.pedidosCab || null;
+    if (kind === 'pedidosLin') return runtime.tables?.commercial?.pedidosLin || null;
+  } catch (_) {
+    return null;
+  }
+  return null;
+}
+
+/**
+ * App-buffer table used by the commercial profile.
+ * isolated_test → JAVIER.TEST_*; otherwise JAVIER.<table>.
+ */
+function db2AppTable(table) {
+  const name = String(table || '').trim().toUpperCase();
+  if (name === 'COBROS') {
+    return resolveCommercialRuntimeTable('cobros') || db2WriteTable('COBROS');
+  }
+  if (name === 'PEDIDOS_CAB') {
+    return resolveCommercialRuntimeTable('pedidosCab') || db2WriteTable('PEDIDOS_CAB');
+  }
+  if (name === 'PEDIDOS_LIN') {
+    return resolveCommercialRuntimeTable('pedidosLin') || db2WriteTable('PEDIDOS_LIN');
+  }
+  return db2WriteTable(name);
+}
+
 module.exports = {
   ACCEPTED_SEMANTIC_TYPE_MISMATCHES,
   ERP_NUMERIC_10_2_MAX,
@@ -114,6 +146,7 @@ module.exports = {
   getDb2WriteSchemaDiagnostic,
   db2WriteTable,
   db2ErpTable,
+  db2AppTable,
   assertMoneyFitsErpNumeric10_2,
   assertMoneyFitsWriteSchema,
 };

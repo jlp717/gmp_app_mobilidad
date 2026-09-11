@@ -133,6 +133,9 @@ class CobroPendiente {
     this.appPaymentApplied = 0,
     this.cobradoPorRepartidor = false,
     this.provisional = false,
+    this.tipoDocumento = '',
+    this.cobroRiguroso = false,
+    this.porcentajeMinimoCobro = 0,
   });
 
   factory CobroPendiente.fromJson(Map<String, dynamic> json) {
@@ -186,6 +189,16 @@ class CobroPendiente {
           json['cobradoRepartidor'] == true ||
           json['responsabilidad']?.toString().toUpperCase() == 'REPARTIDOR',
       provisional: json['provisional'] == true,
+      tipoDocumento: (json['tipoDocumento'] ?? json['TIPO_DOCUMENTO'] ?? '')
+          .toString()
+          .trim(),
+      cobroRiguroso: json['cobroRiguroso'] == true ||
+          json['COBRO_RIGUROSO'] == true ||
+          json['cobroRiguroso']?.toString().toUpperCase() == 'S',
+      porcentajeMinimoCobro: ((json['porcentajeMinimoCobro'] ??
+              json['PORCENTAJE_MINIMO_COBRO'] ??
+              0) as num)
+          .toDouble(),
     );
   }
   final String id;
@@ -208,6 +221,9 @@ class CobroPendiente {
   /// True cuando el cobro pendiente es responsabilidad del repartidor, no del comercial.
   final bool cobradoPorRepartidor;
   final bool provisional;
+  final String tipoDocumento;
+  final bool cobroRiguroso;
+  final double porcentajeMinimoCobro;
 
   bool get isVencido => estado == EstadoCobro.vencido;
   bool get isPedidoAppProvisional => provisional || tipo == TipoCobro.pedidoApp;

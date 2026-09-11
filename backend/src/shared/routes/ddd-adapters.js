@@ -1821,7 +1821,7 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { clientCode, clientName, vendedorCode, lines, observations, observaciones, tipoventa, almacen, tarifa, formaPago } = req.body;
+      const { clientCode, clientName, vendedorCode, lines, observations, observaciones, tipoventa, almacen, tarifa, formaPago, descuentoGlobal, globalDiscountPct } = req.body;
       // Use explicit vendedorCode from body, fallback to userId (the logged-in user)
       const actualVendedor = normalizePedidoMutationVendorCode(vendedorCode, userId);
 
@@ -1850,6 +1850,9 @@ function createPedidosRoutes() {
         tarifa: tarifa == null || String(tarifa || '').trim() === '' ? undefined : parseInt(tarifa, 10),
         formaPago: formaPago == null ? undefined : String(formaPago).trim(),
         observaciones: observations || observaciones || '',
+        descuentoGlobal: descuentoGlobal != null
+          ? parseFloat(descuentoGlobal)
+          : (globalDiscountPct != null ? parseFloat(globalDiscountPct) : 0),
         lines: lines,
         origen: 'A',
         idempotencyKey,
@@ -1889,7 +1892,7 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { saleType, deliveryDate, vehicleCode, driverCode, routeCode } = req.body || {};
+      const { saleType, deliveryDate, vehicleCode, driverCode, routeCode, cobroPropio, cobroEnMano } = req.body || {};
       const pedidosService = require('../../../services/pedidos.service');
       let normalizedSaleType;
       try {
@@ -1910,6 +1913,7 @@ function createPedidosRoutes() {
         vehicleCode: vehicleCode ? String(vehicleCode).trim() : undefined,
         driverCode: driverCode ? String(driverCode).trim() : undefined,
         routeCode: routeCode ? String(routeCode).trim() : undefined,
+        cobroPropio: cobroPropio === true || cobroEnMano === true,
       });
 
       if (result && result.blocked) {
@@ -2232,6 +2236,7 @@ function createCobrosRoutes() {
                 error.code === 'ORDER_NOT_FOUND_FOR_PAYMENT' ? 404 :
                   error.code === 'IDEMPOTENCY_CONFLICT' ? 409 :
                     error.code === 'OVERPAY_NOT_ALLOWED' ? 409 :
+                    error.code === 'BELOW_MIN_COBRO' ? 409 :
                       error.code === 'PAYMENT_ALREADY_REGISTERED' ? 409 : 500);
     return res.status(status).json({
       success: false,
