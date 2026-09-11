@@ -33,4 +33,29 @@ void main() {
     expect(snapshot.returns.single.amount, -1000);
     expect(snapshot.returns.single.yaCobrada, isTrue);
   });
+
+  test('parses saved TEST draft without subtracting returns from LQD', () {
+    final snapshot = ComercialLiquidacionDailySnapshot.fromJson({
+      'date': '2026-09-11',
+      'summary': {
+        'totalEfectivo': 800,
+        'devolucionesYaCobradas': 400,
+        'totalAIngresar': 2500,
+        'source': 'DSEDAC.LQD',
+      },
+      'savedDraft': {
+        'vendedor': '80',
+        'date': '2026-09-11',
+        'ingresoBanco': 100,
+        'entregado': 2400,
+        'totalEsperado': 2500,
+      },
+      'returns': const [],
+    });
+
+    expect(snapshot.summary.totalAIngresar, 2500);
+    expect(snapshot.summary.devolucionesYaCobradas, 400);
+    expect(snapshot.savedDraft?.ingresoBanco, 100);
+    expect(snapshot.savedDraft?.entregado, 2400);
+  });
 }

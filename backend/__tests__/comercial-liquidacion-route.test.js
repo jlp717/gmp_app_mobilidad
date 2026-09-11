@@ -5,6 +5,8 @@ const express = require('express');
 
 const mockListReturns = jest.fn();
 const mockGetDailySummary = jest.fn();
+const mockSaveLiquidacion = jest.fn();
+const mockRegisterReturn = jest.fn();
 
 jest.mock('../services/comercial-devoluciones-service', () => {
   const actual = jest.requireActual('../services/comercial-devoluciones-service');
@@ -12,6 +14,8 @@ jest.mock('../services/comercial-devoluciones-service', () => {
     ...actual,
     listReturns: (...args) => mockListReturns(...args),
     getDailySummary: (...args) => mockGetDailySummary(...args),
+    saveLiquidacion: (...args) => mockSaveLiquidacion(...args),
+    registerReturn: (...args) => mockRegisterReturn(...args),
   };
 });
 
@@ -135,5 +139,73 @@ describe('GET /resumen-diario', () => {
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('Error interno del servidor');
     expect(JSON.stringify(res.body)).not.toMatch(/SQL0802/);
+  });
+});
+
+describe('POST /guardar', () => {
+  test('persists the commercial settlement for the signed-in vendor', async () => {
+    mockSaveLiquidacion.mockResolvedValueOnce({
+      vendedor: '80',
+      date: '2026-09-11',
+      ingresoBanco: 120,
+      entregado: 80,
+      source: 'JAVIER.TEST_LIQUIDACION_COMERCIAL',
+      idempotent: false,
+    });
+
+    const res = await request(makeApp({ code: '80', role: 'COMERCIAL' }))
+      .post('/guardar')
+      .send({
+        fecha: '2026-09-11',
+        ingresoBanco: 120,
+        entregado: 80,
+        expectedTotal: 200,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.saved.source).toBe('JAVIER.TEST_LIQUIDACION_COMERCIAL');
+    expect(mockSaveLiquidacion).toHaveBeenCalledWith(expect.objectContaining({
+      vendorCodes: ['80'],
+      date: '2026-09-11',
+      ingresoBanco: 120,
+      entregado: 80,
+    }));
+  });
+
+  test('forbids another vendor', async () => {
+    const res = await request(makeApp({ code: '80', role: 'COMERCIAL' }))
+      .post('/guardar')
+      .send({ vendedor: '15', fecha: '2026-09-11', ingresoBanco: 1, entregado: 0 });
+    expect(res.status).toBe(403);
+    expect(mockSaveLiquidacion).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /devoluciones', () => {
+  test('creates a TEST overlay return', async () => {
+    mockRegisterReturn.mockResolvedValueOnce({
+      documento: 'D-4',
+      amount: -1000,
+      yaCobrada: true,
+      source: 'JAVIER.TEST_DEVOLUCIONES_COMERCIAL',
+      idempotent: false,
+    });
+
+    const res = await request(makeApp({ code: '80', role: 'COMERCIAL' }))
+      .post('/devoluciones')
+      .send({
+        fecha: '2026-09-11',
+        cliente: '4300000354',
+        importe: 1000,
+        yaCobrada: true,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.return.documento).toBe('D-4');
+    expect(mockRegisterReturn).toHaveBeenCalledWith(expect.objectContaining({
+      vendorCodes: ['80'],
+      clientCode: '4300000354',
+      amount: 1000,
+    }));
   });
 });

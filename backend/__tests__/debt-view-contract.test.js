@@ -7,6 +7,7 @@ const {
   boundDebtFetchFirst,
   cvcLiveTypeSql,
   cvcDocumentJoins,
+  cvcPendientesJoins,
   cvcCliJoin,
   formaPagoLabel,
   isBelowMinCobro,
@@ -32,6 +33,10 @@ describe('debt-view-contract', () => {
     expect(joins).toMatch(/LEFT JOIN DSEDAC\.CPC CPC/i);
     expect(joins).toMatch(/LEFT JOIN DSEDAC\.FPG FPG/i);
     expect(joins).not.toMatch(/DSEDAC\.FPA/i);
+    const pendientesJoins = cvcPendientesJoins('C');
+    expect(pendientesJoins).toMatch(/LEFT JOIN DSEDAC\.FPG FPG/i);
+    expect(pendientesJoins).not.toMatch(/LEFT JOIN DSEDAC\.CAC/i);
+    expect(pendientesJoins).not.toMatch(/LEFT JOIN DSEDAC\.CPC/i);
     expect(cvcCliJoin('CVC')).toMatch(/LEFT JOIN DSEDAC\.CLI CLI/i);
     expect(cvcLiveTypeSql('CVC')).toMatch(/'COB'/);
     expect(cvcLiveTypeSql('CVC')).toMatch(/'DEV'/);

@@ -21,7 +21,7 @@ jest.mock('../middleware/logger', () => ({
   debug: jest.fn(),
 }));
 
-const { Db2CobrosRepository } = require('../src/modules/cobros/infrastructure/db2-cobros-repository');
+const { Db2CobrosRepository, clearPedidoCabOptionalColumnsCache } = require('../src/modules/cobros/infrastructure/db2-cobros-repository');
 
 function orderRow(overrides = {}) {
   return {
@@ -65,6 +65,7 @@ beforeEach(() => {
   mockPoolConnect.mockReset();
   mockConnQuery.mockReset();
   mockConnClose.mockReset();
+  clearPedidoCabOptionalColumnsCache();
 });
 
 describe('Db2CobrosRepository ensureCobrosTable', () => {
@@ -172,7 +173,7 @@ describe('commercial cobros hardening', () => {
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
     expect(sql).not.toMatch(/\bJOIN\s+DSEDAC\.CLP/i);
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
-    expect(mockQueryWithParams).not.toHaveBeenCalled();
+    expect(mockQueryWithParams.mock.calls.every(([sqlText]) => /QSYS2\.SYSCOLUMNS2/i.test(sqlText))).toBe(true);
     expect(result).toEqual({
       summary: {
         C001: { nombre: 'Cliente Uno', total: 125.5, vencido: 25.5, count: 2, estado: 'VENCIDO' },
@@ -482,7 +483,7 @@ describe('commercial cobros hardening', () => {
     expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\('[^']+'/i);
     expect(sql).toMatch(/'UNK'/);
     expect(sql).not.toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\([^)]*\?/i);
-    expect(mockQueryWithParams).not.toHaveBeenCalled();
+    expect(mockQueryWithParams.mock.calls.every(([sqlText]) => /QSYS2\.SYSCOLUMNS2/i.test(sqlText))).toBe(true);
   });
 
   test('getPendingSummary embeds three-character vendor sentinels to avoid DB2 truncation', async () => {
@@ -498,7 +499,7 @@ describe('commercial cobros hardening', () => {
     const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
     expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\('UNK'\)/i);
     expect(sql).not.toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\([^)]*\?/i);
-    expect(mockQueryWithParams).not.toHaveBeenCalled();
+    expect(mockQueryWithParams.mock.calls.every(([sqlText]) => /QSYS2\.SYSCOLUMNS2/i.test(sqlText))).toBe(true);
   });
 
   test('getPendingSummary forbids COMERCIAL from ALL and another vendor', async () => {
@@ -603,13 +604,13 @@ describe('commercial cobros hardening', () => {
       /FROM\s+DSEDAC\.CVC\s+C/i.test(sql),
     );
     expect(cvcSql).toMatch(/DSEDAC\.CLP/);
-    expect(cvcSql).toMatch(/DSEDAC\.CAC/);
-    expect(cvcSql).toMatch(/DSEDAC\.CPC/);
+    expect(cvcSql).not.toMatch(/DSEDAC\.CAC/);
+    expect(cvcSql).not.toMatch(/DSEDAC\.CPC/);
     expect(cvcSql).toMatch(/DSEDAC\.FPG/);
     expect(cvcSql).not.toMatch(/VISTA_DEUDA_BASE/i);
     expect(cvcSql).toMatch(/DSED\.LACLAE/);
     expect(cvcSql).toMatch(/IN\s*\('01','1'\)/i);
-    expect(cvcSql).not.toMatch(/FETCH\s+FIRST\s+100\s+ROWS\s+ONLY/i);
+    expect(cvcSql).toMatch(/FETCH FIRST \d+ ROWS ONLY/i);
     expect(params).toEqual(['C001']);
   });
 
@@ -751,11 +752,9 @@ describe('commercial cobros hardening', () => {
   });
 
   test('getPendientes merges CVC debt with provisional app orders', async () => {
-    mockQuery.mockImplementation(async (sql) => {
-      if (/QSYS2\.SYSCOLUMNS2/i.test(sql)) return [{ COLUMN_NAME: 'ORIGEN' }];
-      return [{ 1: 1 }];
-    });
+    mockQuery.mockResolvedValue([{ 1: 1 }]);
     mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/QSYS2\.SYSCOLUMNS2/i.test(sql)) return [{ COLUMN_NAME: 'ORIGEN' }];
       if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
         return [{
           SERIE_DOCUMENTO: 'M',
@@ -812,6 +811,12 @@ describe('commercial cobros hardening', () => {
       importePendiente: 30,
       docKey: { source: 'PEDIDOS_CAB', id: 22, serie: 'M', numero: 7 },
     });
+    const cvcSql = mockQueryWithParams.mock.calls.find(([sql]) => /FROM\s+DSEDAC\.CVC\s+C/i.test(sql))[0];
+    expect(cvcSql).toMatch(/LEFT JOIN DSEDAC\.FPG FPG/i);
+    expect(cvcSql).not.toMatch(/LEFT JOIN DSEDAC\.CAC/i);
+    expect(cvcSql).not.toMatch(/LEFT JOIN DSEDAC\.CPC/i);
+    expect(cvcSql).toMatch(/FETCH FIRST \d+ ROWS ONLY/i);
+    expect(cvcSql).not.toMatch(/VISTA_DEUDA_BASE/i);
   });
 
   test('registerPayment records a partial payment and returns remaining pending amount', async () => {

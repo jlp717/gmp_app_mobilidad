@@ -26,6 +26,7 @@ class ComercialLiquidacionDiariaPage extends ConsumerStatefulWidget {
     this.initialReturns = const [],
     this.snapshotLoader,
     this.onSubmit,
+    this.onRegisterReturn,
   });
 
   final String employeeCode;
@@ -35,6 +36,12 @@ class ComercialLiquidacionDiariaPage extends ConsumerStatefulWidget {
   final List<ComercialDevolucionItem> initialReturns;
   final Future<ComercialLiquidacionDailySnapshot> Function()? snapshotLoader;
   final FutureOr<void> Function(ComercialLiquidacionDraft draft)? onSubmit;
+  final Future<ComercialDevolucionItem> Function({
+    required String clientCode,
+    required double amount,
+    String? documentoOrigen,
+    bool yaCobrada,
+  })? onRegisterReturn;
 
   @override
   ConsumerState<ComercialLiquidacionDiariaPage> createState() =>
@@ -112,6 +119,12 @@ class _ComercialLiquidacionDiariaPageState
         _summary = snapshot.summary;
         _returns = snapshot.returns;
         _isLoadingRemote = false;
+        final saved = snapshot.savedDraft;
+        if (saved != null && !_hasInput) {
+          _ingresoBancoController.text = saved.ingresoBanco.toStringAsFixed(2);
+          _entregadoController.text = saved.entregado.toStringAsFixed(2);
+          _lastSavedAt = saved.date;
+        }
       });
     } catch (error) {
       if (!mounted) return;
@@ -239,7 +252,12 @@ class _ComercialLiquidacionDiariaPageState
                                 ],
                               ),
                               const SizedBox(height: 16),
-                              _DevolucionesList(returns: _returns),
+                              _DevolucionesList(
+                                returns: _returns,
+                                onRegister: widget.onRegisterReturn == null
+                                    ? null
+                                    : _openReturnDialog,
+                              ),
                               const SizedBox(height: 16),
                               _LiquidacionWorkspace(
                                 ingresoBancoController: _ingresoBancoController,
@@ -316,11 +334,155 @@ class _ComercialLiquidacionDiariaPageState
     }
   }
 
+  Future<void> _openReturnDialog() async {
+    final register = widget.onRegisterReturn;
+    if (register == null) return;
+    final result = await showDialog<_DevuelveDraft>(
+      context: context,
+      builder: (dialogContext) => const _DevuelveDialog(),
+    );
+    if (result == null || !mounted) return;
+    if (result.client.isEmpty || result.amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cliente e importe válidos obligatorios')),
+      );
+      return;
+    }
+    try {
+      final item = await register(
+        clientCode: result.client,
+        amount: result.amount,
+        documentoOrigen: result.origen,
+        yaCobrada: result.yaCobrada,
+      );
+      if (!mounted) return;
+      setState(() => _returns = [..._returns, item]);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Devolución registrada en TEST.')),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Commercial return overlay failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo registrar la devolución TEST.'),
+        ),
+      );
+    }
+  }
+
   void _clearDraft() {
     _ingresoBancoController.clear();
     _entregadoController.clear();
     _lastSavedAt = null;
     setState(() {});
+  }
+}
+
+class _DevuelveDraft {
+  const _DevuelveDraft({
+    required this.client,
+    required this.amount,
+    required this.origen,
+    required this.yaCobrada,
+  });
+
+  final String client;
+  final double amount;
+  final String origen;
+  final bool yaCobrada;
+}
+
+class _DevuelveDialog extends StatefulWidget {
+  const _DevuelveDialog();
+
+  @override
+  State<_DevuelveDialog> createState() => _DevuelveDialogState();
+}
+
+class _DevuelveDialogState extends State<_DevuelveDialog> {
+  final _clientController = TextEditingController();
+  final _amountController = TextEditingController();
+  final _originController = TextEditingController();
+  bool _yaCobrada = true;
+
+  @override
+  void dispose() {
+    _clientController.dispose();
+    _amountController.dispose();
+    _originController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppTheme.raisedSurface,
+      title: const Text('Devuelve (TEST)'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(
+            label: 'Cliente de la devolución',
+            textField: true,
+            child: TextField(
+              key: const ValueKey('comercial-devuelve-cliente'),
+              controller: _clientController,
+              decoration: const InputDecoration(labelText: 'Cliente'),
+            ),
+          ),
+          Semantics(
+            label: 'Importe de la devolución',
+            textField: true,
+            child: TextField(
+              key: const ValueKey('comercial-devuelve-importe'),
+              controller: _amountController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Importe'),
+            ),
+          ),
+          Semantics(
+            label: 'Documento origen',
+            textField: true,
+            child: TextField(
+              key: const ValueKey('comercial-devuelve-origen'),
+              controller: _originController,
+              decoration: const InputDecoration(
+                labelText: 'Factura / albarán origen',
+              ),
+            ),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Ya cobrada (PG / LIQ.Vd)'),
+            value: _yaCobrada,
+            onChanged: (value) => setState(() => _yaCobrada = value),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          key: const ValueKey('comercial-devuelve-confirm'),
+          onPressed: () {
+            Navigator.pop(
+              context,
+              _DevuelveDraft(
+                client: _clientController.text.trim(),
+                amount: parseAmount(_amountController.text) ?? 0,
+                origen: _originController.text.trim(),
+                yaCobrada: _yaCobrada,
+              ),
+            );
+          },
+          child: const Text('Devuelve'),
+        ),
+      ],
+    );
   }
 }
 
@@ -1127,22 +1289,44 @@ class _DevolucionesLoadError extends StatelessWidget {
 }
 
 class _DevolucionesList extends StatelessWidget {
-  const _DevolucionesList({required this.returns});
+  const _DevolucionesList({
+    required this.returns,
+    this.onRegister,
+  });
 
   final List<ComercialDevolucionItem> returns;
+  final VoidCallback? onRegister;
 
   @override
   Widget build(BuildContext context) {
+    final registerButton = onRegister == null
+        ? const SizedBox.shrink()
+        : Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('comercial-liquidacion-devuelve-button'),
+              onPressed: onRegister,
+              icon: const Icon(Icons.undo_rounded, size: 18),
+              label: const Text('Devuelve'),
+            ),
+          );
+
     if (returns.isEmpty) {
-      return Semantics(
-        label: 'Sin devoluciones de mercancía en el día',
-        child: Text(
-          'Sin devoluciones de mercancía en el día',
-          style: TextStyle(
-            color: AppTheme.textSecondary.withValues(alpha: 0.86),
-            fontSize: 13,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            label: 'Sin devoluciones de mercancía en el día',
+            child: Text(
+              'Sin devoluciones de mercancía en el día',
+              style: TextStyle(
+                color: AppTheme.textSecondary.withValues(alpha: 0.86),
+                fontSize: 13,
+              ),
+            ),
           ),
-        ),
+          registerButton,
+        ],
       );
     }
 
@@ -1193,6 +1377,7 @@ class _DevolucionesList extends StatelessWidget {
                   ],
                 ),
               ),
+            registerButton,
           ],
         ),
       ),

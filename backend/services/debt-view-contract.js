@@ -30,6 +30,12 @@ function cvcLiveTypeSql(alias = 'CVC') {
   return `AND TRIM(${alias}.TIPODOCUMENTO) IN (${CVC_LIVE_TYPES.map((type) => `'${type}'`).join(', ')})`;
 }
 
+function cvcPendientesJoins(alias = 'C') {
+  return `
+            LEFT JOIN DSEDAC.FPG FPG
+              ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(${alias}.CODIGOFORMAPAGO)`;
+}
+
 function cvcDocumentJoins(alias = 'C') {
   return `
             LEFT JOIN DSEDAC.CAC CAC
@@ -89,6 +95,7 @@ module.exports = {
   cvcPendingPredicate,
   cvcLiveTypeSql,
   cvcDocumentJoins,
+  cvcPendientesJoins,
   cvcCliJoin,
   formaPagoLabel,
   boundDebtFetchFirst,

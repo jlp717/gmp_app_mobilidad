@@ -2101,6 +2101,21 @@ class _MainShellState extends ConsumerState<MainShell> {
               isJefeVentas: true,
               snapshotLoader: () => const ComercialLiquidacionService()
                   .fetchDaily(employeeCode: employeeCode),
+              onSubmit: (draft) =>
+                  const ComercialLiquidacionService().saveDaily(draft),
+              onRegisterReturn: ({
+                required clientCode,
+                required amount,
+                documentoOrigen,
+                yaCobrada = true,
+              }) =>
+                  const ComercialLiquidacionService().registerReturn(
+                employeeCode: employeeCode,
+                clientCode: clientCode,
+                amount: amount,
+                documentoOrigen: documentoOrigen,
+                yaCobrada: yaCobrada,
+              ),
             );
           case 'Bolsa':
             return const BolsaPage();
@@ -2225,6 +2240,21 @@ class _MainShellState extends ConsumerState<MainShell> {
             forceShowVendorSelector: hasScopedVendorAccess,
             snapshotLoader: () => const ComercialLiquidacionService()
                 .fetchDaily(employeeCode: empCode),
+            onSubmit: (draft) =>
+                const ComercialLiquidacionService().saveDaily(draft),
+            onRegisterReturn: ({
+              required clientCode,
+              required amount,
+              documentoOrigen,
+              yaCobrada = true,
+            }) =>
+                const ComercialLiquidacionService().registerReturn(
+              employeeCode: empCode,
+              clientCode: clientCode,
+              amount: amount,
+              documentoOrigen: documentoOrigen,
+              yaCobrada: yaCobrada,
+            ),
           );
         case 'Bolsa':
           return BolsaPage(forceShowVendorSelector: hasScopedVendorAccess);

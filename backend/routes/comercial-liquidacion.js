@@ -8,6 +8,8 @@ const {
   todayIsoDate,
   listReturns,
   getDailySummary,
+  saveLiquidacion,
+  registerReturn,
 } = require('../services/comercial-devoluciones-service');
 
 const router = express.Router();
@@ -36,7 +38,13 @@ function forbidden(res, message) {
 
 function resolveVendorCodes(req) {
   const context = getContext(req);
-  const requestedRaw = String(req.query.vendedor || req.query.vendedorCodes || '').trim();
+  const requestedRaw = String(
+    req.query.vendedor
+    || req.query.vendedorCodes
+    || req.body?.vendedor
+    || req.body?.vendedorCodes
+    || '',
+  ).trim();
   const requestedIsAll = requestedRaw.toUpperCase() === 'ALL';
   const requestedCodes = requestedIsAll ? [] : sanitizeVendorCodes(requestedRaw.split(','));
   const visible = sanitizeVendorCodes([
@@ -131,6 +139,72 @@ router.get('/resumen-diario', async (req, res) => {
     });
   } catch (error) {
     return sendTypedError(res, error, 'LIQUIDACION_SUMMARY_ERROR');
+  }
+});
+
+function resolveWriteDate(req) {
+  const raw = req.body?.fecha || req.query.fecha || todayIsoDate();
+  const parsed = parseIsoDate(raw);
+  if (!parsed) return { error: 'fecha invalida; usa YYYY-MM-DD' };
+  return { date: parsed.iso };
+}
+
+router.post('/guardar', async (req, res) => {
+  try {
+    const vendors = resolveVendorCodes(req);
+    if (vendors.error) return forbidden(res, vendors.error);
+    const fecha = resolveWriteDate(req);
+    if (fecha.error) {
+      return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', error: fecha.error });
+    }
+    const body = req.body || {};
+    const saved = await saveLiquidacion({
+      vendorCodes: vendors.codes,
+      date: fecha.date,
+      ingresoBanco: body.ingresoBanco,
+      entregado: body.entregado,
+      expectedTotal: body.expectedTotal ?? body.totalEsperado,
+      totals: body.totals || {},
+      createdBy: getContext(req).userId,
+      idempotencyToken: req.get('Idempotency-Key') || body.idempotencyToken,
+    });
+    return res.status(saved.idempotent ? 200 : 201).json({
+      success: true,
+      saved,
+    });
+  } catch (error) {
+    return sendTypedError(res, error, 'LIQUIDACION_SAVE_ERROR');
+  }
+});
+
+router.post('/devoluciones', async (req, res) => {
+  try {
+    const vendors = resolveVendorCodes(req);
+    if (vendors.error) return forbidden(res, vendors.error);
+    const fecha = resolveWriteDate(req);
+    if (fecha.error) {
+      return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', error: fecha.error });
+    }
+    const body = req.body || {};
+    const created = await registerReturn({
+      vendorCodes: vendors.codes,
+      date: fecha.date,
+      clientCode: body.cliente || body.clientCode,
+      amount: body.importe ?? body.amount,
+      units: body.unidades ?? body.units,
+      serie: body.serie,
+      numero: body.numero,
+      documentoOrigen: body.documentoOrigen || body.origen,
+      yaCobrada: body.yaCobrada !== false,
+      createdBy: getContext(req).userId,
+      idempotencyToken: req.get('Idempotency-Key') || body.idempotencyToken,
+    });
+    return res.status(created.idempotent ? 200 : 201).json({
+      success: true,
+      return: created,
+    });
+  } catch (error) {
+    return sendTypedError(res, error, 'DEVOLUCION_SAVE_ERROR');
   }
 });
 

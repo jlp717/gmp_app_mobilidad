@@ -62,6 +62,13 @@ describe('commercial isolated_test table mapping', () => {
     expect(migration).toMatch(/CREATE TABLE JAVIER\.TEST_COBROS LIKE JAVIER\.COBROS/);
     expect(migration).toMatch(/CREATE TABLE JAVIER\.TEST_PEDIDOS_CAB LIKE JAVIER\.PEDIDOS_CAB/);
     expect(migration).toMatch(/CREATE TABLE JAVIER\.TEST_PEDIDOS_LIN LIKE JAVIER\.PEDIDOS_LIN/);
+    const overlayMigration = fs.readFileSync(
+      require.resolve('../migrations/046_comercial_liquidacion_test_overlay.sql'),
+      'utf8',
+    );
+    expect(overlayMigration).toMatch(/CREATE TABLE JAVIER\.TEST_LIQUIDACION_COMERCIAL/);
+    expect(overlayMigration).toMatch(/CREATE TABLE JAVIER\.TEST_DEVOLUCIONES_COMERCIAL/);
+    expect(overlayMigration).not.toMatch(/ALTER TABLE DSEDAC|CREATE TABLE DSEDAC|INSERT INTO DSEDAC/);
     expect(migration).not.toMatch(/ALTER TABLE DSEDAC|CREATE TABLE DSEDAC|INSERT INTO DSEDAC/);
   });
 });

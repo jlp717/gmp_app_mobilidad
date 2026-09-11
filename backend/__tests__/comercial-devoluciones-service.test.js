@@ -7,6 +7,8 @@ const {
   sanitizeVendorCodes,
   listReturns,
   getDailySummary,
+  saveLiquidacion,
+  registerReturn,
 } = require('../services/comercial-devoluciones-service');
 
 const mockQueryWithParams = jest.fn();
@@ -210,5 +212,137 @@ describe('getDailySummary', () => {
     expect(lqdSql).toMatch(/IMPORTETOTALAINGRESAR/);
     expect(lqdSql).not.toMatch(/VENDEDOR\s*=\s*'ALL'/i);
     expect(lqdSql).not.toMatch(/VISTA_DEUDA_BASE/i);
+  });
+});
+
+function isolatedWriteEnv() {
+  const previous = {};
+  const env = {
+    NODE_ENV: 'test',
+    REPARTO_ENVIRONMENT: 'test',
+    REPARTO_TABLE_SET: 'isolated_test',
+    REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+    REPARTO_WRITES_ENABLED: 'true',
+    ODBC_DSN: 'GMP',
+    REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+    REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+    REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+  };
+  for (const [key, value] of Object.entries(env)) {
+    previous[key] = process.env[key];
+    process.env[key] = value;
+  }
+  return () => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
+}
+
+describe('TEST-only commercial writes', () => {
+  let restoreEnv;
+
+  beforeEach(() => {
+    mockQueryWithParams.mockReset();
+    restoreEnv = isolatedWriteEnv();
+  });
+
+  afterEach(() => {
+    restoreEnv();
+  });
+
+  test('saveLiquidacion inserts JAVIER.TEST_LIQUIDACION_COMERCIAL and never DSEDAC', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/IDEMPOTENCY_TOKEN/i.test(sql) && /SELECT/i.test(sql)) return [];
+      if (/SELECT ID FROM JAVIER\.TEST_LIQUIDACION_COMERCIAL/i.test(sql)) return [];
+      return [];
+    });
+
+    const saved = await saveLiquidacion({
+      vendorCodes: ['80'],
+      date: '2026-09-11',
+      ingresoBanco: 120,
+      entregado: 80,
+      expectedTotal: 200,
+      idempotencyToken: 'liq-80-2026-09-11',
+      createdBy: '80',
+    });
+
+    expect(saved.source).toBe('JAVIER.TEST_LIQUIDACION_COMERCIAL');
+    expect(saved.ingresoBanco).toBe(120);
+    const insertSql = mockQueryWithParams.mock.calls.find(([sql]) => /INSERT INTO/i.test(sql))[0];
+    expect(insertSql).toMatch(/JAVIER\.TEST_LIQUIDACION_COMERCIAL/);
+    expect(insertSql).not.toMatch(/DSEDAC/i);
+    expect(insertSql).not.toMatch(/VISTA_DEUDA_BASE/i);
+  });
+
+  test('saveLiquidacion refuses writes outside isolated_test', async () => {
+    process.env.REPARTO_TABLE_SET = 'production';
+    process.env.REPARTO_ENVIRONMENT = 'production';
+    process.env.NODE_ENV = 'production';
+    process.env.REPARTO_WRITES_ENABLED = 'false';
+    process.env.REPARTIDOR_FINANCE_ERP_SCHEMA = 'DSEDAC';
+    await expect(saveLiquidacion({
+      vendorCodes: ['80'],
+      date: '2026-09-11',
+      ingresoBanco: 10,
+      entregado: 0,
+      expectedTotal: 10,
+    })).rejects.toMatchObject({ code: 'WRITES_TEST_ONLY', status: 409 });
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('registerReturn inserts TEST overlay without touching LACLAE', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/IDEMPOTENCY_TOKEN/i.test(sql) && /SELECT/i.test(sql)) return [];
+      if (/MAX\(NUMERO\)/i.test(sql)) return [{ LAST_NUM: 3 }];
+      return [];
+    });
+
+    const created = await registerReturn({
+      vendorCodes: ['80'],
+      date: '2026-09-11',
+      clientCode: '4300000354',
+      amount: 1000,
+      yaCobrada: true,
+      documentoOrigen: 'F-88',
+      idempotencyToken: 'dev-80-2026-09-11-c1',
+    });
+
+    expect(created.documento).toBe('D-4');
+    expect(created.amount).toBe(-1000);
+    expect(created.yaCobrada).toBe(true);
+    expect(created.source).toBe('JAVIER.TEST_DEVOLUCIONES_COMERCIAL');
+    const insertSql = mockQueryWithParams.mock.calls.find(([sql]) => /INSERT INTO/i.test(sql))[0];
+    expect(insertSql).toMatch(/JAVIER\.TEST_DEVOLUCIONES_COMERCIAL/);
+    expect(insertSql).not.toMatch(/DSED\.LACLAE/);
+    expect(insertSql).not.toMatch(/DSEDAC/i);
+  });
+
+  test('listReturns merges TEST overlay without double-counting ERP docs', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/DSED\.LACLAE/i.test(sql)) {
+        return [{
+          YEAR: 2026, MONTH: 9, DAY: 11, SERIE: 'D', NUMERO: 1,
+          CLIENTE: 'C1', VENDEDOR: '80', AMOUNT: '-400', UNITS: '-1', YA_COBRADA: 1,
+        }];
+      }
+      if (/TEST_DEVOLUCIONES_COMERCIAL/i.test(sql)) {
+        return [{
+          YEAR: 2026, MONTH: 9, DAY: 11, SERIE: 'D', NUMERO: 1,
+          CLIENTE: 'C1', VENDEDOR: '80', AMOUNT: '-400', UNITS: '-1', YA_COBRADA: 1,
+          DOCUMENTO_ORIGEN: 'F-1',
+        }, {
+          YEAR: 2026, MONTH: 9, DAY: 11, SERIE: 'D', NUMERO: 9,
+          CLIENTE: 'C2', VENDEDOR: '80', AMOUNT: '-250', UNITS: '-1', YA_COBRADA: 1,
+        }];
+      }
+      return [];
+    });
+
+    const returns = await listReturns({ vendorCodes: ['80'], date: '2026-09-11' });
+    expect(returns).toHaveLength(2);
+    expect(returns.map((item) => item.documento).sort()).toEqual(['D-1', 'D-9']);
   });
 });

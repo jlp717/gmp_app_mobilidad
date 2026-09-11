@@ -19,7 +19,7 @@ const { getClientCodesFromCache } = require('../../../../services/laclae');
 const {
   DEBT_VIEW,
   boundDebtFetchFirst,
-  cvcDocumentJoins,
+  cvcPendientesJoins,
   cvcCliJoin,
   cvcLiveTypeSql,
   cvcPendingPredicate,
@@ -31,6 +31,11 @@ const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2AppTable('COBROS');
 const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
 const COBROS_HEALTHCHECK_SQL = ['SELECT 1 FROM', COBROS_TABLE, 'FETCH FIRST 1 ROW ONLY'].join(' ');
+const pedidoCabOptionalColumnsCache = new Map();
+
+function clearPedidoCabOptionalColumnsCache() {
+  pedidoCabOptionalColumnsCache.clear();
+}
 
 const FORMAS_PAGO_REPARTIDOR = ['01', 'CO', 'CTR', 'EF'];
 
@@ -758,18 +763,20 @@ class Db2CobrosRepository extends CobrosRepository {
             TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO,
             TRIM(FPG.DESCRIPCIONFORMAPAGO) AS FORMA_PAGO_DESC
         FROM ${DEBT_VIEW} C
-        ${cvcDocumentJoins('C')}
+        ${cvcPendientesJoins('C')}
         WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
           AND ${cvcPendingPredicate('C')}
           ${docFilters.clause}
           ${access.clause}
-        ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC`;
+        ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC
+        FETCH FIRST ${boundDebtFetchFirst(context.limit || 200)} ROWS ONLY`;
 
-      const [rows, appCobrosByDoc, repartidorByDoc, cobroMinimo] = await Promise.all([
+      const [rows, appCobrosByDoc, repartidorByDoc, cobroMinimo, appOrders] = await Promise.all([
         queryWithParams(cvcSql, [trim(clientCode), ...docFilters.params, ...access.params], []),
         this.getAppSideCobrosByDoc(clientCode),
         this.getAppSideRepartidorByDoc(clientCode),
         this.getClientCobroRiguroso(clientCode, context),
+        this.getAppOrderPendientes(clientCode, context),
       ]);
       const groupedRows = groupCvcRowsByDocument(rows).map((row) => ({
         ...row,
@@ -801,7 +808,6 @@ class Db2CobrosRepository extends CobrosRepository {
         repartidorByDoc,
       );
 
-      const appOrders = await this.getAppOrderPendientes(clientCode, context);
       const mergedCobros = [
         ...cobros,
         ...(appOrders.cobros || []),
@@ -845,16 +851,22 @@ class Db2CobrosRepository extends CobrosRepository {
     if (!/^[A-Z][A-Z0-9_]*$/.test(schema || '') || !/^[A-Z][A-Z0-9_]*$/.test(table || '')) {
       return optionalColumns;
     }
+    const cacheKey = `${schema}.${table}`;
+    if (pedidoCabOptionalColumnsCache.has(cacheKey)) {
+      return pedidoCabOptionalColumnsCache.get(cacheKey);
+    }
     try {
-      const columnRows = await query(`
-        SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
-        WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${table}'
-          AND COLUMN_NAME IN (
-            'ORIGEN', 'NUMEROALBARAN', 'NUMEROFACTURA', 'PROCESADOSN',
-            'SITUACIONALBARAN', 'IMPORTECOBRADO', 'SYSTEM_NUMEROPEDIDO',
-            'SYSTEM_SERIEPEDIDO', 'SYSTEM_TERMINALPEDIDO'
-          )
-      `);
+      const columnRows = await queryWithParams(
+        `SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
+          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+            AND COLUMN_NAME IN (
+              'ORIGEN', 'NUMEROALBARAN', 'NUMEROFACTURA', 'PROCESADOSN',
+              'SITUACIONALBARAN', 'IMPORTECOBRADO', 'SYSTEM_NUMEROPEDIDO',
+              'SYSTEM_SERIEPEDIDO', 'SYSTEM_TERMINALPEDIDO'
+            )`,
+        [schema, table],
+        [],
+      );
       for (const row of columnRows || []) optionalColumns.add(trim(row.COLUMN_NAME).toUpperCase());
     } catch (e) {
       logger.debug('[COBROS_REPO] PEDIDOS_CAB optional column detection skipped', {
@@ -863,6 +875,7 @@ class Db2CobrosRepository extends CobrosRepository {
         reason: e?.code || e?.message || 'unknown',
       });
     }
+    pedidoCabOptionalColumnsCache.set(cacheKey, optionalColumns);
     return optionalColumns;
   }
 
@@ -1935,4 +1948,4 @@ class Db2CobrosRepository extends CobrosRepository {
 
 Db2CobrosRepository._vddxMinColumn = null;
 
-module.exports = { Db2CobrosRepository };
+module.exports = { Db2CobrosRepository, clearPedidoCabOptionalColumnsCache };

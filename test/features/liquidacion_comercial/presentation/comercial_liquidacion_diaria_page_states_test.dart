@@ -9,6 +9,12 @@ Future<void> _pumpPage(
   WidgetTester tester, {
   ComercialLiquidacionSummary summary = const ComercialLiquidacionSummary(),
   FutureOr<void> Function(ComercialLiquidacionDraft)? onSubmit,
+  Future<ComercialDevolucionItem> Function({
+    required String clientCode,
+    required double amount,
+    String? documentoOrigen,
+    bool yaCobrada,
+  })? onRegisterReturn,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -17,6 +23,7 @@ Future<void> _pumpPage(
           employeeCode: '57',
           initialSummary: summary,
           onSubmit: onSubmit,
+          onRegisterReturn: onRegisterReturn,
         ),
       ),
     ),
@@ -111,5 +118,50 @@ void main() {
     expect(find.text('Liquidación guardada.'), findsNothing);
     expect(find.text('Guardar'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Devuelve registra overlay TEST y lo muestra en la lista',
+      (tester) async {
+    ComercialDevolucionItem? created;
+    await _pumpPage(
+      tester,
+      onRegisterReturn: ({
+        required clientCode,
+        required amount,
+        documentoOrigen,
+        yaCobrada = true,
+      }) async {
+        created = ComercialDevolucionItem(
+          documento: 'D-4',
+          cliente: clientCode,
+          amount: -amount,
+          yaCobrada: yaCobrada,
+        );
+        return created!;
+      },
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('comercial-liquidacion-devuelve-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+        find.byKey(const ValueKey('comercial-liquidacion-devuelve-button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('comercial-devuelve-cliente')),
+      '4300000354',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('comercial-devuelve-importe')),
+      '1000',
+    );
+    await tester.tap(find.byKey(const ValueKey('comercial-devuelve-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(created?.cliente, '4300000354');
+    expect(created?.amount, -1000);
+    expect(find.textContaining('D-4'), findsOneWidget);
+    expect(find.text('Devolución registrada en TEST.'), findsOneWidget);
   });
 }

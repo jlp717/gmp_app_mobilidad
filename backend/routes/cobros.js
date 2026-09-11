@@ -8,7 +8,7 @@ const rateLimit = require('express-rate-limit');
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, invalidateCache: invalidateCachePattern } = require('../services/redis-cache');
-const { DEBT_VIEW, cvcDocumentJoins, cvcCliJoin, cvcLiveTypeSql, cvcPendingPredicate, formaPagoLabel } = require('../services/debt-view-contract');
+const { DEBT_VIEW, cvcPendientesJoins, cvcCliJoin, cvcLiveTypeSql, cvcPendingPredicate, formaPagoLabel } = require('../services/debt-view-contract');
 const logger = require('../middleware/logger');
 const { db2QualifiedTable, db2InsertSql } = require('../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../utils/db2-schemas');
@@ -531,7 +531,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO,
                 TRIM(FPG.DESCRIPCIONFORMAPAGO) AS FORMA_PAGO_DESC
             FROM ${DEBT_VIEW} C
-            ${cvcDocumentJoins('C')}
+            ${cvcPendientesJoins('C')}
             WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
               AND ${cvcPendingPredicate('C')}
               ${docFilterSql}
