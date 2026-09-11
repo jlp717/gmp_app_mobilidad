@@ -8,6 +8,7 @@
  *   node backend/scripts/live-reparto-confirm-isolated.js
  */
 
+const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const crypto = require('crypto');
@@ -76,7 +77,7 @@ function credentials(actor) {
 }
 
 function loadActorFromE2eScript() {
-  const file = require('path').join(__dirname, '_e2e_extra_tabs.js');
+  const file = path.join(__dirname, '_e2e_extra_tabs.js');
   if (!fs.existsSync(file)) return null;
   const src = fs.readFileSync(file, 'utf8');
   const user = src.match(/username\s*:\s*['"]([^'"]+)['"]/i)
@@ -84,7 +85,13 @@ function loadActorFromE2eScript() {
   const pass = src.match(/password\s*:\s*['"]([^'"]+)['"]/i)
     || src.match(/pin\s*:\s*['"]([^'"]+)['"]/i);
   if (!user || !pass) return null;
-  return { login: { username: user[1], password: pass[1] } };
+  const role = src.match(/newRole\s*:\s*['"]([^'"]+)['"]/);
+  const userId = src.match(/userId\s*:\s*['"]([^'"]+)['"]/);
+  const actor = { login: { username: user[1], password: pass[1] } };
+  if (role && userId) {
+    actor.switchRole = { body: { newRole: role[1], userId: userId[1] } };
+  }
+  return actor;
 }
 
 function loadActor() {
@@ -124,10 +131,35 @@ function parcialLines(lines) {
   first.cantidadEntregada = delivered;
   first.cantidadPendiente = Number(first.cantidadPedida) - delivered;
   first.cantidadRechazada = 0;
-  first.motivoDiferencia = delivered < Number(first.cantidadPedida) ? 'CERT_PARCIAL' : undefined;
+  first.motivoDiferencia = delivered < Number(first.cantidadPedida) ? 'PRODUCTO_FALTANTE' : null;
   return [first, ...lines.slice(1)];
 }
 
+function isoDateOffset(days) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+async function findPending(token, driver) {
+  let lastStatus = null;
+  let lastCount = 0;
+  let lastCode = null;
+  for (let days = 0; days <= 14; days += 1) {
+    const date = isoDateOffset(days);
+    const pending = await request('GET', `/entregas/pendientes/${encodeURIComponent(driver)}?date=${date}&limit=80&offset=0`, { token });
+    const candidates = listOf(pending.json).filter((row) =>
+      !['ENTREGADO', 'DELIVERED', 'PARCIAL'].includes(String(row?.estado ?? row?.status ?? '').toUpperCase()));
+    lastStatus = pending.status;
+    lastCount = listOf(pending.json).length;
+    lastCode = typeof pending.json?.code === 'string' ? pending.json.code : lastCode;
+    if (statusOk(pending, [200]) && candidates.length) {
+      return { date, pending, candidates };
+    }
+  }
+  emit('pending_scan', { lastStatus, lastCount, lastCode, daysTried: 15 });
+  return null;
+}
 async function main() {
   const actor = loadActor();
   const ready = await request('GET', '/ready');
@@ -146,19 +178,60 @@ async function main() {
     throw new Error('API is not isolated_test');
   }
 
-  const login = await request('POST', '/auth/login', { body: credentials(actor) });
-  const token = tokenOf(login.json);
+  let login = await request('POST', '/auth/login', { body: credentials(actor) });
+  let token = tokenOf(login.json);
   if (!statusOk(login, [200]) || !token) throw new Error(`login failed (${login.status})`);
+  const loginRole = String(decodedClaimsOf(token)?.role || userOf(login.json)?.role || '').toUpperCase();
+  if (actor.switchRole?.body && ['JEFE_VENTAS', 'ADMIN'].includes(loginRole)) {
+    const switched = await request('POST', '/auth/switch-role', {
+      token,
+      body: actor.switchRole.body,
+    });
+    const switchedToken = tokenOf(switched.json);
+    emit('switch_role', { status: switched.status, ok: Boolean(switchedToken) });
+    if (statusOk(switched, [200]) && switchedToken) {
+      token = switchedToken;
+      login = switched;
+    }
+  }
   const claims = signedRepartidorCodes(decodedClaimsOf(token));
-  const driver = claims.length === 1 ? claims[0] : actorCode(actor, login.json);
-  emit('auth', { status: login.status, driverPresent: Boolean(driver) });
-  if (!driver) throw new Error('repartidor identity absent');
+  const switchedUser = userOf(login.json);
+  const validate = await request('GET', '/auth/validate', { token });
+  emit('validate', {
+    status: validate.status,
+    role: validate.json?.role || null,
+    activeMode: validate.json?.activeMode || null,
+    claimsVersion: validate.json?.claimsVersion ?? null,
+  });
+  const fleetResponse = await request('GET', '/auth/repartidores', { token });
+  const fleet = arrayOf(fleetResponse.json, ['repartidores', 'items']);
+  const fleetCodes = [...new Set(fleet.map((entry) => String(
+    entry?.codigo ?? entry?.code ?? entry?.id ?? '',
+  ).trim()).filter(Boolean))];
+  emit('fleet', { status: fleetResponse.status, count: fleetCodes.length });
+  const driverCandidates = [...new Set([
+    ...fleetCodes,
+    actor.switchRole?.body?.userId,
+    switchedUser?.repartidorId,
+    switchedUser?.repartidorCode,
+    ...claims,
+    actorCode(actor, login.json),
+  ].filter(Boolean).map((value) => String(value).trim()))];
 
-  const date = new Date().toISOString().slice(0, 10);
-  const pending = await request('GET', `/entregas/pendientes/${encodeURIComponent(driver)}?date=${date}&limit=80&offset=0`, { token });
-  const candidates = listOf(pending.json).filter((row) =>
-    !['ENTREGADO', 'DELIVERED', 'PARCIAL'].includes(String(row?.estado ?? row?.status ?? '').toUpperCase()));
-  if (!statusOk(pending, [200]) || !candidates.length) throw new Error('no pending delivery');
+  let found = null;
+  let driver = '';
+  for (const candidate of driverCandidates) {
+    found = await findPending(token, candidate);
+    if (found) {
+      driver = candidate;
+      break;
+    }
+  }
+  if (!driver) driver = String(driverCandidates[0] || '').trim();
+  emit('auth', { status: login.status, driverPresent: Boolean(driver), role: loginRole || null });
+  if (!found) throw new Error('no pending delivery');
+  const { date, candidates } = found;
+  emit('pending', { date, count: candidates.length });
 
   let selected;
   for (const row of candidates) {
@@ -209,6 +282,7 @@ async function main() {
     status: confirm.status,
     created: Boolean(confirmationId),
     code: typeof confirm.json?.code === 'string' ? confirm.json.code : null,
+    error: typeof confirm.json?.error === 'string' ? String(confirm.json.error).slice(0, 120) : null,
   });
   if (!statusOk(confirm, [200, 201]) || !confirmationId) {
     throw new Error(`confirm failed (${confirm.status})`);
