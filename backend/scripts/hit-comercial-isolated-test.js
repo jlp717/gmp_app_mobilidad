@@ -87,7 +87,12 @@ async function main() {
       body: { username: VENDOR, password: pin },
     });
     const token = login.body?.token;
-    rows.push(record('POST /auth/login', login.status === 200 && Boolean(token), `status=${login.status}`));
+    const loginRole = String(login.body?.user?.role || login.body?.role || '').toUpperCase();
+    rows.push(record(
+      'POST /auth/login',
+      login.status === 200 && Boolean(token),
+      `status=${login.status} role=${loginRole || '-'}`,
+    ));
 
     const summary = await api('GET', `/comercial-liquidacion/resumen-diario?vendedor=${VENDOR}`, { token });
     rows.push(record(
@@ -140,33 +145,156 @@ async function main() {
       `status=${ret.status} doc=${ret.body?.return?.documento || ret.body?.code || ret.body?.error || '-'}`,
     ));
 
-    const cobrosClient = String(process.env.HIT_COBROS_CLIENT || '4300000354').trim();
-    const pendientes = await api('GET', `/cobros/${encodeURIComponent(cobrosClient)}/pendientes?vendedorCodes=${VENDOR}`, { token });
+    const summaryPend = await api('GET', `/cobros/pending-summary/${VENDOR}?limit=5&page=1`, { token });
+    const summaryMap = summaryPend.body?.summary || {};
+    const cobrosClient = String(
+      process.env.HIT_COBROS_CLIENT
+      || Object.keys(summaryMap).find((code) => Number(summaryMap[code]?.total) > 0)
+      || '',
+    ).trim();
+    rows.push(record(
+      'GET cobros pending-summary',
+      summaryPend.status === 200 && Boolean(cobrosClient),
+      `status=${summaryPend.status} client=${cobrosClient || '-'} clients=${Object.keys(summaryMap).length}`,
+    ));
+
+    const pendientesPath = `/cobros/${encodeURIComponent(cobrosClient)}/pendientes?vendedorCodes=${VENDOR}`;
+    const cold = await api('GET', `${pendientesPath}&_ts=${Date.now()}`, { token });
+    const samples = [];
+    let pendientes = cold;
+    for (let i = 0; i < 3; i += 1) {
+      pendientes = await api('GET', pendientesPath, { token });
+      samples.push(pendientes.ms);
+    }
+    samples.sort((a, b) => a - b);
+    const p95ish = samples[samples.length - 1];
+    const docs = pendientes.body?.cobros || [];
     rows.push(record(
       'GET cobros pendientes',
-      pendientes.status === 200,
-      `status=${pendientes.status} ms=${pendientes.ms} docs=${pendientes.body?.cobros?.length ?? pendientes.body?.resumen?.numDocumentos ?? '-'}`,
+      pendientes.status === 200 && cold.status === 200,
+      `status=${pendientes.status} client=${cobrosClient} coldMs=${cold.ms} warmMs=${samples.join(',')} docs=${docs.length}`,
     ));
     rows.push(record(
       'cobros pendientes <500ms o mejora',
-      pendientes.status === 200 && pendientes.ms < 5000,
-      `ms=${pendientes.ms} (objetivo p95 <500; mejora vs 7400)`,
+      cold.status === 200 && cold.ms < 5000 && p95ish < 5000,
+      `cold=${cold.ms}ms p95ish=${p95ish}ms warm=${samples.join(',')} (objetivo p95 <500; baseline 7400)`,
+    ));
+
+    let createdId = null;
+    let confirmedEstado = '';
+    let confirmedSync = '';
+    let pedidoReference = '';
+    if (cobrosClient) {
+      const products = await api('GET', `/pedidos/products?vendedorCodes=${VENDOR}&clientCode=${encodeURIComponent(cobrosClient)}&limit=80`, { token });
+      const catalog = products.body?.products || [];
+      const candidates = catalog
+        .filter((item) => Number(item.precioCliente || item.precioTarifa1) > 0)
+        .sort((a, b) => Number(b.stockEnvases || b.STOCKENVASES || 0) - Number(a.stockEnvases || a.STOCKENVASES || 0));
+      const inStock = candidates.filter((item) => Number(item.stockEnvases || item.STOCKENVASES || 0) > 0);
+      const tryList = (inStock.length > 0 ? inStock : candidates).slice(0, 4);
+      let createDetail = `sin producto status=${products.status}`;
+      let confirmDetail = 'sin confirmacion';
+      let createOk = false;
+      let confirmOk = false;
+      for (const product of tryList) {
+        const price = Number(product.precioCliente || product.precioTarifa1 || 1);
+        const created = await api('POST', '/pedidos/create', {
+          token,
+          body: {
+            clientCode: cobrosClient,
+            clientName: 'HIT comercial',
+            vendedorCode: VENDOR,
+            descuentoGlobal: 5,
+            lines: [{
+              codigoArticulo: product.code,
+              descripcion: String(product.name || 'HIT').slice(0, 40),
+              cantidadEnvases: 1,
+              cantidadUnidades: 0,
+              unidadesCaja: product.unitsPerBox || 1,
+              precio: price,
+              precioVenta: price,
+              precioCosto: Number(product.precioCosto) || 0.5,
+              precioTarifa: price,
+            }],
+          },
+        });
+        createdId = created.body?.id || created.body?.header?.id || created.body?.order?.header?.id || created.body?.order?.id;
+        createOk = (created.status === 201 || created.status === 200) && Boolean(createdId);
+        createDetail = `status=${created.status} id=${createdId || created.body?.code || created.body?.error || '-'} art=${product.code} stock=${Number(product.stockEnvases || 0)}`;
+        if (!createdId) continue;
+        const confirmed = await api('PUT', `/pedidos/${createdId}/confirm`, {
+          token,
+          body: { saleType: 'CC', cobroEnMano: true },
+        });
+        const header = confirmed.body?.order?.header || confirmed.body?.header || confirmed.body?.order || {};
+        confirmedEstado = String(header.estado || header.ESTADO || '').toUpperCase();
+        confirmedSync = String(header.syncStatus || header.SYNC_STATUS || '').toUpperCase();
+        const serie = String(header.seriePedido || header.SERIEPEDIDO || header.serie || '').trim();
+        const numero = String(header.numeroPedido || header.NUMEROPEDIDO || header.numero || '').trim();
+        pedidoReference = serie && numero ? `${serie}-${numero}` : (createdId ? `PEDIDO:${createdId}` : '');
+        const pendienteErp = confirmedEstado === 'CONFIRMADO' && (!confirmedSync || confirmedSync === 'LOCAL');
+        confirmOk = confirmed.status === 200 && confirmedEstado === 'CONFIRMADO';
+        confirmDetail = `status=${confirmed.status} estado=${confirmedEstado || confirmed.body?.code || confirmed.body?.reason || '-'} sync=${confirmedSync || 'empty'} pendienteErp=${pendienteErp}`;
+        if (confirmOk) break;
+      }
+      rows.push(record('POST pedido dto TEST', createOk, createDetail));
+      rows.push(record('PUT confirm + cobro en mano', confirmOk, confirmDetail));
+    }
+
+    const cobroIdem = `HitCob${String(Date.now()).slice(-10)}`;
+    let cobro = { status: 0, body: {} };
+    if (pedidoReference && confirmedEstado === 'CONFIRMADO') {
+      cobro = await api('POST', `/cobros/${encodeURIComponent(cobrosClient)}/registrar`, {
+        token,
+        body: {
+          referencia: pedidoReference,
+          importe: 0.01,
+          formaPago: 'CONTADO',
+          idempotencyToken: cobroIdem,
+        },
+      });
+    }
+    if (cobro.status !== 200) {
+      const payable = docs.find((doc) => Number(doc.importePendiente) >= 1 && String(doc.referencia || '').trim());
+      if (payable) {
+        cobro = await api('POST', `/cobros/${encodeURIComponent(cobrosClient)}/registrar`, {
+          token,
+          body: {
+            referencia: payable.referencia,
+            importe: 0.01,
+            formaPago: 'CONTADO',
+            idempotencyToken: `HitCvc${String(Date.now()).slice(-10)}`,
+          },
+        });
+      }
+    }
+    rows.push(record(
+      'POST cobro TEST_COBROS',
+      cobro.status === 200 && cobro.body?.success === true,
+      `status=${cobro.status} ref=${pedidoReference || '-'} code=${cobro.body?.code || cobro.body?.error || 'ok'}`,
     ));
 
     const pedidos = await api('GET', `/pedidos?vendedorCodes=${VENDOR}&page=1&limit=5`, { token });
-    const confirmed = (pedidos.body?.orders || []).find((order) => String(order.estado || '').toUpperCase() === 'CONFIRMADO');
+    const confirmedOrders = (pedidos.body?.orders || []).filter((order) => String(order.estado || '').toUpperCase() === 'CONFIRMADO');
+    const pendienteErpOrders = confirmedOrders.filter((order) => {
+      const sync = String(order.syncStatus || '').toUpperCase();
+      return !sync || sync === 'LOCAL';
+    });
     rows.push(record(
       'GET pedidos + chip Pendiente ERP',
       pedidos.status === 200,
-      `status=${pedidos.status} confirmados=${(pedidos.body?.orders || []).filter((o) => String(o.estado || '').toUpperCase() === 'CONFIRMADO').length}`,
+      `status=${pedidos.status} confirmados=${confirmedOrders.length} pendienteErp=${pendienteErpOrders.length} createdId=${createdId || '-'}`,
     ));
 
     const overlay = await api('GET', `/entregas/pendientes/${VENDOR}?date=${new Date().toISOString().slice(0, 10)}&limit=5`, { token });
     const overlayCount = Number(overlay.body?.pedidos_overlay ?? overlay.body?.resumen?.pedidos_overlay);
+    const overlayOk = overlay.status === 200
+      ? overlayCount > 0 || confirmedEstado === 'CONFIRMADO'
+      : overlay.status === 403 && confirmedEstado === 'CONFIRMADO';
     rows.push(record(
-      'pedidos_overlay rutero',
-      overlay.status === 200 || overlay.status === 403,
-      `status=${overlay.status} overlay=${Number.isFinite(overlayCount) ? overlayCount : '-'} confirmedSample=${confirmed ? 'yes' : 'no'}`,
+      'pedidos_overlay o cobro en mano confirmado',
+      overlayOk,
+      `status=${overlay.status} overlay=${Number.isFinite(overlayCount) ? overlayCount : '-'} confirmed=${confirmedEstado || 'no'}`,
     ));
 
     const failed = rows.filter((ok) => !ok).length;
