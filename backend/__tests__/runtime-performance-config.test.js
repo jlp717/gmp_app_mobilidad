@@ -251,6 +251,7 @@ describe('runtime performance configuration', () => {
     expect(pendingSummaryBlock).not.toMatch(/CVC_DOCS_RAW/);
     expect(pendingSummaryBlock).not.toMatch(/APP_COBROS AS/);
     expect(pendingSummaryBlock).not.toMatch(/DOC_NET AS/);
-    expect(source).toMatch(/groupedRows\.length > 0 && adjustmentVendorCodes\.length > 0/);
+    expect(source).toMatch(/CODIGOCLIENTEALBARAN = CAST\(\? AS CHAR\(10\)\)/);
+    expect(source).not.toMatch(/groupedRows\.length > 0 && adjustmentVendorCodes\.length > 0/);
   });
 });

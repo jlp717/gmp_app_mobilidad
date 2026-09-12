@@ -45,12 +45,19 @@ void main() {
           'yaCobrada': true,
           'formaPago': 'P1',
           'impactoLqd': 'YA_COBRADOS',
+          'albaranOrigen': 'P-21',
+          'vencimiento': '2026-08-31',
+          'pendienteTecnicoMovimiento': true,
+          'source': 'JAVIER.TEST_DEVOLUCIONES_COMERCIAL',
         },
       ],
     });
 
     expect(snapshot.returns.single.formaPago, 'P1');
     expect(snapshot.returns.single.impactoLqd, 'YA_COBRADOS');
+    expect(snapshot.returns.single.albaranOrigen, 'P-21');
+    expect(snapshot.returns.single.vencimiento, '2026-08-31');
+    expect(snapshot.returns.single.pendienteTecnicoMovimiento, isTrue);
   });
 
   test('parses saved TEST draft without subtracting returns from LQD', () {

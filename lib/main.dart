@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/di/injection.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_orchestrator.dart';
@@ -29,6 +30,9 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   configureDependencies();
+  if (kDebugMode) {
+    ApiConfig.setDevelopment();
+  }
 
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
@@ -77,19 +81,22 @@ void main() async {
   }
 
   try {
-    await CacheService.init();
-    debugPrint('[MAIN] ✅ Cache initialized');
-    await ApiClient.initialize();
-    // Start monitoring WiFi ↔ mobile data changes for adaptive timeouts
-    ApiClient.startConnectivityMonitoring();
-    // Initialize offline infrastructure
-    await ConnectivityService.instance.initialize();
-    await SyncQueueService.instance.initialize();
-    await NotificationOrchestrator.instance.initialize();
-    debugPrint(
-      '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}',
-    );
-    debugPrint('[MAIN] ✅ Offline infrastructure initialized');
+    await () async {
+      await CacheService.init();
+      debugPrint('[MAIN] ✅ Cache initialized');
+      await ApiClient.initialize();
+      // Start monitoring WiFi ↔ mobile data changes for adaptive timeouts
+      ApiClient.startConnectivityMonitoring();
+      // Initialize offline infrastructure
+      await ConnectivityService.instance.initialize();
+      await SyncQueueService.instance.initialize();
+      await NotificationOrchestrator.instance.initialize();
+      debugPrint(
+        '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}',
+      );
+      debugPrint('[MAIN] ✅ Offline infrastructure initialized');
+    }()
+        .timeout(const Duration(seconds: 12));
   } catch (e, stack) {
     debugPrint('[MAIN] ❌ Initialization error: $e');
     debugPrint('[MAIN] Stack: $stack');

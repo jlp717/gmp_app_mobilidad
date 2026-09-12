@@ -74,6 +74,9 @@ describe('Business audit — pedidos / promos / bolsa', () => {
             giftQty: 2,
             cumulative: false,
         })]));
+        const giftSql = mockQuery.mock.calls.map((call) => String(call[0] || '')).find((sql) => sql.includes('FROM DSEDAC.PMR P'));
+        expect(giftSql).toMatch(/WHERE P\.CODIGOCLIENTE = CAST\(\? AS CHAR\(10\)\)/);
+        expect(giftSql).not.toMatch(/WHERE TRIM\(P\.CODIGOCLIENTE\)/);
     });
 
     test('getActivePromotions returns empty list when active PMR has no rows', async () => {

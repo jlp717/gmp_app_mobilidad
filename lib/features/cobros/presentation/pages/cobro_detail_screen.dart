@@ -518,7 +518,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
     // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si los documentos crecen mucho.
     final detailRows = <Widget>[
-      if (payableCobros.any((c) => c.cobroRiguroso)) ...[
+      if (payableCobros.any((c) => c.cobroRiguroso) ||
+          (cobros.resumenCobros?.porcentajeMinimoVendedor ?? 0) > 0) ...[
         Semantics(
           label: 'Aviso cobro minimo riguroso',
           child: Container(
@@ -532,7 +533,12 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
             ),
             child: Text(
-              'Cliente con cobro riguroso. El importe parcial no puede bajar del minimo.',
+              [
+                if (payableCobros.any((c) => c.cobroRiguroso))
+                  'Cliente con cobro riguroso. El importe parcial no puede bajar del ${payableCobros.firstWhere((c) => c.cobroRiguroso).porcentajeMinimoCobro.toStringAsFixed(0)}% del pendiente.',
+                if ((cobros.resumenCobros?.porcentajeMinimoVendedor ?? 0) > 0)
+                  'Mínimo vendedor (VDDX): ${cobros.resumenCobros!.porcentajeMinimoVendedor.toStringAsFixed(0)}%.',
+              ].join(' '),
               style: TextStyle(
                 color: AppColors.themedWhite,
                 fontWeight: FontWeight.w600,

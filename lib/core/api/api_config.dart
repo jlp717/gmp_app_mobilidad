@@ -107,19 +107,37 @@ class ApiConfig {
     return _requireSafeProductionUrl(_compiledProductionUrl);
   }
 
+  /// Loopback / isolated_test hosts allowed over HTTP via --dart-define.
+  /// Production traffic remains HTTPS-only.
+  static const Set<String> localTestHttpHosts = {
+    '10.0.2.2',
+    '127.0.0.1',
+    'localhost',
+    '192.168.1.230',
+  };
+
   static String _requireSafeProductionUrl(String value) {
     final candidate = value.trim();
     final uri = Uri.tryParse(candidate);
     if (candidate.isEmpty ||
         uri == null ||
-        uri.scheme != 'https' ||
         uri.host.isEmpty ||
         uri.userInfo.isNotEmpty ||
         uri.hasQuery ||
         uri.hasFragment) {
       throw StateError(
-        'API_BASE_URL must be an absolute HTTPS URL without credentials, '
+        'API_BASE_URL must be an absolute URL without credentials, '
         'query parameters, or fragments.',
+      );
+    }
+
+    final isLocalHttp =
+        uri.scheme == 'http' && localTestHttpHosts.contains(uri.host);
+    final isHttps = uri.scheme == 'https';
+    if (!isHttps && !isLocalHttp) {
+      throw StateError(
+        'API_BASE_URL must be an absolute HTTPS URL, or HTTP to a local '
+        'TEST host (10.0.2.2, 127.0.0.1, localhost, 192.168.1.230).',
       );
     }
 

@@ -122,13 +122,17 @@ Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero":
 - Las pruebas de rendimiento deben hacerse en móvil con el rol jefe de ventas (el que más datos carga).
 - No declarar el perfil de reparto cerrado al 100% mientras queden huecos o no se haya validado en emulador.
 - El perfil comercial es un workstream aparte del de reparto (pedidos, devoluciones y liquidación diaria); no mezclar su validación con la de REPARTIDOR.
+- Identificadores de albarán/factura en UI y PDF deben mostrar la serie completa (p.ej. P-15-2296, no P-2296).
 
 ## Learned Workspace Facts
 
 - Objetivos comerciales usan R1_T8CDVD (quién tiene el cliente); LCCDVD es quién vendió. Comisiones: sales=LCCDVD, baseline de objetivo=R1_T8CDVD.
 - Comercial 80 es líder de equipo (72/73/81/83); su objetivo personal no es la suma del equipo.
-- La sección Cobros del perfil repartidor no es solo lectura: debe permitir registrar cobros pendientes o parciales del rutero.
+- La sección Cobros del perfil repartidor no es solo lectura: un cobro parcial del rutero debe poder cobrarse el resto desde Cobros.
+- En cobro del rutero hay 4 métodos (Efectivo, Tarjeta, Bizum, Talón): Transferencia se sustituye por Talón (el usuario nunca ve Transferencia). Talón exige número, vencimiento y banco del catálogo ENB.
+- Si las unidades entregadas difieren de las previstas, el albarán recalcula precio unitario/totales y la liquidación diaria debe cuadrar con esos importes.
+- Devoluciones sobre facturas ya cobradas (PG) ajustan la liquidación del vendedor (ya cobrados / caja); no restar otra vez el total LQD.
 - El saldo cobrable de una entrega se limita al importe del documento (CPC), no a la deuda CVC del cliente; la UI distingue este albarán vs deuda del cliente.
 - En facturas, la lista debe mostrar totales agregados (importe, recuento, base con/sin IVA).
 - Las escrituras a base de datos van solo a TEST (isolated_test / JAVIER.TEST_*); DSEDAC es lectura o copia hacia test, nunca escritura.
-- En isolated_test, el correo usa sink/allowlist y no debe enviarse a bandejas reales de clientes ERP; la lista to/cc de producto debe construirse completa igual.
+- En isolated_test, el correo usa sink/allowlist y no debe enviarse a bandejas reales de clientes ERP; la lista to/cc de producto debe construirse completa igual (operaciones + repartidor de la acción).

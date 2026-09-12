@@ -1923,8 +1923,11 @@ class PedidosProvider with ChangeNotifier {
     try {
       final response = await ApiClient.get(
         '/pedidos/promotions',
-        queryParameters: {'clientCode': _clientCode},
-        cacheKey: 'pedidos:promotions:$_clientCode',
+        queryParameters: {
+          'clientCode': _clientCode,
+          if (_vendedorCodes.isNotEmpty) 'vendedorCodes': _vendedorCodes,
+        },
+        cacheKey: 'pedidos:promotions:$_clientCode:$_vendedorCodes',
         cacheTTL: CacheService.defaultTTL,
       );
       final list = response['promotions'] as List? ?? [];
@@ -1933,15 +1936,15 @@ class PedidosProvider with ChangeNotifier {
       final seen = <String>{};
       for (final p in list) {
         final item = PromotionItem.fromJson(p as Map<String, dynamic>);
-        // Normalize numeric values to avoid float string inconsistencies
         final minQtyStr = item.minQty.toStringAsFixed(2);
         final giftQtyStr = item.giftQty.toStringAsFixed(2);
         final promoPriceStr = item.promoPrice.toStringAsFixed(2);
         final key =
             '${item.promoType}|${item.promoCode}|${item.code}|${item.dateFrom}|${item.dateTo}|$minQtyStr|$giftQtyStr|$promoPriceStr';
+        if (!seen.add(key)) continue;
+        _activePromotionsList.add(item);
         final productCode = _promotionProductCode(item);
-        if (productCode.isNotEmpty && seen.add(key)) {
-          _activePromotionsList.add(item);
+        if (productCode.isNotEmpty) {
           (_promotionsByProduct[productCode] ??= []).add(item);
         }
       }

@@ -481,6 +481,9 @@ class ResumenCobros {
     this.numPedidos = 0,
     this.diasMoraMaximo = 0,
     this.cobros = const [],
+    this.cobroRiguroso = false,
+    this.porcentajeMinimoCobro = 0,
+    this.porcentajeMinimoVendedor = 0,
   });
 
   factory ResumenCobros.fromJson(Map<String, dynamic> json) {
@@ -503,6 +506,12 @@ class ResumenCobros {
               ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      cobroRiguroso: json['cobroRiguroso'] == true ||
+          json['cobroRiguroso']?.toString().toUpperCase() == 'S',
+      porcentajeMinimoCobro:
+          ((json['porcentajeMinimoCobro'] ?? 0) as num).toDouble(),
+      porcentajeMinimoVendedor:
+          ((json['porcentajeMinimoVendedor'] ?? 0) as num).toDouble(),
     );
   }
   final double totalPendiente;
@@ -511,4 +520,7 @@ class ResumenCobros {
   final int numPedidos;
   final int diasMoraMaximo;
   final List<CobroPendiente> cobros;
+  final bool cobroRiguroso;
+  final double porcentajeMinimoCobro;
+  final double porcentajeMinimoVendedor;
 }

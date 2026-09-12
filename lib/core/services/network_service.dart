@@ -42,10 +42,10 @@ class NetworkService {
       debugOnly: true,
     ),
 
-    // 3. Emulador Android Studio
+    // 3. Emulador Android Studio → host loopback (SSH -L 3335)
     ServerConfig(
-      name: 'Emulador Android',
-      baseUrl: 'http://10.0.2.2:3334/api',
+      name: 'Emulador Android isolated_test',
+      baseUrl: 'http://10.0.2.2:3335/api',
       priority: 3,
       isEmulatorOnly: true,
       debugOnly: true,
@@ -123,6 +123,16 @@ class NetworkService {
     // DESARROLLO (Debug build) - Detectar mejor servidor
     // =============================================================================
     try {
+      const emulatorTestUrl = 'http://10.0.2.2:3335/api';
+      if (await _checkHealth(emulatorTestUrl)) {
+        _activeBaseUrl = emulatorTestUrl;
+        _isInitialized = true;
+        debugPrint(
+          '[NetworkService] ✅ DESARROLLO: isolated_test via emulator $emulatorTestUrl',
+        );
+        return;
+      }
+
       final prefs = await SharedPreferences.getInstance();
       final savedUrl = prefs.getString(_prefsKeyActiveServer);
 
@@ -217,7 +227,7 @@ class NetworkService {
   /// Detecta si se está ejecutando en un emulador Android
   static Future<bool> _isRunningOnEmulator() async {
     // En un emulador Android, 10.0.2.2 es localhost
-    return _checkHealth('http://10.0.2.2:3334/api/health');
+    return _checkHealth('http://10.0.2.2:3335/api/health');
   }
 
   /// Fuerza la reconexión al servidor de producción

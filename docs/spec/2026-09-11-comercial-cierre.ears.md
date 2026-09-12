@@ -57,3 +57,24 @@ WHEN el comercial pulsa Devuelve sobre una factura cobrada con pagaré (`DSEDAC.
 THE SYSTEM SHALL registrar overlay TEST con `YA_COBRADA=1` e `IMPACTO_LQD=YA_COBRADOS`
 AND THE SYSTEM SHALL NOT restar esa devolución de `DSEDAC.LQD.IMPORTETOTALAINGRESAR`
 AND THE SYSTEM SHALL NOT tratarla como factura impagada a 30 días.
+
+### REQ-PED-03
+WHEN un comercial consulta ofertas de un cliente con filas vigentes en `DSEDAC.PMR` o `DSEDAC.PMRC`
+THE SYSTEM SHALL devolver `GET /pedidos/promotions` con count > 0
+AND THE SYSTEM SHALL mostrar esas ofertas en Pedidos (incluidas cabeceras de regalo sin artículo).
+CPES puede estar vacío; no se finge count>0 con CPES=0.
+
+### REQ-PAG-01
+WHEN se lista un pagaré ya cobrado para Devuelve
+THE SYSTEM SHALL usar vencimiento de `CVC.ANOVENCIMIENTO/MES/DIA` y forma de pago `FPG` (P1 = PAGARE 30 DFF)
+AND THE SYSTEM SHALL enlazar el albarán por `CAC` factura→albarán
+AND THE SYSTEM SHALL filtrar `IMPORTEPENDIENTE=0` y cliente `COALESCE(CODIGOCLIENTEFACTURA, CODIGOCLIENTEALBARAN)`.
+
+### REQ-COB-02
+WHEN Cobros muestra un cliente con `CLX.COBRORIGUROSOSN='S'`
+THE SYSTEM SHALL aplicar `CLX.PORCENTAJECOBRORIGUROSO` o, si es 0, `VDDX.PORCENTAJEMINIMOCOBRO`
+AND THE SYSTEM SHALL pintarlo en la UI de cobro.
+
+### REQ-PERF-02
+WHEN `GET /api/cobros/:cliente/pendientes` consulta un cliente ya autorizado
+THE SYSTEM SHALL leer `DSEDAC.CVC` con igualdad `CHAR(10)` (sin `TRIM` ni semi-join LACLAE de cartera).

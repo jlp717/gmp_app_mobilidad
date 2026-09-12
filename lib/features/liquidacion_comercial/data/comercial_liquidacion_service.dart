@@ -203,6 +203,10 @@ class ComercialLiquidacionDailySnapshot {
           item['yaCobrada'] == true || item['yaCobrada']?.toString() == '1',
       formaPago: item['formaPago']?.toString(),
       impactoLqd: item['impactoLqd']?.toString(),
+      albaranOrigen: item['albaranOrigen']?.toString(),
+      vencimiento: item['vencimiento']?.toString(),
+      pendienteTecnicoMovimiento: item['pendienteTecnicoMovimiento'] == true ||
+          (item['source']?.toString() ?? '').startsWith('JAVIER.TEST_'),
     );
   }
 

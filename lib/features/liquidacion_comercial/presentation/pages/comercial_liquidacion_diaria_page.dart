@@ -497,7 +497,7 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Ajusta caja ya cobrada (LIQ.Vd), no una factura a 30 días impagada.',
+                'Ajusta caja ya cobrada (LIQ.Vd), no una factura a 30 días impagada. Overlay TEST: Pendiente técnico movimiento (ERP LAC/CVC/LQD no se escribe).',
                 style: TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 12),
@@ -548,7 +548,10 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                           ),
                           subtitle: Text(
                             '${_pgDocs[i]['cliente'] ?? ''} · ${_pgDocs[i]['importe'] ?? ''} €'
-                            '${_pgDocs[i]['vencimiento'] != null ? ' · vto ${_pgDocs[i]['vencimiento']}' : ''}',
+                            '${_pgDocs[i]['formaPagoDesc'] != null && _pgDocs[i]['formaPagoDesc'].toString().isNotEmpty ? ' · ${_pgDocs[i]['formaPagoDesc']}' : ''}'
+                            '${_pgDocs[i]['albaran'] != null && _pgDocs[i]['albaran'].toString().isNotEmpty ? ' · alb ${_pgDocs[i]['albaran']}' : ''}'
+                            '${_pgDocs[i]['vencimiento'] != null ? ' · vto ${_pgDocs[i]['vencimiento']}' : ''}'
+                            ' · LIQ.Vd ya cobrados',
                           ),
                         ),
                     ],
@@ -1502,7 +1505,9 @@ class _DevolucionesList extends StatelessWidget {
                     Expanded(
                       child: Text(
                         '${item.documento} · ${item.cliente}'
-                        '${item.yaCobrada ? ' · ya cobrada (LIQ.Vd)' : ''}',
+                        '${item.yaCobrada ? ' · ya cobrada (LIQ.Vd)' : ''}'
+                        '${item.albaranOrigen != null && item.albaranOrigen!.isNotEmpty ? ' · alb ${item.albaranOrigen}' : ''}'
+                        '${item.pendienteTecnicoMovimiento ? ' · Pde. Tech. Mov.' : ''}',
                         style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 13,

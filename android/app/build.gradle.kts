@@ -50,6 +50,14 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
+        // Optional: ORG_GRADLE_PROJECT_ABI_FILTER=x86_64 for emulator-only APKs.
+        val abiFilter = (project.findProperty("ABI_FILTER") as String?)?.trim()
+        if (!abiFilter.isNullOrEmpty()) {
+            ndk {
+                abiFilters.clear()
+                abiFilters.add(abiFilter)
+            }
+        }
     }
 
 
@@ -73,9 +81,29 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
 
-// Suppress obsolete source/target (Java 8) warnings coming from some plugins
+// Suppress obsolete source/target (Java 8) warnings coming from some plugins.
+// Flutter still injects integration_test into GeneratedPluginRegistrant (dev_dependency)
+// which does not exist on the release classpath.
 tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.addAll(listOf("-Xlint:-options"))
+    if (name.contains("Release", ignoreCase = true)) {
+        doFirst {
+            val registrant = file("src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java")
+            if (registrant.exists()) {
+                val original = registrant.readText()
+                val stripped = original.replace(
+                    Regex(
+                        """\s*try \{\s*flutterEngine\.getPlugins\(\)\.add\(new dev\.flutter\.plugins\.integration_test\.IntegrationTestPlugin\(\)\);\s*\} catch \(Exception e\) \{\s*Log\.e\(TAG, "Error registering plugin integration_test,[^"]+", e\);\s*\}""",
+                    ),
+                    "",
+                )
+                if (stripped != original) {
+                    registrant.writeText(stripped)
+                    logger.lifecycle("Stripped integration_test from GeneratedPluginRegistrant for release")
+                }
+            }
+        }
+    }
 }
 
 

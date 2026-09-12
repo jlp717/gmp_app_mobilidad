@@ -603,13 +603,12 @@ describe('commercial cobros hardening', () => {
     const [cvcSql, params] = mockQueryWithParams.mock.calls.find(([sql]) =>
       /FROM\s+DSEDAC\.CVC\s+C/i.test(sql),
     );
-    expect(cvcSql).toMatch(/DSEDAC\.CLP/);
+    expect(cvcSql).toMatch(/CODIGOCLIENTEALBARAN = CAST\(\? AS CHAR\(10\)\)/);
     expect(cvcSql).not.toMatch(/DSEDAC\.CAC/);
     expect(cvcSql).not.toMatch(/DSEDAC\.CPC/);
     expect(cvcSql).toMatch(/DSEDAC\.FPG/);
     expect(cvcSql).not.toMatch(/VISTA_DEUDA_BASE/i);
-    expect(cvcSql).toMatch(/DSED\.LACLAE/);
-    expect(cvcSql).toMatch(/IN\s*\('01','1'\)/i);
+    expect(cvcSql).not.toMatch(/DSED\.LACLAE/);
     expect(cvcSql).toMatch(/FETCH FIRST \d+ ROWS ONLY/i);
     expect(params).toEqual(['C001']);
   });

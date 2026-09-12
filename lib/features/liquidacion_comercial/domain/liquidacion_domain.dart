@@ -46,6 +46,9 @@ class ComercialDevolucionItem {
     this.yaCobrada = false,
     this.formaPago,
     this.impactoLqd,
+    this.albaranOrigen,
+    this.vencimiento,
+    this.pendienteTecnicoMovimiento = false,
   });
 
   /// Document key, typically series-number.
@@ -71,6 +74,15 @@ class ComercialDevolucionItem {
 
   /// LQD cash bucket impacted. `YA_COBRADOS` matches the whiteboard flow.
   final String? impactoLqd;
+
+  /// Linked delivery note from CAC, e.g. P-2-1.
+  final String? albaranOrigen;
+
+  /// Due date of the collected pagaré.
+  final String? vencimiento;
+
+  /// TEST overlay is pending ERP technical movement (LAC/CVC/LQD not written).
+  final bool pendienteTecnicoMovimiento;
 }
 
 /// Editable values for one commercial settlement.

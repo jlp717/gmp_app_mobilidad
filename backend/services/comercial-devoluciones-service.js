@@ -138,6 +138,7 @@ function mapReturnRow(row) {
     vencimiento: String(row.VENCIMIENTO || '').trim() || null,
     impactoLqd: String(row.IMPACTO_LQD || '').trim()
       || (Number(row.YA_COBRADA) === 1 ? 'YA_COBRADOS' : 'NO_COBRADA'),
+    pendienteTecnicoMovimiento: String(row.SOURCE || '').startsWith('JAVIER.TEST_'),
   };
 }
 
@@ -359,18 +360,39 @@ async function listTestReturns({
   }
 }
 
+function buildPgVendorClause(vendorCodes) {
+  const codes = sanitizeVendorCodes(vendorCodes);
+  if (codes.length === 0) return { clause: '', params: [] };
+  const inList = codes.map(() => 'CAST(? AS CHAR(2))').join(',');
+  return {
+    clause: `AND (
+      TRIM(CVC.CODIGOVENDEDOR) IN (${inList})
+      OR TRIM(CVC.CODIGOVENDEDORCOBRO) IN (${inList})
+      OR TRIM(COALESCE(NULLIF(TRIM(CVC.CODIGOCLIENTEFACTURA), ''), CVC.CODIGOCLIENTEALBARAN)) IN (
+        SELECT TRIM(CLP.CODIGOCLIENTE)
+          FROM DSEDAC.CLP CLP
+         WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${inList})
+            OR TRIM(CLP.VENDEDORCOBRO) IN (${inList})
+      )
+    )`,
+    params: [...codes, ...codes, ...codes, ...codes],
+  };
+}
+
 async function listPgCollectedDocuments({
   vendorCodes,
   clientCode,
   limit = 40,
 } = {}, deps = {}) {
   const run = deps.queryWithParams || queryWithParams;
-  const vendorFilter = buildVendorInClause('CVC.CODIGOVENDEDOR', vendorCodes);
+  const vendorFilter = buildPgVendorClause(vendorCodes);
   const client = String(clientCode || '').trim().substring(0, 10);
-  const clientClause = client ? 'AND TRIM(CVC.CODIGOCLIENTEALBARAN) = CAST(? AS VARCHAR(10))' : '';
+  const clientClause = client
+    ? `AND TRIM(COALESCE(NULLIF(TRIM(CVC.CODIGOCLIENTEFACTURA), ''), CVC.CODIGOCLIENTEALBARAN)) = CAST(? AS CHAR(10))`
+    : '';
   const fetchLimit = Math.min(Math.max(Number(limit) || 40, 1), 80);
   const sql = `
-    SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+    SELECT TRIM(COALESCE(NULLIF(TRIM(CVC.CODIGOCLIENTEFACTURA), ''), CVC.CODIGOCLIENTEALBARAN)) AS CLIENTE,
            TRIM(CVC.TIPODOCUMENTO) AS TIPO,
            TRIM(CVC.SERIEDOCUMENTO) AS SERIE,
            CVC.NUMERODOCUMENTO AS NUMERO,
@@ -385,18 +407,25 @@ async function listPgCollectedDocuments({
            CVC.ANOVENCIMIENTO AS ANOV,
            CVC.MESVENCIMIENTO AS MESV,
            CVC.DIAVENCIMIENTO AS DIAV,
-           TRIM(COALESCE(CAC.SERIEALBARAN, '')) AS SERIE_ALB,
-           CAC.NUMEROALBARAN AS NUM_ALB
+           TRIM(COALESCE(CAC.SERIEALBARAN, CAC_ALB.SERIEALBARAN, '')) AS SERIE_ALB,
+           COALESCE(CAC.NUMEROALBARAN, CAC_ALB.NUMEROALBARAN) AS NUM_ALB
       FROM DSEDAC.CVC CVC
       LEFT JOIN DSEDAC.FPG FPG
         ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(CVC.CODIGOFORMAPAGO)
       LEFT JOIN DSEDAC.CAC CAC
-        ON CAC.EJERCICIOALBARAN = CVC.EJERCICIODOCUMENTO
-       AND TRIM(CAC.SERIEALBARAN) = TRIM(CVC.SERIEDOCUMENTO)
-       AND CAC.TERMINALALBARAN = CVC.TERMINALDOCUMENTO
-       AND CAC.NUMEROALBARAN = CVC.NUMERODOCUMENTO
+        ON CAC.EJERCICIOFACTURA = CVC.EJERCICIODOCUMENTO
+       AND TRIM(CAC.SERIEFACTURA) = TRIM(CVC.SERIEDOCUMENTO)
+       AND CAC.NUMEROFACTURA = CVC.NUMERODOCUMENTO
+      LEFT JOIN DSEDAC.CAC CAC_ALB
+        ON CAC_ALB.EJERCICIOALBARAN = CVC.EJERCICIODOCUMENTO
+       AND TRIM(CAC_ALB.SERIEALBARAN) = TRIM(CVC.SERIEDOCUMENTO)
+       AND CAC_ALB.TERMINALALBARAN = CVC.TERMINALDOCUMENTO
+       AND CAC_ALB.NUMEROALBARAN = CVC.NUMERODOCUMENTO
      WHERE TRIM(CVC.TIPODOCUMENTO) <> CAST(? AS VARCHAR(3))
        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+       AND CVC.IMPORTEPENDIENTE = 0
+       AND CVC.IMPORTEVENCIMIENTO > 0
+       AND TRIM(COALESCE(NULLIF(TRIM(CVC.CODIGOCLIENTEFACTURA), ''), CVC.CODIGOCLIENTEALBARAN)) <> ''
        AND (
             UPPER(TRIM(COALESCE(FPG.PAGARESN, ''))) = CAST(? AS VARCHAR(1))
          OR UPPER(TRIM(CVC.CODIGOFORMAPAGO)) = CAST(? AS VARCHAR(2))
@@ -428,6 +457,8 @@ async function listPgCollectedDocuments({
       formaPagoDesc: String(row.FP_DESC || '').trim(),
       pagare: String(row.PAGARESN || '').trim().toUpperCase() === 'S'
         || isPagareFormaPago(row.FP),
+      formaPagoDias: /30/.test(String(row.FP_DESC || '')) ? 30 : null,
+      pendienteTecnicoMovimiento: true,
       fecha: year && month && day
         ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
         : null,

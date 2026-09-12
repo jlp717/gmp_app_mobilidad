@@ -855,17 +855,24 @@ function createPedidosRoutes() {
       if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
       const scopedVendedorCodes = authorizedVendorCodesOrOriginal(clientAccess, vendedorCodes);
 
-      const cacheKey = `ddd:promotions:${clientAccess.clientCode}:${scopedVendedorCodes}`;
-      await withCache(cache, cacheKey, TTL_MS.PROMOTIONS, async () => {
-        const result = await repo.getPromotions({
-          clientCode: clientAccess.clientCode,
-          vendedorCodes: scopedVendedorCodes
-        });
-        // result is an array of promotion objects from legacy service
-        const promotions = Array.isArray(result) ? result : [];
-        logger.info(`[DDD-PEDIDOS] Promotions for ${trimmedClient}: ${promotions.length} found`);
-        return { success: true, promotions };
-      }, res, req);
+      const cacheKey = `ddd:promotions:v3:${clientAccess.clientCode}:${scopedVendedorCodes}`;
+      if (!isForceRefreshRequest(req)) {
+        const cached = await cache.get(cacheKey);
+        if (cached && Array.isArray(cached.promotions) && cached.promotions.length > 0) {
+          return res.json(cached);
+        }
+      }
+      const result = await repo.getPromotions({
+        clientCode: clientAccess.clientCode,
+        vendedorCodes: scopedVendedorCodes
+      });
+      const promotions = Array.isArray(result) ? result : [];
+      logger.info(`[DDD-PEDIDOS] Promotions for ${trimmedClient}: ${promotions.length} found`);
+      const payload = { success: true, promotions };
+      if (promotions.length > 0) {
+        await cache.set(cacheKey, payload, TTL_MS.PROMOTIONS);
+      }
+      return res.json(payload);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /promotions: ${error.message}`);
       res.status(500).json({ success: false, error: 'Error cargando promociones' });

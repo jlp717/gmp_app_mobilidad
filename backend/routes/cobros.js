@@ -476,19 +476,8 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         const desdeInt = parseYmdInt(fechaDesde);
         const hastaInt = parseYmdInt(fechaHasta);
 
-        const context = getCobrosContext(req);
-        const vendorCodes = normalizeCodeList(context.vendorCodes);
-        let vendorClause = '';
-        let vendorParams = [];
-        if (vendorCodes.length > 0) {
-            const scoped = buildCvcVendorScopeFilter(vendorCodes);
-            vendorClause = scoped.clause.replace(/CVC/g, 'C');
-            vendorParams = scoped.params;
-        }
-        const portfolioVendorClause = vendorCodes.length > 0 ? buildCvcVendorScopeFilter(vendorCodes).clause : '';
-        const portfolioAdjustmentsForPendientes = portfolioVendorClause
-            ? await getAppSideCobrosByDocForVendorScope(portfolioVendorClause, vendorParams)
-            : null;
+        // Client already authorized. Skip the CLP+LACLAE portfolio scan
+        // (18-22s cold). App-side cobros for THIS client load below.
 
         // Req #15: Read real debt from DSEDAC.CVC (ERP unpaid invoices).
         // DB2 metadata verified: the active CVC layout uses long business names,
@@ -532,7 +521,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 TRIM(FPG.DESCRIPCIONFORMAPAGO) AS FORMA_PAGO_DESC
             FROM ${DEBT_VIEW} C
             ${cvcPendientesJoins('C')}
-            WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
+            WHERE C.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10))
               AND ${cvcPendingPredicate('C')}
               ${docFilterSql}
             ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC
@@ -629,12 +618,8 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 const estado = computeEstadoVencimiento(fechaVencimiento, fechaDoc);
                 // H4: descuenta cobros app-side aun no propagados al ERP.
                 const docKey = sanitizeCode(serie) + '-' + numero;
-                const scopedKey = sanitizeCode(codigoCliente) + '|' + docKey;
-                const scopedPaid = portfolioAdjustmentsForPendientes
-                    ? (portfolioAdjustmentsForPendientes.get(scopedKey) || 0)
-                    : null;
-                const appPaid = scopedPaid !== null ? scopedPaid : (appCobrosByDoc.get(docKey) || 0);
-                const repartidorPaid = scopedPaid !== null ? 0 : (appRepartidorByDoc.get(docKey) || 0);
+                const appPaid = appCobrosByDoc.get(docKey) || 0;
+                const repartidorPaid = appRepartidorByDoc.get(docKey) || 0;
                 const erpPendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
                 const erpCobrado = parseFloat(row.IMPORTE_COBRADO) || 0;
                 const importePendienteAjustado = Math.max(0, erpPendiente - appPaid);

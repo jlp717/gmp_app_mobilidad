@@ -8,6 +8,20 @@ void main() {
       expect(ApiConfig.baseUrl, startsWith('https://'));
     });
 
+    test('allows HTTP dart-define only for local TEST hosts', () {
+      addTearDown(
+        () => ApiConfig.setProductionUrl('https://api.mari-pepa.com/api'),
+      );
+      ApiConfig.setProductionUrl('http://10.0.2.2:3335/api');
+      expect(ApiConfig.baseUrl, 'http://10.0.2.2:3335/api');
+      ApiConfig.setProductionUrl('https://api.mari-pepa.com/api');
+      expect(ApiConfig.baseUrl, startsWith('https://'));
+      expect(
+        () => ApiConfig.setProductionUrl('http://evil.example/api'),
+        throwsStateError,
+      );
+    });
+
     test('should have correct endpoint paths', () {
       expect(ApiConfig.login, '/auth/login');
       expect(ApiConfig.dashboardMetrics, '/dashboard/metrics');

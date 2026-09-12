@@ -8,6 +8,19 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/client_b
 
 void main() {
   group('Cobros models', () {
+    test('parses cobro riguroso and vendor minimum percentages', () {
+      final resumen = ResumenCobros.fromJson({
+        'totalPendiente': 80,
+        'cobroRiguroso': true,
+        'porcentajeMinimoCobro': 100,
+        'porcentajeMinimoVendedor': 25,
+      });
+
+      expect(resumen.cobroRiguroso, isTrue);
+      expect(resumen.porcentajeMinimoCobro, 100);
+      expect(resumen.porcentajeMinimoVendedor, 25);
+    });
+
     test('parses pedidos summary separately from facturas and albaranes', () {
       final resumen = ResumenCobros.fromJson({
         'totalPendiente': 42.5,

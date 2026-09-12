@@ -5487,7 +5487,7 @@ async function getActivePromotionsPMR(clientCode, today) {
             P.CANTIDADMAXIMAREGALO,
             P.PROMOCIONACUMULATIVASN
         FROM DSEDAC.PMR P
-        WHERE TRIM(P.CODIGOCLIENTE) = ?
+        WHERE P.CODIGOCLIENTE = CAST(? AS CHAR(10))
           AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
           AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
         FETCH FIRST 200 ROWS ONLY
@@ -5688,7 +5688,7 @@ async function getActiveGiftPromotionsV2(clientCode, today, options = {}) {
             CAST(0 AS INTEGER) AS PRODUCT_ORDER,
             'PMR_DIRECT' AS ASSIGNMENT_SOURCE
         FROM DSEDAC.PMR P
-        WHERE TRIM(P.CODIGOCLIENTE) = ?
+        WHERE P.CODIGOCLIENTE = CAST(? AS CHAR(10))
           AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
           AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
         FETCH FIRST 200 ROWS ONLY
@@ -5699,7 +5699,7 @@ async function getActiveGiftPromotionsV2(clientCode, today, options = {}) {
         logger.warn(`[PEDIDOS] Query promociones PMR directas fallo: ${e.message}`);
     }
 
-    if (options.hasClientAssignments && options.hasProductLines) {
+    if (options.hasClientAssignments) {
         const assignedSql = `
             SELECT
                 TRIM(P.CODIGOPROMOCIONREGALO) AS PROMO_CODE,
@@ -5739,7 +5739,7 @@ async function getActiveGiftPromotionsV2(clientCode, today, options = {}) {
                 WHERE CODIGOALMACEN = 1
                 GROUP BY TRIM(CODIGOARTICULO)
             ) S ON S.CODE = TRIM(G.CODIGOARTICULO)
-            WHERE TRIM(C.CODIGOCLIENTE) = ?
+            WHERE C.CODIGOCLIENTE = CAST(? AS CHAR(10))
               AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
               AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
             ORDER BY TRIM(P.CODIGOPROMOCIONREGALO), G.ORDEN, TRIM(G.CODIGOARTICULO)
@@ -5779,7 +5779,7 @@ async function getActiveSpecialPricePromotionsV2(clientCode, today) {
             WHERE CODIGOALMACEN = 1
             GROUP BY TRIM(CODIGOARTICULO)
         ) S ON S.CODE = TRIM(C.CODIGOARTICULO)
-        WHERE TRIM(C.CODIGOCLIENTE) = ?
+        WHERE C.CODIGOCLIENTE = CAST(? AS CHAR(10))
           AND TRIM(COALESCE(C.CODIGOARTICULO, '')) <> ''
           AND (C.ANOINICIO = 0 OR (C.ANOINICIO * 10000 + C.MESINICIO * 100 + C.DIAINICIO) <= ?)
           AND (C.ANOFINAL = 0 OR (C.ANOFINAL * 10000 + C.MESFINAL * 100 + C.DIAFINAL) >= ?)

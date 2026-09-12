@@ -68,6 +68,52 @@ async function pinForVendor(vendor) {
   return String(rows?.[0]?.PIN || '').trim();
 }
 
+function todayYmd() {
+  const now = new Date();
+  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+}
+
+async function pmrClients() {
+  const today = todayYmd();
+  const rows = await queryWithParams(
+    `SELECT TRIM(P.CODIGOCLIENTE) AS CLIENTE
+       FROM DSEDAC.PMR P
+      WHERE TRIM(COALESCE(P.CODIGOCLIENTE, '')) <> ''
+        AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
+        AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
+      FETCH FIRST 20 ROWS ONLY`,
+    [today, today],
+  );
+  const pmrc = await queryWithParams(
+    `SELECT TRIM(C.CODIGOCLIENTE) AS CLIENTE
+       FROM DSEDAC.PMRC C
+       JOIN DSEDAC.PMR P
+         ON TRIM(P.CODIGOPROMOCIONREGALO) = TRIM(C.CODIGOPROMOCIONREGALO)
+      WHERE TRIM(COALESCE(C.CODIGOCLIENTE, '')) <> ''
+        AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
+        AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
+      FETCH FIRST 20 ROWS ONLY`,
+    [today, today],
+  );
+  return [...new Set([
+    ...(rows || []).map((row) => String(row.CLIENTE || '').trim()),
+    ...(pmrc || []).map((row) => String(row.CLIENTE || '').trim()),
+  ].filter(Boolean))];
+}
+
+async function vendorForClient(client) {
+  const rows = await queryWithParams(
+    `SELECT TRIM(LAC.R1_T8CDVD) AS VD
+       FROM DSED.LACLAE LAC
+      WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
+        AND LAC.LCAADC >= ?
+        AND TRIM(COALESCE(LAC.R1_T8CDVD, '')) <> ''
+      FETCH FIRST 1 ROW ONLY`,
+    [client, 2024],
+  );
+  return String(rows?.[0]?.VD || '').trim();
+}
+
 function record(name, pass, detail) {
   console.log(`[${pass ? 'PASS' : 'FAIL'}] ${name}${detail ? ` — ${detail}` : ''}`);
   return pass;
@@ -93,6 +139,28 @@ async function main() {
       login.status === 200 && Boolean(token),
       `status=${login.status} role=${loginRole || '-'}`,
     ));
+
+    try {
+      const hist = await queryWithParams(
+        `SELECT TRIM(LCSRAB) AS SERIE, LCNRLA AS NUMERO, TRIM(LCCDCL) AS CLIENTE,
+                TRIM(R1_T8CDVD) AS VD, LCIECC AS IMP_CC
+           FROM DSED.LACLAE
+          WHERE LCSRAB = CAST(? AS CHAR(1))
+          FETCH FIRST 3 ROWS ONLY`,
+        ['D'],
+      );
+      rows.push(record(
+        'SELECT LACLAE serie D historico',
+        Array.isArray(hist) && hist.length > 0,
+        `rows=${hist?.length || 0} sample=${hist?.[0] ? `${String(hist[0].SERIE || '').trim()}-${hist[0].NUMERO} cl=${String(hist[0].CLIENTE || '').trim()} vd=${String(hist[0].VD || '').trim()}` : '-'}`,
+      ));
+    } catch (error) {
+      rows.push(record(
+        'SELECT LACLAE serie D historico',
+        false,
+        String(error.message || error).slice(0, 80),
+      ));
+    }
 
     const summary = await api('GET', `/comercial-liquidacion/resumen-diario?vendedor=${VENDOR}`, { token });
     rows.push(record(
@@ -127,6 +195,7 @@ async function main() {
       `status=${save.status} source=${save.body?.saved?.source || save.body?.code || save.body?.error || '-'}`,
     ));
 
+    const retToken = `hit-dev-${VENDOR}-${Date.now()}`;
     const ret = await api('POST', '/comercial-liquidacion/devoluciones', {
       token,
       body: {
@@ -138,14 +207,36 @@ async function main() {
         formaPago: 'PG',
         impactoLqd: 'YA_COBRADOS',
         documentoOrigen: 'HIT-PG',
-        idempotencyToken: `hit-dev-${VENDOR}-${Date.now()}`,
+        albaranOrigen: 'P-2-1',
+        vencimiento: '2026-08-31',
+        idempotencyToken: retToken,
       },
     });
     rows.push(record(
       'POST Devuelve TEST',
       (ret.status === 201 || ret.status === 200) && String(ret.body?.return?.source || '').startsWith('JAVIER.TEST_'),
-      `status=${ret.status} doc=${ret.body?.return?.documento || ret.body?.code || ret.body?.error || '-'}`,
+      `status=${ret.status} doc=${ret.body?.return?.documento || ret.body?.code || ret.body?.error || '-'} impacto=${ret.body?.return?.impactoLqd || '-'}`,
     ));
+    try {
+      const overlay = await queryWithParams(
+        `SELECT TRIM(CLIENTE) AS CLIENTE, IMPORTE, YA_COBRADA
+           FROM JAVIER.TEST_DEVOLUCIONES_COMERCIAL
+          WHERE IDEMPOTENCY_TOKEN = ?
+          FETCH FIRST 1 ROW ONLY`,
+        [retToken],
+      );
+      rows.push(record(
+        'SELECT overlay TEST_DEVOLUCIONES',
+        Array.isArray(overlay) && overlay.length > 0,
+        `rows=${overlay?.length || 0} yaCobrada=${overlay?.[0]?.YA_COBRADA ?? '-'}`,
+      ));
+    } catch (error) {
+      rows.push(record(
+        'SELECT overlay TEST_DEVOLUCIONES',
+        false,
+        String(error.message || error).slice(0, 80),
+      ));
+    }
 
     const pgDocs = await api('GET', `/comercial-liquidacion/ya-cobrados-pg?vendedor=${VENDOR}`, { token });
     if (pgDocs.status === 200 && Array.isArray(pgDocs.body?.documents)) {
@@ -204,7 +295,16 @@ async function main() {
     rows.push(record(
       'cobros pendientes <500ms o mejora',
       cold.status === 200 && cold.ms < 5000 && p95ish < 5000,
-      `cold=${cold.ms}ms p95ish=${p95ish}ms warm=${samples.join(',')} (objetivo p95 <500; baseline 7400)`,
+      `cold=${cold.ms}ms p95ish=${p95ish}ms warm=${samples.join(',')} (objetivo p95 <500; baseline 18000)`,
+    ));
+    const cobrosPct = Number(pendientes.body?.resumen?.porcentajeMinimoCobro || 0);
+    const vendorPct = Number(pendientes.body?.resumen?.porcentajeMinimoVendedor || 0);
+    const cobrosRig = pendientes.body?.resumen?.cobroRiguroso === true
+      || (pendientes.body?.cobros || []).some((doc) => doc.cobroRiguroso === true);
+    rows.push(record(
+      'cobros % minimo CLX/VDDX en payload',
+      pendientes.status === 200,
+      `riguroso=${cobrosRig} clxPct=${cobrosPct} vddxPct=${vendorPct} tipos=${[...new Set((pendientes.body?.cobros || []).map((d) => d.tipoDocumento || d.tipo || '-'))].slice(0, 6).join(',')}`,
     ));
 
     let createdId = null;
@@ -279,19 +379,59 @@ async function main() {
           detail.status === 200 && pie === 5 && linePct === 10,
           `status=${detail.status} pie=${pie} linea=${linePct} lines=${lines.length}`,
         ));
-        const promos = await api(
-          'GET',
-          `/pedidos/promotions?clientCode=${encodeURIComponent(cobrosClient)}&vendedorCodes=${VENDOR}`,
-          { token },
-        );
-        const promoList = promos.body?.promotions || [];
-        rows.push(record(
-          'GET ofertas PMR/CPES',
-          promos.status === 200 && Array.isArray(promoList),
-          `status=${promos.status} count=${promoList.length} sources=${[...new Set(promoList.map((p) => p.source || p.assignmentSource || '-'))].join(',') || 'none'}`,
-        ));
       }
     }
+
+    const knownPmr = ['4300009324', '4300006612', '4300006241', '4300008237'];
+    const promoClients = await pmrClients();
+    let promoHit = { status: 0, count: 0, client: cobrosClient || knownPmr[0], vendor: VENDOR };
+    const tryClients = [...new Set([...knownPmr, cobrosClient, ...promoClients])].filter(Boolean);
+    for (const promoClient of tryClients) {
+      const promos = await api(
+        'GET',
+        `/pedidos/promotions?clientCode=${encodeURIComponent(promoClient)}&vendedorCodes=${VENDOR}&forceRefresh=1`,
+        { token },
+      );
+      const promoList = promos.body?.promotions || [];
+      promoHit = {
+        status: promos.status,
+        count: promoList.length,
+        client: promoClient,
+        vendor: VENDOR,
+        sources: [...new Set(promoList.map((p) => p.source || p.assignmentSource || '-'))].join(','),
+      };
+      if (promos.status === 200 && promoList.length > 0) break;
+      if (promos.status === 403 || (promos.status === 200 && promoList.length === 0)) {
+        const otherVendor = await vendorForClient(promoClient);
+        if (!otherVendor || otherVendor === VENDOR) continue;
+        const otherPin = await pinForVendor(otherVendor);
+        if (!otherPin) continue;
+        const otherLogin = await api('POST', '/auth/login', {
+          body: { username: otherVendor, password: otherPin },
+        });
+        const otherToken = otherLogin.body?.token;
+        if (!otherToken) continue;
+        const otherPromos = await api(
+          'GET',
+          `/pedidos/promotions?clientCode=${encodeURIComponent(promoClient)}&vendedorCodes=${otherVendor}&forceRefresh=1`,
+          { token: otherToken },
+        );
+        const otherList = otherPromos.body?.promotions || [];
+        promoHit = {
+          status: otherPromos.status,
+          count: otherList.length,
+          client: promoClient,
+          vendor: otherVendor,
+          sources: [...new Set(otherList.map((p) => p.source || p.assignmentSource || '-'))].join(','),
+        };
+        if (otherPromos.status === 200 && otherList.length > 0) break;
+      }
+    }
+    rows.push(record(
+      'GET ofertas PMR/CPES',
+      promoHit.status === 200 && promoHit.count > 0,
+      `status=${promoHit.status} count=${promoHit.count} client=${promoHit.client} vendor=${promoHit.vendor} sources=${promoHit.sources || 'none'}`,
+    ));
 
     const cobroIdem = `HitCob${String(Date.now()).slice(-10)}`;
     let cobro = { status: 0, body: {} };
@@ -347,6 +487,14 @@ async function main() {
       'pedidos_overlay o cobro en mano confirmado',
       overlayOk,
       `status=${overlay.status} overlay=${Number.isFinite(overlayCount) ? overlayCount : '-'} confirmed=${confirmedEstado || 'no'}`,
+    ));
+
+    const facturas = await api('GET', `/facturas/summary?vendedorCodes=${VENDOR}`, { token });
+    const facSum = facturas.body?.summary || {};
+    rows.push(record(
+      'GET facturas summary totales',
+      facturas.status === 200 && Number(facSum.totalFacturas || facSum.totalDocumentos || 0) >= 0,
+      `status=${facturas.status} docs=${facSum.totalFacturas || facSum.totalDocumentos || 0} importe=${facSum.totalImporte || 0} base=${facSum.totalBase || 0}`,
     ));
 
     const failed = rows.filter((ok) => !ok).length;

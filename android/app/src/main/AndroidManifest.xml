@@ -25,6 +25,7 @@
         android:label="GMP Movilidad"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"

@@ -68,8 +68,12 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
       }
       final response = await ApiClient.get(
         '/pedidos/promotions',
-        queryParameters: {'clientCode': clientCode},
-        cacheKey: 'pedidos:promotions:$clientCode',
+        queryParameters: {
+          'clientCode': clientCode,
+          if (provider.vendedorCodes.isNotEmpty)
+            'vendedorCodes': provider.vendedorCodes,
+        },
+        cacheKey: 'pedidos:promotions:$clientCode:${provider.vendedorCodes}',
         cacheTTL: const Duration(minutes: 30), // Aligned with backend 30min TTL
       );
       final list = response['promotions'] as List? ?? [];

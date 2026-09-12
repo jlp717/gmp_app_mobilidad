@@ -92,6 +92,10 @@ class CommercialCobrosError extends Error {
   }
 }
 
+function padCvcClient(value) {
+  return trim(value).substring(0, 10);
+}
+
 function trim(value) {
   return value == null ? '' : String(value).trim();
 }
@@ -736,9 +740,12 @@ class Db2CobrosRepository extends CobrosRepository {
    */
   async getPendientes(clientCode, context = {}) {
     await this.ensureCobrosTable();
-    const access = buildCvcVendorAccessClause(context, 'C');
     const docFilters = buildCobrosDocumentFilters(context, 'C');
+    const clientParam = padCvcClient(clientCode);
     try {
+      // Client is already authorized in the route. Do NOT add the CLP+LACLAE
+      // vendor semi-join here: TRIM(CODIGOCLIENTEALBARAN) plus that IN-subquery
+      // is the 18-22s cold path. Equality on CHAR(10) keeps the CVC index.
       const cvcSql = `
         SELECT
             TRIM(C.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
@@ -764,15 +771,14 @@ class Db2CobrosRepository extends CobrosRepository {
             TRIM(FPG.DESCRIPCIONFORMAPAGO) AS FORMA_PAGO_DESC
         FROM ${DEBT_VIEW} C
         ${cvcPendientesJoins('C')}
-        WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
+        WHERE C.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10))
           AND ${cvcPendingPredicate('C')}
           ${docFilters.clause}
-          ${access.clause}
         ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC
         FETCH FIRST ${boundDebtFetchFirst(context.limit || 200)} ROWS ONLY`;
 
       const [rows, appCobrosByDoc, repartidorByDoc, cobroMinimo, appOrders] = await Promise.all([
-        queryWithParams(cvcSql, [trim(clientCode), ...docFilters.params, ...access.params], []),
+        queryWithParams(cvcSql, [clientParam, ...docFilters.params], []),
         this.getAppSideCobrosByDoc(clientCode),
         this.getAppSideRepartidorByDoc(clientCode),
         this.getClientCobroRiguroso(clientCode, context),
@@ -783,16 +789,7 @@ class Db2CobrosRepository extends CobrosRepository {
         COBRO_RIGUROSO: cobroMinimo.cobroRiguroso,
         PORCENTAJE_MINIMO_COBRO: cobroMinimo.porcentajeMinimoCobro,
       }));
-      const adjustmentVendorCodes = normalizeVendorCodeList(
-        context.adjustmentVendorCode
-          ? [context.adjustmentVendorCode]
-          : (context.vendorCodes || context.vendedorCodes || []),
-      );
-      let portfolioAdjustments = null;
-      if (groupedRows.length > 0 && adjustmentVendorCodes.length > 0) {
-        const scoped = buildCvcVendorScopeFilter(adjustmentVendorCodes);
-        portfolioAdjustments = await this.getAppSideCobrosByDocForVendorScope(scoped.clause, scoped.params);
-      }
+      const portfolioAdjustments = null;
       const cobros = mapCvcRowsToPendientes(
         groupedRows,
         clientCode,
@@ -830,6 +827,7 @@ class Db2CobrosRepository extends CobrosRepository {
           documentos: { cantidad: mergedCobros.length, total: totalPendiente },
           cobroRiguroso: cobroMinimo.cobroRiguroso,
           porcentajeMinimoCobro: cobroMinimo.porcentajeMinimoCobro,
+          porcentajeMinimoVendedor: cobroMinimo.porcentajeMinimoVendedor || 0,
           cvc: { cantidad: cobros.length, total: cvcTotalPendiente },
           pedidosApp: {
             cantidad: appOrders?.resumen?.pedidos?.cantidad || 0,
@@ -1742,22 +1740,27 @@ class Db2CobrosRepository extends CobrosRepository {
 
   async getClientCobroRiguroso(clientCode, context = {}) {
     const client = trim(clientCode);
-    const empty = { cobroRiguroso: false, porcentajeMinimoCobro: 0 };
+    const empty = { cobroRiguroso: false, porcentajeMinimoCobro: 0, porcentajeMinimoVendedor: 0 };
     if (!client) return empty;
     try {
+      const vendorPct = await this.getVendorMinimoCobro(context);
       const clxRows = await queryWithParams(`
         SELECT TRIM(COBRORIGUROSOSN) AS SN,
                COALESCE(PORCENTAJECOBRORIGUROSO, 0) AS PCT
           FROM DSEDAC.CLX
-         WHERE TRIM(CODIGOCLIENTE) = ?
+         WHERE CODIGOCLIENTE = CAST(? AS CHAR(10))
          FETCH FIRST 1 ROW ONLY
       `, [client], []);
       const sn = trim(clxRows?.[0]?.SN).toUpperCase() === 'S';
       let pct = Number(clxRows?.[0]?.PCT) || 0;
       if (sn && pct <= 0) {
-        pct = await this.getVendorMinimoCobro(context);
+        pct = vendorPct;
       }
-      return { cobroRiguroso: sn, porcentajeMinimoCobro: sn ? pct : 0 };
+      return {
+        cobroRiguroso: sn,
+        porcentajeMinimoCobro: sn ? pct : 0,
+        porcentajeMinimoVendedor: vendorPct,
+      };
     } catch (error) {
       logger.warn(`[COBROS_REPO] CLX cobro riguroso skipped: ${error.message}`);
       return empty;
