@@ -2295,14 +2295,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   bool get _isTalonPayment => _canonicalPaymentMethod == 'TALON';
 
   String? _talonFieldsError() {
-    if (!_isTalonPayment) return null;
-    if (_numeroTalonController.text.trim().isEmpty ||
-        _fechaVencimientoTalonController.text.trim().isEmpty ||
-        (_bancoCodigoController.text.trim().length != 4 &&
-            _bancoNombreController.text.trim().length < 3)) {
-      return 'El talón requiere número, vencimiento y banco validado.';
-    }
-    return null;
+    return validateRuteroTalonFields(
+      paymentMethod: _canonicalPaymentMethod,
+      numeroTalon: _numeroTalonController.text,
+      fechaVencimiento: _fechaVencimientoTalonController.text,
+      nombreBanco: _bancoNombreController.text,
+      codigoEntidad: _bancoCodigoController.text,
+    );
   }
 
   RepartoPayment _buildCanonicalPayment() => RepartoPayment(
@@ -2790,6 +2789,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         importeDisponibleCobro: _albaran.importeDisponibleCobro,
         importeMaxCobrable: _maxCollectableAmount(),
         isPaid: _isPaid,
+        paymentMethod: _canonicalPaymentMethod,
+        numeroTalon: _numeroTalonController.text,
+        fechaVencimientoTalon: _fechaVencimientoTalonController.text,
+        nombreBanco: _bancoNombreController.text,
+        codigoEntidadBancaria: _bancoCodigoController.text,
         signatureEmpty: _signatureController.isEmpty,
         hasPersistedSignature: _hasPersistedSignature,
         importeCobradoText: _importeCobradoController.text,
@@ -2841,13 +2845,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                noEntrega
-                    ? '¿Estás seguro de registrar la no entrega?'
-                    : '¿Estás seguro de completar el albarán?',
-                style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.bold,
+              child: Semantics(
+                header: true,
+                child: Text(
+                  noEntrega
+                      ? '¿Estás seguro de registrar la no entrega?'
+                      : '¿Estás seguro de completar el albarán?',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),

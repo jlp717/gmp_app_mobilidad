@@ -77,4 +77,38 @@ describe('reparto-bank-catalog', () => {
       nombreBanco: 'BANCO FANTASMA',
     }, { query })).rejects.toMatchObject({ code: 'BANK_NOT_FOUND', statusCode: 422 });
   });
+
+  test('assertTalonPayment rejects missing numero', async () => {
+    await expect(assertTalonPayment({
+      formaPago: 'TALON',
+      fechaVencimientoTalon: '2026-12-01',
+      nombreBanco: 'SANTANDER',
+    })).rejects.toMatchObject({ code: 'TALON_FIELDS_REQUIRED', statusCode: 422 });
+  });
+
+  test('assertTalonPayment rejects missing vencimiento', async () => {
+    await expect(assertTalonPayment({
+      formaPago: 'TALON',
+      numeroTalon: '123456',
+      nombreBanco: 'SANTANDER',
+    })).rejects.toMatchObject({ code: 'TALON_FIELDS_REQUIRED', statusCode: 422 });
+  });
+
+  test('assertTalonPayment rejects missing banco', async () => {
+    const query = jest.fn(async (sql) => {
+      if (String(sql).includes('SYSTABLES')) return [{ TABLE_NAME: 'ENB' }];
+      if (String(sql).includes('SYSCOLUMNS')) {
+        return [
+          { COLUMN_NAME: 'CODIGOENTIDADBANCARIA' },
+          { COLUMN_NAME: 'DESCRICIONENTIDADBANCARIA' },
+        ];
+      }
+      return [];
+    });
+    await expect(assertTalonPayment({
+      formaPago: 'TALON',
+      numeroTalon: '123456',
+      fechaVencimientoTalon: '2026-12-01',
+    }, { query })).rejects.toMatchObject({ statusCode: 422 });
+  });
 });

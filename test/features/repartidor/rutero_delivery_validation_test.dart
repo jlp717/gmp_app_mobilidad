@@ -23,6 +23,11 @@ RuteroDeliveryValidationInput _base({
   double importeTotal = 10,
   double? importeDisponibleCobro,
   double? importeMaxCobrable,
+  String paymentMethod = 'EFECTIVO',
+  String numeroTalon = '',
+  String fechaVencimientoTalon = '',
+  String nombreBanco = '',
+  String codigoEntidadBancaria = '',
 }) {
   return RuteroDeliveryValidationInput(
     isLoadingItems: isLoadingItems,
@@ -44,6 +49,11 @@ RuteroDeliveryValidationInput _base({
     importeTotal: importeTotal,
     importeDisponibleCobro: importeDisponibleCobro,
     importeMaxCobrable: importeMaxCobrable,
+    paymentMethod: paymentMethod,
+    numeroTalon: numeroTalon,
+    fechaVencimientoTalon: fechaVencimientoTalon,
+    nombreBanco: nombreBanco,
+    codigoEntidadBancaria: codigoEntidadBancaria,
   );
 }
 
@@ -298,5 +308,78 @@ void main() {
     expect(result.ok, isFalse);
     expect(result.message.toLowerCase(), contains('zpl'));
     expect(result.message.toLowerCase(), contains('esc/pos'));
+  });
+
+  test('talón paid without número, vencimiento or banco is blocked', () {
+    expect(
+      validateRuteroTalonFields(
+        paymentMethod: 'TALON',
+        numeroTalon: '',
+        fechaVencimiento: '2026-12-01',
+        nombreBanco: 'SANTANDER',
+      ),
+      kRuteroTalonRequiredMessage,
+    );
+    expect(
+      validateRuteroTalonFields(
+        paymentMethod: 'TALON',
+        numeroTalon: '123456',
+        fechaVencimiento: '',
+        nombreBanco: 'SANTANDER',
+      ),
+      kRuteroTalonRequiredMessage,
+    );
+    expect(
+      validateRuteroTalonFields(
+        paymentMethod: 'TALON',
+        numeroTalon: '123456',
+        fechaVencimiento: '2026-12-01',
+        nombreBanco: '',
+      ),
+      kRuteroTalonRequiredMessage,
+    );
+    expect(
+      validateRuteroTalonFields(
+        paymentMethod: 'TALON',
+        numeroTalon: '123456',
+        fechaVencimiento: '2026-12-01',
+        nombreBanco: 'SANTANDER',
+        codigoEntidad: '0049',
+      ),
+      isNull,
+    );
+    expect(
+      validateRuteroTalonFields(
+        paymentMethod: 'EFECTIVO',
+        numeroTalon: '',
+        fechaVencimiento: '',
+        nombreBanco: '',
+      ),
+      isNull,
+    );
+
+    final blocked = validateRuteroDeliveryForm(
+      _base(
+        isPaid: true,
+        importeCobradoText: '10,00',
+        importeDisponibleCobro: 10,
+        paymentMethod: 'TALON',
+      ),
+    );
+    expect(blocked.isValid, isFalse);
+    expect(blocked.messageFor('pago'), kRuteroTalonRequiredMessage);
+
+    final ok = validateRuteroDeliveryForm(
+      _base(
+        isPaid: true,
+        importeCobradoText: '10,00',
+        importeDisponibleCobro: 10,
+        paymentMethod: 'TALON',
+        numeroTalon: '123456',
+        fechaVencimientoTalon: '2026-12-01',
+        nombreBanco: 'SANTANDER',
+      ),
+    );
+    expect(ok.messageFor('pago'), isNull);
   });
 }

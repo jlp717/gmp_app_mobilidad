@@ -85,12 +85,29 @@ void main() {
       ),
     );
 
+    expect(
+        kRuteroPaymentMethodCodes, ['EFECTIVO', 'TARJETA', 'BIZUM', 'TALON']);
+    expect(kRuteroPaymentMethodCodes, hasLength(4));
+    expect(kRuteroPaymentMethodCodes, isNot(contains('TRANSFERENCIA')));
+
     expect(find.text('Efectivo'), findsOneWidget);
     expect(find.text('Tarjeta'), findsOneWidget);
     expect(find.text('Bizum'), findsOneWidget);
     expect(find.text('Talón'), findsOneWidget);
     expect(find.text('Transferencia'), findsNothing);
     expect(find.text('TRANSFERENCIA'), findsNothing);
+
+    expect(find.byKey(ruteroPaymentChipKey('EFECTIVO')), findsOneWidget);
+    expect(find.byKey(ruteroPaymentChipKey('TARJETA')), findsOneWidget);
+    expect(find.byKey(ruteroPaymentChipKey('BIZUM')), findsOneWidget);
+    expect(find.byKey(ruteroPaymentChipKey('TALON')), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((widget) {
+        final key = widget.key;
+        return key is ValueKey<String> && key.value.startsWith('rutero-pay-');
+      }),
+      findsNWidgets(4),
+    );
 
     expect(tester.takeException(), isNull);
   });
@@ -222,6 +239,10 @@ void main() {
     expect(find.text('Fecha de vencimiento'), findsOneWidget);
     expect(find.textContaining('Código de entidad'), findsOneWidget);
     expect(find.text('Nombre del banco'), findsOneWidget);
+    expect(find.byKey(const ValueKey('rutero-talon-numero')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('rutero-talon-vencimiento')), findsOneWidget);
+    expect(find.byKey(const ValueKey('rutero-talon-banco')), findsOneWidget);
     expect(find.text('Transferencia'), findsNothing);
   });
 
@@ -251,5 +272,57 @@ void main() {
     expect(find.text('Transferencia'), findsNothing);
     expect(find.text('TRANSFERENCIA'), findsNothing);
     expect(find.text('Datos del talón'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((widget) {
+        final key = widget.key;
+        return key is ValueKey<String> && key.value.startsWith('rutero-pay-');
+      }),
+      findsNWidgets(4),
+    );
+  });
+
+  testWidgets('cobro opcional arranca desmarcado y se puede marcar',
+      (tester) async {
+    final controller = TextEditingController(text: '40,00');
+    var taps = 0;
+    await tester.pumpWidget(
+      _wrap(
+        RuteroDetailPayment(
+          albaran: AlbaranEntrega(
+            id: '2026-A-1-88-C1',
+            numeroAlbaran: 88,
+            ejercicio: 2026,
+            serie: 'A',
+            codigoCliente: 'C1',
+            nombreCliente: 'Bar La Esquina',
+            fecha: '2026-09-07',
+            importeTotal: 40,
+            codigoRepartidor: '08',
+            estado: EstadoEntrega.enRuta,
+            importeDisponibleCobro: 40,
+            esCTR: false,
+          ),
+          selectedPaymentMethod: 'EFECTIVO',
+          isPaid: false,
+          pagoError: null,
+          importeCobradoController: controller,
+          importeCobradoError: null,
+          paymentLocked: false,
+          onPaymentMethodChanged: (_) {},
+          onPaidChanged: () => taps += 1,
+          onContinueToFinalize: () {},
+          getPaymentTypeLabel: () => 'Crédito',
+        ),
+      ),
+    );
+
+    expect(find.textContaining('Cobro opcional'), findsWidgets);
+    expect(
+      find.textContaining('Márcalo solo si vas a cobrar este albarán ahora.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Voy a cobrar este documento'));
+    await tester.pump();
+    expect(taps, 1);
   });
 }

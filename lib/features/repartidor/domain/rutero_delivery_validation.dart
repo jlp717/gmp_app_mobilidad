@@ -63,6 +63,11 @@ class RuteroDeliveryValidationInput {
     required this.importeTotal,
     this.importeDisponibleCobro,
     this.importeMaxCobrable,
+    this.paymentMethod = 'EFECTIVO',
+    this.numeroTalon = '',
+    this.fechaVencimientoTalon = '',
+    this.nombreBanco = '',
+    this.codigoEntidadBancaria = '',
   });
 
   final bool isLoadingItems;
@@ -82,6 +87,11 @@ class RuteroDeliveryValidationInput {
   final bool hasPersistedSignature;
   final String importeCobradoText;
   final double importeTotal;
+  final String paymentMethod;
+  final String numeroTalon;
+  final String fechaVencimientoTalon;
+  final String nombreBanco;
+  final String codigoEntidadBancaria;
   final double? importeDisponibleCobro;
 
   /// Server-enforced ceiling for the payment amount. On a complete delivery
@@ -154,6 +164,42 @@ double capSaldoCobrableAlDocumento({
   return collectableAmount < documentAmount
       ? double.parse(collectableAmount.toStringAsFixed(2))
       : double.parse(documentAmount.toStringAsFixed(2));
+}
+
+const kRuteroTalonRequiredMessage =
+    'El talón requiere número, vencimiento y banco validado.';
+
+bool isRuteroTalonPaymentMethod(String method) {
+  final normalized = method.trim().toUpperCase();
+  return const {
+    'TALON',
+    'TALÓN',
+    'CHEQUE',
+    'CH',
+    'TALON BANCARIO',
+    'TRANSFERENCIA',
+    'TRANSFER',
+    'TR',
+    'T0',
+  }.contains(normalized);
+}
+
+/// Blocks confirm when Talón is selected and any of the 3 required fields
+/// (número, vencimiento, banco ENB) is missing.
+String? validateRuteroTalonFields({
+  required String paymentMethod,
+  required String numeroTalon,
+  required String fechaVencimiento,
+  required String nombreBanco,
+  String codigoEntidad = '',
+}) {
+  if (!isRuteroTalonPaymentMethod(paymentMethod)) return null;
+  if (numeroTalon.trim().isEmpty) return kRuteroTalonRequiredMessage;
+  if (fechaVencimiento.trim().isEmpty) return kRuteroTalonRequiredMessage;
+  final hasName = nombreBanco.trim().length >= 3;
+  final hasCode = RegExp(r'^\d{4}$').hasMatch(codigoEntidad.trim());
+  if (!hasName && !hasCode) return kRuteroTalonRequiredMessage;
+  return null;
 }
 
 double? parseRuteroMoney(String value) {
@@ -309,6 +355,22 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
           ),
         );
       }
+    }
+    final talonError = validateRuteroTalonFields(
+      paymentMethod: input.paymentMethod,
+      numeroTalon: input.numeroTalon,
+      fechaVencimiento: input.fechaVencimientoTalon,
+      nombreBanco: input.nombreBanco,
+      codigoEntidad: input.codigoEntidadBancaria,
+    );
+    if (talonError != null) {
+      issues.add(
+        RuteroFieldIssue(
+          tab: RuteroDeliveryTab.payment,
+          field: 'pago',
+          message: talonError,
+        ),
+      );
     }
   }
 

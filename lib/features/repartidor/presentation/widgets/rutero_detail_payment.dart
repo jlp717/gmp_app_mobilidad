@@ -10,6 +10,24 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repar
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_tab_bar.dart';
 import 'package:intl/intl.dart';
 
+/// Exactly 4 cobro chips in the rutero. Transferencia is not a chip:
+/// the ERP code maps to Talón in [ruteroPaymentMethodLabel].
+const kRuteroPaymentMethodCodes = <String>[
+  'EFECTIVO',
+  'TARJETA',
+  'BIZUM',
+  'TALON',
+];
+
+const kRuteroPaymentMethodIcons = <String, IconData>{
+  'EFECTIVO': Icons.money,
+  'TARJETA': Icons.credit_card,
+  'BIZUM': Icons.phone_android,
+  'TALON': Icons.account_balance,
+};
+
+Key ruteroPaymentChipKey(String method) => ValueKey('rutero-pay-$method');
+
 String ruteroPaymentMethodLabel(String method, {bool compact = false}) {
   final normalized = method.trim().toUpperCase();
   switch (normalized) {
@@ -342,6 +360,7 @@ class RuteroDetailPayment extends StatelessWidget {
   Widget _buildPaymentMethodSelector(BuildContext context) {
     final compact = Responsive.isSmall(context);
     final gap = compact ? 8.0 : 10.0;
+    final methods = kRuteroPaymentMethodCodes;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -354,45 +373,24 @@ class RuteroDetailPayment extends StatelessWidget {
           ),
         ),
         SizedBox(height: compact ? 8 : 10),
-        Row(
-          children: [
-            Expanded(
-              child: _buildPaymentOption(
-                context,
-                'EFECTIVO',
-                Icons.money,
-              ),
-            ),
-            SizedBox(width: gap),
-            Expanded(
-              child: _buildPaymentOption(
-                context,
-                'TARJETA',
-                Icons.credit_card,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: gap),
-        Row(
-          children: [
-            Expanded(
-              child: _buildPaymentOption(
-                context,
-                'BIZUM',
-                Icons.phone_android,
-              ),
-            ),
-            SizedBox(width: gap),
-            Expanded(
-              child: _buildPaymentOption(
-                context,
-                'TALON',
-                Icons.account_balance,
-              ),
-            ),
-          ],
-        ),
+        for (var row = 0; row < 2; row++) ...[
+          if (row > 0) SizedBox(height: gap),
+          Row(
+            children: [
+              for (var col = 0; col < 2; col++) ...[
+                if (col > 0) SizedBox(width: gap),
+                Expanded(
+                  child: _buildPaymentOption(
+                    context,
+                    methods[row * 2 + col],
+                    kRuteroPaymentMethodIcons[methods[row * 2 + col]] ??
+                        Icons.payments,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -423,6 +421,7 @@ class RuteroDetailPayment extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           TextField(
+            key: const ValueKey('rutero-talon-numero'),
             controller: numeroTalonController,
             enabled: _methodsEnabled,
             maxLength: 10,
@@ -432,6 +431,7 @@ class RuteroDetailPayment extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           TextField(
+            key: const ValueKey('rutero-talon-vencimiento'),
             controller: fechaVencimientoTalonController,
             enabled: _methodsEnabled,
             readOnly: true,
@@ -475,6 +475,7 @@ class RuteroDetailPayment extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           TextField(
+            key: const ValueKey('rutero-talon-banco'),
             controller: bancoNombreController,
             enabled: _methodsEnabled,
             maxLength: 40,
@@ -501,6 +502,7 @@ class RuteroDetailPayment extends StatelessWidget {
     final visibleLabel = ruteroPaymentMethodLabel(method, compact: compact);
 
     return Semantics(
+      key: ruteroPaymentChipKey(method),
       button: true,
       selected: isSelected,
       enabled: _methodsEnabled,
