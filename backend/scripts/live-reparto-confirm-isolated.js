@@ -234,6 +234,9 @@ async function main() {
   emit('pending', { date, count: candidates.length });
 
   let selected;
+  let fallback;
+  let scanned = 0;
+  let withSaldo = 0;
   for (const row of candidates) {
     const identity = identityOf(row);
     if (!identity) continue;
@@ -242,10 +245,25 @@ async function main() {
     const amount = amountOf(detail.json, row);
     if (!statusOk(detail, [200]) || !lines || !lines.length || !Number.isFinite(amount) || amount === 0) continue;
     const parcial = parcialLines(lines);
-    if (!parcial) continue;
-    selected = { identity, lines: parcial };
-    break;
+    if (!parcial || Number(parcial[0].cantidadEntregada) <= 0) continue;
+    scanned += 1;
+    const saldo = Number(
+      detail.json?.albaran?.importeDisponibleCobro
+      ?? detail.json?.importeDisponibleCobro
+      ?? row?.importeDisponibleCobro
+      ?? 0,
+    );
+    const talon = Number.isFinite(saldo) && saldo > 0.01;
+    if (talon) withSaldo += 1;
+    const candidate = { identity, lines: parcial, talon };
+    if (talon) {
+      selected = candidate;
+      break;
+    }
+    if (!fallback) fallback = candidate;
   }
+  emit('scan', { scanned, withSaldo });
+  selected = selected || fallback;
   if (!selected) throw new Error('no contract-safe pending delivery');
 
   const signature = await request('POST', '/repartidor-finanzas/rutero/evidence/signature', {
@@ -261,26 +279,39 @@ async function main() {
   if (!statusOk(signature, [200, 201]) || !evidenceId) throw new Error('signature failed');
 
   const key = `live-cierre-${crypto.randomUUID()}`;
+  const confirmBody = {
+    delivery: {
+      itemId: selected.identity.itemId,
+      repartidorId: driver,
+      status: 'PARCIAL',
+      occurredAt: new Date().toISOString(),
+      receiver: { nombre: 'Cert', apellidos: 'Live', dni: '12345678Z' },
+      lineas: selected.lines,
+      firma: evidenceId,
+      observaciones: 'Cierre vivo isolated_test PARCIAL',
+    },
+  };
+  if (selected.talon) {
+    confirmBody.cobro = {
+      entregaId: selected.identity.itemId,
+      importeCobrado: 0.01,
+      formaPago: 'TALON',
+      numeroTalon: '123456',
+      fechaVencimientoTalon: '2026-12-01',
+      codigoEntidadBancaria: '0049',
+      nombreBanco: 'SANTANDER',
+    };
+  }
   const confirm = await request('POST', '/repartidor-finanzas/rutero/confirm-delivery-cobro', {
     token,
     headers: { 'Idempotency-Key': key },
-    body: {
-      delivery: {
-        itemId: selected.identity.itemId,
-        repartidorId: driver,
-        status: 'PARCIAL',
-        occurredAt: new Date().toISOString(),
-        receiver: { nombre: 'Cert', apellidos: 'Live', dni: '12345678Z' },
-        lineas: selected.lines,
-        firma: evidenceId,
-        observaciones: 'Cierre vivo isolated_test PARCIAL',
-      },
-    },
+    body: confirmBody,
   });
   const confirmationId = confirmationIdOf(confirm.json);
   emit('confirm', {
     status: confirm.status,
     created: Boolean(confirmationId),
+    talonSent: selected.talon === true,
     code: typeof confirm.json?.code === 'string' ? confirm.json.code : null,
     error: typeof confirm.json?.error === 'string' ? String(confirm.json.error).slice(0, 120) : null,
   });

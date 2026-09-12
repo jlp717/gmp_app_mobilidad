@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/erp_document_label.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/features/facturas/data/facturas_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
@@ -70,7 +71,8 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
         MaterialPageRoute<void>(
           builder: (_) => PdfPreviewScreen(
             pdfBytes: Uint8List.fromList(bytes),
-            title: 'Factura $serie-$numero',
+            title:
+                'Factura ${formatErpDocumentLabel(serie: serie, numero: numero)}',
             fileName: 'Factura_${serie}_${numero}_$ejercicio.pdf',
           ),
         ),
@@ -110,7 +112,8 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
         MaterialPageRoute<void>(
           builder: (_) => PdfPreviewScreen(
             pdfBytes: Uint8List.fromList(bytes),
-            title: 'Albaran $serie-$terminal-$numero',
+            title:
+                'Albarán ${formatErpDocumentLabel(serie: serie, terminal: terminal, numero: numero)}',
             fileName: 'Albaran_${serie}_${terminal}_${numero}_$ejercicio.pdf',
           ),
         ),
@@ -199,7 +202,10 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                               facturaYear > 0;
                           final facturaDisplay = facturaRef.isNotEmpty
                               ? facturaRef
-                              : '$facturaSerie-$facturaNum';
+                              : formatErpDocumentLabel(
+                                  serie: facturaSerie,
+                                  numero: facturaNum,
+                                );
                           return Container(
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(10),
@@ -212,8 +218,8 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                               children: [
                                 Text(
                                   albaranRef.isNotEmpty
-                                      ? 'Albaran $albaranRef'
-                                      : "${a['serie'] ?? ''} ${a['numeroAlbaran'] ?? ''}",
+                                      ? 'Albarán $albaranRef'
+                                      : 'Albarán ${formatErpDocumentLabel(serie: (a['serie'] ?? '').toString(), terminal: _asInt(a['terminal']), numero: _asInt(a['numeroAlbaran']))}',
                                   style: TextStyle(
                                     color: AppColors.themedWhite,
                                     fontWeight: FontWeight.bold,

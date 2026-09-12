@@ -107,6 +107,8 @@ void main() {
               id: '2026-A-1-42-C1',
               numeroAlbaran: 42,
               ejercicio: 2026,
+              serie: 'P',
+              terminal: 15,
               codigoCliente: 'C1',
               nombreCliente: 'Cliente prueba',
               fecha: '2026-08-18',
@@ -131,5 +133,6 @@ void main() {
 
     expect(find.text('Nota de entrega'), findsOneWidget);
     expect(find.text('Albarán (con firma)'), findsOneWidget);
+    expect(find.text('Albarán P-15-42'), findsOneWidget);
   });
 }

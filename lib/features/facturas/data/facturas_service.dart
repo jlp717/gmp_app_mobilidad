@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/utils/erp_document_label.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 
@@ -118,14 +119,11 @@ class Factura {
   bool get isFactura => documentType == FacturaDocumentType.factura;
   String get tipoLabel => documentType.label;
 
-  String get numeroFormateado {
-    if (isAlbaran) {
-      final term =
-          terminal == null ? '' : '-${terminal.toString().padLeft(3, '0')}';
-      return '$serie$term-${numero.toString().padLeft(5, '0')}';
-    }
-    return '$serie-${numero.toString().padLeft(5, '0')}';
-  }
+  String get numeroFormateado => formatErpDocumentLabel(
+        serie: serie,
+        terminal: terminal,
+        numero: numero,
+      );
 
   String get pdfFilePrefix => isAlbaran ? 'Albaran' : 'Factura';
 }
@@ -210,7 +208,10 @@ class FacturaHeader {
   final double total;
   final List<FacturaBase> bases;
 
-  String get numeroFormateado => '$serie-${numero.toString().padLeft(5, '0')}';
+  String get numeroFormateado => formatErpDocumentLabel(
+        serie: serie,
+        numero: numero,
+      );
 }
 
 class FacturaBase {

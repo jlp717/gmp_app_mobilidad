@@ -74,6 +74,7 @@ function invalidatePedidosCache(pedidoId) {
         logger.warn(`[PEDIDOS] Cache invalidation skipped: ${err.message}`);
     }
 }
+const { formatErpDocumentLabel } = require('../../utils/erp-document-label');
 const { LACLAE_SALES_FILTER } = require('../../utils/common');
 const { CircuitBreaker } = require('../circuit-breaker');
 const { getClientDays } = require('../laclae');
@@ -4966,8 +4967,14 @@ async function getOrderAlbaran(orderId) {
                     ejercicioFactura,
                     documentType: hasFactura ? 'factura' : 'albaran',
                     documentLabel: hasFactura ? 'Factura' : 'Albaran',
-                    albaranRef: `${serieAlbaran}-${String(terminalAlbaran).padStart(3, '0')}-${String(numeroAlbaran).padStart(6, '0')}`,
-                    facturaRef: hasFactura ? `${serieFactura}-${String(numeroFactura).padStart(6, '0')}` : '',
+                    albaranRef: formatErpDocumentLabel({
+                        serie: serieAlbaran,
+                        terminal: terminalAlbaran,
+                        numero: numeroAlbaran,
+                    }),
+                    facturaRef: hasFactura
+                        ? formatErpDocumentLabel({ serie: serieFactura, numero: numeroFactura })
+                        : '',
                     albaranPdfAvailable: numeroAlbaran > 0 && serieAlbaran && terminalAlbaran > 0 && ejercicioAlbaran > 0,
                     facturaPdfAvailable: hasFactura,
                 };

@@ -531,9 +531,7 @@ class ZebraPrintService {
     // ═══ DOCUMENT TYPE + NUMBER ═══
     final isFactura = albaran.numeroFactura > 0;
     final docType = isFactura ? 'FACTURA' : 'ALBARAN';
-    final docNum = isFactura
-        ? '${albaran.serieFactura}-${albaran.terminal}-${albaran.numeroFactura}'
-        : '${albaran.serie}-${albaran.terminal}-${albaran.numeroAlbaran}';
+    final docNum = albaran.erpDocumentId;
     final fDoc = L.fontSize(26);
     _writeLeft(buf, L, y, fDoc, '$docType: $docNum');
     y += L.rowGap(fDoc);

@@ -14,7 +14,6 @@ import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
-import 'package:gmp_app_mobilidad/core/utils/erp_document_label.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
@@ -2802,7 +2801,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                noEntrega ? 'Registrar no entrega' : 'Confirmar entrega',
+                noEntrega
+                    ? '¿Estás seguro de registrar la no entrega?'
+                    : '¿Estás seguro de completar el albarán?',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
@@ -2818,7 +2819,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             Text(
               noEntrega
                   ? 'Se registrará como no entregado sin cobro ni firma.'
-                  : '¿Está seguro de confirmar esta entrega?',
+                  : 'Se confirmará la entrega con los datos actuales.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             ),
             const SizedBox(height: 16),
@@ -2841,9 +2842,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _isFactura
-                            ? 'Factura ${widget.albaran.numeroFactura}'
-                            : 'Albarán ${widget.albaran.numeroAlbaran}',
+                        widget.albaran.erpDocumentLabel,
                         style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w500,
@@ -3630,12 +3629,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final bytes = await _downloadCommercialPdfBytes();
       modal.close();
       if (!mounted) return;
-      final title = isFactura
-          ? 'Factura ${formatErpDocumentLabel(serie: alb.serieFactura, terminal: alb.terminal == 0 ? null : alb.terminal, numero: alb.numeroFactura)}'
-          : 'Albarán ${formatErpDocumentLabel(serie: alb.serie, terminal: alb.terminal == 0 ? null : alb.terminal, numero: alb.numeroAlbaran)}';
+      final title = alb.erpDocumentLabel;
       final fileName = isFactura
-          ? 'Factura_${alb.ejercicio}_${alb.serieFactura}_${alb.numeroFactura}.pdf'
-          : 'Albaran_${alb.ejercicio}_${alb.serie}_${alb.numeroAlbaran}.pdf';
+          ? 'Factura_${alb.ejercicio}_${alb.serieFactura}_${alb.terminal}_${alb.numeroFactura}.pdf'
+          : 'Albaran_${alb.ejercicio}_${alb.serie}_${alb.terminal}_${alb.numeroAlbaran}.pdf';
       unawaited(
         Navigator.push(
           context,
@@ -3706,8 +3703,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final isFactura = alb.numeroFactura > 0;
     final file = File(
       isFactura
-          ? '${tempDir.path}/factura_${alb.ejercicio}_${alb.serieFactura}_${alb.numeroFactura}_$timestamp.pdf'
-          : '${tempDir.path}/albaran_${alb.ejercicio}_${alb.serie}_${alb.numeroAlbaran}_$timestamp.pdf',
+          ? '${tempDir.path}/factura_${alb.ejercicio}_${alb.erpDocumentId}_$timestamp.pdf'
+          : '${tempDir.path}/albaran_${alb.ejercicio}_${alb.erpDocumentId}_$timestamp.pdf',
     );
     await file.writeAsBytes(bytes, flush: true);
     return file;
@@ -3722,10 +3719,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
     final tempDir = await getTemporaryDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final label = alb.numeroFactura > 0
-        ? 'F${alb.numeroFactura}'
-        : 'A${alb.numeroAlbaran}';
-    final file = File('${tempDir.path}/nota_entrega_${label}_$timestamp.pdf');
+    final file = File(
+      '${tempDir.path}/nota_entrega_${alb.erpDocumentId}_$timestamp.pdf',
+    );
     await file.writeAsBytes(bytes, flush: true);
     return file;
   }
@@ -3762,8 +3758,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
       final pdfBytes = base64Decode(pdfData);
       const title = 'Nota de entrega';
-      final fileName =
-          'Nota_Entrega_${widget.albaran.numeroFactura > 0 ? "F${widget.albaran.numeroFactura}" : "A${widget.albaran.numeroAlbaran}"}.pdf';
+      final fileName = 'Nota_Entrega_${widget.albaran.erpDocumentId}.pdf';
 
       if (!mounted) return;
       unawaited(
@@ -3816,8 +3811,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (!mounted) return;
       await Share.shareXFiles(
         <XFile>[XFile(file.path, mimeType: 'application/pdf')],
-        text:
-            'Nota de entrega ${widget.albaran.serie}-${widget.albaran.numeroAlbaran}',
+        text: 'Nota de entrega ${widget.albaran.erpDocumentId}',
         subject: 'Nota de entrega',
         sharePositionOrigin: _shareOrigin(),
       );
@@ -3849,9 +3843,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final file = await _prepareCommercialPdfFile();
       modal.close();
       if (!mounted) return;
-      final subject = isFactura
-          ? 'Factura ${widget.albaran.numeroFactura}'
-          : 'Albarán ${widget.albaran.serie}-${widget.albaran.numeroAlbaran}';
+      final subject = widget.albaran.erpDocumentLabel;
       await Share.shareXFiles(
         <XFile>[XFile(file.path, mimeType: 'application/pdf')],
         text: subject,
@@ -3874,8 +3866,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
     final form = await WhatsAppFormModal.show(
       context,
-      defaultMessage:
-          'Nota de entrega ${widget.albaran.serie}-${widget.albaran.numeroAlbaran}. '
+      defaultMessage: 'Nota de entrega ${widget.albaran.erpDocumentId}. '
           'Gracias por su confianza.',
     );
     if (!mounted || form == null) return;
@@ -3951,8 +3942,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final form = prefilled ??
         await WhatsAppFormModal.show(
           context,
-          defaultMessage:
-              '$docLabel ${isFactura ? widget.albaran.numeroFactura : '${widget.albaran.serie}-${widget.albaran.numeroAlbaran}'}. '
+          defaultMessage: '${widget.albaran.erpDocumentLabel}. '
               'Gracias por su confianza.',
         );
     if (!mounted || form == null) return;

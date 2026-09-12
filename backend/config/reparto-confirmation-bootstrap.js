@@ -22,7 +22,7 @@ const STATIC_REPARTO_CATALOG = Object.freeze({
   statuses: Object.freeze(['ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO']),
   differenceReasons: Object.freeze(['PRODUCTO_FALTANTE', 'PRODUCTO_DANADO', 'RECHAZO_CLIENTE', 'CLIENTE_AUSENTE', 'DIRECCION_INCORRECTA', 'ACCESO_IMPOSIBLE', 'OTRO']),
   incidentTypes: Object.freeze(['CLIENTE_AUSENTE', 'DIRECCION_INCORRECTA', 'ACCESO_IMPOSIBLE', 'VEHICULO', 'PRODUCTO_DANADO', 'RECHAZO_CLIENTE', 'OTRO']),
-  paymentMethods: Object.freeze(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'CHEQUE', 'BIZUM']),
+  paymentMethods: Object.freeze(['EFECTIVO', 'TARJETA', 'TALON', 'CHEQUE', 'BIZUM', 'TRANSFERENCIA']),
 });
 
 function canEnableCanonicalConfirmation(runtime) {

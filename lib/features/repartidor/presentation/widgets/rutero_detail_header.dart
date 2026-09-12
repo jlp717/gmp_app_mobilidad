@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
-import 'package:gmp_app_mobilidad/core/utils/erp_document_label.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
@@ -170,9 +169,7 @@ class RuteroDetailHeader extends StatelessWidget {
           const SizedBox(width: 8),
           Flexible(
             child: Text(
-              _isFactura
-                  ? 'Factura ${formatErpDocumentLabel(serie: albaran.serieFactura, terminal: albaran.terminal == 0 ? null : albaran.terminal, numero: albaran.numeroFactura)}'
-                  : 'Albarán ${formatErpDocumentLabel(serie: albaran.serie.isNotEmpty ? albaran.serie : "A", terminal: albaran.terminal == 0 ? null : albaran.terminal, numero: albaran.numeroAlbaran)}',
+              albaran.erpDocumentLabel,
               style: TextStyle(
                 color: badgeColor,
                 fontWeight: FontWeight.bold,

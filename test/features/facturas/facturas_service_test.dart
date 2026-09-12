@@ -22,7 +22,7 @@ void main() {
       expect(factura.isAlbaran, true);
       expect(factura.isFactura, false);
       expect(factura.terminal, 93);
-      expect(factura.numeroFormateado, 'J-093-01187');
+      expect(factura.numeroFormateado, 'J-93-1187');
       expect(factura.pdfFilePrefix, 'Albaran');
       expect(factura.base, 671.66);
       expect(factura.iva, 39.89);

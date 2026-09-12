@@ -237,9 +237,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
-                    _isFactura
-                        ? '${widget.albaran.serieFactura.isNotEmpty ? widget.albaran.serieFactura : "F"}-${widget.albaran.numeroFactura}'
-                        : '${widget.albaran.serie.isNotEmpty ? widget.albaran.serie : "A"}${widget.albaran.terminal > 0 ? "-${widget.albaran.terminal}" : ""}-${widget.albaran.numeroAlbaran}',
+                    widget.albaran.erpDocumentId,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

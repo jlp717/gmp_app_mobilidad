@@ -139,9 +139,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
         }
       }
 
-      final albaranLabel = widget.albaran.numeroFactura > 0
-          ? 'Factura: ${widget.albaran.serieFactura}/${widget.albaran.numeroFactura}'
-          : 'Albarán: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}';
+      final albaranLabel = widget.albaran.erpDocumentLabel;
 
       final layout = await ZebraPrintService.resolveLayout(
         printerName: widget.printerName,
@@ -263,9 +261,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      widget.albaran.numeroFactura > 0
-                          ? 'Factura: ${widget.albaran.serieFactura}/${widget.albaran.numeroFactura}'
-                          : 'Albarán: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}',
+                      widget.albaran.erpDocumentLabel,
                       style: const TextStyle(
                         color: AppTheme.info,
                         fontSize: 14,

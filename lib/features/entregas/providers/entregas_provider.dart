@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
+import 'package:gmp_app_mobilidad/core/utils/erp_document_label.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
@@ -538,6 +539,27 @@ class AlbaranEntrega {
 
   bool get tieneSaldoCobrable =>
       importeDisponibleCobro != null && importeDisponibleCobro! > 0.004;
+
+  int? get visibleTerminal => terminal == 0 ? null : terminal;
+
+  String get erpDocumentId {
+    if (numeroFactura > 0) {
+      return formatErpDocumentLabel(
+        serie: serieFactura.isNotEmpty ? serieFactura : 'F',
+        terminal: visibleTerminal,
+        numero: numeroFactura,
+      );
+    }
+    return formatErpDocumentLabel(
+      serie: serie.isNotEmpty ? serie : 'A',
+      terminal: visibleTerminal,
+      numero: numeroAlbaran,
+    );
+  }
+
+  String get erpDocumentKind => numeroFactura > 0 ? 'Factura' : 'Albarán';
+
+  String get erpDocumentLabel => '$erpDocumentKind $erpDocumentId';
 
   AlbaranEntrega copyWith({
     double? importeTotal,

@@ -131,6 +131,46 @@ async function main() {
     evidence.staffRolesError = error.message;
   }
 
+  try {
+    const talonCols = await queryWithParams(
+      `SELECT TRIM(COLUMN_NAME) AS COLUMN_NAME
+         FROM QSYS2.SYSCOLUMNS
+        WHERE TABLE_SCHEMA = 'JAVIER' AND TABLE_NAME = 'TEST_REPARTIDOR_COBROS'
+          AND COLUMN_NAME IN ('NUMEROTALON','CODIGOENTIDADBANCARIA','NOMBREENTIDADBANCARIA','DIAVENCIMIENTO','MESVENCIMIENTO','ANOVENCIMIENTO')
+        ORDER BY COLUMN_NAME`,
+      [],
+    );
+    evidence.talonColumns = (talonCols || []).map((row) => text(cell(row, 'COLUMN_NAME')));
+  } catch (error) {
+    evidence.talonColumnsError = error.message;
+  }
+
+  try {
+    const outbox = await queryWithParams(
+      `SELECT STATUS, PAYLOAD_JSON
+         FROM JAVIER.TEST_REPARTO_VARIANCE_OUTBOX
+        ORDER BY CREATED_AT DESC
+        FETCH FIRST 3 ROWS ONLY`,
+      [],
+    );
+    evidence.outbox = (outbox || []).map((row) => {
+      let payload = {};
+      try {
+        payload = JSON.parse(text(cell(row, 'PAYLOAD_JSON')) || '{}');
+      } catch (_) {
+        payload = {};
+      }
+      const recipients = payload.recipients || {};
+      return {
+        status: text(cell(row, 'STATUS')),
+        toRoles: (recipients.to || []).map((item) => item.role).filter(Boolean),
+        ccRoles: (recipients.cc || []).map((item) => item.role).filter(Boolean),
+      };
+    });
+  } catch (error) {
+    evidence.outboxError = error.message;
+  }
+
   process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
 }
 

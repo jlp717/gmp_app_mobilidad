@@ -140,9 +140,7 @@ class RuteroDetailCompleted extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _isFactura
-                      ? 'Factura ${albaran.numeroFactura}'
-                      : 'Albarán ${albaran.numeroAlbaran}',
+                  albaran.erpDocumentLabel,
                   style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
