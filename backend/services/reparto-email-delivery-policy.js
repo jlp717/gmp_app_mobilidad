@@ -181,9 +181,54 @@ function redactDeliverySummary(results) {
   return { attempted, sent, failed: Math.max(0, attempted - sent), allSucceeded: attempted > 0 && sent === attempted };
 }
 
+/**
+ * Product to/cc list is always the real staff+destinatario set.
+ * isolated_test still SMTP-redirects to the sink; it must not drop Carlos
+ * from intendedTo/intendedCc.
+ */
+function composeProductEmailDispatch({
+  destinatario,
+  staffEmails,
+  env = process.env,
+} = {}) {
+  const intendedTo = uniqueEmails([destinatario]);
+  if (!intendedTo.length) {
+    throw new RepartoEmailDeliveryPolicyError(
+      'El destinatario de correo de reparto es obligatorio y debe ser válido',
+      'REPARTO_EMAIL_RECIPIENT_REQUIRED',
+      422,
+    );
+  }
+  resolveRepartoEmailDelivery({
+    recipients: intendedTo,
+    env,
+    mode: 'manual',
+  });
+  const intendedCc = uniqueEmails(staffEmails)
+    .filter((email) => !intendedTo.includes(email));
+  const intendedRecipients = uniqueEmails([...intendedTo, ...intendedCc]);
+  const smtp = resolveRepartoEmailDelivery({
+    recipients: intendedRecipients,
+    env,
+    mode: 'automatic',
+  });
+  const redirected = Boolean(smtp.redirected);
+  return {
+    intendedTo,
+    intendedCc,
+    intendedRecipients,
+    smtpTo: redirected ? smtp.effectiveRecipients[0] : intendedTo[0],
+    smtpCc: redirected ? [] : intendedCc,
+    effectiveRecipients: smtp.effectiveRecipients,
+    redirected,
+    policy: smtp.policy,
+  };
+}
+
 module.exports = {
   RepartoEmailDeliveryPolicyError,
   resolveRepartoEmailDelivery,
+  composeProductEmailDispatch,
   buildRepartoMessageId,
   redactDeliverySummary,
   normalizeEmail,

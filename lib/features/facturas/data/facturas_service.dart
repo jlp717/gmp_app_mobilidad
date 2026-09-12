@@ -162,6 +162,7 @@ class FacturaHeader {
     required this.bases,
     this.nombreComercial,
     this.nombreFiscal,
+    this.terminal,
   });
 
   factory FacturaHeader.fromJson(Map<String, dynamic> json) {
@@ -192,11 +193,15 @@ class FacturaHeader {
       bases: basesJson
           .map((b) => FacturaBase.fromJson(b as Map<String, dynamic>))
           .toList(),
+      terminal: json['terminal'] is int
+          ? json['terminal'] as int
+          : int.tryParse(json['terminal']?.toString() ?? ''),
     );
   }
   final String serie;
   final int numero;
   final int ejercicio;
+  final int? terminal;
   final String fecha;
   final String clienteId;
   final String clienteNombre;
@@ -210,6 +215,7 @@ class FacturaHeader {
 
   String get numeroFormateado => formatErpDocumentLabel(
         serie: serie,
+        terminal: terminal,
         numero: numero,
       );
 }

@@ -9,6 +9,8 @@ const crypto = require('crypto');
 const {
     parseLineDiscountPct,
     parseGlobalDiscountPct,
+    resolveStoredPieDiscountPct,
+    resolveStoredLineDiscountPct,
     applyPctToAmount,
     isCobroPropio,
 } = require('./discounts');
@@ -2792,7 +2794,7 @@ function buildLocalPedidoCabInsert({
         'DIADOCUMENTO', 'MESDOCUMENTO', 'ANODOCUMENTO', 'HORADOCUMENTO',
         'CODIGOCLIENTE', 'NOMBRECLIENTE', 'CODIGOVENDEDOR', 'CODIGOFORMAPAGO',
         'CODIGOTARIFA', 'CODIGOALMACEN', 'TIPOVENTA', 'OBSERVACIONES',
-        'DESCUENTO_GLOBAL', 'ORIGEN',
+        'DESCUENTO_GLOBAL', 'PORCENTAJEDESCUENTO1', 'ORIGEN',
         'SUBEMPRESAPEDIDO', 'EJERCICIOPEDIDO', 'TERMINALPEDIDO',
         'CODIGOCLIENTEALBARAN', 'CODIGOCLIENTEFACTURA', 'CODIGOCLIENTECADENA',
         'CODIGOVENDEDORCOBRO', 'CODIGOPROMOTORPREVENTA', 'CODIGOCOMERCIAL',
@@ -2807,7 +2809,9 @@ function buildLocalPedidoCabInsert({
         dia, mes, ano, hora,
         cliente, (clientName || '').substring(0, 60), actor.vendedor, formaPago,
         tarifa, almacen, tipoventa, obs,
-        parseFloat(descuentoGlobal) || 0, origen,
+        parseFloat(descuentoGlobal) || 0,
+        parseFloat(descuentoGlobal) || 0,
+        origen,
         target.subempresa, ejercicio, terminal,
         cliente, cliente, '',
         actor.vendedorCobro, actor.promotor, actor.comercial,
@@ -2856,8 +2860,12 @@ function buildLegacyPedidoCabInsert({
         formaPago, tarifa, almacen, tipoventa, (observaciones || '').substring(0, 200),
     ];
     if (includeOrigen) {
-        columns.push('DESCUENTO_GLOBAL', 'ORIGEN');
-        params.push(parseFloat(descuentoGlobal) || 0, origen);
+        columns.push('DESCUENTO_GLOBAL', 'PORCENTAJEDESCUENTO1', 'ORIGEN');
+        params.push(
+            parseFloat(descuentoGlobal) || 0,
+            parseFloat(descuentoGlobal) || 0,
+            origen,
+        );
     }
 
     return {
@@ -3433,7 +3441,10 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             TRIM(C.SYSTEM_SUBEMPRESAPEDIDO) AS SYSTEM_SUBEMPRESAPEDIDO,
             C.SYSTEM_EJERCICIOPEDIDO, TRIM(C.SYSTEM_SERIEPEDIDO) AS SYSTEM_SERIEPEDIDO,
             C.SYSTEM_TERMINALPEDIDO, C.SYSTEM_NUMEROPEDIDO,
-            COALESCE(C.DESCUENTO_GLOBAL, 0) AS DESCUENTO_GLOBAL,
+            CASE WHEN COALESCE(C.PORCENTAJEDESCUENTO1, 0) <> 0
+                 THEN C.PORCENTAJEDESCUENTO1
+                 ELSE COALESCE(C.DESCUENTO_GLOBAL, 0)
+            END AS DESCUENTO_GLOBAL,
             C.CREATED_AT, C.UPDATED_AT,
             COALESCE(LC.LINE_COUNT, 0) AS LINE_COUNT,
             COALESCE(BM.BOLSA_MOV_COUNT, 0) AS BOLSA_MOV_COUNT,
@@ -3751,6 +3762,8 @@ async function getOrderDetail(orderId, options = {}) {
             TRIM(SYSTEM_SUBEMPRESAPEDIDO) AS SYSTEM_SUBEMPRESAPEDIDO,
             SYSTEM_EJERCICIOPEDIDO, TRIM(SYSTEM_SERIEPEDIDO) AS SYSTEM_SERIEPEDIDO,
             SYSTEM_TERMINALPEDIDO, SYSTEM_NUMEROPEDIDO,
+            COALESCE(DESCUENTO_GLOBAL, 0) AS DESCUENTO_GLOBAL,
+            COALESCE(PORCENTAJEDESCUENTO1, 0) AS PORCENTAJEDESCUENTO1,
             CREATED_AT, UPDATED_AT
         FROM ${PEDIDOS_CAB_TABLE}
         WHERE ID = ?`;
@@ -3768,6 +3781,7 @@ async function getOrderDetail(orderId, options = {}) {
             TRIM(CLASELINEA) AS CLASELINEA,
             TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA,
             COALESCE(DESCUENTO_LINEA, 0) AS DESCUENTO_LINEA,
+            COALESCE(PORCENTAJEDESCUENTO, 0) AS PORCENTAJEDESCUENTO,
             ORDEN, CREATED_AT
         FROM ${PEDIDOS_LIN_TABLE}
         WHERE PEDIDO_ID = ?
@@ -3841,7 +3855,7 @@ async function getOrderDetail(orderId, options = {}) {
                 ruta: cab.RUTA || '',
                 diasReparto: cab.DIASREPARTO || '',
                 repartoValidado: (cab.REPARTO_VALIDADO_SN || '').trim() === 'S',
-                descuentoGlobal: parseFloat(cab.DESCUENTO_GLOBAL) || 0,
+                descuentoGlobal: resolveStoredPieDiscountPct(cab),
                 createdAt: cab.CREATED_AT,
                 updatedAt: cab.UPDATED_AT,
             },
@@ -3872,8 +3886,8 @@ async function getOrderDetail(orderId, options = {}) {
                     tipoventa: l.TIPOVENTA,
                     claseLinea: l.CLASELINEA,
                     orden: l.ORDEN,
-                    descuentoLinea: parseFloat(l.DESCUENTO_LINEA) || 0,
-                    lineDiscountPct: parseFloat(l.DESCUENTO_LINEA) || 0,
+                    descuentoLinea: resolveStoredLineDiscountPct(l),
+                    lineDiscountPct: resolveStoredLineDiscountPct(l),
                     createdAt: l.CREATED_AT,
                     bolsaMovements: movements,
                     bolsaImpact: summarizeLineBolsaMovements(movements),
@@ -4151,7 +4165,10 @@ async function recalculateOrderTotals(pedidoId) {
                 WHEN COALESCE(NULLIF(TRIM(L.CODIGOIVA), ''), '2') = '5' THEN L.IMPORTEVENTA * 0.10
                 ELSE L.IMPORTEVENTA * 0.21
             END), 0) as RAW_IVA,
-            COALESCE(MAX(C.DESCUENTO_GLOBAL), 0) as DESCUENTO_GLOBAL
+            CASE WHEN COALESCE(MAX(C.PORCENTAJEDESCUENTO1), 0) <> 0
+                 THEN MAX(C.PORCENTAJEDESCUENTO1)
+                 ELSE COALESCE(MAX(C.DESCUENTO_GLOBAL), 0)
+            END as DESCUENTO_GLOBAL
          FROM ${PEDIDOS_CAB_TABLE} C
          LEFT JOIN ${PEDIDOS_LIN_TABLE} L ON L.PEDIDO_ID = C.ID
          WHERE C.ID = ?`,
@@ -4907,6 +4924,7 @@ async function getOrderAlbaran(orderId) {
         SELECT COALESCE(C.NUMEROALBARAN, P.NUMEROALBARAN) AS NUMEROALBARAN,
                TRIM(COALESCE(C.SERIEALBARAN, P.SERIEALBARAN)) AS SERIEALBARAN,
                COALESCE(C.TERMINALALBARAN, P.TERMINALALBARAN) AS TERMINALALBARAN,
+               COALESCE(C.TERMINALFACTURA, C.TERMINALALBARAN, P.TERMINALALBARAN) AS TERMINALFACTURA,
                COALESCE(C.EJERCICIOALBARAN, P.EJERCICIOALBARAN) AS EJERCICIOALBARAN,
                COALESCE(C.DIADOCUMENTO, P.DIADOCUMENTO) AS DIADOCUMENTO,
                COALESCE(C.MESDOCUMENTO, P.MESDOCUMENTO) AS MESDOCUMENTO,
@@ -4973,7 +4991,15 @@ async function getOrderAlbaran(orderId) {
                         numero: numeroAlbaran,
                     }),
                     facturaRef: hasFactura
-                        ? formatErpDocumentLabel({ serie: serieFactura, numero: numeroFactura })
+                        ? formatErpDocumentLabel({
+                            serie: serieFactura,
+                            terminal: (r.TERMINALFACTURA === null
+                                || r.TERMINALFACTURA === undefined
+                                || r.TERMINALFACTURA === '')
+                                ? terminalAlbaran
+                                : integerValue(r.TERMINALFACTURA),
+                            numero: numeroFactura,
+                        })
                         : '',
                     albaranPdfAvailable: numeroAlbaran > 0 && serieAlbaran && terminalAlbaran > 0 && ejercicioAlbaran > 0,
                     facturaPdfAvailable: hasFactura,

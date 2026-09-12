@@ -171,6 +171,24 @@ async function main() {
     evidence.outboxError = error.message;
   }
 
+  try {
+    const terminalCols = await queryWithParams(
+      `SELECT TRIM(TABLE_NAME) AS TABLE_NAME, TRIM(COLUMN_NAME) AS COLUMN_NAME
+         FROM QSYS2.SYSCOLUMNS
+        WHERE TABLE_SCHEMA = 'DSEDAC'
+          AND TABLE_NAME IN ('CFC', 'CAC')
+          AND COLUMN_NAME IN ('TERMINALFACTURA', 'TERMINAL')
+        ORDER BY TABLE_NAME, COLUMN_NAME`,
+      [],
+    );
+    evidence.invoiceTerminalColumns = (terminalCols || []).map((row) => ({
+      table: text(cell(row, 'TABLE_NAME')),
+      column: text(cell(row, 'COLUMN_NAME')),
+    }));
+  } catch (error) {
+    evidence.invoiceTerminalColumnsError = error.message;
+  }
+
   process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
 }
 

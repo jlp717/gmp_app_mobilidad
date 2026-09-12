@@ -577,7 +577,7 @@ describe('pedidos reparto confirmation contract', () => {
       documentType: 'factura',
       documentLabel: 'Factura',
       albaranRef: 'P-3-3049',
-      facturaRef: 'A-4984',
+      facturaRef: 'A-3-4984',
       numeroFactura: 4984,
       facturaPdfAvailable: true,
     });

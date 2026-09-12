@@ -142,7 +142,10 @@ function parseTalonDueDate(value) {
 
 function isTalonPaymentMethod(value) {
   const method = normalizeText(value).toUpperCase();
-  return ['TALON', 'TALÓN', 'CHEQUE', 'CH', 'TALON BANCARIO'].includes(method);
+  return [
+    'TALON', 'TALÓN', 'CHEQUE', 'CH', 'TALON BANCARIO',
+    'TRANSFERENCIA', 'TRANSFER', 'TR', 'T0',
+  ].includes(method);
 }
 
 async function assertTalonPayment(input, { query = queryWithParams } = {}) {

@@ -540,19 +540,19 @@ class AlbaranEntrega {
   bool get tieneSaldoCobrable =>
       importeDisponibleCobro != null && importeDisponibleCobro! > 0.004;
 
-  int? get visibleTerminal => terminal == 0 ? null : terminal;
+  int? get visibleTerminal => terminal;
 
   String get erpDocumentId {
     if (numeroFactura > 0) {
       return formatErpDocumentLabel(
         serie: serieFactura.isNotEmpty ? serieFactura : 'F',
-        terminal: visibleTerminal,
+        terminal: terminal,
         numero: numeroFactura,
       );
     }
     return formatErpDocumentLabel(
       serie: serie.isNotEmpty ? serie : 'A',
-      terminal: visibleTerminal,
+      terminal: terminal,
       numero: numeroAlbaran,
     );
   }

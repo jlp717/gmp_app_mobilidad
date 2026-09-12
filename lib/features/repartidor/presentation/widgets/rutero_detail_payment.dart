@@ -11,7 +11,8 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/ruter
 import 'package:intl/intl.dart';
 
 String ruteroPaymentMethodLabel(String method, {bool compact = false}) {
-  switch (method) {
+  final normalized = method.trim().toUpperCase();
+  switch (normalized) {
     case 'EFECTIVO':
       return 'Efectivo';
     case 'TARJETA':
@@ -21,10 +22,19 @@ String ruteroPaymentMethodLabel(String method, {bool compact = false}) {
     case 'TALON':
     case 'TALÓN':
     case 'CHEQUE':
-      return compact ? 'Talón' : 'Talón';
+    case 'CH':
     case 'TRANSFERENCIA':
+    case 'TRANSFER':
+    case 'TR':
+    case 'T0':
       return compact ? 'Talón' : 'Talón';
     default:
+      if (normalized.contains('TRANSFER') ||
+          normalized.contains('TALON') ||
+          normalized.contains('TALÓN') ||
+          normalized.contains('CHEQUE')) {
+        return 'Talón';
+      }
       return method;
   }
 }
@@ -67,6 +77,7 @@ class RuteroDetailPayment extends StatelessWidget {
     this.fechaVencimientoTalonController,
     this.bancoCodigoController,
     this.bancoNombreController,
+    this.liveDocumentTotal,
     super.key,
   });
 
@@ -99,6 +110,7 @@ class RuteroDetailPayment extends StatelessWidget {
   final TextEditingController? fechaVencimientoTalonController;
   final TextEditingController? bancoCodigoController;
   final TextEditingController? bancoNombreController;
+  final double? liveDocumentTotal;
 
   bool get _isUrgent => albaran.esCTR;
   bool get _hasCollectibleBalance => albaran.tieneSaldoCobrable;
@@ -106,7 +118,10 @@ class RuteroDetailPayment extends StatelessWidget {
       selectedPaymentMethod == 'TALON' ||
       selectedPaymentMethod == 'TALÓN' ||
       selectedPaymentMethod == 'CHEQUE' ||
-      selectedPaymentMethod == 'TRANSFERENCIA';
+      selectedPaymentMethod == 'CH' ||
+      selectedPaymentMethod == 'TRANSFERENCIA' ||
+      selectedPaymentMethod == 'TR' ||
+      selectedPaymentMethod == 'T0';
 
   bool get _methodsEnabled =>
       _hasCollectibleBalance && !isRegisteringCobro && !readOnly;
@@ -183,7 +198,7 @@ class RuteroDetailPayment extends StatelessWidget {
     final compact = Responsive.isSmall(context);
     final paymentType = getPaymentTypeLabel();
     final collectable = effectiveDocumentCollectable(albaran);
-    final documentTotal = albaran.importeTotal;
+    final documentTotal = liveDocumentTotal ?? albaran.importeTotal;
     final scopePhrase = ruteroDocumentScopePhrase(albaran);
     final scopeTitle = ruteroDocumentScopeTitle(albaran);
     final showsDocumentTotal = _hasCollectibleBalance &&

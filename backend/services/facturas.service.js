@@ -380,6 +380,7 @@ class FacturasService {
         TRIM(CFC.SERIEFACTURA) as SERIE,
         CFC.NUMEROFACTURA as NUMERO,
         CFC.EJERCICIOFACTURA as EJERCICIO,
+        CFC.TERMINALFACTURA as TERMINAL,
         CFC.ANODOCUMENTO as ANO,
         CFC.MESDOCUMENTO as MES,
         CFC.DIADOCUMENTO as DIA,
@@ -588,7 +589,7 @@ class FacturasService {
         TRIM(CFC.SERIEFACTURA) as SERIE,
         CFC.NUMEROFACTURA as NUMERO,
         CFC.EJERCICIOFACTURA as EJERCICIO,
-        CAST(NULL AS INTEGER) as TERMINAL,
+        CFC.TERMINALFACTURA as TERMINAL,
         CFC.ANODOCUMENTO as ANO,
         CFC.MESDOCUMENTO as MES,
         CFC.DIADOCUMENTO as DIA,
@@ -1202,6 +1203,7 @@ class FacturasService {
         CFC.NUMEROFACTURA,
         CFC.SERIEFACTURA,
         CFC.EJERCICIOFACTURA,
+        CFC.TERMINALFACTURA,
         CFC.DIADOCUMENTO as DIAFACTURA,
         CFC.MESDOCUMENTO as MESFACTURA,
         CFC.ANODOCUMENTO as ANOFACTURA,
@@ -1279,12 +1281,21 @@ class FacturasService {
             const lines = await queryWithParams(linesSql, [serie, numero, ejercicio]);
 
             const bases = buildTaxBases(header);
+            const headerTerminal = Number.parseInt(header.TERMINALFACTURA, 10);
+            const firstLineTerminal = Number.parseInt(
+                lines && lines[0] ? lines[0].TERMINALALBARAN : null,
+                10,
+            );
+            const resolvedTerminal = Number.isFinite(headerTerminal)
+                ? headerTerminal
+                : (Number.isFinite(firstLineTerminal) ? firstLineTerminal : null);
 
             return {
                 header: {
                     serie: header.SERIEFACTURA && header.SERIEFACTURA.trim ? header.SERIEFACTURA.trim() : serie,
                     numero: header.NUMEROFACTURA,
                     ejercicio: header.EJERCICIOFACTURA,
+                    terminal: resolvedTerminal,
                     fecha: `${String(header.DIAFACTURA).padStart(2, '0')}/${String(header.MESFACTURA).padStart(2, '0')}/${header.ANOFACTURA}`,
                     clienteId: header.CODIGOCLIENTE,
                     clienteNombre: header.NOMBRECLIENTEFACTURA,

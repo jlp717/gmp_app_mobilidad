@@ -4,6 +4,7 @@ const PDFDocument = require('pdfkit');
 const { drawCompanyHeader } = require('./company-header');
 const { RepartoPersistenceError } = require('./reparto-confirmation-service');
 const { assertDecodablePng } = require('../utils/png-image-validator');
+const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 
 function unavailable(code, message) {
   return new RepartoPersistenceError(message, { code, statusCode: 503 });
@@ -151,7 +152,11 @@ function buildReceiptPresentation(receipt) {
   const totalConIva = fiscalAvailable
     ? neto + iva
     : amount;
-  const documentNumber = receipt.documento?.numero ?? receipt.documentId;
+  const documentNumber = formatErpDocumentLabel({
+    serie: receipt.documento?.serie,
+    terminal: receipt.documento?.terminal,
+    numero: receipt.documento?.numero,
+  }) || receipt.documento?.numero || receipt.documentId;
   const documentType = String(receipt.documento?.tipo || '').toUpperCase().includes('FAC')
     ? 'FACTURA'
     : 'ALBARÁN';
@@ -162,7 +167,7 @@ function buildReceiptPresentation(receipt) {
   const header = Object.freeze([
     'COMPROBANTE DE REPARTO',
     `Confirmacion: ${printable(receipt.confirmationId)}`,
-    `Documento: ${printable(receipt.documentId)}`,
+    `Documento: ${printable(documentNumber || receipt.documentId)}`,
     `Cliente: ${printable(receipt.cliente?.codigo)} ${printable(receipt.cliente?.nombre)}`,
     `Pedido: ${printable(receipt.pedido?.ejercicio)}-${printable(receipt.pedido?.numero)}`,
     `Fecha/hora: ${printable(receipt.confirmedAt || receipt.occurredAt)}`,
@@ -177,14 +182,18 @@ function buildReceiptPresentation(receipt) {
     `Observaciones: ${printable(receipt.observaciones)}`,
   ];
   if (receipt.cobro) {
-    footer.push(`Cobro: ${decimal(receipt.cobro.importeCobrado)} ${printable(receipt.cobro.formaPago)} | fecha ${paymentDate(receipt.cobro)}`);
+    const method = String(receipt.cobro.formaPago || '').trim().toUpperCase();
+    const methodLabel = ['TRANSFERENCIA', 'TRANSFER', 'TR', 'T0', 'CHEQUE', 'CH', 'TALON', 'TALÓN', 'TALON BANCARIO'].includes(method)
+      ? 'TALÓN'
+      : printable(receipt.cobro.formaPago);
+    footer.push(`Cobro: ${decimal(receipt.cobro.importeCobrado)} ${methodLabel} | fecha ${paymentDate(receipt.cobro)}`);
   } else {
     footer.push('Cobro: no registrado');
   }
   return Object.freeze({
     title: 'NOTA DE ENTREGA',
     confirmationReference: printable(receipt.confirmationId),
-    documentReference: printable(receipt.documentId || documentNumber),
+    documentReference: printable(documentNumber || receipt.documentId),
     header,
     rows: Object.freeze(rows),
     // Keep the old textual projection for callers/tests while exposing the

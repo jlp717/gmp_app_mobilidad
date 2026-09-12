@@ -89,6 +89,8 @@ void main() {
     expect(find.text('Tarjeta'), findsOneWidget);
     expect(find.text('Bizum'), findsOneWidget);
     expect(find.text('Talón'), findsOneWidget);
+    expect(find.text('Transferencia'), findsNothing);
+    expect(find.text('TRANSFERENCIA'), findsNothing);
 
     expect(tester.takeException(), isNull);
   });
@@ -220,5 +222,34 @@ void main() {
     expect(find.text('Fecha de vencimiento'), findsOneWidget);
     expect(find.textContaining('Código de entidad'), findsOneWidget);
     expect(find.text('Nombre del banco'), findsOneWidget);
+    expect(find.text('Transferencia'), findsNothing);
+  });
+
+  testWidgets(
+      'TRANSFERENCIA interno se muestra como Talón y no como chip extra',
+      (tester) async {
+    final controller = TextEditingController(text: '40,00');
+    await tester.pumpWidget(
+      _wrap(
+        RuteroDetailPayment(
+          albaran:
+              _collectableAlbaran(saldo: 40, deudaCliente: 40, capped: false),
+          selectedPaymentMethod: 'TRANSFERENCIA',
+          isPaid: true,
+          pagoError: null,
+          importeCobradoController: controller,
+          importeCobradoError: null,
+          onPaymentMethodChanged: (_) {},
+          onPaidChanged: () {},
+          onContinueToFinalize: () {},
+          getPaymentTypeLabel: () => 'Contado',
+        ),
+      ),
+    );
+
+    expect(find.text('Talón'), findsWidgets);
+    expect(find.text('Transferencia'), findsNothing);
+    expect(find.text('TRANSFERENCIA'), findsNothing);
+    expect(find.text('Datos del talón'), findsOneWidget);
   });
 }

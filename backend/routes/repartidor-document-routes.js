@@ -23,10 +23,10 @@ const { redisCache, TTL } = require('../services/redis-cache');
 const whatsappGateway = require('../services/whatsappGatewayService');
 const {
     RepartoEmailDeliveryPolicyError,
-    resolveRepartoEmailDelivery,
+    composeProductEmailDispatch,
     buildRepartoMessageId,
-    isIsolatedTest,
 } = require('../services/reparto-email-delivery-policy');
+const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 const {
     verifyToken,
     requireJefeVentas: importedRequireJefeVentas,
@@ -522,12 +522,18 @@ router.post('/document/send-email', verifyToken, async (req, res) => {
             documentType: isAlbaran ? 'albaran' : 'factura',
         });
         const label = isAlbaran ? 'Albarán' : 'Factura';
-        const filename = `${isAlbaran ? 'Albaran' : 'Factura'}_${key.series}-${key.number}.pdf`
+        const documentLabel = formatErpDocumentLabel({
+            serie: key.series,
+            terminal: key.terminal,
+            numero: key.number,
+        }) || `${key.series}-${key.number}`;
+        const filename = `${isAlbaran ? 'Albaran' : 'Factura'}_${documentLabel}.pdf`
             .replace(/[^a-zA-Z0-9._-]/g, '_');
         const htmlBody = isAlbaran
             ? generateDeliveryEmailHtml({
                 numero: key.number,
                 serie: key.series,
+                terminal: key.terminal,
                 fecha: '',
                 total: header.IMPORTETOTAL || header.TOTALFACTURA || '',
                 clienteNombre: header.NOMBRECLIENTEFACTURA || '',
@@ -536,22 +542,12 @@ router.post('/document/send-email', verifyToken, async (req, res) => {
             : generateInvoiceEmailHtml({
                 serie: key.series,
                 numero: key.number,
+                terminal: key.terminal,
                 fecha: '',
                 total: header.IMPORTETOTAL || header.TOTALFACTURA || '',
                 clienteNombre: header.NOMBRECLIENTEFACTURA || '',
                 customBody: cuerpo,
             });
-        const delivery = resolveRepartoEmailDelivery({
-            recipients: [destinatario],
-            mode: 'manual',
-        });
-        const effectiveRecipient = delivery.effectiveRecipients[0];
-        if (!effectiveRecipient) {
-            throw new RepartoEmailDeliveryPolicyError(
-                'El destinatario efectivo no es valido',
-                'REPARTO_EMAIL_RECIPIENT_REQUIRED',
-            );
-        }
         const clienteCodigo = String(header.CODIGOCLIENTEFACTURA || header.CODIGOCLIENTE || '').trim();
         const documentId = [
             key.year,
@@ -571,19 +567,20 @@ router.post('/document/send-email', verifyToken, async (req, res) => {
             comercialCode,
             clienteCodigo,
         });
-        const cc = isIsolatedTest()
-            ? []
-            : (directory.emails || []).filter((email) => email !== effectiveRecipient);
+        const dispatch = composeProductEmailDispatch({
+            destinatario,
+            staffEmails: directory.emails || [],
+        });
         const logicalKey = `document:${isAlbaran ? 'albaran' : 'factura'}:${key.year}:${key.series}:${key.terminal || ''}:${key.number}`;
         const expectedMessageId = buildRepartoMessageId({
             kind: 'document',
             identity: logicalKey,
-            recipient: effectiveRecipient,
+            recipient: dispatch.smtpTo,
         });
         const result = await sendEmailWithPdf({
-            to: effectiveRecipient,
-            cc,
-            subject: asunto || `${label} ${key.series}-${key.number} - Granja Mari Pepa`,
+            to: dispatch.smtpTo,
+            cc: dispatch.smtpCc,
+            subject: asunto || `${label} ${documentLabel} - Granja Mari Pepa`,
             htmlBody,
             pdfBuffer,
             messageId: expectedMessageId,
@@ -608,8 +605,10 @@ router.post('/document/send-email', verifyToken, async (req, res) => {
             message: 'Email enviado correctamente',
             messageId,
             ledgerWritten: true,
-            deliveryPolicy: delivery.policy,
-            redirected: Boolean(delivery.redirected),
+            deliveryPolicy: dispatch.policy,
+            redirected: Boolean(dispatch.redirected),
+            intendedTo: dispatch.intendedTo,
+            intendedCc: dispatch.intendedCc,
             recipients: directory.plan,
         });
     } catch (error) {

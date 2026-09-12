@@ -9,11 +9,13 @@ class RuteroDetailHeader extends StatelessWidget {
   const RuteroDetailHeader({
     required this.albaran,
     required this.isCompleted,
+    this.liveImporteTotal,
     super.key,
   });
 
   final AlbaranEntrega albaran;
   final bool isCompleted;
+  final double? liveImporteTotal;
 
   bool get _isFactura => albaran.numeroFactura > 0;
   bool get _isUrgent => albaran.esCTR;
@@ -196,7 +198,7 @@ class RuteroDetailHeader extends StatelessWidget {
             pendingPrice
                 ? 'Pendiente'
                 : NumberFormat.currency(symbol: '€', locale: 'es_ES')
-                    .format(albaran.importeTotal),
+                    .format(liveImporteTotal ?? albaran.importeTotal),
             style: TextStyle(
               color: pendingPrice
                   ? AppTheme.warning

@@ -64,7 +64,15 @@ describe('liquidacion-pdf-service', () => {
       tipoDocumento: 'FAC',
       terminalDocumento: 0,
       numeroDocumento: 6290,
-    })).toBe('F 000 006290');
+    })).toBe('F-0-6290');
+    expect(paperDocumentLabel({
+      serieDocumento: 'P',
+      terminalDocumento: 15,
+      numeroDocumento: 2296,
+    })).toBe('P-15-2296');
+    expect(paymentTypeLabel('TR')).toBe('TALÓN');
+    expect(paymentTypeLabel('TRANSFERENCIA')).toBe('TALÓN');
+    expect(paymentTypeLabel('TALON')).toBe('TALÓN');
   });
 
   test('pdf buffer contains GMP title and tesoreria labels', async () => {

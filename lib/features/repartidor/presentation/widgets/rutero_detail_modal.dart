@@ -759,6 +759,20 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   bool get _productsReadOnly => _isCompleted;
 
+  double get _liveAlbaranTotal {
+    if (_items.isEmpty) return _albaran.importeTotal;
+    final live = _items.fold<double>(0, (sum, item) {
+      final qty =
+          _productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida;
+      return sum +
+          ruteroLineDeliveredAmount(
+            item: item,
+            deliveredQty: qty.toDouble(),
+          );
+    });
+    return live > 0.004 ? live : _albaran.importeTotal;
+  }
+
   Color get _terminalAccentColor => switch (widget.albaran.estado) {
         EstadoEntrega.entregado => AppTheme.success,
         EstadoEntrega.parcial || EstadoEntrega.noEntregado => AppTheme.warning,
@@ -814,6 +828,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     RuteroDetailHeader(
                       albaran: _albaran,
                       isCompleted: _isCompleted,
+                      liveImporteTotal: _liveAlbaranTotal,
                     ),
                     RuteroDetailTabBar(
                       tabController: _tabController,
@@ -973,7 +988,25 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 _syncDefaultImporteCobrado();
               });
             },
-            onContinueToPayment: () {
+            onContinueToPayment: () async {
+              final qtyModified = _items.any(
+                (item) => _quantityDiffers(
+                  _productQuantities[ruteroLineKey(item)] ??
+                      item.cantidadPedida,
+                  item.cantidadPedida,
+                ),
+              );
+              if (qtyModified) {
+                final ok = await confirmRepartidorAction(
+                  context,
+                  title: '¿Estás seguro de modificar el albarán?',
+                  message:
+                      'Las cantidades entregadas no coinciden con las previstas. '
+                      'El importe se recalculará.',
+                  confirmLabel: 'Sí, modificar',
+                );
+                if (!ok || !mounted) return;
+              }
               HapticFeedback.mediumImpact();
               _tabController.animateTo(1);
             },
@@ -1050,6 +1083,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       fechaVencimientoTalonController: _fechaVencimientoTalonController,
       bancoCodigoController: _bancoCodigoController,
       bancoNombreController: _bancoNombreController,
+      liveDocumentTotal: _liveAlbaranTotal,
       onSendEmailChanged: (value) {
         setState(() => _sendCobroEmail = value);
       },
@@ -2245,7 +2279,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   String get _canonicalPaymentMethod {
     final method = _selectedPaymentMethod.trim().toUpperCase();
-    if (method == 'TRANSFERENCIA' || method == 'CHEQUE' || method == 'TALÓN') {
+    if (method == 'TRANSFERENCIA' ||
+        method == 'TRANSFER' ||
+        method == 'TR' ||
+        method == 'T0' ||
+        method == 'CHEQUE' ||
+        method == 'CH' ||
+        method == 'TALÓN' ||
+        method == 'TALON BANCARIO') {
       return 'TALON';
     }
     return method;
@@ -2429,7 +2470,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           importeCobrado: collectedNow > 0.004 ? collectedNow : cobroAmount,
           importeDisponibleCobro: remaining,
           importePendienteCobro: remaining,
-          formaPagoCobro: _selectedPaymentMethod,
+          formaPagoCobro: _canonicalPaymentMethod,
           cobroParcial: remaining > 0.004,
         );
         _isPaid = false;
@@ -2907,7 +2948,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'Cobrado: $_selectedPaymentMethod',
+                            'Cobrado: ${ruteroPaymentMethodLabel(_selectedPaymentMethod)}',
                             style: const TextStyle(
                               color: AppTheme.success,
                               fontSize: 13,
@@ -3387,6 +3428,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       context: context,
       albaran: widget.albaran,
       items: _items,
+      deliveredQuantities: Map<String, double>.from(_productQuantities),
       observaciones: _observacionesController.text.trim(),
       receptorNombre: _nombreController.text.trim(),
       receptorDni: _dniController.text.trim(),

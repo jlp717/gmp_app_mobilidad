@@ -11,6 +11,7 @@ const {
   PRODUCT_DELIVERY_CC_ROLES,
   clearCache,
   normalizeVendorCode,
+  parseNameMatch,
 } = require('../services/staff-email-directory-service');
 
 describe('staff-email-directory-service', () => {
@@ -147,6 +148,46 @@ describe('staff-email-directory-service', () => {
         resolvedVia: 'NAME_MATCH',
       }),
     );
+  });
+
+  test('NAME_MATCH CORBALÁN folds accent and matches CORBALAN', async () => {
+    expect(parseNameMatch('CORBALÁN')).toEqual({ token: 'CORBALAN', requireName: false });
+    const query = jest.fn(async (sql, params) => {
+      if (sql.includes('ROLE_TARGETS')) {
+        return [
+          { ROLE_KEY: 'CARLOS_CORBALAN', VENDOR_CODE: '30', NAME_MATCH: 'CORBALÁN' },
+        ];
+      }
+      if (sql.includes('LIKE ?') && params[0] === '%CORBALAN%') {
+        return [{ CODIGO: '30', NOMBRE: '30 CARLOS CORBALÁN', EMAIL: 'carlos@example.test' }];
+      }
+      return [];
+    });
+
+    const roles = await resolveRoleEmails(['CARLOS_CORBALAN'], {
+      query,
+      env: {
+        NODE_ENV: 'test',
+        REPARTO_ENVIRONMENT: 'test',
+        REPARTO_TABLE_SET: 'isolated_test',
+        ODBC_DSN: 'GMP',
+        REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
+        REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
+        REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
+        REPARTO_WRITES_ENABLED: 'false',
+        REPARTO_PRODUCTION_WRITES_APPROVED: 'false',
+        REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false',
+        REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'false',
+        REPARTO_PRODUCTION_CONFIRMATION_APPROVED: 'false',
+        REPARTO_FINANCE_DB2_CAPABILITY_APPROVED: 'false',
+        REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+      },
+    });
+
+    expect(roles[0]).toEqual(expect.objectContaining({
+      email: 'carlos@example.test',
+      resolvedVia: 'NAME_MATCH',
+    }));
   });
 
   test('preserves required roles when the role catalog query fails', async () => {

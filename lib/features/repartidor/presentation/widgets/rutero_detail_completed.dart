@@ -3,7 +3,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
-import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_payment.dart';
 
 /// Post-delivery surface: **nota de entrega** and **albarán/factura**
 /// (ERP PDF with signature) as separate action groups.
@@ -226,7 +226,7 @@ class RuteroDetailCompleted extends StatelessWidget {
           _InfoRow(
             icon: Icons.payment,
             label: 'Forma pago doc.',
-            value: albaran.formaPagoDesc,
+            value: ruteroPaymentMethodLabel(albaran.formaPagoDesc),
           ),
           if (albaran.hasAppCobro) ...[
             Divider(color: AppTheme.borderColor, height: 20),
@@ -242,7 +242,7 @@ class RuteroDetailCompleted extends StatelessWidget {
                 child: _InfoRow(
                   icon: Icons.credit_card,
                   label: 'Método cobro',
-                  value: albaran.formaPagoCobro!,
+                  value: ruteroPaymentMethodLabel(albaran.formaPagoCobro!),
                 ),
               ),
             if (albaran.importePendienteCobro != null &&

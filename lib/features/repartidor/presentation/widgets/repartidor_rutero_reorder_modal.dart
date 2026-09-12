@@ -791,9 +791,7 @@ class _RepartidorRuteroReorderModalState
       itemBuilder: (context, index) {
         final a = _ordered[index];
         final meta = _metaFor(a);
-        final docLabel = a.numeroFactura > 0
-            ? 'Fac ${a.numeroFactura}'
-            : 'Alb ${a.numeroAlbaran}';
+        final docLabel = a.erpDocumentId;
         final selected = _selectedDocumentId == a.id;
         final window = meta?.windowLabel;
         final obs = meta?.observacionesSnippet ?? '';

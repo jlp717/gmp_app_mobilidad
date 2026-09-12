@@ -103,7 +103,7 @@ const cobroSchema = z.object({
   nombreBanco: z.string().trim().min(3).max(40).optional(),
 }).superRefine((value, ctx) => {
   const method = String(value.formaPago || '').trim().toUpperCase();
-  if (['TALON', 'TALÓN', 'CHEQUE', 'CH', 'TALON BANCARIO'].includes(method)) {
+  if (['TALON', 'TALÓN', 'CHEQUE', 'CH', 'TALON BANCARIO', 'TRANSFERENCIA', 'TRANSFER', 'TR', 'T0'].includes(method)) {
     if (!value.numeroTalon || !value.fechaVencimientoTalon || !(value.codigoEntidadBancaria || value.nombreBanco)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

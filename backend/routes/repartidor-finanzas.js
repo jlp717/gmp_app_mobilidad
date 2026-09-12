@@ -33,11 +33,11 @@ const { sendEmailWithPdf, generateDeliveryEmailHtml } = require('../services/ema
 const whatsappGateway = require('../services/whatsappGatewayService');
 const {
   RepartoEmailDeliveryPolicyError,
-  resolveRepartoEmailDelivery,
+  composeProductEmailDispatch,
   buildRepartoMessageId,
   normalizeEmail,
-  isIsolatedTest,
 } = require('../services/reparto-email-delivery-policy');
+const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 const {
   recordDocumentEmailLedger,
 } = require('../repositories/repartidor-route-db2-repository');
@@ -929,21 +929,14 @@ router.post(
       const clienteNombre = receipt.cliente?.nombre || receipt.clienteNombre || '';
       const numero = receipt.documento?.numero || receipt.confirmationId;
       const serie = receipt.documento?.serie || '';
+      const terminal = receipt.documento?.terminal;
+      const documentLabel = formatErpDocumentLabel({ serie, terminal, numero })
+        || `${serie}-${numero}`.replace(/^-|-$/g, '')
+        || String(numero);
       const lineTotal = (Array.isArray(receipt.lineas) ? receipt.lineas : [])
         .reduce((sum, line) => (
           sum + (Number(line.cantidadEntregada || 0) * Number(line.precioUnitario || 0))
         ), 0);
-      const delivery = resolveRepartoEmailDelivery({
-        recipients: [parsed.data.destinatario],
-        mode: 'manual',
-      });
-      const effectiveRecipient = delivery.effectiveRecipients[0];
-      if (!effectiveRecipient) {
-        throw new RepartoEmailDeliveryPolicyError(
-          'El destinatario efectivo no es valido',
-          'REPARTO_EMAIL_RECIPIENT_REQUIRED',
-        );
-      }
       let comercialCode = '';
       try {
         comercialCode = await repartoVarianceNotificationService.resolveDocumentComercialCode(
@@ -957,29 +950,31 @@ router.post(
         comercialCode,
         clienteCodigo: receipt.cliente?.codigo,
       });
-      const cc = isIsolatedTest()
-        ? []
-        : (directory.emails || []).filter((email) => email !== effectiveRecipient);
+      const dispatch = composeProductEmailDispatch({
+        destinatario: parsed.data.destinatario,
+        staffEmails: directory.emails || [],
+      });
       const logicalKey = `receipt:${receipt.confirmationId}`;
       const expectedMessageId = buildRepartoMessageId({
         kind: 'receipt',
         identity: logicalKey,
-        recipient: effectiveRecipient,
+        recipient: dispatch.smtpTo,
       });
       const sent = await sendEmailWithPdf({
-        to: effectiveRecipient,
-        cc,
-        subject: `Nota de entrega ${serie}-${numero} - Granja Mari Pepa`,
+        to: dispatch.smtpTo,
+        cc: dispatch.smtpCc,
+        subject: `Nota de entrega ${documentLabel} - Granja Mari Pepa`,
         htmlBody: generateDeliveryEmailHtml({
           numero,
           serie,
+          terminal,
           fecha: receipt.confirmedAt || '',
           total: receipt.importeTotal || receipt.total || lineTotal || 0,
           clienteNombre,
         }),
         pdfBuffer: rendered.pdf,
         messageId: expectedMessageId,
-        pdfFilename: rendered.fileName || `nota_entrega_${numero}.pdf`,
+        pdfFilename: rendered.fileName || `nota_entrega_${documentLabel}.pdf`,
       });
       const messageId = String(sent?.messageId || '').trim();
       if (!messageId) {
@@ -1003,8 +998,10 @@ router.post(
         message: 'Email enviado correctamente',
         messageId,
         ledgerWritten: true,
-        deliveryPolicy: delivery.policy,
-        redirected: Boolean(delivery.redirected),
+        deliveryPolicy: dispatch.policy,
+        redirected: Boolean(dispatch.redirected),
+        intendedTo: dispatch.intendedTo,
+        intendedCc: dispatch.intendedCc,
         recipients: directory.plan,
       });
     } catch (error) {
@@ -1077,9 +1074,13 @@ router.post(
       );
       const numero = receipt.documento?.numero || receipt.confirmationId;
       const serie = receipt.documento?.serie || '';
+      const terminal = receipt.documento?.terminal;
+      const documentLabel = formatErpDocumentLabel({ serie, terminal, numero })
+        || `${serie}-${numero}`.replace(/^-|-$/g, '')
+        || String(numero);
       const clienteNombre = parsed.data.clienteNombre || receipt.cliente?.nombre || receipt.clienteNombre || '';
       const caption = parsed.data.mensaje
-        || `Granja Mari Pepa\n\nNota de entrega: ${serie}-${numero}\nCliente: ${clienteNombre}`;
+        || `Granja Mari Pepa\n\nNota de entrega: ${documentLabel}\nCliente: ${clienteNombre}`;
       const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`;
       const fileName = rendered.fileName || `nota_entrega_${numero}.pdf`;
 

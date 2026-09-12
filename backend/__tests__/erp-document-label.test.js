@@ -21,4 +21,8 @@ describe('erp document label', () => {
   test('does not invent a terminal when missing', () => {
     expect(formatErpDocumentLabel({ serie: 'A', numero: 12 })).toBe('A-12');
   });
+
+  test('keeps terminal 0 (P-0-2296, not P-2296)', () => {
+    expect(formatErpDocumentLabel({ serie: 'P', terminal: 0, numero: 2296 })).toBe('P-0-2296');
+  });
 });

@@ -26,6 +26,18 @@ function parseGlobalDiscountPct(payload = {}) {
     );
 }
 
+function resolveStoredPieDiscountPct(row = {}) {
+    const erpPie = Number.parseFloat(row.PORCENTAJEDESCUENTO1);
+    if (Number.isFinite(erpPie) && erpPie > 0) return clampDiscountPct(erpPie);
+    return clampDiscountPct(row.DESCUENTO_GLOBAL ?? row.descuentoGlobal ?? 0);
+}
+
+function resolveStoredLineDiscountPct(row = {}) {
+    const erpLine = Number.parseFloat(row.PORCENTAJEDESCUENTO);
+    if (Number.isFinite(erpLine) && erpLine > 0) return clampDiscountPct(erpLine);
+    return clampDiscountPct(row.DESCUENTO_LINEA ?? row.descuentoLinea ?? 0);
+}
+
 function applyPctToAmount(amount, pct) {
     const base = Number(amount) || 0;
     const discount = clampDiscountPct(pct);
@@ -47,6 +59,8 @@ module.exports = {
     clampDiscountPct,
     parseLineDiscountPct,
     parseGlobalDiscountPct,
+    resolveStoredPieDiscountPct,
+    resolveStoredLineDiscountPct,
     applyPctToAmount,
     isCobroPropio,
 };

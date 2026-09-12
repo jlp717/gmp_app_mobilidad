@@ -131,9 +131,8 @@ function paymentCode(value) {
   const normalized = normalizeText(value).toUpperCase();
   if (['EFECTIVO', 'CONTADO', 'EF', 'F0'].includes(normalized)) return 'EF';
   if (['TARJETA', 'TPV', 'TJ'].includes(normalized)) return 'TJ';
-  if (['TRANSFERENCIA', 'TRANSFER', 'TR', 'T0'].includes(normalized)) return 'TR';
   if (['BIZUM', 'BI'].includes(normalized)) return 'BI';
-  if (['CHEQUE', 'TALON', 'TALON BANCARIO', 'CH'].includes(normalized)) return 'CH';
+  if (['TRANSFERENCIA', 'TRANSFER', 'TR', 'T0', 'CHEQUE', 'TALON', 'TALON BANCARIO', 'CH'].includes(normalized)) return 'CH';
   if (['POSTDATADO', 'POSTDATADOS', 'PD'].includes(normalized)) return 'PD';
   return normalized.slice(0, 2);
 }

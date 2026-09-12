@@ -3,6 +3,7 @@
 const {
   RepartoEmailDeliveryPolicyError,
   resolveRepartoEmailDelivery,
+  composeProductEmailDispatch,
   buildRepartoMessageId,
   redactDeliverySummary,
 } = require('../services/reparto-email-delivery-policy');
@@ -132,5 +133,35 @@ describe('reparto email delivery policy', () => {
   test('delivery summary retains no recipient or SMTP detail', () => {
     expect(redactDeliverySummary([{ success: true, to: 'private@example.test' }, { success: false, error: 'smtp secret' }]))
       .toEqual({ attempted: 2, sent: 1, failed: 1, allSucceeded: false });
+  });
+
+  test('product dispatch keeps Carlos in intended CC while SMTP goes to the sink', () => {
+    const dispatch = composeProductEmailDispatch({
+      destinatario: 'reparto-test@localhost',
+      staffEmails: ['carlos@empresa.com', 'javier@empresa.com', 'repartidor@empresa.com'],
+      env: { REPARTO_TABLE_SET: 'isolated_test' },
+    });
+    expect(dispatch.intendedTo).toEqual(['reparto-test@localhost']);
+    expect(dispatch.intendedCc).toEqual([
+      'carlos@empresa.com',
+      'javier@empresa.com',
+      'repartidor@empresa.com',
+    ]);
+    expect(dispatch.smtpTo).toBe('reparto-test@localhost');
+    expect(dispatch.smtpCc).toEqual([]);
+    expect(dispatch.redirected).toBe(true);
+    expect(dispatch.policy).toBe('isolated_test_redirect');
+  });
+
+  test('product dispatch in production CCs staff including Carlos', () => {
+    const dispatch = composeProductEmailDispatch({
+      destinatario: 'cliente@empresa.com',
+      staffEmails: ['carlos@empresa.com', 'javier@empresa.com'],
+      env: { NODE_ENV: 'production' },
+    });
+    expect(dispatch.smtpTo).toBe('cliente@empresa.com');
+    expect(dispatch.smtpCc).toEqual(['carlos@empresa.com', 'javier@empresa.com']);
+    expect(dispatch.redirected).toBe(false);
+    expect(dispatch.intendedCc).toContain('carlos@empresa.com');
   });
 });

@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
-import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_stop_status_badges.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_payment.dart';
 import 'package:intl/intl.dart';
 
 /// Smart Delivery Card with futuristic design
@@ -546,7 +546,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               ? 'Cobro registrado'
               : 'Cobrado';
       if (method.isEmpty) return kind;
-      return '$kind · $method';
+      return '$kind · ${ruteroPaymentMethodLabel(method)}';
     }
     final code = widget.albaran.tipoPago.toUpperCase().trim();
     if (code == '01' || code == 'CNT' || code.contains('CONTADO')) {

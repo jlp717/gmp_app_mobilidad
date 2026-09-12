@@ -4,6 +4,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_products.dart';
 import 'package:signature/signature.dart';
 
 Future<void> showRuteroPrintPreviewDialog({
@@ -16,6 +17,7 @@ Future<void> showRuteroPrintPreviewDialog({
   SignatureController? signatureController,
   String? printerName,
   String? printerProtocol,
+  Map<String, double>? deliveredQuantities,
   Future<bool> Function()? onEnsurePrinter,
   VoidCallback? onPrinted,
 }) {
@@ -31,6 +33,7 @@ Future<void> showRuteroPrintPreviewDialog({
       signatureController: signatureController,
       printerName: printerName,
       printerProtocol: printerProtocol,
+      deliveredQuantities: deliveredQuantities,
       onEnsurePrinter: onEnsurePrinter,
       onPrinted: onPrinted,
     ),
@@ -47,6 +50,7 @@ class RuteroPrintPreviewDialog extends StatefulWidget {
     this.signatureController,
     this.printerName,
     this.printerProtocol,
+    this.deliveredQuantities,
     this.onEnsurePrinter,
     this.onPrinted,
     super.key,
@@ -60,6 +64,7 @@ class RuteroPrintPreviewDialog extends StatefulWidget {
   final SignatureController? signatureController;
   final String? printerName;
   final String? printerProtocol;
+  final Map<String, double>? deliveredQuantities;
   final Future<bool> Function()? onEnsurePrinter;
   final VoidCallback? onPrinted;
 
@@ -118,6 +123,26 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
     return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
+  double _deliveredQty(EntregaItem item) {
+    return widget.deliveredQuantities?[ruteroLineKey(item)] ??
+        item.cantidadPedida.toDouble();
+  }
+
+  double _lineAmount(EntregaItem item) {
+    return ruteroLineDeliveredAmount(
+      item: item,
+      deliveredQty: _deliveredQty(item),
+    );
+  }
+
+  double get _liveTotal {
+    final live = widget.items.fold<double>(
+      0,
+      (sum, item) => sum + _lineAmount(item),
+    );
+    return live > 0.004 ? live : widget.albaran.importeTotal;
+  }
+
   Future<void> _print() async {
     if (_isPrinting) return;
     setState(() {
@@ -149,6 +174,9 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
         maxHeight: layout.logoMaxHeight,
       );
 
+      for (final item in widget.items) {
+        item.cantidadEntregada = _deliveredQty(item);
+      }
       final zpl = ZebraPrintService.generateDeliveryZpl(
         albaran: widget.albaran,
         items: widget.items,
@@ -167,12 +195,12 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
             .map(
               (item) => <String, dynamic>{
                 'desc': item.descripcion,
-                'qty': item.cantidadPedida,
-                'importe': item.cantidadPedida * item.precioUnitario,
+                'qty': _deliveredQty(item),
+                'importe': _lineAmount(item),
               },
             )
             .toList(),
-        total: widget.albaran.importeTotal,
+        total: _liveTotal,
       );
 
       final result = await ZebraPrintService.printTicket(
@@ -300,9 +328,9 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                                   ),
                                 ),
                                 Text(
-                                  'x${_formatQuantity(item.cantidadPedida)}'
+                                  'x${_formatQuantity(_deliveredQty(item))}'
                                   '${(item.unit ?? '').trim().isEmpty ? '' : ' ${item.unit}'}  '
-                                  '${(item.cantidadPedida * item.precioUnitario).toStringAsFixed(2)}€',
+                                  '${_lineAmount(item).toStringAsFixed(2)}€',
                                   style: TextStyle(
                                     color: AppTheme.textSecondary,
                                     fontSize: 12,
@@ -322,7 +350,7 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                       ),
                     Divider(color: AppTheme.textTertiary),
                     Text(
-                      'TOTAL: ${widget.albaran.importeTotal.toStringAsFixed(2)} €',
+                      'TOTAL: ${_liveTotal.toStringAsFixed(2)} €',
                       style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,

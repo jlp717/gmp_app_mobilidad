@@ -116,6 +116,8 @@ describe('canonical reparto confirmation bootstrap', () => {
     expect(db.acquireConfiguredConnection).not.toHaveBeenCalled();
     expect(STATIC_REPARTO_CATALOG.statuses).toContain('PARCIAL');
     expect(STATIC_REPARTO_CATALOG.paymentMethods).toContain('TALON');
+    expect(STATIC_REPARTO_CATALOG.paymentMethods).not.toContain('TRANSFERENCIA');
+    expect(STATIC_REPARTO_CATALOG.paymentMethods).not.toContain('CHEQUE');
   });
 
   test('acquires one lazy connection from the initialized pool', async () => {

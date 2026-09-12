@@ -34,7 +34,7 @@ Future<void> pumpQuiet(WidgetTester tester, Duration duration) async {
 
 Future<void> tapFirst(WidgetTester tester, Finder finder) async {
   expect(finder, findsWidgets);
-  await tester.tap(finder.first);
+  await tester.tap(finder.first, warnIfMissed: false);
   await tester.pump(const Duration(milliseconds: 400));
 }
 

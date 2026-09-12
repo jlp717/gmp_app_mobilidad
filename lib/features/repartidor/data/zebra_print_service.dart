@@ -470,6 +470,17 @@ class ZebraPrintService {
     return name.replaceFirst(RegExp(r'^\d+\s+'), '').trim();
   }
 
+  static String _ticketPaymentLabel(String raw) {
+    final upper = raw.trim().toUpperCase();
+    if (upper.contains('TRANSFER') ||
+        upper.contains('TALON') ||
+        upper.contains('TALÓN') ||
+        upper.contains('CHEQUE')) {
+      return 'Talón';
+    }
+    return raw;
+  }
+
   /// Escape ZPL special characters in field data to prevent ZPL injection.
   static String _sanitizeZpl(String text) {
     return text
@@ -563,7 +574,8 @@ class ZebraPrintService {
         y += L.rowGap(fMeta) - 2;
       }
     }
-    _writeLeft(buf, L, y, fMeta, 'Forma de pago: ${albaran.formaPagoDesc}');
+    _writeLeft(buf, L, y, fMeta,
+        'Forma de pago: ${_ticketPaymentLabel(albaran.formaPagoDesc)}');
     y += L.rowGap(fMeta) + 2;
 
     _writeSep(buf, L, y);
@@ -586,9 +598,10 @@ class ZebraPrintService {
     for (var i = 0; i < items.length; i++) {
       final item = items[i];
       final partida = '${i + 1}';
-      final bultos = item.bultos > 0 ? item.bultos : item.cantidadPedida;
+      final deliveredQty = item.cantidadEntregada ?? item.cantidadPedida;
+      final bultos = item.bultos > 0 ? item.bultos : deliveredQty;
       totalBultos += bultos;
-      final importe = item.cantidadPedida * item.precioUnitario;
+      final importe = deliveredQty * item.precioUnitario;
 
       buf.writeln('^CF0,$fBody');
       buf.writeln('^FO${L.colPtda},$y^FD$partida^FS');

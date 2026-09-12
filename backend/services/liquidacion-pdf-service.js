@@ -2,6 +2,7 @@
 
 const PDFDocument = require('pdfkit');
 const { drawCompanyHeader } = require('./company-header');
+const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 
 const NAVY = '#003d7a';
 const NAVY_DEEP = '#00264d';
@@ -18,8 +19,8 @@ const CARD_MUTED = '#f1f5f9';
 const WHITE = '#ffffff';
 
 const CASH_METHOD_RE = /^(EFECTIVO|EF|F0|E|CONTADO|CT)$/i;
-const CHEQUE_METHOD_RE = /^(CHEQUE|CH|TALON|TALON BANCARIO)$/i;
-const CARD_METHOD_RE = /^(TARJETA|TJ|TPV|TRANSFERENCIA|TR|T0|BIZUM|BI)$/i;
+const CHEQUE_METHOD_RE = /^(CHEQUE|CH|TALON|TALON BANCARIO|TRANSFERENCIA|TRANSFER|TR|T0)$/i;
+const CARD_METHOD_RE = /^(TARJETA|TJ|TPV|BIZUM|BI)$/i;
 const POSTDATED_METHOD_RE = /^(POSTDATADO|PD|POSTDATADOS)$/i;
 
 function toNumber(raw) {
@@ -129,26 +130,30 @@ function sumCashPayments(payments = []) {
 function paymentTypeLabel(raw) {
   const value = String(raw || '').trim().toUpperCase();
   if (CASH_METHOD_RE.test(value)) return 'EFECTIVO';
-  if (CARD_METHOD_RE.test(value)) return 'TARJETA';
-  if (['TRANSFERENCIA', 'TR'].includes(value)) return 'TRANSFERENCIA';
   if (['BIZUM', 'BI'].includes(value)) return 'BIZUM';
-  if (CHEQUE_METHOD_RE.test(value)) return 'CHEQUE';
+  if (CARD_METHOD_RE.test(value)) return 'TARJETA';
+  if (CHEQUE_METHOD_RE.test(value)) return 'TALÓN';
   if (POSTDATED_METHOD_RE.test(value)) return 'POSTDATADO';
   return value || '—';
 }
 
 function paperDocumentLabel(cobro) {
   const explicit = String(cobro?.documento || '').trim();
+  const serie = String(cobro?.serieDocumento || cobro?.serie || '').trim();
+  const terminal = cobro?.terminalDocumento ?? cobro?.terminal;
+  const numero = cobro?.numeroDocumento ?? cobro?.numero;
+  if (serie) {
+    const label = formatErpDocumentLabel({ serie, terminal, numero });
+    if (label) return label;
+  }
   const tipo = String(cobro?.tipoDocumento || cobro?.tipoCobro || '').trim().toUpperCase();
   const letter = tipo.startsWith('F') ? 'F'
     : tipo.startsWith('P') ? 'P'
       : tipo.startsWith('E') || tipo === 'CAC' || tipo === 'ALB' ? 'E'
         : '';
-  const terminal = Number(cobro?.terminalDocumento ?? cobro?.terminal);
-  const numero = Number(cobro?.numeroDocumento ?? cobro?.numero);
-  if (letter && Number.isFinite(numero) && numero > 0) {
-    const term = Number.isFinite(terminal) ? terminal : 0;
-    return `${letter} ${pad(term, 3)} ${pad(numero, 6)}`;
+  if (letter) {
+    const label = formatErpDocumentLabel({ serie: letter, terminal, numero });
+    if (label) return label;
   }
   return explicit || '—';
 }

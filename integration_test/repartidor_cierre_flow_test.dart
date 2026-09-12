@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_modal.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_tab_bar.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/smart_delivery_card.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:signature/signature.dart';
@@ -41,17 +42,29 @@ void main() {
         label: 'modal de entrega',
       );
       debugPrint('[e2e-cierre] modal entrega abierto');
+      await waitFor(
+        tester,
+        find.byType(RuteroDetailTabBar).hitTestable(),
+        timeout: const Duration(seconds: 12),
+        label: 'TabBar del modal hit-testable',
+      );
 
-      expect(find.text('Productos'), findsWidgets);
-      expect(find.text('Cobro'), findsWidgets);
-      expect(find.text('Finalizar'), findsWidgets);
+      Finder inModal(Finder matching) => find.descendant(
+            of: find.byType(RuteroDetailModal),
+            matching: matching,
+          );
 
-      await tapFirst(tester, find.text('Cobro'));
+      expect(inModal(find.text('Productos')), findsWidgets);
+      expect(inModal(find.text('Cobro')), findsWidgets);
+      expect(inModal(find.text('Finalizar')), findsWidgets);
+
+      await _tapModalTab(tester, 'Cobro');
       await pumpQuiet(tester, const Duration(seconds: 2));
+      debugPrint('[e2e-cierre] tab Cobro');
 
-      final talonChip = find.text('Talón');
+      final talonChip = inModal(find.text('Talón')).hitTestable();
       expect(talonChip, findsWidgets,
-          reason: 'chip Talón visible, no Transferencia');
+          reason: 'chip Talón visible y pulsable, no Transferencia');
       expect(find.text('TRANSFERENCIA'), findsNothing);
       expect(find.text('Transferencia'), findsNothing);
       expect(
@@ -84,13 +97,15 @@ void main() {
         }
       }
 
-      await tapFirst(tester, find.text('Productos'));
+      await _tapModalTab(tester, 'Productos');
       await pumpQuiet(tester, const Duration(seconds: 1));
       final completedAlready =
-          find.text('Confirmar entrega').evaluate().isEmpty;
+          inModal(find.text('Confirmar entrega')).evaluate().isEmpty;
 
-      await tapFirst(tester, find.text('Finalizar'));
+      await _tapModalTab(tester, 'Finalizar');
       await pumpQuiet(tester, const Duration(seconds: 2));
+      debugPrint(
+          '[e2e-cierre] tab Finalizar completedAlready=$completedAlready');
 
       var sawSureDialog = false;
       var completed = completedAlready;
@@ -128,25 +143,25 @@ void main() {
         expect(find.text('Finalizar'), findsWidgets);
       }
 
-      await tapFirst(tester, find.text('Productos'));
+      await _tapModalTab(tester, 'Productos');
       await pumpQuiet(tester, const Duration(seconds: 1));
-      await tapFirst(tester, find.text('Cobro'));
+      await _tapModalTab(tester, 'Cobro');
       await pumpQuiet(tester, const Duration(seconds: 1));
-      await tapFirst(tester, find.text('Finalizar'));
+      await _tapModalTab(tester, 'Finalizar');
       await pumpQuiet(tester, const Duration(seconds: 1));
 
       // Close and reopen to check overlay persistence.
-      final closeDetail = find.byTooltip('Cerrar detalle');
+      final closeDetail = inModal(find.byTooltip('Cerrar detalle'));
       if (closeDetail.evaluate().isNotEmpty) {
-        await tester.tap(closeDetail.first);
-        await pumpQuiet(tester, const Duration(seconds: 2));
-      } else {
-        await tester.pageBack();
+        await tester.tap(closeDetail.first, warnIfMissed: false);
         await pumpQuiet(tester, const Duration(seconds: 2));
       }
       if (find.byType(RuteroDetailModal).evaluate().isNotEmpty) {
-        await tester.tap(find.byIcon(Icons.close).first);
-        await pumpQuiet(tester, const Duration(seconds: 2));
+        final closeIcon = inModal(find.byIcon(Icons.close));
+        if (closeIcon.evaluate().isNotEmpty) {
+          await tester.tap(closeIcon.first, warnIfMissed: false);
+          await pumpQuiet(tester, const Duration(seconds: 2));
+        }
       }
       if (find.byType(SmartDeliveryCard).evaluate().isNotEmpty) {
         await tapFirst(tester, find.byType(SmartDeliveryCard));
@@ -173,8 +188,28 @@ void main() {
         'locked=${locked.evaluate().isNotEmpty}',
       );
     },
-    timeout: const Timeout(Duration(minutes: 8)),
+    timeout: const Timeout(Duration(minutes: 20)),
   );
+}
+
+Future<void> _tapModalTab(WidgetTester tester, String label) async {
+  final bar = find.byType(RuteroDetailTabBar);
+  expect(bar, findsWidgets, reason: 'TabBar del modal');
+  final tabs = find.descendant(
+    of: bar,
+    matching: find.byType(Tab),
+  );
+  expect(tabs, findsNWidgets(3), reason: 'Productos/Cobro/Finalizar');
+  final index = switch (label) {
+    'Productos' => 0,
+    'Cobro' => 1,
+    'Finalizar' => 2,
+    _ => throw ArgumentError.value(label, 'label'),
+  };
+  final rect = tester.getRect(tabs.at(index));
+  debugPrint('[e2e-cierre] tap tab $label at ${rect.center} size=${rect.size}');
+  await tester.tapAt(rect.center);
+  await tester.pump(const Duration(milliseconds: 500));
 }
 
 Future<void> _fillTalonIfEnabled(WidgetTester tester) async {

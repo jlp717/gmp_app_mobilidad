@@ -534,8 +534,8 @@ function liquidacionPdfPaymentTotals(payments) {
     const amount = roundMoney(payment.amount);
     const method = String(payment.paymentMethod || '').trim().toUpperCase();
     if (/^(EFECTIVO|EF|F0|E|CONTADO|CT)$/.test(method)) totals.totalEfectivo += amount;
-    else if (/^(CHEQUE|CH|TALON|TALON BANCARIO)$/.test(method)) totals.totalCheques += amount;
-    else if (/^(TARJETA|TJ|TPV|TRANSFERENCIA|TR|T0|BIZUM|BI)$/.test(method)) totals.totalTarjeta += amount;
+    else if (/^(CHEQUE|CH|TALON|TALON BANCARIO|TRANSFERENCIA|TRANSFER|TR|T0)$/.test(method)) totals.totalCheques += amount;
+    else if (/^(TARJETA|TJ|TPV|BIZUM|BI)$/.test(method)) totals.totalTarjeta += amount;
     else if (/^(POSTDATADO|PD|POSTDATADOS)$/.test(method)) totals.totalPostdatados += amount;
     else throw new LiquidacionPdfReadError('El snapshot contiene una forma de cobro no clasificable');
   }
@@ -777,9 +777,10 @@ function normalizePaymentForCompare(raw) {
   const current = normalizeText(raw).toUpperCase();
   if (['EF', 'F0', 'E', 'CT', 'EFECTIVO', 'CONTADO'].includes(current)) return 'EFECTIVO';
   if (['TJ', 'TARJETA', 'TPV'].includes(current)) return 'TARJETA';
-  if (['TR', 'T0', 'TRANSFER', 'TRANSFERENCIA'].includes(current)) return 'TRANSFERENCIA';
   if (['BI', 'BIZUM'].includes(current)) return 'BIZUM';
-  if (['CH', 'CHEQUE', 'TALON', 'TALON BANCARIO'].includes(current)) return 'CHEQUE';
+  if (['TR', 'T0', 'TRANSFER', 'TRANSFERENCIA', 'CH', 'CHEQUE', 'TALON', 'TALON BANCARIO'].includes(current)) {
+    return 'TALON';
+  }
   if (['PD', 'POSTDATADO', 'POSTDATADOS'].includes(current)) return 'POSTDATADO';
   return current;
 }

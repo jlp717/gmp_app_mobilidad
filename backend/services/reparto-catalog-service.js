@@ -96,6 +96,14 @@ async function loadWithTimeout(catalog, { timeoutMs, signal } = {}) {
   }
 }
 
+function canonicalizePaymentMethod(value) {
+  const code = normalizeCode(value);
+  if (['TRANSFERENCIA', 'TRANSFER', 'TR', 'T0', 'CHEQUE', 'CH', 'TALÓN', 'TALON BANCARIO'].includes(code)) {
+    return 'TALON';
+  }
+  return code;
+}
+
 function assertAllowed(values, value, field) {
   const code = normalizeCode(value);
   if (!code || !values.has(code)) {
@@ -122,7 +130,11 @@ function validateCommandAgainstCatalog(command, catalog) {
     assertAllowed(catalog.incidentTypes, delivery.incidencia.tipo, 'delivery.incidencia.tipo');
   }
   if (command.cobro?.formaPago) {
-    assertAllowed(catalog.paymentMethods, command.cobro.formaPago, 'cobro.formaPago');
+    assertAllowed(
+      catalog.paymentMethods,
+      canonicalizePaymentMethod(command.cobro.formaPago),
+      'cobro.formaPago',
+    );
   }
   return command;
 }
@@ -143,4 +155,5 @@ module.exports = {
   loadWithTimeout,
   validateCatalog,
   validateCommandAgainstCatalog,
+  canonicalizePaymentMethod,
 };

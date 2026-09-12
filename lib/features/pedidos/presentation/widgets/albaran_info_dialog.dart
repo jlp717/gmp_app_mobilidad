@@ -57,6 +57,7 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
     final serie = (albaran['serieFactura'] ?? '').toString().trim();
     final numero = _asInt(albaran['numeroFactura']);
     final ejercicio = _asInt(albaran['ejercicioFactura']);
+    final terminal = _asInt(albaran['terminal']);
     if (serie.isEmpty || numero <= 0 || ejercicio <= 0) return;
 
     setState(() => _isOpeningFactura = true);
@@ -72,8 +73,8 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
           builder: (_) => PdfPreviewScreen(
             pdfBytes: Uint8List.fromList(bytes),
             title:
-                'Factura ${formatErpDocumentLabel(serie: serie, numero: numero)}',
-            fileName: 'Factura_${serie}_${numero}_$ejercicio.pdf',
+                'Factura ${formatErpDocumentLabel(serie: serie, terminal: terminal, numero: numero)}',
+            fileName: 'Factura_${serie}_${terminal}_${numero}_$ejercicio.pdf',
           ),
         ),
       );
@@ -204,6 +205,7 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                               ? facturaRef
                               : formatErpDocumentLabel(
                                   serie: facturaSerie,
+                                  terminal: _asInt(a['terminal']),
                                   numero: facturaNum,
                                 );
                           return Container(

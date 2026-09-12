@@ -16,6 +16,7 @@ const { verifyToken } = require('../middleware/auth');
 const { authorizeVendorScope, isFinancialRole, userScopeCodes, normalizeCode } = require('../middleware/vendor-scope');
 const { emailLimiter } = require('../middleware/security');
 const { normalizeEmail } = require('../services/reparto-email-delivery-policy');
+const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 
 const FACTURA_PDF_CACHE_VERSION = 'v4';
 const FACTURA_DEFAULT_LIMIT = 250;
@@ -193,9 +194,17 @@ function getRequestDocumentType(req) {
     );
 }
 
+function documentVisibleId(document) {
+    return formatErpDocumentLabel({
+        serie: document.displaySerie,
+        terminal: document.displayTerminal,
+        numero: document.displayNumero,
+    });
+}
+
 function buildWhatsAppMessageForDocument(document, clienteNombre) {
     return `Granja Mari Pepa\n\n` +
-        `${document.label}: ${document.displaySerie}-${document.displayNumero}\n` +
+        `${document.label}: ${documentVisibleId(document)}\n` +
         `Fecha: ${document.fecha}\n` +
         `Total: ${document.total.toFixed(2)} EUR\n\n` +
         `Cliente: ${clienteNombre || document.clienteNombre}\n\n` +
@@ -206,6 +215,7 @@ function buildEmailHtmlForDocument(document, clienteNombre, customBody) {
     const params = {
         serie: document.displaySerie,
         numero: document.displayNumero,
+        terminal: document.displayTerminal,
         fecha: document.fecha,
         total: document.total,
         clienteNombre: clienteNombre || document.clienteNombre,
@@ -246,6 +256,14 @@ async function resolveFacturaDocument({ serie, numero, ejercicio }) {
     const displaySerie = (header.serie || serie || '').toString().trim();
     const displayNumero = header.numero || numero;
     const displayEjercicio = header.ejercicio || ejercicio;
+    const displayTerminal = header.terminal === null || header.terminal === undefined || header.terminal === ''
+        ? null
+        : parseInt(header.terminal, 10);
+    const visibleId = formatErpDocumentLabel({
+        serie: displaySerie,
+        terminal: Number.isFinite(displayTerminal) ? displayTerminal : null,
+        numero: displayNumero,
+    });
 
     return {
         documentType: 'factura',
@@ -254,11 +272,11 @@ async function resolveFacturaDocument({ serie, numero, ejercicio }) {
         displaySerie,
         displayNumero,
         displayEjercicio,
-        displayTerminal: null,
+        displayTerminal: Number.isFinite(displayTerminal) ? displayTerminal : null,
         fecha: header.fecha || '',
         total: parseFloat(header.total) || 0,
         clienteNombre: header.clienteNombre || '',
-        filename: `Factura_${displaySerie}_${displayNumero}_${displayEjercicio}.pdf`
+        filename: `Factura_${visibleId || `${displaySerie}_${displayNumero}`}_${displayEjercicio}.pdf`
     };
 }
 
@@ -618,7 +636,7 @@ router.post('/share/whatsapp', verifyToken, async (req, res, next) => {
         const pdfBase64 = pdfBuffer.toString('base64');
         const pdfFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 
-        logger.info(`[FACTURAS] WhatsApp generated: ${document.label} ${document.displaySerie}-${document.displayNumero} to ${phoneClean}`);
+        logger.info(`[FACTURAS] WhatsApp generated: ${document.label} ${documentVisibleId(document)} to ${phoneClean}`);
 
         res.json({
             success: true,
@@ -676,7 +694,7 @@ router.post('/send-email', verifyToken, emailLimiter, async (req, res, next) => 
         }
 
         const pdfDocument = await buildCommercialDocumentPdf(document);
-        const emailSubject = asunto || `${document.label} ${document.displaySerie}-${document.displayNumero} - Granja Mari Pepa`;
+        const emailSubject = asunto || `${document.label} ${documentVisibleId(document)} - Granja Mari Pepa`;
         const htmlBody = buildEmailHtmlForDocument(document, clienteNombre, cuerpo);
         const pdfFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 
@@ -741,7 +759,7 @@ router.post('/share/email', verifyToken, emailLimiter, async (req, res, next) =>
         }
 
         const pdfDocument = await buildCommercialDocumentPdf(document);
-        const emailSubject = `${document.label} ${document.displaySerie}-${document.displayNumero} - Granja Mari Pepa`;
+        const emailSubject = `${document.label} ${documentVisibleId(document)} - Granja Mari Pepa`;
         const htmlBody = buildEmailHtmlForDocument(document, clienteNombre);
         const pdfFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 

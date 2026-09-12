@@ -43,4 +43,24 @@ void main() {
     expect(factura.erpDocumentId, 'P-15-2296');
     expect(factura.erpDocumentLabel, 'Factura P-15-2296');
   });
+
+  test('mantiene terminal 0 en el identificador visible', () {
+    expect(
+      formatErpDocumentLabel(serie: 'P', terminal: 0, numero: 2296),
+      'P-0-2296',
+    );
+    final albaran = AlbaranEntrega(
+      id: '2026-P-0-2296-C1',
+      numeroAlbaran: 2296,
+      ejercicio: 2026,
+      serie: 'P',
+      terminal: 0,
+      codigoCliente: 'C1',
+      nombreCliente: 'Cliente',
+      fecha: '2026-09-12',
+      importeTotal: 76,
+      codigoRepartidor: '08',
+    );
+    expect(albaran.erpDocumentId, 'P-0-2296');
+  });
 }

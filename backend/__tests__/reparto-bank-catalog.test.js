@@ -25,6 +25,8 @@ describe('reparto-bank-catalog', () => {
 
   test('TALON is a talon payment method', () => {
     expect(isTalonPaymentMethod('TALON')).toBe(true);
+    expect(isTalonPaymentMethod('TRANSFERENCIA')).toBe(true);
+    expect(isTalonPaymentMethod('TR')).toBe(true);
     expect(isTalonPaymentMethod('EFECTIVO')).toBe(false);
   });
 

@@ -172,10 +172,7 @@ class _RuteroRouteMapViewState extends State<RuteroRouteMapView> {
     }
   }
 
-  String _docLabel(AlbaranEntrega a) {
-    if (a.numeroFactura > 0) return 'Fac ${a.numeroFactura}';
-    return 'Alb ${a.numeroAlbaran}';
-  }
+  String _docLabel(AlbaranEntrega a) => a.erpDocumentId;
 
   String _docTipo(AlbaranEntrega a) {
     if (a.numeroFactura > 0) return 'FACTURA';
@@ -554,9 +551,7 @@ class _StopDetailCard extends StatelessWidget {
 
   String get _docTipo => albaran.numeroFactura > 0 ? 'FACTURA' : 'ALBARÁN';
 
-  String get _docLabel => albaran.numeroFactura > 0
-      ? 'Fac ${albaran.numeroFactura}'
-      : 'Alb ${albaran.numeroAlbaran}';
+  String get _docLabel => albaran.erpDocumentId;
 
   String get _pagoLabel {
     final tipo = albaran.tipoPago.trim();

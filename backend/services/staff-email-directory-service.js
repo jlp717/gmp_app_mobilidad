@@ -53,6 +53,16 @@ function normalizeText(value) {
   return String(value).trim();
 }
 
+function foldAccents(value) {
+  return String(value || '')
+    .toUpperCase()
+    .replace(/[ÁÀÄÂ]/g, 'A')
+    .replace(/[ÉÈËÊ]/g, 'E')
+    .replace(/[ÍÌÏÎ]/g, 'I')
+    .replace(/[ÓÒÖÔ]/g, 'O')
+    .replace(/[ÚÙÜÛ]/g, 'U');
+}
+
 function normalizeVendorCode(value) {
   const raw = normalizeText(value).toUpperCase();
   if (!raw || !VENDOR_CODE_RE.test(raw)) return '';
@@ -78,9 +88,9 @@ function parseNameMatch(raw) {
   const text = normalizeText(raw);
   if (!text) return { token: '', requireName: false };
   if (text.startsWith('!')) {
-    return { token: text.slice(1).trim().toUpperCase(), requireName: true };
+    return { token: foldAccents(text.slice(1).trim()), requireName: true };
   }
-  return { token: text.toUpperCase(), requireName: false };
+  return { token: foldAccents(text), requireName: false };
 }
 
 function cacheGet(key) {
@@ -178,13 +188,17 @@ async function resolveVendorEmail(vendorCode, opts = {}) {
  * Resolve vendor by fragment of NOMBREVENDEDOR (ERP master). Prefer row with email.
  */
 async function resolveVendorByNameMatch(nameToken, { query = queryWithParams } = {}) {
-  const token = normalizeText(nameToken).toUpperCase();
+  const token = foldAccents(normalizeText(nameToken));
   if (token.length < 3) return null;
 
   const cacheKey = `name:${token}`;
   const cached = cacheGet(cacheKey);
   if (cached !== undefined) return cached;
 
+  const foldedName = `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(`
+    + `REPLACE(REPLACE(REPLACE(REPLACE(UPPER(V.NOMBREVENDEDOR),`
+    + `'Á','A'),'É','E'),'Í','I'),'Ó','O'),'Ú','U'),`
+    + `'À','A'),'È','E'),'Ì','I'),'Ò','O'),'Ù','U')`;
   const sql = `
     SELECT TRIM(V.CODIGOVENDEDOR) AS CODIGO,
            TRIM(V.NOMBREVENDEDOR) AS NOMBRE,
@@ -192,13 +206,15 @@ async function resolveVendorByNameMatch(nameToken, { query = queryWithParams } =
       FROM DSEDAC.VDD V
       LEFT JOIN DSEDAC.VDDX X ON TRIM(V.CODIGOVENDEDOR) = TRIM(X.CODIGOVENDEDOR)
      WHERE UPPER(V.NOMBREVENDEDOR) LIKE ?
+        OR ${foldedName} LIKE ?
      ORDER BY CASE WHEN NULLIF(TRIM(X.CORREOELECTRONICO), '') IS NULL THEN 1 ELSE 0 END,
               V.CODIGOVENDEDOR
      FETCH FIRST 10 ROWS ONLY
   `;
   let rows = [];
   try {
-    rows = await query(sql, [`%${token}%`]);
+    const likeToken = `%${token}%`;
+    rows = await query(sql, [likeToken, likeToken]);
   } catch (error) {
     logger.warn(`[staff-email] name match failed for ${token}: ${error.message}`);
     return cacheSet(cacheKey, null);
