@@ -364,18 +364,14 @@ function buildPgVendorClause(vendorCodes) {
   const codes = sanitizeVendorCodes(vendorCodes);
   if (codes.length === 0) return { clause: '', params: [] };
   const inList = codes.map(() => 'CAST(? AS CHAR(2))').join(',');
+  // Settled CVC PAG rows store spaces in CODIGOVENDEDOR / CODIGOCLIENTE*.
+  // Client and vendor live on CAC (factura → albarán), CHAR equality.
   return {
     clause: `AND (
-      TRIM(CVC.CODIGOVENDEDOR) IN (${inList})
-      OR TRIM(CVC.CODIGOVENDEDORCOBRO) IN (${inList})
-      OR TRIM(COALESCE(NULLIF(TRIM(CVC.CODIGOCLIENTEFACTURA), ''), CVC.CODIGOCLIENTEALBARAN)) IN (
-        SELECT TRIM(CLP.CODIGOCLIENTE)
-          FROM DSEDAC.CLP CLP
-         WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${inList})
-            OR TRIM(CLP.VENDEDORCOBRO) IN (${inList})
-      )
+      CAC.CODIGOVENDEDOR IN (${inList})
+      OR CAC.CODIGOVENDEDORCOBRO IN (${inList})
     )`,
-    params: [...codes, ...codes, ...codes, ...codes],
+    params: [...codes, ...codes],
   };
 }
 
@@ -388,11 +384,12 @@ async function listPgCollectedDocuments({
   const vendorFilter = buildPgVendorClause(vendorCodes);
   const client = String(clientCode || '').trim().substring(0, 10);
   const clientClause = client
-    ? `AND TRIM(COALESCE(NULLIF(TRIM(CVC.CODIGOCLIENTEFACTURA), ''), CVC.CODIGOCLIENTEALBARAN)) = CAST(? AS CHAR(10))`
+    ? `AND (CAC.CODIGOCLIENTEFACTURA = CAST(? AS CHAR(10))
+         OR CAC.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10)))`
     : '';
   const fetchLimit = Math.min(Math.max(Number(limit) || 40, 1), 80);
   const sql = `
-    SELECT TRIM(COALESCE(NULLIF(TRIM(CVC.CODIGOCLIENTEFACTURA), ''), CVC.CODIGOCLIENTEALBARAN)) AS CLIENTE,
+    SELECT TRIM(COALESCE(NULLIF(TRIM(CAC.CODIGOCLIENTEFACTURA), ''), CAC.CODIGOCLIENTEALBARAN)) AS CLIENTE,
            TRIM(CVC.TIPODOCUMENTO) AS TIPO,
            TRIM(CVC.SERIEDOCUMENTO) AS SERIE,
            CVC.NUMERODOCUMENTO AS NUMERO,
@@ -407,38 +404,31 @@ async function listPgCollectedDocuments({
            CVC.ANOVENCIMIENTO AS ANOV,
            CVC.MESVENCIMIENTO AS MESV,
            CVC.DIAVENCIMIENTO AS DIAV,
-           TRIM(COALESCE(CAC.SERIEALBARAN, CAC_ALB.SERIEALBARAN, '')) AS SERIE_ALB,
-           COALESCE(CAC.NUMEROALBARAN, CAC_ALB.NUMEROALBARAN) AS NUM_ALB
+           TRIM(CAC.SERIEALBARAN) AS SERIE_ALB,
+           CAC.NUMEROALBARAN AS NUM_ALB
       FROM DSEDAC.CVC CVC
-      LEFT JOIN DSEDAC.FPG FPG
-        ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(CVC.CODIGOFORMAPAGO)
-      LEFT JOIN DSEDAC.CAC CAC
+      JOIN DSEDAC.CAC CAC
         ON CAC.EJERCICIOFACTURA = CVC.EJERCICIODOCUMENTO
-       AND TRIM(CAC.SERIEFACTURA) = TRIM(CVC.SERIEDOCUMENTO)
+       AND CAC.SERIEFACTURA = CVC.SERIEDOCUMENTO
        AND CAC.NUMEROFACTURA = CVC.NUMERODOCUMENTO
-      LEFT JOIN DSEDAC.CAC CAC_ALB
-        ON CAC_ALB.EJERCICIOALBARAN = CVC.EJERCICIODOCUMENTO
-       AND TRIM(CAC_ALB.SERIEALBARAN) = TRIM(CVC.SERIEDOCUMENTO)
-       AND CAC_ALB.TERMINALALBARAN = CVC.TERMINALDOCUMENTO
-       AND CAC_ALB.NUMEROALBARAN = CVC.NUMERODOCUMENTO
-     WHERE TRIM(CVC.TIPODOCUMENTO) <> CAST(? AS VARCHAR(3))
+      LEFT JOIN DSEDAC.FPG FPG
+        ON FPG.CODIGOFORMAPAGO = CVC.CODIGOFORMAPAGO
+     WHERE CVC.TIPODOCUMENTO = CAST(? AS CHAR(3))
        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
        AND CVC.IMPORTEPENDIENTE = 0
        AND CVC.IMPORTEVENCIMIENTO > 0
-       AND TRIM(COALESCE(NULLIF(TRIM(CVC.CODIGOCLIENTEFACTURA), ''), CVC.CODIGOCLIENTEALBARAN)) <> ''
-       AND (
-            UPPER(TRIM(COALESCE(FPG.PAGARESN, ''))) = CAST(? AS VARCHAR(1))
-         OR UPPER(TRIM(CVC.CODIGOFORMAPAGO)) = CAST(? AS VARCHAR(2))
-       )
+       AND FPG.PAGARESN = CAST(? AS CHAR(1))
        ${vendorFilter.clause}
        ${clientClause}
      ORDER BY CVC.ANOVENCIMIENTO DESC, CVC.MESVENCIMIENTO DESC, CVC.DIAVENCIMIENTO DESC
      FETCH FIRST ${fetchLimit} ROWS ONLY
   `;
-  const params = ['DEV', 'S', 'PG', ...vendorFilter.params];
-  if (client) params.push(client);
+  const params = ['PAG', 'S', ...vendorFilter.params];
+  if (client) params.push(client, client);
   const rows = await run(sql, params);
-  return (rows || []).map((row) => {
+  const seen = new Set();
+  const docs = [];
+  for (const row of rows || []) {
     const year = Number(row.ANO) || 0;
     const month = Number(row.MES) || 0;
     const day = Number(row.DIA) || 0;
@@ -447,10 +437,13 @@ async function listPgCollectedDocuments({
     const vDay = Number(row.DIAV) || 0;
     const serieAlb = String(row.SERIE_ALB || '').trim();
     const numAlb = row.NUM_ALB == null ? '' : String(row.NUM_ALB).trim();
-    return {
+    const documento = `${String(row.SERIE || '').trim()}-${row.NUMERO == null ? '' : row.NUMERO}`;
+    if (seen.has(documento)) continue;
+    seen.add(documento);
+    docs.push({
       cliente: String(row.CLIENTE || '').trim(),
       tipoDocumento: String(row.TIPO || '').trim(),
-      documento: `${String(row.SERIE || '').trim()}-${row.NUMERO == null ? '' : row.NUMERO}`,
+      documento,
       importe: money(row.IMPORTE),
       pendiente: money(row.PENDIENTE),
       formaPago: String(row.FP || '').trim(),
@@ -468,8 +461,9 @@ async function listPgCollectedDocuments({
       albaran: serieAlb && numAlb ? `${serieAlb}-${numAlb}` : null,
       impactoLqd: 'YA_COBRADOS',
       yaCobrada: true,
-    };
-  });
+    });
+  }
+  return docs;
 }
 
 async function getDailyCobrosByFormaPago({

@@ -401,11 +401,13 @@ describe('pizarra PG ya cobrados', () => {
     expect(sql).toMatch(/EJERCICIOFACTURA/);
     expect(sql).toMatch(/IMPORTEPENDIENTE = 0/);
     expect(sql).toMatch(/CODIGOCLIENTEFACTURA/);
+    expect(sql).toMatch(/TIPODOCUMENTO = CAST\(\? AS CHAR\(3\)\)/);
+    expect(sql).toMatch(/PAGARESN = CAST\(\? AS CHAR\(1\)\)/);
+    expect(sql).toMatch(/CAC\.CODIGOVENDEDOR/);
     expect(sql).not.toMatch(/INSERT|UPDATE|DELETE/i);
     expect(sql).not.toMatch(/VISTA_DEUDA_BASE/i);
-    expect(params[0]).toBe('DEV');
+    expect(params[0]).toBe('PAG');
     expect(params[1]).toBe('S');
-    expect(params[2]).toBe('PG');
   });
 
   test('registerReturn keeps PG already-collected impact on TEST overlay', async () => {

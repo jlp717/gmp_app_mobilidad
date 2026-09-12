@@ -66,9 +66,9 @@ CPES puede estar vacío; no se finge count>0 con CPES=0.
 
 ### REQ-PAG-01
 WHEN se lista un pagaré ya cobrado para Devuelve
-THE SYSTEM SHALL usar vencimiento de `CVC.ANOVENCIMIENTO/MES/DIA` y forma de pago `FPG` (P1 = PAGARE 30 DFF)
-AND THE SYSTEM SHALL enlazar el albarán por `CAC` factura→albarán
-AND THE SYSTEM SHALL filtrar `IMPORTEPENDIENTE=0` y cliente `COALESCE(CODIGOCLIENTEFACTURA, CODIGOCLIENTEALBARAN)`.
+THE SYSTEM SHALL leer `DSEDAC.CVC` tipo `PAG` con `IMPORTEPENDIENTE=0` y `FPG.PAGARESN='S'`
+AND THE SYSTEM SHALL resolver cliente, vendedor y albarán por `DSEDAC.CAC` (factura→albarán), porque CVC PAG deja cliente/vendedor en blancos EBCDIC
+AND THE SYSTEM SHALL usar vencimiento de `CVC.ANOVENCIMIENTO/MES/DIA` (P1 = PAGARE 30 DFF en FPG).
 
 ### REQ-COB-02
 WHEN Cobros muestra un cliente con `CLX.COBRORIGUROSOSN='S'`
