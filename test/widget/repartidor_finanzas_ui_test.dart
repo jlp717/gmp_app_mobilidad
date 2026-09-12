@@ -314,6 +314,8 @@ void main() {
     );
 
     expect(sentPayload?['notas'], 'Entregado a recepción');
+    expect(sentPayload?['formaPago'], 'EFECTIVO');
+    expect(sentPayload?.containsKey('numeroTalon'), isFalse);
     expect(
       RepartidorFinanzasService.vencimientosCacheKey(
         repartidorId: '94',
@@ -334,7 +336,48 @@ void main() {
     );
   });
 
-  testWidgets('repartidor vencimientos exposes abonar action', (tester) async {
+  test('cobro de vencimiento envía los 3 campos de talón', () async {
+    Map<String, dynamic>? sentPayload;
+    final service = RepartidorFinanzasService(
+      pendingOperations: () => const [],
+      offlinePost: (endpoint, data, {syncType, cacheKey}) async {
+        sentPayload = data;
+        return <String, dynamic>{'queued': false, 'syncId': 'sync-talon'};
+      },
+    );
+
+    await service.registerVencimientoCobro(
+      repartidorId: '94',
+      codigoCliente: '4300001119',
+      nombreCliente: 'CARNICERIA MECA',
+      tipoDocumento: 'CAC',
+      documento: 'I-10-2730',
+      keys: const {
+        'tipoDocumento': 'CAC',
+        'ejercicioDocumento': 2026,
+        'serieDocumento': 'I',
+        'terminalDocumento': 10,
+        'numeroDocumento': 2730,
+      },
+      importeCobrado: 10,
+      importePendiente: 20,
+      formaPago: 'TALON',
+      idempotencyToken: 'cobro-talon-1',
+      numeroTalon: '123456',
+      fechaVencimientoTalon: '2026-12-31',
+      codigoEntidadBancaria: '0049',
+      nombreBanco: 'SANTANDER',
+    );
+
+    expect(sentPayload?['formaPago'], 'TALON');
+    expect(sentPayload?['numeroTalon'], '123456');
+    expect(sentPayload?['fechaVencimientoTalon'], '2026-12-31');
+    expect(sentPayload?['codigoEntidadBancaria'], '0049');
+    expect(sentPayload?['nombreBanco'], 'SANTANDER');
+    expect(sentPayload?['pantallaOrigen'], 'VENCIMIENTOS');
+  });
+
+  testWidgets('repartidor vencimientos exposes cobrar action', (tester) async {
     final now = DateTime.now();
     final from = DateTime(now.year, now.month, now.day).subtract(
       const Duration(days: 180),
@@ -401,13 +444,30 @@ void main() {
     await tester.tap(find.textContaining('CARNICERIA MECA'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Abonar'), findsOneWidget);
+    expect(find.text('Cobrar'), findsOneWidget);
     expect(find.text('ALBARÁN'), findsWidgets);
 
-    await tester.tap(find.text('Abonar'));
+    await tester.tap(find.text('Cobrar'));
     await tester.pumpAndSettle();
 
     expect(find.text('Observaciones (opcional)'), findsOneWidget);
+    expect(find.text('Efectivo'), findsOneWidget);
+    expect(find.text('Transferencia'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('cobros-forma-pago')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Talón'), findsWidgets);
+    expect(find.text('Cheque'), findsNothing);
+    expect(find.text('Transferencia'), findsNothing);
+
+    await tester.tap(find.text('Talón').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('cobros-talon-numero')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('cobros-talon-vencimiento')), findsOneWidget);
+    expect(find.byKey(const ValueKey('cobros-talon-banco')), findsOneWidget);
   });
 
   testWidgets('comisiones displays summary and commercial-style table',

@@ -537,7 +537,7 @@ class _LiquidacionTreasuryFields {
           ),
           const SizedBox(height: 8),
           _TreasuryMetricCard(
-            label: 'Total Cheques',
+            label: 'Total Talones',
             value: summary.totalCheques,
           ),
           const SizedBox(height: 8),

@@ -352,7 +352,7 @@ function buildLiquidacionPdfBuffer({
         fill: CARD_GREEN, color: GREEN_DARK,
       },
       {
-        label: 'Total Cheques', value: summary.totalCheques,
+        label: 'Total Talones', value: summary.totalCheques,
         fill: CARD_BG, color: NAVY,
       },
       {

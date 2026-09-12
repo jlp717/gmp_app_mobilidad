@@ -1256,7 +1256,7 @@ class RepartidorDataService {
         !isValidRepartoOwnerId(owner) ||
         !isValidRepartoServerId(confirmation)) {
       throw const RepartidorDataException(
-        'Invalid email or delivery owner.',
+        'Email o repartidor no válidos.',
         statusCode: 422,
         code: 'REPARTO_RECEIPT_INVALID_LOOKUP',
       );
@@ -1269,7 +1269,7 @@ class RepartidorDataService {
       final result = RepartoReceiptEmailResult.fromResponse(response);
       if (result.delivered) return result;
       throw const RepartidorDataException(
-        'Receipt email was not fully acknowledged.',
+        'El email de la nota de entrega no se confirmó del todo.',
         code: 'EMAIL_DELIVERY_LEDGER_REQUIRED',
       );
     } on RepartidorDataException {
@@ -1277,7 +1277,8 @@ class RepartidorDataService {
     } on ApiException catch (error) {
       throw mapDeliveryNoteError(error);
     } catch (_) {
-      throw const RepartidorDataException('Receipt email delivery failed.');
+      throw const RepartidorDataException(
+          'No se pudo enviar la nota de entrega.');
     }
   }
 

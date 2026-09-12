@@ -1,9 +1,12 @@
 // ignore_for_file: public_member_api_docs
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_delivery_validation.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_confirm_dialog.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
@@ -686,19 +689,29 @@ class _RepartidorVencimientosPageState
                     const SizedBox(height: 16),
                     SizedBox(
                       width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.of(sheetContext).pop();
-                          _showAbonoDialog(
-                            context,
-                            ref,
-                            repartidorId,
-                            item,
-                            onSaved: onSaved,
-                          );
-                        },
-                        icon: const Icon(Icons.payments),
-                        label: const Text('Abonar'),
+                      child: Semantics(
+                        button: true,
+                        label: item.importePendiente < item.importe - 0.004
+                            ? 'Cobrar el resto de ${item.documento}'
+                            : 'Cobrar ${item.documento}',
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            _showCobroDialog(
+                              context,
+                              ref,
+                              repartidorId,
+                              item,
+                              onSaved: onSaved,
+                            );
+                          },
+                          icon: const Icon(Icons.payments),
+                          label: Text(
+                            item.importePendiente < item.importe - 0.004
+                                ? 'Cobrar el resto'
+                                : 'Cobrar',
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -711,7 +724,7 @@ class _RepartidorVencimientosPageState
     );
   }
 
-  static Future<void> _showAbonoDialog(
+  static Future<void> _showCobroDialog(
     BuildContext context,
     WidgetRef ref,
     String repartidorId,
@@ -730,8 +743,8 @@ class _RepartidorVencimientosPageState
         SnackBar(
           content: Text(
             pendingIntent.requiresManualReview
-                ? 'Este abono requiere revision manual; no se enviara otro.'
-                : 'Este abono sigue pendiente de sincronizacion.',
+                ? 'Este cobro requiere revisión manual; no se enviará otro.'
+                : 'Este cobro sigue pendiente de sincronización.',
           ),
           backgroundColor: pendingIntent.requiresManualReview
               ? AppTheme.error
@@ -749,6 +762,10 @@ class _RepartidorVencimientosPageState
       text: item.importePendiente.toStringAsFixed(2).replaceAll('.', ','),
     );
     final notesController = TextEditingController();
+    final numeroTalonController = TextEditingController();
+    final fechaVencimientoController = TextEditingController();
+    final bancoCodigoController = TextEditingController();
+    final bancoNombreController = TextEditingController();
 
     var formaPago = 'EFECTIVO';
     var saving = false;
@@ -763,21 +780,44 @@ class _RepartidorVencimientosPageState
           builder: (contentContext, setState) {
             Future<void> submit() async {
               if (saving) return;
-              final amount = double.tryParse(
-                amountController.text.trim().replaceAll(',', '.'),
-              );
+              final amount = parseRuteroMoney(amountController.text);
               if (amount == null || amount <= 0) {
-                setState(() => errorText = 'Importe invalido');
+                setState(() => errorText = 'Importe inválido');
                 return;
               }
               if (amount > item.importePendiente) {
                 setState(() => errorText = 'Importe superior al pendiente');
                 return;
               }
+              final talonError = validateRuteroTalonFields(
+                paymentMethod: formaPago,
+                numeroTalon: numeroTalonController.text,
+                fechaVencimiento: fechaVencimientoController.text,
+                nombreBanco: bancoNombreController.text,
+                codigoEntidad: bancoCodigoController.text,
+              );
+              if (talonError != null) {
+                setState(() => errorText = talonError);
+                return;
+              }
+              final methodLabel = switch (formaPago) {
+                'TARJETA' => 'Tarjeta',
+                'BIZUM' => 'Bizum',
+                'TALON' => 'Talón',
+                _ => 'Efectivo',
+              };
+              final confirmed = await confirmRepartidorAction(
+                contentContext,
+                title: '¿Estás seguro de registrar este cobro?',
+                message:
+                    'Se cobrará ${amount.toStringAsFixed(2)} € con $methodLabel sobre ${item.documento}.',
+              );
+              if (!confirmed || !contentContext.mounted) return;
               setState(() {
                 saving = true;
                 errorText = null;
               });
+              final isTalon = isRuteroTalonPaymentMethod(formaPago);
               try {
                 final result = await service.registerVencimientoCobro(
                   repartidorId: repartidorId,
@@ -791,6 +831,14 @@ class _RepartidorVencimientosPageState
                   formaPago: formaPago,
                   idempotencyToken: idempotencyToken,
                   notas: notesController.text,
+                  numeroTalon:
+                      isTalon ? numeroTalonController.text.trim() : null,
+                  fechaVencimientoTalon:
+                      isTalon ? fechaVencimientoController.text.trim() : null,
+                  codigoEntidadBancaria:
+                      isTalon ? bancoCodigoController.text.trim() : null,
+                  nombreBanco:
+                      isTalon ? bancoNombreController.text.trim() : null,
                 );
                 if (result.isConfirmed) {
                   ref
@@ -804,10 +852,10 @@ class _RepartidorVencimientosPageState
                 Navigator.of(dialogContext).pop();
                 if (!rootContext.mounted) return;
                 final message = result.isConfirmed
-                    ? 'Abono registrado'
+                    ? 'Cobro registrado'
                     : result.requiresManualReview
-                        ? 'Abono pendiente de revision manual'
-                        : 'Abono pendiente de sincronizacion';
+                        ? 'Cobro pendiente de revisión manual'
+                        : 'Cobro pendiente de sincronización';
                 ScaffoldMessenger.of(rootContext).showSnackBar(
                   SnackBar(
                     content: Text(message),
@@ -824,7 +872,7 @@ class _RepartidorVencimientosPageState
                   saving = false;
                   errorText = financeErrorMessage(
                     error,
-                    'No se pudo registrar el abono',
+                    'No se pudo registrar el cobro',
                   );
                 });
                 try {
@@ -845,104 +893,202 @@ class _RepartidorVencimientosPageState
                     color: AppTheme.info.withValues(alpha: 0.28),
                   ),
                 ),
-                title: Text(
-                  'Abonar vencimiento',
-                  style: TextStyle(color: AppTheme.textPrimary),
+                title: Semantics(
+                  header: true,
+                  child: Text(
+                    'Cobrar documento',
+                    style: TextStyle(color: AppTheme.textPrimary),
+                  ),
                 ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.documento,
-                      style: TextStyle(color: AppTheme.textSecondary),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: amountController,
-                      enabled: !saving,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      style: TextStyle(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        labelText:
-                            'Importe (pendiente ${item.importePendiente.toStringAsFixed(2)} €)',
-                        prefixIcon: const Icon(Icons.euro),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: formaPago,
-                      dropdownColor: AppTheme.raisedSurface,
-                      style: TextStyle(color: AppTheme.textPrimary),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'EFECTIVO',
-                          child: Text('Efectivo'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'TARJETA',
-                          child: Text('Tarjeta'),
-                        ),
-                        DropdownMenuItem(value: 'BIZUM', child: Text('Bizum')),
-                        DropdownMenuItem(
-                          value: 'TALON',
-                          child: Text('Talón'),
-                        ),
-                        DropdownMenuItem(
-                            value: 'CHEQUE', child: Text('Cheque')),
-                      ],
-                      onChanged: saving
-                          ? null
-                          : (value) {
-                              if (value != null) {
-                                setState(() => formaPago = value);
-                              }
-                            },
-                      decoration: const InputDecoration(
-                        labelText: 'Forma de pago',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: notesController,
-                      enabled: !saving,
-                      maxLength: 60,
-                      minLines: 2,
-                      maxLines: 4,
-                      style: TextStyle(color: AppTheme.textPrimary),
-                      decoration: const InputDecoration(
-                        labelText: 'Observaciones (opcional)',
-                        prefixIcon: Icon(Icons.notes),
-                      ),
-                    ),
-                    if (errorText != null) ...[
-                      const SizedBox(height: 10),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        errorText!,
-                        style: const TextStyle(color: AppTheme.error),
+                        item.documento,
+                        style: TextStyle(color: AppTheme.textSecondary),
                       ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: amountController,
+                        enabled: !saving,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        style: TextStyle(color: AppTheme.textPrimary),
+                        decoration: InputDecoration(
+                          labelText:
+                              'Importe (pendiente ${item.importePendiente.toStringAsFixed(2)} €)',
+                          prefixIcon: const Icon(Icons.euro),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        key: const ValueKey('cobros-forma-pago'),
+                        initialValue: formaPago,
+                        dropdownColor: AppTheme.raisedSurface,
+                        style: TextStyle(color: AppTheme.textPrimary),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'EFECTIVO',
+                            child: Text('Efectivo'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'TARJETA',
+                            child: Text('Tarjeta'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'BIZUM',
+                            child: Text('Bizum'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'TALON',
+                            child: Text('Talón'),
+                          ),
+                        ],
+                        onChanged: saving
+                            ? null
+                            : (value) {
+                                if (value != null) {
+                                  setState(() => formaPago = value);
+                                }
+                              },
+                        decoration: const InputDecoration(
+                          labelText: 'Forma de pago',
+                        ),
+                      ),
+                      if (formaPago == 'TALON') ...[
+                        const SizedBox(height: 12),
+                        Semantics(
+                          label: 'Datos del talón: número, vencimiento y banco',
+                          child: Column(
+                            children: [
+                              TextField(
+                                key: const ValueKey('cobros-talon-numero'),
+                                controller: numeroTalonController,
+                                enabled: !saving,
+                                maxLength: 10,
+                                style: TextStyle(color: AppTheme.textPrimary),
+                                decoration: const InputDecoration(
+                                  labelText: 'Número de talón',
+                                  hintText: 'Ej: 123456',
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                key: const ValueKey('cobros-talon-vencimiento'),
+                                controller: fechaVencimientoController,
+                                enabled: !saving,
+                                readOnly: true,
+                                onTap: saving
+                                    ? null
+                                    : () async {
+                                        final now = DateTime.now();
+                                        final picked = await showDatePicker(
+                                          context: contentContext,
+                                          initialDate: now,
+                                          firstDate: now.subtract(
+                                            const Duration(days: 1),
+                                          ),
+                                          lastDate: now.add(
+                                            const Duration(days: 365 * 3),
+                                          ),
+                                        );
+                                        if (picked == null) return;
+                                        fechaVencimientoController.text =
+                                            '${picked.year.toString().padLeft(4, '0')}-'
+                                            '${picked.month.toString().padLeft(2, '0')}-'
+                                            '${picked.day.toString().padLeft(2, '0')}';
+                                      },
+                                style: TextStyle(color: AppTheme.textPrimary),
+                                decoration: const InputDecoration(
+                                  labelText: 'Fecha de vencimiento',
+                                  hintText: 'AAAA-MM-DD',
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: bancoCodigoController,
+                                enabled: !saving,
+                                maxLength: 4,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(4),
+                                ],
+                                style: TextStyle(color: AppTheme.textPrimary),
+                                decoration: const InputDecoration(
+                                  labelText: 'Código de entidad (ENB)',
+                                  hintText: 'Ej: 0049',
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                key: const ValueKey('cobros-talon-banco'),
+                                controller: bancoNombreController,
+                                enabled: !saving,
+                                maxLength: 40,
+                                textCapitalization:
+                                    TextCapitalization.characters,
+                                style: TextStyle(color: AppTheme.textPrimary),
+                                decoration: const InputDecoration(
+                                  labelText: 'Nombre del banco',
+                                  hintText: 'Ej: SANTANDER',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: notesController,
+                        enabled: !saving,
+                        maxLength: 60,
+                        minLines: 2,
+                        maxLines: 4,
+                        style: TextStyle(color: AppTheme.textPrimary),
+                        decoration: const InputDecoration(
+                          labelText: 'Observaciones (opcional)',
+                          prefixIcon: Icon(Icons.notes),
+                        ),
+                      ),
+                      if (errorText != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          errorText!,
+                          style: const TextStyle(color: AppTheme.error),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
                 actions: [
-                  TextButton(
-                    onPressed: saving
-                        ? null
-                        : () => Navigator.of(contentContext).pop(),
-                    child: const Text('Cancelar'),
+                  Semantics(
+                    button: true,
+                    label: 'Cancelar',
+                    child: TextButton(
+                      onPressed: saving
+                          ? null
+                          : () => Navigator.of(contentContext).pop(),
+                      child: const Text('Cancelar'),
+                    ),
                   ),
-                  ElevatedButton.icon(
-                    onPressed: saving ? null : submit,
-                    icon: saving
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.payments),
-                    label: const Text('Abonar'),
+                  Semantics(
+                    button: true,
+                    label: 'Registrar cobro',
+                    child: ElevatedButton.icon(
+                      onPressed: saving ? null : submit,
+                      icon: saving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.payments),
+                      label: const Text('Cobrar'),
+                    ),
                   ),
                 ],
               ),
@@ -953,6 +1099,10 @@ class _RepartidorVencimientosPageState
     ).whenComplete(() {
       amountController.dispose();
       notesController.dispose();
+      numeroTalonController.dispose();
+      fechaVencimientoController.dispose();
+      bancoCodigoController.dispose();
+      bancoNombreController.dispose();
     });
   }
 }

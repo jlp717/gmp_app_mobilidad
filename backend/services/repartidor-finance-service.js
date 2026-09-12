@@ -20,6 +20,7 @@ const {
   publicLiquidacionRecipientPlan,
 } = require('./staff-email-directory-service');
 const { assertTalonPayment } = require('./reparto-bank-catalog');
+const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { resolveDocumentCollectable } = require('./delivery-cobro-availability');
 const { resolveDeliveryAmount } = require('./delivery-amount-resolver');
@@ -374,13 +375,17 @@ function isoDateToCompact(dateString) {
 }
 
 function buildDocument(row) {
-  const year = toInt(value(row, 'EJERCICIODOCUMENTO') || value(row, 'EJERCICIO_DOCUMENTO'));
-  const origin = String(value(row, 'ORIGENDOCUMENTO', 'B') || 'B').trim() || 'B';
   const serie = String(value(row, 'SERIEDOCUMENTO') || value(row, 'SERIE_DOCUMENTO') || '').trim();
   const terminal = toInt(value(row, 'TERMINALDOCUMENTO') || value(row, 'TERMINAL_DOCUMENTO'));
   const numero = toInt(value(row, 'NUMERODOCUMENTO') || value(row, 'NUMERO_DOCUMENTO'));
-  const xde = toInt(value(row, 'XDEDOCUMENTO') || value(row, 'XDE_DOCUMENTO') || 1);
+  const visible = serie && numero
+    ? formatErpDocumentLabel({ serie, terminal, numero })
+    : '';
+  if (visible) return visible;
 
+  const year = toInt(value(row, 'EJERCICIODOCUMENTO') || value(row, 'EJERCICIO_DOCUMENTO'));
+  const origin = String(value(row, 'ORIGENDOCUMENTO', 'B') || 'B').trim() || 'B';
+  const xde = toInt(value(row, 'XDEDOCUMENTO') || value(row, 'XDE_DOCUMENTO') || 1);
   if (!year || !numero) return String(value(row, 'DOCUMENTO', '') || '').trim();
   return `E ${year}-${origin}-${serie}-${pad(terminal, 3)}-${pad(numero, 6)}-${pad(xde, 2)}`;
 }

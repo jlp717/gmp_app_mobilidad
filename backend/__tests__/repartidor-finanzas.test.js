@@ -240,7 +240,7 @@ describe('Repartidor finanzas routes', () => {
     expect(res.body.summary.totalEfectivo).toBe(222.79);
     expect(res.body.summary.saldoActual).toBe(4.81);
     expect(res.body.summary.totalAIngresar).toBe(227.6);
-    expect(res.body.cobros[0].documento).toBe('E 2026-B-S-010-000404-01');
+    expect(res.body.cobros[0].documento).toBe('S-10-404');
     const sqlText = mockQueryWithParams.mock.calls.map(([sql]) => sql).join('\n');
     expect(sqlText).not.toContain('LIQUIDADO_SN');
     expect(sqlText).toContain('COALESCE(NUMEROLIQUIDACION, 0) = 0');
@@ -616,7 +616,7 @@ describe('Repartidor finanzas routes', () => {
       nombreAlternativo: 'MECA MONTALBAN RAMON',
       poblacion: 'LORCA',
       fechaVencimiento: '2026-04-23',
-      documento: 'E 2026-B-I-010-002730-01',
+      documento: 'I-10-2730',
       tipoDocumento: 'CAC',
       importePendiente: 40,
     });

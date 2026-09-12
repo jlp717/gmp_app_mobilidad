@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/erp_document_label.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/offline_state_widget.dart';
@@ -26,6 +27,7 @@ import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_confirm_dialog.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -48,6 +50,35 @@ String _sanitizedDocumentActionError(
     };
   }
   return fallback;
+}
+
+@visibleForTesting
+String repartidorHistoryAlbaranLabel({
+  required String serie,
+  required int terminal,
+  required Object numero,
+}) {
+  return formatErpDocumentLabel(
+    serie: serie,
+    terminal: terminal,
+    numero: numero,
+  );
+}
+
+@visibleForTesting
+String repartidorHistoryFacturaLabel({
+  required String serie,
+  String? serieFactura,
+  required int terminal,
+  required Object numero,
+}) {
+  final facturaSerie =
+      (serieFactura ?? '').trim().isNotEmpty ? serieFactura!.trim() : serie;
+  return formatErpDocumentLabel(
+    serie: facturaSerie,
+    terminal: terminal,
+    numero: numero,
+  );
 }
 
 typedef RepartidorHistoryClientsLoader = Future<List<HistoryClient>> Function({
@@ -655,6 +686,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       doc.serie,
       doc.ejercicio.toString(),
       doc.terminal.toString(),
+      doc.albaranLabel,
+      doc.facturaLabel,
+      doc.visibleDocumentLabel,
       doc.preparationOrderNumber?.toString() ?? '',
       doc.preparationOrderYear?.toString() ?? '',
       if (doc.type == _DocType.factura) 'factura' else 'albaran',
@@ -2062,8 +2096,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
                     isFactura &&
                             doc.facturaNumber != null &&
                             doc.facturaNumber! > 0
-                        ? 'F-${doc.facturaNumber}'
-                        : '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
+                        ? doc.facturaLabel
+                        : doc.albaranLabel,
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
@@ -2074,7 +2108,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
                 ),
                 if (isFactura && doc.albaranNumber != null)
                   Text(
-                    '  (Alb: ${doc.serie}-${doc.terminal}-${doc.albaranNumber})',
+                    '  (Alb: ${doc.albaranLabel})',
                     style: TextStyle(
                       fontSize: 9,
                       color: AppTheme.textSecondary.withValues(alpha: 0.6),
@@ -2335,9 +2369,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isFactura && doc.facturaNumber != null
-                                    ? 'Factura F-${doc.facturaNumber} (Alb: ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number})'
-                                    : 'Albarán ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
+                                doc.visibleDocumentTitle,
                                 style: TextStyle(
                                   fontSize: 17,
                                   fontWeight: FontWeight.bold,
@@ -2714,51 +2746,55 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
     required VoidCallback onTap,
     String? subtitle,
   }) {
-    return RepartidorExecutivePanel(
-      accentColor: color,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-      padding: EdgeInsets.zero,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
+    return Semantics(
+      button: true,
+      label: subtitle == null ? label : '$label. $subtitle',
+      child: RepartidorExecutivePanel(
+        accentColor: color,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+        padding: EdgeInsets.zero,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 20),
               ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  if (subtitle != null)
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      subtitle,
+                      label,
                       style: TextStyle(
-                        fontSize: 11,
-                        color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                        fontSize: 15,
+                        color: AppTheme.textPrimary,
                       ),
                     ),
-                ],
+                    if (subtitle != null)
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            Icon(
-              Icons.chevron_right,
-              color: AppTheme.textSecondary.withValues(alpha: 0.5),
-            ),
-          ],
+              Icon(
+                Icons.chevron_right,
+                color: AppTheme.textSecondary.withValues(alpha: 0.5),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2816,8 +2852,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       final pdfBytes = Uint8List.fromList(bytes);
       final safeClientName =
           _selectedClientName?.replaceAll(RegExp(r'[^\w\s]+'), '') ?? 'Cliente';
-      final docRef =
-          '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}';
+      final docRef = doc.albaranLabel;
       unawaited(
         Navigator.push(
           context,
@@ -2904,7 +2939,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       // Use client name in filename if available, otherwise just number
       final safeClientName =
           _selectedClientName?.replaceAll(RegExp(r'[^\w\s]+'), '') ?? 'Cliente';
-      final docRef = '${doc.serie}-${doc.terminal}-${doc.number}';
+      final docRef = doc.visibleDocumentLabel;
       final fileName = '${typeLabel}_${docRef}_$safeClientName.pdf';
 
       unawaited(
@@ -2913,7 +2948,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
           MaterialPageRoute(
             builder: (_) => PdfPreviewScreen(
               pdfBytes: pdfBytes,
-              title: '$typeLabel ${doc.serie}-${doc.terminal}-${doc.number}',
+              title: '$typeLabel ${doc.visibleDocumentLabel}',
               fileName: fileName,
               onEmailTap: widget.canEmailDocuments
                   ? () {
@@ -2963,7 +2998,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
 
       final tempDir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final docRef = '${doc.serie}-${doc.terminal}-${doc.number}';
+      final docRef = doc.visibleDocumentLabel;
       final fileName = '${typeLabel}_${docRef}_$timestamp.pdf';
 
       final file = File('${tempDir.path}/$fileName');
@@ -2986,7 +3021,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       // Use Share to "Save to..."
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Guardar $typeLabel ${doc.serie}-${doc.terminal}-${doc.number}',
+        text: 'Guardar $typeLabel ${doc.visibleDocumentLabel}',
         sharePositionOrigin: origin,
       );
     } catch (e) {
@@ -3073,6 +3108,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       );
       return;
     }
+    final confirmed = await confirmRepartidorAction(
+      context,
+      title: '¿Estás seguro de enviar el email?',
+      message:
+          'Se enviará ${doc.visibleDocumentTitle} a $email, con copia a Carlos, Javier y al repartidor.',
+    );
+    if (!confirmed || !mounted) return;
     final isFactura = doc.type == _DocType.factura;
     final modal = AsyncOperationModal.show(context, text: 'Enviando email...');
     try {
@@ -3136,10 +3178,20 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
     if (email == null || email.isEmpty || !mounted) return;
     if (!isValidRepartoReceiptEmailAddress(email)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid email address.')),
+        const SnackBar(
+          content: Text('Email inválido'),
+          backgroundColor: AppTheme.error,
+        ),
       );
       return;
     }
+    final confirmed = await confirmRepartidorAction(
+      context,
+      title: '¿Estás seguro de enviar el email?',
+      message:
+          'Se enviará la nota de entrega ${doc.albaranLabel} a $email, con copia a Carlos, Javier y al repartidor.',
+    );
+    if (!confirmed || !mounted) return;
     final modal = AsyncOperationModal.show(context, text: 'Enviando nota...');
     try {
       await RepartidorDataService.emailDeliveryNote(
@@ -3239,8 +3291,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       }
       final isFactura = doc.type == _DocType.factura;
       final title = isFactura && (doc.facturaNumber ?? 0) > 0
-          ? 'FACTURA F-${doc.facturaNumber}'
-          : 'ALBARAN ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}';
+          ? 'FACTURA ${doc.facturaLabel}'
+          : 'ALBARAN ${doc.albaranLabel}';
       final zpl = ZebraPrintService.generateHistoryDeliveryZpl(
         title: title,
         clientName: _selectedClientName ?? '',
@@ -3360,8 +3412,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       );
       modal.close();
       final tempDir = await getTemporaryDirectory();
-      final docRef =
-          '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}';
+      final docRef = doc.albaranLabel;
       final fileName =
           'Nota_entrega_${docRef}_${DateTime.now().millisecondsSinceEpoch}.pdf';
       final file = File('${tempDir.path}/$fileName');
@@ -3580,8 +3631,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       return;
     }
     final clientName = _selectedClientName ?? 'Cliente';
-    final docRef =
-        '${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}';
+    final docRef = doc.albaranLabel;
     final result = await WhatsAppFormModal.show(
       context,
       defaultMessage:
@@ -3697,7 +3747,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       final tempDir = await getTemporaryDirectory();
       final typeLabel = isFactura ? 'Factura' : 'Albaran';
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final docRef = '${doc.serie}-${doc.terminal}-${doc.number}';
+      final docRef = doc.visibleDocumentLabel;
       final fileName = '${typeLabel}_${docRef}_$timestamp.pdf';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(bytes);
@@ -4001,6 +4051,29 @@ class _DocumentItem {
 
   bool get hasAppCobro =>
       cobrado && (importeCobrado != null && importeCobrado! > 0.004);
+
+  String get albaranLabel => repartidorHistoryAlbaranLabel(
+        serie: serie,
+        terminal: terminal,
+        numero: albaranNumber ?? number,
+      );
+
+  String get facturaLabel => repartidorHistoryFacturaLabel(
+        serie: serie,
+        serieFactura: serieFactura,
+        terminal: terminal,
+        numero: facturaNumber ?? number,
+      );
+
+  String get visibleDocumentLabel =>
+      type == _DocType.factura && (facturaNumber ?? 0) > 0
+          ? facturaLabel
+          : albaranLabel;
+
+  String get visibleDocumentTitle =>
+      type == _DocType.factura && (facturaNumber ?? 0) > 0
+          ? 'Factura $facturaLabel (Alb: $albaranLabel)'
+          : 'Albarán $albaranLabel';
 
   String? get cobroBadgeLabel {
     if (!hasAppCobro) return null;

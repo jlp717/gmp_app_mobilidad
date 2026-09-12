@@ -796,6 +796,10 @@ class RepartidorFinanzasService {
     required String formaPago,
     required String idempotencyToken,
     String? notas,
+    String? numeroTalon,
+    String? fechaVencimientoTalon,
+    String? codigoEntidadBancaria,
+    String? nombreBanco,
   }) async {
     final payload = _buildVencimientoCobroPayload(
       repartidorId: repartidorId,
@@ -809,6 +813,10 @@ class RepartidorFinanzasService {
       formaPago: formaPago,
       idempotencyToken: idempotencyToken,
       notas: notas,
+      numeroTalon: numeroTalon,
+      fechaVencimientoTalon: fechaVencimientoTalon,
+      codigoEntidadBancaria: codigoEntidadBancaria,
+      nombreBanco: nombreBanco,
     );
     final obligationKey = _vencimientoObligationKey(payload);
     final existing = findPendingVencimientoCobro(
@@ -887,6 +895,10 @@ class RepartidorFinanzasService {
     required String formaPago,
     required String idempotencyToken,
     String? notas,
+    String? numeroTalon,
+    String? fechaVencimientoTalon,
+    String? codigoEntidadBancaria,
+    String? nombreBanco,
   }) {
     String keyString(String key, [String fallback = '']) {
       final value = keys[key];
@@ -919,6 +931,14 @@ class RepartidorFinanzasService {
       'pantallaOrigen': 'VENCIMIENTOS',
       'idempotencyToken': idempotencyToken,
       'notas': notas?.trim().isEmpty ?? true ? null : notas!.trim(),
+      if ((numeroTalon ?? '').trim().isNotEmpty)
+        'numeroTalon': numeroTalon!.trim(),
+      if ((fechaVencimientoTalon ?? '').trim().isNotEmpty)
+        'fechaVencimientoTalon': fechaVencimientoTalon!.trim(),
+      if ((codigoEntidadBancaria ?? '').trim().isNotEmpty)
+        'codigoEntidadBancaria': codigoEntidadBancaria!.trim(),
+      if ((nombreBanco ?? '').trim().isNotEmpty)
+        'nombreBanco': nombreBanco!.trim(),
     };
   }
 

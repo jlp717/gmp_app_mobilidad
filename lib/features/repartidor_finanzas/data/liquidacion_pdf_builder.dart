@@ -141,7 +141,7 @@ class LiquidacionPdfBuilder {
                       summary.totalEfectivo,
                       green: true,
                     ),
-                    _treasuryRow('Total cheques', summary.totalCheques),
+                    _treasuryRow('Total talones', summary.totalCheques),
                     _treasuryRow('Total tarjeta', summary.totalTarjeta),
                     _treasuryRow('Total postdatados', summary.totalPostdatados),
                     _treasuryRow(
