@@ -867,13 +867,11 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
     const scopedClient = await assertClientInVendorScope(safeClientCode, vendedorCodes);
     if (!scopedClient.ok) return res.status(scopedClient.status).json(scopedClient.body);
 
-    // Historial del cliente (R1/CLP). LINDTO.CODIGOVENDEDOR es LCCDVD (quien vendio), no el titular.
+    // Historial del cliente (R1/CLP). DSED.LACLAE es el ledger comercial; LINDTO no tiene lineas de este cliente.
     const whereParts = [
-      'L.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10))',
-      'L.ANODOCUMENTO >= ?',
-      "L.TIPOVENTA IN ('CC', 'VC')",
-      "L.TIPOLINEA IN ('AB', 'VT')",
-      "L.SERIEALBARAN NOT IN ('N', 'Z')",
+      'TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10))',
+      'L.LCAADC >= ?',
+      LACLAE_SALES_FILTER,
     ];
     const params = [safeClientCode, MIN_YEAR];
 
@@ -891,17 +889,17 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
     }
 
     const products = await queryWithParams(`
-      SELECT L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
-        L.CODIGOARTICULO as productCode,
-        COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION), 'Sin descripción') as productName,
-        SUM(L.CANTIDADENVASES) as boxes, SUM(L.CANTIDADUNIDADES) as units,
-        SUM(L.IMPORTEVENTA) as amount, SUM(L.IMPORTEMARGENREAL) as margin,
-        L.CODIGOVENDEDOR as vendedor
-      FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+      SELECT L.LCAADC as year, L.LCMMDC as month, L.LCDDDC as day,
+        TRIM(L.LCCDRF) as productCode,
+        COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.LCCDRF), 'Sin descripción') as productName,
+        SUM(L.LCCTEV) as boxes, SUM(L.LCCTUD) as units,
+        SUM(L.LCIMVT) as amount, SUM(L.LCIMVT - L.LCIMCT) as margin,
+        TRIM(L.LCCDVD) as vendedor
+      FROM DSED.LACLAE L
+      LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
       WHERE ${whereParts.join(' AND ')}
-      GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO, L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, L.CODIGOVENDEDOR
-      ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
+      GROUP BY L.LCAADC, L.LCMMDC, L.LCDDDC, L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCCDVD
+      ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
       ${db2OffsetFetch(page)}
     `, params, false);
 
@@ -952,20 +950,19 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
     let hasMore = false;
 
     if (familyLevel === 0) {
-      // Historial del cliente (R1/CLP). LINDTO.CODIGOVENDEDOR es LCCDVD (quien vendio), no el titular.
+      // Historial del cliente (R1/CLP) desde DSED.LACLAE. LCCDVD es quien vendio, no el titular.
       sales = await queryWithParams(`
-        SELECT ANODOCUMENTO as year, MESDOCUMENTO as month, DIADOCUMENTO as day,
-    CODIGOARTICULO as productCode,
-    COALESCE(DESCRIPCION, 'Sin descripción') as productName,
-    CANTIDADENVASES as boxes, CANTIDADUNIDADES as units,
-    IMPORTEVENTA as amount, IMPORTEMARGENREAL as margin,
-    CODIGOVENDEDOR as vendedor
-        FROM DSEDAC.LINDTO
-        WHERE CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10)) AND ANODOCUMENTO >= ?
-          AND TIPOVENTA IN ('CC', 'VC')
-          AND TIPOLINEA IN ('AB', 'VT')
-          AND SERIEALBARAN NOT IN ('N', 'Z')
-        ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
+        SELECT L.LCAADC as year, L.LCMMDC as month, L.LCDDDC as day,
+    TRIM(L.LCCDRF) as productCode,
+    COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.LCCDRF), 'Sin descripción') as productName,
+    L.LCCTEV as boxes, L.LCCTUD as units,
+    L.LCIMVT as amount, (L.LCIMVT - L.LCIMCT) as margin,
+    TRIM(L.LCCDVD) as vendedor
+        FROM DSED.LACLAE L
+        LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+        WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
+          AND ${LACLAE_SALES_FILTER}
+        ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
         ${db2OffsetFetch(page)}
       `, [safeClientCode, MIN_YEAR], false);
       hasMore = sales.length === safeLimit;
@@ -1011,17 +1008,15 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
 
       sales = await queryWithParams(`
         SELECT ${familySelects.join(', ')},
-          SUM(CANTIDADENVASES) as boxes,
-          SUM(CANTIDADUNIDADES) as units,
-          SUM(IMPORTEVENTA) as amount,
-          SUM(IMPORTEMARGENREAL) as margin,
-          COUNT(DISTINCT CODIGOARTICULO) as productCount
-        FROM DSEDAC.LINDTO L
-        LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-        WHERE L.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10)) AND L.ANODOCUMENTO >= ?
-          AND L.TIPOVENTA IN ('CC', 'VC')
-          AND L.TIPOLINEA IN ('AB', 'VT')
-          AND L.SERIEALBARAN NOT IN ('N', 'Z')
+          SUM(L.LCCTEV) as boxes,
+          SUM(L.LCCTUD) as units,
+          SUM(L.LCIMVT) as amount,
+          SUM(L.LCIMVT - L.LCIMCT) as margin,
+          COUNT(DISTINCT L.LCCDRF) as productCount
+        FROM DSED.LACLAE L
+        LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+        WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
+          AND ${LACLAE_SALES_FILTER}
         GROUP BY ${groupByClause}
         ORDER BY amount DESC
         ${db2OffsetFetch(page)}
