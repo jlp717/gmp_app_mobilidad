@@ -62,6 +62,30 @@ function resolveClientsVendedorCodes(req, requested) {
   return { ok: true, vendedorCodes: codes.join(',') };
 }
 
+async function assertClientInVendorScope(safeClientCode, vendedorCodes) {
+  const scopeFilter = buildClientVendorParamFilter(vendorCodeArrayForClientScope(vendedorCodes), 'C');
+  if (!scopeFilter.clause) return { ok: true };
+  const scopeRows = await queryWithParams(`
+    SELECT 1 AS OK
+    FROM DSEDAC.CLI C
+    WHERE C.CODIGOCLIENTE = ?
+      ${scopeFilter.clause}
+    FETCH FIRST 1 ROW ONLY
+  `, [safeClientCode, ...scopeFilter.params], false);
+  if (scopeRows.length === 0) {
+    return {
+      ok: false,
+      status: 403,
+      body: {
+        success: false,
+        code: 'FORBIDDEN_CLIENT',
+        error: 'Cliente fuera de alcance del vendedor',
+      },
+    };
+  }
+  return { ok: true };
+}
+
 function boundedInt(value, min, max, fallback) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return fallback;
@@ -840,8 +864,10 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
     const level = [1, 2, 3, 13].includes(parsedLevel) ? parsedLevel : 1;
     const page = parsePage({ limit }, { defaultLimit: 100, maxLimit: 300 });
     const safeLimit = page.limit;
-    const vendedorFilter = buildVendedorParamFilter(vendedorCodes, 'L.CODIGOVENDEDOR');
+    const scopedClient = await assertClientInVendorScope(safeClientCode, vendedorCodes);
+    if (!scopedClient.ok) return res.status(scopedClient.status).json(scopedClient.body);
 
+    // Historial del cliente (R1/CLP). LINDTO.CODIGOVENDEDOR es LCCDVD (quien vendio), no el titular.
     const whereParts = [
       'L.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10))',
       'L.ANODOCUMENTO >= ?',
@@ -849,8 +875,7 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
       "L.TIPOLINEA IN ('AB', 'VT')",
       "L.SERIEALBARAN NOT IN ('N', 'Z')",
     ];
-    const params = [safeClientCode, MIN_YEAR, ...vendedorFilter.params];
-    if (vendedorFilter.clause) whereParts.push(vendedorFilter.clause.replace(/^AND\s+/i, ''));
+    const params = [safeClientCode, MIN_YEAR];
 
     if (level === 1 || level === 13) {
       whereParts.push('TRIM(A.CODIGOFAMILIA) = ?');
@@ -920,13 +945,14 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
     const page = parsePage({ limit, offset }, { defaultLimit: 50, maxLimit: 300, maxOffset: 100000 });
     const safeLimit = page.limit;
     const safeOffset = page.offset;
-    const vendedorFilter = buildVendedorParamFilter(vendedorCodes, 'CODIGOVENDEDOR');
+    const scopedClient = await assertClientInVendorScope(safeClientCode, vendedorCodes);
+    if (!scopedClient.ok) return res.status(scopedClient.status).json(scopedClient.body);
 
     let sales;
     let hasMore = false;
 
     if (familyLevel === 0) {
-      // No grouping - return individual products
+      // Historial del cliente (R1/CLP). LINDTO.CODIGOVENDEDOR es LCCDVD (quien vendio), no el titular.
       sales = await queryWithParams(`
         SELECT ANODOCUMENTO as year, MESDOCUMENTO as month, DIADOCUMENTO as day,
     CODIGOARTICULO as productCode,
@@ -939,10 +965,9 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
           AND TIPOVENTA IN ('CC', 'VC')
           AND TIPOLINEA IN ('AB', 'VT')
           AND SERIEALBARAN NOT IN ('N', 'Z')
-          ${vendedorFilter.clause}
         ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
         ${db2OffsetFetch(page)}
-      `, [safeClientCode, MIN_YEAR, ...vendedorFilter.params], false);
+      `, [safeClientCode, MIN_YEAR], false);
       hasMore = sales.length === safeLimit;
 
       res.json({
@@ -984,7 +1009,6 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
 
       const groupByClause = familyGroupBy.join(', ');
 
-      const groupedVendorFilter = buildVendedorParamFilter(vendedorCodes, 'L.CODIGOVENDEDOR');
       sales = await queryWithParams(`
         SELECT ${familySelects.join(', ')},
           SUM(CANTIDADENVASES) as boxes,
@@ -998,11 +1022,10 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
           AND L.TIPOVENTA IN ('CC', 'VC')
           AND L.TIPOLINEA IN ('AB', 'VT')
           AND L.SERIEALBARAN NOT IN ('N', 'Z')
-          ${groupedVendorFilter.clause}
         GROUP BY ${groupByClause}
         ORDER BY amount DESC
         ${db2OffsetFetch(page)}
-      `, [safeClientCode, MIN_YEAR, ...groupedVendorFilter.params], false);
+      `, [safeClientCode, MIN_YEAR], false);
 
       res.json({
         history: sales.map(s => {

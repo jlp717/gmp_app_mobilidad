@@ -158,18 +158,71 @@ describe('clients route regression contracts', () => {
   });
 
   test('GET /api/clients/:code/sales-history/family does not query invalid DSEDAC.ART.DESCRIPCION', async () => {
-    mockQueryWithParams.mockResolvedValue([]);
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/SELECT\s+1\s+AS\s+OK/i.test(sql)) return [{ OK: 1 }];
+      return [];
+    });
 
     const res = await request(makeApp())
       .get('/api/clients/C001/sales-history/family?vendedorCodes=01&family1=01&groupLevel=1');
 
     expect(res.status).toBe(200);
-    const familySql = mockQueryWithParams.mock.calls[0][0];
-    const familyParams = mockQueryWithParams.mock.calls[0][1];
-    expect(familySql).toMatch(/LEFT\s+JOIN\s+DSEDAC\.ART\s+A/i);
+    const familyCall = mockQueryWithParams.mock.calls.find((call) => /LEFT\s+JOIN\s+DSEDAC\.ART\s+A/i.test(call[0]));
+    expect(familyCall).toBeTruthy();
+    const familySql = familyCall[0];
+    const familyParams = familyCall[1];
     expect(familySql).toMatch(/DESCRIPCIONARTICULO|L\.DESCRIPCION/i);
     expect(familySql).not.toMatch(/\bA\.DESCRIPCION\b/i);
-    expect(familySql).toMatch(/L\.CODIGOCLIENTEALBARAN\s*=\s*\?/i);
-    expect(familyParams).toEqual(expect.arrayContaining(['C001', '01']));
+    expect(familySql).toMatch(/CAST\(\?\s+AS\s+CHAR\(10\)\)/i);
+    expect(familySql).not.toMatch(/CODIGOVENDEDOR\s*=/i);
+    expect(familyParams[0]).toBe('C001');
+    expect(familyParams[1]).toEqual(expect.any(Number));
+    expect(familyParams[2]).toBe('01');
+  });
+
+  test('GET /api/clients/:code/sales-history scopes client via portfolio then reads LINDTO without seller filter', async () => {
+    mockUser = { code: '80', role: 'COMERCIAL' };
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/SELECT\s+1\s+AS\s+OK/i.test(sql)) return [{ OK: 1 }];
+      return [{
+        YEAR: 2026,
+        MONTH: 8,
+        DAY: 1,
+        PRODUCTCODE: 'ART1',
+        PRODUCTNAME: 'Producto',
+        BOXES: 1,
+        UNITS: 12,
+        AMOUNT: 100,
+        MARGIN: 20,
+        VENDEDOR: '72',
+      }];
+    });
+
+    const res = await request(makeApp()).get('/api/clients/4300030056/sales-history?vendedorCodes=80&limit=20');
+
+    expect(res.status).toBe(200);
+    expect(res.body.history).toHaveLength(1);
+    expect(res.body.history[0].vendedor).toBe('72');
+    const [scopeSql, scopeParams] = mockQueryWithParams.mock.calls[0];
+    expect(scopeSql).toMatch(/SELECT\s+1\s+AS\s+OK/i);
+    expect(scopeParams[0]).toBe('4300030056');
+    expect(scopeParams).toEqual(expect.arrayContaining(['80']));
+    const historyCall = mockQueryWithParams.mock.calls.find((call) => (
+      /FROM\s+DSEDAC\.LINDTO/i.test(call[0]) && !/LEFT\s+JOIN/i.test(call[0])
+    ));
+    expect(historyCall).toBeTruthy();
+    expect(historyCall[0]).toMatch(/CAST\(\?\s+AS\s+CHAR\(10\)\)/i);
+    expect(historyCall[0]).not.toMatch(/CODIGOVENDEDOR\s*=/i);
+    expect(historyCall[1][0]).toBe('4300030056');
+    expect(historyCall[1]).not.toEqual(expect.arrayContaining(['80']));
+  });
+
+  test('GET /api/clients/:code/sales-history rejects COMERCIAL out-of-scope client', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([]);
+    const res = await request(makeApp()).get('/api/clients/C999/sales-history?vendedorCodes=01');
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_CLIENT' });
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+    expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/SELECT\s+1\s+AS\s+OK/i);
   });
 });
