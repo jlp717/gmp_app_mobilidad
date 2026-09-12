@@ -142,8 +142,8 @@ async function main() {
 
     try {
       const hist = await queryWithParams(
-        `SELECT TRIM(LCSRAB) AS SERIE, LCNRLA AS NUMERO, TRIM(LCCDCL) AS CLIENTE,
-                TRIM(R1_T8CDVD) AS VD, LCIECC AS IMP_CC
+        `SELECT TRIM(LCSRAB) AS SERIE, LCNRAB AS NUMERO, TRIM(LCCDCL) AS CLIENTE,
+                TRIM(R1_T8CDVD) AS VD, LCIMVT AS IMP
            FROM DSED.LACLAE
           WHERE LCSRAB = CAST(? AS CHAR(1))
           FETCH FIRST 3 ROWS ONLY`,
@@ -239,29 +239,56 @@ async function main() {
     }
 
     const pgDocs = await api('GET', `/comercial-liquidacion/ya-cobrados-pg?vendedor=${VENDOR}`, { token });
-    if (pgDocs.status === 200 && Array.isArray(pgDocs.body?.documents)) {
-      rows.push(record(
-        'GET ya-cobrados-pg',
-        true,
-        `status=200 count=${pgDocs.body.documents.length} impacto=${pgDocs.body.impactoLqd || '-'}`,
-      ));
-    } else {
+    let pgHit = {
+      status: pgDocs.status,
+      count: Array.isArray(pgDocs.body?.documents) ? pgDocs.body.documents.length : 0,
+      vendor: VENDOR,
+    };
+    if (pgHit.status === 200 && pgHit.count === 0) {
       try {
-        const { listPgCollectedDocuments } = require('../services/comercial-devoluciones-service');
-        const sqlDocs = await listPgCollectedDocuments({ vendorCodes: [VENDOR], limit: 5 });
-        rows.push(record(
-          'GET ya-cobrados-pg',
-          Array.isArray(sqlDocs),
-          `api=${pgDocs.status} sqlCount=${sqlDocs.length} (API pendiente deploy whitelist)`,
-        ));
+        const samplePg = await queryWithParams(
+          `SELECT TRIM(COALESCE(NULLIF(TRIM(CVC.CODIGOCLIENTEFACTURA), ''), CVC.CODIGOCLIENTEALBARAN)) AS CLIENTE,
+                  TRIM(CVC.CODIGOVENDEDORCOBRO) AS VD
+             FROM DSEDAC.CVC CVC
+             LEFT JOIN DSEDAC.FPG FPG
+               ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(CVC.CODIGOFORMAPAGO)
+            WHERE CVC.IMPORTEPENDIENTE = 0
+              AND CVC.IMPORTEVENCIMIENTO > 0
+              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+              AND TRIM(CVC.TIPODOCUMENTO) <> CAST(? AS VARCHAR(3))
+              AND TRIM(COALESCE(CVC.CODIGOVENDEDORCOBRO, '')) <> ''
+              AND (
+                   UPPER(TRIM(COALESCE(FPG.PAGARESN, ''))) = CAST(? AS VARCHAR(1))
+                OR UPPER(TRIM(CVC.CODIGOFORMAPAGO)) = CAST(? AS VARCHAR(2))
+              )
+            FETCH FIRST 1 ROW ONLY`,
+          ['DEV', 'S', 'PG'],
+        );
+        const pgVendor = String(samplePg?.[0]?.VD || '').trim();
+        const pgPin = pgVendor ? await pinForVendor(pgVendor) : '';
+        if (pgPin) {
+          const pgLogin = await api('POST', '/auth/login', {
+            body: { username: pgVendor, password: pgPin },
+          });
+          const pgToken = pgLogin.body?.token;
+          if (pgToken) {
+            const otherPg = await api('GET', `/comercial-liquidacion/ya-cobrados-pg?vendedor=${pgVendor}`, { token: pgToken });
+            pgHit = {
+              status: otherPg.status,
+              count: Array.isArray(otherPg.body?.documents) ? otherPg.body.documents.length : 0,
+              vendor: pgVendor,
+            };
+          }
+        }
       } catch (error) {
-        rows.push(record(
-          'GET ya-cobrados-pg',
-          false,
-          `api=${pgDocs.status} sql=${String(error.message || error).slice(0, 80)}`,
-        ));
+        pgHit = { ...pgHit, error: String(error.message || error).slice(0, 80) };
       }
     }
+    rows.push(record(
+      'GET ya-cobrados-pg',
+      pgHit.status === 200 && pgHit.count > 0,
+      `status=${pgHit.status} count=${pgHit.count} vendor=${pgHit.vendor}${pgHit.error ? ` err=${pgHit.error}` : ''}`,
+    ));
 
     const summaryPend = await api('GET', `/cobros/pending-summary/${VENDOR}?limit=5&page=1`, { token });
     const summaryMap = summaryPend.body?.summary || {};
