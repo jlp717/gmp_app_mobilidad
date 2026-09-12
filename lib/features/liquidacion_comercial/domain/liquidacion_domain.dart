@@ -44,6 +44,8 @@ class ComercialDevolucionItem {
     this.date,
     this.vendedor = '',
     this.yaCobrada = false,
+    this.formaPago,
+    this.impactoLqd,
   });
 
   /// Document key, typically series-number.
@@ -63,6 +65,12 @@ class ComercialDevolucionItem {
 
   /// True when CVC marks the return as already collected (PG / pendiente 0).
   final bool yaCobrada;
+
+  /// Payment form of the original document, typically PG / P1.
+  final String? formaPago;
+
+  /// LQD cash bucket impacted. `YA_COBRADOS` matches the whiteboard flow.
+  final String? impactoLqd;
 }
 
 /// Editable values for one commercial settlement.

@@ -98,7 +98,13 @@ class ClientConditionsWidget extends StatelessWidget {
                   subtitle: '$mediosCount medios',
                   isDark: isDark,
                   onTap: () {
-                    // TODO: Navegar a detalle de medios
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Medios de pago: pestaña Cobros / Facturas',
+                        ),
+                      ),
+                    );
                   },
                 ),
 
@@ -113,7 +119,13 @@ class ClientConditionsWidget extends StatelessWidget {
                   subtitle: '$congeladoresCount máquinas',
                   isDark: isDark,
                   onTap: () {
-                    // TODO: Navegar a detalle de congeladores
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Congeladores: pestaña Alertas del perfil comercial',
+                        ),
+                      ),
+                    );
                   },
                 ),
               ],

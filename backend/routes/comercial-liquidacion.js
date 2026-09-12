@@ -7,6 +7,7 @@ const {
   parseIsoDate,
   todayIsoDate,
   listReturns,
+  listPgCollectedDocuments,
   getDailySummary,
   saveLiquidacion,
   registerReturn,
@@ -149,6 +150,26 @@ function resolveWriteDate(req) {
   return { date: parsed.iso };
 }
 
+router.get('/ya-cobrados-pg', async (req, res) => {
+  try {
+    const vendors = resolveVendorCodes(req);
+    if (vendors.error) return forbidden(res, vendors.error);
+    const clientCode = String(req.query.cliente || req.query.clientCode || '').trim();
+    const documents = await listPgCollectedDocuments({
+      vendorCodes: vendors.codes,
+      clientCode,
+    });
+    return res.json({
+      success: true,
+      count: documents.length,
+      documents,
+      impactoLqd: 'YA_COBRADOS',
+    });
+  } catch (error) {
+    return sendTypedError(res, error, 'PG_COBRADOS_LIST_ERROR');
+  }
+});
+
 router.post('/guardar', async (req, res) => {
   try {
     const vendors = resolveVendorCodes(req);
@@ -196,6 +217,10 @@ router.post('/devoluciones', async (req, res) => {
       numero: body.numero,
       documentoOrigen: body.documentoOrigen || body.origen,
       yaCobrada: body.yaCobrada !== false,
+      formaPago: body.formaPago || body.fp,
+      albaranOrigen: body.albaranOrigen || body.albaran,
+      vencimiento: body.vencimiento,
+      impactoLqd: body.impactoLqd,
       createdBy: getContext(req).userId,
       idempotencyToken: req.get('Idempotency-Key') || body.idempotencyToken,
     });

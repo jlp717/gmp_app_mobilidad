@@ -2,10 +2,12 @@
 
 const {
   classifyFormaPago,
+  isPagareFormaPago,
   buildComercialLiquidacionSummary,
   parseIsoDate,
   sanitizeVendorCodes,
   listReturns,
+  listPgCollectedDocuments,
   getDailySummary,
   saveLiquidacion,
   registerReturn,
@@ -49,6 +51,8 @@ describe('comercial devoluciones domain', () => {
     expect(classifyFormaPago('CHEQUE')).toBe('CHEQUES');
     expect(classifyFormaPago('POSTDATADO')).toBe('POSTDATADOS');
     expect(classifyFormaPago('CTR')).toBe('REPARTIDOR');
+    expect(classifyFormaPago('PG')).toBe('POSTDATADOS');
+    expect(classifyFormaPago('P1')).toBe('POSTDATADOS');
   });
 
   test('does not subtract returns from the amount to deposit', () => {
@@ -115,6 +119,7 @@ describe('listReturns', () => {
     expect(sql).toMatch(/LEFT JOIN DSEDAC\.CVC CVC/);
     expect(sql).toMatch(/LEFT JOIN DSEDAC\.FPG FPG/);
     expect(sql).toMatch(/TIPODOCUMENTO\) = 'DEV'/);
+    expect(sql).toMatch(/FPG\.PAGARESN/);
     expect(sql).toMatch(/L\.LCSRAB = \? OR L\.LCTPVT = \?/);
     expect(sql).not.toMatch(/VENDEDOR\s*=\s*'ALL'/i);
     expect(sql).not.toMatch(/VISTA_DEUDA_BASE/i);
@@ -344,5 +349,89 @@ describe('TEST-only commercial writes', () => {
     const returns = await listReturns({ vendorCodes: ['80'], date: '2026-09-11' });
     expect(returns).toHaveLength(2);
     expect(returns.map((item) => item.documento).sort()).toEqual(['D-1', 'D-9']);
+  });
+});
+
+describe('pizarra PG ya cobrados', () => {
+  let restoreEnv;
+
+  beforeEach(() => {
+    mockQueryWithParams.mockReset();
+    restoreEnv = isolatedWriteEnv();
+  });
+
+  afterEach(() => {
+    restoreEnv();
+  });
+
+  test('lists CVC pagarés via FPG.PAGARESN without writing DSEDAC', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([{
+      CLIENTE: '4300010001',
+      TIPO: 'COB',
+      SERIE: 'M',
+      NUMERO: 88,
+      IMPORTE: '1000',
+      PENDIENTE: '0',
+      FP: 'P1',
+      FP_DESC: 'PAGARE 30 DFF',
+      PAGARESN: 'S',
+      ANO: 2026,
+      MES: 5,
+      DIA: 31,
+      ANOV: 2026,
+      MESV: 8,
+      DIAV: 31,
+      SERIE_ALB: 'P',
+      NUM_ALB: 21,
+    }]);
+
+    const docs = await listPgCollectedDocuments({ vendorCodes: ['80'] });
+    expect(docs[0]).toMatchObject({
+      cliente: '4300010001',
+      formaPago: 'P1',
+      pagare: true,
+      vencimiento: '2026-08-31',
+      albaran: 'P-21',
+      impactoLqd: 'YA_COBRADOS',
+    });
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/DSEDAC\.CVC/);
+    expect(sql).toMatch(/DSEDAC\.FPG/);
+    expect(sql).toMatch(/DSEDAC\.CAC/);
+    expect(sql).toMatch(/EJERCICIOALBARAN/);
+    expect(sql).not.toMatch(/INSERT|UPDATE|DELETE/i);
+    expect(sql).not.toMatch(/VISTA_DEUDA_BASE/i);
+    expect(params[0]).toBe('DEV');
+    expect(params[1]).toBe('S');
+    expect(params[2]).toBe('PG');
+  });
+
+  test('registerReturn keeps PG already-collected impact on TEST overlay', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/IDEMPOTENCY_TOKEN/i.test(sql) && /SELECT/i.test(sql)) return [];
+      if (/MAX\(NUMERO\)/i.test(sql)) return [{ LAST_NUM: 1 }];
+      return [];
+    });
+
+    const created = await registerReturn({
+      vendorCodes: ['80'],
+      date: '2026-05-31',
+      clientCode: '4300010001',
+      amount: 1000,
+      formaPago: 'PG',
+      albaranOrigen: 'P-21',
+      vencimiento: '2026-08-31',
+      documentoOrigen: 'M-88',
+      idempotencyToken: 'dev-pg-pizarra',
+    });
+
+    expect(created.yaCobrada).toBe(true);
+    expect(created.impactoLqd).toBe('YA_COBRADOS');
+    expect(created.formaPago).toBe('PG');
+    expect(isPagareFormaPago('P1')).toBe(true);
+    const insertSql = mockQueryWithParams.mock.calls.find(([sql]) => /INSERT INTO/i.test(sql))[0];
+    expect(insertSql).toMatch(/JAVIER\.TEST_DEVOLUCIONES_COMERCIAL/);
+    expect(insertSql).toMatch(/FORMA_PAGO/);
+    expect(insertSql).not.toMatch(/DSEDAC/i);
   });
 });

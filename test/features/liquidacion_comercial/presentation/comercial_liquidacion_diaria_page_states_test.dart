@@ -14,7 +14,11 @@ Future<void> _pumpPage(
     required double amount,
     String? documentoOrigen,
     bool yaCobrada,
+    String? formaPago,
+    String? albaranOrigen,
+    String? vencimiento,
   })? onRegisterReturn,
+  Future<List<Map<String, dynamic>>> Function()? pgCollectedLoader,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -24,6 +28,7 @@ Future<void> _pumpPage(
           initialSummary: summary,
           onSubmit: onSubmit,
           onRegisterReturn: onRegisterReturn,
+          pgCollectedLoader: pgCollectedLoader,
         ),
       ),
     ),
@@ -130,6 +135,9 @@ void main() {
         required amount,
         documentoOrigen,
         yaCobrada = true,
+        formaPago,
+        albaranOrigen,
+        vencimiento,
       }) async {
         created = ComercialDevolucionItem(
           documento: 'D-4',
@@ -163,5 +171,63 @@ void main() {
     expect(created?.amount, -1000);
     expect(find.textContaining('D-4'), findsOneWidget);
     expect(find.text('Devolución registrada en TEST.'), findsOneWidget);
+  });
+
+  testWidgets('Devuelve rellena pagaré ya cobrado P1 y marca LIQ.Vd',
+      (tester) async {
+    String? fp;
+    String? alb;
+    String? vto;
+    await _pumpPage(
+      tester,
+      pgCollectedLoader: () async => [
+        {
+          'cliente': '4300010001',
+          'documento': 'M-88',
+          'importe': 1000,
+          'formaPago': 'P1',
+          'albaran': 'P-21',
+          'vencimiento': '2026-08-31',
+        },
+      ],
+      onRegisterReturn: ({
+        required clientCode,
+        required amount,
+        documentoOrigen,
+        yaCobrada = true,
+        formaPago,
+        albaranOrigen,
+        vencimiento,
+      }) async {
+        fp = formaPago;
+        alb = albaranOrigen;
+        vto = vencimiento;
+        return ComercialDevolucionItem(
+          documento: 'D-5',
+          cliente: clientCode,
+          amount: -amount,
+          yaCobrada: yaCobrada,
+          formaPago: formaPago,
+          impactoLqd: 'YA_COBRADOS',
+        );
+      },
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('comercial-liquidacion-devuelve-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+        find.byKey(const ValueKey('comercial-liquidacion-devuelve-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('comercial-devuelve-pg-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('comercial-devuelve-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(fp, 'P1');
+    expect(alb, 'P-21');
+    expect(vto, '2026-08-31');
+    expect(find.textContaining('D-5'), findsOneWidget);
   });
 }

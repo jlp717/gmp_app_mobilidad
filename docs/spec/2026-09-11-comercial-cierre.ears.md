@@ -46,3 +46,14 @@ WHEN `GET /api/cobros/:cliente/pendientes` consulta deuda
 THE SYSTEM SHALL leer `DSEDAC.CVC` (nunca `JAVIER.VISTA_DEUDA_BASE`)
 AND THE SYSTEM SHALL usar SQL parametrizado
 AND THE SYSTEM SHALL apuntar a p95 < 500 ms o una mejora sustancial respecto a ~7.4 s.
+
+### REQ-PED-02
+WHEN un pedido TEST se crea con descuento de línea o de pie
+THE SYSTEM SHALL persistir `PEDIDOS_LIN.PORCENTAJEDESCUENTO` y `PEDIDOS_CAB.PORCENTAJEDESCUENTO1` (además de `DESCUENTO_LINEA` / `DESCUENTO_GLOBAL`)
+AND THE SYSTEM SHALL devolver esos porcentajes en el detalle del pedido.
+
+### REQ-DEV-06
+WHEN el comercial pulsa Devuelve sobre una factura cobrada con pagaré (`DSEDAC.FPG.PAGARESN='S'` o código PG/P1)
+THE SYSTEM SHALL registrar overlay TEST con `YA_COBRADA=1` e `IMPACTO_LQD=YA_COBRADOS`
+AND THE SYSTEM SHALL NOT restar esa devolución de `DSEDAC.LQD.IMPORTETOTALAINGRESAR`
+AND THE SYSTEM SHALL NOT tratarla como factura impagada a 30 días.

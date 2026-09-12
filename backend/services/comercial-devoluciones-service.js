@@ -14,6 +14,10 @@ const RETURN_TIPO_VENTA = 'DV';
 const FORMAS_PAGO_REPARTIDOR = new Set(['01', 'CO', 'CTR', 'EF']);
 const FORMAS_PAGO_CHEQUE = new Set(['CHEQUE', 'TALON', 'TALON BANCARIO', 'CH']);
 const FORMAS_PAGO_POSTDATADO = new Set(['POSTDATADO', 'POSTDATADOS', 'PD']);
+const FORMAS_PAGO_PAGARE = new Set([
+  'PG', 'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9',
+  'PB', 'PC', 'Q1', 'Q2', 'PAGARE',
+]);
 
 function sanitizeVendorCodes(vendorCodes) {
   if (!Array.isArray(vendorCodes)) return [];
@@ -58,8 +62,14 @@ function classifyFormaPago(code) {
   if (!normalized) return 'EFECTIVO';
   if (FORMAS_PAGO_REPARTIDOR.has(normalized)) return 'REPARTIDOR';
   if (FORMAS_PAGO_CHEQUE.has(normalized)) return 'CHEQUES';
-  if (FORMAS_PAGO_POSTDATADO.has(normalized)) return 'POSTDATADOS';
+  if (FORMAS_PAGO_PAGARE.has(normalized) || FORMAS_PAGO_POSTDATADO.has(normalized)) {
+    return 'POSTDATADOS';
+  }
   return 'EFECTIVO';
+}
+
+function isPagareFormaPago(code) {
+  return FORMAS_PAGO_PAGARE.has(String(code || '').trim().toUpperCase());
 }
 
 function buildVendorInClause(columnSql, vendorCodes) {
@@ -124,6 +134,10 @@ function mapReturnRow(row) {
     formaPago: String(row.FORMA_PAGO || '').trim() || null,
     source: String(row.SOURCE || 'DSED.LACLAE').trim() || 'DSED.LACLAE',
     documentoOrigen: String(row.DOCUMENTO_ORIGEN || '').trim() || null,
+    albaranOrigen: String(row.ALBARAN_ORIGEN || '').trim() || null,
+    vencimiento: String(row.VENCIMIENTO || '').trim() || null,
+    impactoLqd: String(row.IMPACTO_LQD || '').trim()
+      || (Number(row.YA_COBRADA) === 1 ? 'YA_COBRADOS' : 'NO_COBRADA'),
   };
 }
 
@@ -140,6 +154,11 @@ function returnDocKey(item) {
 function isTableMissingError(error) {
   const msg = String(error?.message || error || '');
   return /SQL0204|SQL5005|not (found|exist)|undefined name/i.test(msg);
+}
+
+function isColumnMissingError(error) {
+  const msg = String(error?.message || error || '');
+  return /SQL0206|42S22|column .+ not found|undefined name/i.test(msg);
 }
 
 function typedError(message, code, status) {
@@ -206,8 +225,8 @@ async function listReturns({
            SUM(L.LCCTUD) AS UNITS,
            MAX(CASE
              WHEN CVC.IMPORTEPENDIENTE = 0
+               OR UPPER(TRIM(COALESCE(FPG.PAGARESN, ''))) = 'S'
                OR UPPER(TRIM(COALESCE(CVC.CODIGOFORMAPAGO, ''))) = 'PG'
-               OR UPPER(TRIM(COALESCE(FPG.CODIGOFORMAPAGO, ''))) = 'PG'
              THEN 1 ELSE 0
            END) AS YA_COBRADA,
            MAX(TRIM(COALESCE(FPG.DESCRIPCIONFORMAPAGO, CVC.CODIGOFORMAPAGO, ''))) AS FORMA_PAGO
@@ -285,7 +304,11 @@ async function listTestReturns({
            IMPORTE AS AMOUNT,
            UNIDADES AS UNITS,
            YA_COBRADA AS YA_COBRADA,
-           TRIM(COALESCE(DOCUMENTO_ORIGEN, '')) AS DOCUMENTO_ORIGEN
+           TRIM(COALESCE(DOCUMENTO_ORIGEN, '')) AS DOCUMENTO_ORIGEN,
+           TRIM(COALESCE(FORMA_PAGO, '')) AS FORMA_PAGO,
+           TRIM(COALESCE(ALBARAN_ORIGEN, '')) AS ALBARAN_ORIGEN,
+           VARCHAR_FORMAT(VENCIMIENTO, 'YYYY-MM-DD') AS VENCIMIENTO,
+           TRIM(COALESCE(IMPACTO_LQD, '')) AS IMPACTO_LQD
       FROM ${TEST_DEVOLUCIONES_TABLE}
      WHERE FECHA = ?
        ${vendorFilter.clause}
@@ -306,8 +329,116 @@ async function listTestReturns({
       logger.warn('[COMERCIAL_LIQUIDACION] TEST devoluciones overlay table missing');
       return [];
     }
+    if (isColumnMissingError(error)) {
+      const fallbackSql = `
+        SELECT YEAR(FECHA) AS YEAR,
+               MONTH(FECHA) AS MONTH,
+               DAY(FECHA) AS DAY,
+               TRIM(SERIE) AS SERIE,
+               NUMERO AS NUMERO,
+               TRIM(CLIENTE) AS CLIENTE,
+               TRIM(VENDEDOR) AS VENDEDOR,
+               IMPORTE AS AMOUNT,
+               UNIDADES AS UNITS,
+               YA_COBRADA AS YA_COBRADA,
+               TRIM(COALESCE(DOCUMENTO_ORIGEN, '')) AS DOCUMENTO_ORIGEN
+          FROM ${TEST_DEVOLUCIONES_TABLE}
+         WHERE FECHA = ?
+           ${vendorFilter.clause}
+           ${clientClause}
+         ORDER BY IMPORTE ASC
+         FETCH FIRST ${fetchLimit} ROWS ONLY
+      `;
+      const rows = await run(fallbackSql, params);
+      return (rows || []).map((row) => mapReturnRow({
+        ...row,
+        SOURCE: TEST_DEVOLUCIONES_TABLE,
+      }));
+    }
     throw error;
   }
+}
+
+async function listPgCollectedDocuments({
+  vendorCodes,
+  clientCode,
+  limit = 40,
+} = {}, deps = {}) {
+  const run = deps.queryWithParams || queryWithParams;
+  const vendorFilter = buildVendorInClause('CVC.CODIGOVENDEDOR', vendorCodes);
+  const client = String(clientCode || '').trim().substring(0, 10);
+  const clientClause = client ? 'AND TRIM(CVC.CODIGOCLIENTEALBARAN) = CAST(? AS VARCHAR(10))' : '';
+  const fetchLimit = Math.min(Math.max(Number(limit) || 40, 1), 80);
+  const sql = `
+    SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+           TRIM(CVC.TIPODOCUMENTO) AS TIPO,
+           TRIM(CVC.SERIEDOCUMENTO) AS SERIE,
+           CVC.NUMERODOCUMENTO AS NUMERO,
+           CVC.IMPORTEVENCIMIENTO AS IMPORTE,
+           CVC.IMPORTEPENDIENTE AS PENDIENTE,
+           TRIM(CVC.CODIGOFORMAPAGO) AS FP,
+           TRIM(COALESCE(FPG.DESCRIPCIONFORMAPAGO, '')) AS FP_DESC,
+           TRIM(COALESCE(FPG.PAGARESN, '')) AS PAGARESN,
+           CVC.ANOEMISION AS ANO,
+           CVC.MESEMISION AS MES,
+           CVC.DIAEMISION AS DIA,
+           CVC.ANOVENCIMIENTO AS ANOV,
+           CVC.MESVENCIMIENTO AS MESV,
+           CVC.DIAVENCIMIENTO AS DIAV,
+           TRIM(COALESCE(CAC.SERIEALBARAN, '')) AS SERIE_ALB,
+           CAC.NUMEROALBARAN AS NUM_ALB
+      FROM DSEDAC.CVC CVC
+      LEFT JOIN DSEDAC.FPG FPG
+        ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(CVC.CODIGOFORMAPAGO)
+      LEFT JOIN DSEDAC.CAC CAC
+        ON CAC.EJERCICIOALBARAN = CVC.EJERCICIODOCUMENTO
+       AND TRIM(CAC.SERIEALBARAN) = TRIM(CVC.SERIEDOCUMENTO)
+       AND CAC.TERMINALALBARAN = CVC.TERMINALDOCUMENTO
+       AND CAC.NUMEROALBARAN = CVC.NUMERODOCUMENTO
+     WHERE TRIM(CVC.TIPODOCUMENTO) <> CAST(? AS VARCHAR(3))
+       AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+       AND (
+            UPPER(TRIM(COALESCE(FPG.PAGARESN, ''))) = CAST(? AS VARCHAR(1))
+         OR UPPER(TRIM(CVC.CODIGOFORMAPAGO)) = CAST(? AS VARCHAR(2))
+       )
+       ${vendorFilter.clause}
+       ${clientClause}
+     ORDER BY CVC.ANOVENCIMIENTO DESC, CVC.MESVENCIMIENTO DESC, CVC.DIAVENCIMIENTO DESC
+     FETCH FIRST ${fetchLimit} ROWS ONLY
+  `;
+  const params = ['DEV', 'S', 'PG', ...vendorFilter.params];
+  if (client) params.push(client);
+  const rows = await run(sql, params);
+  return (rows || []).map((row) => {
+    const year = Number(row.ANO) || 0;
+    const month = Number(row.MES) || 0;
+    const day = Number(row.DIA) || 0;
+    const vYear = Number(row.ANOV) || 0;
+    const vMonth = Number(row.MESV) || 0;
+    const vDay = Number(row.DIAV) || 0;
+    const serieAlb = String(row.SERIE_ALB || '').trim();
+    const numAlb = row.NUM_ALB == null ? '' : String(row.NUM_ALB).trim();
+    return {
+      cliente: String(row.CLIENTE || '').trim(),
+      tipoDocumento: String(row.TIPO || '').trim(),
+      documento: `${String(row.SERIE || '').trim()}-${row.NUMERO == null ? '' : row.NUMERO}`,
+      importe: money(row.IMPORTE),
+      pendiente: money(row.PENDIENTE),
+      formaPago: String(row.FP || '').trim(),
+      formaPagoDesc: String(row.FP_DESC || '').trim(),
+      pagare: String(row.PAGARESN || '').trim().toUpperCase() === 'S'
+        || isPagareFormaPago(row.FP),
+      fecha: year && month && day
+        ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+        : null,
+      vencimiento: vYear && vMonth && vDay
+        ? `${vYear}-${String(vMonth).padStart(2, '0')}-${String(vDay).padStart(2, '0')}`
+        : null,
+      albaran: serieAlb && numAlb ? `${serieAlb}-${numAlb}` : null,
+      impactoLqd: 'YA_COBRADOS',
+      yaCobrada: true,
+    };
+  });
 }
 
 async function getDailyCobrosByFormaPago({
@@ -681,6 +812,10 @@ async function registerReturn({
   numero,
   documentoOrigen,
   yaCobrada = true,
+  formaPago,
+  albaranOrigen,
+  vencimiento,
+  impactoLqd,
   createdBy,
   idempotencyToken,
 } = {}, deps = {}) {
@@ -708,6 +843,13 @@ async function registerReturn({
     `dev-${codes[0]}-${parsedDate.iso}-${client}`,
   );
   const serieCode = String(serie || RETURN_SERIE).trim().substring(0, 4) || RETURN_SERIE;
+  const fpCode = String(formaPago || '').trim().substring(0, 2).toUpperCase();
+  const alb = String(albaranOrigen || '').trim().substring(0, 40);
+  const vto = parseIsoDate(vencimiento);
+  const collected = yaCobrada !== false || isPagareFormaPago(fpCode);
+  const impacto = String(impactoLqd || (collected ? 'YA_COBRADOS' : 'NO_COBRADA'))
+    .trim()
+    .substring(0, 20) || 'YA_COBRADOS';
 
   const existing = await run(
     `SELECT SERIE, NUMERO, TRIM(CLIENTE) AS CLIENTE, IMPORTE, YA_COBRADA
@@ -740,6 +882,10 @@ async function registerReturn({
         UNITS: units,
         YA_COBRADA: row.YA_COBRADA,
         DOCUMENTO_ORIGEN: documentoOrigen,
+        FORMA_PAGO: fpCode,
+        ALBARAN_ORIGEN: alb,
+        VENCIMIENTO: vto?.iso,
+        IMPACTO_LQD: impacto,
         SOURCE: TEST_DEVOLUCIONES_TABLE,
       }),
       idempotent: true,
@@ -751,25 +897,36 @@ async function registerReturn({
     ? resolvedNumero
     : await nextTestReturnNumero({ vendor: codes[0], date: parsedDate.iso }, deps);
 
-  const insert = db2InsertSql(TEST_DEVOLUCIONES_TABLE, [
+  const baseColumns = [
     'SERIE', 'NUMERO', 'CLIENTE', 'VENDEDOR', 'FECHA',
     'IMPORTE', 'UNIDADES', 'DOCUMENTO_ORIGEN', 'YA_COBRADA',
     'IDEMPOTENCY_TOKEN', 'CREATED_BY',
-  ]);
+  ];
+  const extraColumns = ['FORMA_PAGO', 'ALBARAN_ORIGEN', 'VENCIMIENTO', 'IMPACTO_LQD'];
+  const baseParams = [
+    serieCode,
+    docNumero,
+    client,
+    codes[0],
+    parsedDate.iso,
+    storeAmount,
+    money(units),
+    String(documentoOrigen || '').trim().substring(0, 40) || null,
+    collected ? 1 : 0,
+    token,
+    String(createdBy || codes[0]).trim().substring(0, 20),
+  ];
+  const extraParams = [
+    fpCode || null,
+    alb || null,
+    vto ? vto.iso : null,
+    impacto,
+  ];
   try {
-    await run(insert, [
-      serieCode,
-      docNumero,
-      client,
-      codes[0],
-      parsedDate.iso,
-      storeAmount,
-      money(units),
-      String(documentoOrigen || '').trim().substring(0, 40) || null,
-      yaCobrada ? 1 : 0,
-      token,
-      String(createdBy || codes[0]).trim().substring(0, 20),
-    ]);
+    await run(
+      db2InsertSql(TEST_DEVOLUCIONES_TABLE, [...baseColumns, ...extraColumns]),
+      [...baseParams, ...extraParams],
+    );
   } catch (error) {
     if (isTableMissingError(error)) {
       throw typedError(
@@ -778,7 +935,8 @@ async function registerReturn({
         503,
       );
     }
-    throw error;
+    if (!isColumnMissingError(error)) throw error;
+    await run(db2InsertSql(TEST_DEVOLUCIONES_TABLE, baseColumns), baseParams);
   }
   return {
     ...mapReturnRow({
@@ -791,8 +949,12 @@ async function registerReturn({
       VENDEDOR: codes[0],
       AMOUNT: storeAmount,
       UNITS: units,
-      YA_COBRADA: yaCobrada ? 1 : 0,
+      YA_COBRADA: collected ? 1 : 0,
       DOCUMENTO_ORIGEN: documentoOrigen,
+      FORMA_PAGO: fpCode,
+      ALBARAN_ORIGEN: alb,
+      VENCIMIENTO: vto?.iso,
+      IMPACTO_LQD: impacto,
       SOURCE: TEST_DEVOLUCIONES_TABLE,
     }),
     idempotent: false,
@@ -809,9 +971,11 @@ module.exports = {
   parseIsoDate,
   todayIsoDate,
   classifyFormaPago,
+  isPagareFormaPago,
   buildComercialLiquidacionSummary,
   listReturns,
   listTestReturns,
+  listPgCollectedDocuments,
   getDailyCobrosByFormaPago,
   getLqdForVendorDay,
   getDailySummary,

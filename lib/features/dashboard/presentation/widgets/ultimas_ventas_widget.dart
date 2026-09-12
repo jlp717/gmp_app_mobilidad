@@ -104,7 +104,13 @@ class UltimasVentasWidget extends StatelessWidget {
               const SizedBox(height: 12),
               TextButton.icon(
                 onPressed: () {
-                  // TODO: Navegar a historial completo
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Historial completo: pestaña Pedidos / Facturas',
+                      ),
+                    ),
+                  );
                 },
                 icon: const Icon(Icons.arrow_forward),
                 label: const Text('Ver todas'),

@@ -111,15 +111,19 @@ class Db2MasterRepository extends MasterRepository {
         }));
       }
     } catch (e) {
-      // Table may not exist, fall back to DSEDAC.FPA
+      // Table may not exist, fall back to DSEDAC.FPG (FPA does not exist)
     }
 
     const sql = `
-      SELECT 
+      SELECT
         CODIGOFORMAPAGO AS CODIGO,
         DESCRIPCIONFORMAPAGO AS NOMBRE,
-        DIASPAGO AS DIAS
-      FROM DSEDAC.FPA
+        CASE
+          WHEN UPPER(TRIM(COALESCE(PAGARESN, ''))) = 'S' THEN 1
+          ELSE 0
+        END AS ES_PAGARE,
+        PRIMERPAGO AS DIAS
+      FROM DSEDAC.FPG
       ORDER BY CODIGOFORMAPAGO
     `;
     const result = await this._db.executeParams(sql, []);

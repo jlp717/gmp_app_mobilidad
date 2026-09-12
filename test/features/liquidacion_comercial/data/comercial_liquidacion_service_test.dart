@@ -34,6 +34,25 @@ void main() {
     expect(snapshot.returns.single.yaCobrada, isTrue);
   });
 
+  test('parses PG formaPago and YA_COBRADOS impact from Devuelve overlay', () {
+    final snapshot = ComercialLiquidacionDailySnapshot.fromJson({
+      'summary': {'totalAIngresar': 0, 'devolucionesYaCobradas': 1000},
+      'returns': [
+        {
+          'documento': 'D-1',
+          'cliente': '4300010001',
+          'amount': -1000,
+          'yaCobrada': true,
+          'formaPago': 'P1',
+          'impactoLqd': 'YA_COBRADOS',
+        },
+      ],
+    });
+
+    expect(snapshot.returns.single.formaPago, 'P1');
+    expect(snapshot.returns.single.impactoLqd, 'YA_COBRADOS');
+  });
+
   test('parses saved TEST draft without subtracting returns from LQD', () {
     final snapshot = ComercialLiquidacionDailySnapshot.fromJson({
       'date': '2026-09-11',

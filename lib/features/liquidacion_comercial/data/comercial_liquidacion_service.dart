@@ -66,6 +66,9 @@ class ComercialLiquidacionService {
     DateTime? date,
     String? documentoOrigen,
     bool yaCobrada = true,
+    String? formaPago,
+    String? albaranOrigen,
+    String? vencimiento,
   }) async {
     final day = date ?? DateTime.now();
     final fecha = DateFormat('yyyy-MM-dd').format(day);
@@ -83,6 +86,12 @@ class ComercialLiquidacionService {
         'importe': amount,
         'documentoOrigen': documentoOrigen,
         'yaCobrada': yaCobrada,
+        if (formaPago != null && formaPago.isNotEmpty) 'formaPago': formaPago,
+        if (albaranOrigen != null && albaranOrigen.isNotEmpty)
+          'albaranOrigen': albaranOrigen,
+        if (vencimiento != null && vencimiento.isNotEmpty)
+          'vencimiento': vencimiento,
+        'impactoLqd': yaCobrada ? 'YA_COBRADOS' : 'NO_COBRADA',
         'idempotencyToken':
             'dev-$vendors-$fecha-$clientCode-${amount.toStringAsFixed(2)}',
       },
@@ -92,6 +101,29 @@ class ComercialLiquidacionService {
     );
     final itemJson = (body['return'] as Map?)?.cast<String, dynamic>() ?? body;
     return ComercialLiquidacionDailySnapshot.itemFromJson(itemJson);
+  }
+
+  /// Lists CVC pagarés already collected so Devuelve can adjust LIQ.Vd.
+  Future<List<Map<String, dynamic>>> listPgCollected({
+    required String employeeCode,
+    String? clientCode,
+  }) async {
+    final vendors = employeeCode
+        .split(',')
+        .map((code) => code.trim())
+        .where((code) => code.isNotEmpty)
+        .join(',');
+    final body = await ApiClient.get(
+      '/comercial-liquidacion/ya-cobrados-pg',
+      queryParameters: {
+        'vendedor': vendors,
+        if (clientCode != null && clientCode.isNotEmpty) 'cliente': clientCode,
+      },
+      cacheKey: 'comercial-liquidacion-pg:$vendors:${clientCode ?? ''}',
+      cacheTTL: const Duration(minutes: 2),
+    );
+    final docs = (body['documents'] as List?) ?? const [];
+    return docs.whereType<Map>().map(Map<String, dynamic>.from).toList();
   }
 }
 
@@ -169,6 +201,8 @@ class ComercialLiquidacionDailySnapshot {
       vendedor: (item['vendedor'] ?? '').toString(),
       yaCobrada:
           item['yaCobrada'] == true || item['yaCobrada']?.toString() == '1',
+      formaPago: item['formaPago']?.toString(),
+      impactoLqd: item['impactoLqd']?.toString(),
     );
   }
 

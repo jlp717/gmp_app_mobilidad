@@ -27,6 +27,7 @@ class ComercialLiquidacionDiariaPage extends ConsumerStatefulWidget {
     this.snapshotLoader,
     this.onSubmit,
     this.onRegisterReturn,
+    this.pgCollectedLoader,
   });
 
   final String employeeCode;
@@ -41,7 +42,11 @@ class ComercialLiquidacionDiariaPage extends ConsumerStatefulWidget {
     required double amount,
     String? documentoOrigen,
     bool yaCobrada,
+    String? formaPago,
+    String? albaranOrigen,
+    String? vencimiento,
   })? onRegisterReturn;
+  final Future<List<Map<String, dynamic>>> Function()? pgCollectedLoader;
 
   @override
   ConsumerState<ComercialLiquidacionDiariaPage> createState() =>
@@ -299,21 +304,20 @@ class _ComercialLiquidacionDiariaPageState
 
     try {
       final submit = widget.onSubmit;
-      if (submit != null) {
-        await submit(draft);
-      } else {
-        await Future<void>.delayed(const Duration(milliseconds: 220));
+      if (submit == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No hay grabación de liquidación conectada.'),
+          ),
+        );
+        return;
       }
+      await submit(draft);
       if (!mounted) return;
       setState(() => _lastSavedAt = DateTime.now());
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            submit == null
-                ? 'Liquidación preparada. Pendiente de conectar grabación real.'
-                : 'Liquidación guardada.',
-          ),
-        ),
+        const SnackBar(content: Text('Liquidación guardada.')),
       );
     } catch (error, stackTrace) {
       debugPrint('Commercial liquidation save failed: $error');
@@ -339,7 +343,9 @@ class _ComercialLiquidacionDiariaPageState
     if (register == null) return;
     final result = await showDialog<_DevuelveDraft>(
       context: context,
-      builder: (dialogContext) => const _DevuelveDialog(),
+      builder: (dialogContext) => _DevuelveDialog(
+        loader: widget.pgCollectedLoader,
+      ),
     );
     if (result == null || !mounted) return;
     if (result.client.isEmpty || result.amount <= 0) {
@@ -354,6 +360,9 @@ class _ComercialLiquidacionDiariaPageState
         amount: result.amount,
         documentoOrigen: result.origen,
         yaCobrada: result.yaCobrada,
+        formaPago: result.formaPago,
+        albaranOrigen: result.albaranOrigen,
+        vencimiento: result.vencimiento,
       );
       if (!mounted) return;
       setState(() => _returns = [..._returns, item]);
@@ -386,16 +395,24 @@ class _DevuelveDraft {
     required this.amount,
     required this.origen,
     required this.yaCobrada,
+    this.formaPago,
+    this.albaranOrigen,
+    this.vencimiento,
   });
 
   final String client;
   final double amount;
   final String origen;
   final bool yaCobrada;
+  final String? formaPago;
+  final String? albaranOrigen;
+  final String? vencimiento;
 }
 
 class _DevuelveDialog extends StatefulWidget {
-  const _DevuelveDialog();
+  const _DevuelveDialog({this.loader});
+
+  final Future<List<Map<String, dynamic>>> Function()? loader;
 
   @override
   State<_DevuelveDialog> createState() => _DevuelveDialogState();
@@ -406,6 +423,58 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
   final _amountController = TextEditingController();
   final _originController = TextEditingController();
   bool _yaCobrada = true;
+  bool _loadingPg = false;
+  String? _pgError;
+  List<Map<String, dynamic>> _pgDocs = const [];
+  int? _selectedPg;
+  String? _formaPago;
+  String? _albaranOrigen;
+  String? _vencimiento;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPgDocs();
+  }
+
+  Future<void> _loadPgDocs() async {
+    final loader = widget.loader;
+    if (loader == null) return;
+    setState(() {
+      _loadingPg = true;
+      _pgError = null;
+    });
+    try {
+      final docs = await loader();
+      if (!mounted) return;
+      setState(() {
+        _pgDocs = docs;
+        _loadingPg = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingPg = false;
+        _pgError = 'No se pudieron cargar pagarés ya cobrados.';
+      });
+    }
+  }
+
+  void _applyPgDoc(int index) {
+    if (index < 0 || index >= _pgDocs.length) return;
+    final doc = _pgDocs[index];
+    final importe = doc['importe'];
+    _clientController.text = (doc['cliente'] ?? '').toString();
+    _amountController.text = importe == null ? '' : importe.toString();
+    _originController.text = (doc['documento'] ?? '').toString();
+    setState(() {
+      _selectedPg = index;
+      _yaCobrada = true;
+      _formaPago = (doc['formaPago'] ?? '').toString();
+      _albaranOrigen = (doc['albaran'] ?? '').toString();
+      _vencimiento = (doc['vencimiento'] ?? '').toString();
+    });
+  }
 
   @override
   void dispose() {
@@ -420,66 +489,140 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
     return AlertDialog(
       backgroundColor: AppTheme.raisedSurface,
       title: const Text('Devuelve (TEST)'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Semantics(
-            label: 'Cliente de la devolución',
-            textField: true,
-            child: TextField(
-              key: const ValueKey('comercial-devuelve-cliente'),
-              controller: _clientController,
-              decoration: const InputDecoration(labelText: 'Cliente'),
-            ),
-          ),
-          Semantics(
-            label: 'Importe de la devolución',
-            textField: true,
-            child: TextField(
-              key: const ValueKey('comercial-devuelve-importe'),
-              controller: _amountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Importe'),
-            ),
-          ),
-          Semantics(
-            label: 'Documento origen',
-            textField: true,
-            child: TextField(
-              key: const ValueKey('comercial-devuelve-origen'),
-              controller: _originController,
-              decoration: const InputDecoration(
-                labelText: 'Factura / albarán origen',
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Ajusta caja ya cobrada (LIQ.Vd), no una factura a 30 días impagada.',
+                style: TextStyle(fontSize: 13),
               ),
-            ),
+              const SizedBox(height: 12),
+              if (_loadingPg)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      key: ValueKey('comercial-devuelve-pg-loading'),
+                    ),
+                  ),
+                )
+              else if (_pgError != null)
+                Semantics(
+                  label: 'Error al cargar pagarés',
+                  child: Column(
+                    children: [
+                      Text(_pgError!, style: TextStyle(color: AppTheme.error)),
+                      TextButton(
+                        key: const ValueKey('comercial-devuelve-pg-retry'),
+                        onPressed: _loadPgDocs,
+                        child: const Text('Reintentar'),
+                      ),
+                    ],
+                  ),
+                )
+              else if (widget.loader != null && _pgDocs.isEmpty)
+                const Text(
+                  'No hay pagarés ya cobrados para este vendedor. Introduce cliente e importe a mano.',
+                )
+              else if (_pgDocs.isNotEmpty)
+                Semantics(
+                  label: 'Pagarés ya cobrados para Devuelve',
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < _pgDocs.length; i++)
+                        RadioListTile<int>(
+                          key: ValueKey('comercial-devuelve-pg-$i'),
+                          dense: true,
+                          value: i,
+                          groupValue: _selectedPg,
+                          onChanged: (value) {
+                            if (value != null) _applyPgDoc(value);
+                          },
+                          title: Text(
+                            '${_pgDocs[i]['documento'] ?? ''} · ${_pgDocs[i]['formaPago'] ?? 'PG'}',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          subtitle: Text(
+                            '${_pgDocs[i]['cliente'] ?? ''} · ${_pgDocs[i]['importe'] ?? ''} €'
+                            '${_pgDocs[i]['vencimiento'] != null ? ' · vto ${_pgDocs[i]['vencimiento']}' : ''}',
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              Semantics(
+                label: 'Cliente de la devolución',
+                textField: true,
+                child: TextField(
+                  key: const ValueKey('comercial-devuelve-cliente'),
+                  controller: _clientController,
+                  decoration: const InputDecoration(labelText: 'Cliente'),
+                ),
+              ),
+              Semantics(
+                label: 'Importe de la devolución',
+                textField: true,
+                child: TextField(
+                  key: const ValueKey('comercial-devuelve-importe'),
+                  controller: _amountController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Importe'),
+                ),
+              ),
+              Semantics(
+                label: 'Documento origen',
+                textField: true,
+                child: TextField(
+                  key: const ValueKey('comercial-devuelve-origen'),
+                  controller: _originController,
+                  decoration: const InputDecoration(
+                    labelText: 'Factura / albarán origen',
+                  ),
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Ya cobrada (PG / LIQ.Vd)'),
+                subtitle: const Text(
+                  'Ajusta caja ya cobrada, no una factura a 30 días impagada.',
+                ),
+                value: _yaCobrada,
+                onChanged: (value) => setState(() => _yaCobrada = value),
+              ),
+            ],
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Ya cobrada (PG / LIQ.Vd)'),
-            value: _yaCobrada,
-            onChanged: (value) => setState(() => _yaCobrada = value),
-          ),
-        ],
+        ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancelar'),
         ),
-        FilledButton(
-          key: const ValueKey('comercial-devuelve-confirm'),
-          onPressed: () {
-            Navigator.pop(
-              context,
-              _DevuelveDraft(
-                client: _clientController.text.trim(),
-                amount: parseAmount(_amountController.text) ?? 0,
-                origen: _originController.text.trim(),
-                yaCobrada: _yaCobrada,
-              ),
-            );
-          },
-          child: const Text('Devuelve'),
+        Semantics(
+          button: true,
+          label: 'Registrar devolución TEST',
+          child: FilledButton(
+            key: const ValueKey('comercial-devuelve-confirm'),
+            onPressed: () {
+              Navigator.pop(
+                context,
+                _DevuelveDraft(
+                  client: _clientController.text.trim(),
+                  amount: parseAmount(_amountController.text) ?? 0,
+                  origen: _originController.text.trim(),
+                  yaCobrada: _yaCobrada,
+                  formaPago: _formaPago,
+                  albaranOrigen: _albaranOrigen,
+                  vencimiento: _vencimiento,
+                ),
+              );
+            },
+            child: const Text('Devuelve'),
+          ),
         ),
       ],
     );

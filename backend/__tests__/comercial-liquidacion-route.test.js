@@ -4,6 +4,7 @@ const request = require('supertest');
 const express = require('express');
 
 const mockListReturns = jest.fn();
+const mockListPgCollectedDocuments = jest.fn();
 const mockGetDailySummary = jest.fn();
 const mockSaveLiquidacion = jest.fn();
 const mockRegisterReturn = jest.fn();
@@ -13,6 +14,7 @@ jest.mock('../services/comercial-devoluciones-service', () => {
   return {
     ...actual,
     listReturns: (...args) => mockListReturns(...args),
+    listPgCollectedDocuments: (...args) => mockListPgCollectedDocuments(...args),
     getDailySummary: (...args) => mockGetDailySummary(...args),
     saveLiquidacion: (...args) => mockSaveLiquidacion(...args),
     registerReturn: (...args) => mockRegisterReturn(...args),
@@ -207,5 +209,19 @@ describe('POST /devoluciones', () => {
       clientCode: '4300000354',
       amount: 1000,
     }));
+  });
+});
+
+describe('GET /ya-cobrados-pg', () => {
+  test('returns pagarés already collected for Devuelve', async () => {
+    mockListPgCollectedDocuments.mockResolvedValueOnce([
+      { documento: 'M-88', formaPago: 'P1', impactoLqd: 'YA_COBRADOS' },
+    ]);
+    const res = await request(makeApp({ code: '80', role: 'COMERCIAL' }))
+      .get('/ya-cobrados-pg');
+    expect(res.status).toBe(200);
+    expect(res.body.documents).toHaveLength(1);
+    expect(res.body.impactoLqd).toBe('YA_COBRADOS');
+    expect(mockListPgCollectedDocuments).toHaveBeenCalled();
   });
 });

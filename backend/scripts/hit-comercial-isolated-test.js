@@ -135,6 +135,8 @@ async function main() {
         cliente: 'HITTEST01',
         importe: 12.34,
         yaCobrada: true,
+        formaPago: 'PG',
+        impactoLqd: 'YA_COBRADOS',
         documentoOrigen: 'HIT-PG',
         idempotencyToken: `hit-dev-${VENDOR}-${Date.now()}`,
       },
@@ -144,6 +146,31 @@ async function main() {
       (ret.status === 201 || ret.status === 200) && String(ret.body?.return?.source || '').startsWith('JAVIER.TEST_'),
       `status=${ret.status} doc=${ret.body?.return?.documento || ret.body?.code || ret.body?.error || '-'}`,
     ));
+
+    const pgDocs = await api('GET', `/comercial-liquidacion/ya-cobrados-pg?vendedor=${VENDOR}`, { token });
+    if (pgDocs.status === 200 && Array.isArray(pgDocs.body?.documents)) {
+      rows.push(record(
+        'GET ya-cobrados-pg',
+        true,
+        `status=200 count=${pgDocs.body.documents.length} impacto=${pgDocs.body.impactoLqd || '-'}`,
+      ));
+    } else {
+      try {
+        const { listPgCollectedDocuments } = require('../services/comercial-devoluciones-service');
+        const sqlDocs = await listPgCollectedDocuments({ vendorCodes: [VENDOR], limit: 5 });
+        rows.push(record(
+          'GET ya-cobrados-pg',
+          Array.isArray(sqlDocs),
+          `api=${pgDocs.status} sqlCount=${sqlDocs.length} (API pendiente deploy whitelist)`,
+        ));
+      } catch (error) {
+        rows.push(record(
+          'GET ya-cobrados-pg',
+          false,
+          `api=${pgDocs.status} sql=${String(error.message || error).slice(0, 80)}`,
+        ));
+      }
+    }
 
     const summaryPend = await api('GET', `/cobros/pending-summary/${VENDOR}?limit=5&page=1`, { token });
     const summaryMap = summaryPend.body?.summary || {};
@@ -215,6 +242,8 @@ async function main() {
               precioVenta: price,
               precioCosto: Number(product.precioCosto) || 0.5,
               precioTarifa: price,
+              lineDiscountPct: 10,
+              descuentoLinea: 10,
             }],
           },
         });
@@ -239,6 +268,29 @@ async function main() {
       }
       rows.push(record('POST pedido dto TEST', createOk, createDetail));
       rows.push(record('PUT confirm + cobro en mano', confirmOk, confirmDetail));
+      if (createdId) {
+        const detail = await api('GET', `/pedidos/${createdId}`, { token });
+        const header = detail.body?.order?.header || detail.body?.header || {};
+        const lines = detail.body?.order?.lines || detail.body?.lines || [];
+        const pie = Number(header.descuentoGlobal ?? 0);
+        const linePct = Number(lines[0]?.lineDiscountPct ?? lines[0]?.descuentoLinea ?? 0);
+        rows.push(record(
+          'GET pedido dto pie+linea',
+          detail.status === 200 && pie === 5 && linePct === 10,
+          `status=${detail.status} pie=${pie} linea=${linePct} lines=${lines.length}`,
+        ));
+        const promos = await api(
+          'GET',
+          `/pedidos/promotions?clientCode=${encodeURIComponent(cobrosClient)}&vendedorCodes=${VENDOR}`,
+          { token },
+        );
+        const promoList = promos.body?.promotions || [];
+        rows.push(record(
+          'GET ofertas PMR/CPES',
+          promos.status === 200 && Array.isArray(promoList),
+          `status=${promos.status} count=${promoList.length} sources=${[...new Set(promoList.map((p) => p.source || p.assignmentSource || '-'))].join(',') || 'none'}`,
+        ));
+      }
     }
 
     const cobroIdem = `HitCob${String(Date.now()).slice(-10)}`;

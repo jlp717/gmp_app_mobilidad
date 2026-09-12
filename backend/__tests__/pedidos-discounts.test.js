@@ -44,5 +44,18 @@ describe('pedidos discount helpers', () => {
     const src = fs.readFileSync(require.resolve('../services/pedidos/index.js'), 'utf8');
     expect(src).toMatch(/function buildDsedacLpcInsert[\s\S]*'PORCENTAJEDESCUENTO'/);
     expect(src).toMatch(/function buildDsedacCpcInsert[\s\S]*'PORCENTAJEDESCUENTO1'/);
+    expect(src).toMatch(/function buildLocalPedidoCabInsert[\s\S]*'PORCENTAJEDESCUENTO1'/);
+    expect(src).toMatch(/function buildLocalPedidoLineInsert[\s\S]*'PORCENTAJEDESCUENTO'/);
+  });
+
+  test('prefers ERP pie/line columns when stored', () => {
+    const {
+      resolveStoredPieDiscountPct,
+      resolveStoredLineDiscountPct,
+    } = require('../services/pedidos/discounts');
+    expect(resolveStoredPieDiscountPct({ PORCENTAJEDESCUENTO1: 7, DESCUENTO_GLOBAL: 0 })).toBe(7);
+    expect(resolveStoredPieDiscountPct({ PORCENTAJEDESCUENTO1: 0, DESCUENTO_GLOBAL: 5 })).toBe(5);
+    expect(resolveStoredLineDiscountPct({ PORCENTAJEDESCUENTO: 10, DESCUENTO_LINEA: 0 })).toBe(10);
+    expect(resolveStoredLineDiscountPct({ PORCENTAJEDESCUENTO: 0, DESCUENTO_LINEA: 8 })).toBe(8);
   });
 });

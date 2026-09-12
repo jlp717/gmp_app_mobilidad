@@ -2108,6 +2108,9 @@ class _MainShellState extends ConsumerState<MainShell> {
                 required amount,
                 documentoOrigen,
                 yaCobrada = true,
+                formaPago,
+                albaranOrigen,
+                vencimiento,
               }) =>
                   const ComercialLiquidacionService().registerReturn(
                 employeeCode: employeeCode,
@@ -2115,6 +2118,13 @@ class _MainShellState extends ConsumerState<MainShell> {
                 amount: amount,
                 documentoOrigen: documentoOrigen,
                 yaCobrada: yaCobrada,
+                formaPago: formaPago,
+                albaranOrigen: albaranOrigen,
+                vencimiento: vencimiento,
+              ),
+              pgCollectedLoader: () =>
+                  const ComercialLiquidacionService().listPgCollected(
+                employeeCode: employeeCode,
               ),
             );
           case 'Bolsa':
@@ -2247,6 +2257,9 @@ class _MainShellState extends ConsumerState<MainShell> {
               required amount,
               documentoOrigen,
               yaCobrada = true,
+              formaPago,
+              albaranOrigen,
+              vencimiento,
             }) =>
                 const ComercialLiquidacionService().registerReturn(
               employeeCode: empCode,
@@ -2254,6 +2267,13 @@ class _MainShellState extends ConsumerState<MainShell> {
               amount: amount,
               documentoOrigen: documentoOrigen,
               yaCobrada: yaCobrada,
+              formaPago: formaPago,
+              albaranOrigen: albaranOrigen,
+              vencimiento: vencimiento,
+            ),
+            pgCollectedLoader: () =>
+                const ComercialLiquidacionService().listPgCollected(
+              employeeCode: empCode,
             ),
           );
         case 'Bolsa':

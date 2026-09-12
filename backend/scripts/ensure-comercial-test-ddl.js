@@ -58,6 +58,10 @@ const TABLES = [
       UNIDADES DECIMAL(11, 3) NOT NULL DEFAULT 0,
       DOCUMENTO_ORIGEN VARCHAR(40),
       YA_COBRADA SMALLINT NOT NULL DEFAULT 1,
+      FORMA_PAGO CHAR(2),
+      ALBARAN_ORIGEN VARCHAR(40),
+      VENCIMIENTO DATE,
+      IMPACTO_LQD VARCHAR(20) DEFAULT 'YA_COBRADOS',
       IDEMPOTENCY_TOKEN VARCHAR(128) NOT NULL,
       CREATED_BY VARCHAR(20),
       CREATED_AT TIMESTAMP NOT NULL DEFAULT CURRENT TIMESTAMP,
@@ -67,8 +71,24 @@ const TABLES = [
       'CREATE UNIQUE INDEX JAVIER.UX_TEST_DEVCOM_TOKEN ON JAVIER.TEST_DEVOLUCIONES_COMERCIAL (IDEMPOTENCY_TOKEN)',
       'CREATE UNIQUE INDEX JAVIER.UX_TEST_DEVCOM_DOC ON JAVIER.TEST_DEVOLUCIONES_COMERCIAL (VENDEDOR, FECHA, SERIE, NUMERO, CLIENTE)',
     ],
+    extraColumns: [
+      { name: 'FORMA_PAGO', ddl: 'ALTER TABLE JAVIER.TEST_DEVOLUCIONES_COMERCIAL ADD COLUMN FORMA_PAGO CHAR(2)' },
+      { name: 'ALBARAN_ORIGEN', ddl: 'ALTER TABLE JAVIER.TEST_DEVOLUCIONES_COMERCIAL ADD COLUMN ALBARAN_ORIGEN VARCHAR(40)' },
+      { name: 'VENCIMIENTO', ddl: 'ALTER TABLE JAVIER.TEST_DEVOLUCIONES_COMERCIAL ADD COLUMN VENCIMIENTO DATE' },
+      { name: 'IMPACTO_LQD', ddl: "ALTER TABLE JAVIER.TEST_DEVOLUCIONES_COMERCIAL ADD COLUMN IMPACTO_LQD VARCHAR(20) DEFAULT 'YA_COBRADOS'" },
+    ],
   },
 ];
+
+async function columnExists(schema, table, column) {
+  const rows = await queryWithParams(
+    `SELECT 1 AS OK FROM QSYS2.SYSCOLUMNS
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
+      FETCH FIRST 1 ROW ONLY`,
+    [schema, table, column],
+  );
+  return (rows || []).length > 0;
+}
 
 async function tableExists(schema, table) {
   const rows = await queryWithParams(
@@ -124,6 +144,15 @@ async function main() {
             console.log('OK index exists', indexName);
           }
         }
+      }
+      for (const extra of spec.extraColumns || []) {
+        const present = await columnExists(spec.schema, spec.table, extra.name);
+        if (present) {
+          console.log('OK column', `${qualified}.${extra.name}`);
+          continue;
+        }
+        console.log(APPLY ? 'ALTER ADD' : '[DRY] ALTER ADD', `${qualified}.${extra.name}`);
+        if (APPLY) await query(extra.ddl);
       }
     }
     console.log('DONE');
