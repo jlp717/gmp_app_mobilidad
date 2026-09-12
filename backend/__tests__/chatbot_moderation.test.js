@@ -70,6 +70,15 @@ describe('chatbot moderation output contracts', () => {
     expect(result).toContain('No tengo acceso');
   });
 
+  test('allows own-day commercial summary dates without treating them as other vendors', () => {
+    const result = validateOutput(
+      '**Resumen comercial 12/9/2026** - Ventas: **38.500,66€**',
+      { userCode: '35', isJefeVentas: false },
+    );
+    expect(result).toContain('Resumen comercial 12/9/2026');
+    expect(result).not.toContain('No tengo acceso');
+  });
+
   test('blocks internal DB2 and schema details in public output', () => {
     const result = validateOutput(
       'Error DB2 SQL0204N DSEDAC.CLI no existe en SELECT * FROM JAVIER.CLI',

@@ -2090,20 +2090,6 @@ router.get('/summary', verifyToken, validateQuery(summaryQuerySchema), async (re
             )];
         const isGroupedRequest = safeVendorCode === 'ALL' || requestedVendorCodes.length > 1;
         const userCode = req.user?.code || '';
-        if (isCommercial80User(userCode)) {
-            logger.info('[COMMISSIONS] Hidden summary for authenticated commercial 80');
-            return res.json({
-                success: true,
-                status: 'hidden',
-                hiddenForCommercial80: true,
-                grandTotalCommission: 0,
-                totals: { commission: 0 },
-                breakdown: [],
-                months: [],
-                quarters: [],
-                payments: { monthly: {}, quarterly: {}, details: {}, total: 0 },
-            });
-        }
         // ASVS V8 / BOLA (H-01): solo codigos dentro del alcance firmado del usuario.
         if (safeVendorCode === 'ALL') {
             const allAllowed = isFinancialRole(req.user) || isScopedTeamAllRequest(userCode, 'ALL');
@@ -3326,22 +3312,6 @@ router.get('/team/:leaderCode', verifyToken, validateQuery(teamQuerySchema), asy
         if (actorCode !== leaderCode.replace(/^0+/, '') && !isFinancialRole(req.user)) {
             logger.warn(`[COMMISSIONS] Forbidden team access: user=${req.user?.code || 'unknown'} leader=${leaderCode}`);
             return res.status(403).json({ success: false, error: 'Forbidden: equipo fuera de tu alcance' });
-        }
-        if (isCommercial80User(req.user?.code || '')) {
-            logger.info('[COMMISSIONS] Hidden team commission for authenticated commercial 80');
-            return res.json({
-                success: true,
-                hiddenForCommercial80: true,
-                leaderCode,
-                year,
-                months: [],
-                teamMembers: [],
-                annualTotal: 0,
-                annualExcess: 0,
-                annualTeamMembersExcess: 0,
-                annualTeamMembersCommission: 0,
-                leaderPersonalCommission: 0,
-            });
         }
         await ensureExcludedVendorsLoaded();
         let config = DEFAULT_CONFIG_2026;

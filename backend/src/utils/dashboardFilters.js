@@ -4,10 +4,11 @@
  * Filtros SQL parametrizados por vendedor para LACLAE. Movidos verbatim desde
  * routes/dashboard.js; el route file importa desde aqui (fuente unica).
  */
-function buildVendedorFilterParameterized(vendedorCodes, tableAlias = 'L') {
+function buildVendedorFilterParameterized(vendedorCodes, tableAlias = 'L', columnName = 'LCCDVD') {
     if (!vendedorCodes || vendedorCodes === 'ALL') return { filter: '', params: [] };
     const prefix = tableAlias ? `${tableAlias}.` : '';
-    const col = `${prefix}LCCDVD`;
+    const safeColumn = String(columnName || 'LCCDVD').replace(/[^A-Za-z0-9_]/g, '') || 'LCCDVD';
+    const col = `${prefix}${safeColumn}`;
 
     const codeList = vendedorCodes.split(',').map(c => c.trim());
     const validCodes = codeList

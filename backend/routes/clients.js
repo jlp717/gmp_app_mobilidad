@@ -843,7 +843,7 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
     const vendedorFilter = buildVendedorParamFilter(vendedorCodes, 'L.CODIGOVENDEDOR');
 
     const whereParts = [
-      'L.CODIGOCLIENTEALBARAN = ?',
+      'L.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10))',
       'L.ANODOCUMENTO >= ?',
       "L.TIPOVENTA IN ('CC', 'VC')",
       "L.TIPOLINEA IN ('AB', 'VT')",
@@ -935,7 +935,7 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
     IMPORTEVENTA as amount, IMPORTEMARGENREAL as margin,
     CODIGOVENDEDOR as vendedor
         FROM DSEDAC.LINDTO
-        WHERE CODIGOCLIENTEALBARAN = ? AND ANODOCUMENTO >= ?
+        WHERE CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10)) AND ANODOCUMENTO >= ?
           AND TIPOVENTA IN ('CC', 'VC')
           AND TIPOLINEA IN ('AB', 'VT')
           AND SERIEALBARAN NOT IN ('N', 'Z')
@@ -994,7 +994,7 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
           COUNT(DISTINCT CODIGOARTICULO) as productCount
         FROM DSEDAC.LINDTO L
         LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-        WHERE L.CODIGOCLIENTEALBARAN = ? AND L.ANODOCUMENTO >= ?
+        WHERE L.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10)) AND L.ANODOCUMENTO >= ?
           AND L.TIPOVENTA IN ('CC', 'VC')
           AND L.TIPOLINEA IN ('AB', 'VT')
           AND L.SERIEALBARAN NOT IN ('N', 'Z')

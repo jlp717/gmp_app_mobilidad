@@ -16,7 +16,11 @@ function isDashboardManager(user) {
 }
 function dashboardVisibleVendorCodes(user) {
     const values = user?.vendorCodes || user?.vendedorCodes;
-    return Array.isArray(values) ? values.map(normalizeVendorCode).filter(Boolean) : [];
+    const raw = Array.isArray(values) ? values.map(normalizeVendorCode).filter(Boolean) : [];
+    // JEFE tokens can carry warehouse codes (A2, A3…). Those are not sales
+    // vendors; keep numeric comerciales so Panel ALL is company-wide.
+    const salesCodes = raw.filter((code) => /^\d{1,2}$/.test(code.replace(/^0+/, '') || code));
+    return salesCodes.length ? salesCodes : raw.filter((code) => /^\d{2}$/.test(code));
 }
 function resolveDashboardVendedorCodes(req, requested) {
     const user = req.user || {};

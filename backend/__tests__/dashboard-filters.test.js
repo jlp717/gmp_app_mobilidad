@@ -63,6 +63,13 @@ describe('dashboardFilters', () => {
             expect(result.filter).not.toContain("'80'");
         });
 
+        test('LINDTO recent-sales uses CODIGOVENDEDOR not LACLAE LCCDVD', () => {
+            const result = buildVendedorFilterParameterized('80,15', 'L', 'CODIGOVENDEDOR');
+            expect(result.filter).toBe('AND L.CODIGOVENDEDOR IN (?,?)');
+            expect(result.params).toEqual(['80', '15']);
+            expect(result.filter).not.toContain('LCCDVD');
+        });
+
         test('rejects unknown tokens instead of matching UNK literally', () => {
             expect(buildVendedorFilterParameterized('UNK')).toEqual({
                 filter: 'AND 1=0',

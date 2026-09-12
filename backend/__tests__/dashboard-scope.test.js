@@ -33,6 +33,13 @@ describe('dashboardScope', () => {
     )).toEqual({ ok: true, vendedorCodes: 'ALL' });
   });
 
+  test('JEFE ALL ignores warehouse A* codes and falls back to company ALL', () => {
+    expect(resolveDashboardVendedorCodes(
+      { user: { code: '98', role: 'JEFE_VENTAS', vendorCodes: ['A2', 'A3', 'A4'] } },
+      'ALL',
+    )).toEqual({ ok: true, vendedorCodes: 'ALL' });
+  });
+
   test('JEFE cannot request a vendor outside visible scope', () => {
     const scoped = resolveDashboardVendedorCodes(
       { user: { code: '98', role: 'JEFE_VENTAS', vendorCodes: ['80', '15'] } },

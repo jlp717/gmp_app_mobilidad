@@ -427,7 +427,7 @@ router.get('/recent-sales', verifyToken, async (req, res) => {
         if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
         vendedorCodes = scoped.vendedorCodes;
 
-        const vendedorResult = buildVendedorFilterParameterized(vendedorCodes, 'L');
+        const vendedorResult = buildVendedorFilterParameterized(vendedorCodes, 'L', 'CODIGOVENDEDOR');
         const cacheKey = `dashboard:recent_sales:${vendedorCodes || 'ALL'}:${limit}`;
 
         const recentTTL = (!vendedorCodes || vendedorCodes === 'ALL') ? TTL.MEDIUM : TTL.SHORT;

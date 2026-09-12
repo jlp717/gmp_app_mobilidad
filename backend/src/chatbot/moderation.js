@@ -179,7 +179,7 @@ function validateOutput(response, context) {
 
     // If not jefe de ventas, check for references to other vendors
     if (!isJefeVentas && userCode) {
-        const vendorRefs = response.match(/(?:vendedor|comercial)\s+([A-Z0-9]+)/gi);
+        const vendorRefs = response.match(/(?:vendedor|comercial)\s+([A-Z0-9]{1,3})\b(?!\/)/gi);
         if (vendorRefs) {
             for (const ref of vendorRefs) {
                 const code = ref.split(/\s+/).pop();
