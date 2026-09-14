@@ -1170,13 +1170,15 @@ class Db2CobrosRepository extends CobrosRepository {
       vendedorCodes: vendorCodes,
       vendorCodes,
     };
-    const [rows, appClientAdjustments, appOrderSummary] = await Promise.all([
+    const [rows, appOrderSummary] = await Promise.all([
       runQuery(summarySql),
-      this.getAppSideCobrosByClient(vendorClause),
       this.getAppOrderPendingSummary(appOrderContext),
     ]);
 
     const cvcRows = Array.isArray(rows) ? rows : [];
+    const appClientAdjustments = await this.getAppSideCobrosByClientCodes(
+      cvcRows.map((row) => trim(row.CLIENTE)),
+    );
     const cvcEntries = cvcRows.map((r) => {
       const code = trim(r.CLIENTE);
       const paid = toCents(appClientAdjustments.get(code) || 0);
@@ -1341,7 +1343,7 @@ class Db2CobrosRepository extends CobrosRepository {
     return adjustments;
   }
 
-  async getAppSideCobrosByClient(vendorClause = '') {
+  async getAppSideCobrosByClientCodes(clientCodes = []) {
     const adjustments = new Map();
     const add = (clientCode, amount) => {
       const code = trim(clientCode);
@@ -1349,20 +1351,22 @@ class Db2CobrosRepository extends CobrosRepository {
       adjustments.set(code, (adjustments.get(code) || 0) + (parseFloat(amount) || 0));
     };
 
-    // Uncorrelated client IN-list, not EXISTS(CVC) per COBROS row. Correlated
-    // EXISTS was ~1s on raso 35; a full COBROS scan without vendor scope made
-    // JEFE 98 pay for the whole overlay table (~285ms vs ~162ms).
+    const safeCodes = [...new Set(
+      (Array.isArray(clientCodes) ? clientCodes : [])
+        .map((code) => trim(code))
+        .filter((code) => /^[a-zA-Z0-9]+$/.test(code)),
+    )];
+    if (safeCodes.length === 0) return adjustments;
+    const inList = safeCodes.map((code) => `'${code.replace(/'/g, "''")}'`).join(',');
+
+    // Overlay only the clients already aggregated from CVC. No second CVC scan:
+    // correlated EXISTS ~1s on raso 35; full COBROS / CVC IN-list slowed JEFE 98.
     try {
       const comercialSql = `
         SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,
                COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
           FROM ${COBROS_TABLE} C
-         WHERE TRIM(C.CODIGO_CLIENTE) IN (
-           SELECT TRIM(CVC.CODIGOCLIENTEALBARAN)
-             FROM ${DEBT_VIEW} CVC
-            WHERE ${cvcPendingPredicate('CVC')}
-              ${vendorClause}
-         )
+         WHERE TRIM(C.CODIGO_CLIENTE) IN (${inList})
          GROUP BY TRIM(C.CODIGO_CLIENTE)`;
       const rows = await query(comercialSql, false);
       for (const row of rows || []) add(row.CLIENTE, row.TOTAL_APP);
@@ -1375,12 +1379,7 @@ class Db2CobrosRepository extends CobrosRepository {
         SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS CLIENTE,
                COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_APP
           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
-         WHERE TRIM(R.CODIGOCLIENTEALBARAN) IN (
-           SELECT TRIM(CVC.CODIGOCLIENTEALBARAN)
-             FROM ${DEBT_VIEW} CVC
-            WHERE ${cvcPendingPredicate('CVC')}
-              ${vendorClause}
-         )
+         WHERE TRIM(R.CODIGOCLIENTEALBARAN) IN (${inList})
          GROUP BY TRIM(R.CODIGOCLIENTEALBARAN)`;
       const rows = await query(repartidorSql, false);
       for (const row of rows || []) add(row.CLIENTE, row.TOTAL_APP);

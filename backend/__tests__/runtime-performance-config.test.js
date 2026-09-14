@@ -250,7 +250,7 @@ describe('runtime performance configuration', () => {
     expect(pendingSummaryBlock).toMatch(/getClientCodesFromCache\(vendorCodes\.join\(','\)\)/);
     expect(pendingSummaryBlock).toMatch(/buildCvcClientScopeFilter/);
     expect(pendingSummaryBlock).toMatch(/FETCH FIRST \$\{clientFetchLimit\} ROWS ONLY/);
-    expect(pendingSummaryBlock).toMatch(/this\.getAppSideCobrosByClient\(vendorClause\)/);
+    expect(pendingSummaryBlock).toMatch(/this\.getAppSideCobrosByClientCodes\(/);
     expect(pendingSummaryBlock).not.toMatch(/cvcCliJoin\(/);
     expect(pendingSummaryBlock).not.toMatch(/CVC_DOCS_RAW/);
     expect(pendingSummaryBlock).not.toMatch(/APP_COBROS AS/);
