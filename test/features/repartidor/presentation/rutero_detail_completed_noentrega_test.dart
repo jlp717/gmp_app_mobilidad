@@ -45,8 +45,8 @@ void main() {
     await tester.pumpWidget(
       _wrap(_albaranWithEstado(EstadoEntrega.noEntregado)),
     );
-    expect(find.text('NO ENTREGA CONFIRMADA'), findsOneWidget);
-    expect(find.textContaining('ALBARÁN (CON FIRMA)'), findsNothing);
+    expect(find.text('No entrega confirmada'), findsOneWidget);
+    expect(find.textContaining('Albarán (con firma)'), findsNothing);
     expect(find.text('Ver Albarán'), findsNothing);
     // The delivery note (no-entrega receipt) stays available.
     expect(find.text('Ver nota de entrega'), findsOneWidget);
@@ -58,8 +58,8 @@ void main() {
     await tester.pumpWidget(
       _wrap(_albaranWithEstado(EstadoEntrega.rechazado)),
     );
-    expect(find.text('ENTREGA RECHAZADA'), findsOneWidget);
-    expect(find.textContaining('ALBARÁN (CON FIRMA)'), findsNothing);
+    expect(find.text('Entrega rechazada'), findsOneWidget);
+    expect(find.textContaining('Albarán (con firma)'), findsNothing);
     expect(find.text('Ver nota de entrega'), findsOneWidget);
   });
 
@@ -69,8 +69,8 @@ void main() {
     await tester.pumpWidget(
       _wrap(_albaranWithEstado(EstadoEntrega.entregado)),
     );
-    expect(find.text('ENTREGA COMPLETADA'), findsOneWidget);
-    expect(find.textContaining('ALBARÁN (CON FIRMA)'), findsOneWidget);
+    expect(find.text('Entrega completada'), findsOneWidget);
+    expect(find.textContaining('Albarán (con firma)'), findsOneWidget);
     expect(find.text('Ver Albarán'), findsOneWidget);
   });
 
@@ -80,8 +80,8 @@ void main() {
     await tester.pumpWidget(
       _wrap(_albaranWithEstado(EstadoEntrega.parcial)),
     );
-    expect(find.text('ENTREGA PARCIAL CONFIRMADA'), findsOneWidget);
-    expect(find.textContaining('ALBARÁN (CON FIRMA)'), findsOneWidget);
+    expect(find.text('Entrega parcial confirmada'), findsOneWidget);
+    expect(find.textContaining('Albarán (con firma)'), findsOneWidget);
     expect(find.text('Ver Albarán'), findsOneWidget);
   });
 }
