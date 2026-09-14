@@ -144,10 +144,70 @@ async function main() {
     []);
   out({ sampleAlertCodes: sampleAlert.ok ? sampleAlert.rows.map((r) => t(r.CODE)) : sampleAlert.error });
 
-  const cvcClp = await q('cvcClp35',
-    `SELECT COUNT(*) AS N, COALESCE(SUM(IMPORTEPENDIENTE),0) AS IMP
+  const lacToday35 = await q('lacToday35',
+    `SELECT COALESCE(SUM(IMPORTEVENTA),0) AS SALES,
+            COUNT(DISTINCT TRIM(CODIGOCLIENTEALBARAN)) AS CLIENTES,
+            COUNT(DISTINCT TRIM(SERIEALBARAN) CONCAT '-' CONCAT TRIM(CHAR(NUMEROALBARAN))) AS PEDIDOS,
+            COUNT(*) AS LINEAS
+       FROM DSEDAC.LAC
+      WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? AND DIADOCUMENTO = ?
+        AND TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))`,
+    [year, month, day, '35']);
+  out({ lacToday35: lacToday35.ok ? lacToday35.rows[0] : lacToday35.error, ms: lacToday35.ms });
+
+  const pmrClp80 = await q('pmrClp80',
+    `SELECT TRIM(P.CODIGOCLIENTE) AS CLIENTE, COUNT(*) AS N
+       FROM DSEDAC.PMR P
+       INNER JOIN DSEDAC.CLP C
+         ON TRIM(C.CODIGOCLIENTE) = TRIM(P.CODIGOCLIENTE)
+      WHERE TRIM(C.VENDEDORCOMERCIAL) = CAST(? AS VARCHAR(2))
+        AND (P.ANOFIN = 0 OR P.ANOFIN >= ?)
+      GROUP BY TRIM(P.CODIGOCLIENTE)
+      FETCH FIRST 3 ROWS ONLY`,
+    ['80', year]);
+  out({ pmrClp80: pmrClp80.ok ? pmrClp80.rows : pmrClp80.error, ms: pmrClp80.ms });
+
+  const pmrLac80 = await q('pmrLac80',
+    `SELECT TRIM(P.CODIGOCLIENTE) AS CLIENTE
+       FROM DSEDAC.LAC L
+       INNER JOIN DSEDAC.PMR P
+         ON TRIM(P.CODIGOCLIENTE) = TRIM(L.CODIGOCLIENTEALBARAN)
+      WHERE TRIM(L.CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
+        AND L.ANODOCUMENTO >= ?
+        AND (P.ANOFIN = 0 OR P.ANOFIN >= ?)
+      FETCH FIRST 3 ROWS ONLY`,
+    ['80', year, year]);
+  out({ pmrLac80: pmrLac80.ok ? pmrLac80.rows : pmrLac80.error, ms: pmrLac80.ms });
+
+  const cvcVendor35 = await q('cvcVendor35',
+    `SELECT COUNT(*) AS N,
+            COUNT(DISTINCT TRIM(CODIGOCLIENTEALBARAN)) AS CLIENTS,
+            COALESCE(SUM(IMPORTEPENDIENTE),0) AS IMP
        FROM DSEDAC.CVC CVC
-      WHERE CVC.IMPORTEPENDIENTE > 0
+      WHERE CVC.IMPORTEPENDIENTE <> 0
+        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+        AND TRIM(CVC.CODIGOVENDEDOR) IN ('35','35')`,
+    []);
+  out({ cvcVendor35: cvcVendor35.ok ? cvcVendor35.rows[0] : cvcVendor35.error, ms: cvcVendor35.ms });
+
+  const cvcVendor98 = await q('cvcVendor98',
+    `SELECT COUNT(*) AS N,
+            COUNT(DISTINCT TRIM(CODIGOCLIENTEALBARAN)) AS CLIENTS,
+            COALESCE(SUM(IMPORTEPENDIENTE),0) AS IMP
+       FROM DSEDAC.CVC CVC
+      WHERE CVC.IMPORTEPENDIENTE <> 0
+        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+        AND TRIM(CVC.CODIGOVENDEDOR) IN ('98','98')`,
+    []);
+  out({ cvcVendor98: cvcVendor98.ok ? cvcVendor98.rows[0] : cvcVendor98.error, ms: cvcVendor98.ms });
+
+  const cvcClp = await q('cvcClp35',
+    `SELECT COUNT(*) AS N,
+            COUNT(DISTINCT TRIM(CODIGOCLIENTEALBARAN)) AS CLIENTS,
+            COALESCE(SUM(IMPORTEPENDIENTE),0) AS IMP
+       FROM DSEDAC.CVC CVC
+      WHERE CVC.IMPORTEPENDIENTE <> 0
+        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
         AND TRIM(CVC.CODIGOCLIENTEALBARAN) IN (
           SELECT TRIM(CLP.CODIGOCLIENTE) FROM DSEDAC.CLP CLP
            WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN ('35','35')

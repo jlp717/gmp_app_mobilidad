@@ -413,8 +413,9 @@ describe('commercial cobros hardening', () => {
     });
 
     const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
-    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\(/i);
+    expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\(/i);
     expect(sql).toMatch(/IN\s*\('01','1','02','2'\)/i);
+    expect(sql).not.toMatch(/DSEDAC\.CLP/i);
     expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
   });
 
@@ -432,7 +433,7 @@ describe('commercial cobros hardening', () => {
     expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 
-  test('getPendingSummary for manager selected vendors filters CVC with CLP semi-join', async () => {
+  test('getPendingSummary for manager selected vendors filters CVC by document vendor', async () => {
     mockRepoPendingSummaryDb({
       pageRows: [
         { CLIENTE: 'C002', NOMBRE: 'Cliente Dos', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '80.00', TOTAL_VENCIDO: '0.00' },
@@ -448,12 +449,11 @@ describe('commercial cobros hardening', () => {
 
     const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
     expect(sql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
-    expect(sql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s+IN\s*\(/i);
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\(/i);
-    expect(sql).toMatch(/SELECT\s+TRIM\(CLP\.CODIGOCLIENTE\)\s+FROM\s+DSEDAC\.CLP\s+CLP/i);
+    expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s+IN\s*\(/i);
     expect(sql).not.toMatch(/UNION\s+SELECT\s+DISTINCT\s+TRIM\(LAC\.LCCDCL\)/i);
     expect(sql).not.toMatch(/FROM\s+DSED\.LACLAE/i);
-    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\(/i);
+    expect(sql).not.toMatch(/DSEDAC\.CLP/i);
     expect(sql).toMatch(/IN\s*\('01','1','02','2'\)/i);
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
   });
@@ -482,9 +482,10 @@ describe('commercial cobros hardening', () => {
     });
 
     const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
-    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\('[^']+'/i);
+    expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\('[^']+'/i);
     expect(sql).toMatch(/'UNK'/);
-    expect(sql).not.toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\([^)]*\?/i);
+    expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\([^)]*\?/i);
+    expect(sql).not.toMatch(/DSEDAC\.CLP/i);
     expect(mockQueryWithParams.mock.calls.every(([sqlText]) => /QSYS2\.SYSCOLUMNS2/i.test(sqlText))).toBe(true);
   });
 
@@ -499,8 +500,9 @@ describe('commercial cobros hardening', () => {
     });
 
     const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
-    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\('UNK'\)/i);
-    expect(sql).not.toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\([^)]*\?/i);
+    expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\('UNK'\)/i);
+    expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\([^)]*\?/i);
+    expect(sql).not.toMatch(/DSEDAC\.CLP/i);
     expect(mockQueryWithParams.mock.calls.every(([sqlText]) => /QSYS2\.SYSCOLUMNS2/i.test(sqlText))).toBe(true);
   });
 

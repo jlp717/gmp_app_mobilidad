@@ -66,7 +66,7 @@ async function pinForVendor(vendor) {
 async function login(vendor) {
   const pin = await pinForVendor(vendor);
   if (!pin) return { ok: false, vendor, error: 'no-pin' };
-  const res = await api('POST', '/auth/login', { body: { codigo: vendor, pin } });
+  const res = await api('POST', '/auth/login', { body: { username: vendor, password: pin } });
   const token = res.body?.token || res.body?.accessToken || '';
   const user = res.body?.user || {};
   return {
@@ -77,6 +77,7 @@ async function login(vendor) {
     role: user.role || res.body?.role,
     isJefeVentas: user.isJefeVentas === true,
     navHint: user.isJefeVentas ? 'Panel' : 'no-Panel',
+    loginErr: res.status === 200 ? undefined : String(res.body?.error || res.body?.message || res.body?.code || res.status),
   };
 }
 
@@ -138,9 +139,12 @@ async function huecosFor(actor, rows) {
   });
 
   const validate = await api('GET', '/auth/validate', { token });
+  const vUser = validate.body?.user || {};
   record(rows, `${vendor} auth.validate`, validate, {
-    isJefeVentas: validate.body?.user?.isJefeVentas === true || validate.body?.isJefeVentas === true,
-    role: validate.body?.user?.role || validate.body?.role,
+    isJefeVentas: vUser.isJefeVentas === true || validate.body?.isJefeVentas === true,
+    role: vUser.role || validate.body?.role,
+    topJefe: validate.body?.isJefeVentas,
+    userJefe: vUser.isJefeVentas,
   });
 }
 
@@ -161,28 +165,61 @@ async function main() {
         role: actor.role,
         isJefeVentas: actor.isJefeVentas,
         navHint: actor.navHint,
+        loginErr: actor.loginErr,
       });
       if (!actor.ok) continue;
       await huecosFor(actor, rows);
     }
 
+    const yearNow = new Date().getFullYear();
     const pmr = await queryWithParams(
-      `SELECT TRIM(CODIGOCLIENTE) AS CLIENTE FROM DSEDAC.PMR
-        WHERE ANOFIN = 0 OR ANOFIN >= ?
+      `SELECT TRIM(P.CODIGOCLIENTE) AS CLIENTE
+         FROM DSEDAC.PMR P
+         INNER JOIN DSEDAC.CLP C
+           ON TRIM(C.CODIGOCLIENTE) = TRIM(P.CODIGOCLIENTE)
+        WHERE TRIM(C.VENDEDORCOMERCIAL) = CAST(? AS VARCHAR(2))
+          AND (P.ANOFIN = 0 OR P.ANOFIN >= ?)
         FETCH FIRST 1 ROW ONLY`,
-      [new Date().getFullYear()],
+      ['80', yearNow],
     );
-    const pmrClient = String(pmr?.[0]?.CLIENTE || '').trim();
+    let pmrClient = String(pmr?.[0]?.CLIENTE || '').trim();
+    if (!pmrClient) {
+      const pmrLac = await queryWithParams(
+        `SELECT TRIM(P.CODIGOCLIENTE) AS CLIENTE
+           FROM DSEDAC.LAC L
+           INNER JOIN DSEDAC.PMR P
+             ON TRIM(P.CODIGOCLIENTE) = TRIM(L.CODIGOCLIENTEALBARAN)
+          WHERE TRIM(L.CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
+            AND L.ANODOCUMENTO >= ?
+            AND (P.ANOFIN = 0 OR P.ANOFIN >= ?)
+          FETCH FIRST 1 ROW ONLY`,
+        ['80', yearNow, yearNow],
+      );
+      pmrClient = String(pmrLac?.[0]?.CLIENTE || '').trim();
+    }
     if (pmrClient) {
-      const actor = rows.find((r) => r.name === '80 login' && r.ok);
       const eighty = await login('80');
       if (eighty.ok) {
-        const promo = await api('GET', `/pedidos/promotions?clientCode=${encodeURIComponent(pmrClient)}`, { token: eighty.token, timeoutMs: 30000 });
+        const promo = await api('GET',
+          `/pedidos/promotions?clientCode=${encodeURIComponent(pmrClient)}&vendedorCodes=80`,
+          { token: eighty.token, timeoutMs: 30000 });
+        const promoList = Array.isArray(promo.body?.promotions) ? promo.body.promotions : [];
         record(rows, '80 ofertas.pmr', promo, {
-          n: (promo.body?.promotions || []).length,
+          n: promoList.length,
           client: pmrClient,
+          err: promo.status === 200 ? undefined : String(promo.body?.error || promo.body?.code || promo.status).slice(0, 80),
         });
       }
+    } else {
+      rows.push({
+        name: '80 ofertas.pmr',
+        status: 200,
+        ms: 0,
+        ok: true,
+        n: 0,
+        client: '',
+        err: 'no-pmr-in-80-scope',
+      });
     }
   } finally {
     await closePool().catch(() => undefined);

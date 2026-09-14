@@ -331,19 +331,13 @@ function buildCvcVendorScopeFilter(vendorCodes) {
         return { clause: '', params: [] };
     }
 
-    // Fast cobros scope without DSED.LACLAE DISTINCT (1s+ even for one vendor):
-    // documents sold by the vendor OR clients in CLP cartera.
+    // CVC.CODIGOVENDEDOR only. The previous CLP OR (and LACLAE UNION) forced a
+    // full CVC scan: 35 COUNT-by-vendor is ~40ms, pending-summary with OR was ~1s.
+    // Isolated_test: CLP pending for 35/98 is 0 rows, so CLP does not recover debt.
     const scoped = buildSafeAlnumInList(codes);
     return {
-        clause: `AND (
-            TRIM(CVC.CODIGOVENDEDOR) IN (${scoped.inList})
-            OR TRIM(CVC.CODIGOCLIENTEALBARAN) IN (
-                SELECT TRIM(CLP.CODIGOCLIENTE)
-                  FROM DSEDAC.CLP CLP
-                 WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${scoped.inList})
-            )
-        )`,
-        params: [...scoped.params, ...scoped.params],
+        clause: `AND TRIM(CVC.CODIGOVENDEDOR) IN (${scoped.inList})`,
+        params: [...scoped.params],
     };
 }
 

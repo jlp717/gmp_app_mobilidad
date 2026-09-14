@@ -110,8 +110,8 @@ describe('legacy cobros route hardening', () => {
 
     expect(res.status).toBe(200);
     const sql = mockCachedQuery.mock.calls[0][1];
-    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s+\('01','1','02','2'\)/i);
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s+\('01','1','02','2'\)/i);
+    expect(sql).not.toMatch(/DSEDAC\.CLP/i);
     expect(sql).not.toMatch(/DSED\.LACLAE/i);
     expect(mockQuery.mock.calls[0][0]).toBe(sql);
   });
@@ -124,15 +124,14 @@ describe('legacy cobros route hardening', () => {
 
     expect(res.status).toBe(200);
     const sql = mockCachedQuery.mock.calls[0][1];
-    expect(sql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s+IN\s*\(/i);
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\(/i);
-    expect(sql).toMatch(/SELECT\s+TRIM\(CLP\.CODIGOCLIENTE\)\s+FROM\s+DSEDAC\.CLP\s+CLP/i);
+    expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s+IN\s*\(/i);
     expect(sql).not.toMatch(/UNION\s+SELECT\s+DISTINCT\s+TRIM\(LAC\.LCCDCL\)/i);
     expect(sql).not.toMatch(/FROM\s+DSED\.LACLAE\s+LAC/i);
-    expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
+    expect(sql).not.toMatch(/DSEDAC\.CLP/i);
     expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
     expect(sql).toMatch(/<=\s*\(YEAR\(CURRENT_DATE\) \* 10000 \+ MONTH\(CURRENT_DATE\) \* 100 \+ DAY\(CURRENT_DATE\)\)/i);
-    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s+\('01','1','02','2'\)/i);
+    expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s+\('01','1','02','2'\)/i);
     expect(mockQuery.mock.calls[0][0]).toBe(sql);
   });
 
