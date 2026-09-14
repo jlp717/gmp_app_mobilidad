@@ -8,8 +8,9 @@ describe('phase A reparto data/status contracts', () => {
 
   test('collections are bounded to five drivers and report partial batches', () => {
     const source = read('repositories/repartidor-route-db2-repository.js');
-    expect(source).toContain('const COLLECTION_DRIVER_BATCH_SIZE = 5;')
-    expect(source).toContain('for (const batch of batches)');
+    expect(source).toContain('const COLLECTION_DRIVER_BATCH_SIZE = 5;');
+    expect(source).toContain('const COLLECTION_BATCH_CONCURRENCY = 2;');
+    expect(source).toContain('mapWithConcurrency(batches, COLLECTION_BATCH_CONCURRENCY');
   });
 
   test('isolated test history does not promote ERP delivery state', () => {

@@ -2,6 +2,9 @@
 
 const { db } = require('../config');
 const { resolveRepartoRuntime } = require('../../config/reparto-runtime');
+const { cachedQuery } = require('../../services/query-optimizer');
+
+const WEEK_COUNT_CACHE_TTL_SECONDS = 60;
 
 /**
  * Acceso DB2 para /rutero/week. Solo lectura: DSEDAC (ERP) y JAVIER.DELIVERY_STATUS.
@@ -9,6 +12,18 @@ const { resolveRepartoRuntime } = require('../../config/reparto-runtime');
 class RuteroRepository {
     constructor(deps = {}) {
         this._queryWithParams = deps.queryWithParams || ((sql, params, ...rest) => db.queryWithParams(sql, params, ...rest));
+        this._cachedQuery = deps.cachedQuery || cachedQuery;
+        this._weekCountTtlSeconds = deps.weekCountTtlSeconds || WEEK_COUNT_CACHE_TTL_SECONDS;
+    }
+
+    _runCached(sql, cacheKey, params) {
+        return this._cachedQuery(
+            (querySql, queryParams) => this._queryWithParams(querySql, queryParams, false, false),
+            sql,
+            cacheKey,
+            this._weekCountTtlSeconds,
+            params,
+        );
     }
 
     /**
@@ -21,13 +36,14 @@ class RuteroRepository {
             SELECT COUNT(DISTINCT CPC.NUMEROALBARAN) as DELIVERED
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${erpPlaceholders})
+            WHERE OPP.CODIGOREPARTIDOR IN (${erpPlaceholders})
               AND OPP.DIAREPARTO = ?
               AND OPP.MESREPARTO = ?
               AND OPP.ANOREPARTO = ?
               AND (TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R'))
         `;
-        const rows = await this._queryWithParams(erpSql, [...cleanCodes, dia, mes, ano], false, false);
+        const cacheKey = `rutero:week:erp:${cleanCodes.join(',')}:${ano}-${mes}-${dia}`;
+        const rows = await this._runCached(erpSql, cacheKey, [...cleanCodes, dia, mes, ano]);
         return parseInt(rows[0]?.DELIVERED) || 0;
     }
 
@@ -55,9 +71,13 @@ class RuteroRepository {
             FROM ${deliveryStatusTable} DS
             WHERE DS.STATUS = 'ENTREGADO'
               AND ${repCol} IN (${appPlaceholders})
-              AND DATE(${dateCol}) = CURRENT DATE
+              AND ${dateCol} >= CURRENT DATE
+              AND ${dateCol} < CURRENT DATE + 1 DAY
         `;
-        const rows = await this._queryWithParams(appSql, cleanCodes, false, false);
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const schemaKey = dsNew ? 'new' : 'legacy';
+        const cacheKey = `rutero:week:app:${cleanCodes.join(',')}:${schemaKey}:${todayKey}`;
+        const rows = await this._runCached(appSql, cacheKey, cleanCodes);
         return parseInt(rows[0]?.DELIVERED) || 0;
     }
 
@@ -80,11 +100,11 @@ class RuteroRepository {
         `;
         if (cleanCodes.length > 0) {
             const placeholders = cleanCodes.map(() => '?').join(',');
-            const fullSql = baseSql.replace('WHERE 1=1', `WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})`);
+            const fullSql = baseSql.replace('WHERE 1=1', `WHERE CODIGOVENDEDOR IN (${placeholders})`);
             return this._queryWithParams(fullSql, cleanCodes, false, false);
         }
         return [];
     }
 }
 
-module.exports = { RuteroRepository };
+module.exports = { RuteroRepository, WEEK_COUNT_CACHE_TTL_SECONDS };
