@@ -952,7 +952,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         ApiClient.setAuthMode(activeMode);
         _applyCacheScope(user, vendedorCodes);
 
-        // Pre-warm cache in background
+        DashboardFirstPaintGate.open();
         unawaited(
           CachePreWarmer.preWarmCache(
             vendedorCodes: vendedorCodes,
@@ -1086,6 +1086,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   @protected
   void preWarmAuthenticatedSession(AuthState authenticated) {
     final user = authenticated.user!;
+    DashboardFirstPaintGate.open();
     unawaited(
       CachePreWarmer.preWarmCache(
         vendedorCodes: authenticated.vendedorCodes,

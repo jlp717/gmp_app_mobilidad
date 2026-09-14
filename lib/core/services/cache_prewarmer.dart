@@ -24,15 +24,57 @@ enum CachePrewarmTarget {
   commissions,
 }
 
+/// Dashboard completes this when `/dashboard/metrics` has painted (or 4 s).
+/// CachePreWarmer and notification sync wait so they do not steal the radio.
+class DashboardFirstPaintGate {
+  DashboardFirstPaintGate._();
+
+  static Completer<void>? _ready;
+  static const Duration timeout = Duration(seconds: 4);
+
+  static void open() {
+    final current = _ready;
+    if (current == null || current.isCompleted) {
+      _ready = Completer<void>();
+    }
+  }
+
+  static void markReady() {
+    final current = _ready;
+    if (current != null && !current.isCompleted) {
+      current.complete();
+    }
+  }
+
+  static Future<void> wait({Duration? timeout}) {
+    final current = _ready;
+    if (current == null || current.isCompleted) {
+      return Future.value();
+    }
+    return current.future.timeout(
+      timeout ?? DashboardFirstPaintGate.timeout,
+      onTimeout: () {},
+    );
+  }
+
+  @visibleForTesting
+  static void reset() {
+    final current = _ready;
+    if (current != null && !current.isCompleted) {
+      current.complete();
+    }
+    _ready = null;
+  }
+}
+
 /// Service to pre-warm cache with critical data
 class CachePreWarmer {
   static bool _hasPreWarmed = false;
   static int _warmGeneration = 0;
+  static const int prewarmConcurrency = 2;
 
-  /// Idle gap so JEFE dashboard matrix/metrics get the DB2 pool and the
-  /// phone radio. Comercial still pre-warms immediately.
   @visibleForTesting
-  static Duration jefeIdleDelay = const Duration(seconds: 8);
+  static int debugMaxInFlight = 0;
 
   @visibleForTesting
   static List<CachePrewarmTarget> immediateTargets({
@@ -74,13 +116,17 @@ class CachePreWarmer {
       return;
     }
 
+    await DashboardFirstPaintGate.wait();
+    if (generation != _warmGeneration || _hasPreWarmed) return;
+
     if (isJefeVentas) {
-      await Future<void>.delayed(jefeIdleDelay);
-      if (generation != _warmGeneration || _hasPreWarmed) return;
       debugPrint('[CachePreWarmer] Deferred jefe catalog pre-warm');
       try {
-        await _preWarmVendedores();
-        await _preWarmPedidosCatalog();
+        await runWithConcurrency(const [
+          _preWarmVendedores,
+          _preWarmPedidosFamilies,
+          _preWarmPedidosBrands,
+        ]);
         if (generation != _warmGeneration) return;
         _hasPreWarmed = true;
         debugPrint('[CachePreWarmer] Jefe catalog pre-warm completed');
@@ -97,27 +143,17 @@ class CachePreWarmer {
       final codes = vendedorCodes.join(',');
       final currentYear = DateTime.now().year;
       final currentMonth = DateTime.now().month;
-      await Future.wait([
-        _preWarmFacturas(codes, currentYear, currentMonth),
-        _preWarmClients(codes),
-        _preWarmPedidos(codes),
-        _preWarmRuteroWeek(codes, currentYear, currentMonth),
+      await runWithConcurrency([
+        () => _preWarmFacturasList(codes, currentYear, currentMonth),
+        () => _preWarmFacturasYears(codes),
+        () => _preWarmClients(codes),
+        _preWarmPedidosFamilies,
+        _preWarmPedidosBrands,
+        () => _preWarmPedidosOrders(codes),
+        () => _preWarmPedidosStats(codes),
+        () => _preWarmPedidosProducts(codes),
+        () => _preWarmRuteroWeek(codes, currentYear, currentMonth),
       ]);
-
-      // Manager ALL commissions are intentionally not pre-warmed: the cold query
-      // competes with objectives/rutero and can exhaust the DB pool.
-      unawaited(
-        Future<void>.delayed(const Duration(seconds: 2), () async {
-          if (generation != _warmGeneration) return;
-          try {
-            await _preWarmCommissions(codes, currentYear);
-          } catch (e) {
-            debugPrint(
-              '[CachePreWarmer] Delayed commissions pre-warm failed: $e',
-            );
-          }
-        }),
-      );
 
       if (generation != _warmGeneration) return;
       _hasPreWarmed = true;
@@ -127,47 +163,66 @@ class CachePreWarmer {
     }
   }
 
-  static Future<void> _preWarmFacturas(
+  @visibleForTesting
+  static Future<void> runWithConcurrency(
+    List<Future<void> Function()> tasks, {
+    int concurrency = prewarmConcurrency,
+  }) async {
+    if (tasks.isEmpty) return;
+    final limit = concurrency < 1
+        ? 1
+        : (concurrency > tasks.length ? tasks.length : concurrency);
+    var next = 0;
+    var inFlight = 0;
+    debugMaxInFlight = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        final index = next;
+        next += 1;
+        if (index >= tasks.length) return;
+        inFlight += 1;
+        if (inFlight > debugMaxInFlight) debugMaxInFlight = inFlight;
+        try {
+          await tasks[index]();
+        } finally {
+          inFlight -= 1;
+        }
+      }
+    }
+
+    await Future.wait(
+      List<Future<void>>.generate(limit, (_) => worker()),
+    );
+  }
+
+  static Future<void> _preWarmFacturasList(
     String vendorCodes,
     int year,
     int month,
   ) async {
     try {
-      // Match the exact cache key pattern used by facturas service.
-      // Independent GETs — pre-warm them in parallel.
-      await Future.wait([
-        ApiClient.get(
-          '/facturas?vendedorCodes=$vendorCodes&year=$year&month=$month',
-          cacheKey: 'facturas_${vendorCodes}_${year}_${month}_all___',
-          cacheTTL: CacheService.shortTTL,
-        ),
-        ApiClient.get(
-          '/facturas/years?vendedorCodes=$vendorCodes',
-          cacheKey: 'facturas_years_$vendorCodes',
-          cacheTTL: CacheService.longTTL,
-        ),
-      ]);
-
-      debugPrint('[CachePreWarmer] Facturas pre-warmed');
+      await ApiClient.get(
+        '/facturas?vendedorCodes=$vendorCodes&year=$year&month=$month',
+        cacheKey: 'facturas_${vendorCodes}_${year}_${month}_all___',
+        cacheTTL: CacheService.shortTTL,
+      );
+      debugPrint('[CachePreWarmer] Facturas list pre-warmed');
     } catch (e) {
-      debugPrint('[CachePreWarmer] Facturas pre-warm failed: $e');
+      debugPrint('[CachePreWarmer] Facturas list pre-warm failed: $e');
     }
   }
 
-  static Future<void> _preWarmCommissions(String vendorCodes, int year) async {
+  static Future<void> _preWarmFacturasYears(String vendorCodes) async {
     try {
       await ApiClient.get(
-        '/commissions/summary',
-        queryParameters: {
-          'vendedorCode': vendorCodes,
-          'year': year.toString(),
-        },
-        cacheKey: 'commissions_v14_final_sources_${vendorCodes}_$year',
-        cacheTTL: const Duration(minutes: 15),
+        '/facturas/years?vendedorCodes=$vendorCodes',
+        cacheKey: 'facturas_years_$vendorCodes',
+        cacheTTL: CacheService.longTTL,
       );
-      debugPrint('[CachePreWarmer] Commissions pre-warmed');
+      debugPrint('[CachePreWarmer] Facturas years pre-warmed');
     } catch (e) {
-      debugPrint('[CachePreWarmer] Commissions pre-warm failed: $e');
+      debugPrint('[CachePreWarmer] Facturas years pre-warm failed: $e');
     }
   }
 
@@ -183,30 +238,48 @@ class CachePreWarmer {
     }
   }
 
-  static Future<void> _preWarmPedidosCatalog() async {
+  static Future<void> _preWarmPedidosFamilies() async {
     try {
-      await Future.wait([
-        PedidosService.getFamilies(),
-        PedidosService.getBrands(),
-      ]);
-      debugPrint('[CachePreWarmer] Pedidos catalog pre-warmed');
+      await PedidosService.getFamilies();
+      debugPrint('[CachePreWarmer] Pedidos families pre-warmed');
     } catch (e) {
-      debugPrint('[CachePreWarmer] Pedidos catalog pre-warm failed: $e');
+      debugPrint('[CachePreWarmer] Pedidos families pre-warm failed: $e');
     }
   }
 
-  static Future<void> _preWarmPedidos(String vendorCodes) async {
+  static Future<void> _preWarmPedidosBrands() async {
     try {
-      await Future.wait([
-        PedidosService.getFamilies(),
-        PedidosService.getBrands(),
-        PedidosService.getOrders(vendedorCodes: vendorCodes, limit: 20),
-        PedidosService.getOrderStats(vendedorCodes: vendorCodes),
-        PedidosService.getProducts(vendedorCodes: vendorCodes, limit: 50),
-      ]);
-      debugPrint('[CachePreWarmer] Pedidos pre-warmed');
+      await PedidosService.getBrands();
+      debugPrint('[CachePreWarmer] Pedidos brands pre-warmed');
     } catch (e) {
-      debugPrint('[CachePreWarmer] Pedidos pre-warm failed: $e');
+      debugPrint('[CachePreWarmer] Pedidos brands pre-warm failed: $e');
+    }
+  }
+
+  static Future<void> _preWarmPedidosOrders(String vendorCodes) async {
+    try {
+      await PedidosService.getOrders(vendedorCodes: vendorCodes, limit: 20);
+      debugPrint('[CachePreWarmer] Pedidos orders pre-warmed');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] Pedidos orders pre-warm failed: $e');
+    }
+  }
+
+  static Future<void> _preWarmPedidosStats(String vendorCodes) async {
+    try {
+      await PedidosService.getOrderStats(vendedorCodes: vendorCodes);
+      debugPrint('[CachePreWarmer] Pedidos stats pre-warmed');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] Pedidos stats pre-warm failed: $e');
+    }
+  }
+
+  static Future<void> _preWarmPedidosProducts(String vendorCodes) async {
+    try {
+      await PedidosService.getProducts(vendedorCodes: vendorCodes, limit: 50);
+      debugPrint('[CachePreWarmer] Pedidos products pre-warmed');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] Pedidos products pre-warm failed: $e');
     }
   }
 
@@ -250,6 +323,7 @@ class CachePreWarmer {
   static void reset() {
     _warmGeneration++;
     _hasPreWarmed = false;
+    DashboardFirstPaintGate.reset();
     CacheService.clearMemoryCache();
     debugPrint('[CachePreWarmer] Reset');
   }
