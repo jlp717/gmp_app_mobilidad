@@ -5,6 +5,7 @@ const logger = require('../middleware/logger');
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
+const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
 const {
     getCurrentDate,
     buildVendedorFilter,
@@ -128,8 +129,10 @@ router.get('/top-clients', verifyToken, async (req, res) => {
       ORDER BY T.totalSales DESC
     `;
 
-        const cacheKey = `analytics:top_clients:${year || 'current'}:${month || 'all'}:${vendedorCodes || 'ALL'}:${limit}`;
-        const topClients = await cachedQuery(query, sql, cacheKey, TTL.MEDIUM);
+        const now = getCurrentDate();
+        const yearMeta = historicalYearsCacheMeta([year || now.getFullYear()], now);
+        const cacheKey = `analytics:top_clients:${yearMeta.bucket}:${year || 'current'}:${month || 'all'}:${vendedorCodes || 'ALL'}:${limit}`;
+        const topClients = await cachedQuery(query, sql, cacheKey, yearMeta.ttl);
 
         if (!Array.isArray(topClients) || topClients.length === 0) {
             return res.json({ clients: [] });

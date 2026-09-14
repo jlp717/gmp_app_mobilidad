@@ -73,22 +73,10 @@ describe('cache preloader DB2 contracts', () => {
     expect(mockQuery).not.toHaveBeenCalledWith(expect.any(String), expect.any(Array));
   });
 
-  test('warmUpClientsAll uses v6 CTE cache keys for JV defaults', async () => {
-    mockQuery.mockResolvedValue([{ CODE: '4300001091' }]);
-
+  test('warmUpClientsAll no longer writes unused clients:list:v6 keys', async () => {
     await cachePreloader._internal.warmUpClientsAll();
 
-    expect(mockCachedQuery).toHaveBeenCalledTimes(2);
-    const keys = mockCachedQuery.mock.calls.map((call) => call[2]);
-    expect(keys).toEqual(
-      expect.arrayContaining([
-        'clients:list:v6:ALL:none:50:0',
-        'clients:list:v6:ALL:none:100:0',
-      ]),
-    );
-    const sql = mockCachedQuery.mock.calls[0][1];
-    expect(sql).toContain('LACLAE_SCOPED');
-    expect(sql).toContain('ROW_NUMBER()');
-    expect(sql).not.toContain('LATERAL');
+    expect(mockCachedQuery).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 });

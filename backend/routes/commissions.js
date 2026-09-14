@@ -15,6 +15,7 @@ const {
 const { verifyToken } = require('../middleware/auth');
 const { validateQuery, validateBody } = require('../middleware/security');
 const { authorizeVendorScope, isFinancialRole } = require('../middleware/vendor-scope');
+const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
 const {
     isTeamLeader,
@@ -467,14 +468,15 @@ function findVendorRecordInSummary(cached, vendedorCode) {
 
 async function getCachedPaymentSnapshot(vendedorCode, year, month) {
     const yearKey = String(year);
+    const bucket = summaryCacheBucketForYear(year);
     const variants = getCodeVariants(vendedorCode);
     const keys = [];
     for (const variant of variants) {
-        keys.push(`comm:summary:${COMMISSIONS_CACHE_VERSION}:SINGLE:${variant}:${yearKey}`);
+        keys.push(`comm:summary:${COMMISSIONS_CACHE_VERSION}:SINGLE:${variant}:${yearKey}:${bucket}`);
     }
     keys.push(
-        `comm:summary:${COMMISSIONS_CACHE_VERSION}:ALL:${yearKey}`,
-        `comm:summary:${COMMISSIONS_CACHE_VERSION}:TEAM80:${yearKey}`,
+        `comm:summary:${COMMISSIONS_CACHE_VERSION}:ALL:${yearKey}:${bucket}`,
+        `comm:summary:${COMMISSIONS_CACHE_VERSION}:TEAM80:${yearKey}:${bucket}`,
     );
 
     const lookups = await Promise.all(keys.map(async (key) => {
@@ -2109,13 +2111,14 @@ router.get('/summary', verifyToken, validateQuery(summaryQuerySchema), async (re
             ? crypto.createHash('md5').update(requestedVendorCodes.slice().sort().join(',')).digest('hex').substring(0, 12)
             : 'all';
         const allScope = allModeCacheScope(userCode, safeVendorCode) || 'ALL';
+        const summaryMeta = historicalYearsCacheMeta(years, getCurrentDate());
         const aggregatedCacheKey = isGroupedRequest
             ? (safeVendorCode === 'ALL'
-                ? `comm:summary:${COMMISSIONS_CACHE_VERSION}:${allScope}:${years.join(',')}`
-                : `comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:${groupHash}:${years.join(',')}`)
+                ? `comm:summary:${COMMISSIONS_CACHE_VERSION}:${allScope}:${years.join(',')}:${summaryMeta.bucket}`
+                : `comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:${groupHash}:${years.join(',')}:${summaryMeta.bucket}`)
             : null;
         const singleSummaryCacheKey = !isGroupedRequest
-            ? `comm:summary:${COMMISSIONS_CACHE_VERSION}:SINGLE:${safeVendorCode}:${years.join(',')}`
+            ? `comm:summary:${COMMISSIONS_CACHE_VERSION}:SINGLE:${safeVendorCode}:${years.join(',')}:${summaryMeta.bucket}`
             : null;
 
         if (aggregatedCacheKey && !shouldForceRefresh) {
@@ -2492,12 +2495,12 @@ router.get('/summary', verifyToken, validateQuery(summaryQuerySchema), async (re
         }
 
         if (aggregatedCacheKey && aggregatedResult && !aggregatedResult.degraded) {
-            await redisCache.set('route', aggregatedCacheKey, aggregatedResult, 900);
-            logger.info(`[COMMISSIONS] Cached grouped summary for 15min (${aggregatedCacheKey})`);
+            await redisCache.set('route', aggregatedCacheKey, aggregatedResult, summaryMeta.ttl);
+            logger.info(`[COMMISSIONS] Cached grouped summary (${summaryMeta.bucket} ${summaryMeta.ttl}s) (${aggregatedCacheKey})`);
         }
         if (singleSummaryCacheKey && aggregatedResult && !aggregatedResult.degraded) {
-            await redisCache.set('route', singleSummaryCacheKey, aggregatedResult, 300);
-            logger.debug(`[COMMISSIONS] Cached vendor summary for 5min (${singleSummaryCacheKey})`);
+            await redisCache.set('route', singleSummaryCacheKey, aggregatedResult, summaryMeta.ttl);
+            logger.debug(`[COMMISSIONS] Cached vendor summary (${summaryMeta.bucket} ${summaryMeta.ttl}s) (${singleSummaryCacheKey})`);
         }
 
         // Apply pagination to breakdown when vendor=ALL or grouped request
@@ -2770,10 +2773,15 @@ async function loadCommissionConfigForPdf(year) {
     };
 }
 
+function summaryCacheBucketForYear(year) {
+    return historicalYearsCacheMeta([year], getCurrentDate()).bucket;
+}
+
 function buildGroupedSummaryCacheKeyForPdf(safeVendorCode, requestedVendorCodes, userCode, year) {
+    const bucket = summaryCacheBucketForYear(year);
     if (safeVendorCode === 'ALL') {
         const allScope = allModeCacheScope(userCode, safeVendorCode) || 'ALL';
-        return `comm:summary:${COMMISSIONS_CACHE_VERSION}:${allScope}:${year}`;
+        return `comm:summary:${COMMISSIONS_CACHE_VERSION}:${allScope}:${year}:${bucket}`;
     }
     if (requestedVendorCodes.length > 1) {
         const groupHash = crypto
@@ -2781,7 +2789,7 @@ function buildGroupedSummaryCacheKeyForPdf(safeVendorCode, requestedVendorCodes,
             .update(requestedVendorCodes.slice().sort().join(','))
             .digest('hex')
             .substring(0, 12);
-        return `comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:${groupHash}:${year}`;
+        return `comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:${groupHash}:${year}:${bucket}`;
     }
     return null;
 }

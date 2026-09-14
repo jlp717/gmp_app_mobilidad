@@ -5,10 +5,24 @@ const { getCurrentDate, LACLAE_SALES_FILTER, aggregateBSalesByMonth } = require(
 const { TTL } = require('../../services/redis-cache');
 const { buildVendedorFilterParameterized } = require('../utils/dashboardFilters');
 
-const DASHBOARD_CACHE_VERSION = 'v20260602-b-sales-all';
+const DASHBOARD_CACHE_VERSION = 'v20260914-hist-ttl';
+const CLOSED_YEAR_TTL_SECONDS = 7 * 24 * 3600;
+const OPEN_MONTH_TTL_SECONDS = 10 * 60;
 
 function isCompanyWideVendorScope(vendedorCodes) {
     return !vendedorCodes || String(vendedorCodes).trim().toUpperCase() === 'ALL';
+}
+
+function historicalYearsCacheMeta(years, now = getCurrentDate()) {
+    const nowYear = now.getFullYear();
+    const list = (Array.isArray(years) ? years : [years])
+        .map((year) => parseInt(year, 10))
+        .filter((year) => Number.isFinite(year));
+    const hasOpen = list.length === 0 || list.some((year) => year >= nowYear);
+    return {
+        bucket: hasOpen ? 'open' : 'closed',
+        ttl: hasOpen ? OPEN_MONTH_TTL_SECONDS : CLOSED_YEAR_TTL_SECONDS,
+    };
 }
 
 /**
@@ -34,14 +48,16 @@ class DashboardService {
         const month = parseInt(monthRaw) || (now.getMonth() + 1);
         const cacheKey = `dashboard:metrics:${DASHBOARD_CACHE_VERSION}:${year}:${month || 'all'}:${isCompanyWideVendorScope(vendedorCodes) ? 'ALL' : vendedorCodes}`;
         const isAllVendors = isCompanyWideVendorScope(vendedorCodes);
+        const currentMeta = historicalYearsCacheMeta([year], now);
+        const prevMeta = historicalYearsCacheMeta([year - 1], now);
         return {
             now,
             year,
             month,
             cacheKey,
             isAllVendors,
-            currentTTL: isAllVendors ? this._cache.TTL.MEDIUM : this._cache.TTL.SHORT,
-            prevTTL: this._cache.TTL.LONG,
+            currentTTL: currentMeta.ttl,
+            prevTTL: prevMeta.ttl,
             responseCacheKey: `${cacheKey}:response`,
             cacheScope: vendedorCodes || 'ALL',
         };
@@ -229,8 +245,9 @@ class DashboardService {
             dateParams = [now.getFullYear(), now.getFullYear(), currentMonth, now.getFullYear(), currentMonth, currentDay];
         }
 
-        const cacheKey = `dashboard:evolution:${DASHBOARD_CACHE_VERSION}:${years || 'default'}:${granularity}:${upToToday}:${isCompanyWideVendorScope(vendedorCodes) ? 'ALL' : vendedorCodes}`;
-        const evolutionTTL = isCompanyWideVendorScope(vendedorCodes) ? TTL.LONG : TTL.MEDIUM;
+        const yearMeta = historicalYearsCacheMeta(selectedYears, now);
+        const cacheKey = `dashboard:evolution:${DASHBOARD_CACHE_VERSION}:${years || 'default'}:${granularity}:${upToToday}:${isCompanyWideVendorScope(vendedorCodes) ? 'ALL' : vendedorCodes}:${yearMeta.bucket}`;
+        const evolutionTTL = yearMeta.ttl;
 
         let resultData = [];
         if (granularity === 'week') {
@@ -313,4 +330,11 @@ class DashboardService {
     }
 }
 
-module.exports = { DashboardService, DASHBOARD_CACHE_VERSION };
+module.exports = {
+    DashboardService,
+    DASHBOARD_CACHE_VERSION,
+    CLOSED_YEAR_TTL_SECONDS,
+    OPEN_MONTH_TTL_SECONDS,
+    historicalYearsCacheMeta,
+    isCompanyWideVendorScope,
+};
