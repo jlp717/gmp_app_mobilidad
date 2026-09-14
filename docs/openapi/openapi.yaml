@@ -59,6 +59,8 @@ tags:
     description: "Endpoints del módulo Productos."
   - name: "KPI"
     description: "Endpoints del módulo KPI."
+  - name: "Notifications"
+    description: "Snapshot agregado de notificaciones (un GET en lugar de 13)."
   - name: "Operación"
     description: "Endpoints del módulo Operación."
 paths:
@@ -6528,6 +6530,119 @@ paths:
         - url: "/"
         - url: "/api"
       description: "GET health · version check. Contrato del handler Express existente."
+  /notifications/snapshot:
+    get:
+      tags:
+        - "Notifications"
+      summary: "GET notifications · snapshot"
+      operationId: "get_Notifications_snapshot"
+      parameters: []
+      responses:
+        "200":
+          description: "Snapshot agregado. Campos individuales pueden ser null si el origen falló (Promise.allSettled)."
+          content:
+            application/json:
+              schema:
+                type: "object"
+                required:
+                  - success
+                  - orders
+                  - kpi
+                  - ruteroHoy
+                  - ruteroManana
+                  - facturas
+                  - commissions
+                  - bolsa
+                  - metrics
+                  - topClients
+                  - stats
+                properties:
+                  success:
+                    type: "boolean"
+                  orders:
+                    type: "object"
+                    nullable: true
+                    properties:
+                      borrador:
+                        type: "integer"
+                      pendiente:
+                        type: "integer"
+                  kpi:
+                    type: "object"
+                    nullable: true
+                    additionalProperties: true
+                  ruteroHoy:
+                    type: "object"
+                    nullable: true
+                    additionalProperties: true
+                  ruteroManana:
+                    type: "object"
+                    nullable: true
+                    additionalProperties: true
+                  facturas:
+                    type: "object"
+                    nullable: true
+                    additionalProperties: true
+                  commissions:
+                    type: "object"
+                    nullable: true
+                    additionalProperties: true
+                  bolsa:
+                    type: "object"
+                    nullable: true
+                    additionalProperties: true
+                  metrics:
+                    type: "object"
+                    nullable: true
+                    additionalProperties: true
+                  topClients:
+                    type: "array"
+                    nullable: true
+                    maxItems: 3
+                    items:
+                      type: "object"
+                      additionalProperties: true
+                  stats:
+                    type: "object"
+                    nullable: true
+                    additionalProperties: true
+              example:
+                success: true
+                orders:
+                  borrador: 1
+                  pendiente: 2
+                kpi: null
+                ruteroHoy:
+                  count: 4
+                ruteroManana:
+                  count: 3
+                facturas: null
+                commissions: null
+                bolsa: null
+                metrics: null
+                topClients: []
+                stats: null
+        "401":
+          description: "Autenticación requerida"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Autenticación requerida"
+                code: "HTTP_401"
+        "500":
+          description: "Error interno"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Error interno"
+                code: "HTTP_500"
+      description: "GET /api/notifications/snapshot. Reutiliza servicios y cachés existentes. TTL 60 s por usuario. Fallo parcial → campo null."
   /kpi/alerts:
     get:
       tags:

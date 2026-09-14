@@ -85,6 +85,7 @@ const { getCacheStats } = require('./services/redis-cache');
 const { networkOptimizer, responseCoalescing } = require('./middleware/network-optimizer');
 const dbTiming = require('./middleware/db-timing');
 const telemetryRoutes = require('./routes/telemetry');
+const notificationsRoutes = require('./routes/notifications');
 const { cacheMiddleware, invalidationMiddleware, getCacheStats: getHttpCacheStats } = require('./middleware/http-cache');
 const { createOptimizedQuery } = require('./services/query-optimizer');
 const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
@@ -767,12 +768,14 @@ app.use('/api/entregas', verifyToken, repartoConfirmationWriteGuard);
 if (USE_TS_ROUTES && global.__TS_APP__) {
   // TS app handles its own auth, routes, and middleware
   app.use(global.__TS_APP__);
+  app.use('/api/notifications', verifyToken, notificationsRoutes);
   logger.info('✅ TypeScript routes mounted (compiled from src/)');
 } else {
   // Legacy JavaScript routes
   app.use('/api', verifyToken);
   app.use('/api', cacheMiddleware); // Authenticated HTTP cache; requires req.user from verifyToken
   app.use('/api/telemetry', telemetryRoutes);
+  app.use('/api/notifications', notificationsRoutes);
 
   // Mount Protected Modules
   app.use('/api/dashboard', dashboardRoutes);
