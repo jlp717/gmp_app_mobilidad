@@ -19,7 +19,7 @@ import 'package:sentry_dio/sentry_dio.dart';
 /// Enhanced with automatic server detection and fallback
 class ApiClient {
   static Dio? _dio;
-  static const int _maxRetries = 3;
+  static const int _maxRetries = 1;
   static const Duration _retryDelay = Duration(seconds: 1);
   static bool _isInitialized = false;
   static String? _savedAuthToken;
@@ -211,24 +211,17 @@ class ApiClient {
   /// - Adaptive timeouts: mobile data gets +50% to handle carrier latency
   /// - Certificate pinning for production
   static Dio _createDio() {
-    // Adaptive timeouts: mobile data has higher latency
-    final isMobileData = _lastConnectivity == ConnectivityResult.mobile ||
-        _lastConnectivity == ConnectivityResult.vpn;
-    final connectTimeout =
-        isMobileData ? const Duration(seconds: 20) : ApiConfig.connectTimeout;
-    final receiveTimeout =
-        isMobileData ? const Duration(seconds: 45) : ApiConfig.receiveTimeout;
+    final connectTimeout = ApiConfig.connectTimeout;
+    final receiveTimeout = ApiConfig.receiveTimeout;
     debugPrint(
-        '[ApiClient] ðŸ“¡ Timeouts: connect=${connectTimeout.inSeconds}s, '
+        '[ApiClient] Timeouts: connect=${connectTimeout.inSeconds}s, '
         'receive=${receiveTimeout.inSeconds}s (network=$_lastConnectivity)');
     final dio = Dio(
       BaseOptions(
         baseUrl: ApiConfig.baseUrl,
         connectTimeout: connectTimeout,
         receiveTimeout: receiveTimeout,
-        sendTimeout: isMobileData
-            ? const Duration(seconds: 25)
-            : const Duration(seconds: 15),
+        sendTimeout: const Duration(seconds: 15),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -1344,16 +1337,12 @@ class _RetryInterceptor extends Interceptor {
     }
 
     if (shouldRetry && retryCount < retryLimit) {
-      // FIX: Use longer backoff for 429 rate limit errors
-      final isRateLimited = err.response?.statusCode == 429;
-      final baseDelay = isRateLimited ? _retryDelay * 2 : _retryDelay;
-      final delay = baseDelay * (retryCount + 1);
+      final delay = _retryDelayFor(err);
 
       debugPrint(
         '[ApiClient] Retrying request (${retryCount + 1}/$retryLimit) in ${delay.inSeconds}s...',
       );
 
-      // Exponential backoff
       await Future<void>.delayed(delay);
 
       try {
@@ -1392,25 +1381,31 @@ class _RetryInterceptor extends Interceptor {
       return false;
     }
 
-    // Retry on network errors and 5xx server errors
+    // Retry connection failures and gateway errors only. Never receiveTimeout,
+    // 500 or 429 (surface "servidor ocupado" for the user to retry manually).
     if (err.type == DioExceptionType.connectionError ||
-        err.type == DioExceptionType.connectionTimeout ||
-        err.type == DioExceptionType.receiveTimeout) {
+        err.type == DioExceptionType.connectionTimeout) {
       return true;
     }
 
     final statusCode = err.response?.statusCode;
-
-    // FIX: Retry on 429 (Too Many Requests) with longer backoff
-    if (statusCode == 429) {
-      return true;
-    }
-
-    if (statusCode != null && statusCode >= 500 && statusCode < 600) {
+    if (statusCode == 502 || statusCode == 503 || statusCode == 504) {
       return true;
     }
 
     return false;
+  }
+
+  Duration _retryDelayFor(DioException err) {
+    final status = err.response?.statusCode;
+    if (status == 502 || status == 503 || status == 504) {
+      final retryAfter = err.response?.headers.value('retry-after');
+      final seconds = int.tryParse(retryAfter ?? '');
+      if (seconds != null && seconds > 0) {
+        return Duration(seconds: seconds > 30 ? 30 : seconds);
+      }
+    }
+    return _retryDelay;
   }
 }
 
