@@ -3,6 +3,7 @@
 /// OPTIMIZED: Full caching support with intelligent TTLs
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -80,6 +81,68 @@ class RepartoRecipientSuggestion {
 
   bool get isComplete =>
       nombre.isNotEmpty && apellidos.isNotEmpty && dni.isNotEmpty;
+}
+
+/// Filled by [EntregasNotifier.obtenerDetalleAlbaran] so opening a delivery
+/// does not issue a second RTT to `/recipient-suggestion`.
+class RecipientSuggestionGate {
+  RecipientSuggestionGate._();
+
+  static final Map<String, Completer<Map<String, dynamic>?>> _inflight =
+      <String, Completer<Map<String, dynamic>?>>{};
+  static final Map<String, Map<String, dynamic>?> _remembered =
+      <String, Map<String, dynamic>?>{};
+
+  static String _key(String clientCode, String owner) =>
+      '${owner.trim()}|${clientCode.trim()}';
+
+  static Completer<Map<String, dynamic>?> begin({
+    required String clientCode,
+    required String owner,
+  }) {
+    final completer = Completer<Map<String, dynamic>?>();
+    final key = _key(clientCode, owner);
+    _remembered.remove(key);
+    _inflight[key] = completer;
+    return completer;
+  }
+
+  static void complete(
+    Completer<Map<String, dynamic>?>? gate, {
+    required String clientCode,
+    required String owner,
+    Map<String, dynamic>? raw,
+  }) {
+    final key = _key(clientCode, owner);
+    _remembered[key] = raw;
+    if (gate != null && !gate.isCompleted) {
+      gate.complete(raw);
+    }
+    _inflight.remove(key);
+  }
+
+  static Future<Map<String, dynamic>?> take({
+    required String clientCode,
+    required String owner,
+  }) async {
+    final key = _key(clientCode, owner);
+    final pending = _inflight[key];
+    if (pending != null) {
+      return pending.future;
+    }
+    if (_remembered.containsKey(key)) {
+      return _remembered[key];
+    }
+    return null;
+  }
+
+  static bool wasProvided({
+    required String clientCode,
+    required String owner,
+  }) {
+    final key = _key(clientCode, owner);
+    return _remembered.containsKey(key) || _inflight.containsKey(key);
+  }
 }
 
 class RepartoReceiptEmailResult {
@@ -723,6 +786,19 @@ class RepartidorDataService {
         statusCode: 422,
         code: 'CLIENTE_INVALID',
       );
+    }
+
+    final embedded = await RecipientSuggestionGate.take(
+      clientCode: client,
+      owner: owner,
+    );
+    if (RecipientSuggestionGate.wasProvided(
+      clientCode: client,
+      owner: owner,
+    )) {
+      if (embedded == null) return null;
+      final suggestion = RepartoRecipientSuggestion.fromJson(embedded);
+      return suggestion.isComplete ? suggestion : null;
     }
 
     final response = await ApiClient.get(

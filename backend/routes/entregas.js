@@ -6,7 +6,7 @@ const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema, getDeliveryStatusJoin } = require('../utils/delivery-status-check');
-const { resolveFinanceWriteTables } = require('../repositories/repartidor-route-db2-repository');
+const { resolveFinanceWriteTables, getRecipientSuggestion } = require('../repositories/repartidor-route-db2-repository');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const dayMoveRepo = require('../repositories/repartidor-rutero-day-move-db2-repository');
 const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
@@ -1733,7 +1733,26 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
                 || Math.abs(resolvedAmount.amount - Math.round((netoSum + ivaSum) * 100) / 100) > 0.01,
         };
 
-        res.json({ success: true, albaran });
+        let recipientSuggestion = null;
+        try {
+            const ownerId = String(header.CODIGO_REPARTIDOR || '').trim();
+            const raw = ownerId
+                ? await getRecipientSuggestion({
+                    clientCode: header.CLIENTE,
+                    ownerIds: [ownerId],
+                })
+                : null;
+            const nombre = String(raw?.nombre || '').trim();
+            const apellidos = String(raw?.apellidos || '').trim();
+            const dni = String(raw?.dni || '').trim().toUpperCase();
+            if (nombre && apellidos && dni) {
+                recipientSuggestion = { nombre, apellidos, dni };
+            }
+        } catch (_suggestionError) {
+            recipientSuggestion = null;
+        }
+
+        res.json({ success: true, albaran, recipientSuggestion });
     } catch (error) {
         if (error instanceof RepartoHttpError) {
             return res.status(error.status).json({ success: false, code: error.code, error: error.message });

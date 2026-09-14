@@ -5,6 +5,7 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
 import 'package:gmp_app_mobilidad/core/utils/erp_document_label.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_journal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_receipt_contract.dart';
 
@@ -1162,7 +1163,12 @@ class EntregasNotifier extends Notifier<EntregasState> {
       return null;
     }
 
+    Completer<Map<String, dynamic>?>? suggestionGate;
     try {
+      suggestionGate = RecipientSuggestionGate.begin(
+        clientCode: resolvedCliente,
+        owner: owner,
+      );
       // Prefer Dio queryParameters — embedding `?` in the path is fragile with
       // baseUrl resolution and has caused CLIENT_REQUIRED 400s in production.
       final response = await ApiClient.get(
@@ -1216,9 +1222,28 @@ class EntregasNotifier extends Notifier<EntregasState> {
           albaranes: patched,
           albaranSeleccionado: albaran,
         );
+        final rawSuggestion = response['recipientSuggestion'];
+        RecipientSuggestionGate.complete(
+          suggestionGate,
+          clientCode: resolvedCliente,
+          owner: owner,
+          raw: rawSuggestion is Map
+              ? Map<String, dynamic>.from(rawSuggestion)
+              : null,
+        );
         return albaran;
       }
+      RecipientSuggestionGate.complete(
+        suggestionGate,
+        clientCode: resolvedCliente,
+        owner: owner,
+      );
     } catch (error) {
+      RecipientSuggestionGate.complete(
+        suggestionGate,
+        clientCode: resolvedCliente,
+        owner: owner,
+      );
       state = state.copyWith(error: _safeDeliveryError(error, detail: true));
     }
     return null;

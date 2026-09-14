@@ -415,6 +415,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     });
 
     try {
+      final dayLoad = _loadDayClients(
+        useDirectEndpoint: useDirectEndpoint,
+        forceRefresh: useDirectEndpoint,
+        generation: generation,
+      );
       final result = await OfflineAwareApi.get(
         ApiConfig.ruteroWeek,
         queryParameters: {
@@ -436,7 +441,10 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       );
 
       final response = result.data;
-      if (!mounted || generation != _loadGeneration) return;
+      if (!mounted || generation != _loadGeneration) {
+        await dayLoad;
+        return;
+      }
       final weekRaw = response['week'];
       if (weekRaw is! Map) {
         setState(() {
@@ -444,6 +452,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               (response['error'] ?? 'Respuesta de rutero inválida').toString();
           _isLoadingWeek = false;
         });
+        await dayLoad;
         return;
       }
       setState(() {
@@ -473,20 +482,20 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             _loadWeekData(useDirectEndpoint: useDirectEndpoint);
           }
         });
+        await dayLoad;
         return;
       } else {
-        if (!mounted || generation != _loadGeneration) return;
+        if (!mounted || generation != _loadGeneration) {
+          await dayLoad;
+          return;
+        }
         setState(() {
           _isCacheLoading = false;
           _cacheRetryCount = 0;
         });
       }
 
-      await _loadDayClients(
-        useDirectEndpoint: useDirectEndpoint,
-        forceRefresh: useDirectEndpoint,
-        generation: generation,
-      );
+      await dayLoad;
     } on OfflineException catch (e) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
