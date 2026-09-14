@@ -20,7 +20,6 @@ const {
   DEBT_VIEW,
   boundDebtFetchFirst,
   cvcPendientesJoins,
-  cvcCliJoin,
   cvcLiveTypeSql,
   cvcPendingPredicate,
   formaPagoLabel,
@@ -1122,37 +1121,43 @@ class Db2CobrosRepository extends CobrosRepository {
     const pageOffset = hasOffset ? safeOffset : (safePage - 1) * safeLimit;
     const clientFetchLimit = boundDebtFetchFirst(pageOffset + safeLimit);
 
-    // The mobile summary only needs client-level debt. The previous version
-    // rebuilt every CVC document plus app-side document joins before paging,
-    // which made cold requests scale with the whole ERP portfolio.
+    // Aggregate CVC first (same shape as the fast COUNT-by-vendor), then join
+    // CLI names on the grouped clients. Joining CLI before GROUP BY made raso
+    // 35 cold ~1s while COUNT stayed ~44ms. Overlay stays off CVC (app tables).
     const summarySql = `
-      WITH CVC_CLIENTS AS (
-        SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
-               COALESCE(
-                 NULLIF(MIN(TRIM(CLI.NOMBREALTERNATIVO)), ''),
-                 MIN(TRIM(CLI.NOMBRECLIENTE)),
-                 MIN(TRIM(CVC.CODIGOCLIENTEALBARAN))
-               ) AS NOMBRE,
+      WITH CVC_AGG AS (
+        SELECT CVC.CODIGOCLIENTEALBARAN AS CLIENTE_RAW,
                COUNT(*) AS DOC_COUNT,
                SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
                SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
                    <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
          FROM ${DEBT_VIEW} CVC
-         ${cvcCliJoin('CVC')}
          WHERE ${cvcPendingPredicate('CVC')}
            ${docFilters.clause}
            ${emptyClientFilter}
            ${vendorClause}
-         GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN)
+         GROUP BY CVC.CODIGOCLIENTEALBARAN
+      ), CVC_CLIENTS AS (
+        SELECT TRIM(A.CLIENTE_RAW) AS CLIENTE,
+               A.DOC_COUNT,
+               A.TOTAL_PENDIENTE,
+               A.TOTAL_VENCIDO
+          FROM CVC_AGG A
       )
-      SELECT CLIENTE,
-             NOMBRE,
-             DOC_COUNT,
-             TOTAL_PENDIENTE,
-             TOTAL_VENCIDO
-        FROM CVC_CLIENTS
-       ORDER BY TOTAL_PENDIENTE DESC, CLIENTE ASC
+      SELECT T.CLIENTE,
+             COALESCE(
+               NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''),
+               TRIM(CLI.NOMBRECLIENTE),
+               T.CLIENTE
+             ) AS NOMBRE,
+             T.DOC_COUNT,
+             T.TOTAL_PENDIENTE,
+             T.TOTAL_VENCIDO
+        FROM CVC_CLIENTS T
+        LEFT JOIN DSEDAC.CLI CLI
+          ON TRIM(CLI.CODIGOCLIENTE) = T.CLIENTE
+       ORDER BY T.TOTAL_PENDIENTE DESC, T.CLIENTE ASC
        FETCH FIRST ${clientFetchLimit} ROWS ONLY
     `;
 
@@ -1167,7 +1172,7 @@ class Db2CobrosRepository extends CobrosRepository {
     };
     const [rows, appClientAdjustments, appOrderSummary] = await Promise.all([
       runQuery(summarySql),
-      this.getAppSideCobrosByClient(vendorClause, vendorParams),
+      this.getAppSideCobrosByClient(),
       this.getAppOrderPendingSummary(appOrderContext),
     ]);
 
@@ -1336,7 +1341,7 @@ class Db2CobrosRepository extends CobrosRepository {
     return adjustments;
   }
 
-  async getAppSideCobrosByClient(vendorClause, queryParams) {
+  async getAppSideCobrosByClient() {
     const adjustments = new Map();
     const add = (clientCode, amount) => {
       const code = trim(clientCode);
@@ -1344,22 +1349,16 @@ class Db2CobrosRepository extends CobrosRepository {
       adjustments.set(code, (adjustments.get(code) || 0) + (parseFloat(amount) || 0));
     };
 
+    // App-side overlay must not re-scan CVC. EXISTS(CVC) was the ~1s half of
+    // raso 35 cold; the summary already has the vendor-scoped client set, and
+    // JS only subtracts when the client appears in that CVC aggregate.
     try {
       const comercialSql = `
         SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,
                COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
           FROM ${COBROS_TABLE} C
-         WHERE EXISTS (
-           SELECT 1
-            FROM ${DEBT_VIEW} CVC
-            WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
-              AND ${cvcPendingPredicate('CVC')}
-              ${vendorClause}
-         )
          GROUP BY TRIM(C.CODIGO_CLIENTE)`;
-      const rows = queryParams.length > 0
-        ? await queryWithParams(comercialSql, queryParams, [])
-        : await query(comercialSql, false);
+      const rows = await query(comercialSql, false);
       for (const row of rows || []) add(row.CLIENTE, row.TOTAL_APP);
     } catch (error) {
       logger.warn(`[COBROS_REPO] App-side COBROS summary subtract skipped: ${error.message}`);
@@ -1370,17 +1369,8 @@ class Db2CobrosRepository extends CobrosRepository {
         SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS CLIENTE,
                COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_APP
           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
-         WHERE EXISTS (
-           SELECT 1
-            FROM ${DEBT_VIEW} CVC
-            WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)
-              AND ${cvcPendingPredicate('CVC')}
-              ${vendorClause}
-         )
-         GROUP BY R.CODIGOCLIENTEALBARAN`;
-      const rows = queryParams.length > 0
-        ? await queryWithParams(repartidorSql, queryParams, [])
-        : await query(repartidorSql, false);
+         GROUP BY TRIM(R.CODIGOCLIENTEALBARAN)`;
+      const rows = await query(repartidorSql, false);
       for (const row of rows || []) add(row.CLIENTE, row.TOTAL_APP);
     } catch (error) {
       logger.warn(`[COBROS_REPO] App-side REPARTIDOR_COBROS summary subtract skipped: ${error.message}`);

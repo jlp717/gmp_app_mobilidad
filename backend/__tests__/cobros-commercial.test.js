@@ -121,7 +121,7 @@ function mockRepoPendingSummaryDb({
     );
   };
   const routeSql = async (sql) => {
-    if (/WITH\s+CVC_CLIENTS/i.test(sql)) return clientPageRows();
+    if (/CVC_CLIENTS/i.test(sql)) return clientPageRows();
     if (/FROM\s+JAVIER\.COBROS\s+C/i.test(sql) && /TOTAL_APP/i.test(sql)) {
       return aggregatePayments(pageCobros, 'TOTAL_APP');
     }
@@ -168,7 +168,7 @@ describe('commercial cobros hardening', () => {
       isJefeVentas: true,
     });
 
-    const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
+    const sql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
     expect(sql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
     expect(sql).not.toMatch(/\bJOIN\s+DSEDAC\.CLP/i);
@@ -212,8 +212,8 @@ describe('commercial cobros hardening', () => {
 
     expect(result.pagination).toEqual({ limit: 25, page: 3, offset: 50, returnedDocuments: 1 });
     expect(Object.keys(result.summary)).toEqual(['C051']);
-    const summarySql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
-    expect(summarySql).toMatch(/ORDER BY TOTAL_PENDIENTE DESC, CLIENTE ASC/i);
+    const summarySql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
+    expect(summarySql).toMatch(/ORDER BY T\.TOTAL_PENDIENTE DESC, T\.CLIENTE ASC/i);
     expect(summarySql).toMatch(/FETCH FIRST \d+ ROWS ONLY/i);
     const fetchLimit = Number(summarySql.match(/FETCH FIRST (\d+) ROWS ONLY/i)[1]);
     expect(fetchLimit).toBeGreaterThan(0);
@@ -239,7 +239,7 @@ describe('commercial cobros hardening', () => {
     });
 
     const cvcCall = mockQueryWithParams.mock.calls.find(([sql]) =>
-      /WITH\s+CVC_CLIENTS/i.test(sql),
+      /CVC_CLIENTS/i.test(sql),
     );
     expect(cvcCall).toBeTruthy();
     expect(cvcCall[0]).toMatch(/TRIM\(CVC\.TIPODOCUMENTO\)\s+IN\s*\(\?\)/i);
@@ -275,7 +275,7 @@ describe('commercial cobros hardening', () => {
     expect(result.summary.C051).toEqual({ nombre: 'Cliente 51', total: 100, vencido: 0, count: 1, estado: 'PENDIENTE' });
     expect(result.grandTotal).toBe(5100);
     expect(result.grandTotalVencido).toBe(0);
-    const summarySql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
+    const summarySql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
     expect(summarySql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
   });
 
@@ -353,7 +353,7 @@ describe('commercial cobros hardening', () => {
     expect(result.cvcGrandTotal).toBe(300);
     expect(result.cvcGrandTotalVencido).toBe(50);
     expect(result.appOrdersTotal).toBe(0);
-    const summarySql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
+    const summarySql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
     expect(summarySql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
   });
 
@@ -378,13 +378,56 @@ describe('commercial cobros hardening', () => {
     expect(result.grandTotalVencido).toBe(50);
     expect(result.clientCount).toBe(2);
     const cvcCalls = [...mockQuery.mock.calls, ...mockQueryWithParams.mock.calls]
-      .filter(([sql]) => /WITH\s+CVC_CLIENTS/i.test(sql));
+      .filter(([sql]) => /CVC_CLIENTS/i.test(sql));
     expect(cvcCalls).toHaveLength(1);
-    expect(cvcCalls[0][0]).toMatch(/GROUP BY TRIM\(CVC\.CODIGOCLIENTEALBARAN\)/i);
+    expect(cvcCalls[0][0]).toMatch(/GROUP BY CVC\.CODIGOCLIENTEALBARAN/i);
     expect(cvcCalls[0][0]).toMatch(/FETCH FIRST \d+ ROWS ONLY/i);
     const fetchLimit = Number(cvcCalls[0][0].match(/FETCH FIRST (\d+) ROWS ONLY/i)[1]);
     expect(fetchLimit).toBeGreaterThan(0);
     expect(fetchLimit).toBeLessThanOrEqual(500);
+  });
+
+  test('getPendingSummary aggregates CVC before joining CLI names', async () => {
+    mockRepoPendingSummaryDb();
+    const repo = new Db2CobrosRepository();
+
+    await repo.getPendingSummary('35', {
+      userId: '35',
+      userRole: 'COMERCIAL',
+      isJefeVentas: false,
+    });
+
+    const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_AGG/i.test(candidate));
+    expect(sql).toMatch(/WITH\s+CVC_AGG\s+AS/i);
+    expect(sql).toMatch(/GROUP BY CVC\.CODIGOCLIENTEALBARAN/i);
+    const aggBlock = sql.split(/,\s*CVC_CLIENTS/i)[0];
+    expect(aggBlock).not.toMatch(/DSEDAC\.CLI/i);
+    expect(sql).toMatch(/LEFT JOIN DSEDAC\.CLI CLI/i);
+    expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\(/i);
+  });
+
+  test('getPendingSummary overlay does not re-scan CVC', async () => {
+    mockRepoPendingSummaryDb({
+      pageRows: [
+        { CLIENTE: 'C001', NOMBRE: 'Cliente Uno', TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' },
+      ],
+      pageCobros: [{ CLIENTE: 'C001', TOTAL_APP: '10.00' }],
+    });
+    const repo = new Db2CobrosRepository();
+
+    const result = await repo.getPendingSummary('35', {
+      userId: '35',
+      userRole: 'COMERCIAL',
+      isJefeVentas: false,
+    });
+
+    const overlaySql = [...mockQuery.mock.calls, ...mockQueryWithParams.mock.calls]
+      .map(([sql]) => sql)
+      .filter((sql) => /FROM\s+JAVIER\.COBROS\s+C/i.test(sql) || /REPARTIDOR_COBROS\s+R/i.test(sql));
+    expect(overlaySql.length).toBeGreaterThan(0);
+    expect(overlaySql.every((sql) => !/EXISTS/i.test(sql))).toBe(true);
+    expect(overlaySql.every((sql) => !/DSEDAC\.CVC/i.test(sql))).toBe(true);
+    expect(result.summary.C001.total).toBe(90);
   });
 
   test('getPendingSummary treats documents due today as vencido', async () => {
@@ -412,7 +455,7 @@ describe('commercial cobros hardening', () => {
       vendorCodes: ['01', '02'],
     });
 
-    const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
+    const sql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\(/i);
     expect(sql).toMatch(/IN\s*\('01','1','02','2'\)/i);
     expect(sql).not.toMatch(/DSEDAC\.CLP/i);
@@ -447,7 +490,7 @@ describe('commercial cobros hardening', () => {
       isJefeVentas: true,
     });
 
-    const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
+    const sql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
     expect(sql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\(/i);
     expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s+IN\s*\(/i);
@@ -481,7 +524,7 @@ describe('commercial cobros hardening', () => {
       vendorCodes,
     });
 
-    const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
+    const sql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\('[^']+'/i);
     expect(sql).toMatch(/'UNK'/);
     expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\([^)]*\?/i);
@@ -499,7 +542,7 @@ describe('commercial cobros hardening', () => {
       isJefeVentas: true,
     });
 
-    const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
+    const sql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\('UNK'\)/i);
     expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\([^)]*\?/i);
     expect(sql).not.toMatch(/DSEDAC\.CLP/i);
