@@ -26,12 +26,24 @@ function parseYearsParam(yearsRaw, now) {
         : [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
 }
 
+/**
+ * Flutter Panel envía `year` (un ejercicio). El service solo lee `years`.
+ * Sin este puente se escanean 3 ejercicios y JEFE ALL se va a ~16s.
+ */
+function resolveEvolutionYears(query) {
+    const years = query?.years != null ? String(query.years).trim() : '';
+    if (years) return years;
+    const year = query?.year != null ? String(query.year).trim() : '';
+    return year || undefined;
+}
+
 /** sales-evolution: granularity/upToToday/months con defaults legacy. */
 function parseEvolutionQuery(query) {
     return {
         granularity: query.granularity || 'month',
         upToToday: query.upToToday || 'false',
         months: query.months || 36,
+        years: resolveEvolutionYears(query),
     };
 }
 
@@ -48,6 +60,7 @@ module.exports = {
     coerceIntOr,
     parsePeriodQuery,
     parseYearsParam,
+    resolveEvolutionYears,
     parseEvolutionQuery,
     parseRuteroWeekQuery,
 };

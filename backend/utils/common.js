@@ -331,12 +331,11 @@ function buildCvcVendorScopeFilter(vendorCodes) {
         return { clause: '', params: [] };
     }
 
-    // CVC.CODIGOVENDEDOR only. The previous CLP OR (and LACLAE UNION) forced a
-    // full CVC scan: 35 COUNT-by-vendor is ~40ms, pending-summary with OR was ~1s.
-    // Isolated_test: CLP pending for 35/98 is 0 rows, so CLP does not recover debt.
+    // CVC.CODIGOVENDEDOR is CHAR(2). TRIM() disables the index and sent
+    // vendor 35 pending-summary to ~1s. Literal IN matches CHAR(2) codes.
     const scoped = buildSafeAlnumInList(codes);
     return {
-        clause: `AND TRIM(CVC.CODIGOVENDEDOR) IN (${scoped.inList})`,
+        clause: `AND CVC.CODIGOVENDEDOR IN (${scoped.inList})`,
         params: [...scoped.params],
     };
 }

@@ -35,6 +35,8 @@ describe('debt-view-contract', () => {
     expect(joins).not.toMatch(/DSEDAC\.FPA/i);
     const pendientesJoins = cvcPendientesJoins('C');
     expect(pendientesJoins).toMatch(/LEFT JOIN DSEDAC\.FPG FPG/i);
+    expect(pendientesJoins).toMatch(/FPG\.CODIGOFORMAPAGO = C\.CODIGOFORMAPAGO/);
+    expect(pendientesJoins).not.toMatch(/TRIM\(FPG\.CODIGOFORMAPAGO\)/);
     expect(pendientesJoins).not.toMatch(/LEFT JOIN DSEDAC\.CAC/i);
     expect(pendientesJoins).not.toMatch(/LEFT JOIN DSEDAC\.CPC/i);
     expect(cvcCliJoin('CVC')).toMatch(/LEFT JOIN DSEDAC\.CLI CLI/i);

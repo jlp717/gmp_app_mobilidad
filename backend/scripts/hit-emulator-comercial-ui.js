@@ -182,8 +182,12 @@ function typeDigits(value) {
 }
 
 function clearFocused() {
-  for (let i = 0; i < 18; i += 1) {
-    adb(['shell', 'input', 'keyevent', 'KEYCODE_DEL'], { silent: true });
+  // Flutter often places the caret at the start. DEL then prepends instead of wiping.
+  try {
+    adb(['shell', 'input', 'keyevent', 'KEYCODE_MOVE_END'], { silent: true, noRetry: true });
+  } catch { /* ignore */ }
+  for (let i = 0; i < 40; i += 1) {
+    adb(['shell', 'input', 'keyevent', 'KEYCODE_DEL'], { silent: true, noRetry: true });
   }
 }
 
@@ -678,13 +682,13 @@ async function main() {
     evidenceShot('01-home-comercial');
     const liquidacionOnly = process.argv.includes('--liquidacion-only');
     const ofertasOnly = process.argv.includes('--ofertas-only');
+    const confirmOnly = process.argv.includes('--confirm-only');
     if (ofertasOnly) {
       await runOfertas(home);
       evidenceShot('02-pedidos-ofertas');
-      ensureGmpForeground();
-      await sleep(600);
-      await runLiquidacion();
-      evidenceShot('04-liquidacion');
+    } else if (confirmOnly) {
+      await runPedido(home);
+      evidenceShot('02-pedidos-confirm');
     } else if (!liquidacionOnly) {
       await runPedido(home);
       evidenceShot('02-pedidos');

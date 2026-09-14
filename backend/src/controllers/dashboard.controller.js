@@ -67,11 +67,11 @@ async function salesEvolutionController(req, res, next) {
         if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
         const vendedorCodes = scoped.vendedorCodes;
 
-        const { granularity, upToToday, months } = parseEvolutionQuery(req.query);
+        const { granularity, upToToday, months, years } = parseEvolutionQuery(req.query);
 
         const evolution = await dashboardService.getSalesEvolution(
             vendedorCodes,
-            { years: req.query.years, granularity, upToToday, months },
+            { years, granularity, upToToday, months },
         );
         return res.json({ evolution });
     } catch (error) {

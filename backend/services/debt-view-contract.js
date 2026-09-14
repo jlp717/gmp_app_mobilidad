@@ -33,7 +33,7 @@ function cvcLiveTypeSql(alias = 'CVC') {
 function cvcPendientesJoins(alias = 'C') {
   return `
             LEFT JOIN DSEDAC.FPG FPG
-              ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(${alias}.CODIGOFORMAPAGO)`;
+              ON FPG.CODIGOFORMAPAGO = ${alias}.CODIGOFORMAPAGO`;
 }
 
 function cvcDocumentJoins(alias = 'C') {
@@ -48,7 +48,7 @@ function cvcDocumentJoins(alias = 'C') {
              AND ${alias}.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
              AND ${alias}.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.FPG FPG
-              ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(${alias}.CODIGOFORMAPAGO)`;
+              ON FPG.CODIGOFORMAPAGO = ${alias}.CODIGOFORMAPAGO`;
 }
 
 function cvcCliJoin(alias = 'CVC') {

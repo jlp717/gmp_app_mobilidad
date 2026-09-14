@@ -2255,7 +2255,7 @@ async function main() {
     // ERP-seeded paths below are deliberately non-isomorphic transformations.
     // Only TABLE_MAPPINGS production -> TEST application pairs are preflighted.
     const pairs = collectMappingPairs();
-    const sequencePairs = pairs.filter((pair) => pair.objectType === 'SEQUENCE');
+    const sequencePairs = pairs.filter((pair) => pair.objectType === 'SEQUENCE' && pairSelected(pair));
     const sequenceBlocks = [];
     for (const pair of sequencePairs) {
       const sourceExists = await sequenceExists(pair.src);
@@ -2276,7 +2276,7 @@ async function main() {
     // so comparing its columns as an isomorphic production pair creates a
     // false preflight block (the TEST-only audit/status columns are expected).
     // Keep the strict metadata gate for every true production -> TEST copy.
-    const tablePairs = pairs.filter((pair) => pair.objectType === 'TABLE' && !pair.erpSeeded);
+    const tablePairs = pairs.filter((pair) => pair.objectType === 'TABLE' && !pair.erpSeeded && pairSelected(pair));
     if (RECONCILE_TEST_SCHEMA) {
       const schemaPreview = await reconcileMappingPairs(tablePairs, {
         apply: false,
