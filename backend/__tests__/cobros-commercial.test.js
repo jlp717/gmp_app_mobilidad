@@ -406,7 +406,7 @@ describe('commercial cobros hardening', () => {
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\(/i);
   });
 
-  test('getPendingSummary overlay does not re-scan CVC', async () => {
+  test('getPendingSummary overlay uses uncorrelated CVC client IN-list', async () => {
     mockRepoPendingSummaryDb({
       pageRows: [
         { CLIENTE: 'C001', NOMBRE: 'Cliente Uno', TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' },
@@ -426,7 +426,7 @@ describe('commercial cobros hardening', () => {
       .filter((sql) => /FROM\s+JAVIER\.COBROS\s+C/i.test(sql) || /REPARTIDOR_COBROS\s+R/i.test(sql));
     expect(overlaySql.length).toBeGreaterThan(0);
     expect(overlaySql.every((sql) => !/EXISTS/i.test(sql))).toBe(true);
-    expect(overlaySql.every((sql) => !/DSEDAC\.CVC/i.test(sql))).toBe(true);
+    expect(overlaySql.every((sql) => /IN\s*\(\s*SELECT\s+TRIM\(CVC\.CODIGOCLIENTEALBARAN\)/i.test(sql))).toBe(true);
     expect(result.summary.C001.total).toBe(90);
   });
 

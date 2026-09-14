@@ -1172,7 +1172,7 @@ class Db2CobrosRepository extends CobrosRepository {
     };
     const [rows, appClientAdjustments, appOrderSummary] = await Promise.all([
       runQuery(summarySql),
-      this.getAppSideCobrosByClient(),
+      this.getAppSideCobrosByClient(vendorClause),
       this.getAppOrderPendingSummary(appOrderContext),
     ]);
 
@@ -1341,7 +1341,7 @@ class Db2CobrosRepository extends CobrosRepository {
     return adjustments;
   }
 
-  async getAppSideCobrosByClient() {
+  async getAppSideCobrosByClient(vendorClause = '') {
     const adjustments = new Map();
     const add = (clientCode, amount) => {
       const code = trim(clientCode);
@@ -1349,14 +1349,20 @@ class Db2CobrosRepository extends CobrosRepository {
       adjustments.set(code, (adjustments.get(code) || 0) + (parseFloat(amount) || 0));
     };
 
-    // App-side overlay must not re-scan CVC. EXISTS(CVC) was the ~1s half of
-    // raso 35 cold; the summary already has the vendor-scoped client set, and
-    // JS only subtracts when the client appears in that CVC aggregate.
+    // Uncorrelated client IN-list, not EXISTS(CVC) per COBROS row. Correlated
+    // EXISTS was ~1s on raso 35; a full COBROS scan without vendor scope made
+    // JEFE 98 pay for the whole overlay table (~285ms vs ~162ms).
     try {
       const comercialSql = `
         SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,
                COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
           FROM ${COBROS_TABLE} C
+         WHERE TRIM(C.CODIGO_CLIENTE) IN (
+           SELECT TRIM(CVC.CODIGOCLIENTEALBARAN)
+             FROM ${DEBT_VIEW} CVC
+            WHERE ${cvcPendingPredicate('CVC')}
+              ${vendorClause}
+         )
          GROUP BY TRIM(C.CODIGO_CLIENTE)`;
       const rows = await query(comercialSql, false);
       for (const row of rows || []) add(row.CLIENTE, row.TOTAL_APP);
@@ -1369,6 +1375,12 @@ class Db2CobrosRepository extends CobrosRepository {
         SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS CLIENTE,
                COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_APP
           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
+         WHERE TRIM(R.CODIGOCLIENTEALBARAN) IN (
+           SELECT TRIM(CVC.CODIGOCLIENTEALBARAN)
+             FROM ${DEBT_VIEW} CVC
+            WHERE ${cvcPendingPredicate('CVC')}
+              ${vendorClause}
+         )
          GROUP BY TRIM(R.CODIGOCLIENTEALBARAN)`;
       const rows = await query(repartidorSql, false);
       for (const row of rows || []) add(row.CLIENTE, row.TOTAL_APP);
