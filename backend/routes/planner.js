@@ -45,7 +45,32 @@ const RUTERO_WEEKDAY_INDEX = {
 const ORDER_STATUS_EMPTY_LABEL = 'SIN VENTA';
 const RUTERO_DAY_BATCH_SIZE = 200;
 const RUTERO_DAY_CACHE_TTL = TTL.REALTIME;
-const RUTERO_DAY_BATCH_CONCURRENCY = 4;
+const RUTERO_DAY_BATCH_CONCURRENCY = Math.max(
+    1,
+    parseInt(process.env.RUTERO_DAY_BATCH_CONCURRENCY, 10) || 3
+);
+
+function createRuteroQueryLimit(concurrency = RUTERO_DAY_BATCH_CONCURRENCY) {
+    let active = 0;
+    const queue = [];
+    const pump = () => {
+        while (active < concurrency && queue.length > 0) {
+            const job = queue.shift();
+            active += 1;
+            Promise.resolve()
+                .then(job.fn)
+                .then(job.resolve, job.reject)
+                .finally(() => {
+                    active -= 1;
+                    pump();
+                });
+        }
+    };
+    return (fn) => new Promise((resolve, reject) => {
+        queue.push({ fn, resolve, reject });
+        pump();
+    });
+}
 
 function dateParts(dateValue) {
     const year = dateValue.getFullYear();
@@ -212,19 +237,25 @@ function writeRuteroDayPayload(cacheKey, payload) {
     });
 }
 
-async function runBatchedRuteroQuery({ batches, buildSql, buildParams, buildCacheKey, ttl }) {
+async function runBatchedRuteroQuery({ batches, buildSql, buildParams, buildCacheKey, ttl, schedule = null }) {
     const results = await mapRuteroBatches(batches, (batch) => cachedQuery(
         queryWithParams,
         buildSql(batch),
         buildCacheKey(batch),
         ttl,
         buildParams(batch),
-    ));
+    ), RUTERO_DAY_BATCH_CONCURRENCY, schedule);
     return results.flatMap((result) => Array.isArray(result) ? result : []);
 }
 
-async function mapRuteroBatches(batches, mapper, concurrency = RUTERO_DAY_BATCH_CONCURRENCY) {
+async function mapRuteroBatches(batches, mapper, concurrency = RUTERO_DAY_BATCH_CONCURRENCY, schedule = null) {
     const results = new Array(batches.length);
+    if (schedule) {
+        await Promise.all(batches.map(async (batch, index) => {
+            results[index] = await schedule(() => mapper(batch));
+        }));
+        return results;
+    }
     let nextIndex = 0;
     async function worker() {
         while (nextIndex < batches.length) {
@@ -491,8 +522,13 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
 }
 
 // =============================================================================
-async function getBatchedRuteroOrderStatusMap(batches, options) {
-    const results = await mapRuteroBatches(batches, (batch) => getRuteroOrderStatusMap(batch, options));
+async function getBatchedRuteroOrderStatusMap(batches, options, schedule = null) {
+    const results = await mapRuteroBatches(
+        batches,
+        (batch) => getRuteroOrderStatusMap(batch, options),
+        RUTERO_DAY_BATCH_CONCURRENCY,
+        schedule,
+    );
     const statusMap = new Map();
     let degraded = false;
     results.forEach((result) => {
@@ -1589,20 +1625,18 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
             WHERE CLIENT_CODE IN (${batchPlaceholders(batch)})
         `;
 
-        const configRowsPromise = primaryVendor && !shouldIgnoreOverrides
+        const configRowsPromise = () => (primaryVendor && !shouldIgnoreOverrides
             ? queryWithParams(`
                 SELECT CLIENTE, ORDEN
                 FROM JAVIER.RUTERO_CONFIG
-                WHERE VENDEDOR = ? AND DIA = ?
+                WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0
             `, [primaryVendor, normalizedDay], false, false)
-            : Promise.resolve([]);
-        // perf: parallelized independent IO (pool-per-call).
+            : Promise.resolve([]));
+        const schedule = createRuteroQueryLimit(RUTERO_DAY_BATCH_CONCURRENCY);
         const [
             clientDetailsRows,
-            salesRows,
             gpsResult,
             notesResult,
-            orderStatusResult,
             configRows,
         ] = await Promise.all([
             runBatchedRuteroQuery({
@@ -1611,7 +1645,27 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
                 buildParams: (batch) => batch,
                 buildCacheKey: (batch) => `rutero:details:v3:${ruteroBatchHash(batch)}`,
                 ttl: TTL.LONG,
+                schedule,
             }),
+            runBatchedRuteroQuery({
+                batches: clientBatches,
+                buildSql: gpsSql,
+                buildParams: (batch) => batch,
+                buildCacheKey: (batch) => `rutero:gps:v3:${ruteroBatchHash(batch)}`,
+                ttl: TTL.LONG,
+                schedule,
+            }).catch(e => { logger.warn(`GPS query failed: ${e.message}`); return []; }),
+            runBatchedRuteroQuery({
+                batches: clientBatches,
+                buildSql: notesSql,
+                buildParams: (batch) => batch,
+                buildCacheKey: (batch) => `rutero:notes:v1:${ruteroBatchHash(batch)}`,
+                ttl: TTL.SHORT,
+                schedule,
+            }).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; }),
+            schedule(configRowsPromise),
+        ]);
+        const [salesRows, orderStatusResult] = await Promise.all([
             runBatchedRuteroQuery({
                 batches: clientBatches,
                 buildSql: salesSql,
@@ -1626,23 +1680,9 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
                 ],
                 buildCacheKey: (batch) => `rutero:sales:combined:v3:${currentYear}:${previousYear}:${endMonthCurrent}:${endDayCurrent}:${endMonthPrevious}:${endDayPrevious}:${ruteroBatchHash(batch)}`,
                 ttl: cacheTTL,
+                schedule,
             }),
-            runBatchedRuteroQuery({
-                batches: clientBatches,
-                buildSql: gpsSql,
-                buildParams: (batch) => batch,
-                buildCacheKey: (batch) => `rutero:gps:v3:${ruteroBatchHash(batch)}`,
-                ttl: TTL.LONG,
-            }).catch(e => { logger.warn(`GPS query failed: ${e.message}`); return []; }),
-            runBatchedRuteroQuery({
-                batches: clientBatches,
-                buildSql: notesSql,
-                buildParams: (batch) => batch,
-                buildCacheKey: (batch) => `rutero:notes:v1:${ruteroBatchHash(batch)}`,
-                ttl: TTL.SHORT,
-            }).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; }),
-            getBatchedRuteroOrderStatusMap(clientBatches, { vendedorCodes, orderDate }),
-            configRowsPromise,
+            getBatchedRuteroOrderStatusMap(clientBatches, { vendedorCodes, orderDate }, schedule),
         ]);
         const orderStatusMap = orderStatusResult?.statusMap instanceof Map
             ? orderStatusResult.statusMap

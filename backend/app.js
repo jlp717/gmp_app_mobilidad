@@ -273,7 +273,7 @@ function resolveRequestTimeoutMs(req) {
     originalUrl.includes('/objectives/by-client') ||
     originalUrl.includes('/commissions/summary') ||
     originalUrl.includes('/cobros/pending-summary') ||
-    originalUrl.includes('/planner/rutero/day')
+    originalUrl.includes('/rutero/day')
   ) {
     return HTTP_REPORT_TIMEOUT_MS;
   }
