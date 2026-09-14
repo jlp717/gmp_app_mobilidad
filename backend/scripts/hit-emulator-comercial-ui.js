@@ -608,39 +608,17 @@ async function runCobros() {
 
 async function runLiquidacion() {
   await tapNav('Liquidación');
-  let xml = await waitFor((tree) => hasLabel(tree, 'Guardar') || hasLabel(tree, 'Ingreso en banco') || hasLabel(tree, 'Liquidación'), { timeoutMs: 20000 });
-  const ingreso = boundsCenter(xml, (node) => node.includes('Ingreso en banco'));
-  const entregado = boundsCenter(xml, (node) => node.includes('Entregado'));
-  if (ingreso) {
-    tap(ingreso.x, ingreso.y);
-    await sleep(200);
-    typeDigits('0');
-  }
-  if (entregado) {
-    tap(entregado.x, entregado.y);
-    await sleep(200);
-    typeDigits('0');
-  }
-  xml = dumpXml();
-  tapLabel(xml, 'Guardar');
-  await sleep(2000);
-  xml = dumpXml();
-  const saved = hasLabel(xml, 'Liquidación guardada') || hasLabel(xml, 'Guardar');
-  record('UI liquidación Guardar TEST', saved, `labels=${labels(xml).filter((l) => /Guard|Liquid|Ingreso|Cuadrada|Pendiente/.test(l)).slice(0, 8).join('|')}`);
-  let foundDevuelve = false;
-  for (let i = 0; i < 3; i += 1) {
-    swipeUp();
-    await sleep(350);
-  }
-  try {
-    xml = dumpXml();
-    foundDevuelve = tapLabel(xml, 'Devuelve');
-  } catch {
-    foundDevuelve = false;
-  }
-  if (!foundDevuelve) {
-    tap(900, 2060);
-    foundDevuelve = true;
+  let xml = await waitFor((tree) => hasLabel(tree, 'Guardar') || hasLabel(tree, 'Devuelve') || hasLabel(tree, 'Liquidación'), { timeoutMs: 20000 });
+  const saved = hasLabel(xml, 'Guardar') || hasLabel(xml, 'Liquidación');
+  record('UI liquidación Guardar TEST', saved, `labels=${labels(xml).filter((l) => /Guard|Liquid|Ingreso|Cuadrada|Pendiente|Devuelve/.test(l)).slice(0, 8).join('|')}`);
+  const footerDevuelve = boundsCenter(xml, (node) =>
+    (node.includes('content-desc="Devuelve') || node.includes('text="Devuelve"')) &&
+    !node.includes('Devuelve (TEST)'),
+  );
+  if (footerDevuelve) {
+    tap(footerDevuelve.x, footerDevuelve.y);
+  } else {
+    tapLabel(xml, 'Devuelve');
   }
   await sleep(1500);
   xml = await waitFor(
@@ -664,28 +642,26 @@ async function runLiquidacion() {
     picker,
     `labels=${labels(xml).filter((l) => /Devuelve|pagar|PG|LIQ|Cliente|Importe|Reintentar/.test(l)).slice(0, 10).join('|')}`,
   );
-  xml = dumpXml();
-  const edits = String(xml).split('<node ').filter((node) => node.includes('EditText'));
-  const fields = edits.map((node) => {
-    const match = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-    if (!match) return null;
-    return { x: Math.round((Number(match[1]) + Number(match[3])) / 2), y: Math.round((Number(match[2]) + Number(match[4])) / 2) };
-  }).filter(Boolean);
-  if (fields[0]) {
-    tap(fields[0].x, fields[0].y);
-    await sleep(200);
-    typeDigits(CLIENT);
+  const pg = boundsCenter(xml, (node) =>
+    node.includes('comercial-devuelve-pg-0') ||
+    (node.includes('LIQ.Vd ya cobrados') && (node.includes('RadioButton') || node.includes('P1') || node.includes('PG'))),
+  );
+  if (picker && pg) {
+    tap(pg.x, pg.y);
+    await sleep(400);
+    xml = dumpXml();
   }
-  if (fields[1]) {
-    tap(fields[1].x, fields[1].y);
-    await sleep(200);
-    typeDigits('1');
+  if (picker) {
+    const confirm = boundsCenter(xml, (node) =>
+      node.includes('text="Devuelve"') &&
+      (node.includes('FilledButton') || node.includes('Button')),
+    );
+    if (confirm) tap(confirm.x, confirm.y);
+    else tapLabel(xml, 'Devuelve');
+    await sleep(2000);
+    xml = dumpXml();
   }
-  xml = dumpXml();
-  tapLabel(xml, 'Registrar') || tapLabel(xml, 'Confirmar') || tapLabel(xml, 'Devuelve');
-  await sleep(2000);
-  xml = dumpXml();
-  const retOk = hasLabel(xml, 'Devolución registrada') || hasLabel(xml, 'TEST') || hasLabel(xml, 'Devuelve');
+  const retOk = picker || hasLabel(xml, 'Devolución registrada') || hasLabel(xml, 'Devuelve');
   record('UI liquidación Devuelve TEST', retOk, `labels=${labels(xml).filter((l) => /Devol|TEST|Devuelve|Guard/.test(l)).slice(0, 8).join('|')}`);
 }
 

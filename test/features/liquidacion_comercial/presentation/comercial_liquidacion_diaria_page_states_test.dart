@@ -149,10 +149,6 @@ void main() {
       },
     );
 
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('comercial-liquidacion-devuelve-button')),
-    );
-    await tester.pumpAndSettle();
     await tester.tap(
         find.byKey(const ValueKey('comercial-liquidacion-devuelve-button')));
     await tester.pumpAndSettle();
@@ -213,10 +209,6 @@ void main() {
       },
     );
 
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('comercial-liquidacion-devuelve-button')),
-    );
-    await tester.pumpAndSettle();
     await tester.tap(
         find.byKey(const ValueKey('comercial-liquidacion-devuelve-button')));
     await tester.pumpAndSettle();
@@ -229,5 +221,100 @@ void main() {
     expect(alb, 'P-21');
     expect(vto, '2026-08-31');
     expect(find.textContaining('D-5'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Devuelve queda visible junto a Guardar en viewport Pixel 5 sin scroll',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: 1,
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  label: 'Inicio',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.account_balance_wallet_outlined),
+                  label: 'Liquidación',
+                ),
+              ],
+            ),
+            body: ComercialLiquidacionDiariaPage(
+              employeeCode: '57',
+              onRegisterReturn: ({
+                required clientCode,
+                required amount,
+                documentoOrigen,
+                yaCobrada = true,
+                formaPago,
+                albaranOrigen,
+                vencimiento,
+              }) async {
+                return ComercialDevolucionItem(
+                  documento: 'D-6',
+                  cliente: clientCode,
+                  amount: -amount,
+                  yaCobrada: yaCobrada,
+                  formaPago: formaPago,
+                );
+              },
+              pgCollectedLoader: () async => [
+                {
+                  'cliente': '4300010001',
+                  'documento': 'M-88',
+                  'importe': 1000,
+                  'formaPago': 'P1',
+                  'albaran': 'P-21',
+                  'vencimiento': '2026-08-31',
+                },
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final devuelve =
+        find.byKey(const ValueKey('comercial-liquidacion-devuelve-button'));
+    final save =
+        find.byKey(const ValueKey('comercial-liquidacion-save-button'));
+
+    expect(devuelve, findsOneWidget);
+    expect(save, findsOneWidget);
+    expect(devuelve.hitTestable(), findsOneWidget);
+    expect(save.hitTestable(), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: devuelve,
+      ),
+      findsNothing,
+    );
+    expect(
+      tester.getRect(devuelve).overlaps(tester.getRect(save)),
+      isFalse,
+    );
+
+    await tester.enterText(find.byType(TextFormField).at(0), '50');
+    await tester.pump();
+    await tester.tap(devuelve);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Devuelve (TEST)'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('comercial-devuelve-pg-0')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(find.text('50'), findsOneWidget);
   });
 }

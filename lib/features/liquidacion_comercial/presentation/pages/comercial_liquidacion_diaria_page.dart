@@ -199,7 +199,7 @@ class _ComercialLiquidacionDiariaPageState
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     return SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 112),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                       child: Center(
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 1180),
@@ -257,12 +257,7 @@ class _ComercialLiquidacionDiariaPageState
                                 ],
                               ),
                               const SizedBox(height: 16),
-                              _DevolucionesList(
-                                returns: _returns,
-                                onRegister: widget.onRegisterReturn == null
-                                    ? null
-                                    : _openReturnDialog,
-                              ),
+                              _DevolucionesList(returns: _returns),
                               const SizedBox(height: 16),
                               _LiquidacionWorkspace(
                                 ingresoBancoController: _ingresoBancoController,
@@ -288,6 +283,8 @@ class _ComercialLiquidacionDiariaPageState
               canSave: _canSave,
               lastSavedAt: _lastSavedAt,
               onSave: _save,
+              onDevuelve:
+                  widget.onRegisterReturn == null ? null : _openReturnDialog,
             ),
           ],
         ),
@@ -341,6 +338,9 @@ class _ComercialLiquidacionDiariaPageState
   Future<void> _openReturnDialog() async {
     final register = widget.onRegisterReturn;
     if (register == null) return;
+    _ingresoBancoFocus.unfocus();
+    _entregadoFocus.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
     final result = await showDialog<_DevuelveDraft>(
       context: context,
       builder: (dialogContext) => _DevuelveDialog(
@@ -1177,6 +1177,7 @@ class _SaveBar extends StatelessWidget {
     required this.canSave,
     required this.onSave,
     required this.lastSavedAt,
+    this.onDevuelve,
   });
 
   final ComercialLiquidacionDraft draft;
@@ -1185,6 +1186,7 @@ class _SaveBar extends StatelessWidget {
   final bool canSave;
   final VoidCallback onSave;
   final DateTime? lastSavedAt;
+  final VoidCallback? onDevuelve;
 
   @override
   Widget build(BuildContext context) {
@@ -1209,17 +1211,18 @@ class _SaveBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 160),
-                child: Column(
-                  key: ValueKey('${status.label}_${draft.diferencia}_$savedAt'),
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 160),
+              child: Row(
+                key: ValueKey('${status.label}_${draft.diferencia}_$savedAt'),
+                children: [
+                  Icon(status.icon, color: status.color, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
                       status.label,
                       style: TextStyle(
                         color: status.color,
@@ -1227,36 +1230,70 @@ class _SaveBar extends StatelessWidget {
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
+                  ),
+                  Flexible(
+                    child: Text(
                       savedAt ?? 'Registrado: ${_money(draft.registrado)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
                       style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 12),
-            SizedBox(
-              height: 44,
-              child: ElevatedButton.icon(
-                key: const ValueKey('comercial-liquidacion-save-button'),
-                onPressed: canSave ? onSave : null,
-                icon: isSaving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check_rounded, size: 18),
-                label: Text(isSaving ? 'Guardando' : 'Guardar'),
-              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                if (onDevuelve != null) ...[
+                  Semantics(
+                    button: true,
+                    label: 'Devuelve, registrar factura ya cobrada o pagaré',
+                    child: Tooltip(
+                      message:
+                          'Registrar devolución de factura ya cobrada (TEST)',
+                      child: OutlinedButton.icon(
+                        key: const ValueKey(
+                          'comercial-liquidacion-devuelve-button',
+                        ),
+                        onPressed: isSaving ? null : onDevuelve,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.themedPrimaryText,
+                          side: BorderSide(color: AppColors.themedLine),
+                          minimumSize: const Size(0, 44),
+                        ),
+                        icon: const Icon(Icons.undo_rounded, size: 18),
+                        label: const Text('Devuelve'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: SizedBox(
+                    height: 44,
+                    child: ElevatedButton.icon(
+                      key: const ValueKey(
+                        'comercial-liquidacion-save-button',
+                      ),
+                      onPressed: canSave ? onSave : null,
+                      icon: isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check_rounded, size: 18),
+                      label: Text(isSaving ? 'Guardando' : 'Guardar'),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1437,42 +1474,22 @@ class _DevolucionesLoadError extends StatelessWidget {
 class _DevolucionesList extends StatelessWidget {
   const _DevolucionesList({
     required this.returns,
-    this.onRegister,
   });
 
   final List<ComercialDevolucionItem> returns;
-  final VoidCallback? onRegister;
 
   @override
   Widget build(BuildContext context) {
-    final registerButton = onRegister == null
-        ? const SizedBox.shrink()
-        : Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              key: const ValueKey('comercial-liquidacion-devuelve-button'),
-              onPressed: onRegister,
-              icon: const Icon(Icons.undo_rounded, size: 18),
-              label: const Text('Devuelve'),
-            ),
-          );
-
     if (returns.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Semantics(
-            label: 'Sin devoluciones de mercancía en el día',
-            child: Text(
-              'Sin devoluciones de mercancía en el día',
-              style: TextStyle(
-                color: AppTheme.textSecondary.withValues(alpha: 0.86),
-                fontSize: 13,
-              ),
-            ),
+      return Semantics(
+        label: 'Sin devoluciones de mercancía en el día',
+        child: Text(
+          'Sin devoluciones de mercancía en el día',
+          style: TextStyle(
+            color: AppTheme.textSecondary.withValues(alpha: 0.86),
+            fontSize: 13,
           ),
-          registerButton,
-        ],
+        ),
       );
     }
 
@@ -1525,7 +1542,6 @@ class _DevolucionesList extends StatelessWidget {
                   ],
                 ),
               ),
-            registerButton,
           ],
         ),
       ),
