@@ -18,6 +18,10 @@ analyzer:
     strict-raw-types: false
 
   errors:
+    # Lints / infos only. Compile errors (undefined_*, invalid_assignment,
+    # argument_type_not_assignable, return_of_invalid_type*,
+    # final_not_initialized_constructor, non_bool_*, for_in_of_invalid_type)
+    # are no longer ignored so CI fails when the app would not compile.
     unused_element: ignore
     unused_field: ignore
     unused_local_variable: ignore
@@ -35,16 +39,6 @@ analyzer:
     duplicate_import: ignore
     unnecessary_null_comparison: ignore
     unnecessary_cast: ignore
-    non_bool_negation_expression: ignore
-    non_bool_condition: ignore
-    return_of_invalid_type_from_closure: ignore
-    invalid_assignment: ignore
-    argument_type_not_assignable: ignore
-    undefined_method: ignore
-    undefined_identifier: ignore
-    for_in_of_invalid_type: ignore
-    final_not_initialized_constructor: ignore
-    return_of_invalid_type: ignore
     unnecessary_type_check: ignore
     invalid_null_aware_operator: ignore
     unnecessary_non_null_assertion: ignore
