@@ -276,7 +276,8 @@ class ApiClient {
           }
           return pinned;
         }
-        ..connectionTimeout = ApiConfig.connectTimeout
+        ..connectionTimeout = const Duration(seconds: 10)
+        ..idleTimeout = const Duration(seconds: 120)
         // Bursty screens (dashboard 6 calls + prewarmer) previously opened an
         // unbounded number of sockets; mobile networks degrade past ~6
         // concurrent connections. Queue extras on the keep-alive pool instead.

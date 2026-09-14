@@ -213,10 +213,8 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     _resumeInProgress = true;
     try {
       await ConnectivityService.instance.forceRecheck();
-      // A device can resume on the same interface with an expired TCP
-      // keep-alive. Rebuild Dio while preserving the canonical bearer so all
-      // roles recover their endpoints without a needless role switch/login.
-      ApiClient.reinitialize();
+      // Keep the TLS pool across resume. Dio is rebuilt only when
+      // connectivity_plus reports a WiFi ↔ mobile change (ApiClient).
       await ApiClient.checkConnectivity();
       final isSessionValid = await _validateSessionOnResume();
       if (isSessionValid) {
