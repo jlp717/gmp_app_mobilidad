@@ -4,6 +4,7 @@
  */
 
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { 
     verifyToken, 
@@ -13,6 +14,7 @@ const {
 const { loginLimiter, sanitizeInput, bruteForceIpTracker } = require('../middleware/security');
 const { verifyVendorPin } = require('../services/vendor-pin-auth');
 const authTokenService = require('../middleware/auth');
+const logger = require('../middleware/logger');
 const { Db2AuthRepository } = require('../src/modules/auth');
 const { createAuthClaimsResolver } = require('../src/modules/auth/application/auth-claims-resolver');
 const { createAuthClaimsLoginHandler } = require('../src/modules/auth/application/auth-claims-login-handler');
@@ -41,7 +43,54 @@ router.post('/login',
 // REFRESH / LOGOUT / SWITCH ROLE
 // =============================================================================
 
+function shortSidHash(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return 'none';
+    return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 8);
+}
+
+function sidHintFromRefreshToken(refreshToken) {
+    const token = String(refreshToken || '').trim();
+    if (!token) return 'none';
+    try {
+        const payloadPart = token.split('.')[1];
+        if (!payloadPart) return shortSidHash(token);
+        const json = Buffer.from(payloadPart, 'base64url').toString('utf8');
+        const payload = JSON.parse(json);
+        return shortSidHash(payload.sid || payload.jti || token);
+    } catch (_err) {
+        return shortSidHash(token);
+    }
+}
+
+function attachRefreshResultLogger(req, res) {
+    let logged = false;
+    const emit = () => {
+        if (logged) return;
+        logged = true;
+        const body = res.locals.refreshBody || {};
+        const reason = res.locals.refreshReason
+            || body.code
+            || (res.statusCode < 400 ? 'OK' : 'UNKNOWN');
+        const sid = sidHintFromRefreshToken(req.body && req.body.refreshToken);
+        logger.info(
+            `AUTH_REFRESH_RESULT status=${res.statusCode} reason=${reason} sid=${sid} id=${req.requestId || '-'}`
+        );
+    };
+    const originalJson = res.json.bind(res);
+    res.json = function captureRefreshBody(body) {
+        res.locals.refreshBody = body;
+        try {
+            return originalJson(body);
+        } finally {
+            process.nextTick(emit);
+        }
+    };
+    res.on('finish', emit);
+}
+
 router.post('/refresh', async (req, res) => {
+    attachRefreshResultLogger(req, res);
     await handleRefreshToken(req, res);
 });
 
