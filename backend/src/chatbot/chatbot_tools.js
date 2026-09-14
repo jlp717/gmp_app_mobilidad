@@ -2292,25 +2292,15 @@ const summaryTools = {
         const currentMonth = month || new Date().getMonth() + 1;
         const currentDay = day || new Date().getDate();
 
-        // Get orders summary
-        const orderVendorFilter = _buildVendorFilter(vendorScope, userCode, 'OPP.CODIGOVENDEDOR');
-        const orderSql = `
-            SELECT COUNT(DISTINCT OPP.NUMEROORDENPREPARACION) as TOTAL_ORDERS,
-                   COUNT(DISTINCT OPP.CODIGOCLIENTE) as TOTAL_CLIENTS,
-                   COUNT(*) as TOTAL_LINES
-            FROM DSEDAC.OPP OPP
-            WHERE OPP.ANOREPARTO = ? AND OPP.MESREPARTO = ? AND OPP.DIAREPARTO = ?
-              ${orderVendorFilter.sql}
-        `;
-        const orderParams = [currentYear, currentMonth, currentDay, ...orderVendorFilter.params];
-
-        const orderResult = await safeQuery(conn, orderSql, orderParams);
-        const o = orderResult[0] || {};
-
-        // Get total sales
-        const salesVendorFilter = _buildVendorFilter(vendorScope, userCode);
+        // Same source as ventas: DSEDAC.LAC (document date). OPP is warehouse
+        // prep by delivery date and routinely returns pedidos/clientes=0 while
+        // LAC already has the day's sales — same bug class as LINDTO/ofertas.
+        const salesVendorFilter = _buildVendorFilter(vendorScope, userCode, 'CODIGOVENDEDOR');
         const salesSql = `
-            SELECT SUM(IMPORTEVENTA) as TOTAL_SALES
+            SELECT COALESCE(SUM(IMPORTEVENTA), 0) as TOTAL_SALES,
+                   COUNT(DISTINCT TRIM(CODIGOCLIENTEALBARAN)) as TOTAL_CLIENTS,
+                   COUNT(DISTINCT TRIM(SERIEALBARAN) CONCAT '-' CONCAT TRIM(CHAR(NUMEROALBARAN))) as TOTAL_ORDERS,
+                   COUNT(*) as TOTAL_LINES
             FROM DSEDAC.LAC
             WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? AND DIADOCUMENTO = ?
               ${salesVendorFilter.sql}
@@ -2318,7 +2308,8 @@ const summaryTools = {
         const salesParams = [currentYear, currentMonth, currentDay, ...salesVendorFilter.params];
 
         const salesResult = await safeQuery(conn, salesSql, salesParams);
-        const totalSales = parseFloat(salesResult[0]?.TOTAL_SALES) || 0;
+        const o = salesResult[0] || {};
+        const totalSales = parseFloat(o.TOTAL_SALES) || 0;
 
         return {
             year: currentYear,

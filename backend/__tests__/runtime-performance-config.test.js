@@ -201,11 +201,13 @@ describe('runtime performance configuration', () => {
     expect(source).not.toMatch(/MAX\(TRIM\(DESCRIPCIONFAMILIA\)\)/);
   });
 
-  test('KPI dashboard uses vendor client cache before DB2 LACLAE fallback', () => {
+  test('KPI dashboard uses CLP cartera plus LACLAE and caches the vendor client set', () => {
     const source = fs.readFileSync(path.join(backendRoot, 'kpi/routes.js'), 'utf8');
 
     expect(source).toMatch(/getClientCodesFromCache\(codes\.join\(','\)\)/);
-    expect(source).toMatch(/setVendorClientSetCache\(cacheKey, cachedResult\)/);
+    expect(source).toMatch(/FROM DSEDAC\.CLP/);
+    expect(source).toMatch(/setVendorClientSetCache\(cacheKey, result\)/);
+    expect(source).toMatch(/getVendorClientSet\(vendorCodes, 'recent'\)/);
   });
 
   test('DDD commission and purchase history cold paths use bounded DB2 predicates', () => {

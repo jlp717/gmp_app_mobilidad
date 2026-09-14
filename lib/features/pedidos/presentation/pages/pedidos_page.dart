@@ -40,6 +40,7 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_st
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_summary_widget.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_card.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_search_widget.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/promotions_banner.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/recommendations_section.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/sale_type_selector.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/stock_alternatives_sheet.dart';
@@ -1230,12 +1231,11 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ProductSearchWidget(
           vendedorCodes: _vendedorCodes,
         ),
-        // Promotions banner - commented per user request
-        // PromotionsBanner(
-        //   promotions: provider.activePromotionsList,
-        //   onProductTap: (code, name) =>
-        //       _openProductByCode(code, fallbackName: name),
-        // ),
+        PromotionsBanner(
+          promotions: provider.activePromotionsList,
+          onProductTap: (code, name) =>
+              _openProductByCode(code, fallbackName: name),
+        ),
         // Recommendations
         if (provider.hasClient &&
             (provider.clientHistory.isNotEmpty ||

@@ -38,6 +38,31 @@ function normalizeClientCodeForDb2(value) {
   return String(value || '').trim().slice(0, DB2_CLIENT_CODE_MAX_LEN);
 }
 
+function expandClientCodeVariants(value) {
+  const trimmed = String(value || '').trim();
+  const out = [];
+  if (!trimmed) return out;
+  out.push(trimmed);
+  const db2 = normalizeClientCodeForDb2(trimmed);
+  if (db2 && db2 !== trimmed) out.push(db2);
+  if (/^4300\d{6}$/.test(trimmed)) {
+    const tail = trimmed.slice(4);
+    const short = tail.replace(/^0+/, '') || '0';
+    out.push(tail, short);
+  } else if (/^\d{1,6}$/.test(trimmed)) {
+    out.push('4300' + trimmed.padStart(6, '0'));
+  }
+  return [...new Set(out)];
+}
+
+function addClientCodesToSet(target, codes) {
+  for (const code of codes || []) {
+    for (const variant of expandClientCodeVariants(code)) {
+      target.add(variant);
+    }
+  }
+}
+
 function getVendorClientSetCache(key) {
   const cached = vendorClientSetCache.get(key);
   if (!cached) return null;
@@ -84,26 +109,34 @@ async function getVendorClientSet(vendorCodes, mode = 'current') {
     const secondCache = getVendorClientSetCache(cacheKey);
     if (secondCache) return secondCache;
 
+    const result = new Set();
     const laclaeCachedCodes = getClientCodesFromCache(codes.join(','));
     if (Array.isArray(laclaeCachedCodes) && laclaeCachedCodes.length > 0) {
-      const cachedResult = new Set(laclaeCachedCodes.map(normalizeClientCodeForDb2).filter(Boolean));
-      setVendorClientSetCache(cacheKey, cachedResult);
-      return cachedResult;
+      addClientCodesToSet(result, laclaeCachedCodes);
     }
 
     const placeholders = codes.map(() => `CAST(? AS VARCHAR(${DB2_VENDOR_CODE_MAX_LEN}))`).join(',');
     const yearClause = mode === 'recent'
       ? 'LCAADC >= YEAR(CURRENT_DATE) - 1'
       : 'LCAADC = YEAR(CURRENT_DATE)';
-    const vendorQuery = `
-      SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
-      FROM DSED.LACLAE
-      WHERE TRIM(LCCDVD) IN (${placeholders})
-        AND ${yearClause}
-        AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')
-    `;
-    const vendorClientsResult = await kpiQuery(vendorQuery, codes);
-    const result = new Set(vendorClientsResult.rows.map(r => (r.CLIENT_CODE || '').trim()).filter(Boolean));
+    const [clpResult, vendorClientsResult] = await Promise.all([
+      kpiQuery(
+        `SELECT DISTINCT TRIM(CODIGOCLIENTE) AS CLIENT_CODE
+           FROM DSEDAC.CLP
+          WHERE TRIM(VENDEDORCOMERCIAL) IN (${placeholders})`,
+        codes,
+      ),
+      kpiQuery(
+        `SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
+           FROM DSED.LACLAE
+          WHERE TRIM(LCCDVD) IN (${placeholders})
+            AND ${yearClause}
+            AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')`,
+        codes,
+      ),
+    ]);
+    addClientCodesToSet(result, (clpResult.rows || []).map(r => r.CLIENT_CODE));
+    addClientCodesToSet(result, (vendorClientsResult.rows || []).map(r => r.CLIENT_CODE));
     setVendorClientSetCache(cacheKey, result);
     return result;
   });
@@ -614,9 +647,9 @@ router.get('/dashboard', async (req, res) => {
       if (vendorCodes.length > MAX_VENDOR_CLIENT_FILTER_CODES) {
         logger.info(`[kpi:dashboard] Vendor filter skipped for ${vendorCodes.length} codes; treating as manager ALL scope`);
       } else {
-        const validCodes = await getVendorClientSet(vendorCodes, 'current');
+        const validCodes = await getVendorClientSet(vendorCodes, 'recent');
 
-        logger.info(`[kpi:dashboard] LACLAE clients for vendor ${vendorCodes.join(',')}: ${validCodes.size}, sample: ${[...validCodes].slice(0, 5).join(', ')}`);
+        logger.info(`[kpi:dashboard] Cartera+LACLAE clients for vendor ${vendorCodes.join(',')}: ${validCodes.size}, sample: ${[...validCodes].slice(0, 5).join(', ')}`);
 
         filteredAlerts = filteredAlerts.filter(a => validCodes.has((a.CLIENT_CODE || '').trim()));
         logger.info(`[kpi:dashboard] After vendor filter: ${filteredAlerts.length} alerts`);
@@ -781,6 +814,7 @@ router.get('/dashboard', async (req, res) => {
       success: true,
       totals: {
         alerts: calcTotals.TOTAL_ALERTS,
+        TOTAL_ALERTS: calcTotals.TOTAL_ALERTS,
         clients: calcTotals.TOTAL_CLIENTS.size,
         critical: calcTotals.CRITICAL,
         warning: calcTotals.WARNING,

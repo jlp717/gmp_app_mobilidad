@@ -4,8 +4,6 @@
 /// Handles PRICE promos (price reduction) and GIFT promos (buy X get Y free).
 library;
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,7 +14,7 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
-class PromotionsBanner extends StatefulWidget {
+class PromotionsBanner extends ConsumerStatefulWidget {
   const PromotionsBanner({
     super.key,
     this.onProductTap,
@@ -26,10 +24,10 @@ class PromotionsBanner extends StatefulWidget {
   final List<PromotionItem>? promotions;
 
   @override
-  State<PromotionsBanner> createState() => _PromotionsBannerState();
+  ConsumerState<PromotionsBanner> createState() => _PromotionsBannerState();
 }
 
-class _PromotionsBannerState extends State<PromotionsBanner> {
+class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
   List<PromotionItem> _promotions = [];
   bool _isLoading = true;
   bool _hasError = false;
@@ -42,7 +40,9 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
       _promotions = List<PromotionItem>.from(widget.promotions!);
       _isLoading = false;
     } else {
-      _loadPromotions();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadPromotions();
+      });
     }
   }
 
@@ -60,7 +60,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
       setState(() {
         _hasError = false;
       });
-      final provider = Provider.of<PedidosProvider>(context, listen: false);
+      final provider = ref.read(pedidosProvider);
       final clientCode = provider.clientCode;
       if (clientCode == null || clientCode.isEmpty) {
         if (mounted) setState(() => _isLoading = false);
@@ -149,58 +149,64 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         // Header
         InkWell(
           onTap: () => setState(() => _isExpanded = !_isExpanded),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: Row(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.success.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppTheme.success.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.local_offer,
-                        color: AppTheme.success,
-                        size: 16,
+          child: Semantics(
+            button: true,
+            label: _isExpanded
+                ? 'Ocultar ofertas activas'
+                : 'Mostrar ofertas activas',
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppTheme.success.withValues(alpha: 0.4),
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Ofertas activas (${_promotions.length})',
-                        style: TextStyle(
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.local_offer,
                           color: AppTheme.success,
-                          fontWeight: FontWeight.w600,
-                          fontSize: Responsive.fontSize(
-                            context,
-                            small: 12,
-                            large: 14,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Ofertas activas (${_promotions.length})',
+                          style: TextStyle(
+                            color: AppTheme.success,
+                            fontWeight: FontWeight.w600,
+                            fontSize: Responsive.fontSize(
+                              context,
+                              small: 12,
+                              large: 14,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const Spacer(),
-                Icon(
-                  _isExpanded ? Icons.expand_less : Icons.expand_more,
-                  color: AppColors.themedWhite38,
-                  size: 20,
-                ),
-              ],
+                  const Spacer(),
+                  Icon(
+                    _isExpanded ? Icons.expand_less : Icons.expand_more,
+                    color: AppColors.themedWhite38,
+                    size: 20,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
         // Promo cards
         if (_isExpanded)
           SizedBox(
-            height: 110,
+            height: 168,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -215,112 +221,119 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
   Widget _buildPromoCard(PromotionItem promo) {
     final isGift = promo.promoType == 'GIFT';
 
-    return GestureDetector(
-      onTap: () => widget.onProductTap?.call(promo.code, promo.name),
-      child: Container(
-        width: 180,
-        margin: const EdgeInsets.only(right: 8, bottom: 4),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: AppTheme.softPanel,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isGift
-                ? AppTheme.accentIndigo.withValues(alpha: 0.4)
-                : AppTheme.success.withValues(alpha: 0.3),
+    return Semantics(
+      button: true,
+      label: 'Oferta ${promo.name}',
+      child: GestureDetector(
+        onTap: () => widget.onProductTap?.call(promo.code, promo.name),
+        child: Container(
+          width: 180,
+          margin: const EdgeInsets.only(right: 8, bottom: 4),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppTheme.softPanel,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isGift
+                  ? AppTheme.accentIndigo.withValues(alpha: 0.4)
+                  : AppTheme.success.withValues(alpha: 0.3),
+            ),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              promo.name,
-              style: TextStyle(
-                color: AppColors.themedWhite,
-                fontWeight: FontWeight.w600,
-                fontSize: Responsive.fontSize(context, small: 11, large: 13),
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              promo.code,
-              style: TextStyle(
-                color: AppColors.themedWhite38,
-                fontSize: Responsive.fontSize(context, small: 10, large: 11),
-              ),
-            ),
-            const Spacer(),
-            if (isGift)
-              // GIFT promo: show description (e.g., "14+4 GRATIS")
-              _buildGiftRow(promo)
-            else
-              // PRICE promo: show promo price vs regular
-              _buildPriceRow(promo),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                // Badge: type indicator
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: isGift
-                        ? AppTheme.accentIndigo.withValues(alpha: 0.15)
-                        : AppTheme.success.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    isGift ? 'REGALO' : _buildDiscountLabel(promo),
-                    style: TextStyle(
-                      color: isGift ? AppTheme.accentIndigo : AppTheme.success,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+          clipBehavior: Clip.hardEdge,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                promo.name,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
+                  fontWeight: FontWeight.w600,
+                  fontSize: Responsive.fontSize(context, small: 11, large: 13),
                 ),
-                if (promo.cumulative) ...[
-                  const SizedBox(width: 4),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                promo.code,
+                style: TextStyle(
+                  color: AppColors.themedWhite38,
+                  fontSize: Responsive.fontSize(context, small: 10, large: 11),
+                ),
+              ),
+              const SizedBox(height: 4),
+              if (isGift)
+                // GIFT promo: show description (e.g., "14+4 GRATIS")
+                _buildGiftRow(promo)
+              else
+                // PRICE promo: show promo price vs regular
+                _buildPriceRow(promo),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  // Badge: type indicator
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
-                      color: AppTheme.info.withValues(alpha: 0.15),
+                      color: isGift
+                          ? AppTheme.accentIndigo.withValues(alpha: 0.15)
+                          : AppTheme.success.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Text(
-                      'ACUM.',
+                    child: Text(
+                      isGift ? 'REGALO' : _buildDiscountLabel(promo),
                       style: TextStyle(
-                        color: AppTheme.info,
-                        fontSize: 8,
+                        color:
+                            isGift ? AppTheme.accentIndigo : AppTheme.success,
+                        fontSize: 9,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
+                  if (promo.cumulative) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppTheme.info.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'ACUM.',
+                        style: TextStyle(
+                          color: AppTheme.info,
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  if (promo.dateTo.isNotEmpty)
+                    Text(
+                      'hasta ${promo.dateTo}',
+                      style: TextStyle(
+                        color: AppColors.themedWhite38,
+                        fontSize:
+                            Responsive.fontSize(context, small: 9, large: 10),
+                      ),
+                    )
+                  else if (promo.hasStock)
+                    Text(
+                      '${promo.stockEnvases.toInt()} cj',
+                      style: TextStyle(
+                        color: AppTheme.success.withValues(alpha: 0.7),
+                        fontSize:
+                            Responsive.fontSize(context, small: 9, large: 10),
+                      ),
+                    ),
                 ],
-                const Spacer(),
-                if (promo.dateTo.isNotEmpty)
-                  Text(
-                    'hasta ${promo.dateTo}',
-                    style: TextStyle(
-                      color: AppColors.themedWhite38,
-                      fontSize:
-                          Responsive.fontSize(context, small: 9, large: 10),
-                    ),
-                  )
-                else if (promo.hasStock)
-                  Text(
-                    '${promo.stockEnvases.toInt()} cj',
-                    style: TextStyle(
-                      color: AppTheme.success.withValues(alpha: 0.7),
-                      fontSize:
-                          Responsive.fontSize(context, small: 9, large: 10),
-                    ),
-                  ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -329,22 +342,28 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
   Widget _buildPriceRow(PromotionItem promo) {
     return Row(
       children: [
-        Text(
-          PedidosFormatters.money(promo.promoPrice, decimals: 3),
-          style: TextStyle(
-            color: AppTheme.success,
-            fontWeight: FontWeight.bold,
-            fontSize: Responsive.fontSize(context, small: 13, large: 15),
+        Flexible(
+          child: Text(
+            PedidosFormatters.money(promo.promoPrice, decimals: 3),
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: AppTheme.success,
+              fontWeight: FontWeight.bold,
+              fontSize: Responsive.fontSize(context, small: 13, large: 15),
+            ),
           ),
         ),
         const SizedBox(width: 6),
         if (promo.hasSaving)
-          Text(
-            PedidosFormatters.money(promo.regularPrice, decimals: 3),
-            style: TextStyle(
-              color: AppColors.themedWhite38,
-              fontSize: Responsive.fontSize(context, small: 10, large: 11),
-              decoration: TextDecoration.lineThrough,
+          Flexible(
+            child: Text(
+              PedidosFormatters.money(promo.regularPrice, decimals: 3),
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.themedWhite38,
+                fontSize: Responsive.fontSize(context, small: 10, large: 11),
+                decoration: TextDecoration.lineThrough,
+              ),
             ),
           ),
       ],

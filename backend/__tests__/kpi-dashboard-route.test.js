@@ -72,9 +72,12 @@ function makeApp() {
   return app;
 }
 
-function mockDashboardDb({ laclaeRows = [] } = {}) {
+function mockDashboardDb({ laclaeRows = [], clpRows = [] } = {}) {
   mockKpiQuery.mockImplementation(async (sql, params = []) => {
     const text = String(sql);
+    if (/FROM\s+DSEDAC\.CLP/i.test(text)) {
+      return { rows: clpRows };
+    }
     if (/FROM\s+DSED\.LACLAE/i.test(text)) {
       return { rows: laclaeRows };
     }
@@ -132,5 +135,30 @@ describe('kpi dashboard route performance contract', () => {
     expect(laclaeCall).toBeTruthy();
     expect(laclaeCall[0]).toMatch(/CAST\(\?\s+AS\s+VARCHAR\(2\)\)/i);
     expect(laclaeCall[1]).toEqual(['01']);
+    expect(res.body.totals.TOTAL_ALERTS).toBe(1);
+  });
+
+  test('keeps alerts when CLP cartera matches and LACLAE current year is empty', async () => {
+    mockDashboardDb({
+      laclaeRows: [],
+      clpRows: [{ CLIENT_CODE: '4300000001' }],
+    });
+
+    const res = await request(makeApp()).get('/dashboard?vendorCode=02');
+
+    expect(res.status).toBe(200);
+    expect(res.body.totals.alerts).toBe(1);
+    expect(res.body.totals.TOTAL_ALERTS).toBe(1);
+    expect(mockKpiQuery.mock.calls.some(([sql]) => /FROM\s+DSEDAC\.CLP/i.test(String(sql)))).toBe(true);
+  });
+
+  test('matches Glacius short client codes against GMP 4300 cartera', async () => {
+    mockDashboardDb({ clpRows: [{ CLIENT_CODE: '1' }] });
+
+    const res = await request(makeApp()).get('/dashboard?vendorCode=03');
+
+    expect(res.status).toBe(200);
+    expect(res.body.totals.alerts).toBe(1);
+    expect(res.body.clients[0].code).toBe('4300000001');
   });
 });

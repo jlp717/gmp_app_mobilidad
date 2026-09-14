@@ -222,7 +222,7 @@ function buildCvcClientScopeFilter(clientCodes) {
       .filter((code) => /^[A-Za-z0-9]+$/.test(code))),
   ];
   if (codes.length === 0) return null;
-  if (codes.length > 80) return null;
+  if (codes.length > 400) return null;
   return {
     clause: `AND TRIM(CVC.CODIGOCLIENTEALBARAN) IN (${codes.map(() => 'CAST(? AS VARCHAR(10))').join(',')})`,
     params: codes,

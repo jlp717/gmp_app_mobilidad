@@ -449,8 +449,10 @@ describe('commercial cobros hardening', () => {
     const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_CLIENTS/i.test(candidate));
     expect(sql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s+IN\s*\(/i);
+    expect(sql).toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)\s+IN\s*\(/i);
     expect(sql).toMatch(/SELECT\s+TRIM\(CLP\.CODIGOCLIENTE\)\s+FROM\s+DSEDAC\.CLP\s+CLP/i);
-    expect(sql).toMatch(/UNION\s+SELECT\s+DISTINCT\s+TRIM\(LAC\.LCCDCL\)/i);
+    expect(sql).not.toMatch(/UNION\s+SELECT\s+DISTINCT\s+TRIM\(LAC\.LCCDCL\)/i);
+    expect(sql).not.toMatch(/FROM\s+DSED\.LACLAE/i);
     expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\(/i);
     expect(sql).toMatch(/IN\s*\('01','1','02','2'\)/i);
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);

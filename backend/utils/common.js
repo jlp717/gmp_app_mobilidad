@@ -331,25 +331,17 @@ function buildCvcVendorScopeFilter(vendorCodes) {
         return { clause: '', params: [] };
     }
 
-    // Build the visible client set once instead of probing CLP and LACLAE for
-    // every CVC row. This keeps the same scope while avoiding expensive
-    // correlated EXISTS checks on production-sized pending-debt portfolios.
-    const laclaeVendorCol = getVendorColumnExpr('LAC');
+    // Fast cobros scope without DSED.LACLAE DISTINCT (1s+ even for one vendor):
+    // documents sold by the vendor OR clients in CLP cartera.
     const scoped = buildSafeAlnumInList(codes);
     return {
-        clause: `AND TRIM(CVC.CODIGOCLIENTEALBARAN) IN (
-            SELECT TRIM(CLP.CODIGOCLIENTE)
-              FROM DSEDAC.CLP CLP
-             WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${scoped.inList})
-            UNION
-            SELECT DISTINCT TRIM(LAC.LCCDCL)
-              FROM DSED.LACLAE LAC
-             WHERE LAC.LCAADC >= ${MIN_YEAR}
-               AND LAC.TPDC = 'LAC'
-               AND LAC.LCTPVT IN ('CC', 'VC')
-               AND LAC.LCCLLN IN ('AB', 'VT')
-               AND LAC.LCSRAB NOT IN ('N', 'Z')
-               AND TRIM(${laclaeVendorCol}) IN (${scoped.inList})
+        clause: `AND (
+            TRIM(CVC.CODIGOVENDEDOR) IN (${scoped.inList})
+            OR TRIM(CVC.CODIGOCLIENTEALBARAN) IN (
+                SELECT TRIM(CLP.CODIGOCLIENTE)
+                  FROM DSEDAC.CLP CLP
+                 WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${scoped.inList})
+            )
         )`,
         params: [...scoped.params, ...scoped.params],
     };

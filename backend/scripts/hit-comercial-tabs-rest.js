@@ -383,7 +383,11 @@ async function hitActor(actor, jefeActor) {
   }
 
   const kpiDash = await api('GET', `/kpi/dashboard?vendorCode=${encodeURIComponent(vendor)}`, { token, timeoutMs: 40000 });
-  const kpiAlerts = num(kpiDash.body?.totals?.TOTAL_ALERTS || kpiDash.body?.totalAlerts || kpiDash.body?.kpis?.totalVentas);
+  const kpiAlerts = num(
+    kpiDash.body?.totals?.alerts
+    ?? kpiDash.body?.totals?.TOTAL_ALERTS
+    ?? kpiDash.body?.totalAlerts,
+  );
   record('Alertas', 'GET /kpi/dashboard', roleLabel, kpiDash, {
     sample: `success=${kpiDash.body?.success} alerts=${kpiAlerts} keys=${Object.keys(kpiDash.body || {}).slice(0, 8).join(',')}`,
     sampleOk: kpiDash.status === 200 && kpiDash.body?.success !== false,

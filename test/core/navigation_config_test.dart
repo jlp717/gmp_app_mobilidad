@@ -111,6 +111,30 @@ void main() {
       expect(items.any((i) => i.label == 'Comisiones'), false);
     });
 
+    test('comercial team leader without isJefeVentas does not get Panel', () {
+      final items = NavigationConfigService.getNavItems(
+        isAlmacen: false,
+        isRepartidor: false,
+        isJefeVentas: false,
+        showCommissions: true,
+      );
+
+      expect(items.any((i) => i.label == 'Panel'), false);
+      expect(items.any((i) => i.label == 'Pedidos'), true);
+      expect(items.any((i) => i.label == 'Comisiones'), true);
+    });
+
+    test('JEFE_VENTAS sales mode gets Panel first', () {
+      final items = NavigationConfigService.getNavItems(
+        isAlmacen: false,
+        isRepartidor: false,
+        isJefeVentas: true,
+        showCommissions: true,
+      );
+
+      expect(items.first.label, 'Panel');
+    });
+
     test('includes comisiones when showCommissions is true', () {
       final items = NavigationConfigService.getNavItems(
         isAlmacen: false,
