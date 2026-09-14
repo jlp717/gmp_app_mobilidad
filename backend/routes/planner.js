@@ -16,6 +16,7 @@ const {
 } = require('../utils/common');
 const { db2ErpTable } = require('../utils/db2-schemas');
 const { resolvePlannerRole, PlannerRoleError } = require('../src/modules/planner/domain/planner-role-policy');
+const { resolveVendorScope } = require('../middleware/vendor-scope');
 
 // Imports from laclae service
 const {
@@ -343,8 +344,12 @@ function requirePlannerVendorScope({ location, field, mutation = false, requireV
             const requestedAll = requestedCodes.some(code => code.toUpperCase() === 'ALL');
             if (roleScopeCodes.length === 0) return next();
             if (requestedAll) {
-                // Expand literal ALL to the manager's visible vendor claims so
-                // "Todos los comerciales" keeps working in commercial Ruta.
+                const scope = resolveVendorScope(req.user, 'ALL', { visibleCodes: roleScopeCodes });
+                if (scope.literalAll) {
+                    writePlannerVendorField(req, location, field, 'ALL');
+                    return next();
+                }
+                // Subconjunto (p.ej. lider 80): expandir a claims visibles, nunca WHERE VENDEDOR='ALL'.
                 const expanded = roleScopeCodes.join(',');
                 if (!expanded) return plannerForbidden(res);
                 writePlannerVendorField(req, location, field, expanded);

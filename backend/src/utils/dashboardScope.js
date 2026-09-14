@@ -1,5 +1,7 @@
 'use strict';
 
+const { resolveVendorScope } = require('../../middleware/vendor-scope');
+
 /**
  * Scoping de vendedor para dashboard. Movido verbatim desde routes/dashboard.js
  * (mismas funciones, misma semantica); el route file importa desde aqui.
@@ -32,7 +34,11 @@ function resolveDashboardVendedorCodes(req, requested) {
         return { ok: true, vendedorCodes: userCode };
     }
     const visible = dashboardVisibleVendorCodes(user);
-    if (requestedAll) return { ok: true, vendedorCodes: visible.length ? visible.join(',') : 'ALL' };
+    if (requestedAll) {
+        const scope = resolveVendorScope(user, 'ALL', { visibleCodes: visible });
+        if (scope.literalAll) return { ok: true, vendedorCodes: 'ALL' };
+        return { ok: true, vendedorCodes: visible.length ? visible.join(',') : 'ALL' };
+    }
     const codes = raw.split(',').map(normalizeVendorCode).filter(Boolean);
     if (visible.length && codes.some(code => !visible.some(v => dashboardCodesMatch(v, code)))) {
         return { ok: false, status: 403, body: { success: false, code: 'FORBIDDEN_VENDOR', error: 'Vendedor fuera de alcance' } };

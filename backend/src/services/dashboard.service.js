@@ -7,6 +7,10 @@ const { buildVendedorFilterParameterized } = require('../utils/dashboardFilters'
 
 const DASHBOARD_CACHE_VERSION = 'v20260602-b-sales-all';
 
+function isCompanyWideVendorScope(vendedorCodes) {
+    return !vendedorCodes || String(vendedorCodes).trim().toUpperCase() === 'ALL';
+}
+
 /**
  * Logica de negocio de dashboard. Cero SQL aqui: el acceso a datos vive en
  * DashboardRepository (inyectado por constructor para tests con mocks).
@@ -28,8 +32,8 @@ class DashboardService {
         const now = getCurrentDate();
         const year = parseInt(yearRaw) || now.getFullYear();
         const month = parseInt(monthRaw) || (now.getMonth() + 1);
-        const cacheKey = `dashboard:metrics:${DASHBOARD_CACHE_VERSION}:${year}:${month || 'all'}:${vendedorCodes || 'ALL'}`;
-        const isAllVendors = !vendedorCodes || vendedorCodes === 'ALL';
+        const cacheKey = `dashboard:metrics:${DASHBOARD_CACHE_VERSION}:${year}:${month || 'all'}:${isCompanyWideVendorScope(vendedorCodes) ? 'ALL' : vendedorCodes}`;
+        const isAllVendors = isCompanyWideVendorScope(vendedorCodes);
         return {
             now,
             year,
@@ -116,7 +120,7 @@ class DashboardService {
 
     /** Paso 5: sumar ventas B del periodo a las ventas A. */
     async _enrichWithBSales(vendedorCodes, year, month, curr, last) {
-        const bSalesScope = vendedorCodes && vendedorCodes !== 'ALL' ? vendedorCodes : [];
+        const bSalesScope = vendedorCodes && !isCompanyWideVendorScope(vendedorCodes) ? vendedorCodes : [];
         const [bSalesCurrByVendor, bSalesLastByVendor] = await Promise.all([
             this._repo.fetchBSalesByVendor(year, bSalesScope),
             this._repo.fetchBSalesByVendor(year - 1, bSalesScope),
@@ -225,8 +229,8 @@ class DashboardService {
             dateParams = [now.getFullYear(), now.getFullYear(), currentMonth, now.getFullYear(), currentMonth, currentDay];
         }
 
-        const cacheKey = `dashboard:evolution:${DASHBOARD_CACHE_VERSION}:${years || 'default'}:${granularity}:${upToToday}:${vendedorCodes || 'ALL'}`;
-        const evolutionTTL = (!vendedorCodes || vendedorCodes === 'ALL') ? TTL.LONG : TTL.MEDIUM;
+        const cacheKey = `dashboard:evolution:${DASHBOARD_CACHE_VERSION}:${years || 'default'}:${granularity}:${upToToday}:${isCompanyWideVendorScope(vendedorCodes) ? 'ALL' : vendedorCodes}`;
+        const evolutionTTL = isCompanyWideVendorScope(vendedorCodes) ? TTL.LONG : TTL.MEDIUM;
 
         let resultData = [];
         if (granularity === 'week') {
@@ -294,7 +298,7 @@ class DashboardService {
             uniqueClients: parseInt(r.UNIQUECLIENTS) || 0
         }));
 
-        const bSalesScope = vendedorCodes && vendedorCodes !== 'ALL' ? vendedorCodes : [];
+        const bSalesScope = vendedorCodes && !isCompanyWideVendorScope(vendedorCodes) ? vendedorCodes : [];
         const bSalesByYear = await Promise.all(
             selectedYears.map(async y => ({
                 year: y,

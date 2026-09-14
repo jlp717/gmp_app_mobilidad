@@ -49,6 +49,7 @@ const {
 } = require('../../../utils/common');
 const { getClientCodesFromCache } = require('../../../services/laclae');
 const { verifyVendorPin } = require('../../../services/vendor-pin-auth');
+const { resolveVendorScope } = require('../../../middleware/vendor-scope');
 const authTokenService = require('../../../middleware/auth');
 const { createAuthClaimsResolver } = require('../../modules/auth/application/auth-claims-resolver');
 const { createAuthClaimsLoginHandler } = require('../../modules/auth/application/auth-claims-login-handler');
@@ -333,7 +334,8 @@ function resolvePedidoVendorScope(req, requestedVendorCodes) {
     }
   } else if (context.visibleVendorCodes.length > 0) {
     if (requestedAll) {
-      codes = context.visibleVendorCodes;
+      const scope = resolveVendorScope(req.user, 'ALL', { visibleCodes: context.visibleVendorCodes });
+      codes = scope.literalAll ? [] : context.visibleVendorCodes;
     } else if (codes.some((code) => !context.visibleVendorCodes.some((visible) => salesCodesMatch(code, visible)))) {
       return { ok: false, error: 'JEFE_VENTAS no puede operar vendedores fuera de su alcance' };
     }
