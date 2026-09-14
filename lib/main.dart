@@ -15,6 +15,7 @@ import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/telemetry/rum_buffer.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/theme/theme_provider.dart';
@@ -155,6 +156,7 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    RumBuffer.start();
     _router = _createRouter();
     SyncQueueService.confirmDeliveryReconciler ??=
         defaultConfirmDeliveryReconciler;
@@ -200,6 +202,7 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     } else if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
+      unawaited(RumBuffer.flush());
       unawaited(_flushPendingPedidoDraft());
     }
   }

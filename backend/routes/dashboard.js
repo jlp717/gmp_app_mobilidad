@@ -3,7 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
-const { query, queryWithParams } = require('../config/db');
+const { query, queryWithParams } = require('../middleware/db-timing');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, redisCache } = require('../services/redis-cache');
 const {

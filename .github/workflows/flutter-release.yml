@@ -90,9 +90,9 @@ jobs:
           echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
           echo "version=$(awk '/^version:/{print $2; exit}' pubspec.yaml)" >> "$GITHUB_OUTPUT"
       - name: Build signed app bundle
-        run: flutter build appbundle --release --build-number=${{ github.run_number }}
+        run: flutter build appbundle --release --build-number=${{ github.run_number }} --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
       - name: Build signed APK
-        run: flutter build apk --release --build-number=${{ github.run_number }}
+        run: flutter build apk --release --build-number=${{ github.run_number }} --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
       - name: Generate tag-based changelog
         shell: bash
         run: |

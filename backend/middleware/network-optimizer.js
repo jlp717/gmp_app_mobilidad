@@ -53,6 +53,32 @@ const CACHE_CONTROL = {
     default: 'private, no-cache',
 };
 
+const WEEKDAYS = 'lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo';
+
+function normalizeRequestPath(path) {
+    return String(path || '')
+        .replace(new RegExp(`/(${WEEKDAYS})(?=/|$)`, 'gi'), '/:dia')
+        .replace(/\/\d{2,}/g, '/:n');
+}
+
+function emitRequestJsonLine(req, res, totalMs) {
+    const stats = req.dbStats || { ms: 0, n: 0 };
+    logger.info(JSON.stringify({
+        t: 'req',
+        id: req.requestId || null,
+        m: req.method,
+        p: normalizeRequestPath(req.path || req.originalUrl || ''),
+        s: res.statusCode,
+        ms: totalMs,
+        db_ms: Number(stats.ms) || 0,
+        db_n: Number(stats.n) || 0,
+        cache: res.getHeader('X-Cache-Status') || res.getHeader('x-cache-status') || null,
+        w: process.env.INSTANCE_ID || null,
+        u: req.user?.id || req.user?.code || null,
+        net: req.get('X-GMP-Net') || null,
+    }));
+}
+
 function isSensitiveRepartoArtifactPath(req) {
     const path = String(req.originalUrl || req.path || '')
         .split('?')[0]
@@ -140,9 +166,8 @@ function networkOptimizer(req, res, next) {
     // Log slow responses on finish (can't set headers here, response already sent)
     res.on('finish', () => {
         const duration = Date.now() - startTime;
-        // res.setHeader('X-Response-Time', `${duration}ms`); // REMOVED: Cannot set items after send
+        emitRequestJsonLine(req, res, duration);
 
-        // Log slow responses
         if (duration > 1000) {
             logger.warn(`[NetworkOptimizer] Slow response: ${req.method} ${req.path} took ${duration}ms`);
         }
@@ -516,6 +541,8 @@ module.exports = {
     compressionStats,
     isJsonCoalescibleRequest,
     isSensitiveRepartoArtifactPath,
+    normalizeRequestPath,
+    emitRequestJsonLine,
     getFeatureFlags,
     setFeatureFlag,
     COMPRESSION_CONFIG,

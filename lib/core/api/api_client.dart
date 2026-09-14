@@ -12,6 +12,7 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/security/certificate_pinning.dart';
 import 'package:gmp_app_mobilidad/core/services/device_fingerprint.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
+import 'package:gmp_app_mobilidad/core/telemetry/rum_interceptor.dart';
 import 'package:sentry_dio/sentry_dio.dart';
 
 /// API Client for all backend communications
@@ -78,6 +79,7 @@ class ApiClient {
   // Connectivity monitoring.â”€â”€
   static StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   static ConnectivityResult _lastConnectivity = ConnectivityResult.wifi;
+  static ConnectivityResult get lastConnectivity => _lastConnectivity;
   static bool _connectivityMonitoring = false;
 
   /// Start monitoring network changes (WiFi â†” mobile data).
@@ -385,6 +387,7 @@ class ApiClient {
 
     // Add retry interceptor
     dio.interceptors.add(_RetryInterceptor(dio, _maxRetries, _retryDelay));
+    dio.interceptors.add(RumInterceptor());
 
     // Add performance logging interceptor in debug mode
     if (kDebugMode) {
@@ -400,7 +403,10 @@ class ApiClient {
       );
     }
 
-    dio.addSentry(captureFailedRequests: true);
+    const sentryDsn = String.fromEnvironment('SENTRY_DSN');
+    if (sentryDsn.isNotEmpty) {
+      dio.addSentry(captureFailedRequests: true);
+    }
 
     return dio;
   }
@@ -1009,6 +1015,7 @@ class ApiClient {
     bool idempotent = false,
     Duration? receiveTimeout,
     int? maxRetries,
+    Map<String, dynamic>? extra,
   }) async {
     try {
       final response = await dio.post<Map<String, dynamic>>(
@@ -1020,6 +1027,7 @@ class ApiClient {
           extra: <String, dynamic>{
             'idempotent': idempotent,
             if (maxRetries != null) 'maxRetries': maxRetries,
+            ...?extra,
           },
         ),
       );

@@ -83,6 +83,8 @@ const { MIN_YEAR } = require('./utils/common');
 // ==================== OPTIMIZATION IMPORTS ====================
 const { getCacheStats } = require('./services/redis-cache');
 const { networkOptimizer, responseCoalescing } = require('./middleware/network-optimizer');
+const dbTiming = require('./middleware/db-timing');
+const telemetryRoutes = require('./routes/telemetry');
 const { cacheMiddleware, invalidationMiddleware, getCacheStats: getHttpCacheStats } = require('./middleware/http-cache');
 const { createOptimizedQuery } = require('./services/query-optimizer');
 const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
@@ -366,13 +368,17 @@ app.use((req, res, next) => {
   next();
 });
 app.use(requestTimeoutMiddleware);
-app.use((req, res, next) => runWithDbRequestContext({
-  requestId: req.requestId,
-  method: req.method,
-  path: req.path,
-  dbDeadlineAt: Date.now() + Math.max(1000, resolveRequestTimeoutMs(req) - 1000),
-  req,
-}, next));
+app.use((req, res, next) => {
+  req.dbStats = { ms: 0, n: 0, requestId: req.requestId };
+  dbTiming.runWithStats(req.dbStats, () => runWithDbRequestContext({
+    requestId: req.requestId,
+    method: req.method,
+    path: req.path,
+    dbDeadlineAt: Date.now() + Math.max(1000, resolveRequestTimeoutMs(req) - 1000),
+    req,
+    dbStats: req.dbStats,
+  }, next));
+});
 app.use(detectScannerProbes);
 app.use(detectSuspiciousAgents);
 app.use(validateContentLength);
@@ -766,6 +772,7 @@ if (USE_TS_ROUTES && global.__TS_APP__) {
   // Legacy JavaScript routes
   app.use('/api', verifyToken);
   app.use('/api', cacheMiddleware); // Authenticated HTTP cache; requires req.user from verifyToken
+  app.use('/api/telemetry', telemetryRoutes);
 
   // Mount Protected Modules
   app.use('/api/dashboard', dashboardRoutes);

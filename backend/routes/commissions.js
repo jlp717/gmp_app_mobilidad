@@ -1,6 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
-const { query, queryWithParams, getPool } = require('../config/db');
+const { query, queryWithParams, getPool } = require('../middleware/db-timing');
 const { cachedQuery } = require('../services/query-optimizer');
 const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
