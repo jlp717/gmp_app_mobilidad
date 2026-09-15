@@ -11,13 +11,15 @@ const {
     buildVendedorFilterLACLAE,
     formatCurrency,
     MIN_YEAR,
-    LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     sanitizeForSQL,
     sanitizeCodeList,
-    handleRouteError
+    handleRouteError,
+    sargableDocumentDateBound,
 } = require('../utils/common');
 const { verifyToken } = require('../middleware/auth');
+const { authorizeVendorScope, isFinancialRole } = require('../middleware/vendor-scope');
+const { buildVendedorFilterParameterized } = require('../src/utils/dashboardFilters');
 
 
 // =============================================================================
@@ -331,10 +333,38 @@ router.get('/sales-history', verifyToken, async (req, res) => {
             offset = 0
         } = req.query;
 
-        const vendedorFilter = buildVendedorFilter(vendedorCodes);
+        const rawVendor = String(vendedorCodes || '').trim();
+        let requestedScope;
+        if (!rawVendor) {
+            requestedScope = isFinancialRole(req.user)
+                ? 'ALL'
+                : [String(req.user?.code || '').trim()].filter(Boolean);
+        } else if (rawVendor.toUpperCase() === 'ALL') {
+            requestedScope = 'ALL';
+        } else {
+            requestedScope = rawVendor.split(',').map((code) => code.trim()).filter(Boolean);
+        }
+        const scopeCheck = authorizeVendorScope(
+            req,
+            requestedScope === 'ALL' ? 'ALL' : requestedScope,
+        );
+        const financialCanPickVendors = isFinancialRole(req.user) && requestedScope !== 'ALL';
+        if (!scopeCheck.ok && !financialCanPickVendors) {
+            return res.status(403).json({
+                success: false,
+                code: 'VENDOR_SCOPE_FORBIDDEN',
+                error: 'Forbidden: vendedor fuera de tu alcance',
+                denied: scopeCheck.denied,
+            });
+        }
 
-        let whereClause = `WHERE 1=1 ${vendedorFilter}`;
-        const whereParams = [];
+        const vendorFilter = buildVendedorFilterParameterized(
+            requestedScope === 'ALL' ? 'ALL' : requestedScope.join(','),
+            'L',
+            'CODIGOVENDEDOR',
+        );
+        let whereClause = `WHERE 1=1 ${vendorFilter.filter}`;
+        const whereParams = [...vendorFilter.params];
 
         // Filter by Client - safe interpolation
         if (clientCode) {
@@ -351,21 +381,34 @@ router.get('/sales-history', verifyToken, async (req, res) => {
             whereParams.push(searchPattern, searchPattern, searchPattern);
         }
 
-        // Filter by Date Range (YYYY-MM-DD)
+        // Filter by Date Range (YYYY-MM-DD), sargable on ANO/MES/DIA.
         if (startDate) {
-            const start = new Date(startDate);
-            const startNum = start.getFullYear() * 10000 + (start.getMonth() + 1) * 100 + start.getDate();
-            whereClause += ' AND (L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) >= ?';
-            whereParams.push(startNum);
+            const startBound = sargableDocumentDateBound('gte', startDate);
+            if (!startBound) {
+                return res.status(400).json({
+                    success: false,
+                    code: 'INVALID_DATE',
+                    error: 'startDate debe ser YYYY-MM-DD',
+                });
+            }
+            whereClause += ` AND ${startBound.sql}`;
+            whereParams.push(...startBound.params);
         }
 
         if (endDate) {
-            const end = new Date(endDate);
-            const endNum = end.getFullYear() * 10000 + (end.getMonth() + 1) * 100 + end.getDate();
-            whereClause += ' AND (L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) <= ?';
-            whereParams.push(endNum);
+            const endBound = sargableDocumentDateBound('lte', endDate);
+            if (!endBound) {
+                return res.status(400).json({
+                    success: false,
+                    code: 'INVALID_DATE',
+                    error: 'endDate debe ser YYYY-MM-DD',
+                });
+            }
+            whereClause += ` AND ${endBound.sql}`;
+            whereParams.push(...endBound.params);
         } else {
-            whereClause += ` AND L.ANODOCUMENTO >= ${MIN_YEAR}`;
+            whereClause += ' AND L.ANODOCUMENTO >= ?';
+            whereParams.push(MIN_YEAR);
         }
 
         // Construct query - FIX: JOIN with ART and ARTX to get subfamily/FI codes
@@ -403,7 +446,7 @@ router.get('/sales-history', verifyToken, async (req, res) => {
         // Hash the effective SQL, all binds and authenticated scope. Unlike a
         // delimited key, this cannot confuse search/client values or pagination.
         // No raw identity or search data is exposed in cache logs.
-        const cacheKey = `analytics:sales-history:v1:${createHash('sha256')
+        const cacheKey = `analytics:sales-history:v2:${createHash('sha256')
             .update(JSON.stringify([
                 req.user?.id ?? req.user?.code ?? null,
                 req.user?.company ?? null,

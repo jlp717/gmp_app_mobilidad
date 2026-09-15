@@ -159,6 +159,43 @@ const LAC_SALES_FILTER = `
     )
 `.replace(/\s+/g, ' ').trim();
 
+/**
+ * Inclusive calendar bound on LAC ANO/MES/DIA so DB2 can use column indexes.
+ * @param {'gte'|'lte'} op
+ * @param {string} isoDate YYYY-MM-DD
+ * @param {string} [alias]
+ * @returns {{ sql: string, params: number[] } | null}
+ */
+function sargableDocumentDateBound(op, isoDate, alias = 'L') {
+    const match = String(isoDate || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const day = parseInt(match[3], 10);
+    const parsed = new Date(year, month - 1, day);
+    if (
+        parsed.getFullYear() !== year
+        || parsed.getMonth() !== month - 1
+        || parsed.getDate() !== day
+    ) {
+        return null;
+    }
+    const prefix = alias ? `${alias}.` : '';
+    if (op === 'gte') {
+        return {
+            sql: `(${prefix}ANODOCUMENTO > ? OR (${prefix}ANODOCUMENTO = ? AND (${prefix}MESDOCUMENTO > ? OR (${prefix}MESDOCUMENTO = ? AND ${prefix}DIADOCUMENTO >= ?))))`,
+            params: [year, year, month, month, day],
+        };
+    }
+    if (op === 'lte') {
+        return {
+            sql: `(${prefix}ANODOCUMENTO < ? OR (${prefix}ANODOCUMENTO = ? AND (${prefix}MESDOCUMENTO < ? OR (${prefix}MESDOCUMENTO = ? AND ${prefix}DIADOCUMENTO <= ?))))`,
+            params: [year, year, month, month, day],
+        };
+    }
+    return null;
+}
+
 const LAC_TIPOVENTA_FILTER = `L.LCTPVT IN ('CC', 'VC')`;
 const LAC_SERIEALBARAN_FILTER = `L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')`;
 
@@ -741,6 +778,7 @@ module.exports = {
     getCommissionActualVendorColumnExprForMonth,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
+    sargableDocumentDateBound,
     LAC_TIPOVENTA_FILTER,
     LAC_SERIEALBARAN_FILTER,
     formatCurrency,
