@@ -169,7 +169,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
   }
 
   void _syncMotionPolicy(bool motionEnabled) {
-    if (motionEnabled) {
+    final shouldLoop = motionEnabled && widget.isLoading;
+    if (shouldLoop) {
       if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
       return;
     }
