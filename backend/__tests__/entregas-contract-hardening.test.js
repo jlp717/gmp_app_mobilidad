@@ -137,6 +137,15 @@ describe('GET /pendientes contract', () => {
       },
     }));
     expect(response.body.albaranes).toHaveLength(100);
+    expect(sql).not.toMatch(/SELECT \*\s+FROM ranked_deliveries/i);
+    expect(sql).toContain('CPC.IMPORTETOTAL');
+    expect(sql).toContain('CPC_BASE1');
+    const firstRow = response.body.albaranes[0];
+    expect(firstRow.importe).toBe(12);
+    expect(firstRow).not.toHaveProperty('ivaBreakdown');
+    expect(firstRow).not.toHaveProperty('netoSum');
+    expect(firstRow).not.toHaveProperty('ivaSum');
+    expect(firstRow).not.toHaveProperty('checksum');
   });
 
   test('applies post-query filters over the whole dataset before slicing the page', async () => {

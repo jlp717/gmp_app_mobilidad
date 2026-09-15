@@ -1754,8 +1754,6 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
                 name: (r.NAME ?? r.name)?.trim() || null,
                 address: (r.ADDRESS ?? r.address)?.trim() || null,
                 city: (r.CITY ?? r.city)?.trim() || null,
-                phone: (r.PHONE ?? r.phone)?.trim() || null,
-                phone2: (r.PHONE2 ?? r.phone2)?.trim() || null,
                 phones,
                 // Frontend expects 'status' object with raw numbers
                 status: {
@@ -1769,7 +1767,6 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
                 lon: gps.lon,
                 orderStatus,
                 observation: note ? note.text : null,
-                observationBy: note ? note.modifiedBy : null,
                 order: clientOrder
             };
         });

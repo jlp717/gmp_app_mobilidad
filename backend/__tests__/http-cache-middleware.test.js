@@ -383,13 +383,24 @@ describe('network optimizer cache headers', () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
+  test('hashes ETag for JEFE-sized arrays up to 1000 clients', () => {
+    const req = makeGetReq();
+    const res = makeRes();
+    const next = jest.fn();
+
+    networkOptimizer(req, res, next);
+    res.json({ clients: Array.from({ length: 201 }, (_, index) => ({ id: index })) });
+
+    expect(res.setHeader).toHaveBeenCalledWith('ETag', expect.any(String));
+  });
+
   test('skips ETag hashing for large array payloads', () => {
     const req = makeGetReq();
     const res = makeRes();
     const next = jest.fn();
 
     networkOptimizer(req, res, next);
-    res.json({ rows: Array.from({ length: 250 }, (_, index) => ({ id: index })) });
+    res.json({ rows: Array.from({ length: 1001 }, (_, index) => ({ id: index })) });
 
     expect(res.setHeader).not.toHaveBeenCalledWith('ETag', expect.any(String));
   });

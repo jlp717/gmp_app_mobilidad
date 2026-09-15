@@ -152,6 +152,12 @@ describe('Planner rutero/day route', () => {
     const secondClient = res.body.clients.find(c => c.code === '4300000002');
     expect(firstClient.orderStatus.state).toBe('CONFIRMADO');
     expect(firstClient.orderStatus.label).toBe('VENTA CONFIRMADA');
+    expect(firstClient.phone).toBeUndefined();
+    expect(firstClient.phone2).toBeUndefined();
+    expect(firstClient.observationBy).toBeUndefined();
+    expect(firstClient.phones).toEqual([
+      { type: 'Teléfono', number: '600111111' },
+    ]);
     expect(secondClient.orderStatus.state).toBe('SIN_PEDIDO');
     expect(secondClient.orderStatus.label).toBe('SIN VENTA');
     expect(res.body.orderStatusDegraded).toBe(false);
