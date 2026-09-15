@@ -4,6 +4,7 @@ const { queryWithParams } = require('../config/db');
 const { db2AppTable } = require('../utils/db2-schemas');
 const { db2InsertSql } = require('../utils/db2-identifiers');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
+const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 const logger = require('../middleware/logger');
 
 const TEST_LIQUIDACION_TABLE = 'JAVIER.TEST_LIQUIDACION_COMERCIAL';
@@ -393,6 +394,7 @@ async function listPgCollectedDocuments({
            TRIM(CVC.TIPODOCUMENTO) AS TIPO,
            TRIM(CVC.SERIEDOCUMENTO) AS SERIE,
            CVC.NUMERODOCUMENTO AS NUMERO,
+           CVC.TERMINALDOCUMENTO AS TERM_DOC,
            CVC.IMPORTEVENCIMIENTO AS IMPORTE,
            CVC.IMPORTEPENDIENTE AS PENDIENTE,
            TRIM(CVC.CODIGOFORMAPAGO) AS FP,
@@ -405,7 +407,12 @@ async function listPgCollectedDocuments({
            CVC.MESVENCIMIENTO AS MESV,
            CVC.DIAVENCIMIENTO AS DIAV,
            TRIM(CAC.SERIEALBARAN) AS SERIE_ALB,
-           CAC.NUMEROALBARAN AS NUM_ALB
+           CAC.TERMINALALBARAN AS TERM_ALB,
+           CAC.NUMEROALBARAN AS NUM_ALB,
+           TRIM(CAC.SERIEFACTURA) AS SERIE_FAC,
+           CAC.TERMINALFACTURA AS TERM_FAC,
+           CAC.NUMEROFACTURA AS NUM_FAC,
+           FPG.NUMERODIASVENCIMIENTO AS DIAS_FP
       FROM DSEDAC.CVC CVC
       JOIN DSEDAC.CAC CAC
         ON CAC.EJERCICIOFACTURA = CVC.EJERCICIODOCUMENTO
@@ -437,28 +444,44 @@ async function listPgCollectedDocuments({
     const vDay = Number(row.DIAV) || 0;
     const serieAlb = String(row.SERIE_ALB || '').trim();
     const numAlb = row.NUM_ALB == null ? '' : String(row.NUM_ALB).trim();
-    const documento = `${String(row.SERIE || '').trim()}-${row.NUMERO == null ? '' : row.NUMERO}`;
+    const serieFac = String(row.SERIE_FAC || '').trim();
+    const numFac = row.NUM_FAC == null ? '' : String(row.NUM_FAC).trim();
+    const diasFp = Number.parseInt(row.DIAS_FP, 10);
+    const documento = formatErpDocumentLabel({
+      serie: row.SERIE,
+      terminal: row.TERM_DOC,
+      numero: row.NUMERO,
+    }) || `${String(row.SERIE || '').trim()}-${row.NUMERO == null ? '' : row.NUMERO}`;
     if (seen.has(documento)) continue;
     seen.add(documento);
     docs.push({
       cliente: String(row.CLIENTE || '').trim(),
       tipoDocumento: String(row.TIPO || '').trim(),
       documento,
+      factura: formatErpDocumentLabel({
+        serie: serieFac,
+        terminal: row.TERM_FAC,
+        numero: numFac,
+      }) || null,
       importe: money(row.IMPORTE),
       pendiente: money(row.PENDIENTE),
       formaPago: String(row.FP || '').trim(),
       formaPagoDesc: String(row.FP_DESC || '').trim(),
       pagare: String(row.PAGARESN || '').trim().toUpperCase() === 'S'
         || isPagareFormaPago(row.FP),
-      formaPagoDias: /30/.test(String(row.FP_DESC || '')) ? 30 : null,
-      pendienteTecnicoMovimiento: true,
+      formaPagoDias: Number.isFinite(diasFp) && diasFp > 0 ? diasFp : null,
+      pendienteTecnicoMovimiento: false,
       fecha: year && month && day
         ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
         : null,
       vencimiento: vYear && vMonth && vDay
         ? `${vYear}-${String(vMonth).padStart(2, '0')}-${String(vDay).padStart(2, '0')}`
         : null,
-      albaran: serieAlb && numAlb ? `${serieAlb}-${numAlb}` : null,
+      albaran: formatErpDocumentLabel({
+        serie: serieAlb,
+        terminal: row.TERM_ALB,
+        numero: numAlb,
+      }) || null,
       impactoLqd: 'YA_COBRADOS',
       yaCobrada: true,
     });
