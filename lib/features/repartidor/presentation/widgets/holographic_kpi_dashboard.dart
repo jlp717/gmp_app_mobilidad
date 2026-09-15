@@ -55,7 +55,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     _scannerController = AnimationController(
       duration: const Duration(seconds: 3),
       vsync: this,
-    )..repeat();
+    );
 
     _scannerAnimation = Tween<double>(begin: 0, end: 2 * math.pi).animate(
       CurvedAnimation(parent: _scannerController, curve: Curves.linear),
@@ -65,7 +65,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     _pulseController = AnimationController(
       duration: AppTheme.animPulse,
       vsync: this,
-    )..repeat(reverse: true);
+    );
 
     _pulseAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
@@ -122,7 +122,8 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
   }
 
   void _syncMotionPolicy(bool motionEnabled) {
-    if (motionEnabled) {
+    final shouldLoop = motionEnabled && widget.isLoading;
+    if (shouldLoop) {
       if (!_scannerController.isAnimating) _scannerController.repeat();
       if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
       return;
@@ -203,15 +204,17 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                 alignment: Alignment.center,
                 children: [
                   // Background ring
-                  CustomPaint(
-                    size: Size(size, size),
-                    painter: _HoloRingPainter(
-                      progress: progress * _progressController.value,
-                      scannerAngle: _scannerAnimation.value,
-                      backgroundColor: AppTheme.borderColor,
-                      progressColor: AppTheme.info,
-                      glowColor: AppTheme.info,
-                      strokeWidth: isSmall ? 4.0 : 6.0,
+                  RepaintBoundary(
+                    child: CustomPaint(
+                      size: Size(size, size),
+                      painter: _HoloRingPainter(
+                        progress: progress * _progressController.value,
+                        scannerAngle: _scannerAnimation.value,
+                        backgroundColor: AppTheme.borderColor,
+                        progressColor: AppTheme.info,
+                        glowColor: AppTheme.info,
+                        strokeWidth: isSmall ? 4.0 : 6.0,
+                      ),
                     ),
                   ),
                   // Center content
