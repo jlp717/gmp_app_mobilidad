@@ -1,9 +1,10 @@
 import 'dart:async';
-import 'dart:io';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
 
 /// Represents current connectivity state.
@@ -36,7 +37,8 @@ class ConnectivityService {
   bool _healthCheckInProgress = false;
   int _consecutiveFailures = 0;
   static const int _maxFailuresBeforeLimited = 2;
-  static const Duration _healthCheckInterval = Duration(seconds: 30);
+  static const Duration _healthCheckOk = Duration(seconds: 90);
+  static const Duration _healthCheckLimited = Duration(seconds: 30);
 
   static ConnectivityService get instance {
     _instance ??= ConnectivityService._();
@@ -72,10 +74,17 @@ class ConnectivityService {
   }
 
   void _startPeriodicHealthChecks() {
+    _rescheduleHealthChecks();
+  }
+
+  void _rescheduleHealthChecks() {
     _healthCheckTimer?.cancel();
-    _healthCheckTimer = Timer.periodic(_healthCheckInterval, (_) {
+    final interval = _status == ConnectivityStatus.limited
+        ? _healthCheckLimited
+        : _healthCheckOk;
+    _healthCheckTimer = Timer.periodic(interval, (_) {
       if (_status == ConnectivityStatus.offline) return;
-      _verifyRealConnectivity();
+      unawaited(_verifyRealConnectivity());
     });
   }
 
@@ -110,27 +119,16 @@ class ConnectivityService {
     _healthCheckInProgress = true;
 
     try {
-      // Use the actual production URL from ApiConfig
-      final baseUrl = ApiConfig.baseUrl;
-      final healthUrl = '$baseUrl/health';
-
-      final uri = Uri.parse(healthUrl);
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 5);
-
-      final request = await client.getUrl(uri);
-      request.followRedirects = true;
-      final response = await request.close().timeout(
-        const Duration(seconds: 8),
-        onTimeout: () {
-          client.close();
-          throw TimeoutException('Health probe timed out');
-        },
+      // Reuse the Dio keep-alive pool instead of a fresh HttpClient.
+      final response = await ApiClient.dio.get<dynamic>(
+        '/health',
+        options: Options(
+          extra: const {'skipRetry': true, 'skipRum': true},
+          receiveTimeout: const Duration(seconds: 8),
+        ),
       );
-
-      client.close();
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
+      final code = response.statusCode ?? 0;
+      if (code >= 200 && code < 300) {
         _consecutiveFailures = 0;
         _setStatus(ConnectivityStatus.online);
       } else {
@@ -157,6 +155,7 @@ class ConnectivityService {
       _status = newStatus;
       _controller.add(newStatus);
       debugPrint('[ConnectivityService] Status changed: $newStatus');
+      _rescheduleHealthChecks();
       // Bridge: online transition always drains SyncQueue + Pedidos queue.
       if (!wasOnline && newStatus == ConnectivityStatus.online) {
         unawaited(_triggerOfflineSyncBridge());
