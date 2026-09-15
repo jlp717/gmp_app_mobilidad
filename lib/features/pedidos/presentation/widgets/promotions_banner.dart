@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
@@ -61,26 +62,46 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
         _hasError = false;
       });
       final provider = ref.read(pedidosProvider);
-      final clientCode = provider.clientCode;
-      if (clientCode == null || clientCode.isEmpty) {
+      final clientCode = normalizePedidoClientCode(provider.clientCode);
+      if (clientCode.isEmpty) {
         if (mounted) setState(() => _isLoading = false);
         return;
       }
-      final response = await ApiClient.get(
-        '/pedidos/promotions',
-        queryParameters: {
-          'clientCode': clientCode,
-          if (provider.vendedorCodes.isNotEmpty)
-            'vendedorCodes': provider.vendedorCodes,
-        },
-        cacheKey: 'pedidos:promotions:$clientCode:${provider.vendedorCodes}',
-        cacheTTL: const Duration(minutes: 30), // Aligned with backend 30min TTL
-      );
+      final cacheKey = promotionsCacheKey(clientCode, provider.vendedorCodes);
+      final cached = CacheService.get<Object?>(cacheKey);
+      final reuseCache = shouldReusePromotionsCache(cached);
+      final Map<String, dynamic> response;
+      if (reuseCache && cached is Map) {
+        response = Map<String, dynamic>.from(cached);
+      } else {
+        response = await ApiClient.get(
+          '/pedidos/promotions',
+          queryParameters: {
+            'clientCode': clientCode,
+            if (provider.vendedorCodes.isNotEmpty)
+              'vendedorCodes': provider.vendedorCodes,
+          },
+          cacheKey: cacheKey,
+          cacheTTL: const Duration(minutes: 30),
+          cacheResponse: false,
+          forceRefresh: true,
+        );
+        if (shouldReusePromotionsCache(response)) {
+          await CacheService.set(
+            cacheKey,
+            response,
+            ttl: const Duration(minutes: 30),
+          );
+        } else {
+          await CacheService.invalidate(cacheKey);
+        }
+      }
       final list = response['promotions'] as List? ?? [];
       if (mounted) {
         setState(() {
           _promotions = list
-              .map((p) => PromotionItem.fromJson(p as Map<String, dynamic>))
+              .whereType<Map>()
+              .map((p) => PromotionItem.fromJson(Map<String, dynamic>.from(p)))
               .toList();
           _isLoading = false;
           _hasError = false;

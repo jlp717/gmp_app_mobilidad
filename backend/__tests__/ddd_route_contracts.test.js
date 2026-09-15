@@ -855,6 +855,53 @@ describe('DDD pedidos route contracts', () => {
     expect(lastYearCall[1].slice(-5)).toEqual(['01', 'C001', 'P001', 'F01', 'M01']);
     expect(lastYearCall[1]).not.toContain('99');
   });
+
+  test('GET /promotions ignores empty cache and caches only n>0', async () => {
+    const promotions = Array.from({ length: 27 }, (_, i) => ({
+      code: `PMR${i}`,
+      name: `Oferta ${i}`,
+      promoType: 'GIFT',
+      promoCode: `PMR-${i}`,
+    }));
+    mockPedidosRepo.getPromotions.mockResolvedValue(promotions);
+    mockCache.get.mockResolvedValue({ success: true, promotions: [] });
+
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '35',
+      code: '35',
+      role: 'COMERCIAL',
+    }))
+      .get('/promotions')
+      .query({ clientCode: ' 4300009324 ', vendedorCodes: '35' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.promotions).toHaveLength(27);
+    expect(mockPedidosRepo.getPromotions).toHaveBeenCalledWith(
+      expect.objectContaining({ clientCode: '4300009324' }),
+    );
+    expect(mockCache.set).toHaveBeenCalledWith(
+      expect.stringContaining('4300009324'),
+      expect.objectContaining({ success: true, promotions }),
+      expect.any(Number),
+    );
+  });
+
+  test('GET /promotions does not cache an empty promotions list', async () => {
+    mockPedidosRepo.getPromotions.mockResolvedValue([]);
+    mockCache.get.mockResolvedValue(null);
+
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '35',
+      code: '35',
+      role: 'COMERCIAL',
+    }))
+      .get('/promotions')
+      .query({ clientCode: '4300009324', vendedorCodes: '35' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.promotions).toEqual([]);
+    expect(mockCache.set).not.toHaveBeenCalled();
+  });
 });
 
 

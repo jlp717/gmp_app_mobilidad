@@ -328,7 +328,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       );
     }
     provider.loadFilters();
-    provider.loadPromotions();
+    provider.loadPromotions(vendedorCodes: codes);
 
     // Req #8: refrescar estado de borradores acumulados y notificar al usuario
     // si supera el umbral. Se hace por vendedor primario (primer código).
@@ -732,8 +732,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               if (!prov.hasClient) return const SizedBox.shrink();
               final promos = prov.promos;
               // Count unique promotions by promoCode, not individual items
-              final uniquePromoCodes =
-                  promos.map((p) => p.promoCode).toSet().length;
+              final promoCount = promos.length;
               return Stack(
                 children: [
                   IconButton(
@@ -790,7 +789,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                         shape: BoxShape.circle,
                       ),
                       child: Text(
-                        '$uniquePromoCodes',
+                        '$promoCount',
                         style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 10,
@@ -1179,9 +1178,15 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   Widget _buildCatalogPanel() {
-    final hasClient = ref.watch(pedidosProvider.select((p) => p.hasClient));
+    final catalog = ref.watch(pedidosProvider.select(
+      (p) => (
+        hasClient: p.hasClient,
+        promoCount: p.activePromotionsList.length,
+        clientCode: p.clientCode,
+      ),
+    ));
     final provider = ref.read(pedidosProvider);
-    if (!hasClient) {
+    if (!catalog.hasClient) {
       return Column(
         children: [
           _buildOrderHeader(provider),
@@ -1232,6 +1237,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           vendedorCodes: _vendedorCodes,
         ),
         PromotionsBanner(
+          key: ValueKey<String>(
+            'promos-${catalog.clientCode}-${catalog.promoCount}',
+          ),
           promotions: provider.activePromotionsList,
           onProductTap: (code, name) =>
               _openProductByCode(code, fallbackName: name),
@@ -1339,7 +1347,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     ),
                   );
                   unawaited(prov.loadClientBalance(result['code']!));
-                  unawaited(prov.loadPromotions());
+                  unawaited(prov.loadPromotions(vendedorCodes: _vendedorCodes));
                 }
               },
               borderRadius: BorderRadius.circular(12),

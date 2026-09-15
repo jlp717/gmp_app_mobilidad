@@ -23,6 +23,27 @@ void _debugLog(String message) {
   if (kDebugMode) debugPrint(message);
 }
 
+/// CHAR(10) client codes come padded from DB2; the PMR lookup casts to CHAR(10).
+@visibleForTesting
+String normalizePedidoClientCode(String? raw) {
+  final trimmed = (raw ?? '').trim();
+  if (trimmed.isEmpty) return '';
+  return trimmed.length <= 10 ? trimmed : trimmed.substring(0, 10);
+}
+
+@visibleForTesting
+String promotionsCacheKey(String clientCode, String vendedorCodes) {
+  return 'pedidos:promotions:${normalizePedidoClientCode(clientCode)}:${vendedorCodes.trim()}';
+}
+
+/// Mirror of GET /pedidos/promotions: never reuse a cached empty list.
+@visibleForTesting
+bool shouldReusePromotionsCache(Object? cached) {
+  if (cached is! Map) return false;
+  final list = cached['promotions'];
+  return list is List && list.isNotEmpty;
+}
+
 /// Chooses the provider-facing result from create + confirm API responses.
 Map<String, dynamic> normalizeConfirmOrderResultForProvider({
   required Map<String, dynamic> createResult,
@@ -553,11 +574,11 @@ class PedidosProvider with ChangeNotifier {
       _selectedFamily = null;
       _selectedBrand = null;
     }
-    _clientCode = code;
+    _clientCode = normalizePedidoClientCode(code);
     _clientName = name;
     _clientBalance = {
       'balanceStatus': 'loading',
-      'clientCode': code.trim(),
+      'clientCode': _clientCode,
     };
     notifyListeners();
   }
@@ -1912,30 +1933,56 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  Future<void> loadPromotions() async {
-    if (!hasClient) {
+  Future<void> loadPromotions({String? vendedorCodes}) async {
+    final vendor = (vendedorCodes ?? _vendedorCodes).trim();
+    if (vendor.isNotEmpty) {
+      _vendedorCodes = vendor;
+    }
+    final clientCode = normalizePedidoClientCode(_clientCode);
+    if (clientCode.isEmpty) {
       _activePromotionsList.clear();
       _promotionsByProduct.clear();
       notifyListeners();
       return;
     }
+    _clientCode = clientCode;
 
     try {
-      final response = await ApiClient.get(
-        '/pedidos/promotions',
-        queryParameters: {
-          'clientCode': _clientCode,
-          if (_vendedorCodes.isNotEmpty) 'vendedorCodes': _vendedorCodes,
-        },
-        cacheKey: 'pedidos:promotions:$_clientCode:$_vendedorCodes',
-        cacheTTL: CacheService.defaultTTL,
-      );
+      final cacheKey = promotionsCacheKey(clientCode, _vendedorCodes);
+      final cached = CacheService.get<Object?>(cacheKey);
+      final reuseCache = shouldReusePromotionsCache(cached);
+      final Map<String, dynamic> response;
+      if (reuseCache && cached is Map) {
+        response = Map<String, dynamic>.from(cached);
+      } else {
+        response = await ApiClient.get(
+          '/pedidos/promotions',
+          queryParameters: {
+            'clientCode': clientCode,
+            if (_vendedorCodes.isNotEmpty) 'vendedorCodes': _vendedorCodes,
+          },
+          cacheKey: cacheKey,
+          cacheTTL: CacheService.defaultTTL,
+          cacheResponse: false,
+          forceRefresh: true,
+        );
+        if (shouldReusePromotionsCache(response)) {
+          await CacheService.set(
+            cacheKey,
+            response,
+            ttl: CacheService.defaultTTL,
+          );
+        } else {
+          await CacheService.invalidate(cacheKey);
+        }
+      }
       final list = response['promotions'] as List? ?? [];
       _activePromotionsList.clear();
       _promotionsByProduct.clear();
       final seen = <String>{};
       for (final p in list) {
-        final item = PromotionItem.fromJson(p as Map<String, dynamic>);
+        if (p is! Map) continue;
+        final item = PromotionItem.fromJson(Map<String, dynamic>.from(p));
         final minQtyStr = item.minQty.toStringAsFixed(2);
         final giftQtyStr = item.giftQty.toStringAsFixed(2);
         final promoPriceStr = item.promoPrice.toStringAsFixed(2);
