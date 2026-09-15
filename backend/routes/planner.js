@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const logger = require('../middleware/logger');
-const { getPool, query, queryWithParams } = require('../config/db');
+const { getPool, query, queryWithParams } = require('../middleware/db-timing');
 const { cachedQuery, patternFor } = require('../services/query-optimizer');
 const { TTL, deleteCachePattern, redisCache } = require('../services/redis-cache');
 const {

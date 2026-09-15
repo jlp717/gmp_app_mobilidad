@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { query, queryWithParams } = require('../config/db');
+const { query, queryWithParams } = require('../middleware/db-timing');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');

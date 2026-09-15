@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
 const logger = require('../middleware/logger');
-const { query, queryWithParams } = require('../config/db');
+const { query, queryWithParams } = require('../middleware/db-timing');
 const {
     getCurrentDate,
     buildVendedorFilter,

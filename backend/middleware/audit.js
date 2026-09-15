@@ -123,7 +123,7 @@ function getClientIP(req) {
 // =============================================================================
 function auditMiddleware(req, res, next) {
     const startTime = Date.now();
-    const requestId = crypto.randomBytes(4).toString('hex'); // 8-char unique ID
+    const requestId = req.requestId || crypto.randomBytes(4).toString('hex');
     const clientIP = getClientIP(req);
     const userAgent = req.headers['user-agent'] || 'unknown';
 
@@ -135,8 +135,8 @@ function auditMiddleware(req, res, next) {
         deviceId: req.headers['x-device-id'] || null,
     };
 
-    // Attach to request for downstream use
-    req.requestId = requestId;
+    // Keep the UUID from addRequestId so X-Request-ID matches logs.
+    if (!req.requestId) req.requestId = requestId;
     req.clientIP = clientIP;
     req.deviceInfo = deviceInfo;
 
