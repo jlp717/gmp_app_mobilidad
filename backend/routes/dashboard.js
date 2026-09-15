@@ -15,7 +15,6 @@ const {
     getVendorColumnExpr,
     formatCurrency,
     MIN_YEAR,
-    LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     getBSalesByVendor,
     aggregateBSalesByMonth,
@@ -103,7 +102,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
         if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
         vendedorCodes = scoped.vendedorCodes;
         
-        const cacheKey = `dashboard:matrix:v4:${canonicalQueryKey(req.query, {
+        const cacheKey = `dashboard:matrix:v5:${canonicalQueryKey(req.query, {
             vendedorCodes: vendedorCodes || 'ALL',
             userRole: req.user?.role || '',
             userCode: req.user?.code || req.user?.id || ''
@@ -256,10 +255,10 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
 
         const aggregateSQL = `
             SELECT ${selectClauses.join(', ')}
-            FROM DSEDAC.LAC L
+            FROM DSED.LACLAE L
               ${artJoinClause}
               WHERE 1=1
-              AND ${LAC_SALES_FILTER}
+              AND ${LACLAE_SALES_FILTER}
               ${yearFilter}
               ${monthResult.filter}
               ${vendedorResult.filter}

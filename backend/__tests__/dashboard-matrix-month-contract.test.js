@@ -54,7 +54,7 @@ function makeApp() {
 }
 
 function aggregateCall() {
-  return mockQueryWithParams.mock.calls.find(([sql]) => /FROM DSEDAC\.LAC L/i.test(sql)
+  return mockQueryWithParams.mock.calls.find(([sql]) => /FROM DSED\.LACLAE L/i.test(sql)
     && /SUM\(L\.LCIMVT\)/i.test(sql));
 }
 
@@ -95,6 +95,8 @@ describe('GET /matrix-data month filter contract', () => {
     const [sql, params] = aggregateCall();
     expect(sql).toMatch(/FETCH FIRST 240 ROWS ONLY/);
     expect(sql).toMatch(/AND L\.LCMMDC IN \(\?\)/);
+    expect(sql).toMatch(/L\.TPDC = 'LAC'/);
+    expect(sql).not.toMatch(/EXISTS\s*\(\s*SELECT 1 FROM DSEDAC\.CAC/i);
     expect(params).toEqual(expect.arrayContaining([3]));
   });
 
