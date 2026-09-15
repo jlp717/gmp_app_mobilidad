@@ -112,10 +112,8 @@ function normalizePeerAddress(address) {
 }
 
 function getClientIP(req) {
-    // This application deliberately does not trust proxy headers.  A client can
-    // send X-Forwarded-For/X-Real-IP directly, so audit identity must be the
-    // connected peer until an explicitly trusted proxy is introduced.
-    return normalizePeerAddress(req?.socket?.remoteAddress || req?.connection?.remoteAddress);
+    const { clientIp } = require('./security');
+    return clientIp(req);
 }
 
 // =============================================================================

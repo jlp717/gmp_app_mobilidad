@@ -245,9 +245,9 @@ if (USE_DDD_ROUTES) {
 }
 
 const app = express();
-// This process receives client traffic directly. Never trust arbitrary
-// X-Forwarded-For values; proxy support needs an explicit reviewed allowlist.
-app.set('trust proxy', false);
+// Trust X-Forwarded-For only from loopback (local Cloudflare tunnel).
+// CF-Connecting-IP is applied in clientIp() when the TCP peer is loopback.
+app.set('trust proxy', 'loopback');
 const HTTP_COMPRESSION_THRESHOLD = parseInt(process.env.HTTP_COMPRESSION_THRESHOLD, 10) || 1024;
 const HTTP_COMPRESSION_LEVEL = parseInt(process.env.HTTP_COMPRESSION_LEVEL, 10) || 6;
 const HTTP_REQUEST_TIMEOUT_MS = parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS, 10) || 30000;

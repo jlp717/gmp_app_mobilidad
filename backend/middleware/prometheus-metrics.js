@@ -132,7 +132,10 @@ function hasInternalToken(req) {
 }
 
 function isInternalRequest(req) {
-    return isLoopbackIp(socketRemoteAddress(req)) || hasInternalToken(req);
+    if (hasInternalToken(req)) return true;
+    if (!isLoopbackIp(socketRemoteAddress(req))) return false;
+    const cfConnectingIp = getHeader(req, 'cf-connecting-ip');
+    return !cfConnectingIp;
 }
 
 function canSeeInternalDetails(req) {

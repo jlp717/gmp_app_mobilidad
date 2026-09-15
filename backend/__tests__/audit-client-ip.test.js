@@ -17,4 +17,17 @@ describe('audit client peer identity', () => {
         expect(getClientIP({ headers: {}, socket: { remoteAddress: '127.0.0.1' } })).toBe('127.0.0.1');
         expect(getClientIP({ headers: {}, socket: { remoteAddress: '::ffff:192.0.2.44' } })).toBe('192.0.2.44');
     });
+
+    test('uses CF-Connecting-IP only from a loopback peer', () => {
+        expect(getClientIP({
+            headers: { 'cf-connecting-ip': '1.2.3.4' },
+            socket: { remoteAddress: '127.0.0.1' },
+            get: (name) => (String(name).toLowerCase() === 'cf-connecting-ip' ? '1.2.3.4' : ''),
+        })).toBe('1.2.3.4');
+        expect(getClientIP({
+            headers: { 'cf-connecting-ip': '1.2.3.4' },
+            socket: { remoteAddress: '203.0.113.10' },
+            get: (name) => (String(name).toLowerCase() === 'cf-connecting-ip' ? '1.2.3.4' : ''),
+        })).toBe('203.0.113.10');
+    });
 });

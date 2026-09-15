@@ -117,4 +117,18 @@ describe('metrics and health internal access gates', () => {
     process['env'].INTERNAL_HEALTH_TOKEN = 'secret-token';
     expect(canSeeInternalDetails(makeReq({ headers: { 'x-healthcheck-token': 'secret-token' } }))).toBe(true);
   });
+
+  test('loopback with CF-Connecting-IP requires metrics token', () => {
+    const req = makeReq({
+      ip: '127.0.0.1',
+      headers: { 'cf-connecting-ip': '1.2.3.4' },
+    });
+    const res = makeRes();
+    const next = jest.fn();
+
+    requireInternalMetricsAccess(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
 });

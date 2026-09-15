@@ -220,13 +220,44 @@ function createRateLimiter(options, { store } = {}) {
     return failClosedLimiter;
 }
 
-// Do not use req.ip here. It can be derived from X-Forwarded-For when proxy
-// settings change; rate limiting must retain the connected peer identity.
+// Rate-limit / audit identity: CF-Connecting-IP is trusted only from a
+// loopback TCP peer (Cloudflare tunnel). Remote peers cannot spoof it.
+function normalizeIpAddress(address) {
+    if (!address || typeof address !== 'string') return 'unknown';
+    return address.startsWith('::ffff:') ? address.slice(7) : address;
+}
+
+function isLoopbackPeer(address) {
+    const ip = normalizeIpAddress(address);
+    return ip === '::1' || ip === '127.0.0.1' || ip.startsWith('127.');
+}
+
+function peerSocketIp(req) {
+    return normalizeIpAddress(req?.socket?.remoteAddress || req?.connection?.remoteAddress);
+}
+
+function headerValue(req, name) {
+    if (typeof req.get === 'function') {
+        const value = req.get(name);
+        if (value) return String(value).trim();
+    }
+    const headers = req.headers || {};
+    const raw = headers[String(name).toLowerCase()] || headers[name];
+    return raw ? String(raw).trim() : '';
+}
+
+function clientIp(req) {
+    const peer = peerSocketIp(req);
+    if (isLoopbackPeer(peer)) {
+        const cfConnectingIp = headerValue(req, 'CF-Connecting-IP');
+        if (cfConnectingIp) return cfConnectingIp;
+        if (req.ip) return normalizeIpAddress(req.ip);
+    }
+    return peer;
+}
+
 function rateLimitPeerIp(req) {
-    const address = req?.socket?.remoteAddress || req?.connection?.remoteAddress;
-    return typeof address === 'string' && address.startsWith('::ffff:')
-        ? address.slice(7)
-        : address || 'unknown';
+    return clientIp(req);
 }
 
 function globalRateLimitKey(req) {
@@ -355,6 +386,7 @@ exports.evolutionLimiter = createRateLimiter({
 });
 
 exports.rateLimitPeerIp = rateLimitPeerIp;
+exports.clientIp = clientIp;
 exports.globalRateLimitKey = globalRateLimitKey;
 exports.RedisRateLimitStore = RedisRateLimitStore;
 exports.createRateLimiter = createRateLimiter;
