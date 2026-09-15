@@ -31,6 +31,24 @@ void main() {
         }),
         isTrue,
       );
+      expect(
+        isBulkyJsonMap({
+          'albaranes': List.generate(80, (i) => {'id': i}),
+        }),
+        isTrue,
+      );
+      expect(
+        isBulkyJsonMap({
+          'documents': List.generate(80, (i) => {'id': i}),
+        }),
+        isTrue,
+      );
+      expect(
+        isBulkyJsonMap({
+          'yearlyData': List.generate(80, (i) => {'id': i}),
+        }),
+        isTrue,
+      );
     });
 
     test('ignores small payloads', () {

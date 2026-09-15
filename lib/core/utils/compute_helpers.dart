@@ -72,7 +72,7 @@ String _encodeJson(Map<String, dynamic> data) {
 
 /// Threshold for using isolate (in characters)
 /// Below this, parsing on main thread is faster due to isolate overhead
-const int _isolateThreshold = 50000; // ~50KB
+const int _isolateThreshold = 20000; // ~20KB
 
 /// Smart JSON parse - uses isolate only for large data
 /// Handles both JSON objects AND arrays (returns dynamic)

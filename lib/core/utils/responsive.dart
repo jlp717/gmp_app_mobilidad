@@ -19,24 +19,24 @@ class Responsive {
 
   /// Phone-sized or very small tablet (< 600 logical px shortest side)
   static bool isSmall(BuildContext ctx) =>
-      MediaQuery.of(ctx).size.shortestSide < 600;
+      MediaQuery.sizeOf(ctx).shortestSide < 600;
 
   /// Semantic alias for [isSmall].
   static bool isPhone(BuildContext ctx) => isSmall(ctx);
 
   /// Medium tablet (600–899 logical px shortest side)
   static bool isMedium(BuildContext ctx) {
-    final w = MediaQuery.of(ctx).size.shortestSide;
+    final w = MediaQuery.sizeOf(ctx).shortestSide;
     return w >= 600 && w < 900;
   }
 
   /// Large tablet / desktop (>= 900 logical px shortest side)
   static bool isLarge(BuildContext ctx) =>
-      MediaQuery.of(ctx).size.shortestSide >= 900;
+      MediaQuery.sizeOf(ctx).shortestSide >= 900;
 
   /// True when device is in landscape orientation.
   static bool isLandscape(BuildContext ctx) =>
-      MediaQuery.of(ctx).orientation == Orientation.landscape;
+      MediaQuery.orientationOf(ctx) == Orientation.landscape;
 
   /// Whether to use bottom navigation (phones) instead of sidebar (tablets).
   static bool useBottomNav(BuildContext ctx) => isSmall(ctx);
@@ -49,7 +49,7 @@ class Responsive {
   /// This is used to aggressively hide or shrink non-essential UI elements to maximize list visibility.
   static bool isLandscapeCompact(BuildContext ctx) {
     if (!isLandscape(ctx)) return false;
-    return MediaQuery.of(ctx).size.height < 500;
+    return MediaQuery.sizeOf(ctx).height < 500;
   }
 
   /// Returns a shrinking factor when a horizontal device has a very small height.
@@ -57,7 +57,7 @@ class Responsive {
   static double landscapeScale(BuildContext ctx) {
     if (!isLandscapeCompact(ctx)) return 1;
 
-    final h = MediaQuery.of(ctx).size.height;
+    final h = MediaQuery.sizeOf(ctx).height;
     // For heights between 250 and 500, return a value between 0.5 and 0.95
     // This aggressively shrinks fonts, paddings, and headers so users can see more data.
     return (0.5 + ((h - 250) / 250) * 0.45).clamp(0.5, 0.95);
@@ -77,7 +77,7 @@ class Responsive {
     required double desktop,
     double? tablet,
   }) {
-    final w = MediaQuery.of(ctx).size.shortestSide;
+    final w = MediaQuery.sizeOf(ctx).shortestSide;
     final t = tablet ?? (phone + desktop) / 2;
     final factor = landscapeScale(ctx);
     if (w >= 1200) return desktop * factor;
@@ -93,7 +93,7 @@ class Responsive {
   /// Scale a fixed value proportionally to screen size.
   /// Returns the original value on large screens (>= 1200px shortestSide).
   static double scale(BuildContext ctx, double val) {
-    final width = MediaQuery.of(ctx).size.shortestSide;
+    final width = MediaQuery.sizeOf(ctx).shortestSide;
     final factor = landscapeScale(ctx);
     if (width >= 1200) return val * factor;
     if (width >= 900) return val * 0.85 * factor;
@@ -106,7 +106,7 @@ class Responsive {
     double desired, {
     double maxPercent = 0.9,
   }) {
-    final screenW = MediaQuery.of(ctx).size.width;
+    final screenW = MediaQuery.sizeOf(ctx).width;
     final max = screenW * maxPercent;
     return desired > max ? max : desired;
   }
@@ -117,7 +117,7 @@ class Responsive {
     double desired, {
     double maxPercent = 0.9,
   }) {
-    final screenH = MediaQuery.of(ctx).size.height;
+    final screenH = MediaQuery.sizeOf(ctx).height;
     final max = screenH * maxPercent;
     return desired > max ? max : desired;
   }
@@ -139,7 +139,7 @@ class Responsive {
     required double small,
     required double large,
   }) {
-    final w = MediaQuery.of(ctx).size.shortestSide;
+    final w = MediaQuery.sizeOf(ctx).shortestSide;
     final factor = landscapeScale(ctx);
     if (w >= 1200) return large * factor;
     if (w >= 900) return (small + (large - small) * 0.7) * factor;
@@ -165,7 +165,7 @@ class Responsive {
     required double small,
     required double large,
   }) {
-    final w = MediaQuery.of(ctx).size.shortestSide;
+    final w = MediaQuery.sizeOf(ctx).shortestSide;
     final factor = landscapeScale(ctx);
     if (w >= 1200) return large * factor;
     if (w >= 600) return (small + (large - small) * 0.5) * factor;
@@ -174,7 +174,7 @@ class Responsive {
 
   /// Standard content padding that adapts to screen size.
   static EdgeInsets contentPadding(BuildContext ctx) {
-    final w = MediaQuery.of(ctx).size.shortestSide;
+    final w = MediaQuery.sizeOf(ctx).shortestSide;
     final factor = landscapeScale(ctx);
     if (w >= 1200) return EdgeInsets.all(24 * factor);
     if (w >= 600) return EdgeInsets.all(16 * factor);
@@ -183,7 +183,7 @@ class Responsive {
 
   /// Spacing between cards/sections.
   static double spacing(BuildContext ctx) {
-    final w = MediaQuery.of(ctx).size.shortestSide;
+    final w = MediaQuery.sizeOf(ctx).shortestSide;
     final factor = landscapeScale(ctx);
     if (w >= 1200) return 24 * factor;
     if (w >= 600) return 16 * factor;
@@ -197,7 +197,7 @@ class Responsive {
     double portraitFraction = 0.85,
     double landscapeFraction = 0.95,
   }) {
-    final h = MediaQuery.of(ctx).size.height;
+    final h = MediaQuery.sizeOf(ctx).height;
     final fraction = isLandscape(ctx) ? landscapeFraction : portraitFraction;
     return h * fraction;
   }

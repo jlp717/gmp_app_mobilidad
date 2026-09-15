@@ -8,6 +8,9 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/ruter
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_stop_status_badges.dart';
 import 'package:intl/intl.dart';
 
+final NumberFormat _deliveryCurrency =
+    NumberFormat.currency(symbol: '€', locale: 'es_ES');
+
 /// Smart Delivery Card with futuristic design
 /// Features:
 /// - Clear distinction between Albaran and Factura
@@ -174,10 +177,11 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               scale: _scaleAnimation.value,
               child: Transform.translate(
                 offset: Offset(_dragOffset, 0),
-                child: _buildCardContent(),
+                child: child,
               ),
             );
           },
+          child: _buildCardContent(),
         ),
       ),
     );
@@ -286,8 +290,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               Text(
                 widget.albaran.isPendingPrice
                     ? 'Pendiente'
-                    : NumberFormat.currency(symbol: '€', locale: 'es_ES')
-                        .format(widget.albaran.importeTotal),
+                    : _deliveryCurrency.format(widget.albaran.importeTotal),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
