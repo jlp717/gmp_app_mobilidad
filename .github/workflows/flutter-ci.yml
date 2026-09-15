@@ -2,14 +2,14 @@ name: Flutter CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, test]
     paths:
       - 'lib/**'
       - 'test/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
   pull_request:
-    branches: [main]
+    branches: [main, test]
     paths:
       - 'lib/**'
       - 'test/**'
