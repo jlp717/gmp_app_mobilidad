@@ -15,6 +15,7 @@
  */
 
 const express = require('express');
+const { z } = require('zod');
 const logger = require('../../../middleware/logger');
 const { Db2PedidosRepository } = require('../../modules/pedidos');
 const { Db2CobrosRepository } = require('../../modules/cobros');
@@ -63,6 +64,19 @@ function publicErrorMessageForStatus(error, status, fallbackMessage = INTERNAL_S
 function sendInternalServerError(res, fallbackMessage = INTERNAL_SERVER_ERROR_MESSAGE) {
   return res.status(500).json({ success: false, code: 'INTERNAL_SERVER_ERROR', error: fallbackMessage });
 }
+
+const pedidoLineSchema = z.object({
+  codigoArticulo: z.string().trim().min(1).max(10),
+  cantidad: z.coerce.number().nonnegative().optional(),
+  cantidadEnvases: z.coerce.number().nonnegative().optional(),
+  cantidadUnidades: z.coerce.number().nonnegative().optional(),
+  descuentoLinea: z.coerce.number().min(0).max(100).optional(),
+  lineDiscountPct: z.coerce.number().min(0).max(100).optional(),
+  motivo: z.string().max(200).optional(),
+  motivoPrecio: z.string().max(200).optional(),
+}).passthrough();
+
+const pedidoLinesSchema = z.array(pedidoLineSchema).min(1);
 
 const TTL_MS = {
   PRODUCT_CATALOG: 5 * 60 * 1000,
@@ -1840,6 +1854,15 @@ function createPedidosRoutes() {
         return res.status(400).json({ success: false, error: 'clientCode and lines are required' });
       }
 
+      const parsedLines = pedidoLinesSchema.safeParse(lines);
+      if (!parsedLines.success) {
+        return res.status(400).json({
+          success: false,
+          error: 'Lineas de pedido invalidas',
+          code: 'INVALID_LINE_PAYLOAD',
+        });
+      }
+
       const vendorAccess = authorizePedidoVendorCode(req, actualVendedor, 'crear pedidos para');
       if (!vendorAccess.ok) return res.status(vendorAccess.status).json(vendorAccess.body);
       const clientAccess = await authorizePedidoClientScope(req, clientCode, vendorAccess.vendedorCode, 'crear pedidos para');
@@ -1860,9 +1883,10 @@ function createPedidosRoutes() {
         descuentoGlobal: descuentoGlobal != null
           ? parseFloat(descuentoGlobal)
           : (globalDiscountPct != null ? parseFloat(globalDiscountPct) : 0),
-        lines: lines,
+        lines: parsedLines.data,
         origen: 'A',
         idempotencyKey,
+        userRole: req.user?.role,
       });
 
       // Invalidate related caches
@@ -1886,6 +1910,13 @@ function createPedidosRoutes() {
       }
       if (error.code === 'INVALID_SALE_TYPE') {
         return res.status(400).json({ success: false, code: error.code, error: error.message });
+      }
+      if (error.code === 'PRICE_UNDER_MINIMO' || error.code === 'PRICE_UNAVAILABLE') {
+        return res.status(Number(error.status) || 422).json({
+          success: false,
+          code: error.code,
+          error: error.message,
+        });
       }
       logger.error(`[DDD-PEDIDOS] Error in POST /create: ${error.message}`);
       sendInternalServerError(res);

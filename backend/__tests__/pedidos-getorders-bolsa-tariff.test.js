@@ -155,6 +155,38 @@ describe('tariff deviation guard', () => {
             articleCode: 'ART1',
         })).not.toThrow();
     });
+
+    test('resolveServerLineUnitPrice rejects 0.01 below minimo', () => {
+        expect(() => pedidosService.resolveServerLineUnitPrice({
+            clientTariff: 10,
+            precioMinimo: 8,
+            requestedPrice: 0.01,
+            userRole: 'COMERCIAL',
+            articleCode: 'ART1',
+        })).toThrow(/bajo minimo/);
+        try {
+            pedidosService.resolveServerLineUnitPrice({
+                clientTariff: 10,
+                precioMinimo: 8,
+                requestedPrice: 0.01,
+                userRole: 'COMERCIAL',
+                articleCode: 'ART1',
+            });
+        } catch (err) {
+            expect(err.status).toBe(422);
+            expect(err.code).toBe('PRICE_UNDER_MINIMO');
+        }
+    });
+
+    test('resolveServerLineUnitPrice overwrites with tariff when request is valid', () => {
+        expect(pedidosService.resolveServerLineUnitPrice({
+            clientTariff: 12.5,
+            precioMinimo: 8,
+            requestedPrice: 12.5,
+            userRole: 'COMERCIAL',
+            articleCode: 'ART1',
+        })).toBe(12.5);
+    });
 });
 
 

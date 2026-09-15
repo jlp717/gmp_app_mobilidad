@@ -304,6 +304,41 @@ function roundPrice(value) {
     return Math.round(number * 10000) / 10000;
 }
 
+function resolveServerLineUnitPrice({
+    clientTariff,
+    precioMinimo,
+    requestedPrice,
+    userRole,
+    motivo,
+    articleCode,
+}) {
+    const tariff = roundPrice(clientTariff);
+    const min = roundPrice(precioMinimo);
+    const requested = roundPrice(requestedPrice);
+    const role = String(userRole || '').trim().toUpperCase();
+    const isManager = role === 'JEFE_VENTAS' || role === 'ADMIN';
+    const hasMotivo = Boolean(String(motivo || '').trim());
+
+    if (min > 0 && requested > 0 && requested + 1e-9 < min && !(isManager && hasMotivo)) {
+        const err = new Error(`Precio bajo minimo para ${articleCode || 'articulo'}`);
+        err.status = 422;
+        err.code = 'PRICE_UNDER_MINIMO';
+        throw err;
+    }
+
+    let unit = tariff > 0 ? tariff : (min > 0 ? min : 0);
+    if (isManager && hasMotivo && requested > 0) {
+        unit = requested;
+    }
+    if (unit <= 0) {
+        const err = new Error(`Sin tarifa servidor para ${articleCode || 'articulo'}`);
+        err.status = 422;
+        err.code = 'PRICE_UNAVAILABLE';
+        throw err;
+    }
+    return unit;
+}
+
 function priceWithIva(value, ivaRate) {
     return roundPrice(roundPrice(value) * (1 + normalizeIvaRateValue(ivaRate, 0.21)));
 }
@@ -3011,6 +3046,31 @@ async function getClientTariffsForLines(clientCode, lines) {
     return tariffsByCode;
 }
 
+async function getMinPricesForLines(lines) {
+    const articleCodes = [...new Set((lines || [])
+        .map(line => truncate(line.codigoArticulo || line.CODIGOARTICULO, 10))
+        .filter(Boolean))];
+    const minByCode = new Map();
+    if (articleCodes.length === 0) return minByCode;
+
+    const placeholders = articleCodes.map(() => '?').join(',');
+    const sql = `
+        SELECT TRIM(CODIGOARTICULO) AS CODIGOARTICULO, PRECIOTARIFA
+          FROM DSEDAC.ARA
+         WHERE CODIGOTARIFA = 2
+           AND TRIM(CODIGOARTICULO) IN (${placeholders})`;
+    try {
+        const rows = await queryWithParams(sql, articleCodes, false);
+        for (const row of rows || []) {
+            const code = truncate(row.CODIGOARTICULO, 10);
+            if (code) minByCode.set(code, parseFloat(row.PRECIOTARIFA) || 0);
+        }
+    } catch (error) {
+        logger.warn(`[PEDIDOS] Min price prefetch skipped: ${error.message}`);
+    }
+    return minByCode;
+}
+
 async function getArticleIvaCodesForLines(lines) {
     const articleCodes = [...new Set((lines || [])
         .map(line => truncate(line.codigoArticulo || line.CODIGOARTICULO, 10))
@@ -3052,6 +3112,7 @@ async function createOrder({
     idempotencyKey,
     clientRequestId,
     userId,
+    userRole,
 }) {
     const serviceT0 = Date.now();
     const lineCount = Array.isArray(lines) ? lines.length : 0;
@@ -3121,6 +3182,25 @@ async function createOrder({
     const terminal = resolvePedidoTerminal(effectiveVendedorCode, userId);
     logger.info(`[PEDIDOS] createOrder stage=getNextOrderNumber lineCount=${lineCount} durationMs=${Date.now() - nextOrderT0}`);
 
+    const tariffT0 = Date.now();
+    const [clientTariffs, articleIvaCodes, minPrices] = await Promise.all([
+        getClientTariffsForLines(effectiveClientCode, lines),
+        getArticleIvaCodesForLines(lines),
+        getMinPricesForLines(lines),
+    ]);
+    for (const ln of lines) {
+        const articleCode = truncate(ln.codigoArticulo || ln.CODIGOARTICULO, 10);
+        resolveServerLineUnitPrice({
+            clientTariff: clientTariffs.get(articleCode) || 0,
+            precioMinimo: minPrices.get(articleCode) || 0,
+            requestedPrice: parseFloat(ln.precio) || parseFloat(ln.precioVenta) || 0,
+            userRole,
+            motivo: ln.motivoPrecio || ln.motivo,
+            articleCode,
+        });
+    }
+    logger.info(`[PEDIDOS] createOrder stage=line_price_validate lineCount=${lineCount} durationMs=${Date.now() - tariffT0}`);
+
     // Insert header; ORIGEN column may not exist in older installs
     const headerT0 = Date.now();
     let cabSql, cabParams;
@@ -3185,15 +3265,11 @@ async function createOrder({
     logger.info(`[PEDIDOS] createOrder stage=id_lookup pedidoId=${pedidoId ?? 'n/a'} lineCount=${lineCount} durationMs=${Date.now() - idLookupT0}`);
     if (!pedidoId) throw new Error('Failed to retrieve created order ID');
 
-    const tariffT0 = Date.now();
-    const [clientTariffs, articleIvaCodes] = await Promise.all([
-        getClientTariffsForLines(effectiveClientCode, lines),
-        getArticleIvaCodesForLines(lines),
-    ]);
-    logger.info(`[PEDIDOS] createOrder stage=line_defaults_prefetch pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - tariffT0}`);
+    logger.info(`[PEDIDOS] createOrder stage=line_defaults_prefetch pedidoId=${pedidoId} lineCount=${lineCount} durationMs=0`);
     const lineContexts = lines.map((ln, index) => {
         const articleCode = truncate(ln.codigoArticulo || ln.CODIGOARTICULO, 10);
         const clientTariff = clientTariffs.get(articleCode) || 0;
+        const serverMin = minPrices.get(articleCode) || 0;
         const productIvaCode = articleIvaCodes.get(articleCode);
         const iva = productIvaCode
             ? resolveIvaFromCodigo(productIvaCode)
@@ -3203,11 +3279,13 @@ async function createOrder({
                 ...ln,
                 precioTarifa: ln.precioTarifa ?? clientTariff,
                 precioTarifaCliente: ln.precioTarifaCliente ?? clientTariff,
+                precioMinimo: serverMin || ln.precioMinimo,
                 codigoIva: iva.codigoIva,
                 ivaRate: iva.ivaRate,
             }
             : {
                 ...ln,
+                precioMinimo: serverMin || ln.precioMinimo,
                 codigoIva: iva.codigoIva,
                 ivaRate: iva.ivaRate,
             };
@@ -3216,8 +3294,14 @@ async function createOrder({
         let unidadesCaja = parseFloat(line.unidadesCaja) || 1;
         let unidadMedida = line.unidadMedida || 'CAJAS';
         const descuentoLinea = parseLineDiscountPct(line);
-        const precioBase = parseFloat(line.precio) || parseFloat(line.precioVenta) || 0;
-        const precio = precioBase;
+        const precio = resolveServerLineUnitPrice({
+            clientTariff,
+            precioMinimo: serverMin,
+            requestedPrice: parseFloat(line.precio) || parseFloat(line.precioVenta) || 0,
+            userRole,
+            motivo: ln.motivoPrecio || ln.motivo,
+            articleCode,
+        });
 
         const importeBruto = calculateLineImporte({
             unidadMedida,
@@ -6997,6 +7081,7 @@ module.exports = {
     searchProductsWithStock,
     calculateLineImporte,
     assertPrecioWithinClientTariff,
+    resolveServerLineUnitPrice,
     applyConfiguredPricingToProducts,
     applyConfiguredPricingToProduct,
     effectiveMinPriceFromRow,
