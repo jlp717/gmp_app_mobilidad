@@ -83,7 +83,10 @@ void main() async {
 
   try {
     await () async {
-      await CacheService.init();
+      await Future.wait<void>([
+        CacheService.init(),
+        initializeDateFormatting('es'),
+      ]);
       debugPrint('[MAIN] ✅ Cache initialized');
       await ApiClient.initialize();
       // Start monitoring WiFi ↔ mobile data changes for adaptive timeouts
@@ -91,7 +94,6 @@ void main() async {
       // Initialize offline infrastructure
       await ConnectivityService.instance.initialize();
       await SyncQueueService.instance.initialize();
-      await NotificationOrchestrator.instance.initialize();
       debugPrint(
         '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}',
       );
@@ -103,8 +105,6 @@ void main() async {
     debugPrint('[MAIN] Stack: $stack');
     await Sentry.captureException(e, stackTrace: stack);
   }
-
-  await initializeDateFormatting('es');
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
@@ -158,6 +158,9 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     WidgetsBinding.instance.addObserver(this);
     RumBuffer.start();
     _router = _createRouter();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(NotificationOrchestrator.instance.initialize());
+    });
     SyncQueueService.confirmDeliveryReconciler ??=
         defaultConfirmDeliveryReconciler;
     // Deferred evidence resolution: queued offline confirmations upload

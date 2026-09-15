@@ -897,48 +897,6 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           return const AuthState(isInitialized: true);
         }
         ApiClient.setAuthToken(currentToken);
-        ApiClient.startLogin(); // suppress onUnauthorized during validation
-        try {
-          await ApiClient.get(ApiConfig.validate);
-        } on ApiException catch (e) {
-          if (e.statusCode == 401 || e.statusCode == 403) {
-            // The server invalidated the access token (e.g. a restart rotated
-            // the signing secret). One refresh attempt can recover the whole
-            // session without forcing the user back to the login screen.
-            final recovered = await ApiClient.refreshAccessToken();
-            if (recovered) {
-              token = await SecureStorage.readSecureData('user_token');
-              if (token == null || token.isEmpty) {
-                await _clearStoredSession();
-                return const AuthState(isInitialized: true);
-              }
-              userDataStr = await SecureStorage.readSecureData('user_data');
-              codes = await AuthSessionPersistence.readVendedorCodes();
-              savedMode = await AuthSessionPersistence.readActiveMode();
-              debugPrint(
-                '[AuthNotifier] Stored session recovered via refresh',
-              );
-            } else if (ApiClient.lastTokenRefreshFailedDueToConnectivity) {
-              debugPrint(
-                '[AuthNotifier] Validation offline - restoring local session',
-              );
-            } else {
-              debugPrint(
-                '[AuthNotifier] Server rejected stored token - '
-                'clearing session',
-              );
-              await _clearStoredSession();
-              return const AuthState(isInitialized: true);
-            }
-          }
-        } catch (_) {
-          // Network error â€” proceed with stored session (offline-tolerant)
-          debugPrint(
-            '[AuthNotifier] Could not reach server, proceeding offline',
-          );
-        } finally {
-          ApiClient.endLogin();
-        }
         final restoredUserData = userDataStr;
         if (restoredUserData == null) {
           await _clearStoredSession();
@@ -953,6 +911,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         _applyCacheScope(user, vendedorCodes);
 
         DashboardFirstPaintGate.open();
+        unawaited(_validateRestoredSessionInBackground());
+
+        // Pre-warm cache in background
         unawaited(
           CachePreWarmer.preWarmCache(
             vendedorCodes: vendedorCodes,
@@ -982,7 +943,24 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     return const AuthState(isInitialized: true);
   }
 
-  /// Login with credentials
+  Future<void> _validateRestoredSessionInBackground() async {
+    ApiClient.startLogin();
+    try {
+      await ApiClient.get(ApiConfig.validate);
+    } on ApiException catch (e) {
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        final recovered = await ApiClient.refreshAccessToken();
+        if (!recovered && !ApiClient.lastTokenRefreshFailedDueToConnectivity) {
+          await logout(sessionExpired: true);
+        }
+      }
+    } catch (_) {
+      debugPrint('[AuthNotifier] Background validate offline');
+    } finally {
+      ApiClient.endLogin();
+    }
+  }
+
   Future<bool> login(String username, String password) => _loginCanonical(
         username: username,
         password: password,
