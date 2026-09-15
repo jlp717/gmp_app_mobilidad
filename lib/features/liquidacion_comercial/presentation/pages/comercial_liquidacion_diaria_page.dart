@@ -466,7 +466,8 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
     final importe = doc['importe'];
     _clientController.text = (doc['cliente'] ?? '').toString();
     _amountController.text = importe == null ? '' : importe.toString();
-    _originController.text = (doc['documento'] ?? '').toString();
+    _originController.text =
+        (doc['factura'] ?? doc['documento'] ?? '').toString();
     setState(() {
       _selectedPg = index;
       _yaCobrada = true;
@@ -547,11 +548,29 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                             style: const TextStyle(fontSize: 13),
                           ),
                           subtitle: Text(
-                            '${_pgDocs[i]['cliente'] ?? ''} · ${_pgDocs[i]['importe'] ?? ''} €'
-                            '${_pgDocs[i]['formaPagoDesc'] != null && _pgDocs[i]['formaPagoDesc'].toString().isNotEmpty ? ' · ${_pgDocs[i]['formaPagoDesc']}' : ''}'
-                            '${_pgDocs[i]['albaran'] != null && _pgDocs[i]['albaran'].toString().isNotEmpty ? ' · alb ${_pgDocs[i]['albaran']}' : ''}'
-                            '${_pgDocs[i]['vencimiento'] != null ? ' · vto ${_pgDocs[i]['vencimiento']}' : ''}'
-                            ' · LIQ.Vd ya cobrados',
+                            [
+                              '${_pgDocs[i]['cliente'] ?? ''} · ${_pgDocs[i]['importe'] ?? ''} €',
+                              if (_pgDocs[i]['formaPagoDias'] != null)
+                                '${_pgDocs[i]['formaPagoDias']} D F.Factura'
+                              else if (_pgDocs[i]['formaPagoDesc']
+                                      ?.toString()
+                                      .isNotEmpty ==
+                                  true)
+                                _pgDocs[i]['formaPagoDesc'].toString(),
+                              if (_pgDocs[i]['factura']
+                                      ?.toString()
+                                      .isNotEmpty ==
+                                  true)
+                                _pgDocs[i]['factura'].toString(),
+                              if (_pgDocs[i]['albaran']
+                                      ?.toString()
+                                      .isNotEmpty ==
+                                  true)
+                                'alb ${_pgDocs[i]['albaran']}',
+                              if (_pgDocs[i]['vencimiento'] != null)
+                                'vto ${_pgDocs[i]['vencimiento']}',
+                              'LIQ.Vd ya cobrados',
+                            ].join(' · '),
                           ),
                         ),
                     ],

@@ -367,9 +367,10 @@ describe('pizarra PG ya cobrados', () => {
   test('lists CVC pagarés via FPG.PAGARESN without writing DSEDAC', async () => {
     mockQueryWithParams.mockResolvedValueOnce([{
       CLIENTE: '4300010001',
-      TIPO: 'COB',
+      TIPO: 'PAG',
       SERIE: 'M',
       NUMERO: 88,
+      TERM_DOC: 1,
       IMPORTE: '1000',
       PENDIENTE: '0',
       FP: 'P1',
@@ -382,7 +383,12 @@ describe('pizarra PG ya cobrados', () => {
       MESV: 8,
       DIAV: 31,
       SERIE_ALB: 'P',
-      NUM_ALB: 21,
+      TERM_ALB: 2,
+      NUM_ALB: 1,
+      SERIE_FAC: 'F',
+      TERM_FAC: 1,
+      NUM_FAC: 1,
+      DIAS_FP: 30,
     }]);
 
     const docs = await listPgCollectedDocuments({ vendorCodes: ['80'] });
@@ -391,7 +397,10 @@ describe('pizarra PG ya cobrados', () => {
       formaPago: 'P1',
       pagare: true,
       vencimiento: '2026-08-31',
-      albaran: 'P-21',
+      albaran: 'P-2-1',
+      factura: 'F-1-1',
+      formaPagoDias: 30,
+      pendienteTecnicoMovimiento: false,
       impactoLqd: 'YA_COBRADOS',
     });
     const [sql, params] = mockQueryWithParams.mock.calls[0];
@@ -399,6 +408,8 @@ describe('pizarra PG ya cobrados', () => {
     expect(sql).toMatch(/DSEDAC\.FPG/);
     expect(sql).toMatch(/DSEDAC\.CAC/);
     expect(sql).toMatch(/EJERCICIOFACTURA/);
+    expect(sql).toMatch(/TERMINALALBARAN/);
+    expect(sql).toMatch(/NUMERODIASVENCIMIENTO/);
     expect(sql).toMatch(/IMPORTEPENDIENTE = 0/);
     expect(sql).toMatch(/CODIGOCLIENTEFACTURA/);
     expect(sql).toMatch(/TIPODOCUMENTO = CAST\(\? AS CHAR\(3\)\)/);
@@ -423,7 +434,7 @@ describe('pizarra PG ya cobrados', () => {
       clientCode: '4300010001',
       amount: 1000,
       formaPago: 'PG',
-      albaranOrigen: 'P-21',
+      albaranOrigen: 'P-2-1',
       vencimiento: '2026-08-31',
       documentoOrigen: 'M-88',
       idempotencyToken: 'dev-pg-pizarra',

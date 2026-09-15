@@ -182,7 +182,9 @@ void main() {
           'documento': 'M-88',
           'importe': 1000,
           'formaPago': 'P1',
-          'albaran': 'P-21',
+          'albaran': 'P-2-1',
+          'factura': 'F-1-1',
+          'formaPagoDias': 30,
           'vencimiento': '2026-08-31',
         },
       ],
@@ -214,11 +216,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('comercial-devuelve-pg-0')));
     await tester.pumpAndSettle();
+    expect(find.textContaining('P-2-1'), findsWidgets);
+    expect(find.textContaining('30 D F.Factura'), findsWidgets);
+    expect(find.textContaining('LIQ.Vd ya cobrados'), findsWidgets);
     await tester.tap(find.byKey(const ValueKey('comercial-devuelve-confirm')));
     await tester.pumpAndSettle();
 
     expect(fp, 'P1');
-    expect(alb, 'P-21');
+    expect(alb, 'P-2-1');
     expect(vto, '2026-08-31');
     expect(find.textContaining('D-5'), findsOneWidget);
   });
@@ -273,7 +278,9 @@ void main() {
                   'documento': 'M-88',
                   'importe': 1000,
                   'formaPago': 'P1',
-                  'albaran': 'P-21',
+                  'albaran': 'P-2-1',
+                  'factura': 'F-1-1',
+                  'formaPagoDias': 30,
                   'vencimiento': '2026-08-31',
                 },
               ],
