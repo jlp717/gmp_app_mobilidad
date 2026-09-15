@@ -36,20 +36,25 @@ const auditLogger = winston.createLogger({
 // IMMUTABLE AUDIT LOG — append-only, never rotated, legal-grade evidence
 // =============================================================================
 const IMMUTABLE_LOG_PATH = 'logs/audit-immutable.log';
-// fs.promises.appendFile: fully async (the old appendFileSync serialized
-// the event loop during error bursts) yet opens/closes the fd per call, so
-// it leaves no persistent handles behind — a module-level WriteStream kept
-// an open handle and broke the server-startup contract (require('./app')
-// must exit naturally with zero active handles).
+const IMMUTABLE_MAX_BYTES = 10 * 1024 * 1024;
 const appendImmutable = fs.promises.appendFile;
+async function rotateImmutableIfNeeded() {
+    try {
+        const stat = await fs.promises.stat(IMMUTABLE_LOG_PATH);
+        if (stat.size < IMMUTABLE_MAX_BYTES) return;
+        await fs.promises.rename(IMMUTABLE_LOG_PATH, `${IMMUTABLE_LOG_PATH}.1`);
+    } catch (_) {
+        // missing file is fine
+    }
+}
 function writeImmutable(entry) {
     try {
         const line =
             JSON.stringify({ ...entry, _ts: new Date().toISOString() }) + '\n';
-        appendImmutable(IMMUTABLE_LOG_PATH, line, 'utf8').catch(() => {
-            // Silent fail — do not crash the server for audit logging
-        });
-    } catch (e) {
+        rotateImmutableIfNeeded()
+            .then(() => appendImmutable(IMMUTABLE_LOG_PATH, line, 'utf8'))
+            .catch(() => {});
+    } catch (_) {
         // Silent fail — do not crash the server for audit logging
     }
 }
@@ -212,9 +217,14 @@ function auditMiddleware(req, res, next) {
         const deviceTag = deviceInfo.appVersion ? ` | App:${deviceInfo.appVersion} Dev:${deviceInfo.deviceModel || '?'}` : '';
 
         // Only log important stuff to console (reduce noise)
-        if (isAuth || isError || isSlow || isSensitive || res.statusCode === 200) {
+        if (isAuth || isError || isSlow || isSensitive) {
             const logger = require('./logger');
             logger.info(
+                `[AUDIT] ${statusIcon} ${req.method} ${req.path} → ${res.statusCode} (${duration}ms) | IP: ${clientIP} | User: ${userId}${authTag}${sensitiveTag}${deviceTag}`
+            );
+        } else if (res.statusCode >= 200 && res.statusCode < 300) {
+            const logger = require('./logger');
+            logger.debug(
                 `[AUDIT] ${statusIcon} ${req.method} ${req.path} → ${res.statusCode} (${duration}ms) | IP: ${clientIP} | User: ${userId}${authTag}${sensitiveTag}${deviceTag}`
             );
         }

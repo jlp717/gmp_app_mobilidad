@@ -28,18 +28,6 @@ const logger = winston.createLogger({
     transports: [
         new winston.transports.Console({
             stderrLevels: ['error', 'warn']
-        }),
-        new winston.transports.File({ 
-            filename: 'server.log', 
-            maxsize: 5242880, 
-            maxFiles: 5,
-            level: 'info'
-        }),
-        new winston.transports.File({ 
-            filename: 'error.log', 
-            maxsize: 5242880, 
-            maxFiles: 3,
-            level: 'error'
         })
     ]
 });
