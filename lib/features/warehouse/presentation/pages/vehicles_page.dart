@@ -376,7 +376,12 @@ class _VehiclesPageState extends State<VehiclesPage>
           ),
         ),
       ),
-    );
+    ).whenComplete(() {
+      largoC.dispose();
+      anchoC.dispose();
+      altoC.dispose();
+      toleranciaC.dispose();
+    });
   }
 
   Widget _field(TextEditingController c, String label, IconData icon) {

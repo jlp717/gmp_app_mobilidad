@@ -365,6 +365,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         ],
       ),
     );
+    ctrl.dispose();
 
     if (result != null && result != currentNotes) {
       await _saveNotes(result);

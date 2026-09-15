@@ -620,6 +620,8 @@ class _LineDiscountChip extends StatelessWidget {
         );
       },
     );
+    pctController.dispose();
+    euroController.dispose();
     if (result != null) {
       onChanged(result);
     }

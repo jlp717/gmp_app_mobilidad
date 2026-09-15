@@ -1082,7 +1082,12 @@ class _ArticlesPageState extends State<ArticlesPage>
           ),
         ),
       ),
-    );
+    ).whenComplete(() {
+      largoC.dispose();
+      anchoC.dispose();
+      altoC.dispose();
+      pesoC.dispose();
+    });
   }
 
   Widget _field(TextEditingController c, String label) {

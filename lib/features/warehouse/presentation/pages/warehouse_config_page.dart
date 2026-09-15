@@ -165,6 +165,7 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
         ],
       ),
     );
+    controller.dispose();
 
     if (newValue != null && newValue != currentValue) {
       try {

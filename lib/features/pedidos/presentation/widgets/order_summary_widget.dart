@@ -1377,7 +1377,14 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           ),
         );
       },
-    );
+    ).whenComplete(() {
+      qtyController.dispose();
+      cajasController.dispose();
+      unidadesController.dispose();
+      priceController.dispose();
+      discountPctController.dispose();
+      discountEuroController.dispose();
+    });
   }
 
   Future<void> _onConfirm(
