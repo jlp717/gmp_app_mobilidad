@@ -9,7 +9,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_models.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:timezone/data/latest_10y.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 class LocalNotificationService {
