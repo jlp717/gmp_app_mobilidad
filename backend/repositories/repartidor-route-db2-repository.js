@@ -812,6 +812,40 @@ async function getCollectionsDailyBatch(selectedYear, selectedMonth, repartidorI
 
 // DB2 CVC joins become unstable near the 20-code mark; keep manager-wide requests bounded.
 const COLLECTION_DRIVER_BATCH_SIZE = 5;
+const COLLECTION_BATCH_CONCURRENCY = 2;
+
+function sargableAnoMesDiaRange(alias, startNum, endNum) {
+  const start = Number(startNum);
+  const end = Number(endNum);
+  const startY = Math.trunc(start / 10000);
+  const startM = Math.trunc((start % 10000) / 100);
+  const startD = start % 100;
+  const endY = Math.trunc(end / 10000);
+  const endM = Math.trunc((end % 10000) / 100);
+  const endD = end % 100;
+  const ano = `${alias}.ANOREPARTO`;
+  const mes = `${alias}.MESREPARTO`;
+  const dia = `${alias}.DIAREPARTO`;
+  return {
+    sql: `(${ano} > ? OR (${ano} = ? AND ${mes} > ?) OR (${ano} = ? AND ${mes} = ? AND ${dia} >= ?))
+        AND (${ano} < ? OR (${ano} = ? AND ${mes} < ?) OR (${ano} = ? AND ${mes} = ? AND ${dia} <= ?))`,
+    params: [startY, startY, startM, startY, startM, startD, endY, endY, endM, endY, endM, endD],
+  };
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+  if (!items.length) return results;
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
+}
 
 function mergeCollectionRows(groups, keyFields) {
   const numeric = ['TOTAL_COBRABLE', 'TOTAL_COBRADO', 'TOTAL_PENDIENTE', 'NUM_DOCUMENTOS', 'CVC_DOCUMENTOS', 'CVC_AMBIGUOUS_DOCUMENTS'];
@@ -831,12 +865,16 @@ async function loadCollectionsInBatches(repartidorIds, load, keyFields) {
   for (let index = 0; index < ids.length; index += COLLECTION_DRIVER_BATCH_SIZE) batches.push(ids.slice(index, index + COLLECTION_DRIVER_BATCH_SIZE));
   const successful = [];
   let failedBatches = 0;
-  for (const batch of batches) {
+  const batchResults = await mapWithConcurrency(batches, COLLECTION_BATCH_CONCURRENCY, async (batch) => {
     try {
-      successful.push((await load(batch)) || []);
+      return { ok: true, rows: (await load(batch)) || [] };
     } catch (_error) {
-      failedBatches += 1;
+      return { ok: false, rows: [] };
     }
+  });
+  for (const result of batchResults) {
+    if (!result.ok) failedBatches += 1;
+    else successful.push(result.rows);
   }
   if (!successful.length) {
     const error = new Error('REPARTIDOR_COLLECTIONS_UNAVAILABLE');
@@ -1800,6 +1838,7 @@ async function getRuteroWeekWithDayMoves(weekStartNum, weekEndNum, repartidorIdL
   const confirmationScope = confirmationOwnerScopeClause(repartidorIdList);
   const confirmationJoins = confirmationOverlayJoins(weekTables);
   const confirmationDelivered = confirmationOverlayDeliveredSql(weekTables);
+  const weekRange = sargableAnoMesDiaRange('OPP', weekStartNum, weekEndNum);
   const sql = `
     WITH DOCUMENTOS_SEMANA AS (
       SELECT
@@ -1827,8 +1866,7 @@ async function getRuteroWeekWithDayMoves(weekStartNum, weekEndNum, repartidorIdL
        AND ROUTE_MOVE.WEEK_START = ?
        AND TRIM(ROUTE_MOVE.DOCUMENT_ID) = ${expr}
       ${confirmationJoins}
-      WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
-              BETWEEN ? AND ?
+      WHERE ${weekRange.sql}
         AND (
           OPP.CODIGOREPARTIDOR IN (${repartidorIdList.map(() => '?').join(',')})
           ${confirmationScope.sql}
@@ -1848,8 +1886,7 @@ async function getRuteroWeekWithDayMoves(weekStartNum, weekEndNum, repartidorIdL
   const params = [
     ...repartidorIdList,
     weekStartYmd,
-    weekStartNum,
-    weekEndNum,
+    ...weekRange.params,
     ...repartidorIdList,
     ...confirmationScope.params,
   ];
@@ -1874,6 +1911,7 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
   const confirmationScope = confirmationOwnerScopeClause(repartidorIdList);
   const confirmationJoins = confirmationOverlayJoins(weekTables);
   const confirmationDelivered = confirmationOverlayDeliveredSql(weekTables);
+  const weekRange = sargableAnoMesDiaRange('OPP', weekStartNum, weekEndNum);
   const sql = `
             WITH DOCUMENTOS_SEMANA AS (
                 SELECT
@@ -1895,8 +1933,7 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
                     AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
                     AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
                 ${confirmationJoins}
-                WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
-                    BETWEEN ? AND ?
+                WHERE ${weekRange.sql}
                   AND (
                     OPP.CODIGOREPARTIDOR IN (${repartidorIdList.map(() => '?').join(',')})
                     ${confirmationScope.sql}
@@ -1913,7 +1950,7 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
             GROUP BY ANO, MES, DIA
             ORDER BY ANO, MES, DIA
         `;
-  const params = [weekStartNum, weekEndNum, ...repartidorIdList, ...confirmationScope.params];
+  const params = [...weekRange.params, ...repartidorIdList, ...confirmationScope.params];
   // Canonical status is mutable; weekly aggregates must always read fresh DB2 state.
   return runQueryWithParams(sql, params, false);
 }
@@ -2303,6 +2340,9 @@ module.exports = {
   getCacFirmaBase64,
   getDeliverySummary,
   getRuteroWeek,
+  sargableAnoMesDiaRange,
+  COLLECTION_BATCH_CONCURRENCY,
+  COLLECTION_DRIVER_BATCH_SIZE,
   getHistoryDeliveries,
   getHistoryClients,
   getAlbaranPdfHeader,

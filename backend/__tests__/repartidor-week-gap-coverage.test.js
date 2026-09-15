@@ -90,12 +90,18 @@ describe('GET /rutero/week/:repartidorId delivery truth', () => {
     expect(sql).toContain('GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO, OPP.DIAREPARTO,');
     expect(sql).toContain('COUNT(*) as TOTAL_ALBARANES');
     expect(sql).toContain('SUM(ENTREGADO) as ENTREGADOS');
+    expect(sql).toContain('WHERE (OPP.ANOREPARTO > ? OR (OPP.ANOREPARTO = ? AND OPP.MESREPARTO > ?) OR (OPP.ANOREPARTO = ? AND OPP.MESREPARTO = ? AND OPP.DIAREPARTO >= ?))');
+    expect(sql).not.toContain('ANOREPARTO * 10000');
     expect(sql).not.toMatch(/OPP\.DIAREPARTO\)\s*<\s*\?/);
     expect(sql).not.toMatch(/SITUACIONALBARAN\s+IN\s*\(\s*'F'\s*,\s*'R'\s*\)/);
     expect(sql).not.toMatch(/TRIM\(CPC\.CONFORMADOSN\) = 'S' THEN 1/);
     expect(sql).toContain('TEST_REPARTO_CONFIRMACIONES');
     expect(sql).toContain("WHEN UPPER(TRIM(COALESCE(TC0.STATUS, ''))) IN ('ENTREGADO', 'NO_ENTREGADO', 'RECHAZADO') THEN 1");
-    expect(params).toEqual([20260803, 20260809, '05', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05']);
+    expect(params).toEqual([
+      2026, 2026, 8, 2026, 8, 3,
+      2026, 2026, 8, 2026, 8, 9,
+      '05', 'ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO', '05',
+    ]);
   });
 
   test('keeps app-confirmed delivery as an explicit per-document state', async () => {

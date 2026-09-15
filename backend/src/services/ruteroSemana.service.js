@@ -54,7 +54,10 @@ class RuteroSemanalService {
                             logger.warn(`[RUTERO WEEK] ERP delivery count error: ${erpErr.message}`);
                             return 0;
                         }),
-                        this._repo.fetchAppDeliveredCount(cleanCodes).catch(() => 0),
+                        this._repo.fetchAppDeliveredCount(cleanCodes).catch((appErr) => {
+                            logger.warn(`[RUTERO WEEK] App delivery count error: ${appErr.message}`);
+                            return 0;
+                        }),
                     ]);
                     // El mayor de los dos evita doble conteo.
                     deliveredToday = Math.max(erpDelivered, appDelivered);
