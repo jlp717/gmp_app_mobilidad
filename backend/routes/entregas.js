@@ -31,6 +31,7 @@ const {
     DeliveryStatusResolutionError,
     resolveCanonicalDeliveryStatuses,
 } = require('../services/deterministic-delivery-status');
+const { shouldShowIvaBreakdown } = require('../config/feature-flags');
 const REPARTIDOR_ROUTE_ORDER_FETCH_MAX = 500;
 
 /**
@@ -590,7 +591,20 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
               ${dayMoveWeekRangeWhere}
               ${dayMoveDateWhere}
             )
-            SELECT * FROM ranked_deliveries
+            SELECT
+              SUBEMPRESAALBARAN, EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN,
+              NUMEROALBARAN, NUMEROFACTURA, SERIEFACTURA,
+              CLIENTE, NOMBRE_CLIENTE, NOMBRE_COMERCIAL, NOMBRE_FISCAL,
+              DIRECCION, POBLACION, TELEFONO, TELEFONO2,
+              IMPORTETOTAL, CAC_IMPORTETOTAL, IMPORTEBRUTO,
+              CPC_BASE1, CPC_BASE2, CPC_BASE3,
+              CPC_PCTIVA1, CPC_PCTIVA2, CPC_PCTIVA3,
+              CPC_IVA1, CPC_IVA2, CPC_IVA3,
+              FORMA_PAGO, DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO,
+              RUTA, CODIGO_REPARTIDOR, ROUTE_MOVE_POSITION, ORDEN_PREPARACION,
+              NOMBRE_REPARTIDOR, DIALLEGADA, HORALLEGADA, CONFORMADO,
+              DS_STATUS, DS_OBS, DS_FIRMA
+            FROM ranked_deliveries
             WHERE DELIVERY_RANK = 1
             ORDER BY EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN, CLIENTE
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
@@ -626,7 +640,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             // confirmation and cobro overlays are applied below on every
             // request, so a fresh payment/confirmation is never hidden.
             const routeCacheKey = [
-                'repartidor:rutero-pending:v3',
+                'repartidor:rutero-pending:v4',
                 idList.slice().sort().join(','),
                 targetDate.date,
                 dayMoveEnabled ? 'moves' : 'base',
@@ -947,13 +961,10 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             const importeTotal = importeAlbaran;
             const importeBruto = parseMoney(row.IMPORTEBRUTO);
 
-            // Build IVA breakdown array (only non-zero bases)
-            const ivaBreakdown = [];
-            if (base1 > 0) ivaBreakdown.push({ base: base1, pct: pctIva1, iva: iva1 });
-            if (base2 > 0) ivaBreakdown.push({ base: base2, pct: pctIva2, iva: iva2 });
-            if (base3 > 0) ivaBreakdown.push({ base: base3, pct: pctIva3, iva: iva3 });
-
-            return {
+            const showIvaOnList = shouldShowIvaBreakdown(
+                (row.CODIGO_REPARTIDOR || '').trim() || idList[0],
+            );
+            const listItem = {
                 id: esPedidoAnteroom
                     ? (row._anteroomId || `PED-${row.PEDIDO_ID}-${cliente}`)
                     : `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${cliente}`,
@@ -976,10 +987,6 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 telefono2: row.TELEFONO2?.trim() || '',
                 importe: importeTotal,
                 importeBruto: importeBruto,
-                netoSum: netoSum,
-                ivaSum: ivaSum,
-                ivaBreakdown: ivaBreakdown,
-                checksum: `${Math.round((netoSum + ivaSum) * 100) / 100}`,
                 lineSum: resolvedAmount.lineSum,
                 amountSource: resolvedAmount.source,
                 pricingState: resolvedAmount.pricingState,
@@ -1010,6 +1017,17 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 observaciones: row.DS_OBS,
                 firma: row.DS_FIRMA
             };
+            if (showIvaOnList) {
+                const ivaBreakdown = [];
+                if (base1 > 0) ivaBreakdown.push({ base: base1, pct: pctIva1, iva: iva1 });
+                if (base2 > 0) ivaBreakdown.push({ base: base2, pct: pctIva2, iva: iva2 });
+                if (base3 > 0) ivaBreakdown.push({ base: base3, pct: pctIva3, iva: iva3 });
+                listItem.netoSum = netoSum;
+                listItem.ivaSum = ivaSum;
+                listItem.ivaBreakdown = ivaBreakdown;
+                listItem.checksum = `${Math.round((netoSum + ivaSum) * 100) / 100}`;
+            }
+            return listItem;
             } catch (projectErr) {
                 logger.warn(`[ENTREGAS] Skip delivery projection: ${projectErr.message}`);
                 return null;

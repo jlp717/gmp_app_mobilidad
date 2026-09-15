@@ -108,7 +108,7 @@ const pendingRequests = new Map();
 const COALESCE_WINDOW_MS = 50;
 const MAX_PENDING_REQUESTS = parseInt(process.env.HTTP_COALESCE_MAX_PENDING, 10) || 1000;
 const MAX_ETAG_BYTES = parseInt(process.env.HTTP_ETAG_MAX_BYTES, 10) || 256 * 1024;
-const MAX_ETAG_ARRAY_ITEMS = parseInt(process.env.HTTP_ETAG_MAX_ARRAY_ITEMS, 10) || 200;
+const MAX_ETAG_ARRAY_ITEMS = parseInt(process.env.HTTP_ETAG_MAX_ARRAY_ITEMS, 10) || 1000;
 const MAX_PENDING_AGE_MS = 60000; // 60s — heavy DB2 queries (commissions ALL, clients) need this
 
 let pendingCleanupTimer = null;
