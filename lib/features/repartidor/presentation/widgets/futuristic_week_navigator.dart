@@ -444,74 +444,73 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                     ]
                   : null,
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Day letter
-                Text(
-                  dayLetter,
-                  style: TextStyle(
-                    fontSize: Responsive.isSmall(context) ? 8 : 10,
-                    fontWeight: FontWeight.bold,
-                    color: isSelected
-                        ? AppTheme.textPrimary
-                        : AppTheme.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                // Count
-                Text(
-                  count > 0 ? '$count' : '-',
-                  style: TextStyle(
-                    fontSize: isSelected
-                        ? (Responsive.isSmall(context) ? 14 : 18)
-                        : (Responsive.isSmall(context) ? 12 : 16),
-                    fontWeight: FontWeight.w900,
-                    color: isSelected
-                        ? AppTheme.textPrimary
-                        : (count > 0 ? statusColor : AppTheme.textTertiary),
-                  ),
-                ),
-                // Status indicator
-                if (count > 0 && !isSelected && !compact)
-                  Container(
-                    margin: const EdgeInsets.only(top: 4),
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: statusColor.withValues(alpha: 0.5),
-                          blurRadius: 4,
-                        ),
-                      ],
-                    ),
-                  ),
-                // Today indicator
-                if (isToday && !isSelected && !compact)
-                  Container(
-                    margin: const EdgeInsets.only(top: 2),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: AppTheme.info.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      'HOY',
-                      style: TextStyle(
-                        fontSize: 6,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.info,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            child: child,
           );
         },
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Day letter
+            Text(
+              dayLetter,
+              style: TextStyle(
+                fontSize: Responsive.isSmall(context) ? 8 : 10,
+                fontWeight: FontWeight.bold,
+                color:
+                    isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            // Count
+            Text(
+              count > 0 ? '$count' : '-',
+              style: TextStyle(
+                fontSize: isSelected
+                    ? (Responsive.isSmall(context) ? 14 : 18)
+                    : (Responsive.isSmall(context) ? 12 : 16),
+                fontWeight: FontWeight.w900,
+                color: isSelected
+                    ? AppTheme.textPrimary
+                    : (count > 0 ? statusColor : AppTheme.textTertiary),
+              ),
+            ),
+            // Status indicator
+            if (count > 0 && !isSelected && !compact)
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: statusColor.withValues(alpha: 0.5),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+              ),
+            // Today indicator
+            if (isToday && !isSelected && !compact)
+              Container(
+                margin: const EdgeInsets.only(top: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppTheme.info.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'HOY',
+                  style: TextStyle(
+                    fontSize: 6,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.info,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
