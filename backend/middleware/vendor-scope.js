@@ -222,8 +222,58 @@ function resolveVendorScope(user, requested, options = {}) {
     return { ok: true, literalAll: false, codes: allowed };
 }
 
+function isCommercial80User(userCode) {
+    return normalizeCode(userCode) === '80';
+}
+
+function parseRequestedVendorCodes(raw) {
+    if (raw == null || String(raw).trim() === '' || String(raw).trim().toUpperCase() === 'ALL') {
+        return 'ALL';
+    }
+    const codes = String(raw).split(',').map((s) => s.trim()).filter(Boolean);
+    return codes.length ? codes : 'ALL';
+}
+
+/**
+ * COMERCIAL + ALL → 403; JEFE + ALL → ALL; comercial 80 + ALL → alcance de equipo.
+ */
+function applyAuthorizedVendedorCodes(req, rawVendedorCodes) {
+    const requested = parseRequestedVendorCodes(rawVendedorCodes);
+    const userCode = req.user && (req.user.code || req.user.id);
+    if (requested === 'ALL' && isCommercial80User(userCode)) {
+        const codes = [...userScopeCodes(req.user)];
+        if (!codes.length) {
+            return { ok: false, status: 403, body: { error: 'Forbidden', code: 'FORBIDDEN_VENDOR' } };
+        }
+        return { ok: true, vendedorCodes: codes.join(',') };
+    }
+    const check = authorizeVendorScope(req, requested);
+    if (!check.ok) {
+        return {
+            ok: false,
+            status: 403,
+            body: {
+                error: 'Forbidden',
+                code: 'FORBIDDEN_VENDOR',
+                reason: check.reason,
+                denied: check.denied,
+            },
+        };
+    }
+    return { ok: true, vendedorCodes: requested === 'ALL' ? 'ALL' : requested.join(',') };
+}
+
+function requireVendorQueryScope(req, res, next) {
+    const scoped = applyAuthorizedVendedorCodes(req, req.query && req.query.vendedorCodes);
+    if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
+    req.query.vendedorCodes = scoped.vendedorCodes;
+    return next();
+}
+
 module.exports = {
     authorizeVendorScope,
+    applyAuthorizedVendedorCodes,
+    requireVendorQueryScope,
     isFinancialRole,
     userScopeCodes,
     normalizeCode,

@@ -7,9 +7,12 @@ const evolutionService = require('../services/evolution.service');
 const { evolutionLimiter } = require('../middleware/security');
 const { handleRouteError } = require('../utils/common');
 
+const { requireVendorQueryScope } = require('../middleware/vendor-scope');
+
 const router = express.Router();
 router.use(verifyToken);
 router.use(evolutionLimiter);
+router.use(requireVendorQueryScope);
 
 // Req #2: Margin visibility
 const MARGIN_ROLES = ['JEFE_VENTAS', 'ADMIN'];

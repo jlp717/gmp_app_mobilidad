@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
+const { requireVendorQueryScope } = require('../middleware/vendor-scope');
 const logger = require('../middleware/logger');
 const { query, queryWithParams } = require('../middleware/db-timing');
 const {
@@ -800,7 +801,7 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
 // =============================================================================
 // OBJECTIVES SUMMARY (Quota vs Actual)
 // =============================================================================
-router.get('/', verifyToken, async (req, res) => {
+router.get('/', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes, year, month } = req.query;
         const now = getCurrentDate();
@@ -956,7 +957,7 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
 // =============================================================================
 // OBJECTIVES EVOLUTION
 // =============================================================================
-router.get('/evolution', verifyToken, async (req, res) => {
+router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes, years } = req.query;
         const effectiveVendorCodes = scopeVendorCodesForUser(req.user?.code, vendedorCodes);
@@ -1277,7 +1278,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
 // =============================================================================
 // OBJECTIVES MATRIX
 // =============================================================================
-router.get('/matrix', verifyToken, async (req, res) => {
+router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const {
             clientCode, years, startMonth = '1', endMonth = '12',
@@ -2473,7 +2474,7 @@ router.get('/populations', verifyToken, async (req, res) => {
 // =============================================================================
 // OBJECTIVES BY CLIENT
 // =============================================================================
-router.get('/by-client', verifyToken, async (req, res, next) => {
+router.get('/by-client', verifyToken, requireVendorQueryScope, async (req, res, next) => {
     try {
         await objectivesByClientBreaker.execute(
             () => handleByClientRequest(req, res),
