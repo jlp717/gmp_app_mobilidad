@@ -73,7 +73,8 @@ class RepartidorFinanzasService {
         _enqueueOperation =
             enqueueOperation ?? SyncQueueService.instance.enqueue,
         _liquidacionPost = liquidacionPost ?? _postLiquidacion,
-        _liquidacionGet = liquidacionGet ?? (ApiClient.get);
+        _liquidacionGet = liquidacionGet ?? _uncachedLiquidacionGet,
+        _injectedLiquidacionGet = liquidacionGet != null;
 
   static const _prefix = 'repartidor_finanzas';
   static const _vencimientoCobroEndpoint = '/repartidor-finanzas/cobros';
@@ -83,6 +84,7 @@ class RepartidorFinanzasService {
   final EnqueueFinanceOperation _enqueueOperation;
   final LiquidacionPost _liquidacionPost;
   final LiquidacionGet _liquidacionGet;
+  final bool _injectedLiquidacionGet;
   final Set<String> _vencimientoSubmissionsInFlight = <String>{};
   final Map<
       String,
@@ -165,6 +167,21 @@ class RepartidorFinanzasService {
 
   static String dailyLiquidacionCacheKey(String repartidorId, String date) =>
       '${_prefix}_liquidacion_${repartidorId}_$date';
+
+  static String liquidacionLedgerCacheKey(String repartidorId, String date) =>
+      '${_prefix}_liquidacion_${repartidorId}_${date}_ledger';
+
+  static Future<Map<String, dynamic>> _uncachedLiquidacionGet(
+    String endpoint, {
+    Map<String, String>? queryParameters,
+  }) {
+    return ApiClient.get(
+      endpoint,
+      queryParameters: queryParameters,
+      cacheResponse: false,
+      forceRefresh: true,
+    );
+  }
 
   static String monthlyLiquidacionSummaryCacheKey(
     String repartidorId,
@@ -315,6 +332,7 @@ class RepartidorFinanzasService {
       cacheKey: cacheKey,
       cacheTTL: const Duration(minutes: 2),
       forceRefresh: forceRefresh,
+      revalidate: !forceRefresh,
     );
 
     final summary = RepartidorDailySummary.fromJson(result.data);
@@ -459,10 +477,22 @@ class RepartidorFinanzasService {
     FormatException? lastError;
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
-        final response = await _liquidacionGet(
-          '/repartidor-finanzas/liquidaciones/$repartidorId/desglose',
-          queryParameters: {'date': _isoDate(date)},
-        );
+        final Map<String, dynamic> response;
+        if (_injectedLiquidacionGet) {
+          response = await _liquidacionGet(
+            '/repartidor-finanzas/liquidaciones/$repartidorId/desglose',
+            queryParameters: {'date': _isoDate(date)},
+          );
+        } else {
+          final cached = await OfflineAwareApi.get(
+            '/repartidor-finanzas/liquidaciones/$repartidorId/desglose',
+            queryParameters: {'date': _isoDate(date)},
+            cacheKey: liquidacionLedgerCacheKey(repartidorId, _isoDate(date)),
+            cacheTTL: const Duration(minutes: 2),
+            revalidate: true,
+          );
+          response = cached.data;
+        }
         final ledger = response['ledger'];
         if (response['success'] != true || ledger is! Map) {
           throw const FormatException(

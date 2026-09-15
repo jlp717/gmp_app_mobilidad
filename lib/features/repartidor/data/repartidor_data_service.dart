@@ -1024,6 +1024,7 @@ class RepartidorDataService {
           repartidorId: owner,
         ).endpoint,
         forceRefresh: true,
+        cacheResponse: false,
         allowStale: false,
         receiveTimeout: const Duration(seconds: 20),
       );
