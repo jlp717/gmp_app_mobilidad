@@ -82,7 +82,9 @@ if (accessMode === 'http') {
 }
 
 function sanitizeCode(code) {
-  return (code || '').replace(/[^a-zA-Z0-9._-]/g, '').substring(0, 50);
+  const raw = String(code || '').trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(raw)) return '';
+  return raw.substring(0, 50);
 }
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp']);

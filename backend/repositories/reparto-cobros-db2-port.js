@@ -3,6 +3,7 @@
 const { validateFinanceTableMapping } = require('../config/reparto-runtime');
 const { RepartoPersistenceError } = require('../services/reparto-confirmation-service');
 const { madridCalendarParts } = require('../utils/madrid-calendar');
+const { guardedQuery } = require('../utils/dsedac-write-guard');
 
 const LEDGER_COLUMNS = Object.freeze([
   'ID', 'CODIGOCLIENTEALBARAN', 'CODIGOCLIENTEFACTURA', 'CODIGOVENDEDOR',
@@ -69,7 +70,7 @@ function rowValue(row, name) {
 async function rows(connection, sql, params = []) {
   try {
     const result = typeof connection?.query === 'function'
-      ? await connection.query(sql, params)
+      ? await guardedQuery(connection, sql, params)
       : await connection?.execute?.(sql, params);
     if (!Array.isArray(result) && !Array.isArray(result?.rows)) {
       throw new Error('invalid DB2 row result');
@@ -86,7 +87,7 @@ async function rows(connection, sql, params = []) {
 async function execute(connection, sql, params = [], { preserveUnique = false } = {}) {
   try {
     return typeof connection?.query === 'function'
-      ? await connection.query(sql, params)
+      ? await guardedQuery(connection, sql, params)
       : await connection?.execute?.(sql, params);
   } catch (error) {
     if (preserveUnique && isUniqueConstraintError(error)) {

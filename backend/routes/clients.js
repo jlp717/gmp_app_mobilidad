@@ -603,7 +603,7 @@ router.get('/:code', verifyToken, async (req, res) => {
         } catch (e) { return null; }
       })(),
       // Query 2: Sales summary
-      query(`
+      queryWithParams(`
         SELECT 
           SUM(IMPORTEVENTA) as totalSales,
           SUM(IMPORTEMARGENREAL) as totalMargin,
@@ -611,20 +611,20 @@ router.get('/:code', verifyToken, async (req, res) => {
           COUNT(*) as totalLines,
           COUNT(DISTINCT ANODOCUMENTO || '-' || MESDOCUMENTO || '-' || DIADOCUMENTO) as numOrders
         FROM DSEDAC.LINDTO
-        WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
-          AND ANODOCUMENTO >= ${MIN_YEAR} 
+        WHERE CODIGOCLIENTEALBARAN = ?
+          AND ANODOCUMENTO >= ?
           AND TIPOVENTA IN ('CC', 'VC')
           AND TIPOLINEA IN ('AB', 'VT')
           AND SERIEALBARAN NOT IN ('N', 'Z')
           ${vendedorFilter}
-      `),
+      `, [safeClientCode, MIN_YEAR]),
       // Query 3: Monthly trend
-      query(`
+      queryWithParams(`
         SELECT ANODOCUMENTO as year, MESDOCUMENTO as month,
           SUM(IMPORTEVENTA) as sales, SUM(IMPORTEMARGENREAL) as margin
         FROM DSEDAC.LINDTO
-        WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
-          AND ANODOCUMENTO >= ${MIN_YEAR} 
+        WHERE CODIGOCLIENTEALBARAN = ?
+          AND ANODOCUMENTO >= ?
           AND TIPOVENTA IN ('CC', 'VC')
           AND TIPOLINEA IN ('AB', 'VT')
           AND SERIEALBARAN NOT IN ('N', 'Z')
@@ -632,9 +632,9 @@ router.get('/:code', verifyToken, async (req, res) => {
         GROUP BY ANODOCUMENTO, MESDOCUMENTO
         ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
         FETCH FIRST 12 ROWS ONLY
-      `),
+      `, [safeClientCode, MIN_YEAR]),
       // Query 4: Top products
-      query(`
+      queryWithParams(`
         SELECT L.CODIGOARTICULO as code,
   COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION)) as name,
   SUM(L.IMPORTEVENTA) as totalSales,
@@ -642,29 +642,29 @@ router.get('/:code', verifyToken, async (req, res) => {
   COUNT(*) as timesOrdered
         FROM DSEDAC.LINDTO L
         LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-        WHERE L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
+        WHERE L.CODIGOCLIENTEALBARAN = ? AND L.ANODOCUMENTO >= ? ${vendedorFilter}
         GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
         ORDER BY totalSales DESC
         FETCH FIRST 10 ROWS ONLY
-      `),
+      `, [safeClientCode, MIN_YEAR]),
       // Query 5: Payment status (CVC)
-      query(`
+      queryWithParams(`
         SELECT
           SUM(CASE WHEN CVC.SITUACION = 'C' THEN CVC.IMPORTEVENCIMIENTO ELSE 0 END) as paid,
           SUM(CASE WHEN CVC.SITUACION = 'P' THEN CVC.IMPORTEPENDIENTE ELSE 0 END) as pending,
           COUNT(CASE WHEN CVC.SITUACION = 'P' THEN 1 END) as pendingCount
         FROM DSEDAC.CVC CVC
-        WHERE CVC.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND CVC.ANOEMISION >= ${MIN_YEAR}
-      `),
+        WHERE CVC.CODIGOCLIENTEALBARAN = ? AND CVC.ANOEMISION >= ?
+      `, [safeClientCode, MIN_YEAR]),
       // Query 6: CAC cross-validation (invoice totals)
-      query(`
+      queryWithParams(`
         SELECT
           SUM(CAC.IMPORTETOTAL) as totalInvoiced
         FROM DSEDAC.CAC CAC
-        WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = '${safeClientCode}'
-          AND CAC.EJERCICIOFACTURA >= ${MIN_YEAR}
+        WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = ?
+          AND CAC.EJERCICIOFACTURA >= ?
           AND CAC.NUMEROFACTURA > 0
-      `),
+      `, [safeClientCode, MIN_YEAR]),
     ]);
 
     // Transform raw results into structured format

@@ -24,30 +24,30 @@ router.get('/client-report', async (req, res) => {
         const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
 
         // Get complete client data for PDF report
-        const clientRows = await query(`
+        const clientRows = await queryWithParams(`
       SELECT CODIGOCLIENTE as code, NOMBRECLIENTE as name, NIF as nif,
              DIRECCION as address, POBLACION as city, PROVINCIA as province,
              CODIGOPOSTAL as postalCode, TELEFONO1 as phone, CODIGORUTA as route
-      FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${safeCode}'
-    `);
+      FROM DSEDAC.CLI WHERE CODIGOCLIENTE = ?
+    `, [safeCode]);
         const clientInfo = clientRows && clientRows.length > 0 ? clientRows[0] : null;
 
         // Yearly summary
-        const yearlySummary = await query(`
+        const yearlySummary = await queryWithParams(`
       SELECT ANODOCUMENTO as year,
              SUM(IMPORTEVENTA) as sales,
              SUM(IMPORTEMARGENREAL) as margin,
              SUM(CANTIDADENVASES) as boxes,
              COUNT(DISTINCT MESDOCUMENTO) as activeMonths
       FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = '${safeCode}' 
-        AND ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
+      WHERE CODIGOCLIENTEALBARAN = ?
+        AND ANODOCUMENTO >= ? ${vendedorFilter}
       GROUP BY ANODOCUMENTO
       ORDER BY ANODOCUMENTO
-    `);
+    `, [safeCode, MIN_YEAR]);
 
         // Top 10 products
-        const topProducts = await query(`
+        const topProducts = await queryWithParams(`
       SELECT L.CODIGOARTICULO as code,
              COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION), 'Producto') as name,
              SUM(L.IMPORTEVENTA) as sales,
@@ -55,12 +55,12 @@ router.get('/client-report', async (req, res) => {
              COUNT(*) as orders
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      WHERE L.CODIGOCLIENTEALBARAN = '${safeCode}' 
-        AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
+      WHERE L.CODIGOCLIENTEALBARAN = ?
+        AND L.ANODOCUMENTO >= ? ${vendedorFilter}
       GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
       ORDER BY sales DESC
       FETCH FIRST 10 ROWS ONLY
-    `);
+    `, [safeCode, MIN_YEAR]);
 
         res.json({
             exportDate: new Date().toISOString(),

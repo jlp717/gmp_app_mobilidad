@@ -10,6 +10,7 @@ const { getSchedulerStatus } = require('./services/scheduler');
 const { getPrometheusMetrics, metricsMiddleware } = require('./services/metrics');
 const { transformAlert } = require('./services/alert_transformer');
 const logger = require('../middleware/logger');
+const { verifyToken, requireJefeVentas } = require('../middleware/auth');
 const { getClientCodesFromCache } = require('../services/laclae');
 
 const router = Router();
@@ -377,13 +378,13 @@ router.get('/alerts/clients', async (req, res) => {
 // POST /api/kpi/etl/run
 // Dispara el ETL manualmente (admin only)
 // ============================================================
-router.post('/etl/run', async (req, res) => {
+router.post('/etl/run', verifyToken, requireJefeVentas, async (req, res) => {
   try {
-    const { localDir, force } = req.body || {};
+    const { force } = req.body || {};
 
     logger.info(`[kpi:api] ETL manual solicitado por ${req.user?.code || 'unknown'}`);
 
-    const result = await runETL({ localDir, force: force === true });
+    const result = await runETL({ force: force === true });
 
     res.json({
       success: true,
@@ -394,7 +395,7 @@ router.post('/etl/run', async (req, res) => {
     });
   } catch (err) {
     logger.error(`[kpi:api] Error en POST /etl/run: ${err.message}`);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Error ejecutando ETL' });
   }
 });
 
@@ -581,7 +582,7 @@ function parseRawData(val) {
 // GET /api/kpi/debug/db-status
 // Diagnóstico: muestra contenido real de la tabla KPI_ALERTS
 // ============================================================
-router.get('/debug/db-status', async (req, res) => {
+router.get('/debug/db-status', verifyToken, requireJefeVentas, async (req, res) => {
   try {
     const countResult = await kpiQuery(
       `SELECT COUNT(*) AS TOTAL, SUM(CASE WHEN IS_ACTIVE = 1 THEN 1 ELSE 0 END) AS ACTIVE
@@ -610,7 +611,7 @@ router.get('/debug/db-status', async (req, res) => {
     });
   } catch (err) {
     logger.error(`[kpi:api] Error en debug/db-status: ${err.message}`);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Error consultando estado KPI' });
   }
 });
 
