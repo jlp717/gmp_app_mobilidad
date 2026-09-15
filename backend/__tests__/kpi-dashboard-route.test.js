@@ -46,6 +46,14 @@ jest.mock('../middleware/logger', () => ({
   debug: jest.fn(),
 }));
 
+jest.mock('../middleware/auth', () => ({
+  verifyToken: (req, _res, next) => {
+    req.user = { code: '98', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: [] };
+    next();
+  },
+  requireJefeVentas: (_req, _res, next) => next(),
+}));
+
 const kpiRouter = require('../kpi/routes');
 
 const activeAlerts = [

@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const { verifyToken } = require('../middleware/auth');
+const { requireVendorQueryScope } = require('../middleware/vendor-scope');
 const logger = require('../middleware/logger');
 const { query, queryWithParams } = require('../config/db');
 const {
@@ -13,7 +15,7 @@ const {
 // =============================================================================
 // EXPORT DATA (for PDF generation)
 // =============================================================================
-router.get('/client-report', async (req, res) => {
+router.get('/client-report', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { code, vendedorCodes } = req.query;
         if (!code) {

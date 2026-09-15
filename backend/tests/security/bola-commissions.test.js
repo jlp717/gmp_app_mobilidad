@@ -52,3 +52,35 @@ describe('BOLA vendor-scope (ASVS V8)', () => {
         expect(isFinancialRole({ role: 'otro', isJefeVentas: true })).toBe(true);
     });
 });
+
+const { applyAuthorizedVendedorCodes } = require('../../middleware/vendor-scope');
+
+describe('SEC-02 applyAuthorizedVendedorCodes', () => {
+    test('COMERCIAL with ALL → 403', () => {
+        const res = applyAuthorizedVendedorCodes(
+            { user: { code: '01', role: 'COMERCIAL', vendorCodes: ['01'] } },
+            'ALL',
+        );
+        expect(res.ok).toBe(false);
+        expect(res.status).toBe(403);
+    });
+
+    test('JEFE with ALL → 200 ALL', () => {
+        const res = applyAuthorizedVendedorCodes(
+            { user: { code: '98', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: [] } },
+            'ALL',
+        );
+        expect(res.ok).toBe(true);
+        expect(res.vendedorCodes).toBe('ALL');
+    });
+
+    test('comercial 80 ALL expands team scope, not global ALL', () => {
+        const res = applyAuthorizedVendedorCodes(
+            { user: { code: '80', role: 'COMERCIAL', vendorCodes: ['80', '72', '73', '81', '83'] } },
+            'ALL',
+        );
+        expect(res.ok).toBe(true);
+        expect(res.vendedorCodes.split(',')).toEqual(expect.arrayContaining(['80', '72', '73', '81', '83']));
+        expect(res.vendedorCodes).not.toBe('ALL');
+    });
+});

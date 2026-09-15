@@ -10,6 +10,8 @@ const { getSchedulerStatus } = require('./services/scheduler');
 const { getPrometheusMetrics, metricsMiddleware } = require('./services/metrics');
 const { transformAlert } = require('./services/alert_transformer');
 const logger = require('../middleware/logger');
+const { verifyToken } = require('../middleware/auth');
+const { applyAuthorizedVendedorCodes } = require('../middleware/vendor-scope');
 const { getClientCodesFromCache } = require('../services/laclae');
 
 const router = Router();
@@ -144,6 +146,11 @@ async function getVendorClientSet(vendorCodes, mode = 'current') {
 
 // Métricas middleware en todas las rutas KPI
 router.use(metricsMiddleware);
+
+router.use((req, res, next) => {
+  if (req.path === '/health' || req.path === '/metrics') return next();
+  return verifyToken(req, res, next);
+});
 
 // ============================================================
 // GET /api/kpi/alerts?clientId=871&type=DESVIACION_VENTAS&severity=critical&since=2026-01-01&page=1&limit=20
@@ -621,7 +628,9 @@ router.get('/debug/db-status', async (req, res) => {
 // ============================================================
 router.get('/dashboard', async (req, res) => {
   try {
-    const { vendorCode } = req.query;
+    const scoped = applyAuthorizedVendedorCodes(req, req.query.vendorCode);
+    if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
+    const vendorCode = scoped.vendedorCodes;
 
     // 1. Fetch ALL active alerts with type (single query, filter in Node)
     const allAlertsResult = await kpiQuery(`

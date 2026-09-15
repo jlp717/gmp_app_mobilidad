@@ -18,12 +18,13 @@ const {
     handleRouteError
 } = require('../utils/common');
 const { verifyToken } = require('../middleware/auth');
+const { requireVendorQueryScope } = require('../middleware/vendor-scope');
 
 
 // =============================================================================
 // YOY COMPARISON (Using LACLAE with LCIMVT for sales without VAT)
 // =============================================================================
-router.get('/yoy-comparison', verifyToken, async (req, res) => {
+router.get('/yoy-comparison', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes, year, month } = req.query;
         const currentYear = parseInt(year) || getCurrentDate().getFullYear();
@@ -92,7 +93,7 @@ router.get('/yoy-comparison', verifyToken, async (req, res) => {
 // =============================================================================
 // TOP CLIENTS (Using LACLAE with LCIMVT)
 // =============================================================================
-router.get('/top-clients', verifyToken, async (req, res) => {
+router.get('/top-clients', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes, year, month, limit = 10 } = req.query;
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
@@ -161,7 +162,7 @@ router.get('/top-clients', verifyToken, async (req, res) => {
 // =============================================================================
 // TRENDS (Using LACLAE with LCIMVT)
 // =============================================================================
-router.get('/trends', verifyToken, async (req, res) => {
+router.get('/trends', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes } = req.query;
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
@@ -204,7 +205,7 @@ router.get('/trends', verifyToken, async (req, res) => {
 // =============================================================================
 // TOP PRODUCTS
 // =============================================================================
-router.get('/top-products', verifyToken, async (req, res) => {
+router.get('/top-products', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes, limit = 20 } = req.query;
         const now = getCurrentDate();
@@ -255,7 +256,7 @@ router.get('/top-products', verifyToken, async (req, res) => {
 // =============================================================================
 // MARGIN ANALYSIS
 // =============================================================================
-router.get('/margins', verifyToken, async (req, res) => {
+router.get('/margins', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes } = req.query;
         const now = getCurrentDate();
@@ -319,7 +320,7 @@ router.get('/margins', verifyToken, async (req, res) => {
 // =============================================================================
 // SALES HISTORY EXPLORER (Detailed Product Sales)
 // =============================================================================
-router.get('/sales-history', verifyToken, async (req, res) => {
+router.get('/sales-history', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const {
             vendedorCodes,
@@ -460,7 +461,7 @@ router.get('/sales-history', verifyToken, async (req, res) => {
 // =============================================================================
 // SALES HISTORY SUMMARY (Comparison Header)
 // =============================================================================
-router.get('/sales-history/summary', verifyToken, async (req, res) => {
+router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes, clientCode, productSearch, startDate, endDate } = req.query;
 
