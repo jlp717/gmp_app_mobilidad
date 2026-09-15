@@ -864,48 +864,42 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       );
     }
 
-    return AnimatedBuilder(
-      animation: _listAnimController,
-      builder: (context, child) {
-        return SliverOpacity(
-          opacity: _listAnimController.value,
-          sliver: SliverPadding(
-            padding: EdgeInsets.only(
-              top: 4,
-              bottom: Responsive.useBottomNav(context) ? 16 : 100,
-            ),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final albaran = albaranes[index];
+    return SliverFadeTransition(
+      opacity: _listAnimController,
+      sliver: SliverPadding(
+        padding: EdgeInsets.only(
+          top: 4,
+          bottom: Responsive.useBottomNav(context) ? 16 : 100,
+        ),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final albaran = albaranes[index];
 
-                  return Column(
-                    children: [
-                      SmartDeliveryCard(
-                        albaran: albaran,
-                        onTap: () => _showDetailDialog(albaran),
-                        onSwipeComplete: () =>
-                            _openConfirmationFromSwipe(albaran),
-                        onSwipeNote: () => _showDetailDialog(albaran),
-                        repartidorNames: widget.repartidorNames,
-                      ),
-                      if (index < albaranes.length - 1)
-                        Divider(
-                          height: 1,
-                          thickness: 1,
-                          color: AppTheme.borderColor.withValues(alpha: 0.3),
-                          indent: 12,
-                          endIndent: 12,
-                        ),
-                    ],
-                  );
-                },
-                childCount: albaranes.length,
-              ),
-            ),
+              return Column(
+                children: [
+                  SmartDeliveryCard(
+                    albaran: albaran,
+                    onTap: () => _showDetailDialog(albaran),
+                    onSwipeComplete: () => _openConfirmationFromSwipe(albaran),
+                    onSwipeNote: () => _showDetailDialog(albaran),
+                    repartidorNames: widget.repartidorNames,
+                  ),
+                  if (index < albaranes.length - 1)
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: AppTheme.borderColor.withValues(alpha: 0.3),
+                      indent: 12,
+                      endIndent: 12,
+                    ),
+                ],
+              );
+            },
+            childCount: albaranes.length,
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
