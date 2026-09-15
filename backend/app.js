@@ -662,6 +662,14 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/api/ready', requireInternalMetricsAccess, async (req, res) => {
   const start = Date.now();
+  if (app.locals.databaseStatus === 'unavailable') {
+    return res.status(503).json({
+      status: 'not_ready',
+      database: 'unavailable',
+      timestamp: new Date().toISOString(),
+      responseTime: `${Date.now() - start}ms`,
+    });
+  }
   const dbHealth = await checkDbHealth();
   const redisHealth = getRedisHealth();
   const authSessionStore = await getSessionStoreReadiness();

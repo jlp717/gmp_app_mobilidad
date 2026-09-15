@@ -45,26 +45,47 @@ const canonicalLiquidacionBootstrap = app.locals.canonicalLiquidacionBootstrap;
 let runtimeMonitoringTimer = null;
 let eventLoopDelay = null;
 let isShuttingDown = false;
+let dbRetryTimer = null;
+
+function isFatalStartupDbError(error) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '');
+  return code === 'MISSING_DB_CONFIG'
+    || /ODBC_DSN|DB_USER|DB_PASSWORD|credentials missing|DSN is required/i.test(message);
+}
 
 async function startServer() {
   const { validateConfig } = require('./config/env');
   validateConfig();
   logger.info('✅ Configuration validated successfully');
 
-  await initDb();
-  if (canonicalLiquidacionBootstrap.diagnostic.configured === true) {
-    try {
-      await canonicalLiquidacionBootstrap.verifyCatalogReadOnly();
-    } catch (error) {
-      logger.warn('[REPARTIDOR_LIQUIDACION_RUNTIME] catalog verification failed', {
-        code: String(error?.code || 'LIQUIDACION_CAPABILITY_UNAVAILABLE'),
-      });
+  try {
+    await initDb();
+    app.locals.databaseStatus = 'connected';
+  } catch (error) {
+    if (isFatalStartupDbError(error)) {
+      throw error;
     }
+    logger.error(`Database unavailable at startup (listening degraded): ${error.message}`);
+    app.locals.databaseStatus = 'unavailable';
+    scheduleDbInitRetry(5000);
   }
-  try { await initSchemaCheck(); } catch (error) { logger.warn(`DELIVERY_STATUS schema check skipped: ${error.message}`); }
-  try { await initCache(); } catch (error) { logger.warn(`Redis unavailable (using L1 only): ${error.message}`); }
-  try { await preloadCache(PORT); } catch (error) { logger.warn(`LACLAE preload skipped: ${error.message}`); }
-  try { await loadMetadataCache(); } catch (error) { logger.warn(`Metadata cache skipped: ${error.message}`); }
+
+  if (app.locals.databaseStatus === 'connected') {
+    if (canonicalLiquidacionBootstrap.diagnostic.configured === true) {
+      try {
+        await canonicalLiquidacionBootstrap.verifyCatalogReadOnly();
+      } catch (error) {
+        logger.warn('[REPARTIDOR_LIQUIDACION_RUNTIME] catalog verification failed', {
+          code: String(error?.code || 'LIQUIDACION_CAPABILITY_UNAVAILABLE'),
+        });
+      }
+    }
+    try { await initSchemaCheck(); } catch (error) { logger.warn(`DELIVERY_STATUS schema check skipped: ${error.message}`); }
+    try { await initCache(); } catch (error) { logger.warn(`Redis unavailable (using L1 only): ${error.message}`); }
+    try { await preloadCache(PORT); } catch (error) { logger.warn(`LACLAE preload skipped: ${error.message}`); }
+    try { await loadMetadataCache(); } catch (error) { logger.warn(`Metadata cache skipped: ${error.message}`); }
+  }
 
   startNetworkOptimizerCleanup();
   startRuntimeMonitoring();
@@ -111,9 +132,45 @@ function stopRuntimeMonitoring() {
   app.locals.setEventLoopDelayMonitor(null);
 }
 
+function scheduleDbInitRetry(delayMs = 5000) {
+  if (isShuttingDown || dbRetryTimer) return dbRetryTimer;
+  const wait = Math.max(5000, Math.min(60000, delayMs));
+  dbRetryTimer = setTimeout(async () => {
+    dbRetryTimer = null;
+    if (isShuttingDown) return;
+    try {
+      await initDb();
+      app.locals.databaseStatus = 'connected';
+      logger.info('Database connection restored after degraded startup');
+      if (canonicalLiquidacionBootstrap.diagnostic.configured === true) {
+        try {
+          await canonicalLiquidacionBootstrap.verifyCatalogReadOnly();
+        } catch (error) {
+          logger.warn('[REPARTIDOR_LIQUIDACION_RUNTIME] catalog verification failed', {
+            code: String(error?.code || 'LIQUIDACION_CAPABILITY_UNAVAILABLE'),
+          });
+        }
+      }
+      try { await initSchemaCheck(); } catch (error) { logger.warn(`DELIVERY_STATUS schema check skipped: ${error.message}`); }
+      try { await initCache(); } catch (error) { logger.warn(`Redis unavailable (using L1 only): ${error.message}`); }
+      try { await preloadCache(PORT); } catch (error) { logger.warn(`LACLAE preload skipped: ${error.message}`); }
+      try { await loadMetadataCache(); } catch (error) { logger.warn(`Metadata cache skipped: ${error.message}`); }
+    } catch (error) {
+      logger.warn(`Database retry failed: ${error.message}`);
+      scheduleDbInitRetry(Math.min(60000, wait * 2));
+    }
+  }, wait);
+  dbRetryTimer.unref?.();
+  return dbRetryTimer;
+}
+
 async function gracefulShutdown(signal, exitCode = 0) {
   if (isShuttingDown) return;
   isShuttingDown = true;
+  if (dbRetryTimer) {
+    clearTimeout(dbRetryTimer);
+    dbRetryTimer = null;
+  }
   stopNetworkOptimizerCleanup();
   stopRuntimeMonitoring();
   try {
@@ -131,7 +188,7 @@ async function gracefulShutdown(signal, exitCode = 0) {
 }
 
 // app requestTimeoutMiddleware preserves requestTimedOut and LATE_RESPONSE_SUPPRESSED behavior.
-module.exports = { app, startServer, gracefulShutdown };
+module.exports = { app, startServer, gracefulShutdown, isFatalStartupDbError };
 
 if (require.main === module) {
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
