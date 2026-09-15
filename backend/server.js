@@ -136,6 +136,11 @@ module.exports = { app, startServer, gracefulShutdown };
 if (require.main === module) {
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('message', (message) => {
+    if (message === 'shutdown') {
+      gracefulShutdown('pm2-shutdown');
+    }
+  });
   startServer().catch((error) => {
     logger.error(`Failed to start server: ${error.message}`);
     stopNetworkOptimizerCleanup();

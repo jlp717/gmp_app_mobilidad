@@ -173,7 +173,7 @@ module.exports = {
 
             // ==================== HEALTH CHECK ====================
             listen_timeout: parseInt(process.env.PM2_LISTEN_TIMEOUT_MS, 10) || 120000,
-            kill_timeout: parseInt(process.env.PM2_KILL_TIMEOUT_MS, 10) || 5000,
+            kill_timeout: parseInt(process.env.PM2_KILL_TIMEOUT_MS, 10) || 15000,
 
             // ==================== AUTO RESTART ON FILE CHANGE ====================
             watch_delay: 1000,

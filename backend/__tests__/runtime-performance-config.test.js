@@ -41,7 +41,7 @@ describe('runtime performance configuration', () => {
     expect(app.env.DB_POOL_MAX).toBe('5');
     expect(app.env.DB_QUERY_CONCURRENCY).toBe('4');
     expect(app.watch).toBe(false);
-    expect(app.kill_timeout).toBe(5000);
+    expect(app.kill_timeout).toBe(15000);
     expect(app.max_memory_restart).toBe('512M');
     expect(app.max_restarts).toBe(50);
     expect(app.restart_delay).toBe(1000);
@@ -69,6 +69,21 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/getRedisClient/);
   });
 
+  test('BE-09 PM2 shutdown message and single-leader warmup', () => {
+    const serverSource = fs.readFileSync(path.join(backendRoot, 'server.js'), 'utf8');
+    const preloaderSource = fs.readFileSync(path.join(backendRoot, 'services/cache-preloader.js'), 'utf8');
+    const ecosystem = require('../ecosystem.config');
+    const app = ecosystem.apps.find((entry) => entry.name === 'gmp-api');
+
+    expect(app.kill_timeout).toBe(15000);
+    expect(app.shutdown_with_message).toBe(true);
+    expect(serverSource).toMatch(/if \(message === 'shutdown'\)/);
+    expect(serverSource).toMatch(/gracefulShutdown\('pm2-shutdown'\)/);
+    expect(preloaderSource).toMatch(/INSTANCE_ID/);
+    expect(preloaderSource).toMatch(/skipped on follower INSTANCE_ID/);
+    expect(preloaderSource).toMatch(/acquireLock/);
+  });
+
   test('request timeout and route error helpers suppress duplicate responses', () => {
     const serverSource = fs.readFileSync(path.join(backendRoot, 'server.js'), 'utf8');
     const commonSource = fs.readFileSync(path.join(backendRoot, 'utils/common.js'), 'utf8');
@@ -76,6 +91,8 @@ describe('runtime performance configuration', () => {
 
     expect(serverSource).toMatch(/LATE_RESPONSE_SUPPRESSED/);
     expect(serverSource).toMatch(/requestTimedOut/);
+    expect(serverSource).toMatch(/process\.on\('message'/);
+    expect(serverSource).toMatch(/pm2-shutdown/);
     expect(commonSource).toMatch(/Response already completed/);
     expect(commonSource).toMatch(/DB_QUERY_QUEUE_TIMEOUT/);
     expect(httpCacheSource).toMatch(/requestTimedOut/);
