@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/date_formatter.dart';
@@ -503,8 +504,10 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           _kpiData = Map<String, dynamic>.from(metrics);
           _error = null;
         });
+        DashboardFirstPaintGate.markReady();
       } catch (e) {
         debugPrint('Error fetching dashboard metrics: $e');
+        DashboardFirstPaintGate.markReady();
       }
 
       final matrixResponse = await matrixFuture;
@@ -536,6 +539,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       });
     } catch (e) {
       debugPrint('Error fetching dashboard: $e');
+      DashboardFirstPaintGate.markReady();
       if (mounted && generation == _loadGeneration) {
         setState(() {
           _error = e.toString();

@@ -8,6 +8,7 @@ import 'package:gmp_app_mobilidad/core/notifications/notification_data_repositor
 import 'package:gmp_app_mobilidad/core/notifications/notification_models.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_preferences.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_rules_engine.dart';
+import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/services/session_scope.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 
@@ -29,6 +30,8 @@ class NotificationOrchestrator {
   NotificationUserProfile? _activeProfile;
   bool _initialized = false;
   bool _refreshing = false;
+  DateTime? _lastRefreshAt;
+  static const Duration _resumeThrottle = Duration(minutes: 10);
 
   Future<void> initialize({bool registerBackground = true}) async {
     if (_initialized) return;
@@ -60,18 +63,27 @@ class NotificationOrchestrator {
     if (settings.enabled && !settings.permissionPrompted) {
       await _local.requestPermissionsIfNeeded();
     }
+    await DashboardFirstPaintGate.wait();
     await refreshAll(reason: reason);
   }
 
   Future<void> clearForLogout() async {
     _activeProfile = null;
     await _local.cancelAllGmpNotifications();
+    _lastRefreshAt = null;
   }
 
   Future<void> refreshAll({
     String reason = 'manual',
     DateTime? now,
   }) async {
+    final effectiveNow = now ?? DateTime.now();
+    if (reason == 'app_resumed' &&
+        _lastRefreshAt != null &&
+        effectiveNow.difference(_lastRefreshAt!) < _resumeThrottle) {
+      debugPrint('[Notifications] skip app_resumed refresh (throttle 10 min)');
+      return;
+    }
     if (_refreshing) return;
     _refreshing = true;
     try {
@@ -80,12 +92,13 @@ class NotificationOrchestrator {
           _activeProfile ?? await NotificationSessionStore.loadStoredProfile();
       final snapshot = await _repository.loadSnapshot(
         profile: profile,
-        now: now,
+        now: effectiveNow,
       );
       final settings = await _preferences.load();
-      await _scheduleOrderReminders(snapshot, settings, now: now);
-      await _scheduleSmartNotifications(snapshot, settings, now: now);
-      await _showImmediateNotifications(snapshot, settings, now: now);
+      await _scheduleOrderReminders(snapshot, settings, now: effectiveNow);
+      await _scheduleSmartNotifications(snapshot, settings, now: effectiveNow);
+      await _showImmediateNotifications(snapshot, settings, now: effectiveNow);
+      _lastRefreshAt = effectiveNow;
     } catch (e, stack) {
       debugPrint('[Notifications] refreshAll failed ($reason): $e\n$stack');
     } finally {

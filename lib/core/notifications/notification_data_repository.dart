@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -99,69 +100,124 @@ class NotificationDataRepository {
     DateTime? now,
   }) async {
     final effectiveNow = now ?? DateTime.now();
-    final orders = await _loadOrders(profile: profile, now: effectiveNow);
+    final orders = await _loadOrders(
+      profile: profile,
+      now: effectiveNow,
+      includeServerCounts: false,
+    );
 
     if (profile == null) {
       return NotificationSnapshot(scopeKey: 'anon', orders: orders);
     }
+
+    final aggregated = await _loadAggregatedSnapshot(
+      profile: profile,
+      now: effectiveNow,
+      localOrders: orders,
+    );
+    if (aggregated != null) return aggregated;
 
     final canCommercial = profile.canReceiveCommercialAlerts;
     final canDelivery = profile.canReceiveDeliveryAlerts;
 
     final commercialResults = canCommercial
         ? await Future.wait<Object?>([
-            _loadObjectives(profile, effectiveNow),
-            _loadRutero(profile, effectiveNow),
-            _loadRutero(profile, effectiveNow.add(const Duration(days: 1))),
-            _loadKpiBundle(profile),
-            _loadInvoices(profile, effectiveNow),
-            _loadCommissions(profile, effectiveNow),
             _loadBolsa(profile, effectiveNow),
-            _loadSalesDay(profile, effectiveNow),
+            _loadKpiBundle(profile),
+            _loadRutero(profile, effectiveNow),
+            _safeServerOrderCount(profile, 'BORRADOR'),
+            _safeServerOrderCount(profile, 'PENDIENTE'),
           ])
         : const <Object?>[];
+
+    if (canCommercial) {
+      unawaited(_deferSecondarySnapshot(profile, effectiveNow));
+    }
 
     final deliveries =
         canDelivery ? await _loadDeliveries(profile, effectiveNow) : null;
 
     final kpi = canCommercial
-        ? commercialResults[3]! as _KpiNotificationBundle
+        ? commercialResults[1]! as _KpiNotificationBundle
         : const _KpiNotificationBundle();
+    final serverDraft = canCommercial ? commercialResults[3]! as int : 0;
+    final serverPending = canCommercial ? commercialResults[4]! as int : 0;
 
     return NotificationSnapshot(
       scopeKey: profile.scopeKey,
       profile: profile,
-      orders: orders,
-      objectives: canCommercial
-          ? commercialResults[0] as ObjectivesNotificationSnapshot?
-          : null,
+      orders: OrderReminderSnapshot(
+        localDraftCount: orders.localDraftCount,
+        localPendingCount: orders.localPendingCount,
+        localFailedCount: orders.localFailedCount,
+        serverDraftCount: serverDraft,
+        serverPendingCount: serverPending,
+        oldestAt: orders.oldestAt,
+        clientNames: orders.clientNames,
+      ),
       rutero: canCommercial
-          ? commercialResults[1] as RuteroNotificationSnapshot?
-          : null,
-      nextRutero: canCommercial
           ? commercialResults[2] as RuteroNotificationSnapshot?
           : null,
       glacius: kpi.glacius,
       clients: kpi.clients,
-      invoices: canCommercial
-          ? commercialResults[4] as InvoicesNotificationSnapshot?
-          : null,
-      commissions: canCommercial && profile.showCommissions
-          ? commercialResults[5] as CommissionsNotificationSnapshot?
-          : null,
       bolsa: canCommercial
-          ? commercialResults[6] as BolsaNotificationSnapshot?
-          : null,
-      salesDay: canCommercial
-          ? commercialResults[7] as SalesDayNotificationSnapshot?
+          ? commercialResults[0] as BolsaNotificationSnapshot?
           : null,
       deliveries: deliveries,
     );
   }
 
+  Future<void> _deferSecondarySnapshot(
+    NotificationUserProfile profile,
+    DateTime now,
+  ) async {
+    try {
+      await Future<void>.delayed(const Duration(seconds: 30));
+      await Future.wait<Object?>([
+        _loadObjectives(profile, now),
+        _loadRutero(profile, now.add(const Duration(days: 1))),
+        _loadInvoices(profile, now),
+        _loadCommissions(profile, now),
+        _loadSalesDay(profile, now),
+      ]);
+    } catch (e) {
+      debugPrint('[Notifications] Deferred snapshot failed: $e');
+    }
+  }
+
+  Future<NotificationSnapshot?> _loadAggregatedSnapshot({
+    required NotificationUserProfile profile,
+    required DateTime now,
+    required OrderReminderSnapshot localOrders,
+  }) async {
+    if (!profile.canReceiveCommercialAlerts) return null;
+    try {
+      final response = await ApiClient.get(
+        '/notifications/snapshot',
+        cacheKey: 'notifications:snapshot:${profile.scopeKey}',
+        cacheTTL: const Duration(seconds: 60),
+      );
+      if (response['success'] != true) return null;
+      final deliveries = profile.canReceiveDeliveryAlerts
+          ? await _loadDeliveries(profile, now)
+          : null;
+      return NotificationBackendSnapshotMapper.map(
+        body: response,
+        profile: profile,
+        localOrders: localOrders,
+        now: now,
+        deliveries: deliveries,
+      );
+    } catch (e) {
+      debugPrint('[Notifications] Aggregated snapshot unavailable: $e');
+      return null;
+    }
+  }
+
   Future<OrderReminderSnapshot> _loadOrders({
     required NotificationUserProfile? profile,
     required DateTime now,
+    bool includeServerCounts = true,
   }) async {
     try {
       await PedidosOfflineService.init();
@@ -180,7 +236,9 @@ class NotificationDataRepository {
 
     var serverDraftCount = 0;
     var serverPendingCount = 0;
-    if (profile != null && profile.canReceiveCommercialAlerts) {
+    if (includeServerCounts &&
+        profile != null &&
+        profile.canReceiveCommercialAlerts) {
       final serverCounts = await Future.wait<int>([
         _safeServerOrderCount(profile, 'BORRADOR'),
         _safeServerOrderCount(profile, 'PENDIENTE'),
@@ -736,4 +794,260 @@ class _KpiNotificationBundle {
 
   final GlaciusNotificationSnapshot? glacius;
   final ClientsNotificationSnapshot? clients;
+}
+
+class NotificationBackendSnapshotMapper {
+  const NotificationBackendSnapshotMapper._();
+
+  static NotificationSnapshot map({
+    required Map<String, dynamic> body,
+    required NotificationUserProfile profile,
+    required OrderReminderSnapshot localOrders,
+    required DateTime now,
+    DeliveryNotificationSnapshot? deliveries,
+  }) {
+    final ordersRaw = body['orders'] is Map
+        ? Map<String, dynamic>.from(body['orders'] as Map)
+        : const <String, dynamic>{};
+    final kpi = _kpiFrom(body['kpi']);
+    return NotificationSnapshot(
+      scopeKey: profile.scopeKey,
+      profile: profile,
+      orders: OrderReminderSnapshot(
+        localDraftCount: localOrders.localDraftCount,
+        localPendingCount: localOrders.localPendingCount,
+        localFailedCount: localOrders.localFailedCount,
+        serverDraftCount: NotificationDataRepository._toInt(ordersRaw['borrador']),
+        serverPendingCount:
+            NotificationDataRepository._toInt(ordersRaw['pendiente']),
+        oldestAt: localOrders.oldestAt,
+        clientNames: localOrders.clientNames,
+      ),
+      rutero: _ruteroFrom(body['ruteroHoy'], now),
+      nextRutero: _ruteroFrom(
+        body['ruteroManana'],
+        now.add(const Duration(days: 1)),
+      ),
+      glacius: kpi.glacius,
+      clients: kpi.clients,
+      invoices: _invoicesFrom(body['facturas']),
+      commissions: profile.showCommissions
+          ? _commissionsFrom(body['commissions'], now)
+          : null,
+      bolsa: _bolsaFrom(body['bolsa']),
+      salesDay: _salesDayFrom(body['metrics'], body['topClients'], body['stats']),
+      deliveries: deliveries,
+    );
+  }
+
+  static _KpiNotificationBundle _kpiFrom(Object? raw) {
+    if (raw is! Map) return const _KpiNotificationBundle();
+    final response = Map<String, dynamic>.from(raw);
+    final totals = response['totals'] is Map
+        ? Map<String, dynamic>.from(response['totals'] as Map)
+        : <String, dynamic>{};
+    final byType = (response['byType'] as List? ?? const [])
+        .whereType<Map>()
+        .map(Map<String, dynamic>.from)
+        .toList(growable: false);
+    final clients = (response['clients'] as List? ?? const [])
+        .whereType<Map>()
+        .map(Map<String, dynamic>.from)
+        .toList(growable: false);
+    var reincorporationCount = 0;
+    var noPurchaseCount = 0;
+    var newClientCount = 0;
+    for (final item in byType) {
+      final type = item['type']?.toString().toUpperCase() ?? '';
+      final label = item['label']?.toString().toUpperCase() ?? '';
+      final count = NotificationDataRepository._toInt(item['count']);
+      final isReincorporation = type.contains('ALTA') ||
+          type.contains('REINCOR') ||
+          label.contains('ALTA') ||
+          label.contains('REINCOR');
+      if (isReincorporation) reincorporationCount += count;
+      if (type.contains('SIN_COMPRA') || label.contains('SIN COMPRA')) {
+        noPurchaseCount += count;
+      }
+      if (type.contains('ALTA') || label.contains('CLIENTE NUEVO')) {
+        newClientCount += count;
+      }
+    }
+    final clientNames = clients
+        .map((item) => item['name']?.toString() ?? '')
+        .where((name) => name.trim().isNotEmpty)
+        .take(4)
+        .toList(growable: false);
+    return _KpiNotificationBundle(
+      glacius: GlaciusNotificationSnapshot(
+        totalAlerts: NotificationDataRepository._toInt(
+          totals['alerts'] ?? totals['totalAlerts'] ?? totals['TOTAL_ALERTS'],
+        ),
+        criticalAlerts: NotificationDataRepository._toInt(
+          totals['critical'] ?? totals['criticalAlerts'] ?? totals['CRITICAL'],
+        ),
+        reincorporationAlerts: reincorporationCount,
+        clientNames: clientNames,
+      ),
+      clients: ClientsNotificationSnapshot(
+        criticalAlertCount: NotificationDataRepository._toInt(
+          totals['critical'] ?? totals['criticalAlerts'] ?? totals['CRITICAL'],
+        ),
+        warningAlertCount: NotificationDataRepository._toInt(
+          totals['warning'] ?? totals['warnings'] ?? totals['WARNING'],
+        ),
+        noPurchaseCount: noPurchaseCount,
+        newClientCount: newClientCount,
+        clientNames: clientNames,
+      ),
+    );
+  }
+
+  static RuteroNotificationSnapshot? _ruteroFrom(Object? raw, DateTime date) {
+    if (raw is! Map) return null;
+    final data = Map<String, dynamic>.from(raw);
+    final clients = (data['clients'] as List? ?? const [])
+        .whereType<Map>()
+        .map(Map<String, dynamic>.from)
+        .toList(growable: false);
+    final names = clients
+        .map((item) => item['name']?.toString() ?? '')
+        .where((name) => name.trim().isNotEmpty)
+        .take(4)
+        .toList(growable: false);
+    return RuteroNotificationSnapshot(
+      date: DateTime(date.year, date.month, date.day),
+      dayName: data['day']?.toString() ?? '',
+      clientCount: NotificationDataRepository._toInt(data['count']),
+      clientNames: names,
+    );
+  }
+
+  static InvoicesNotificationSnapshot? _invoicesFrom(Object? raw) {
+    if (raw is! Map) return null;
+    final data = Map<String, dynamic>.from(raw);
+    final hoy = data['hoy'] is Map
+        ? Map<String, dynamic>.from(data['hoy'] as Map)
+        : const <String, dynamic>{};
+    final mes = data['mes'] is Map
+        ? Map<String, dynamic>.from(data['mes'] as Map)
+        : const <String, dynamic>{};
+    return InvoicesNotificationSnapshot(
+      todayDocuments: NotificationDataRepository._toInt(hoy['totalDocumentos']),
+      todayInvoices:
+          NotificationDataRepository._toInt(hoy['totalFacturasEmitidas']),
+      todayDeliveryNotes:
+          NotificationDataRepository._toInt(hoy['totalAlbaranes']),
+      todayAmount: NotificationDataRepository._toDouble(hoy['totalImporte']),
+      monthDocuments: NotificationDataRepository._toInt(mes['totalDocumentos']),
+      monthAmount: NotificationDataRepository._toDouble(mes['totalImporte']),
+    );
+  }
+
+  static CommissionsNotificationSnapshot? _commissionsFrom(
+    Object? raw,
+    DateTime now,
+  ) {
+    if (raw is! Map) return null;
+    final data = Map<String, dynamic>.from(raw);
+    final months = data['months'] as List? ?? const [];
+    final rawMonth = months.cast<dynamic>().firstWhere(
+          (item) =>
+              item is Map && (item['month'] as num?)?.toInt() == now.month,
+          orElse: () => null,
+        );
+    if (rawMonth is! Map) return null;
+    final month = Map<String, dynamic>.from(rawMonth);
+    final ctx = month['complianceCtx'] is Map
+        ? Map<String, dynamic>.from(month['complianceCtx'] as Map)
+        : <String, dynamic>{};
+    final payments = data['payments'] is Map
+        ? Map<String, dynamic>.from(data['payments'] as Map)
+        : <String, dynamic>{};
+    final monthlyPaid = payments['monthly'] is Map
+        ? Map<String, dynamic>.from(payments['monthly'] as Map)
+        : <String, dynamic>{};
+    return CommissionsNotificationSnapshot(
+      month: now.month,
+      currentSales: NotificationDataRepository._toDouble(month['actual']),
+      monthTarget: NotificationDataRepository._toDouble(month['target']),
+      monthCommission: NotificationDataRepository._toDouble(ctx['commission']),
+      paidThisMonth: NotificationDataRepository._toDouble(
+        monthlyPaid[now.month.toString()],
+      ),
+    );
+  }
+
+  static BolsaNotificationSnapshot? _bolsaFrom(Object? raw) {
+    if (raw is! Map) return null;
+    final data = Map<String, dynamic>.from(raw);
+    final vendedores = (data['vendedores'] as List? ?? const [])
+        .whereType<Map>()
+        .map(Map<String, dynamic>.from)
+        .toList(growable: false);
+    final totals = data['totals'] is Map
+        ? Map<String, dynamic>.from(data['totals'] as Map)
+        : data;
+    return BolsaNotificationSnapshot(
+      vendorCount: NotificationDataRepository._toInt(
+        data['vendorCount'] ?? vendedores.length,
+        fallback: vendedores.isEmpty ? 1 : vendedores.length,
+      ),
+      deficitCount: NotificationDataRepository._toInt(data['deficitCount']),
+      lowCount: NotificationDataRepository._toInt(data['lowCount']),
+      available: NotificationDataRepository._toDouble(
+        totals['saldoDisponible'] ?? data['saldoDisponible'],
+      ),
+      consumed: NotificationDataRepository._toDouble(
+        totals['consumido'] ?? data['consumido'],
+      ),
+      accumulated: NotificationDataRepository._toDouble(
+        totals['acumulado'] ?? data['acumulado'],
+      ),
+      vendorNames: vendedores
+          .map((item) => (item['vendedor'] ?? item['name'] ?? '').toString())
+          .where((name) => name.trim().isNotEmpty)
+          .take(3)
+          .toList(growable: false),
+    );
+  }
+
+  static SalesDayNotificationSnapshot? _salesDayFrom(
+    Object? metricsRaw,
+    Object? topRaw,
+    Object? statsRaw,
+  ) {
+    if (metricsRaw == null && topRaw == null && statsRaw == null) return null;
+    final metrics = metricsRaw is Map
+        ? Map<String, dynamic>.from(metricsRaw)
+        : const <String, dynamic>{};
+    final top = topRaw is Map
+        ? Map<String, dynamic>.from(topRaw)
+        : const <String, dynamic>{};
+    final stats = statsRaw is Map
+        ? Map<String, dynamic>.from(statsRaw)
+        : const <String, dynamic>{};
+    final fromList = topRaw is List ? topRaw : (top['clients'] as List? ?? top['data'] as List? ?? const []);
+    final names = fromList
+        .whereType<Map>()
+        .map((item) => item['name']?.toString() ?? '')
+        .where((name) => name.trim().isNotEmpty)
+        .take(3)
+        .toList(growable: false);
+    final dashboardSales = NotificationDataRepository._toDouble(
+      metrics['todaySales'],
+    );
+    final dashboardOrders = NotificationDataRepository._toInt(metrics['todayOrders']);
+    return SalesDayNotificationSnapshot(
+      sales: dashboardSales > 0
+          ? dashboardSales
+          : NotificationDataRepository._toDouble(stats['totalAmount']),
+      orders: dashboardOrders > 0
+          ? dashboardOrders
+          : NotificationDataRepository._toInt(stats['totalOrders']),
+      clients: NotificationDataRepository._toInt(metrics['uniqueClients']),
+      margin: NotificationDataRepository._toDouble(metrics['totalMargin']),
+      topClientNames: names,
+    );
+  }
 }
