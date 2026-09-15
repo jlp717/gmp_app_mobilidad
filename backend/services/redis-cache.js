@@ -27,6 +27,18 @@ const REDIS_PORT = parseInt(process.env.REDIS_PORT) || 6379;
 const REDIS_PASSWORD = process.env.REDIS_PASSWORD;
 const REDIS_CONNECT_TIMEOUT_MS = parseInt(process.env.REDIS_CONNECT_TIMEOUT_MS, 10) || 5000;
 const REDIS_COMMAND_TIMEOUT_MS = parseInt(process.env.REDIS_COMMAND_TIMEOUT_MS, 10) || 1000;
+const REDIS_RECONNECT_WATCHDOG_MS = 30000;
+
+/**
+ * node-redis reconnect delay. Never returns false — Redis must keep retrying.
+ * Caps exponential backoff at retries=7 (~25.6s) then 30s.
+ */
+function redisReconnectDelay(retries) {
+    if (retries > 0 && retries % 10 === 0) {
+        logger.warn(`[RedisCache] Redis reconnect attempt ${retries}, still retrying`);
+    }
+    return Math.min(30000, 200 * (2 ** Math.min(retries, 7)));
+}
 
 const REDIS_CONFIG = {
     url: process.env.REDIS_URL || `redis://${REDIS_HOST}:${REDIS_PORT}`,
@@ -40,13 +52,7 @@ const REDIS_CONFIG = {
         connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
         keepAlive: true,
         keepAliveInitialDelay: 10000,
-        reconnectStrategy: (retries) => {
-            if (retries > 10) {
-                logger.warn('[RedisCache] Max retries reached, continuing without Redis');
-                return false; // Stop reconnecting
-            }
-            return Math.min(retries * 200, 3000);
-        },
+        reconnectStrategy: redisReconnectDelay,
     },
 };
 
@@ -87,6 +93,8 @@ class RedisCacheService {
         // caches that live OUTSIDE this module (e.g. laclae ruteroConfigCache)
         // react to cross-instance invalidations without a require cycle.
         this._patternHooks = [];
+        this._initInFlight = null;
+        this._reconnectWatchdog = null;
         this.stats = {
             hits: { l1: 0, l2: 0 },
             misses: 0,
@@ -94,6 +102,21 @@ class RedisCacheService {
             invalidations: 0,
             byNamespace: {},
         };
+        this._ensureReconnectWatchdog();
+    }
+
+    _ensureReconnectWatchdog() {
+        if (this._reconnectWatchdog) return;
+        this._reconnectWatchdog = setInterval(() => {
+            if (!this.isConnected) {
+                this.init().catch((error) => {
+                    logger.warn(`[RedisCache] Watchdog re-init failed: ${error.message}`);
+                });
+            }
+        }, REDIS_RECONNECT_WATCHDOG_MS);
+        if (typeof this._reconnectWatchdog.unref === 'function') {
+            this._reconnectWatchdog.unref();
+        }
     }
 
     _recordNamespace(namespace, field) {
@@ -108,28 +131,47 @@ class RedisCacheService {
      * Initialize Redis connection with OPTIMIZED pool settings
      */
     async init() {
-        // Silently skip Redis init if the package failed to load
+        this._ensureReconnectWatchdog();
         if (!Redis) {
             logger.warn('[RedisCache] ⚠️ Redis package not available, using L1 cache only');
             return true;
         }
+        if (this._initInFlight) {
+            return this._initInFlight;
+        }
+        this._initInFlight = this._initInternal().finally(() => {
+            this._initInFlight = null;
+        });
+        return this._initInFlight;
+    }
+
+    async _initInternal() {
+        if (this.client) {
+            if (this.isConnected) return true;
+            try {
+                if (!this.client.isOpen) {
+                    await this._withTimeout(this.client.connect(), REDIS_CONNECT_TIMEOUT_MS, 'reconnect');
+                }
+            } catch (error) {
+                logger.warn(`[RedisCache] ⚠️ Redis unavailable, using L1 cache only: ${error.message}`);
+                this.isConnected = false;
+            }
+            return true;
+        }
         try {
-            // Main client for read/write
             this.client = Redis.createClient(REDIS_CONFIG);
 
-            // Event handlers
             this.client.on('connect', () => {
                 logger.info('[RedisCache] ✅ Connected to Redis');
-                this.isConnected = true;
-                this._flushPendingCommands();
             });
 
             this.client.on('ready', () => {
                 logger.info('[RedisCache] ✅ Redis ready for operations');
+                this.isConnected = true;
+                this._flushPendingCommands();
             });
 
             this.client.on('error', (err) => {
-                // Only log critical errors, not connection issues
                 if (err.message && !err.message.includes('ECONNREFUSED') && !err.message.includes('ETIMEDOUT')) {
                     logger.warn(`[RedisCache] ⚠️ Redis error: ${err.message}`);
                 }
@@ -137,13 +179,11 @@ class RedisCacheService {
             });
 
             this.client.on('reconnecting', () => {
-                logger.warn('[RedisCache] 🔄 Redis reconnecting...');
+                logger.info('[RedisCache] 🔄 Redis reconnecting...');
             });
 
-            // Connect with timeout
             await this._withTimeout(this.client.connect(), REDIS_CONNECT_TIMEOUT_MS, 'connect');
 
-            // Setup pub/sub only if connected
             try {
                 this.subscriber = this.client.duplicate();
                 await this._withTimeout(this.subscriber.connect(), REDIS_CONNECT_TIMEOUT_MS, 'subscriber connect');
@@ -157,7 +197,6 @@ class RedisCacheService {
         } catch (error) {
             logger.warn(`[RedisCache] ⚠️ Redis unavailable, using L1 cache only: ${error.message}`);
             this.isConnected = false;
-            // Continue without throwing - L1 cache still works
             return true;
         }
     }
@@ -798,6 +837,8 @@ const redisCache = new RedisCacheService();
 // Export TTL constants and service
 module.exports = {
     redisCache,
+    redisReconnectDelay,
+    REDIS_RECONNECT_WATCHDOG_MS,
     TTL,
     // Convenience methods
     initCache: () => redisCache.init(),
