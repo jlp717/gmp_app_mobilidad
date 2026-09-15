@@ -143,6 +143,10 @@ class _MainShellState extends ConsumerState<MainShell> {
   String? _pendingClientName;
   String? _pendingClientRepartidorId;
 
+  List<Widget>? _cachedShellPages;
+  String? _cachedShellPagesKey;
+  String? _cachedHotIndexKey;
+
   @override
   void initState() {
     super.initState();
@@ -1879,6 +1883,34 @@ class _MainShellState extends ConsumerState<MainShell> {
     _onSessionReady(user, authState?.activeMode);
   }
 
+  List<Widget> _reuseIndexedPages({
+    required String cacheKey,
+    required int length,
+    required Widget Function(int idx) pageBuilder,
+    int? hotIndex,
+    String? hotIndexKey,
+  }) {
+    final mustRebuildAll = _cachedShellPages == null ||
+        _cachedShellPagesKey != cacheKey ||
+        _cachedShellPages!.length != length;
+    if (mustRebuildAll) {
+      _cachedShellPages = List<Widget>.generate(length, pageBuilder);
+      _cachedShellPagesKey = cacheKey;
+      _cachedHotIndexKey = hotIndexKey;
+      return _cachedShellPages!;
+    }
+    if (hotIndex != null &&
+        hotIndexKey != _cachedHotIndexKey &&
+        hotIndex >= 0 &&
+        hotIndex < _cachedShellPages!.length) {
+      final next = List<Widget>.of(_cachedShellPages!);
+      next[hotIndex] = pageBuilder(hotIndex);
+      _cachedShellPages = next;
+      _cachedHotIndexKey = hotIndexKey;
+    }
+    return _cachedShellPages!;
+  }
+
   Widget _buildCurrentPage(bool isJefeVentas) {
     if (widget.contentOverride != null) return widget.contentOverride!;
 
@@ -2032,15 +2064,23 @@ class _MainShellState extends ConsumerState<MainShell> {
       final historyTabIdx = navIndexOf('Histórico');
       final content = LazyIndexedStack(
         index: _currentIndex,
-        children: List.generate(navItems.length, (idx) {
-          final pendingKeyPart = idx == historyTabIdx
-              ? '_${_pendingClientId ?? ""}_${_pendingClientRepartidorId ?? ""}'
-              : '';
-          return KeyedSubtree(
-            key: ValueKey('rutero_view_${repartidorId}_$idx$pendingKeyPart'),
-            child: pageForIndex(idx),
-          );
-        }),
+        children: _reuseIndexedPages(
+          cacheKey:
+              'rep|$repartidorId|$isJefe|${navItems.map((item) => item.label).join('|')}',
+          length: navItems.length,
+          pageBuilder: (idx) {
+            final pendingKeyPart = idx == historyTabIdx
+                ? '_${_pendingClientId ?? ""}_${_pendingClientRepartidorId ?? ""}'
+                : '';
+            return KeyedSubtree(
+              key: ValueKey('rutero_view_${repartidorId}_$idx$pendingKeyPart'),
+              child: pageForIndex(idx),
+            );
+          },
+          hotIndex: historyTabIdx,
+          hotIndexKey:
+              '${_pendingClientId}|${_pendingClientName}|${_pendingClientRepartidorId}',
+        ),
       );
 
       if (isJefe) {
@@ -2144,13 +2184,18 @@ class _MainShellState extends ConsumerState<MainShell> {
 
       return LazyIndexedStack(
         index: _currentIndex,
-        children: List.generate(jefeNav.length, (idx) {
-          final label = idx < jefeNav.length ? jefeNav[idx].label : '';
-          return KeyedSubtree(
-            key: ValueKey('jefe_tab_$label'),
-            child: jefePageForIndex(idx),
-          );
-        }),
+        children: _reuseIndexedPages(
+          cacheKey:
+              'jefe|$employeeCode|${jefeNav.map((item) => item.label).join('|')}',
+          length: jefeNav.length,
+          pageBuilder: (idx) {
+            final label = idx < jefeNav.length ? jefeNav[idx].label : '';
+            return KeyedSubtree(
+              key: ValueKey('jefe_tab_$label'),
+              child: jefePageForIndex(idx),
+            );
+          },
+        ),
       );
     }
 
@@ -2296,13 +2341,19 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     return LazyIndexedStack(
       index: _currentIndex,
-      children: List.generate(comercialNav.length, (idx) {
-        final label = idx < comercialNav.length ? comercialNav[idx].label : '';
-        return KeyedSubtree(
-          key: ValueKey('comercial_tab_$label'),
-          child: comercialPageForIndex(idx),
-        );
-      }),
+      children: _reuseIndexedPages(
+        cacheKey:
+            'com|$empCode|$apiAggregateCode|$isTeamAggregateView|$hasScopedVendorAccess|$selectedScopedVendor|${comercialNav.map((item) => item.label).join('|')}',
+        length: comercialNav.length,
+        pageBuilder: (idx) {
+          final label =
+              idx < comercialNav.length ? comercialNav[idx].label : '';
+          return KeyedSubtree(
+            key: ValueKey('comercial_tab_$label'),
+            child: comercialPageForIndex(idx),
+          );
+        },
+      ),
     );
   }
 }
