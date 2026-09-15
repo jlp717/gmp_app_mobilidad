@@ -6,6 +6,11 @@ const { db2InsertSql } = require('../utils/db2-identifiers');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 const logger = require('../middleware/logger');
+const {
+  buildReturnPdfPath,
+  buildDevolucionPdfBuffer,
+  devolucionPdfFileName,
+} = require('./comercial-devolucion-pdf-service');
 
 const TEST_LIQUIDACION_TABLE = 'JAVIER.TEST_LIQUIDACION_COMERCIAL';
 const TEST_DEVOLUCIONES_TABLE = 'JAVIER.TEST_DEVOLUCIONES_COMERCIAL';
@@ -117,22 +122,26 @@ function mapReturnRow(row) {
   const day = Number(row.DAY) || 0;
   const serie = String(row.SERIE || '').trim();
   const numero = String(row.NUMERO == null ? '' : row.NUMERO).trim();
+  const vendedor = String(row.VENDEDOR || '').trim();
+  const date = year && month && day
+    ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    : null;
+  const diasFp = Number.parseInt(row.DIAS_FP ?? row.FORMA_PAGO_DIAS, 10);
   return {
     year,
     month,
     day,
-    date: year && month && day
-      ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-      : null,
+    date,
     serie,
     numero,
     documento: serie && numero ? `${serie}-${numero}` : serie || numero,
     cliente: String(row.CLIENTE || '').trim(),
-    vendedor: String(row.VENDEDOR || '').trim(),
+    vendedor,
     amount: money(row.AMOUNT),
     units: money(row.UNITS),
     yaCobrada: Number(row.YA_COBRADA) === 1,
     formaPago: String(row.FORMA_PAGO || '').trim() || null,
+    formaPagoDias: Number.isFinite(diasFp) && diasFp > 0 ? diasFp : null,
     source: String(row.SOURCE || 'DSED.LACLAE').trim() || 'DSED.LACLAE',
     documentoOrigen: String(row.DOCUMENTO_ORIGEN || '').trim() || null,
     albaranOrigen: String(row.ALBARAN_ORIGEN || '').trim() || null,
@@ -140,7 +149,62 @@ function mapReturnRow(row) {
     impactoLqd: String(row.IMPACTO_LQD || '').trim()
       || (Number(row.YA_COBRADA) === 1 ? 'YA_COBRADOS' : 'NO_COBRADA'),
     pendienteTecnicoMovimiento: String(row.SOURCE || '').startsWith('JAVIER.TEST_'),
+    pdfUrl: buildReturnPdfPath({
+      vendedor,
+      fecha: date,
+      serie,
+      numero,
+    }),
   };
+}
+
+async function lookupFormaPagoDias(formaPago, deps = {}) {
+  const run = deps.queryWithParams || queryWithParams;
+  const code = String(formaPago || '').trim().substring(0, 2).toUpperCase();
+  if (!code) return null;
+  try {
+    const rows = await run(
+      `SELECT NUMERODIASVENCIMIENTO AS DIAS
+         FROM DSEDAC.FPG
+        WHERE TRIM(CODIGOFORMAPAGO) = CAST(? AS CHAR(2))
+        FETCH FIRST 1 ROW ONLY`,
+      [code],
+    );
+    const dias = Number.parseInt(rows?.[0]?.DIAS, 10);
+    return Number.isFinite(dias) && dias > 0 ? dias : null;
+  } catch (error) {
+    logger.warn('[COMERCIAL_LIQUIDACION] FPG days lookup skipped', { error: error.message });
+    return null;
+  }
+}
+
+async function getVendorMinimoCobro(vendorCodes, deps = {}) {
+  const run = deps.queryWithParams || queryWithParams;
+  const vendor = sanitizeVendorCodes(vendorCodes)[0];
+  if (!vendor) return 0;
+  try {
+    const cols = await run(
+      `SELECT COLUMN_NAME
+         FROM QSYS2.SYSCOLUMNS
+        WHERE TABLE_SCHEMA = ?
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+        FETCH FIRST 1 ROW ONLY`,
+      ['DSEDAC', 'VDDX', 'PORCENTAJEMINIMOCOBRO'],
+    );
+    if (!(cols || []).length) return 0;
+    const rows = await run(
+      `SELECT COALESCE(PORCENTAJEMINIMOCOBRO, 0) AS PCT
+         FROM DSEDAC.VDDX
+        WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
+        FETCH FIRST 1 ROW ONLY`,
+      [vendor],
+    );
+    return Number(rows?.[0]?.PCT) || 0;
+  } catch (error) {
+    logger.warn('[COMERCIAL_LIQUIDACION] VDDX minimo cobro skipped', { error: error.message });
+    return 0;
+  }
 }
 
 function returnDocKey(item) {
@@ -291,9 +355,11 @@ async function listTestReturns({
   const run = deps.queryWithParams || queryWithParams;
   const parsedDate = parseIsoDate(date);
   if (!parsedDate) return [];
-  const vendorFilter = buildVendorInClause('VENDEDOR', vendorCodes);
+  const vendorFilter = buildVendorInClause('D.VENDEDOR', vendorCodes);
+  const vendorFilterPlain = buildVendorInClause('VENDEDOR', vendorCodes);
   const client = String(clientCode || '').trim().substring(0, 10);
-  const clientClause = client ? 'AND TRIM(CLIENTE) = CAST(? AS VARCHAR(10))' : '';
+  const clientClause = client ? 'AND TRIM(D.CLIENTE) = CAST(? AS VARCHAR(10))' : '';
+  const clientClausePlain = client ? 'AND TRIM(CLIENTE) = CAST(? AS VARCHAR(10))' : '';
   const fetchLimit = Math.min(Math.max(Number(limit) || 100, 1), 200);
   const sql = `
     SELECT YEAR(FECHA) AS YEAR,
@@ -310,9 +376,12 @@ async function listTestReturns({
            TRIM(COALESCE(FORMA_PAGO, '')) AS FORMA_PAGO,
            TRIM(COALESCE(ALBARAN_ORIGEN, '')) AS ALBARAN_ORIGEN,
            VARCHAR_FORMAT(VENCIMIENTO, 'YYYY-MM-DD') AS VENCIMIENTO,
-           TRIM(COALESCE(IMPACTO_LQD, '')) AS IMPACTO_LQD
-      FROM ${TEST_DEVOLUCIONES_TABLE}
-     WHERE FECHA = ?
+           TRIM(COALESCE(IMPACTO_LQD, '')) AS IMPACTO_LQD,
+           COALESCE(FORMA_PAGO_DIAS, FPG.NUMERODIASVENCIMIENTO) AS DIAS_FP
+      FROM ${TEST_DEVOLUCIONES_TABLE} D
+      LEFT JOIN DSEDAC.FPG FPG
+        ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(COALESCE(D.FORMA_PAGO, ''))
+     WHERE D.FECHA = ?
        ${vendorFilter.clause}
        ${clientClause}
      ORDER BY IMPORTE ASC
@@ -346,8 +415,8 @@ async function listTestReturns({
                TRIM(COALESCE(DOCUMENTO_ORIGEN, '')) AS DOCUMENTO_ORIGEN
           FROM ${TEST_DEVOLUCIONES_TABLE}
          WHERE FECHA = ?
-           ${vendorFilter.clause}
-           ${clientClause}
+           ${vendorFilterPlain.clause}
+           ${clientClausePlain}
          ORDER BY IMPORTE ASC
          FETCH FIRST ${fetchLimit} ROWS ONLY
       `;
@@ -412,7 +481,9 @@ async function listPgCollectedDocuments({
            TRIM(CAC.SERIEFACTURA) AS SERIE_FAC,
            CAC.TERMINALFACTURA AS TERM_FAC,
            CAC.NUMEROFACTURA AS NUM_FAC,
-           FPG.NUMERODIASVENCIMIENTO AS DIAS_FP
+           FPG.NUMERODIASVENCIMIENTO AS DIAS_FP,
+           TRIM(COALESCE(CLX.COBRORIGUROSOSN, '')) AS SN_CLX,
+           COALESCE(CLX.PORCENTAJECOBRORIGUROSO, 0) AS PCT_CLX
       FROM DSEDAC.CVC CVC
       JOIN DSEDAC.CAC CAC
         ON CAC.EJERCICIOFACTURA = CVC.EJERCICIODOCUMENTO
@@ -420,6 +491,8 @@ async function listPgCollectedDocuments({
        AND CAC.NUMEROFACTURA = CVC.NUMERODOCUMENTO
       LEFT JOIN DSEDAC.FPG FPG
         ON FPG.CODIGOFORMAPAGO = CVC.CODIGOFORMAPAGO
+      LEFT JOIN DSEDAC.CLX CLX
+        ON CLX.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
      WHERE CVC.TIPODOCUMENTO = CAST(? AS CHAR(3))
        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
        AND CVC.IMPORTEPENDIENTE = 0
@@ -432,7 +505,16 @@ async function listPgCollectedDocuments({
   `;
   const params = ['PAG', 'S', ...vendorFilter.params];
   if (client) params.push(client, client);
-  const rows = await run(sql, params);
+  let rows;
+  try {
+    rows = await run(sql, params);
+  } catch (error) {
+    if (!isColumnMissingError(error)) throw error;
+    const fallbackSql = sql
+      .replace(/,\s*TRIM\(COALESCE\(CLX\.COBRORIGUROSOSN, ''\)\) AS SN_CLX,\s*COALESCE\(CLX\.PORCENTAJECOBRORIGUROSO, 0\) AS PCT_CLX/, '')
+      .replace(/\s*LEFT JOIN DSEDAC\.CLX CLX\s+ON CLX\.CODIGOCLIENTE = CAC\.CODIGOCLIENTEFACTURA/, '');
+    rows = await run(fallbackSql, params);
+  }
   const seen = new Set();
   const docs = [];
   for (const row of rows || []) {
@@ -484,6 +566,8 @@ async function listPgCollectedDocuments({
       }) || null,
       impactoLqd: 'YA_COBRADOS',
       yaCobrada: true,
+      cobroRiguroso: String(row.SN_CLX || '').trim().toUpperCase() === 'S',
+      porcentajeMinimoCobro: Number(row.PCT_CLX) || 0,
     });
   }
   return docs;
@@ -602,11 +686,12 @@ async function getDailySummary({
     throw error;
   }
 
-  const [cobros, returns, lqd, savedDraft] = await Promise.all([
+  const [cobros, returns, lqd, savedDraft, porcentajeMinimoVendedor] = await Promise.all([
     getDailyCobrosByFormaPago({ vendorCodes, date: parsedDate.iso }, deps),
     listReturns({ vendorCodes, date: parsedDate.iso }, deps),
     getLqdForVendorDay({ vendorCodes, date: parsedDate.iso }, deps),
     getSavedDraft({ vendorCodes, date: parsedDate.iso }, deps),
+    getVendorMinimoCobro(vendorCodes, deps),
   ]);
 
   const devolucionesYaCobradas = returns.reduce(
@@ -638,6 +723,11 @@ async function getDailySummary({
     lqd,
     savedDraft,
     summary,
+    minimoCobro: {
+      porcentajeMinimoVendedor: Number(porcentajeMinimoVendedor) || 0,
+      source: 'DSEDAC.VDDX.PORCENTAJEMINIMOCOBRO',
+      clienteSource: 'DSEDAC.CLX.PORCENTAJECOBRORIGUROSO',
+    },
   };
 }
 
@@ -898,6 +988,7 @@ async function registerReturn({
   const impacto = String(impactoLqd || (collected ? 'YA_COBRADOS' : 'NO_COBRADA'))
     .trim()
     .substring(0, 20) || 'YA_COBRADOS';
+  const formaPagoDias = await lookupFormaPagoDias(fpCode, deps);
 
   const existing = await run(
     `SELECT SERIE, NUMERO, TRIM(CLIENTE) AS CLIENTE, IMPORTE, YA_COBRADA
@@ -934,6 +1025,7 @@ async function registerReturn({
         ALBARAN_ORIGEN: alb,
         VENCIMIENTO: vto?.iso,
         IMPACTO_LQD: impacto,
+        FORMA_PAGO_DIAS: formaPagoDias,
         SOURCE: TEST_DEVOLUCIONES_TABLE,
       }),
       idempotent: true,
@@ -951,6 +1043,7 @@ async function registerReturn({
     'IDEMPOTENCY_TOKEN', 'CREATED_BY',
   ];
   const extraColumns = ['FORMA_PAGO', 'ALBARAN_ORIGEN', 'VENCIMIENTO', 'IMPACTO_LQD'];
+  const extraWithDias = [...extraColumns, 'FORMA_PAGO_DIAS'];
   const baseParams = [
     serieCode,
     docNumero,
@@ -970,11 +1063,20 @@ async function registerReturn({
     vto ? vto.iso : null,
     impacto,
   ];
+  const extraParamsWithDias = [...extraParams, formaPagoDias];
   try {
-    await run(
-      db2InsertSql(TEST_DEVOLUCIONES_TABLE, [...baseColumns, ...extraColumns]),
-      [...baseParams, ...extraParams],
-    );
+    try {
+      await run(
+        db2InsertSql(TEST_DEVOLUCIONES_TABLE, [...baseColumns, ...extraWithDias]),
+        [...baseParams, ...extraParamsWithDias],
+      );
+    } catch (diasError) {
+      if (!isColumnMissingError(diasError)) throw diasError;
+      await run(
+        db2InsertSql(TEST_DEVOLUCIONES_TABLE, [...baseColumns, ...extraColumns]),
+        [...baseParams, ...extraParams],
+      );
+    }
   } catch (error) {
     if (isTableMissingError(error)) {
       throw typedError(
@@ -1003,9 +1105,48 @@ async function registerReturn({
       ALBARAN_ORIGEN: alb,
       VENCIMIENTO: vto?.iso,
       IMPACTO_LQD: impacto,
+      FORMA_PAGO_DIAS: formaPagoDias,
       SOURCE: TEST_DEVOLUCIONES_TABLE,
     }),
     idempotent: false,
+  };
+}
+
+async function renderReturnPdf({
+  vendorCodes,
+  date,
+  serie,
+  numero,
+} = {}, deps = {}) {
+  const parsedDate = parseIsoDate(date);
+  if (!parsedDate) {
+    throw typedError('fecha invalida; usa YYYY-MM-DD', 'VALIDATION_ERROR', 400);
+  }
+  const serieCode = String(serie || '').trim();
+  const numeroCode = String(numero == null ? '' : numero).trim();
+  if (!serieCode || !numeroCode) {
+    throw typedError('serie y numero obligatorios', 'VALIDATION_ERROR', 400);
+  }
+  const overlay = await listTestReturns({
+    vendorCodes,
+    date: parsedDate.iso,
+  }, deps);
+  const item = overlay.find((row) => (
+    String(row.serie || '').trim() === serieCode
+    && String(row.numero || '').trim() === numeroCode
+  ));
+  if (!item) {
+    throw typedError('Documento de devolucion TEST no encontrado', 'NOT_FOUND', 404);
+  }
+  const buffer = await buildDevolucionPdfBuffer({
+    ...item,
+    factura: item.documentoOrigen,
+    albaranOrigen: item.albaranOrigen,
+  });
+  return {
+    buffer,
+    fileName: devolucionPdfFileName(item),
+    item,
   };
 }
 
@@ -1030,5 +1171,8 @@ module.exports = {
   getSavedDraft,
   saveLiquidacion,
   registerReturn,
+  lookupFormaPagoDias,
+  getVendorMinimoCobro,
+  renderReturnPdf,
   assertIsolatedTestWrites,
 };

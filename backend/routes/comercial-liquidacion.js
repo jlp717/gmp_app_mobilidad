@@ -11,6 +11,7 @@ const {
   getDailySummary,
   saveLiquidacion,
   registerReturn,
+  renderReturnPdf,
 } = require('../services/comercial-devoluciones-service');
 
 const router = express.Router();
@@ -96,6 +97,48 @@ function sendTypedError(res, error, fallbackCode) {
     error: status >= 500 ? 'Error interno del servidor' : (error?.message || 'Solicitud invalida'),
   });
 }
+
+function wantsPdf(req) {
+  const accept = String(req.get('Accept') || '').toLowerCase();
+  const format = String(req.query.format || req.body?.format || '').toLowerCase();
+  return accept.includes('application/pdf') || format === 'pdf';
+}
+
+function sendPdf(res, buffer, fileName) {
+  const safeName = String(fileName || 'DEVOLUCION.pdf').replace(/[\r\n"]/g, '');
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `inline; filename="${safeName}"`);
+  return res.send(buffer);
+}
+
+router.get('/devoluciones/pdf', async (req, res) => {
+  try {
+    const vendors = resolveVendorCodes(req);
+    if (vendors.error) return forbidden(res, vendors.error);
+    const fecha = resolveDate(req);
+    if (fecha.error) {
+      return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', error: fecha.error });
+    }
+    const serie = String(req.query.serie || '').trim();
+    const numero = String(req.query.numero || '').trim();
+    if (!serie || !numero) {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        error: 'serie y numero obligatorios',
+      });
+    }
+    const rendered = await renderReturnPdf({
+      vendorCodes: vendors.codes,
+      date: fecha.date,
+      serie,
+      numero,
+    });
+    return sendPdf(res, rendered.buffer, rendered.fileName);
+  } catch (error) {
+    return sendTypedError(res, error, 'DEVOLUCION_PDF_ERROR');
+  }
+});
 
 router.get('/devoluciones', async (req, res) => {
   try {
@@ -224,6 +267,15 @@ router.post('/devoluciones', async (req, res) => {
       createdBy: getContext(req).userId,
       idempotencyToken: req.get('Idempotency-Key') || body.idempotencyToken,
     });
+    if (wantsPdf(req)) {
+      const rendered = await renderReturnPdf({
+        vendorCodes: vendors.codes,
+        date: created.date || fecha.date,
+        serie: created.serie,
+        numero: created.numero,
+      });
+      return sendPdf(res.status(created.idempotent ? 200 : 201), rendered.buffer, rendered.fileName);
+    }
     return res.status(created.idempotent ? 200 : 201).json({
       success: true,
       return: created,
