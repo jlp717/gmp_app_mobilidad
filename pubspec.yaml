@@ -96,7 +96,9 @@ flutter_icons:
 flutter:
   uses-material-design: true
   assets:
-    - assets/load_planner/
-    - assets/load_planner/lib/
+    - assets/load_planner/index.html
+    - assets/load_planner/load_planner_3d.global.js
+    - assets/load_planner/lib/three.global.js
+    - assets/load_planner/lib/OrbitControls.global.js
     - assets/rutero_map/
     - assets/branding/ticket_header.png

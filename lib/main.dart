@@ -24,11 +24,13 @@ import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/main_she
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_offline.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  GoogleFonts.config.allowRuntimeFetching = false;
   configureDependencies();
   if (kDebugMode) {
     ApiConfig.setDevelopment();

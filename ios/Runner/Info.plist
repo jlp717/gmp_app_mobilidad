@@ -50,6 +50,12 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>GMP usa Bluetooth para imprimir tickets y etiquetas en la impresora del repartidor.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>GMP usa la cámara para adjuntar fotos de entrega y evidencia de cobro.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>GMP accede a tus fotos para adjuntar evidencia de entrega y cobro.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>GMP usa tu ubicación mientras haces el rutero para mostrar tu avance y la próxima parada.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

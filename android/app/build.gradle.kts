@@ -64,9 +64,14 @@ android {
 
     buildTypes {
         getByName("release") {
-            // Disabled due to NDK strip issue on Windows - AAB is still valid
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8/ProGuard: canonical builder is CI Linux. If Windows NDK strip
+            // fails locally, skip local minify and rely on flutter-release.yml.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = signingConfigs.getByName("release")
         }
     }
