@@ -20,11 +20,11 @@ class Db2ConnectionPool {
   }
 
   async execute(sql) {
-    return query(sql, true, true);
+    return query(sql, false, true);
   }
 
   async executeParams(sql, params) {
-    return queryWithParams(sql, params, true, true);
+    return queryWithParams(sql, params, false, true);
   }
 
   async executeSilent(sql) {

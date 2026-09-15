@@ -53,7 +53,7 @@ async function refreshCacheIfNeeded() {
     try {
         // FI1 - Categorías principales
         const fi1Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI1 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
-        const fi1Result = await query(fi1Sql, true, true);
+        const fi1Result = await query(fi1Sql, false, true);
         logger.info(`🔍 FI1 raw result: ${fi1Result.length} rows, sample keys: ${fi1Result[0] ? Object.keys(fi1Result[0]).join(', ') : 'empty'}`);
         
         filtersCache.fi1 = fi1Result.map(f => {
@@ -66,7 +66,7 @@ async function refreshCacheIfNeeded() {
 
         // FI2 - Subcategorías
         const fi2Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI2 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
-        const fi2Result = await query(fi2Sql, true, true);
+        const fi2Result = await query(fi2Sql, false, true);
         logger.info(`🔍 FI2 raw result: ${fi2Result.length} rows`);
         
         filtersCache.fi2All = fi2Result.map(f => {
@@ -78,7 +78,7 @@ async function refreshCacheIfNeeded() {
 
         // FI3 - Atributos adicionales
         const fi3Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI3 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
-        const fi3Result = await query(fi3Sql, true, true);
+        const fi3Result = await query(fi3Sql, false, true);
         logger.info(`🔍 FI3 raw result: ${fi3Result.length} rows`);
         
         filtersCache.fi3All = fi3Result.map(f => {
@@ -90,7 +90,7 @@ async function refreshCacheIfNeeded() {
 
         // FI4 - Características especiales
         const fi4Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI4 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
-        const fi4Result = await query(fi4Sql, true, true);
+        const fi4Result = await query(fi4Sql, false, true);
         logger.info(`🔍 FI4 raw result: ${fi4Result.length} rows`);
         
         filtersCache.fi4All = fi4Result.map(f => {
@@ -102,7 +102,7 @@ async function refreshCacheIfNeeded() {
 
         // FI5 - Secciones/Tipo conservación
         const fi5Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI5 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
-        const fi5Result = await query(fi5Sql, true, true);
+        const fi5Result = await query(fi5Sql, false, true);
         logger.info(`🔍 FI5 raw result: ${fi5Result.length} rows`);
         
         filtersCache.fi5 = fi5Result.map(f => {
@@ -233,7 +233,7 @@ router.get('/fi3', async (req, res) => {
                 AND x.FILTRO03 IS NOT NULL
                 AND TRIM(x.FILTRO03) <> ''
             `;
-            const fi3Filtered = await queryWithParams(fi3Sql, params, true, true);
+            const fi3Filtered = await queryWithParams(fi3Sql, params, false, true);
             logger.info(`🔍 FI3 filtrados: ${fi3Filtered.length} códigos`);
 
             const codesInUse = new Set(
@@ -283,7 +283,7 @@ router.get('/fi4', async (req, res) => {
                 AND x.FILTRO04 IS NOT NULL
                 AND TRIM(x.FILTRO04) <> ''
             `;
-            const fi4Filtered = await queryWithParams(fi4Sql, params, true, true);
+            const fi4Filtered = await queryWithParams(fi4Sql, params, false, true);
             logger.info(`🔍 FI4 filtrados: ${fi4Filtered.length} códigos`);
 
             const codesInUse = new Set(
