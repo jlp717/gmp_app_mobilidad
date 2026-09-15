@@ -5,6 +5,9 @@ import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:intl/intl.dart';
 
+final NumberFormat _headerCurrency =
+    NumberFormat.currency(symbol: '€', locale: 'es_ES');
+
 class RuteroDetailHeader extends StatelessWidget {
   const RuteroDetailHeader({
     required this.albaran,
@@ -197,8 +200,9 @@ class RuteroDetailHeader extends StatelessWidget {
           Text(
             pendingPrice
                 ? 'Pendiente'
-                : NumberFormat.currency(symbol: '€', locale: 'es_ES')
-                    .format(liveImporteTotal ?? albaran.importeTotal),
+                : _headerCurrency.format(
+                    liveImporteTotal ?? albaran.importeTotal,
+                  ),
             style: TextStyle(
               color: pendingPrice
                   ? AppTheme.warning

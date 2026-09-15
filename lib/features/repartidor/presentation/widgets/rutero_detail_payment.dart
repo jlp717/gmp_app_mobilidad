@@ -19,6 +19,9 @@ const kRuteroPaymentMethodCodes = <String>[
   'TALON',
 ];
 
+final NumberFormat _paymentCurrency =
+    NumberFormat.currency(symbol: '€', locale: 'es_ES');
+
 const kRuteroPaymentMethodIcons = <String, IconData>{
   'EFECTIVO': Icons.money,
   'TARJETA': Icons.credit_card,
@@ -222,7 +225,7 @@ class RuteroDetailPayment extends StatelessWidget {
     final showsDocumentTotal = _hasCollectibleBalance &&
         !albaran.isPendingPrice &&
         (documentTotal - collectable).abs() > 0.01;
-    final currency = NumberFormat.currency(symbol: '€', locale: 'es_ES');
+    final currency = _paymentCurrency;
     return Semantics(
       label: _hasCollectibleBalance
           ? 'Saldo cobrable de $scopePhrase, '

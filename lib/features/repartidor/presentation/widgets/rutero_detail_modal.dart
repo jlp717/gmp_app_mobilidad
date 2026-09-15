@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -3374,7 +3375,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       _cachedPdfBase64 = pdfData;
       modal.close();
       await Printing.layoutPdf(
-        onLayout: (_) async => Uint8List.fromList(base64Decode(pdfData)),
+        onLayout: (_) async =>
+            Uint8List.fromList(await Isolate.run(() => base64Decode(pdfData))),
       );
     } catch (error) {
       modal.close();
@@ -3819,7 +3821,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       modal.close();
       if (!mounted) return;
 
-      final pdfBytes = base64Decode(pdfData);
+      final pdfBytes = await Isolate.run(() => base64Decode(pdfData));
       const title = 'Nota de entrega';
       final fileName = 'Nota_Entrega_${widget.albaran.erpDocumentId}.pdf';
 

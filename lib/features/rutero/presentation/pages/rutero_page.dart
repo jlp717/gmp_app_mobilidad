@@ -21,6 +21,8 @@ import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_we
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+final NumberFormat _ruteroAmount = NumberFormat('#,##0.00', 'es_ES');
+
 /// Rutero Page - Premium Design with Visit/Delivery Toggle
 /// Shows clients to visit/deliver each day with YoY comparison
 class RuteroPage extends ConsumerStatefulWidget {
@@ -74,6 +76,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   String _selectedAlertType = 'ALL';
   bool _onlyWithAlerts = false;
   Set<String> _kpiFilteredCodes = {};
+  String? _visibleClientsFingerprint;
+  List<Map<String, dynamic>> _visibleClientsCache = const [];
   // Sort mode options - Professional labels
   static const Map<String, String> _sortModeLabels = {
     'sales_desc': 'Mayor Acumulado',
@@ -634,19 +638,92 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   // Currency formatting WITHOUT rounding
   String _formatCurrency(double value) {
     if (value.isNaN || value.isInfinite) return '0,00 €';
-    return '${NumberFormat('#,##0.00', 'es_ES').format(value)} €';
+    return '${_ruteroAmount.format(value)} €';
   }
 
   String _formatVariation(double variation) {
     if (variation.isNaN || variation.isInfinite) return '+0,00 €';
     final sign = variation >= 0 ? '+' : '';
-    return '$sign${NumberFormat('#,##0.00', 'es_ES').format(variation)} €';
+    return '$sign${_ruteroAmount.format(variation)} €';
+  }
+
+  List<Map<String, dynamic>> _memoizedVisibleClients() {
+    final fingerprint =
+        '$_searchQuery|$_sortMode|$_onlyWithAlerts|$_selectedAlertType|${identityHashCode(_dayClients)}|${identityHashCode(_kpiFilteredCodes)}';
+    if (_visibleClientsFingerprint == fingerprint) {
+      return _visibleClientsCache;
+    }
+
+    final filteredClients = _dayClients.where((client) {
+      final code = (client['code'] as String?) ?? '';
+
+      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
+        if (!_kpiFilteredCodes.contains(code)) return false;
+      }
+
+      if (_searchQuery.isNotEmpty) {
+        final name = (client['name'] as String?)?.toLowerCase() ?? '';
+        final address = (client['address'] as String?)?.toLowerCase() ?? '';
+        final city = (client['city'] as String?)?.toLowerCase() ?? '';
+
+        final q = _searchQuery.toLowerCase();
+        return name.contains(q) ||
+            code.contains(q) ||
+            address.contains(q) ||
+            city.contains(q);
+      }
+
+      return true;
+    }).toList();
+
+    switch (_sortMode) {
+      case 'sales_desc':
+        filteredClients.sort((a, b) {
+          final salesA =
+              ((a['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
+                      ?.toDouble() ??
+                  0;
+          final salesB =
+              ((b['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
+                      ?.toDouble() ??
+                  0;
+          return salesB.compareTo(salesA);
+        });
+      case 'sales_asc':
+        filteredClients.sort((a, b) {
+          final salesA =
+              ((a['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
+                      ?.toDouble() ??
+                  0;
+          final salesB =
+              ((b['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
+                      ?.toDouble() ??
+                  0;
+          return salesA.compareTo(salesB);
+        });
+      case 'route':
+        break;
+      case 'custom':
+      default:
+        filteredClients.sort((a, b) {
+          final orderA = (a['order'] as int?) ?? 9999;
+          final orderB = (b['order'] as int?) ?? 9999;
+          if (orderA != orderB) return orderA.compareTo(orderB);
+          final nameA = (a['name'] as String?) ?? '';
+          final nameB = (b['name'] as String?) ?? '';
+          return nameA.compareTo(nameB);
+        });
+    }
+
+    _visibleClientsFingerprint = fingerprint;
+    _visibleClientsCache = filteredClients;
+    return filteredClients;
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final screenHeight = MediaQuery.of(context).size.height;
+    final screenHeight = MediaQuery.sizeOf(context).height;
     final isSmallScreen = screenHeight < 850;
 
     return Scaffold(
@@ -817,70 +894,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     }
 
     // Filter clients based on search query AND KPI alerts
-    final filteredClients = _dayClients.where((client) {
-      final code = (client['code'] as String?) ?? '';
-
-      // 1. KPI Filter (Alerts)
-      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
-        if (!_kpiFilteredCodes.contains(code)) return false;
-      }
-
-      // 2. Search Filter
-      if (_searchQuery.isNotEmpty) {
-        final name = (client['name'] as String?)?.toLowerCase() ?? '';
-        final address = (client['address'] as String?)?.toLowerCase() ?? '';
-        final city = (client['city'] as String?)?.toLowerCase() ?? '';
-
-        final q = _searchQuery.toLowerCase();
-        return name.contains(q) ||
-            code.contains(q) ||
-            address.contains(q) ||
-            city.contains(q);
-      }
-
-      return true;
-    }).toList();
-
-    // Apply sorting based on _sortMode
-    switch (_sortMode) {
-      case 'sales_desc':
-        filteredClients.sort((a, b) {
-          final salesA =
-              ((a['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
-                      ?.toDouble() ??
-                  0;
-          final salesB =
-              ((b['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
-                      ?.toDouble() ??
-                  0;
-          return salesB.compareTo(salesA); // Descending
-        });
-      case 'sales_asc':
-        filteredClients.sort((a, b) {
-          final salesA =
-              ((a['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
-                      ?.toDouble() ??
-                  0;
-          final salesB =
-              ((b['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
-                      ?.toDouble() ??
-                  0;
-          return salesA.compareTo(salesB); // Ascending
-        });
-      case 'route':
-        // Already sorted by API order
-        break;
-      case 'custom':
-      default:
-        filteredClients.sort((a, b) {
-          final orderA = (a['order'] as int?) ?? 9999;
-          final orderB = (b['order'] as int?) ?? 9999;
-          if (orderA != orderB) return orderA.compareTo(orderB);
-          final nameA = (a['name'] as String?) ?? '';
-          final nameB = (b['name'] as String?) ?? '';
-          return nameA.compareTo(nameB);
-        });
-    }
+    final filteredClients = _memoizedVisibleClients();
 
     // --- Empty States for Filtered Results ---
 

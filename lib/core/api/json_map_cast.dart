@@ -8,7 +8,13 @@ library;
 
 /// True when the map holds a list large enough to jank the UI thread.
 bool isBulkyJsonMap(Map<dynamic, dynamic> src) {
-  final bulky = src['rows'] ?? src['clients'] ?? src['data'] ?? src['items'];
+  final bulky = src['rows'] ??
+      src['clients'] ??
+      src['data'] ??
+      src['items'] ??
+      src['albaranes'] ??
+      src['documents'] ??
+      src['yearlyData'];
   return bulky is List && bulky.length >= 80;
 }
 
