@@ -57,11 +57,61 @@ class _RepartidorLiquidacionDiariaPageState
   RepartidorLiquidacionResult? _closedResult;
   final _ingresoBancoController = TextEditingController();
   bool _seededClassicFields = false;
+  bool _isRevalidating = false;
+  bool _softRefreshStarted = false;
 
   @override
   void dispose() {
     _ingresoBancoController.dispose();
     super.dispose();
+  }
+
+  void _kickSoftRefresh() {
+    if (_softRefreshStarted || widget.repartidorId.isEmpty) return;
+    _softRefreshStarted = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_softRefresh());
+    });
+  }
+
+  Future<void> _softRefresh() async {
+    if (!mounted) return;
+    setState(() => _isRevalidating = true);
+    try {
+      await ref.read(
+        repartidorDailySummaryProvider(
+          (
+            repartidorId: widget.repartidorId,
+            date: _sessionDate,
+            forceRefresh: true,
+          ),
+        ).future,
+      );
+      if (!mounted) return;
+      ref.invalidate(
+        repartidorDailySummaryProvider(
+          (
+            repartidorId: widget.repartidorId,
+            date: _sessionDate,
+            forceRefresh: false,
+          ),
+        ),
+      );
+      if (!widget.repartidorId.contains(',')) {
+        ref.invalidate(
+          repartidorLiquidacionLedgerProvider(
+            (
+              repartidorId: widget.repartidorId,
+              date: _sessionDate,
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // Keep the cached paint. POST close still requires the server.
+    } finally {
+      if (mounted) setState(() => _isRevalidating = false);
+    }
   }
 
   @override
@@ -103,8 +153,7 @@ class _RepartidorLiquidacionDiariaPageState
     final args = (
       repartidorId: widget.repartidorId,
       date: _sessionDate,
-      // Always revalidate with server: stale Hive cache was showing zeros.
-      forceRefresh: true,
+      forceRefresh: false,
     );
     final asyncSummary = ref.watch(repartidorDailySummaryProvider(args));
     final ledgerArgs = (repartidorId: widget.repartidorId, date: _sessionDate);
@@ -118,7 +167,21 @@ class _RepartidorLiquidacionDiariaPageState
     return Scaffold(
       backgroundColor: AppColors.inkSurface,
       body: asyncSummary.when(
-        data: (summary) => _buildForm(summary, asyncLedger, ledgerArgs),
+        data: (summary) {
+          _kickSoftRefresh();
+          return Column(
+            children: [
+              if (_isRevalidating)
+                const LinearProgressIndicator(
+                  minHeight: 2,
+                  color: AppColors.info,
+                ),
+              Expanded(
+                child: _buildForm(summary, asyncLedger, ledgerArgs),
+              ),
+            ],
+          );
+        },
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppColors.info),
         ),

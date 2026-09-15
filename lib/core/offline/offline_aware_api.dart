@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -37,6 +39,8 @@ enum DataSource { network, cache, stale }
 class OfflineAwareApi {
   const OfflineAwareApi._();
 
+  static final Map<String, DateTime> _revalidateCooldown = <String, DateTime>{};
+
   /// Whether we have verified real connectivity (not just a network interface).
   static bool get _isOnline =>
       ConnectivityService.instance.currentStatus == ConnectivityStatus.online;
@@ -46,12 +50,15 @@ class OfflineAwareApi {
   /// [cacheKey] is used for Hive cache storage.
   /// [cacheTTL] defaults to CacheService.longTTL (24h).
   /// Returns the data and a source indicator.
+  /// [revalidate] returns the cache immediately and refreshes it in the
+  /// background. Writes (POST liquidación) never go through this path.
   static Future<OfflineResult<Map<String, dynamic>>> get(
     String endpoint, {
     required String cacheKey,
     Map<String, dynamic>? queryParameters,
     Duration? cacheTTL,
     bool forceRefresh = false,
+    bool revalidate = false,
     CancelToken? cancelToken,
   }) async {
     if (forceRefresh) {
@@ -64,6 +71,15 @@ class OfflineAwareApi {
         final cached = CacheService.get<Map<String, dynamic>>(cacheKey);
         if (cached != null) {
           debugPrint('[OfflineAware] Cache HIT: $endpoint');
+          if (revalidate && _isOnline && !forceRefresh) {
+            _scheduleRevalidate(
+              endpoint: endpoint,
+              cacheKey: cacheKey,
+              queryParameters: queryParameters,
+              cacheTTL: cacheTTL,
+              cancelToken: cancelToken,
+            );
+          }
           return OfflineResult(
             data: _deepCastMap(cached),
             source: DataSource.cache,
@@ -118,6 +134,35 @@ class OfflineAwareApi {
         ? 'No hay datos disponibles y la conexión es limitada.'
         : 'No hay datos disponibles. Conéctate a internet y vuelve a intentarlo.';
     throw OfflineException(msg);
+  }
+
+  static void _scheduleRevalidate({
+    required String endpoint,
+    required String cacheKey,
+    Map<String, dynamic>? queryParameters,
+    Duration? cacheTTL,
+    CancelToken? cancelToken,
+  }) {
+    final last = _revalidateCooldown[cacheKey];
+    final now = DateTime.now();
+    if (last != null && now.difference(last) < const Duration(seconds: 15)) {
+      return;
+    }
+    _revalidateCooldown[cacheKey] = now;
+    unawaited(() async {
+      try {
+        await ApiClient.get(
+          endpoint,
+          queryParameters: queryParameters,
+          cacheKey: cacheKey,
+          cacheTTL: cacheTTL,
+          forceRefresh: true,
+          cancelToken: cancelToken,
+        );
+      } catch (error) {
+        debugPrint('[OfflineAware] Background revalidate failed: $error');
+      }
+    }());
   }
 
   /// GET with offline-first strategy for List responses.

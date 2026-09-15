@@ -657,7 +657,8 @@ class ApiClient {
         lower.contains('/health') ||
         lower.contains('/metrics') ||
         lower.contains('/optimization') ||
-        lower.contains('/admin');
+        lower.contains('/admin') ||
+        lower.contains('/pdf');
     if (nonCacheable) return null;
 
     final queryString = _normalizedQueryString(queryParameters);
