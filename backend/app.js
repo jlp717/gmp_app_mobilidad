@@ -51,7 +51,6 @@ const USE_DDD_ROUTES = repartoRouteMode.useDddRoutes;
 const Sentry = global.__GMP_SENTRY__ || null;
 const express = require('express');
 const cors = require('cors');
-const helmet = require('helmet');
 const compression = require('compression');
 const { createCanonicalConfirmationBootstrap } = require('./config/reparto-confirmation-bootstrap');
 const { createRepartidorLiquidacionBootstrap } = require('./config/repartidor-liquidacion-bootstrap');
@@ -363,11 +362,6 @@ app.use(cors({
     maxAge: 86400
 }));
 app.use(addRequestId);
-const telemetryLogger = require('./telemetry/logger');
-app.use((req, res, next) => {
-  req.log = telemetryLogger.child({ request_id: req.requestId });
-  next();
-});
 app.use(requestTimeoutMiddleware);
 app.use((req, res, next) => {
   req.dbStats = { ms: 0, n: 0, requestId: req.requestId };
@@ -384,7 +378,6 @@ app.use(detectScannerProbes);
 app.use(detectSuspiciousAgents);
 app.use(validateContentLength);
 app.use(createSecurityHeaders());
-app.use(helmet());
 app.use(compression({
     threshold: HTTP_COMPRESSION_THRESHOLD,
     level: HTTP_COMPRESSION_LEVEL,

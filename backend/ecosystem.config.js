@@ -199,35 +199,6 @@ module.exports = {
                 ? { cron_restart: process.env.PM2_CRON_RESTART }
                 : {}),
         },
-
-        // ==================== OPTIMIZATION SCRIPTS ====================
-        {
-            name: 'gmp-cache-cleanup',
-            script: 'scripts/cache-cleanup.js',
-            cwd: __dirname,
-            instances: 1,
-            exec_mode: 'fork',
-            cron_restart: '0 */6 * * *', // Run every 6 hours
-            autorestart: false,
-            watch: false,
-            env: {
-                NODE_ENV: 'production',
-            },
-        },
-
-        {
-            name: 'gmp-query-analyzer',
-            script: 'scripts/query-analyzer.js',
-            cwd: __dirname,
-            instances: 1,
-            exec_mode: 'fork',
-            cron_restart: '0 2 * * *', // Run daily at 2 AM
-            autorestart: false,
-            watch: false,
-            env: {
-                NODE_ENV: 'production',
-            },
-        },
     ],
 
     // ==================== DEPLOYMENT ====================
