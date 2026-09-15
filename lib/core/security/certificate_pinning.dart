@@ -20,6 +20,8 @@ class TlsPinningConfig {
 
   static const String _pinsRaw = String.fromEnvironment('GMP_TLS_PINS');
 
+  /// Empty unless `--dart-define=GMP_TLS_PINS=...` (ADR 0008: option a).
+
   /// Configured pins (`sha256/<base64>` entries). Empty by default.
   static List<String> get pins => _pinsRaw
       .split(',')
