@@ -3,6 +3,7 @@
 const {
   DsedacWriteError,
   assertNoDsedacWrite,
+  guardedQuery,
 } = require('../../utils/dsedac-write-guard');
 
 describe('DSEDAC write guard', () => {

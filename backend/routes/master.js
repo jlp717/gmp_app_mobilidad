@@ -18,28 +18,27 @@ router.get('/products', async (req, res) => {
     try {
         const { search, limit = 50, offset = 0 } = req.query;
 
+        const boundLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+        const boundOffset = Math.max(parseInt(offset, 10) || 0, 0);
+        const params = [];
         let searchFilter = '';
         if (search) {
-            const safeSearch = sanitizeForSQL(search.trim().toUpperCase());
-            searchFilter = `AND(UPPER(DESCRIPCIONARTICULO) LIKE '%${safeSearch}%' 
-                      OR CODIGOARTICULO LIKE '%${safeSearch}%'
-                      OR UPPER(CODIGOMARCA) LIKE '%${safeSearch}%')`;
+            const like = `%${String(search).trim().toUpperCase()}%`;
+            searchFilter = `AND (UPPER(DESCRIPCIONARTICULO) LIKE ? OR CODIGOARTICULO LIKE ? OR UPPER(CODIGOMARCA) LIKE ?)`;
+            params.push(like, like, like);
         }
+        params.push(boundOffset, boundLimit);
 
-        // Cache key based on search params
-        const cacheKey = `master:products:${search || 'all'}:${limit}:${offset}`;
-        const cacheTTL = search ? TTL.SHORT : TTL.LONG; // Longer for browse
-
-        const products = await cachedQuery(query, `
+        const products = await queryWithParams(`
       SELECT CODIGOARTICULO as code, DESCRIPCIONARTICULO as name,
   CODIGOMARCA as brand, CODIGOFAMILIA as family,
   UNIDADESCAJA as unitsPerBox, PESO as weight
       FROM DSEDAC.ART
       WHERE ANOBAJA = 0 ${searchFilter}
       ORDER BY DESCRIPCIONARTICULO
-      OFFSET ${parseInt(offset)} ROWS
-      FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `, cacheKey, cacheTTL);
+      OFFSET ? ROWS
+      FETCH FIRST ? ROWS ONLY
+    `, params);
 
         res.json({
             products: products.map(p => ({
@@ -50,7 +49,7 @@ router.get('/products', async (req, res) => {
                 unitsPerBox: parseInt(p.UNITSPERBOX) || 1,
                 weight: parseFloat(p.WEIGHT) || 0
             })),
-            hasMore: products.length === parseInt(limit)
+            hasMore: products.length === boundLimit
         });
 
     } catch (error) {

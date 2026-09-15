@@ -520,13 +520,16 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
             if (codes) vendedorFilter = `AND L.LCCDVD IN (${codes})`;
         }
 
-        // Client filter - adaptar para LACLAE (LCCDCL)
-        const clientFilter = clientCode ? `AND L.LCCDCL = '${sanitizeForSQL(clientCode)}'` : '';
-
-        // Product search filter - adaptar para LACLAE (LCCDRF, LCDESC)
+        const extraParams = [];
+        const clientFilter = clientCode ? 'AND L.LCCDCL = ?' : '';
+        if (clientCode) extraParams.push(String(clientCode).trim());
         const searchFilter = productSearch
-            ? `AND (UPPER(L.LCDESC) LIKE UPPER('%${sanitizeForSQL(productSearch)}%') OR TRIM(L.LCCDRF) LIKE '%${sanitizeForSQL(productSearch)}%')`
+            ? 'AND (UPPER(L.LCDESC) LIKE UPPER(?) OR TRIM(L.LCCDRF) LIKE ?)'
             : '';
+        if (productSearch) {
+            const like = `%${String(productSearch).trim()}%`;
+            extraParams.push(like, like);
+        }
 
         // Helper to query LACLAE
         const getStats = async (year) => {
@@ -538,13 +541,12 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
                     COUNT(DISTINCT TRIM(L.LCCDRF)) as product_count
                 FROM DSED.LACLAE L
                 WHERE ${LACLAE_FILTER}
-                  AND L.LCAADC = ${year}
+                  AND L.LCAADC = ?
                   ${vendedorFilter}
                   ${clientFilter}
                   ${searchFilter}
             `;
-            const cacheKey = `history:summary:laclae:${year}:${vendedorCodes}:${clientCode}:${productSearch}`;
-            const result = await cachedQuery(query, queryStr, cacheKey, TTL.SHORT);
+            const result = await queryWithParams(queryStr, [year, ...extraParams]);
             return result[0] || {};
         };
 
@@ -558,14 +560,14 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
                     SUM(L.LCCTUD) as units
                 FROM DSED.LACLAE L
                 WHERE ${LACLAE_FILTER}
-                  AND L.LCAADC BETWEEN ${startYear} AND ${endYear}
+                  AND L.LCAADC BETWEEN ? AND ?
                   ${vendedorFilter}
                   ${clientFilter}
                   ${searchFilter}
                 GROUP BY L.LCAADC
                 ORDER BY L.LCAADC DESC
             `;
-            return await cachedQuery(query, queryStr, `history:breakdown:laclae:${startYear}:${endYear}:${vendedorCodes}:${clientCode}:${productSearch}`, TTL.SHORT);
+            return await queryWithParams(queryStr, [startYear, endYear, ...extraParams]);
         };
 
         // Helper for Monthly Breakdown (Current vs Last Year)
@@ -578,14 +580,14 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
                     SUM(L.LCIMVT) as sales
                 FROM DSED.LACLAE L
                 WHERE ${LACLAE_FILTER}
-                  AND L.LCAADC IN (${year}, ${prevYear})
+                  AND L.LCAADC IN (?, ?)
                   ${vendedorFilter}
                   ${clientFilter}
                   ${searchFilter}
                 GROUP BY L.LCAADC, L.LCMMDC
                 ORDER BY L.LCMMDC
             `;
-            const rows = await cachedQuery(query, queryStr, `history:monthly:${year}:${prevYear}:${vendedorCodes}:${clientCode}:${productSearch}`, TTL.SHORT);
+            const rows = await queryWithParams(queryStr, [year, prevYear, ...extraParams]);
 
             // Merge rows into Month objects
             const months = {};

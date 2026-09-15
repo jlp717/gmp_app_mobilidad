@@ -26,7 +26,14 @@ function assertNoDsedacWrite(sql) {
   if (SET_SCHEMA_PATTERN.test(statement)) throw new DsedacWriteError('SET SCHEMA');
 }
 
+function guardedQuery(conn, sql, params) {
+  assertNoDsedacWrite(sql);
+  if (typeof conn.query === 'function') return conn.query(sql, params);
+  return conn.execute(sql, params);
+}
+
 module.exports = {
   DsedacWriteError,
   assertNoDsedacWrite,
+  guardedQuery,
 };
