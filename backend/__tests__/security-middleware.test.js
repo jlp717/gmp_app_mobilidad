@@ -12,29 +12,30 @@ jest.mock('../middleware/logger', () => ({
     debug: jest.fn(),
 }));
 
-const {
-    detectSuspiciousAgents,
-    validateContentLength,
-    detectSqlInjection,
-    sanitizeInput,
-    validateContentType,
-    addRequestId,
-    globalLimiter,
-    loginLimiter,
-    apiLimiter,
-    uploadLimiter,
-    emailLimiter,
-    cobrosLimiter,
-    pedidosLimiter,
-    createSecurityHeaders,
-    logSecurityEvent,
-    detectScannerProbes,
-    bruteForceIpTracker,
-    rateLimitPeerIp,
-    globalRateLimitKey,
-    RedisRateLimitStore,
-    createRateLimiter,
-} = require('../middleware/security');
+    const {
+        detectSuspiciousAgents,
+        validateContentLength,
+        detectSqlInjection,
+        sanitizeInput,
+        validateContentType,
+        addRequestId,
+        globalLimiter,
+        loginLimiter,
+        apiLimiter,
+        uploadLimiter,
+        emailLimiter,
+        cobrosLimiter,
+        pedidosLimiter,
+        createSecurityHeaders,
+        logSecurityEvent,
+        detectScannerProbes,
+        bruteForceIpTracker,
+        rateLimitPeerIp,
+        clientIp,
+        globalRateLimitKey,
+        RedisRateLimitStore,
+        createRateLimiter,
+    } = require('../middleware/security');
 
 beforeEach(() => {
     jest.clearAllMocks();
@@ -161,6 +162,27 @@ describe('Rate Limiter Configuration', () => {
         });
 
         expect(rateLimitPeerIp(req)).toBe('203.0.113.10');
+        expect(clientIp(req)).toBe('203.0.113.10');
+    });
+
+    test('uses CF-Connecting-IP only when the TCP peer is loopback', () => {
+        const fromTunnel = createMockReq({
+            ip: '127.0.0.1',
+            headers: { 'cf-connecting-ip': '1.2.3.4' },
+            socket: { remoteAddress: '127.0.0.1' },
+            connection: { remoteAddress: '127.0.0.1' },
+        });
+        const fromRemote = createMockReq({
+            ip: '203.0.113.10',
+            headers: { 'cf-connecting-ip': '1.2.3.4' },
+            socket: { remoteAddress: '203.0.113.10' },
+            connection: { remoteAddress: '203.0.113.10' },
+        });
+
+        expect(clientIp(fromTunnel)).toBe('1.2.3.4');
+        expect(rateLimitPeerIp(fromTunnel)).toBe('1.2.3.4');
+        expect(clientIp(fromRemote)).toBe('203.0.113.10');
+        expect(rateLimitPeerIp(fromRemote)).toBe('203.0.113.10');
     });
 
     test('global bucket cannot be multiplied with forged IP headers or User-Agent', () => {
