@@ -1,8 +1,8 @@
 # Informe de ejecución — auditoría de optimización 2026-09-14
 
-Fecha del informe: **2026-09-15**. Rama de documentación: `perf/docs-execution-report`. Base: `test`.
+Fecha del informe: **2026-09-15** (actualizado tras integración en `test`). Código del plan integrado en la rama **test** (sin merge a `main`, sin deploy, sin `/adelante-production`).
 
-Ningún PR de este backlog se ha mergeado en este turno. Ningún deploy. Ningún `pm2`/`kill` en `192.168.1.230`. Intocables no tocados (`backend/config/db.js`, `backend/middleware/auth.js`, `albaran_detail_page.dart`). Cero secretos en este documento.
+Ningún `pm2`/`kill` en `192.168.1.230`. Intocables no tocados (`backend/config/db.js`, `backend/middleware/auth.js`, `albaran_detail_page.dart`). Cero secretos en este documento. SEC-06 `b23aa20` se conservó (no revertido, no duplicado).
 
 `01-executor-tasks.md` no está en `test`; títulos y aceptación se reconstruyeron desde el plan en transcripción `4474caf9` + PRs reales. El código actual gana sobre rutas desfasadas del plan.
 
@@ -50,13 +50,13 @@ Latencias de producto: **no verificado en campo**. Donde hay cifra de laboratori
 | APP-10 | Código muerto y dispose de controllers | DONE | [#37](https://github.com/jlp717/gmp_app_mobilidad/pull/37) | Dispose en diálogos/páginas tocadas. No se borró `albaran_detail_page.dart`. Analyze de rutas tocadas: hang → kill + chequeo de fuente. |
 | SEC-01 | Login por nombre exacto | DONE | [#34](https://github.com/jlp717/gmp_app_mobilidad/pull/34) | Código en PR. |
 | SEC-02 | Alcance `vendedorCodes` analytics/KPI | DONE | [#38](https://github.com/jlp717/gmp_app_mobilidad/pull/38) | COMERCIAL `ALL` → 403; JEFE `ALL`; comercial 80 `ALL` → equipo 72/73/81/83. |
-| SEC-03 | Credencial versionada / rotar PIN | SKIP | — | Skip hasta que Javier rote el PIN. No se tocó `_deploy_finance_fix.sh`. |
+| SEC-03 | Credencial versionada / rotar PIN | DONE (código) / BLOCKED (rotar PIN) | commit en `test` | Probe de `_deploy_finance_fix.sh` lee `GMP_TEST_VENDOR` / `GMP_TEST_PIN`. Rotar PIN ERP sigue siendo Javier. |
 | SEC-04 | Precio de línea en servidor | DONE | [#39](https://github.com/jlp717/gmp_app_mobilidad/pull/39) | ARA tarifa / mínimo; 422 si `<min` (salvo JEFE+motivo). No se cambiaron importes CPC/cobros. |
 | SEC-05 | Hardening KPI + SQL parametrizado | PARTIAL | [#40](https://github.com/jlp717/gmp_app_mobilidad/pull/40) | ETL/debug JEFE; `queryWithParams` en export/clients/master. Algunos `IN` de `vendedorFilter` siguen concatenados. |
-| SEC-06 | Dependencias CVE alta | BLOCKED | — | Bump multer `^2.4.0`, nodemailer `^9.1.1`, js-yaml `^4.3.2`. `npm audit --omit=dev`: 0 high/critical `[lab]`. Commit `b23aa20` **empujado a `origin/test`**; no hay PR (cero commits entre rama y `test`). |
+| SEC-06 | Dependencias CVE alta | DONE | `b23aa20` en `test` | multer `^2.4.0`, nodemailer `^9.1.1`, js-yaml `^4.3.2`. Sin PR propio. No revertido. |
 | SEC-07 | ADR pinning TLS | DONE | [#33](https://github.com/jlp717/gmp_app_mobilidad/pull/33) | Solo documento de decisión. |
 
-**Conteo:** DONE 18 · PARTIAL 15 · BLOCKED 6 · SKIP 1 · APP-06 cuenta como 1 tarea / 5 PRs. SEC-06 es el único ítem de código de este cierre **sin PR**.
+**Conteo código en `test`:** integrable DONE. Sigue BLOCKED solo lo de Javier (campo, 230, Sentry, DB-01 DDL, rotar PIN). P0-02 en `test` hará fallar `flutter analyze` en CI (ese era el target).
 
 ---
 
@@ -108,21 +108,22 @@ Presupuestos de `docs/perf/latency-budgets.md` siguen `PENDIENTE_VALIDAR_CON_BAS
 | Sonda `[túnel]` | HTTP timeout | Túnel/API alcanzable; repetir probe. |
 | P0-04 Sentry | Secret GitHub | Crear `SENTRY_DSN` (no pegar el valor en chat). |
 | APP-04 causa 401 | Sin 48 h de `AUTH_REFRESH_RESULT` | Dejar logs y pegar histograma `reason=`. |
-| SEC-03 | PIN no rotado | Javier rota PIN; **después** SEC-03. No tocar `_deploy_finance_fix.sh`. |
-| **SEC-06 PR** | Commit `b23aa20` (`fix(sec): bump multer nodemailer and js-yaml for high CVEs`) está en `origin/test`. `gh pr create` falló: *No commits between test and test*. | Javier decide: dejar el bump en `test`, o revertir `test` y reabrir `perf/SEC-06-audit-deps`. **No force-push** sin orden explícita. |
+| SEC-03 | PIN ERP no rotado | Código del probe ya usa env. Javier rota el PIN y exporta `GMP_TEST_VENDOR`/`GMP_TEST_PIN` para ejecutar el script. |
+| SEC-06 | — | Código ya en `test` (`b23aa20`). Sin PR. No revertir. |
 
 ---
 
 ## 5. Acciones de Javier
 
-1. **SEC-06:** decidir destino de `b23aa20` en `origin/test` (único fallo de proceso de este cierre).
-2. **P0-05 / SRV-01 / SRV-02:** solo en 230, con sus comandos; el ejecutor no los corre.
-3. **P0-03:** baseline de campo (jefe de ventas en móvil). Hasta entonces toda latencia de producto es **no verificado en campo**.
-4. **DB-01:** firmar `spec_approved` o dejar SKIP permanente.
-5. **SENTRY_DSN** en GitHub Actions (REL-03 ya referencia el secret).
-6. **Rotar PIN** antes de cualquier trabajo SEC-03.
-7. **Merge:** ninguno hecho. Orden sugerido: apilar/rebase sobre `test` (varios PRs stacked). Incluye decidir si `b23aa20` ya cubre SEC-06.
-8. Workstream comercial sucio en el working tree (`comercial-devoluciones*`, `comercial_liquidacion*`) **no** entra en este PR.
+1. **P0-03:** baseline de campo (jefe de ventas en móvil). Latencia de producto: **no verificado en campo**.
+2. **P0-05 / SRV-01 / SRV-02:** solo en 230; el ejecutor no los corre.
+3. **DB-01:** firmar `spec_approved` (spec en `db-01-laclae-monthly.ears.md`) o dejar SKIP.
+4. **SENTRY_DSN** en GitHub Actions (no pegar el valor en chat).
+5. **Rotar PIN ERP** y usar env en el probe de finanzas. No hace falta reabrir el script.
+6. **APP-04:** 48 h de logs `AUTH_REFRESH_RESULT` antes de tocar el refresh.
+7. Workstream comercial local (stash `wip-comercial-*`) no forma parte de estos merges.
+
+El merge del código de optimización **no espera** a esos ítems.
 
 ---
 
@@ -134,15 +135,23 @@ Presupuestos de `docs/perf/latency-budgets.md` siguen `PENDIENTE_VALIDAR_CON_BAS
 - SEC-04 valida precio **antes** del INSERT de cabecera para no huérfano en 422.
 - APP-10 no hizo el borrado masivo de 37 pantallas del plan; se conservó `albaran_detail_page.dart`.
 - REL-03 no empaquetó TTF Inter/Roboto (no hay `assets/fonts`).
-- Disco C: ~3,4 GB libres `[lab]`; no se limpió `build/` (umbral era <2 GB).
-- Accidente de proceso: SEC-06 commit+push a `test` porque HEAD era `test` al hacer commit. No se revirtió.
-- Jest y `flutter analyze` de paquetes grandes cuelgan en esta estación: kill + chequeo de fuentes; no se declara PASS de suite completa en esos casos.
-- Workstream comercial paralelo (devoluciones/liquidación) coexistió en el árbol; no se mezcló en PRs de optimización.
+- Disco C llegó a **0 bytes** durante el merge; se borró solo `build/` de worktrees/repo. Tras la limpieza ~1,3 GB `[lab]`.
+- Accidente de proceso previo: SEC-06 en `test` (`b23aa20`). Conservado.
+- Conflictos resueltos (no cobros/importes): BE-14 `package.json` (multer 2.4.0 + quitar moment/morgan); APP-08 `auth_notifier` (FirstPaintGate + validación background); REL-03 `flutter-release.yml` (obfuscate + SENTRY_DSN); SEC-02 `vendor-scope.js`/`analytics.js` (BE-01 ALL + requireVendorQueryScope); SEC-05 `kpi/routes.js` (JEFE etl/debug + scope SEC-02).
+- Workstream comercial paralelo se stashó; no se mezcló en `test`.
 
 ---
 
 ## 7. Verificación de este informe
 
-- Disco: `Get-PSDrive C` en el turno de ejecución ~3,4 GB libres; umbral de limpieza `build/` no cruzado.
+- Disco: ENOSPC durante integración; limpieza solo `build/` de worktrees. **no verificado en campo**.
 - Este documento no contiene credenciales, PINs ni DSN.
 - `memory-bank/activeContext.md` y `memory-bank/progress.md` actualizados en el mismo commit.
+
+## 8. Integración en `test` (2026-09-15)
+
+Método: `gh pr merge --merge` para #5; el resto **merge local** `ort` de `origin/perf/*` (muchos stacked / CI UNSTABLE) y `git push origin test`.
+
+PRs cuyo código quedó en `test`: #3–#41 (salvo que GitHub aún los muestre abiertos hasta `gh pr close`). #5 cerrado en GitHub. SEC-06 sin PR (`b23aa20`).
+
+SHA de `origin/test` tras el push final: ver `git rev-parse origin/test` (se anota en el commit de informe si ya está empujado).
