@@ -259,6 +259,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     with TickerProviderStateMixin {
   late TabController _tabController;
   late AnimationController _slideController;
+  late Animation<Offset> _slideAnimation;
 
   final TextEditingController _observacionesController =
       TextEditingController();
@@ -367,6 +368,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       duration: const Duration(milliseconds: 400),
       vsync: this,
     )..forward();
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _slideController,
+        curve: Curves.easeOutCubic,
+      ),
+    );
 
     _observacionesController.text = _albaran.observaciones ?? '';
     final importeDisponibleCobro = _albaran.importeDisponibleCobro;
@@ -794,6 +804,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   @override
   Widget build(BuildContext context) {
+    final liveTotal = _liveAlbaranTotal;
+    final productErrorCount = _countIssues(RuteroDeliveryTab.products);
+    final paymentErrorCount = _countIssues(RuteroDeliveryTab.payment);
+    final finalizeErrorCount = _countIssues(RuteroDeliveryTab.finalize);
     // PopScope also vetoes barrier taps and drag-driven route pops while the
     // evidence transaction is active. Only the success path opts back in.
     return PopScope(
@@ -803,15 +817,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           IgnorePointer(
             ignoring: _isSubmitting,
             child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 1),
-                end: Offset.zero,
-              ).animate(
-                CurvedAnimation(
-                  parent: _slideController,
-                  curve: Curves.easeOutCubic,
-                ),
-              ),
+              position: _slideAnimation,
               child: RepartidorExecutiveSheet(
                 height: Responsive.modalHeight(
                   context,
@@ -828,17 +834,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     RuteroDetailHeader(
                       albaran: _albaran,
                       isCompleted: _isCompleted,
-                      liveImporteTotal: _liveAlbaranTotal,
+                      liveImporteTotal: liveTotal,
                     ),
                     RuteroDetailTabBar(
                       tabController: _tabController,
                       isUrgent: _isUrgent,
-                      productErrorCount:
-                          _countIssues(RuteroDeliveryTab.products),
-                      paymentErrorCount:
-                          _countIssues(RuteroDeliveryTab.payment),
-                      finalizeErrorCount:
-                          _countIssues(RuteroDeliveryTab.finalize),
+                      productErrorCount: productErrorCount,
+                      paymentErrorCount: paymentErrorCount,
+                      finalizeErrorCount: finalizeErrorCount,
                     ),
                     RuteroValidationBanner(
                       issues: _validationIssues,
@@ -848,9 +851,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       child: IndexedStack(
                         index: _tabController.index,
                         children: [
-                          SizedBox.expand(child: _buildProductsTab()),
-                          SizedBox.expand(child: _buildPaymentTab()),
-                          SizedBox.expand(child: _buildFinalizeTab()),
+                          _RuteroKeepAliveTab(
+                            builder: (_) => _buildProductsTab(),
+                          ),
+                          _RuteroKeepAliveTab(
+                            builder: (_) => _buildPaymentTab(),
+                          ),
+                          _RuteroKeepAliveTab(
+                            builder: (_) => _buildFinalizeTab(),
+                          ),
                         ],
                       ),
                     ),
@@ -1150,97 +1159,102 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return Column(
       children: [
         Expanded(
-          child: SingleChildScrollView(
-            controller: _finalizeScrollController,
-            padding: EdgeInsets.fromLTRB(
-              20,
-              20,
-              20,
-              16 + MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: IgnorePointer(
-              ignoring: _isCompleted,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (noEntrega) ...[
-                    RepartidorExecutivePanel(
-                      accentColor: AppTheme.warning,
-                      padding: EdgeInsets.all(14),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: AppTheme.warning,
-                            size: 22,
-                          ),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'No entrega: no hace falta firma, DNI ni cobro. '
-                              'Indica el motivo y confirma.',
-                              style: TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontSize: 13,
-                                height: 1.35,
+          child: Builder(
+            builder: (context) {
+              final insetBottom = MediaQuery.viewInsetsOf(context).bottom;
+              return SingleChildScrollView(
+                controller: _finalizeScrollController,
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  16 + insetBottom,
+                ),
+                child: IgnorePointer(
+                  ignoring: _isCompleted,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (noEntrega) ...[
+                        RepartidorExecutivePanel(
+                          accentColor: AppTheme.warning,
+                          padding: EdgeInsets.all(14),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: AppTheme.warning,
+                                size: 22,
                               ),
-                            ),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'No entrega: no hace falta firma, DNI ni cobro. '
+                                  'Indica el motivo y confirma.',
+                                  style: TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 13,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      _buildDeliveryStatusSection(),
+                      const SizedBox(height: 16),
+                      if (_hasDiscrepancy) ...[
+                        _buildDiscrepancyWarning(),
+                        const SizedBox(height: 12),
+                      ],
+                      RuteroErrorSpotlight(
+                        key: _observacionesFieldKey,
+                        active: _spotlightField == 'observaciones',
+                        message: _observacionesError,
+                        child: TextField(
+                          controller: _observacionesController,
+                          focusNode: _observacionesFocusNode,
+                          maxLines: 3,
+                          onChanged: (_) {
+                            if (_observacionesError != null) {
+                              setState(() {
+                                _observacionesError = null;
+                                _removeIssue('observaciones');
+                              });
+                            }
+                          },
+                          style: TextStyle(color: AppTheme.textPrimary),
+                          decoration: ruteroErrorInputDecoration(
+                            label: noEntrega
+                                ? 'Observaciones / motivo de no entrega *'
+                                : 'Observaciones',
+                            hintText: noEntrega
+                                ? 'Ej: cerrado, no hay nadie, vuelvo más tarde...'
+                                : 'Añadir nota sobre la entrega...',
+                            errorText: _observacionesError,
+                            alignLabelWithHint: true,
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  _buildDeliveryStatusSection(),
-                  const SizedBox(height: 16),
-                  if (_hasDiscrepancy) ...[
-                    _buildDiscrepancyWarning(),
-                    const SizedBox(height: 12),
-                  ],
-                  RuteroErrorSpotlight(
-                    key: _observacionesFieldKey,
-                    active: _spotlightField == 'observaciones',
-                    message: _observacionesError,
-                    child: TextField(
-                      controller: _observacionesController,
-                      focusNode: _observacionesFocusNode,
-                      maxLines: 3,
-                      onChanged: (_) {
-                        if (_observacionesError != null) {
-                          setState(() {
-                            _observacionesError = null;
-                            _removeIssue('observaciones');
-                          });
-                        }
-                      },
-                      style: TextStyle(color: AppTheme.textPrimary),
-                      decoration: ruteroErrorInputDecoration(
-                        label: noEntrega
-                            ? 'Observaciones / motivo de no entrega *'
-                            : 'Observaciones',
-                        hintText: noEntrega
-                            ? 'Ej: cerrado, no hay nadie, vuelvo más tarde...'
-                            : 'Añadir nota sobre la entrega...',
-                        errorText: _observacionesError,
-                        alignLabelWithHint: true,
-                      ),
-                    ),
+                      const SizedBox(height: 12),
+                      _buildEvidencePhotosSection(),
+                      if (!noEntrega) ...[
+                        const SizedBox(height: 12),
+                        _buildPrinterConfigSection(),
+                        const SizedBox(height: 20),
+                        _buildSignatureSection(),
+                        const SizedBox(height: 16),
+                        _buildReceiverData(),
+                      ],
+                      const SizedBox(height: 12),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  _buildEvidencePhotosSection(),
-                  if (!noEntrega) ...[
-                    const SizedBox(height: 12),
-                    _buildPrinterConfigSection(),
-                    const SizedBox(height: 20),
-                    _buildSignatureSection(),
-                    const SizedBox(height: 16),
-                    _buildReceiverData(),
-                  ],
-                  const SizedBox(height: 12),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
         if (gaps.isNotEmpty)
@@ -4225,5 +4239,26 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     } on RepartoReceiptUnavailableException {
       rethrow;
     }
+  }
+}
+
+class _RuteroKeepAliveTab extends StatefulWidget {
+  const _RuteroKeepAliveTab({required this.builder});
+
+  final WidgetBuilder builder;
+
+  @override
+  State<_RuteroKeepAliveTab> createState() => _RuteroKeepAliveTabState();
+}
+
+class _RuteroKeepAliveTabState extends State<_RuteroKeepAliveTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return SizedBox.expand(child: widget.builder(context));
   }
 }
