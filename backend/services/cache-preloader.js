@@ -272,13 +272,16 @@ async function runSharedStartupWarmups() {
 
 async function scheduleSharedStartupWarmups() {
     let lockToken = null;
+    const instanceId = String(
+        process.env.INSTANCE_ID ?? process.env.NODE_APP_INSTANCE ?? process.env.pm_id ?? '0'
+    );
+    if (instanceId !== '0') {
+        logger.info(`[CachePreWarmer] Shared startup warmups skipped on follower INSTANCE_ID=${instanceId}`);
+        return;
+    }
 
     if (!redisCache?.isConnected) {
-        const instanceId = process.env.NODE_APP_INSTANCE || process.env.pm_id || '0';
-        if (String(instanceId) !== '0') {
-            logger.info('[CachePreWarmer] Redis unavailable; startup warmups limited to PM2 instance 0');
-            return;
-        }
+        logger.info('[CachePreWarmer] Redis unavailable; INSTANCE_ID=0 will run shared startup warmups');
     }
 
     if (redisCache?.isConnected) {
