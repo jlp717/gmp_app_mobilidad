@@ -16,6 +16,7 @@ const { getCurrentDate, LACLAE_SALES_FILTER, MIN_YEAR } = require('../utils/comm
 const { cachedQuery } = require('./query-optimizer');
 const { query, queryWithParams } = require('../config/db');
 const { redisCache, TTL } = require('./redis-cache');
+const { refreshActiveGmpVendorCatalog } = require('../middleware/vendor-scope');
 
 const DASHBOARD_CACHE_VERSION = 'v20260602-b-sales-all';
 const SHARED_STARTUP_WARMUP_KEY = 'shared-startup-warmups-v1';
@@ -62,6 +63,10 @@ async function warmUpDashboardQueries() {
     const start = Date.now();
 
     try {
+        await refreshActiveGmpVendorCatalog().catch((err) => {
+            logger.warn(`[CachePreWarmer] VDC catalog refresh skipped: ${err.message}`);
+        });
+
         // OPTIMIZATION: Use LONGER TTLs for ALL vendor queries (JEFE_VENTAS)
         const allVendorTTL = 1800; // 30 minutes for ALL
         const prevTTL = 86400; // 24 hours for prev year (static)
@@ -124,9 +129,8 @@ async function warmUpDashboardQueries() {
             FETCH FIRST 20 ROWS ONLY
         `;
 
-        // NOTE: cache keys must match what the dashboard routes generate
-        // Dashboard metrics uses: `dashboard:metrics:${year}:${month}:${vendedorCodes}`
-        // When vendedorCodes is ALL → vendedorFilter is empty, so no codes in key
+        // BE-01: JEFE con catalogo GMP completo usa vendedorCodes=ALL (sin IN ×92).
+        // Las claves :ALL deben coincidir con DashboardService._resolvePeriod / getSalesEvolution.
         const baseKey =
             `dashboard:metrics:${DASHBOARD_CACHE_VERSION}:${year}:${month}:ALL`;
 
