@@ -1067,7 +1067,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           ),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
   }
 }
 

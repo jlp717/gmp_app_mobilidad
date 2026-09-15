@@ -451,14 +451,13 @@ class _BolsaPageState extends ConsumerState<BolsaPage>
         );
       },
     );
+    final pctText = limitePctCtrl.text.replaceAll(',', '.').trim();
+    final impText = limiteImporteCtrl.text.replaceAll(',', '.').trim();
+    limitePctCtrl.dispose();
+    limiteImporteCtrl.dispose();
     if (result ?? false) {
-      final pct = double.tryParse(
-            limitePctCtrl.text.replaceAll(',', '.').trim(),
-          ) ??
-          status.limitePct;
-      final imp = double.tryParse(
-        limiteImporteCtrl.text.replaceAll(',', '.').trim(),
-      );
+      final pct = double.tryParse(pctText) ?? status.limitePct;
+      final imp = double.tryParse(impText);
       final ok = await provider.updateConfig(
         limitePct: pct.clamp(0.0, 100.0),
         limiteImporte: imp,

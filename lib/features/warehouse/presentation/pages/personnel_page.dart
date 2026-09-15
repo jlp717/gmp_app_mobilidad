@@ -169,7 +169,11 @@ class _PersonnelPageState extends State<PersonnelPage>
           ],
         ),
       ),
-    );
+    ).whenComplete(() {
+      nameCtrl.dispose();
+      phoneCtrl.dispose();
+      emailCtrl.dispose();
+    });
   }
 
   Widget _field(TextEditingController ctrl, String label, IconData icon) {
@@ -643,7 +647,11 @@ class _PersonnelPageState extends State<PersonnelPage>
           ],
         ),
       ),
-    );
+    ).whenComplete(() {
+      nameCtrl.dispose();
+      phoneCtrl.dispose();
+      emailCtrl.dispose();
+    });
   }
 
   void _confirmDelete(WarehousePerson person) {

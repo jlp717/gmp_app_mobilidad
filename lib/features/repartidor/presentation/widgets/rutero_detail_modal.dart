@@ -1929,6 +1929,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ],
       ),
     );
+    controller.dispose();
     if (result != null && mounted) {
       final original = linea.cantidadPedida.toDouble();
       if (_quantityDiffers(result, original)) {

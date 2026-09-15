@@ -1552,6 +1552,8 @@ class _CobrosPreview extends ConsumerWidget {
         );
       },
     );
+    final reason = reasonCtrl.text.trim();
+    reasonCtrl.dispose();
     if (confirmed != true) return;
     unawaited(HapticFeedback.mediumImpact());
     if (!context.mounted) return;
@@ -1561,7 +1563,7 @@ class _CobrosPreview extends ConsumerWidget {
       await service.reverseCobro(
         repartidorId: repartidorId!,
         idempotencyToken: cobro.idempotencyToken!,
-        reason: reasonCtrl.text.trim(),
+        reason: reason,
       );
       messenger.showSnackBar(
         SnackBar(

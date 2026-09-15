@@ -1190,6 +1190,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         ],
       ),
     );
+    controller.dispose();
 
     if (result != null && result.trim().isNotEmpty) {
       if (isWhatsApp) {
@@ -1236,6 +1237,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         ],
       ),
     );
+    ctrl.dispose();
 
     if (result != null && result != text) {
       await _saveNotes(client, result);

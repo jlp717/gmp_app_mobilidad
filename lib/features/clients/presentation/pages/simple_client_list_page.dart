@@ -477,6 +477,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage>
         ],
       ),
     );
+    controller.dispose();
 
     if (result != null && result.trim().isNotEmpty) {
       _launchWhatsApp(result.trim());
