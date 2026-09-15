@@ -18,7 +18,9 @@ const { query, queryWithParams } = require('../config/db');
 const { redisCache, TTL } = require('./redis-cache');
 const { refreshActiveGmpVendorCatalog } = require('../middleware/vendor-scope');
 
-const DASHBOARD_CACHE_VERSION = 'v20260602-b-sales-all';
+const DASHBOARD_CACHE_VERSION = 'v20260914-hist-ttl';
+const CLOSED_YEAR_TTL_SECONDS = 7 * 24 * 3600;
+const OPEN_MONTH_TTL_SECONDS = 10 * 60;
 const SHARED_STARTUP_WARMUP_KEY = 'shared-startup-warmups-v1';
 const SHARED_STARTUP_WARMUP_MARKER = `${SHARED_STARTUP_WARMUP_KEY}:scheduled`;
 const SHARED_STARTUP_WARMUP_TTL_SECONDS =
@@ -67,9 +69,9 @@ async function warmUpDashboardQueries() {
             logger.warn(`[CachePreWarmer] VDC catalog refresh skipped: ${err.message}`);
         });
 
-        // OPTIMIZATION: Use LONGER TTLs for ALL vendor queries (JEFE_VENTAS)
-        const allVendorTTL = 1800; // 30 minutes for ALL
-        const prevTTL = 86400; // 24 hours for prev year (static)
+        // OPTIMIZATION: Use closed-year TTL (7d) for previous year; current month 10 min.
+        const allVendorTTL = OPEN_MONTH_TTL_SECONDS;
+        const prevTTL = CLOSED_YEAR_TTL_SECONDS;
         const todayTTL = 300; // 5 minutes for today
 
         // 1. Current month metrics - ALL vendors (JEFE_VENTAS default)
@@ -139,7 +141,7 @@ async function warmUpDashboardQueries() {
             () => cachedQuery(query, currentMetricsSQL, `${baseKey}:curr`, allVendorTTL),
             () => cachedQuery(query, prevMetricsSQL, `${baseKey}:prev`, prevTTL),
             () => cachedQuery(query, todaySQL, `${baseKey}:today`, todayTTL),
-            () => cachedQuery(query, evolutionSQL, `dashboard:evolution:${DASHBOARD_CACHE_VERSION}:default:month:false:ALL:monthly`, allVendorTTL),
+            () => cachedQuery(query, evolutionSQL, `dashboard:evolution:${DASHBOARD_CACHE_VERSION}:default:month:false:ALL:open:monthly`, allVendorTTL),
             () => cachedQuery(query, recentSalesSQL, `dashboard:recent_sales:ALL:20`, allVendorTTL),
         ]);
 
@@ -224,9 +226,7 @@ async function warmUpClientsList(vendedorCodes = 'ALL', limit = 100, offset = 0)
 
 async function warmUpClientsAll() {
     try {
-        // JEFE_VENTAS: dashboard uses limit=50; browse tabs often use 100
-        await warmUpClientsList('ALL', 50, 0);
-        await warmUpClientsList('ALL', 100, 0);
+        logger.info('[CachePreWarmer] Skipping clients:list:v6; DDD reads ddd:clients:v4 and legacy clients:list:v8');
     } catch (e) {
         logger.warn(`[CachePreWarmer] Clients pre-warm error (non-fatal): ${e.message}`);
     }

@@ -47,7 +47,19 @@ const {
     resolveObjectiveSalesTarget,
 } = require('../utils/objectives-source');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260805-annual-cut-100k';
+const OBJECTIVES_CACHE_VERSION = 'v20260914-hist-ttl';
+const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
+
+function byClientHistoricalCache(effectiveVendorCodes, years, months, rowsLimit, now) {
+    const yearsArray = years
+        ? String(years).split(',').map((token) => parseInt(token.trim(), 10)).filter((year) => year >= MIN_YEAR)
+        : [now.getFullYear()];
+    const meta = historicalYearsCacheMeta(yearsArray, now);
+    return {
+        key: `obj:byclient:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${years || 'default'}:${months || 'all'}:${rowsLimit}:${meta.bucket}`,
+        ttl: meta.ttl,
+    };
+}
 const objectivesByClientBreaker = new CircuitBreaker({
     name: 'objectives-by-client',
     failureThreshold: 2,
@@ -953,17 +965,18 @@ router.get('/evolution', verifyToken, async (req, res) => {
         const { getVendorActiveDaysFromCache } = require('../services/laclae');
 
         // PERF: Route-level cache for evolution data
-        const cacheKey = `obj:evolution:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${years || 'default'}`;
+        const yearsArrayPreview = years
+            ? years.split(',').map(y => parseInt(y.trim())).filter(y => y >= MIN_YEAR)
+            : [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
+        const evolutionMeta = historicalYearsCacheMeta(yearsArrayPreview, now);
+        const cacheKey = `obj:evolution:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${years || 'default'}:${evolutionMeta.bucket}`;
         const cachedResult = await redisCache.get('route', cacheKey);
         if (cachedResult) {
             logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution (${cacheKey})`);
             return res.json(cachedResult);
         }
 
-        // Parse years - default to current year and previous 2 (3 years total)
-        const yearsArray = years
-            ? years.split(',').map(y => parseInt(y.trim())).filter(y => y >= MIN_YEAR)
-            : [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
+        const yearsArray = yearsArrayPreview;
 
         // Include previous years for dynamic objective calculation
         const allYears = [...yearsArray, ...yearsArray.map(y => y - 1)];
@@ -1251,8 +1264,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
         };
 
         // PERF: Cache the result (5 min for specific vendor, 10 min for ALL)
-        const cacheTTL = (!effectiveVendorCodes || effectiveVendorCodes === 'ALL') ? TTL.SHORT * 2 : TTL.SHORT;
-        await redisCache.set('route', cacheKey, responseData, cacheTTL);
+        await redisCache.set('route', cacheKey, responseData, evolutionMeta.ttl);
         logger.info(`[OBJECTIVES] 💾 Cached evolution (${cacheKey})`);
 
         res.json(responseData);
@@ -2470,7 +2482,14 @@ router.get('/by-client', verifyToken, async (req, res, next) => {
                 const effectiveVendorCodes = scopeVendorCodesForUser(req.user?.code, req.query.vendedorCodes);
                 const rowsLimit = clampByClientLimit(req.query.limit);
                 const hasFilters = req.query.city || req.query.code || req.query.nif || req.query.name;
-                const cacheKey = `obj:byclient:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${req.query.years || 'default'}:${req.query.months || 'all'}:${rowsLimit}`;
+                const cache = byClientHistoricalCache(
+                    effectiveVendorCodes,
+                    req.query.years,
+                    req.query.months,
+                    rowsLimit,
+                    getCurrentDate(),
+                );
+                const cacheKey = cache.key;
                 const cachedResult = !hasFilters ? await redisCache.get('route', cacheKey) : null;
                 if (cachedResult) {
                     return res.json({ ...cachedResult, stale: true, warning: 'Objetivos por cliente servidos desde cache por timeout DB2' });
@@ -2499,7 +2518,8 @@ async function handleByClientRequest(req, res) {
         // PERF: Route-level cache for by-client (only when no search filters)
         const hasFilters = city || code || nif || name;
         const rowsLimit = clampByClientLimit(limit);
-        const cacheKey = `obj:byclient:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${years || 'default'}:${months || 'all'}:${rowsLimit}`;
+        const byClientCache = byClientHistoricalCache(effectiveVendorCodes, years, months, rowsLimit, now);
+        const cacheKey = byClientCache.key;
         if (!hasFilters) {
             const cachedResult = await redisCache.get('route', cacheKey);
             if (cachedResult) {
@@ -2935,7 +2955,7 @@ async function handleByClientRequest(req, res) {
 
         // PERF: Cache result if no search filters (5 min)
         if (!hasFilters) {
-            await redisCache.set('route', cacheKey, responseData, TTL.SHORT);
+            await redisCache.set('route', cacheKey, responseData, byClientCache.ttl);
             logger.info(`[OBJECTIVES] 💾 Cached by-client (${cacheKey})`);
         }
 

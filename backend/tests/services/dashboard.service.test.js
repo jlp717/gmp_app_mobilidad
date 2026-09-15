@@ -93,6 +93,21 @@ describe('DashboardService.getMetrics', () => {
         const { payload } = await svc.getMetrics('ALL', { year: '2020', month: '1' }, {});
         expect(payload.todaySales).toBe(0);
         expect(repo.fetchPeriodAggregate).toHaveBeenCalledTimes(2); // curr+prev, sin today
+        const ttls = repo.fetchPeriodAggregate.mock.calls.map((call) => call[3]);
+        expect(ttls).toEqual([7 * 24 * 3600, 7 * 24 * 3600]);
+    });
+
+    test('current month metrics use 10 min TTL and previous year 7 days', async () => {
+        const repo = makeRepo({
+            fetchPeriodAggregate: jest.fn().mockResolvedValue([{}]),
+        });
+        const cache = makeCache();
+        const svc = new DashboardService({ repository: repo, cache });
+        await svc.getMetrics('ALL', { year: String(Y), month: String(M) }, {});
+        const ttls = repo.fetchPeriodAggregate.mock.calls.map((call) => call[3]);
+        expect(ttls[0]).toBe(10 * 60);
+        expect(ttls[1]).toBe(7 * 24 * 3600);
+        expect(cache.set.mock.calls[0][3]).toBe(10 * 60);
     });
 });
 
