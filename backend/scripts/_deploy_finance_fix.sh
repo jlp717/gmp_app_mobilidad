@@ -40,12 +40,19 @@ function request(method, path, token, body) {
   });
 }
 (async () => {
-  const login = await request('POST', '/api/auth/login', null, { username: 'diego', password: '9322' });
+  const vendor = process.env.GMP_TEST_VENDOR;
+  const pin = process.env.GMP_TEST_PIN;
+  if (!vendor || !pin) {
+    console.error('GMP_TEST_VENDOR and GMP_TEST_PIN are required');
+    process.exit(1);
+  }
+  const login = await request('POST', '/api/auth/login', null, { username: vendor, password: pin });
   let token = login.json?.token || login.json?.accessToken;
-  const sw = await request('POST', '/api/auth/switch-role', token, { userId: '98', newRole: 'REPARTIDOR' });
+  const sw = await request('POST', '/api/auth/switch-role', token, { userId: vendor, newRole: 'REPARTIDOR' });
   token = sw.json?.token || sw.json?.accessToken || token;
-  const onlyLimit = await request('GET', '/api/repartidor-finanzas/vencimientos/08?limit=200', token);
-  const daily = await request('GET', `/api/repartidor-finanzas/daily-summary/08?date=${new Date().toISOString().slice(0,10)}`, token);
+  const scoped = encodeURIComponent(vendor);
+  const onlyLimit = await request('GET', `/api/repartidor-finanzas/vencimientos/${scoped}?limit=200`, token);
+  const daily = await request('GET', `/api/repartidor-finanzas/daily-summary/${scoped}?date=${new Date().toISOString().slice(0,10)}`, token);
   console.log(JSON.stringify({
     vencOnlyLimit: { status: onlyLimit.status, count: onlyLimit.json?.vencimientos?.length, code: onlyLimit.json?.code, error: onlyLimit.json?.error },
     daily: {
