@@ -101,29 +101,21 @@ function createAuthClaimsLoginHandler({
         (!credentialProfile || credentialProfile.isActive !== true || !credentialProfile._passwordHash)
         && typeof authRepository.findNameLoginCandidates === 'function'
       ) {
-        const candidates = await authRepository.findNameLoginCandidates(username);
-        const pinMatches = [];
-        for (const candidate of candidates) {
-          if (!candidate || candidate.isActive !== true || !candidate._passwordHash) continue;
-          const probe = await verifyVendorPin({
-            vendedorCode: candidate.code,
-            candidatePin: password,
-            dbPin: candidate._passwordHash,
-            requestId: req.requestId || 'AUTH',
-          });
-          if (probe?.valid) pinMatches.push(candidate);
-        }
-        if (pinMatches.length === 1) {
-          credentialProfile = pinMatches[0];
-        } else if (pinMatches.length > 1) {
+        const candidates = await authRepository.findNameLoginCandidates(username, { limit: 2 });
+        if (candidates.length === 1) {
+          const only = candidates[0];
+          if (only && only.isActive === true && only._passwordHash) {
+            credentialProfile = only;
+          }
+        } else if (candidates.length > 1) {
           try {
             await requireLoginAudit(authRepository, null, false, req.ip);
           } catch (error) {
             return sendError(res, error);
           }
           return res.status(401).json({
-            error: 'Credenciales ambiguas',
-            code: 'AMBIGUOUS_CREDENTIALS',
+            error: 'Credenciales invalidas',
+            code: 'INVALID_CREDENTIALS',
           });
         }
       }
@@ -131,6 +123,16 @@ function createAuthClaimsLoginHandler({
       return sendError(res, error);
     }
     if (!credentialProfile || credentialProfile.isActive !== true || !credentialProfile._passwordHash) {
+      try {
+        await verifyVendorPin({
+          vendedorCode: '__none__',
+          candidatePin: password,
+          dbPin: '$2b$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUV',
+          requestId: req.requestId || 'AUTH',
+        });
+      } catch (_) {
+        // Dummy compare for A-12 timing; ignore hash format errors.
+      }
       try {
         await requireLoginAudit(authRepository, credentialProfile?.id || null, false, req.ip);
       } catch (error) {

@@ -121,7 +121,7 @@ class Db2AuthRepository extends AuthRepository {
             AND V.SUBEMPRESA = 'GMP'
         )
           AND REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '')
-            LIKE '%' || CAST(? AS VARCHAR(100)) || '%'
+            = CAST(? AS VARCHAR(100))
         ORDER BY TRIM(P.CODIGOVENDEDOR)
         FETCH FIRST 2 ROWS ONLY
       `;
@@ -168,7 +168,7 @@ class Db2AuthRepository extends AuthRepository {
       )
       AND COALESCE(NULLIF(TRIM(P.ESTADO), ''), '') <> 'A'
         AND REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '')
-          LIKE '%' || CAST(? AS VARCHAR(100)) || '%'
+          = CAST(? AS VARCHAR(100))
       ORDER BY TRIM(P.CODIGOVENDEDOR)
       FETCH FIRST ${max} ROWS ONLY
     `;
