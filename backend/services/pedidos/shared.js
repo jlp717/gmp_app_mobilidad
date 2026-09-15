@@ -19,6 +19,7 @@ module.exports = {
     generateOrderPdf: impl.generateOrderPdf,
     calculateLineImporte: impl.calculateLineImporte,
     assertPrecioWithinClientTariff: impl.assertPrecioWithinClientTariff,
+    resolveServerLineUnitPrice: impl.resolveServerLineUnitPrice,
     pedidosBreaker: impl.pedidosBreaker,
     resolvePedidoTerminal: impl.resolvePedidoTerminal,
     exportCommercialOrderToSystem: impl.exportCommercialOrderToSystem,
