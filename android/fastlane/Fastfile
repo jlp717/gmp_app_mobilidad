@@ -7,7 +7,7 @@ default_platform(:android)
 platform :android do
   desc "Distribuye el APK ya construido al grupo comerciales de Firebase"
   lane :firebase do
-    # ponytail: reutiliza artefacto CI y no recompila. upgrade: compilar aquí si lane se ejecuta fuera de CI.
+    # Firebase App Distribution still consumes the CI APK; Play internal uses AAB.
     firebase_app_distribution(
       app: ENV.fetch("FIREBASE_APP_ID"),
       firebase_cli_token: ENV.fetch("FIREBASE_CLI_TOKEN"),
