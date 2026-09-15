@@ -7,7 +7,21 @@ jest.mock('../middleware/logger', () => ({
   debug: jest.fn(),
 }));
 
-const { cacheMiddleware, invalidateAll } = require('../middleware/http-cache');
+jest.mock('../services/redis-cache', () => {
+  const hooks = [];
+  return {
+    invalidateCache: jest.fn(async (pattern) => {
+      hooks.forEach((hook) => hook(pattern));
+    }),
+    onInvalidationPattern: jest.fn((hook) => {
+      hooks.push(hook);
+      return () => {};
+    }),
+  };
+});
+
+const { cacheMiddleware, invalidateAll, invalidate, invalidationMiddleware } = require('../middleware/http-cache');
+const { invalidateCache } = require('../services/redis-cache');
 const {
   networkOptimizer,
   responseCoalescing,
@@ -475,5 +489,40 @@ describe('network optimizer cache headers', () => {
 
     expect(firstNext).toHaveBeenCalledTimes(1);
     expect(secondNext).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('BE-13 money no-store and cluster invalidation', () => {
+  test.each([
+    '/api/cobros',
+    '/api/cobros/123',
+    '/api/repartidor-finanzas/liquidacion',
+    '/api/liquidaciones/daily',
+    '/api/entregas/pendientes',
+  ])('does not HTTP-cache money paths: %s', (path) => {
+    const req = {
+      method: 'GET',
+      path,
+      originalUrl: path,
+      baseUrl: '/api',
+      query: {},
+      headers: {},
+      user: { id: '94', role: 'REPARTIDOR' },
+    };
+    const res = makeRes();
+    cacheMiddleware(req, res, jest.fn());
+    expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+  });
+
+  test('invalidation publishes so a second worker hook clears its map', () => {
+    invalidate('cobros:');
+    expect(invalidateCache).toHaveBeenCalledWith('cobros:*');
+    const req = {
+      method: 'POST',
+      path: '/api/cobros',
+      originalUrl: '/api/cobros',
+    };
+    invalidationMiddleware(req, makeRes(), jest.fn());
+    expect(invalidateCache).toHaveBeenCalled();
   });
 });

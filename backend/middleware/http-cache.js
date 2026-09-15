@@ -60,6 +60,36 @@ function isSensitiveRepartoPath(req) {
         || /\/repartidor-finanzas\/rutero\/confirmations(?:\/[^/]+)?\/receipt$/.test(path);
 }
 
+function isMoneyNoStorePath(req) {
+    const path = getRequestPath(req);
+    return (
+        path === '/api/cobros'
+        || path.startsWith('/api/cobros/')
+        || path.includes('/repartidor-finanzas')
+        || path.includes('/liquidaciones')
+        || path.includes('/entregas/pendientes')
+    );
+}
+
+let httpCacheInvalidationHooked = false;
+function ensureHttpCacheClusterInvalidation() {
+    if (httpCacheInvalidationHooked) return;
+    httpCacheInvalidationHooked = true;
+    try {
+        const { onInvalidationPattern } = require('../services/redis-cache');
+        onInvalidationPattern((pattern) => {
+            const prefix = String(pattern || '')
+                .replace(/^gmp:/, '')
+                .replace(/\*$/, '');
+            if (prefix) invalidate(prefix, false);
+        });
+    } catch (_) {
+        // Redis optional — workers still invalidate locally
+    }
+}
+
+ensureHttpCacheClusterInvalidation();
+
 function generateETag(data) {
     return `"${crypto.createHash('md5').update(JSON.stringify(data)).digest('hex').substring(0, 16)}"`;
 }
@@ -214,7 +244,7 @@ function deleteKey(key) {
     return cache.delete(key);
 }
 
-function invalidate(pattern) {
+function invalidate(pattern, publishRemote = true) {
     let count = 0;
     for (const key of cache.keys()) {
         if (key.startsWith(pattern)) {
@@ -222,6 +252,15 @@ function invalidate(pattern) {
             totalCacheSize -= entry.size;
             cache.delete(key);
             count++;
+        }
+    }
+    if (publishRemote) {
+        try {
+            const { invalidateCache } = require('../services/redis-cache');
+            const redisPattern = pattern.endsWith('*') ? pattern : `${pattern}*`;
+            Promise.resolve(invalidateCache(redisPattern)).catch(() => {});
+        } catch (_) {
+            // Redis optional
         }
     }
     return count;
@@ -308,7 +347,7 @@ function cacheMiddleware(req, res, next) {
 
         const path = req.path;
 
-        if (isSensitiveRepartoPath(req)) {
+        if (isSensitiveRepartoPath(req) || isMoneyNoStorePath(req)) {
             res.setHeader('Cache-Control', 'private, no-store');
             return next();
         }
@@ -340,14 +379,11 @@ function cacheMiddleware(req, res, next) {
         if (path.includes('/rutero')) {
             return cached('rutero', 300)(req, res, next);
         }
-        if (path.includes('/cobros')) {
-            return cached('cobros', 30)(req, res, next);
+        if (path.includes('/facturas')) {
+            return cached('facturas', 30)(req, res, next);
         }
         if (path.includes('/pedidos')) {
             return cached('pedidos', 30)(req, res, next);
-        }
-        if (path.includes('/facturas')) {
-            return cached('facturas', 30)(req, res, next);
         }
     }
 
@@ -400,6 +436,7 @@ module.exports = {
     invalidateAll,
     isCacheBypassRequest,
     isSensitiveRepartoPath,
+    isMoneyNoStorePath,
     CACHE_TTL,
     MAX_ENTRY_SIZE,
     MAX_TOTAL_CACHE,
