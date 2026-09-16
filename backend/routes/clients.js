@@ -21,6 +21,7 @@ const { parsePage, paginationContract, db2OffsetFetch } = require('../src/utils/
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const { getClientDays } = require('../services/laclae');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 
 function normalizeVendorCode(value) { return String(value || '').trim(); }
@@ -67,7 +68,7 @@ async function assertClientInVendorScope(safeClientCode, vendedorCodes) {
   if (!scopeFilter.clause) return { ok: true };
   const scopeRows = await queryWithParams(`
     SELECT 1 AS OK
-    FROM DSEDAC.CLI C
+    FROM ${comercialErpTable('CLI')} C
     WHERE C.CODIGOCLIENTE = ?
       ${scopeFilter.clause}
     FETCH FIRST 1 ROW ONLY
@@ -237,7 +238,7 @@ const getClientsHandler = async (req, res) => {
     const clients = await cachedQuery(clientQuery, `
       WITH LACLAE_SCOPED AS (
         SELECT LCCDCL, LCIMVT, LCIMCT, LCAADC, LCMMDC, LCDDDC, LCCDVD
-          FROM DSED.LACLAE
+          FROM ${comercialErpTable('LACLAE')}
          WHERE LCAADC >= ${MIN_YEAR}
            AND TPDC = 'LAC'
            AND LCTPVT IN ('CC', 'VC')
@@ -282,7 +283,7 @@ const getClientsHandler = async (req, res) => {
         C.ANOBAJA as yearInactive,
         TRIM(V.NOMBREVENDEDOR) as vendorName,
         LV.LAST_VENDOR as vendorCode
-      FROM DSEDAC.CLI C
+      FROM ${comercialErpTable('CLI')} C
       LEFT JOIN LACLAE_AGG S ON C.CODIGOCLIENTE = S.CLIENT_CODE
       LEFT JOIN LACLAE_LAST LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
       LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
@@ -482,7 +483,7 @@ router.get('/compare', verifyToken, async (req, res) => {
         MIN(L.ANODOCUMENTO * 100 + L.MESDOCUMENTO) as firstPurchase,
         MAX(L.ANODOCUMENTO * 100 + L.MESDOCUMENTO) as lastPurchase
       FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
+      LEFT JOIN ${comercialErpTable('CLI')} C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
       WHERE L.CODIGOCLIENTEALBARAN IN(${clientPlaceholders})
         AND L.ANODOCUMENTO >= ?
         AND L.TIPOVENTA IN ('CC', 'VC')
@@ -555,7 +556,7 @@ router.get('/:code', verifyToken, async (req, res) => {
     if (scopeFilter.clause) {
       const scopeRows = await queryWithParams(`
         SELECT 1 AS OK
-        FROM DSEDAC.CLI C
+        FROM ${comercialErpTable('CLI')} C
         WHERE C.CODIGOCLIENTE = ?
           ${scopeFilter.clause}
         FETCH FIRST 1 ROWS ONLY
@@ -579,7 +580,7 @@ router.get('/:code', verifyToken, async (req, res) => {
   CAST(NULL AS VARCHAR(254)) as email,
   C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
   C.OBSERVACIONES1 as notes, C.ANOALTA as yearCreated
-      FROM DSEDAC.CLI C
+      FROM ${comercialErpTable('CLI')} C
       WHERE C.CODIGOCLIENTE = ?
       FETCH FIRST 1 ROWS ONLY
   `, [safeClientCode], false);
@@ -895,8 +896,8 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
         SUM(L.LCCTEV) as boxes, SUM(L.LCCTUD) as units,
         SUM(L.LCIMVT) as amount, SUM(L.LCIMVT - L.LCIMCT) as margin,
         TRIM(L.LCCDVD) as vendedor
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+      FROM ${comercialErpTable('LACLAE')} L
+      LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
       WHERE ${whereParts.join(' AND ')}
       GROUP BY L.LCAADC, L.LCMMDC, L.LCDDDC, L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCCDVD
       ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
@@ -958,8 +959,8 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
     L.LCCTEV as boxes, L.LCCTUD as units,
     L.LCIMVT as amount, (L.LCIMVT - L.LCIMCT) as margin,
     TRIM(L.LCCDVD) as vendedor
-        FROM DSED.LACLAE L
-        LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+        FROM ${comercialErpTable('LACLAE')} L
+        LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
         WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
           AND ${LACLAE_SALES_FILTER}
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
@@ -1013,8 +1014,8 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
           SUM(L.LCIMVT) as amount,
           SUM(L.LCIMVT - L.LCIMCT) as margin,
           COUNT(DISTINCT L.LCCDRF) as productCount
-        FROM DSED.LACLAE L
-        LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+        FROM ${comercialErpTable('LACLAE')} L
+        LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
         WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
           AND ${LACLAE_SALES_FILTER}
         GROUP BY ${groupByClause}

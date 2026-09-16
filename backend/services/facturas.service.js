@@ -140,7 +140,7 @@ function appendCfcVendorScopeFilter(sql, queryParams, vendorBatch, ownershipYear
         (CFC.CODIGOVENDEDOR IS NULL OR TRIM(CFC.CODIGOVENDEDOR) = '')
         AND TRIM(CFC.CODIGOCLIENTE) IN (
           SELECT DISTINCT TRIM(OWN.CODIGOCLIENTE)
-          FROM DSEDAC.CFC OWN
+          FROM ${comercialErpTable('CFC')} OWN
           WHERE TRIM(OWN.CODIGOVENDEDOR) IN (${placeholders})
             AND OWN.NUMEROFACTURA > 0
             AND OWN.NUMEROFACTURA < 900000
@@ -392,8 +392,8 @@ class FacturasService {
         CFC.IMPORTETOTAL as TOTAL,
         CFC.IMPORTEBASEIMPONIBLE as BASE,
         CFC.IMPORTEIVA as IVA
-      FROM DSEDAC.CFC CFC
-      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
+      FROM ${comercialErpTable('CFC')} CFC
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
       WHERE CFC.NUMEROFACTURA > 0 AND CFC.NUMEROFACTURA < 900000
     `;
             const queryParams = [];
@@ -601,8 +601,8 @@ class FacturasService {
         CFC.IMPORTETOTAL as TOTAL,
         CFC.IMPORTEBASEIMPONIBLE as BASE,
         CFC.IMPORTEIVA as IVA
-      FROM DSEDAC.CFC CFC
-      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
+      FROM ${comercialErpTable('CFC')} CFC
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
       WHERE CFC.NUMEROFACTURA > 0 AND CFC.NUMEROFACTURA < 900000
     `;
             sql = applyCommonFilters(sql, queryParams, {
@@ -643,7 +643,7 @@ class FacturasService {
         ${cacTaxableBaseSql()} as BASE,
         ${cacIvaSql()} as IVA
       FROM ${comercialErpTable('CAC')} CAC
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
       WHERE CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000
         AND NOT (CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000)
     `;
@@ -771,7 +771,7 @@ class FacturasService {
         if (isAll) {
             const sql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
-      FROM DSEDAC.CFC
+      FROM ${comercialErpTable('CFC')}
       WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
       ORDER BY YEAR DESC
     `;
@@ -788,7 +788,7 @@ class FacturasService {
 
         const baseSql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
-      FROM DSEDAC.CFC
+      FROM ${comercialErpTable('CFC')}
       WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
         AND @VENDOR_IN@
       ORDER BY YEAR DESC
@@ -815,7 +815,7 @@ class FacturasService {
 
         const invoiceYearsSql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
-      FROM DSEDAC.CFC
+      FROM ${comercialErpTable('CFC')}
       WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
         AND @VENDOR_IN@
     `;
@@ -902,8 +902,8 @@ class FacturasService {
         SUM(CFC.IMPORTETOTAL) as TOTAL,
         SUM(CFC.IMPORTEBASEIMPONIBLE) as BASE,
         SUM(CFC.IMPORTEIVA) as IVA
-      FROM DSEDAC.CFC CFC
-      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
+      FROM ${comercialErpTable('CFC')} CFC
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
       WHERE CFC.NUMEROFACTURA > 0 AND CFC.NUMEROFACTURA < 900000
     `;
             const queryParams = [];
@@ -1062,8 +1062,8 @@ class FacturasService {
         SUM(CFC.IMPORTETOTAL) as TOTAL,
         SUM(CFC.IMPORTEBASEIMPONIBLE) as BASE,
         SUM(CFC.IMPORTEIVA) as IVA
-      FROM DSEDAC.CFC CFC
-      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
+      FROM ${comercialErpTable('CFC')} CFC
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
       WHERE CFC.NUMEROFACTURA > 0 AND CFC.NUMEROFACTURA < 900000
     `;
             sql = applySummaryFilters(sql, queryParams, {
@@ -1091,7 +1091,7 @@ class FacturasService {
         SUM(${cacTaxableBaseSql()}) as BASE,
         SUM(${cacIvaSql()}) as IVA
       FROM ${comercialErpTable('CAC')} CAC
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
       WHERE CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000
         AND NOT (CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000)
     `;
@@ -1232,8 +1232,8 @@ class FacturasService {
         CFC.IMPORTEBASEIMPONIBLE5,
         CFC.PORCENTAJEIVA5,
         CFC.IMPORTEIVA5
-      FROM DSEDAC.CFC CFC
-      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
+      FROM ${comercialErpTable('CFC')} CFC
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
       WHERE TRIM(CFC.SERIEFACTURA) = ?
         AND CFC.NUMEROFACTURA = ?
         AND CFC.EJERCICIOFACTURA = ?
@@ -1353,7 +1353,7 @@ class FacturasService {
         const placeholders = vendorCodes.map(() => '?').join(',');
         const ownershipSql = `
       SELECT 1 AS OK
-      FROM DSEDAC.CFC OWN
+      FROM ${comercialErpTable('CFC')} OWN
       WHERE TRIM(OWN.CODIGOCLIENTE) = ?
         AND TRIM(OWN.CODIGOVENDEDOR) IN (${placeholders})
         AND OWN.NUMEROFACTURA > 0
@@ -1445,7 +1445,7 @@ class FacturasService {
         CAC.PORCENTAJEIVA5,
         CAC.IMPORTEIVA5
       FROM ${comercialErpTable('CAC')} CAC
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
       WHERE CAC.NUMEROALBARAN = ?
         AND TRIM(CAC.SERIEALBARAN) = ?
         AND CAC.EJERCICIOALBARAN = ?

@@ -19,6 +19,7 @@ const {
 const { verifyToken } = require('../middleware/auth');
 const { authorizeVendorScope, isFinancialRole, requireVendorQueryScope } = require('../middleware/vendor-scope');
 const { buildVendedorFilterParameterized } = require('../src/utils/dashboardFilters');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 function asTrimmedText(value) {
     if (value == null) return '';
@@ -48,7 +49,7 @@ router.get('/yoy-comparison', verifyToken, requireVendorQueryScope, async (req, 
             SUM(L.LCIMVT) as sales, 
             SUM(L.LCIMVT - L.LCIMCT) as margin,
             COUNT(DISTINCT L.LCCDCL) as clients
-          FROM DSED.LACLAE L 
+          FROM ${comercialErpTable('LACLAE')} L 
           WHERE L.LCAADC = ? AND ${LACLAE_SALES_FILTER} ${monthFilter} ${vendorFilter.filter}
         `;
             return cachedQuery(queryWithParams, sql, {
@@ -142,13 +143,13 @@ router.get('/top-clients', verifyToken, requireVendorQueryScope, async (req, res
           L.LCCDCL as code,
           SUM(L.LCIMVT) as totalSales,
           COUNT(*) as transactions
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE ${LACLAE_SALES_FILTER} ${dateFilter} ${vendorFilter.filter}
         GROUP BY L.LCCDCL
         ORDER BY totalSales DESC
         FETCH FIRST ${safeLimit} ROWS ONLY
       ) T
-      LEFT JOIN DSEDAC.CLI C ON C.CODIGOCLIENTE = T.code
+      LEFT JOIN ${comercialErpTable('CLI')} C ON C.CODIGOCLIENTE = T.code
       ORDER BY T.totalSales DESC
     `;
 
@@ -202,7 +203,7 @@ router.get('/trends', verifyToken, requireVendorQueryScope, async (req, res) => 
         // Get last 6 months from LACLAE
         const sql = `
       SELECT L.LCAADC as year, L.LCMMDC as month, SUM(L.LCIMVT) as sales
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE L.LCAADC >= ? AND ${LACLAE_SALES_FILTER} ${vendorFilter.filter}
       GROUP BY L.LCAADC, L.LCMMDC
       ORDER BY L.LCAADC DESC, L.LCMMDC DESC
@@ -479,8 +480,8 @@ router.get('/sales-history', verifyToken, requireVendorQueryScope, async (req, r
         COALESCE(TRIM(AX.FILTRO03), '') as fi3,
         COALESCE(TRIM(AX.FILTRO04), '') as fi4,
         COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as fi5
-      FROM DSEDAC.LAC L
-      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+      FROM ${comercialErpTable('LAC')} L
+      LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO
       LEFT JOIN DSEDAC.ARTX AX ON L.CODIGOARTICULO = AX.CODIGOARTICULO
       ${whereClause}
       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
@@ -576,7 +577,7 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
                     SUM(L.LCIMVT - L.LCIMCT) as margin,
                     SUM(L.LCCTUD) as units,
                     COUNT(DISTINCT TRIM(L.LCCDRF)) as product_count
-                FROM DSED.LACLAE L
+                FROM ${comercialErpTable('LACLAE')} L
                 WHERE ${LACLAE_FILTER}
                   AND L.LCAADC = ?
                   ${vendorFilter.filter}
@@ -595,7 +596,7 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
                     SUM(L.LCIMVT) as sales,
                     SUM(L.LCIMVT - L.LCIMCT) as margin,
                     SUM(L.LCCTUD) as units
-                FROM DSED.LACLAE L
+                FROM ${comercialErpTable('LACLAE')} L
                 WHERE ${LACLAE_FILTER}
                   AND L.LCAADC BETWEEN ? AND ?
                   ${vendorFilter.filter}
@@ -615,7 +616,7 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
                     L.LCAADC as year,
                     L.LCMMDC as month,
                     SUM(L.LCIMVT) as sales
-                FROM DSED.LACLAE L
+                FROM ${comercialErpTable('LACLAE')} L
                 WHERE ${LACLAE_FILTER}
                   AND L.LCAADC IN (?, ?)
                   ${vendorFilter.filter}

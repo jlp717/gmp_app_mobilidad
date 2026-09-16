@@ -42,6 +42,8 @@ describe('comercial ERP table mapping', () => {
     expect(comercialErpTable('ARA')).toBe('JAVIER.TEST_ARA');
     expect(comercialErpTable('LAC')).toBe('JAVIER.TEST_LAC');
     expect(comercialErpTable('LPC')).toBe('JAVIER.TEST_LPC');
+    expect(comercialErpTable('CFC')).toBe('JAVIER.TEST_CFC');
+    expect(comercialErpTable('OPP')).toBe('JAVIER.TEST_OPP');
     const fs = require('fs');
     const path = require('path');
     const facturas = fs.readFileSync(
@@ -53,17 +55,43 @@ describe('comercial ERP table mapping', () => {
     expect(facturas).toMatch(/comercialErpTable\('LAC'\)/);
     const planner = fs.readFileSync(path.join(__dirname, '../routes/planner.js'), 'utf8');
     expect(planner).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(planner).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(planner).toMatch(/comercialErpTable\('CPC'\)/);
     expect(planner).not.toMatch(/FROM DSED\.LACLAE/);
+    expect(planner).not.toMatch(/FROM DSEDAC\.CLI/);
+    expect(planner).not.toMatch(/FROM DSEDAC\.CPC/);
     const facturasService = fs.readFileSync(path.join(__dirname, '../services/facturas.service.js'), 'utf8');
     expect(facturasService).toMatch(/comercialErpTable\('LAC'\)/);
     expect(facturasService).toMatch(/comercialErpTable\('CAC'\)/);
+    expect(facturasService).toMatch(/comercialErpTable\('CFC'\)/);
+    expect(facturasService).toMatch(/comercialErpTable\('CLI'\)/);
     expect(facturasService).not.toMatch(/FROM DSEDAC\.LAC /);
     expect(facturasService).not.toMatch(/FROM DSEDAC\.CAC /);
+    expect(facturasService).not.toMatch(/FROM DSEDAC\.CFC/);
+    const dashboardService = fs.readFileSync(path.join(__dirname, '../src/services/dashboard.service.js'), 'utf8');
+    expect(dashboardService).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(dashboardService).not.toMatch(/FROM DSED\.LACLAE/);
+    const analytics = fs.readFileSync(path.join(__dirname, '../routes/analytics.js'), 'utf8');
+    expect(analytics).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(analytics).not.toMatch(/FROM DSED\.LACLAE/);
+    const commissionsPdf = fs.readFileSync(path.join(__dirname, '../services/commissions-pdf.service.js'), 'utf8');
+    expect(commissionsPdf).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(commissionsPdf).not.toMatch(/FROM DSED\.LACLAE/);
+    const chatbotTools = fs.readFileSync(path.join(__dirname, '../src/chatbot/chatbot_tools.js'), 'utf8');
+    expect(chatbotTools).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(chatbotTools).not.toMatch(/FROM DSED\.LACLAE/);
+    expect(chatbotTools).not.toMatch(/FROM DSEDAC\.CFC/);
+    const ruteroWeek = fs.readFileSync(path.join(__dirname, '../src/repositories/rutero.repository.js'), 'utf8');
+    expect(ruteroWeek).toMatch(/comercialErpTable\('OPP'\)/);
+    expect(ruteroWeek).toMatch(/comercialErpTable\('CPC'\)/);
+    expect(ruteroWeek).not.toMatch(/FROM DSEDAC\.OPP/);
+    expect(ruteroWeek).not.toMatch(/FROM DSEDAC\.CPC/);
     const ruteroRepo = fs.readFileSync(
       path.join(__dirname, '../src/modules/rutero/infrastructure/db2-rutero-repository.js'),
       'utf8',
     );
     expect(ruteroRepo).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(ruteroRepo).toMatch(/comercialErpTable\('CLI'\)/);
     expect(ruteroRepo).not.toMatch(/FROM DSED\.LACLAE/);
   });
 

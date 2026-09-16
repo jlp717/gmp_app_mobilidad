@@ -128,6 +128,26 @@ describe('facturas service fiscal totals', () => {
     expect(headerSql).not.toMatch(/SUM\(CAC\.IMPORTETOTAL\)/i);
   });
 
+  test('getFacturaDetail isolated_test reads TEST_CFC not DSEDAC.CFC', async () => {
+    const previous = process.env.REPARTO_TABLE_SET;
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+JAVIER\.TEST_CFC\s+CFC/i.test(sql)) return [f4306Header];
+      if (/FROM\s+JAVIER\.TEST_LAC\s+LAC/i.test(sql)) return [];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    });
+    try {
+      const factura = await facturasService.getFacturaDetail('F', 4306, 2026);
+      expect(factura.header.total).toBe(3618.44);
+      const headerSql = mockQueryWithParams.mock.calls[0][0];
+      expect(headerSql).toMatch(/FROM\s+JAVIER\.TEST_CFC\s+CFC/i);
+      expect(headerSql).not.toMatch(/FROM\s+DSEDAC\.CFC/i);
+    } finally {
+      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previous;
+    }
+  });
+
   test('getFacturasRaw reads list amounts from CFC aggregated fiscal columns', async () => {
     mockQueryWithParams.mockResolvedValueOnce([
       {
@@ -589,7 +609,7 @@ describe('facturas service fiscal totals', () => {
     process.env.REPARTO_TABLE_SET = 'isolated_test';
     try {
       mockQueryWithParams.mockImplementation(async (sql) => {
-        if (/FROM\s+DSEDAC\.CFC\s+CFC/i.test(sql)) return [f4306Header];
+        if (/FROM\s+JAVIER\.TEST_CFC\s+CFC/i.test(sql)) return [f4306Header];
         if (/FROM\s+JAVIER\.TEST_LAC\s+LAC/i.test(sql) && /JAVIER\.TEST_CAC/i.test(sql)) return [];
         throw new Error(`Unexpected SQL: ${sql}`);
       });

@@ -14,7 +14,6 @@ const {
     lookupClientAssignedVendorCodes,
     handleRouteError
 } = require('../utils/common');
-const { db2ErpTable } = require('../utils/db2-schemas');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { resolvePlannerRole, PlannerRoleError } = require('../src/modules/planner/domain/planner-role-policy');
 const { resolveVendorScope } = require('../middleware/vendor-scope');
@@ -463,13 +462,13 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
         : '';
 
     // JAVIER.PEDIDOS_CAB is the app/test buffer. Commercial Ruta reads live
-    // ERP orders from DSEDAC.CPC: client=CODIGOCLIENTEALBARAN, not ESTADO.
+    // ERP orders from comercialErpTable('CPC'): client=CODIGOCLIENTEALBARAN, not ESTADO.
     const sql = `
         SELECT
             TRIM(C.CODIGOCLIENTEALBARAN) AS CODE,
             COUNT(*) AS TOTAL_COUNT,
             MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER
-        FROM ${db2ErpTable('CPC')} C
+        FROM ${comercialErpTable('CPC')} C
         WHERE TRIM(C.CODIGOCLIENTEALBARAN) IN (${clientPlaceholders})
           AND C.ANODOCUMENTO = ?
           AND C.MESDOCUMENTO = ?
@@ -559,7 +558,7 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
   COUNT(*) as numLines,
   COUNT(DISTINCT L.CODIGOARTICULO) as numProducts
       FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
+      LEFT JOIN ${comercialErpTable('CLI')} C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
       WHERE L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ? 
         AND L.TIPOVENTA IN ('CC', 'VC')
         AND L.TIPOLINEA IN ('AB', 'VT')
@@ -1083,7 +1082,7 @@ router.post('/rutero/config', requirePlannerVendorScope({ location: 'body', fiel
                 // SECURITY: Use parameterized query to prevent SQL injection
                 const clientCodesList = orden.map(o => o.cliente);
                 const placeholders = clientCodesList.map(() => '?').join(',');
-                const sql = `SELECT CODIGOCLIENTE as C, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as N FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${placeholders}) FETCH FIRST 1000 ROWS ONLY`;
+                const sql = `SELECT CODIGOCLIENTE as C, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as N FROM ${comercialErpTable('CLI')} WHERE CODIGOCLIENTE IN (${placeholders}) FETCH FIRST 1000 ROWS ONLY`;
                 const names = await queryWithParams(sql, clientCodesList);
                 names.forEach(n => clientNamesMap[n.C.trim()] = n.N.trim());
             }
@@ -1307,7 +1306,7 @@ router.get('/rutero/day-direct/:day', requirePlannerRole, requirePlannerVendorSc
                 POBLACION as CITY,
                 TELEFONO1 as PHONE,
                 TELEFONO2 as PHONE2
-            FROM DSEDAC.CLI
+            FROM ${comercialErpTable('CLI')}
             WHERE CODIGOCLIENTE IN (${batch.map(() => '?').join(',')})
               AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
         `;
@@ -1586,7 +1585,7 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
                 POBLACION as CITY,
                 TELEFONO1 as PHONE,
                 TELEFONO2 as PHONE2
-            FROM DSEDAC.CLI
+            FROM ${comercialErpTable('CLI')}
             WHERE CODIGOCLIENTE IN (${batchPlaceholders(batch)})
               AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
         `;
@@ -1880,7 +1879,7 @@ router.get('/diagnose/client/:code', requirePlannerPrivilege, async (req, res) =
             analysis: []
         };
 
-        // 1. Get client info from DSEDAC.CLI
+        // 1. Get client info from CLI catalog
         try {
             const clientData = await queryWithParams(`
                 SELECT 
@@ -1890,7 +1889,7 @@ router.get('/diagnose/client/:code', requirePlannerPrivilege, async (req, res) =
                     TRIM(CODIGOREPARTIDOR) as REPARTIDOR_CLI,
                     TRIM(POBLACION) as CITY,
                     TRIM(CODIGORUTA) as ROUTE
-                FROM DSEDAC.CLI
+                FROM ${comercialErpTable('CLI')}
                 WHERE CODIGOCLIENTE = ?
                 FETCH FIRST 1 ROWS ONLY
             `, [clientCode]);
@@ -1900,7 +1899,7 @@ router.get('/diagnose/client/:code', requirePlannerPrivilege, async (req, res) =
                 results.analysis.push(`  Vendedor asignado en CLI: ${clientData[0].VENDOR_CLI || 'N/A'}`);
                 results.analysis.push(`  Repartidor asignado en CLI: ${clientData[0].REPARTIDOR_CLI || 'N/A'}`);
             } else {
-                results.analysis.push(`✗ Cliente NO encontrado en DSEDAC.CLI`);
+                results.analysis.push(`✗ Cliente NO encontrado en CLI`);
             }
         } catch (e) {
             results.analysis.push(`✗ Error consultando CLI: ${e.message}`);

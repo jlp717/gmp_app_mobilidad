@@ -166,7 +166,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS
       FROM ${comercialErpTable('LACLAE')} L
-      LEFT JOIN DSEDAC.CLI C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+      LEFT JOIN ${comercialErpTable('CLI')} C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -210,7 +210,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
         COALESCE(ART.CODIGOFAMILIA, '') AS FAMILIA
       FROM ${comercialErpTable('LACLAE')} L
-      LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = L.LCCDRF
+      LEFT JOIN ${comercialErpTable('ART')} ART ON ART.CODIGOARTICULO = L.LCCDRF
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -275,7 +275,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         COALESCE(C.NOMBRECLIENTE, L.LCCDCL) AS NOMBRE,
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS
       FROM ${comercialErpTable('LACLAE')} L
-      LEFT JOIN DSEDAC.CLI C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+      LEFT JOIN ${comercialErpTable('CLI')} C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -337,7 +337,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         COUNT(DISTINCT L.LCCDRF) AS PRODUCTOS,
         COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES
       FROM ${comercialErpTable('LACLAE')} L
-      LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = L.LCCDRF
+      LEFT JOIN ${comercialErpTable('ART')} ART ON ART.CODIGOARTICULO = L.LCCDRF
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}

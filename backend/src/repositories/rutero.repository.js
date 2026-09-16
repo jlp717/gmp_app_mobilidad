@@ -3,11 +3,12 @@
 const { db } = require('../config');
 const { resolveRepartoRuntime } = require('../../config/reparto-runtime');
 const { cachedQuery } = require('../../services/query-optimizer');
+const { comercialErpTable } = require('../../utils/comercial-erp-tables');
 
 const WEEK_COUNT_CACHE_TTL_SECONDS = 60;
 
 /**
- * Acceso DB2 para /rutero/week. Solo lectura: DSEDAC (ERP) y JAVIER.DELIVERY_STATUS.
+ * Acceso DB2 para /rutero/week. Lectura ERP via comercialErpTable (TEST_* en isolated_test).
  */
 class RuteroRepository {
     constructor(deps = {}) {
@@ -34,8 +35,8 @@ class RuteroRepository {
         const erpPlaceholders = cleanCodes.map(() => '?').join(',');
         const erpSql = `
             SELECT COUNT(DISTINCT CPC.NUMEROALBARAN) as DELIVERED
-            FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+            FROM ${comercialErpTable('OPP')} OPP
+            INNER JOIN ${comercialErpTable('CPC')} CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
             WHERE OPP.CODIGOREPARTIDOR IN (${erpPlaceholders})
               AND OPP.DIAREPARTO = ?
               AND OPP.MESREPARTO = ?

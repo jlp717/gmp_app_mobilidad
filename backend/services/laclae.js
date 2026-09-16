@@ -262,7 +262,7 @@ async function loadLaclaeCacheInternal() {
                     C.ORDENVISITASABADO as OR_S,
                     C.ORDENVISITADOMINGO as OR_D
                 FROM DSEDAC.CDVI C
-                JOIN DSEDAC.CLI K ON C.CODIGOCLIENTE = K.CODIGOCLIENTE
+        JOIN ${comercialErpTable('CLI')} K ON C.CODIGOCLIENTE = K.CODIGOCLIENTE
                 WHERE (C.MARCAACTUALIZACION <> 'B' OR C.MARCAACTUALIZACION IS NULL OR TRIM(C.MARCAACTUALIZACION) = '')
                   AND (  -- EXCLUDE zombie entries with NO visit days assigned
                     TRIM(C.DIAVISITALUNESSN) = 'S' OR TRIM(C.DIAVISITAMARTESSN) = 'S' OR
@@ -325,7 +325,7 @@ async function loadLaclaeCacheInternal() {
           L.R1_T8DIRL as DEL_L, L.R1_T8DIRM as DEL_M, L.R1_T8DIRX as DEL_X,
           L.R1_T8DIRJ as DEL_J, L.R1_T8DIRV as DEL_V, L.R1_T8DIRS as DEL_S, L.R1_T8DIRD as DEL_D
         FROM ${comercialErpTable('LACLAE')} L
-        JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
+        JOIN ${comercialErpTable('CLI')} C ON L.LCCDCL = C.CODIGOCLIENTE
         WHERE L.R1_T8CDVD IS NOT NULL 
           AND L.LCCDCL IS NOT NULL
           AND L.LCAADC >= ?

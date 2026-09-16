@@ -32,6 +32,7 @@ const {
     buildClientVendorParamFilter,
     getVendorColumnExpr,
 } = require('../../utils/common');
+const { comercialErpTable } = require('../../utils/comercial-erp-tables');
 
 // ── Safe Query Helper (Parameterized) ────────────────────────────────────────
 
@@ -245,7 +246,7 @@ async function searchClientsFlexibleRows(conn, query, limit = 20) {
     const rows = await safeQuery(conn, `
             SELECT TRIM(CODIGOCLIENTE) as CODIGO, TRIM(NOMBRECLIENTE) as NOMBRE,
                    TRIM(POBLACION) as POBLACION, TRIM(PROVINCIA) as PROVINCIA
-            FROM DSEDAC.CLI
+            FROM ${comercialErpTable('CLI')}
             WHERE ${clauses}
             ORDER BY NOMBRECLIENTE
             FETCH FIRST ${rowLimit} ROWS ONLY
@@ -354,7 +355,7 @@ const dbDiscoveryTools = {
                    TRIM(C.DIRECCION) as DIRECCION, TRIM(C.POBLACION) as POBLACION,
                    TRIM(C.PROVINCIA) as PROVINCIA,
                    TRIM(P.VENDEDORCOMERCIAL) as VENDEDOR
-            FROM DSEDAC.CLI C
+            FROM ${comercialErpTable('CLI')} C
             LEFT JOIN DSEDAC.CLP P ON C.CODIGOCLIENTE = P.CODIGOCLIENTE
             WHERE TRIM(C.CODIGOCLIENTE) = ?
             FETCH FIRST 1 ROWS ONLY
@@ -392,9 +393,9 @@ const dbDiscoveryTools = {
 const pricingTools = {
     async getProductPrice(conn, productCode) {
         const tariff = await safeQuery(conn, `
-            SELECT A.CODIGOARTICULO, A.DESCRIPCIONARTICULO, COALESCE((SELECT L.PRECIOVENTA FROM DSEDAC.LAC L WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO) AND L.PRECIOVENTA > 0 ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC FETCH FIRST 1 ROW ONLY), 0) AS PRECIOVENTA,
+            SELECT A.CODIGOARTICULO, A.DESCRIPCIONARTICULO, COALESCE((SELECT L.PRECIOVENTA FROM ${comercialErpTable('LAC')} L WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO) AND L.PRECIOVENTA > 0 ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC FETCH FIRST 1 ROW ONLY), 0) AS PRECIOVENTA,
                    COALESCE((
-                       SELECT L.PRECIOCOSTO FROM DSEDAC.LAC L
+                       SELECT L.PRECIOCOSTO FROM ${comercialErpTable('LAC')} L
                        WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
                          AND L.PRECIOCOSTO > 0
                        ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
@@ -408,7 +409,7 @@ const pricingTools = {
         const lastSale = await safeQuery(conn, `
             SELECT PRECIOVENTA, TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
                    ANODOCUMENTO, MESDOCUMENTO
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE TRIM(CODIGOARTICULO) = ?
             ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
             FETCH FIRST 1 ROWS ONLY
@@ -425,9 +426,9 @@ const pricingTools = {
 
     async calculateBreakeven(conn, productCode) {
         const art = await safeQuery(conn, `
-            SELECT COALESCE((SELECT L.PRECIOVENTA FROM DSEDAC.LAC L WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO) AND L.PRECIOVENTA > 0 ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC FETCH FIRST 1 ROW ONLY), 0) AS PRECIOVENTA,
+            SELECT COALESCE((SELECT L.PRECIOVENTA FROM ${comercialErpTable('LAC')} L WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO) AND L.PRECIOVENTA > 0 ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC FETCH FIRST 1 ROW ONLY), 0) AS PRECIOVENTA,
                    COALESCE((
-                       SELECT L.PRECIOCOSTO FROM DSEDAC.LAC L
+                       SELECT L.PRECIOCOSTO FROM ${comercialErpTable('LAC')} L
                        WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
                          AND L.PRECIOCOSTO > 0
                        ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
@@ -457,9 +458,9 @@ const pricingTools = {
 
     async simulateDiscount(conn, productCode, discountPercent) {
         const art = await safeQuery(conn, `
-            SELECT COALESCE((SELECT L.PRECIOVENTA FROM DSEDAC.LAC L WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO) AND L.PRECIOVENTA > 0 ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC FETCH FIRST 1 ROW ONLY), 0) AS PRECIOVENTA,
+            SELECT COALESCE((SELECT L.PRECIOVENTA FROM ${comercialErpTable('LAC')} L WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO) AND L.PRECIOVENTA > 0 ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC FETCH FIRST 1 ROW ONLY), 0) AS PRECIOVENTA,
                    COALESCE((
-                       SELECT L.PRECIOCOSTO FROM DSEDAC.LAC L
+                       SELECT L.PRECIOCOSTO FROM ${comercialErpTable('LAC')} L
                        WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
                          AND L.PRECIOCOSTO > 0
                        ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
@@ -539,7 +540,7 @@ const riskTools = {
     async getClientCreditLimit(conn, clientCode) {
         const client = await safeQuery(conn, `
             SELECT RIESGOACUMULADO
-            FROM DSEDAC.CLI WHERE TRIM(CODIGOCLIENTE) = ?
+            FROM ${comercialErpTable('CLI')} WHERE TRIM(CODIGOCLIENTE) = ?
             FETCH FIRST 1 ROWS ONLY
         `, [clientCode]);
 
@@ -559,7 +560,7 @@ const riskTools = {
     async checkClientBlocked(conn, clientCode) {
         const client = await safeQuery(conn, `
             SELECT CLIENTEBLOQUEADO, MOTIVOBLOQUEO
-            FROM DSEDAC.CLI WHERE TRIM(CODIGOCLIENTE) = ?
+            FROM ${comercialErpTable('CLI')} WHERE TRIM(CODIGOCLIENTE) = ?
             FETCH FIRST 1 ROWS ONLY
         `, [clientCode]);
 
@@ -605,12 +606,12 @@ const commercialTools = {
     async detectChurn(conn, clientCode, months = 6) {
         const oldProducts = await safeQuery(conn, `
             SELECT DISTINCT L.CODIGOARTICULO, A.DESCRIPCIONARTICULO
-            FROM DSEDAC.LAC L
+            FROM ${comercialErpTable('LAC')} L
             LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
             WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
               AND L.ANODOCUMENTO = YEAR(CURRENT DATE) - 1
               AND L.CODIGOARTICULO NOT IN (
-                SELECT DISTINCT CODIGOARTICULO FROM DSEDAC.LAC
+                SELECT DISTINCT CODIGOARTICULO FROM ${comercialErpTable('LAC')}
                 WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
                   AND (ANODOCUMENTO = YEAR(CURRENT DATE) 
                     OR (ANODOCUMENTO = YEAR(CURRENT DATE) - 1 AND MESDOCUMENTO > MONTH(CURRENT DATE) - ?))
@@ -639,7 +640,7 @@ const commercialTools = {
         for (const year of years) {
             const data = await safeQuery(conn, `
                 SELECT SUM(IMPORTEVENTA) as SALES, SUM(CANTIDADENVASES) as BOXES
-                FROM DSEDAC.LAC
+                FROM ${comercialErpTable('LAC')}
                 WHERE TRIM(CODIGOCLIENTEALBARAN) = ? AND ANODOCUMENTO = ?
             `, [clientCode, year]);
             results[year] = { sales: parseFloat(data[0]?.SALES) || 0, boxes: parseFloat(data[0]?.BOXES) || 0 };
@@ -653,7 +654,7 @@ const commercialTools = {
             SELECT ANODOCUMENTO, MESDOCUMENTO, DIADOCUMENTO, 
                    TRIM(CODIGOARTICULO) as CODIGOARTICULO, DESCRIPCIONARTICULO,
                    CANTIDADENVASES, IMPORTEVENTA, PRECIOVENTA
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
             ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
             FETCH FIRST ? ROWS ONLY
@@ -683,7 +684,7 @@ const commercialTools = {
                 SUM(IMPORTECOSTE) as COSTE,
                 COUNT(DISTINCT CODIGOCLIENTEALBARAN) as CLIENTES,
                 COUNT(*) as OPERACIONES
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
               ${vendorFilter.sql}
         `;
@@ -714,7 +715,7 @@ const commercialTools = {
 
         const sql = `
             SELECT SUM(IMPORTEVENTA) as VENTAS, SUM(IMPORTECOSTE) as COSTE, COUNT(*) as OPERACIONES
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE TRIM(CODIGOCLIENTEALBARAN) = ? AND ANODOCUMENTO = ?
               ${vendorFilter.sql}
         `;
@@ -787,14 +788,14 @@ const commissionTools = {
 
             const clientRows = await safeQuery(conn, `
                 SELECT COUNT(DISTINCT TRIM(CODIGOCLIENTEALBARAN)) as CLIENTES
-                FROM DSEDAC.LAC
+                FROM ${comercialErpTable('LAC')}
                 WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
                   ${vendorFilter.sql}
             `, [currentYear, currentMonth, ...vendorFilter.params]);
 
             const opsRows = await safeQuery(conn, `
                 SELECT COUNT(*) as OPS
-                FROM DSEDAC.LAC
+                FROM ${comercialErpTable('LAC')}
                 WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
                   ${vendorFilter.sql}
             `, [currentYear, currentMonth, ...vendorFilter.params]);
@@ -813,7 +814,7 @@ const commissionTools = {
         // Fallback: calculate from LAC table
         const salesRows = await safeQuery(conn, `
             SELECT SUM(IMPORTEVENTA) as VENTAS, COUNT(DISTINCT CODIGOCLIENTEALBARAN) as CLIENTES, COUNT(*) as OPS
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
               ${vendorFilter.sql}
         `, [currentYear, currentMonth, ...vendorFilter.params]);
@@ -842,7 +843,7 @@ const commissionTools = {
         if (clientCode) {
             sql = `
                 SELECT TRIM(CODIGOCLIENTEALBARAN) as CLIENTE, SUM(IMPORTEVENTA) as VENTAS
-                FROM DSEDAC.LAC
+                FROM ${comercialErpTable('LAC')}
                 WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
                   ${vendorFilter.sql}
                   AND TRIM(CODIGOCLIENTEALBARAN) = ?
@@ -853,7 +854,7 @@ const commissionTools = {
         } else {
             sql = `
                 SELECT TRIM(CODIGOCLIENTEALBARAN) as CLIENTE, SUM(IMPORTEVENTA) as VENTAS
-                FROM DSEDAC.LAC
+                FROM ${comercialErpTable('LAC')}
                 WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
                   ${vendorFilter.sql}
                 GROUP BY CODIGOCLIENTEALBARAN
@@ -937,7 +938,7 @@ const objectivesTools = {
 
         const salesRows = await safeQuery(conn, `
             SELECT SUM(IMPORTEVENTA) as VENTAS
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
               ${vendorFilter.sql}
         `, [currentYear, currentMonth, ...vendorFilter.params]);
@@ -945,7 +946,7 @@ const objectivesTools = {
         const achieved = parseFloat(salesRows[0]?.VENTAS) || 0;
         const prevSalesRows = await safeQuery(conn, `
             SELECT SUM(IMPORTEVENTA) as VENTAS
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
               ${vendorFilter.sql}
         `, [currentYear - 1, currentMonth, ...vendorFilter.params]);
@@ -973,7 +974,7 @@ const objectivesTools = {
         if (familyCode) {
             sql = `
                 SELECT TRIM(A.CODIGOFAMILIA) as FAMILIA, SUM(L.IMPORTEVENTA) as VENTAS
-                FROM DSEDAC.LAC L
+                FROM ${comercialErpTable('LAC')} L
                 LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
                 WHERE L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ?
                   ${vendorFilter.sql}
@@ -984,7 +985,7 @@ const objectivesTools = {
         } else {
             sql = `
                 SELECT TRIM(A.CODIGOFAMILIA) as FAMILIA, SUM(L.IMPORTEVENTA) as VENTAS
-                FROM DSEDAC.LAC L
+                FROM ${comercialErpTable('LAC')} L
                 LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
                 WHERE L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ?
                   ${vendorFilter.sql}
@@ -1056,7 +1057,7 @@ async function fetchCfcInvoiceHeader(conn, ref) {
                CFC.DIADOCUMENTO AS DIA,
                CFC.MESDOCUMENTO AS MES,
                CFC.ANODOCUMENTO AS ANO
-        FROM DSEDAC.CFC CFC
+        FROM ${comercialErpTable('CFC')} CFC
         WHERE CFC.NUMEROFACTURA = ?
           AND CFC.EJERCICIOFACTURA = ?
           AND CFC.NUMEROFACTURA > 0
@@ -1181,7 +1182,7 @@ const invoiceTools = {
                    LAC.NUMEROALBARAN AS ALBARAN,
                    LAC.ANODOCUMENTO, LAC.MESDOCUMENTO, LAC.DIADOCUMENTO
             FROM DSEDAC.CAC CAC
-            LEFT JOIN DSEDAC.LAC LAC
+            LEFT JOIN ${comercialErpTable('LAC')} LAC
               ON LAC.SUBEMPRESAALBARAN = CAC.SUBEMPRESAALBARAN
              AND LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
              AND LAC.SERIEALBARAN = CAC.SERIEALBARAN
@@ -1247,7 +1248,7 @@ const invoiceTools = {
                    MAX(LAC.MESDOCUMENTO) AS MES,
                    MAX(LAC.DIADOCUMENTO) AS DIA
             FROM DSEDAC.CAC CAC
-            LEFT JOIN DSEDAC.LAC LAC
+            LEFT JOIN ${comercialErpTable('LAC')} LAC
               ON LAC.SUBEMPRESAALBARAN = CAC.SUBEMPRESAALBARAN
              AND LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
              AND LAC.SERIEALBARAN = CAC.SERIEALBARAN
@@ -1378,7 +1379,7 @@ const invoiceTools = {
                    CFC.DIADOCUMENTO AS DIA,
                    CFC.MESDOCUMENTO AS MES,
                    CFC.ANODOCUMENTO AS ANO
-            FROM DSEDAC.CFC CFC
+            FROM ${comercialErpTable('CFC')} CFC
             WHERE CFC.ANODOCUMENTO = ?
               AND CFC.MESDOCUMENTO = ?
               AND CFC.DIADOCUMENTO = ?
@@ -1424,7 +1425,7 @@ const pedidosTools = {
             SELECT COUNT(*) AS TOTAL_ORDERS,
                    COUNT(DISTINCT CPC.CODIGOCLIENTEALBARAN) AS TOTAL_CLIENTS,
                    COALESCE(SUM(CPC.IMPORTETOTAL), 0) AS TOTAL_AMOUNT
-            FROM DSEDAC.CPC CPC
+            FROM ${comercialErpTable('CPC')} CPC
             WHERE CPC.ANODOCUMENTO = ?
               AND CPC.MESDOCUMENTO = ?
               AND CPC.DIADOCUMENTO = ?
@@ -1455,7 +1456,7 @@ const pedidosTools = {
                    CPC.NUMEROALBARAN,
                    CPC.IMPORTETOTAL AS AMOUNT,
                    TRIM(CPC.SITUACIONALBARAN) AS ESTADO
-            FROM DSEDAC.CPC CPC
+            FROM ${comercialErpTable('CPC')} CPC
             WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = ?
               ${vendorFilter.sql}
             ORDER BY CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC
@@ -1481,7 +1482,7 @@ const pedidosTools = {
         const digits = normalized.replace(/[^\d]/g, '');
         const rows = await safeQuery(conn, `
             SELECT TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE
-            FROM DSEDAC.CPC CPC
+            FROM ${comercialErpTable('CPC')} CPC
             WHERE (TRIM(CHAR(CPC.NUMEROPEDIDO)) = ? OR TRIM(CHAR(CPC.NUMEROPEDIDO)) = ?)
             FETCH FIRST 1 ROW ONLY
         `, [normalized, digits]);
@@ -1505,7 +1506,7 @@ const pedidosTools = {
                    CPC.NUMEROALBARAN,
                    CPC.SUBEMPRESAALBARAN, CPC.EJERCICIOALBARAN,
                    CPC.SERIEALBARAN, CPC.TERMINALALBARAN
-            FROM DSEDAC.CPC CPC
+            FROM ${comercialErpTable('CPC')} CPC
             WHERE (TRIM(CHAR(CPC.NUMEROPEDIDO)) = ? OR TRIM(CHAR(CPC.NUMEROPEDIDO)) = ?)
               ${vendorFilter.sql}
             FETCH FIRST 1 ROW ONLY
@@ -1522,7 +1523,7 @@ const pedidosTools = {
                    LAC.CANTIDADENVASES,
                    LAC.PRECIOVENTA,
                    LAC.IMPORTEVENTA
-            FROM DSEDAC.LAC LAC
+            FROM ${comercialErpTable('LAC')} LAC
             WHERE LAC.SUBEMPRESAALBARAN = ?
               AND LAC.EJERCICIOALBARAN = ?
               AND LAC.SERIEALBARAN = ?
@@ -1615,8 +1616,8 @@ const cobrosTools = {
             SELECT 
                 SUM(CPC.IMPORTETOTAL) as TOTAL_COLLECTABLE,
                 SUM(CASE WHEN COALESCE(CVC.IMPORTEPENDIENTE, 0) = 0 THEN CPC.IMPORTETOTAL ELSE CPC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0) END) as TOTAL_COLLECTED
-            FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+            FROM ${comercialErpTable('OPP')} OPP
+            INNER JOIN ${comercialErpTable('CPC')} CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
             LEFT JOIN DSEDAC.CVC CVC ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
@@ -1814,7 +1815,7 @@ const evolutionTools = {
                 SUM(L.LCIMVT) AS TOTAL_VENTAS,
                 SUM(L.LCIMCT) AS TOTAL_COSTO,
                 SUM(L.LCIMVT - L.LCIMCT) AS TOTAL_MARGEN
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE (L.LCAADC > ? OR (L.LCAADC = ? AND L.LCMMDC >= ?))
               AND L.TPDC = 'LAC'
               AND L.LCTPVT IN ('CC', 'VC')
@@ -1872,7 +1873,7 @@ const evolutionTools = {
                 SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS VENTAS_ACTUAL,
                 SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS VENTAS_ANTERIOR,
                 SUM(L.LCIMVT) AS VENTAS_TOTAL
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             LEFT JOIN DSEDAC.ART A ON TRIM(L.LCCDRF) = TRIM(A.CODIGOARTICULO)
             WHERE L.LCAADC IN (?, ?)
               AND L.LCIMVT > 0
@@ -1913,8 +1914,8 @@ const evolutionTools = {
                 SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS VENTAS_ACTUAL,
                 SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS VENTAS_ANTERIOR,
                 COUNT(DISTINCT CASE WHEN L.LCAADC = ? THEN L.LCCDRF END) AS PRODUCTOS_ACTUAL
-            FROM DSED.LACLAE L
-            LEFT JOIN DSEDAC.CLI C ON TRIM(L.LCCDCL) = TRIM(C.CODIGOCLIENTE)
+            FROM ${comercialErpTable('LACLAE')} L
+            LEFT JOIN ${comercialErpTable('CLI')} C ON TRIM(L.LCCDCL) = TRIM(C.CODIGOCLIENTE)
             WHERE L.LCAADC IN (?, ?)
               AND L.LCIMVT > 0
               ${vendorFilter.sql}
@@ -1959,8 +1960,8 @@ const analyticsTools = {
                 TRIM(MAX(C.NOMBRECLIENTE)) AS CLIENT_NAME,
                 SUM(L.LCIMVT) AS TOTAL_SALES,
                 COUNT(DISTINCT L.LCCDRF) AS NUM_PRODUCTS
-            FROM DSED.LACLAE L
-            LEFT JOIN DSEDAC.CLI C ON TRIM(L.LCCDCL) = TRIM(C.CODIGOCLIENTE)
+            FROM ${comercialErpTable('LACLAE')} L
+            LEFT JOIN ${comercialErpTable('CLI')} C ON TRIM(L.LCCDCL) = TRIM(C.CODIGOCLIENTE)
             WHERE L.LCAADC = ? AND L.LCMMDC = ?
               AND L.LCIMVT > 0
               ${vendorFilter.sql}
@@ -1994,7 +1995,7 @@ const analyticsTools = {
                 TRIM(MAX(A.DESCRIPCIONARTICULO)) AS PRODUCT_NAME,
                 SUM(L.LCIMVT) AS TOTAL_SALES,
                 SUM(L.LCQTVR) AS TOTAL_QUANTITY
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             LEFT JOIN DSEDAC.ART A ON TRIM(L.LCCDRF) = TRIM(A.CODIGOARTICULO)
             WHERE L.LCAADC = ? AND L.LCMMDC = ?
               AND L.LCIMVT > 0
@@ -2032,7 +2033,7 @@ const analyticsTools = {
                     SUM(L.LCIMVT) as SALES,
                     SUM(L.LCIMVT - L.LCIMCT) as MARGIN,
                     COUNT(DISTINCT L.LCCDCL) as CLIENTS
-                FROM DSED.LACLAE L
+                FROM ${comercialErpTable('LACLAE')} L
                 WHERE L.LCAADC = ?
                   AND L.LCIMVT > 0
                   ${monthFilter}
@@ -2086,10 +2087,10 @@ const repartidorTools = {
                     ELSE CPC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0)
                 END) as TOTAL_COBRADO,
                 COUNT(*) as NUM_DOCUMENTOS
-            FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC 
+            FROM ${comercialErpTable('OPP')} OPP
+            INNER JOIN ${comercialErpTable('CPC')} CPC 
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+            LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             LEFT JOIN DSEDAC.CVC CVC 
                 ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
@@ -2179,7 +2180,7 @@ const repartidorTools = {
             SELECT 
                 COUNT(DISTINCT OPP.NUMEROORDENPREPARACION) as TOTAL_DELIVERIES,
                 COUNT(*) as TOTAL_LINES
-            FROM DSEDAC.OPP OPP
+            FROM ${comercialErpTable('OPP')} OPP
             WHERE OPP.ANOREPARTO = ? AND OPP.MESREPARTO = ? AND OPP.DIAREPARTO = ?
               ${repartoFilter.sql}
         `, [currentYear, currentMonth, currentDay, ...repartoFilter.params]);
@@ -2217,7 +2218,7 @@ const warehouseTools = {
                 TRIM(VDD.NOMBREVENDEDOR) AS NOMBRE_REPARTIDOR,
                 COUNT(DISTINCT OPP.NUMEROORDENPREPARACION) AS NUM_ORDENES,
                 COUNT(*) AS NUM_LINEAS
-            FROM DSEDAC.OPP OPP
+            FROM ${comercialErpTable('OPP')} OPP
             LEFT JOIN DSEDAC.VEH V ON TRIM(V.CODIGOVEHICULO) = TRIM(OPP.CODIGOVEHICULO)
             LEFT JOIN DSEDAC.VDD VDD ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
             WHERE OPP.ANOREPARTO = ?
@@ -2301,7 +2302,7 @@ const summaryTools = {
                    COUNT(DISTINCT TRIM(CODIGOCLIENTEALBARAN)) as TOTAL_CLIENTS,
                    COUNT(DISTINCT TRIM(SERIEALBARAN) CONCAT '-' CONCAT TRIM(CHAR(NUMEROALBARAN))) as TOTAL_ORDERS,
                    COUNT(*) as TOTAL_LINES
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? AND DIADOCUMENTO = ?
               ${salesVendorFilter.sql}
         `;
@@ -2335,7 +2336,7 @@ const crossQueryTools = {
             SELECT PRECIOVENTA, IMPORTEVENTA, CANTIDADENVASES,
                    ANODOCUMENTO, MESDOCUMENTO, DIADOCUMENTO,
                    TRIM(NUMEROORDENPREPARACION) as ORDEN
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE TRIM(CODIGOARTICULO) = ? AND TRIM(CODIGOCLIENTEALBARAN) = ?
             ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
             FETCH FIRST ? ROWS ONLY
@@ -2363,7 +2364,7 @@ const crossQueryTools = {
         const rows = await safeQuery(conn, `
             SELECT SUM(IMPORTEVENTA) as TOTAL, SUM(CANTIDADENVASES) as UNIDADES,
                    AVG(PRECIOVENTA) as PRECIO_MEDIO, COUNT(*) as LINEAS
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE TRIM(CODIGOARTICULO) = ? AND TRIM(CODIGOCLIENTEALBARAN) = ?
               AND ANODOCUMENTO = ? AND MESDOCUMENTO = ?
         `, [productCode, clientCode, currentYear, currentMonth]);
@@ -2387,7 +2388,7 @@ const crossQueryTools = {
                    TRIM(A.CODIGOFAMILIA) as FAMILIA,
                    SUM(L.IMPORTEVENTA) as TOTAL, SUM(L.CANTIDADENVASES) as UNIDADES,
                    AVG(L.PRECIOVENTA) as PRECIO_MEDIO
-            FROM DSEDAC.LAC L
+            FROM ${comercialErpTable('LAC')} L
             LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
             WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
             GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, A.CODIGOFAMILIA
@@ -2422,7 +2423,7 @@ const crossQueryTools = {
 
         const clientCheck = await safeQuery(conn, `
             SELECT 1 AS OK
-            FROM DSEDAC.CLI CLI
+            FROM ${comercialErpTable('CLI')} CLI
             WHERE TRIM(CLI.CODIGOCLIENTE) = ?
               ${clientVendorFilter.clause}
             FETCH FIRST 1 ROWS ONLY
@@ -2444,7 +2445,7 @@ const crossQueryTools = {
         const monthlyRows = await safeQuery(conn, `
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
                    SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
               ${laclaeVendorFilter.clause}
@@ -2463,7 +2464,7 @@ const crossQueryTools = {
         const topProductsRows = await safeQuery(conn, `
             SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
                    SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
@@ -2485,7 +2486,7 @@ const crossQueryTools = {
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
                    TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME,
                    SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
               AND (L.LCSRAB = 'D' OR L.LCTPVT = 'DV')
@@ -2518,7 +2519,7 @@ const crossQueryTools = {
                 units: parseFloat(row.UNITS) || 0,
                 amount: parseFloat(row.AMOUNT) || 0,
             })),
-            source: 'DSED.LACLAE',
+            source: comercialErpTable('LACLAE'),
             appSection: 'Pedidos > Evolución',
         };
     },
@@ -2535,7 +2536,7 @@ const crossQueryTools = {
             SELECT ANODOCUMENTO, MESDOCUMENTO,
                    SUM(IMPORTEVENTA) as TOTAL, SUM(CANTIDADENVASES) as UNIDADES,
                    COUNT(*) as LINEAS
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
               AND (ANODOCUMENTO > ? OR (ANODOCUMENTO = ? AND MESDOCUMENTO >= ?))
             GROUP BY ANODOCUMENTO, MESDOCUMENTO
@@ -2565,7 +2566,7 @@ const crossQueryTools = {
                    SUM(IMPORTEVENTA) as VENTAS,
                    COUNT(DISTINCT CODIGOCLIENTEALBARAN) as CLIENTES,
                    COUNT(*) as OPERACIONES
-            FROM DSEDAC.LAC
+            FROM ${comercialErpTable('LAC')}
             WHERE (ANODOCUMENTO > ? OR (ANODOCUMENTO = ? AND MESDOCUMENTO >= ?))
               ${vendorFilter.sql}
             GROUP BY ANODOCUMENTO, MESDOCUMENTO
@@ -2608,7 +2609,7 @@ const crossQueryTools = {
                    TRIM(A.CODIGOFAMILIA) as FAMILIA,
                    SUM(L.IMPORTEVENTA) as TOTAL, SUM(L.CANTIDADENVASES) as UNIDADES,
                    AVG(L.PRECIOVENTA) as PRECIO_MEDIO
-            FROM DSEDAC.LAC L
+            FROM ${comercialErpTable('LAC')} L
             LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
             WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
               AND L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ?
@@ -2657,7 +2658,7 @@ const crossQueryTools = {
             SELECT TRIM(C.CODIGOCLIENTE) as CODIGO, TRIM(C.NOMBRECLIENTE) as NOMBRE,
                    TRIM(C.POBLACION) as POBLACION, TRIM(C.PROVINCIA) as PROVINCIA,
                    TRIM(P.VENDEDORCOMERCIAL) as VENDEDOR
-            FROM DSEDAC.CLI C
+            FROM ${comercialErpTable('CLI')} C
             LEFT JOIN DSEDAC.CLP P ON C.CODIGOCLIENTE = P.CODIGOCLIENTE
             WHERE TRIM(C.NOMBRECLIENTE) LIKE ?
             ORDER BY C.NOMBRECLIENTE
@@ -2845,7 +2846,7 @@ async function queryClientLaclaeAggregate(conn, {
                SUM(L.LCIMCT) AS COST,
                SUM(L.LCCTUD) AS UNITS,
                COUNT(*) AS LINES
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         LEFT JOIN DSEDAC.ART A ON TRIM(L.LCCDRF) = TRIM(A.CODIGOARTICULO)
         WHERE TRIM(L.LCCDCL) = ?
           AND L.LCIMVT > 0
@@ -2914,7 +2915,7 @@ const genericAnalyticsTools = {
             groups: current.groups,
             totals: current.totals,
             comparison,
-            source: 'DSED.LACLAE',
+            source: comercialErpTable('LACLAE'),
         };
     },
 
@@ -2968,7 +2969,7 @@ const genericAnalyticsTools = {
                    SUM(L.LCIMVT) AS SALES,
                    SUM(L.LCCTUD) AS UNITS,
                    COUNT(*) AS LINES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             LEFT JOIN DSEDAC.ART A ON TRIM(L.LCCDRF) = TRIM(A.CODIGOARTICULO)
             WHERE TRIM(L.LCCDCL) = ?
               AND L.LCIMVT > 0
@@ -3000,7 +3001,7 @@ const genericAnalyticsTools = {
             purchaseCount: purchases.length,
             totalSales,
             purchases,
-            source: 'DSED.LACLAE',
+            source: comercialErpTable('LACLAE'),
         };
     },
 
@@ -3034,7 +3035,7 @@ const genericAnalyticsTools = {
                 return safeQuery(conn, `
                     SELECT SUM(L.LCIMVT) AS SALES, SUM(L.LCIMCT) AS COST,
                            COUNT(DISTINCT L.LCCDCL) AS CLIENTS
-                    FROM DSED.LACLAE L
+                    FROM ${comercialErpTable('LACLAE')} L
                     WHERE L.LCIMVT > 0 ${pf.clause} ${vendorFilter.sql}
                 `, [...pf.params, ...vendorFilter.params]);
             };
@@ -3114,7 +3115,7 @@ const genericAnalyticsTools = {
                                LAC.PRECIOVENTA AS PRECIO,
                                LAC.IMPORTEVENTA AS IMPORTE
                         FROM DSEDAC.CAC CAC
-                        LEFT JOIN DSEDAC.LAC LAC
+                        LEFT JOIN ${comercialErpTable('LAC')} LAC
                           ON LAC.SUBEMPRESAALBARAN = CAC.SUBEMPRESAALBARAN
                          AND LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
                          AND LAC.SERIEALBARAN = CAC.SERIEALBARAN

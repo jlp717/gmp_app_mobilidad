@@ -29,11 +29,18 @@ describe('copy-comercial-erp-to-test', () => {
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_CLI')).toBe(true);
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_ART')).toBe(true);
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_LAC')).toBe(true);
+    expect(jobs.some((job) => job.dest === 'JAVIER.TEST_CFC')).toBe(true);
+    expect(jobs.some((job) => job.dest === 'JAVIER.TEST_OPP')).toBe(true);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_CFC').fullSql).toMatch(/SELECT \* FROM DSEDAC\.CFC/);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_OPP').fullSql).toMatch(/SELECT \* FROM DSEDAC\.OPP/);
     expect(jobs.find((job) => job.dest === 'JAVIER.TEST_LPC').appendSql).toMatch(/EJERCICIOPEDIDO/);
     expect(jobs.find((job) => job.dest === 'JAVIER.TEST_LPC').appendSql).not.toMatch(/EJERCICIOALBARAN/);
     expect(jobs.find((job) => job.dest === 'JAVIER.TEST_LPC').fullSql).toMatch(/SELECT \* FROM DSEDAC\.LPC/);
     expect(jobs.find((job) => job.dest === 'JAVIER.TEST_CVC').fullSql).toMatch(/SELECT \* FROM DSEDAC\.CVC/);
     expect(jobs.find((job) => job.dest === 'JAVIER.TEST_LAC').fullSql).toMatch(/SELECT \* FROM DSEDAC\.LAC/);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_LQD').fullSql).toMatch(/SELECT \* FROM DSEDAC\.LQD/);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_CLC').fullSql).toMatch(/SELECT \* FROM DSEDAC\.CLC/);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_CLX').fullSql).toMatch(/SELECT \* FROM DSEDAC\.CLX/);
     expect(jobs.some((job) => /PAG|CAC|CODIGOVENDEDOR/.test(job.insertSql))).toBe(true);
     expect(jobs.find((job) => job.dest === 'JAVIER.TEST_CVC').appendSql).toMatch(/NOT EXISTS/);
     expect(require('../scripts/copy-comercial-erp-to-test').HIT_VENDORS).toEqual(

@@ -1,11 +1,12 @@
 /**
  * Dashboard Repository Implementation - DB2
- * Uses REAL schema: DSED.LACLAE (sales view), DSEDAC.CLI (clients), DSEDAC.ART (products)
+ * Sales/clients via comercialErpTable (TEST_* in isolated_test).
  */
 const { DashboardRepository } = require('../domain/dashboard-repository');
 const { DashboardMetrics, SalesEvolutionPoint, TopClient, TopProduct } = require('../domain/dashboard-metrics');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { LACLAE_SALES_FILTER, sanitizeCodeList, buildClientListVendorSqlFilter, getVendorColumnExpr } = require('../../../../utils/common');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 function clampInt(value, defaultValue, min, max) {
   const n = parseInt(value, 10);
@@ -38,7 +39,7 @@ class Db2DashboardRepository extends DashboardRepository {
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS,
         COALESCE(SUM(L.LCCTEV), 0) AS CAJAS
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -67,7 +68,7 @@ class Db2DashboardRepository extends DashboardRepository {
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -106,8 +107,8 @@ class Db2DashboardRepository extends DashboardRepository {
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+      FROM ${comercialErpTable('LACLAE')} L
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -148,8 +149,8 @@ class Db2DashboardRepository extends DashboardRepository {
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
         COALESCE(ART.CODIGOFAMILIA, '') AS FAMILIA
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
+      FROM ${comercialErpTable('LACLAE')} L
+      LEFT JOIN ${comercialErpTable('ART')} ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -188,9 +189,9 @@ class Db2DashboardRepository extends DashboardRepository {
         COALESCE(ART.DESCRIPCIONARTICULO, L.LCCDRF) AS NOMBRE_PRODUCTO,
         L.LCIMVT AS VENTAS,
         L.LCCTUD AS CANTIDAD
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
-      LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
+      FROM ${comercialErpTable('LACLAE')} L
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+      LEFT JOIN ${comercialErpTable('ART')} ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
       WHERE ${vendorFilter}
         AND ${dateFilter}
       ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
@@ -213,7 +214,7 @@ class Db2DashboardRepository extends DashboardRepository {
         L.LCMMDC AS MES,
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         AND L.LCAADC >= YEAR(CURRENT DATE) - 1
@@ -241,7 +242,7 @@ class Db2DashboardRepository extends DashboardRepository {
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS,
         COUNT(DISTINCT L.LCCDCL) AS CLIENTES
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -267,7 +268,7 @@ class Db2DashboardRepository extends DashboardRepository {
         CLI.TELEFONO1 AS TELEFONO,
         CLI.EMAIL,
         CLI.CODCLI AS TARIFA
-      FROM DSEDAC.CLI CLI
+      FROM ${comercialErpTable('CLI')} CLI
       WHERE (CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0)
         ${vendorFilter}
       ORDER BY CLI.NOMBRECLIENTE

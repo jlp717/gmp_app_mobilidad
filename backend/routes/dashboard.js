@@ -22,6 +22,7 @@ const {
     sanitizeForSQL,
     handleRouteError
 } = require('../utils/common');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const {
     normalizeVendorCode,
     dashboardCodesMatch,
@@ -270,7 +271,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
 
         const aggregateSQL = `
             SELECT ${selectClauses.join(', ')}
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
               ${artJoinClause}
               WHERE 1=1
               AND ${LACLAE_SALES_FILTER}
@@ -311,7 +312,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
             const cCodes = [...new Set(rawData.map(r => r[`ID_${idx}`]).filter(Boolean))];
             if (cCodes.length) {
                 const codesToQuery = cCodes.slice(0, 2000);
-                const clientNamesSql = buildBoundInSql("SELECT TRIM(CODIGOCLIENTE) as CODE, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as NAME FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (", codesToQuery.length);
+                const clientNamesSql = buildBoundInSql(`SELECT TRIM(CODIGOCLIENTE) as CODE, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as NAME FROM ${comercialErpTable('CLI')} WHERE CODIGOCLIENTE IN (`, codesToQuery.length);
                 nameLookups.push(lookup(
                     clientNamesSql,
                     'names:clients:' + hashValues(codesToQuery),

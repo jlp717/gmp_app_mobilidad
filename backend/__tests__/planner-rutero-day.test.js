@@ -89,7 +89,7 @@ describe('Planner rutero/day route', () => {
     mockRedisGet.mockResolvedValue(null);
     mockRedisSet.mockResolvedValue(true);
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (sql.includes('FROM DSEDAC.CLI')) {
+      if (sql.includes('FROM DSEDAC.CLI') || sql.includes('FROM JAVIER.TEST_CLI')) {
         return [
           {
             CODE: '4300000001',
@@ -114,7 +114,7 @@ describe('Planner rutero/day route', () => {
         return [];
       }
 
-      if (sql.includes('FROM DSEDAC.CPC')) {
+      if (sql.includes('FROM DSEDAC.CPC') || sql.includes('FROM JAVIER.TEST_CPC')) {
         return [
           {
             CODE: '4300000001',
@@ -299,6 +299,12 @@ describe('Planner rutero/day route', () => {
       expect(salesCall).toBeDefined();
       expect(salesCall[0]).toContain('FROM JAVIER.TEST_LACLAE L');
       expect(salesCall[0]).not.toContain('FROM DSED.LACLAE');
+      const cliSql = mockQueryWithParams.mock.calls.map(([sql]) => sql).find((sql) => sql.includes('TELEFONO1 as PHONE'));
+      expect(cliSql).toContain('FROM JAVIER.TEST_CLI');
+      expect(cliSql).not.toContain('FROM DSEDAC.CLI');
+      const cpcSql = mockQueryWithParams.mock.calls.map(([sql]) => sql).find((sql) => sql.includes('CODIGOCLIENTEALBARAN'));
+      expect(cpcSql).toContain('FROM JAVIER.TEST_CPC');
+      expect(cpcSql).not.toContain('FROM DSEDAC.CPC');
     } finally {
       if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
       else process.env.REPARTO_TABLE_SET = previous;

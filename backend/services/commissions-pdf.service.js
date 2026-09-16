@@ -28,6 +28,7 @@ const {
 const {
     TEAM_LEAD_GROWTH_THRESHOLD_PCT,
 } = require('./team-commission.service');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 const commissionsPdfBreaker = new CircuitBreaker({
     name: 'commissions-pdf',
@@ -303,7 +304,7 @@ async function getLacSalesData(year, startMonth, endMonth) {
                 COALESCE(TRIM(V.NOMBREVENDEDOR), '') as NOMBRE_VENDEDOR,
                 L.LCMMDC as MES,
                 COALESCE(SUM(L.LCIMVT), 0) as LAC_TOTAL
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             LEFT JOIN DSEDAC.VDD V ON RTRIM(${vendorColExpr}) = RTRIM(V.CODIGOVENDEDOR)
             WHERE L.LCAADC = ?
               AND L.LCMMDC BETWEEN ? AND ?
@@ -477,7 +478,7 @@ async function getPreviousYearLacSales(year, startMonth, endMonth, vendorCodes) 
                 RTRIM(${vendorColExpr}) as VENDEDOR_CODIGO,
                 L.LCMMDC as MES,
                 SUM(L.LCIMVT) as VENTAS_LAC
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC = ?
               AND L.LCMMDC BETWEEN ? AND ?
               AND ${LACLAE_SALES_FILTER}
@@ -1691,7 +1692,7 @@ async function fetchPaymentRecordClientRows(vendorCode, year, monthList) {
             SELECT TRIM(L.LCCDCL) AS CLIENT_CODE,
                    L.LCMMDC AS MONTH,
                    COALESCE(SUM(L.LCIMVT), 0) AS SALES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC = ?
               AND L.LCMMDC IN (${monthPlaceholders})
               AND ${LACLAE_SALES_FILTER}
@@ -1716,7 +1717,7 @@ async function fetchPaymentRecordClientRows(vendorCode, year, monthList) {
             SELECT TRIM(C.CODIGOCLIENTE) AS CLIENT_CODE,
                    TRIM(C.NOMBRECLIENTE) AS NOMBRECLIENTE,
                    TRIM(C.NOMBREALTERNATIVO) AS NOMBREALTERNATIVO
-            FROM DSEDAC.CLI C
+            FROM ${comercialErpTable('CLI')} C
             WHERE C.CODIGOCLIENTE IN (${placeholders})
         `, chunk, false, false);
 

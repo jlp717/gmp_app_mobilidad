@@ -121,6 +121,23 @@ describe('GET /sales-history', () => {
     expect(res.body.code).toBe('FORBIDDEN_VENDOR');
     expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
+
+  test('isolated_test sales-history reads TEST_LAC not DSEDAC.LAC', async () => {
+    const previous = process.env.REPARTO_TABLE_SET;
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    try {
+      const res = await request(makeApp())
+        .get('/sales-history')
+        .query({ vendedorCodes: '15', startDate: '2026-03-01', endDate: '2026-03-31' });
+      expect(res.status).toBe(200);
+      const [sql] = mockQueryWithParams.mock.calls[0];
+      expect(sql).toMatch(/FROM JAVIER\.TEST_LAC L/i);
+      expect(sql).not.toMatch(/FROM DSEDAC\.LAC L/i);
+    } finally {
+      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previous;
+    }
+  });
 });
 
 describe('GET /sales-history/summary', () => {

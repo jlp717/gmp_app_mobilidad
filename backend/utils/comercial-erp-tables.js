@@ -25,6 +25,8 @@ const ERP_PROD = Object.freeze({
   CLC: 'DSEDAC.CLC',
   LAC: 'DSEDAC.LAC',
   LACLAE: 'DSED.LACLAE',
+  CFC: 'DSEDAC.CFC',
+  OPP: 'DSEDAC.OPP',
 });
 
 const ERP_TEST = Object.freeze({
@@ -45,6 +47,8 @@ const ERP_TEST = Object.freeze({
   CLC: 'JAVIER.TEST_CLC',
   LAC: 'JAVIER.TEST_LAC',
   LACLAE: 'JAVIER.TEST_LACLAE',
+  CFC: 'JAVIER.TEST_CFC',
+  OPP: 'JAVIER.TEST_OPP',
 });
 
 function isIsolatedCommercialTest(env = process.env) {

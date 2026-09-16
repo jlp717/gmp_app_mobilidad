@@ -606,6 +606,74 @@ function commercialCopyJobs(lacSchema) {
          FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
     },
     {
+      source: 'DSEDAC.CFC',
+      dest: 'JAVIER.TEST_CFC',
+      note: 'cabecera factura CFC (CREATE LIKE + INSERT SELECT; 0 writes ERP)',
+      minRows: 1,
+      chunkYearColumn: 'EJERCICIOFACTURA',
+      fullSql: 'INSERT INTO JAVIER.TEST_CFC SELECT * FROM DSEDAC.CFC',
+      insertSql: `INSERT INTO JAVIER.TEST_CFC
+        SELECT CFC.* FROM DSEDAC.CFC CFC
+         WHERE TRIM(CFC.CODIGOVENDEDOR) IN (${vendorListSql})
+            OR TRIM(CFC.CODIGOCLIENTE) IN (${hitClientSql})
+            OR EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CAC CAC
+                  WHERE CFC.EJERCICIOFACTURA = CAC.EJERCICIOFACTURA
+                    AND TRIM(CFC.SERIEFACTURA) = TRIM(CAC.SERIEFACTURA)
+                    AND CFC.TERMINALFACTURA = CAC.TERMINALFACTURA
+                    AND CFC.NUMEROFACTURA = CAC.NUMEROFACTURA
+               )
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
+      appendSql: `INSERT INTO JAVIER.TEST_CFC
+        SELECT CFC.* FROM DSEDAC.CFC CFC
+         WHERE (
+              TRIM(CFC.CODIGOVENDEDOR) IN (${coreVendorSql})
+              OR TRIM(CFC.CODIGOCLIENTE) IN (${hitClientSql})
+            )
+           AND NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CFC T
+                  WHERE T.EJERCICIOFACTURA = CFC.EJERCICIOFACTURA
+                    AND TRIM(T.SERIEFACTURA) = TRIM(CFC.SERIEFACTURA)
+                    AND T.TERMINALFACTURA = CFC.TERMINALFACTURA
+                    AND T.NUMEROFACTURA = CFC.NUMEROFACTURA
+               )
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
+    },
+    {
+      source: 'DSEDAC.OPP',
+      dest: 'JAVIER.TEST_OPP',
+      note: 'ordenes OPP (CREATE LIKE si QSYS2 existe; BLOCKER si LIKE falla)',
+      minRows: 0,
+      optional: true,
+      chunkYearColumn: 'ANOREPARTO',
+      fullSql: 'INSERT INTO JAVIER.TEST_OPP SELECT * FROM DSEDAC.OPP',
+      insertSql: `INSERT INTO JAVIER.TEST_OPP
+        SELECT OPP.* FROM DSEDAC.OPP OPP
+         WHERE TRIM(OPP.CODIGOVENDEDOR) IN (${vendorListSql})
+            OR EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CPC CPC
+                  WHERE CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                    AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+               )
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
+      appendSql: `INSERT INTO JAVIER.TEST_OPP
+        SELECT OPP.* FROM DSEDAC.OPP OPP
+         WHERE (
+              TRIM(OPP.CODIGOVENDEDOR) IN (${coreVendorSql})
+              OR EXISTS (
+                   SELECT 1 FROM JAVIER.TEST_CPC CPC
+                    WHERE CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                      AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+                 )
+            )
+           AND NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_OPP T
+                  WHERE T.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+                    AND T.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+               )
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
+    },
+    {
       source: `${lacSchema}.LACLAE`,
       dest: 'JAVIER.TEST_LACLAE',
       note: 'historico LACLAE (full INSERT SELECT en 230)',
@@ -686,6 +754,9 @@ const INDEXES = [
   'CREATE INDEX JAVIER.IX_TEST_CVC_TIPO ON JAVIER.TEST_CVC (TIPODOCUMENTO)',
   'CREATE INDEX JAVIER.IX_TEST_CAC_FAC ON JAVIER.TEST_CAC (EJERCICIOFACTURA, SERIEFACTURA, TERMINALFACTURA, NUMEROFACTURA)',
   'CREATE INDEX JAVIER.IX_TEST_CAC_VD ON JAVIER.TEST_CAC (CODIGOVENDEDOR)',
+  'CREATE INDEX JAVIER.IX_TEST_CFC_FAC ON JAVIER.TEST_CFC (EJERCICIOFACTURA, SERIEFACTURA, TERMINALFACTURA, NUMEROFACTURA)',
+  'CREATE INDEX JAVIER.IX_TEST_CFC_VD ON JAVIER.TEST_CFC (CODIGOVENDEDOR)',
+  'CREATE INDEX JAVIER.IX_TEST_OPP_REP ON JAVIER.TEST_OPP (CODIGOREPARTIDOR, ANOREPARTO, MESREPARTO, DIAREPARTO)',
   'CREATE INDEX JAVIER.IX_TEST_LQD_VD ON JAVIER.TEST_LQD (CODIGOVENDEDOR, ANOLIQUIDACION, MESLIQUIDACION, DIALIQUIDACION)',
   'CREATE INDEX JAVIER.IX_TEST_CLX_CLI ON JAVIER.TEST_CLX (CODIGOCLIENTE)',
   'CREATE INDEX JAVIER.IX_TEST_CLI_COD ON JAVIER.TEST_CLI (CODIGOCLIENTE)',
@@ -717,9 +788,9 @@ async function main() {
   await initDb();
   try {
     const names = [
-      'FPG', 'CVC', 'CAC', 'CPC', 'LQD', 'CLX', 'VDDX', 'LACLAE', 'LAC', 'PMR', 'PMRC', 'LPC', 'ARA', 'ART', 'CLI', 'CLC',
+      'FPG', 'CVC', 'CAC', 'CPC', 'CFC', 'OPP', 'LQD', 'CLX', 'VDDX', 'LACLAE', 'LAC', 'PMR', 'PMRC', 'LPC', 'ARA', 'ART', 'CLI', 'CLC',
       'COBROS', 'PEDIDOS_CAB', 'PEDIDOS_LIN',
-      'TEST_FPG', 'TEST_CVC', 'TEST_CAC', 'TEST_CPC', 'TEST_LQD', 'TEST_CLX', 'TEST_VDDX',
+      'TEST_FPG', 'TEST_CVC', 'TEST_CAC', 'TEST_CPC', 'TEST_CFC', 'TEST_OPP', 'TEST_LQD', 'TEST_CLX', 'TEST_VDDX',
       'TEST_LACLAE', 'TEST_LAC', 'TEST_PMR', 'TEST_CLI', 'TEST_CLC', 'TEST_ART', 'TEST_ARA', 'TEST_LPC',
       'TEST_COBROS', 'TEST_PEDIDOS_CAB', 'TEST_PEDIDOS_LIN',
       'TEST_LIQUIDACION_COMERCIAL', 'TEST_DEVOLUCIONES_COMERCIAL',
@@ -734,6 +805,7 @@ async function main() {
 
     const originSpecs = [
       ['DSEDAC', 'FPG'], ['DSEDAC', 'CVC'], ['DSEDAC', 'CAC'], ['DSEDAC', 'CPC'],
+      ['DSEDAC', 'CFC'], ['DSEDAC', 'OPP'],
       ['DSEDAC', 'LQD'], ['DSEDAC', 'CLX'], ['DSEDAC', 'VDDX'], [lacSchema, 'LACLAE'],
       ['DSEDAC', 'PMR'], ['DSEDAC', 'PMRC'], ['DSEDAC', 'LPC'], ['DSEDAC', 'ARA'],
       ['DSEDAC', 'ART'], ['DSEDAC', 'CLI'], ['DSEDAC', 'CLC'], ['DSEDAC', 'LAC'],
@@ -856,7 +928,7 @@ async function main() {
     }
 
     const testNames = [
-      'TEST_FPG', 'TEST_VDDX', 'TEST_CLX', 'TEST_LQD', 'TEST_CVC', 'TEST_CAC', 'TEST_CPC',
+      'TEST_FPG', 'TEST_VDDX', 'TEST_CLX', 'TEST_LQD', 'TEST_CVC', 'TEST_CAC', 'TEST_CPC', 'TEST_CFC', 'TEST_OPP',
       'TEST_LACLAE', 'TEST_LAC', 'TEST_PMR', 'TEST_PMRC', 'TEST_LPC', 'TEST_CLI', 'TEST_CLC', 'TEST_ART',
       'TEST_ARA', 'TEST_COBROS', 'TEST_PEDIDOS_CAB',
       'TEST_PEDIDOS_LIN', 'TEST_LIQUIDACION_COMERCIAL', 'TEST_DEVOLUCIONES_COMERCIAL',
@@ -874,6 +946,8 @@ async function main() {
       TEST_CVC: report.qsys2.origin['DSEDAC.CVC'],
       TEST_CAC: report.qsys2.origin['DSEDAC.CAC'],
       TEST_CPC: report.qsys2.origin['DSEDAC.CPC'],
+      TEST_CFC: report.qsys2.origin['DSEDAC.CFC'],
+      TEST_OPP: report.qsys2.origin['DSEDAC.OPP'],
       TEST_LACLAE: report.qsys2.origin[`${lacSchema}.LACLAE`],
       TEST_LAC: report.qsys2.origin['DSEDAC.LAC'],
       TEST_PMR: report.qsys2.origin['DSEDAC.PMR'],
@@ -881,6 +955,7 @@ async function main() {
       TEST_ART: report.qsys2.origin['DSEDAC.ART'],
       TEST_ARA: report.qsys2.origin['DSEDAC.ARA'],
       TEST_LPC: report.qsys2.origin['DSEDAC.LPC'],
+      TEST_CLC: report.qsys2.origin['DSEDAC.CLC'],
     };
     for (const [testName, origin] of Object.entries(originByLogical)) {
       report.counts.push({
@@ -900,6 +975,8 @@ async function main() {
       },
       isolatedReads: {
         deudaFpAlbaran: 'JAVIER.TEST_CVC/FPG/CAC/CPC if copied, else DSEDAC SELECT',
+        facturaCabecera: 'JAVIER.TEST_CFC',
+        ruteroOpp: 'JAVIER.TEST_OPP if CREATE LIKE ok; BLOCKER if OPP cannot LIKE',
         lqdClxVddx: 'JAVIER.TEST_LQD/CLX/VDDX',
         laclaeDevoluciones: 'JAVIER.TEST_LACLAE',
         laclaeHistoricoAll: 'JAVIER.TEST_LACLAE (PIN VDPL1 sigue DSEDAC.VDPL1 SELECT)',
@@ -909,6 +986,29 @@ async function main() {
       },
       dsedacWrite: false,
     };
+
+    const oppCopy = report.copies.find((copy) => copy.dest === 'JAVIER.TEST_OPP');
+    const oppOrigin = report.qsys2.origin['DSEDAC.OPP'];
+    const oppTest = report.qsys2.test.TEST_OPP;
+    if (!oppOrigin || oppOrigin.exists !== true) {
+      report.blockerOpp = {
+        code: 'BLOCKER',
+        causa: 'QSYS2 no encuentra DSEDAC.OPP',
+        requiere: 'Confirmar nombre/esquema OPP en 230 antes de LIKE',
+      };
+    } else if (oppCopy && oppCopy.createResult && oppCopy.createResult.ok === false) {
+      report.blockerOpp = {
+        code: 'BLOCKER',
+        causa: `CREATE TABLE JAVIER.TEST_OPP LIKE DSEDAC.OPP fallo: ${JSON.stringify(oppCopy.createResult.error || oppCopy.createResult).slice(0, 220)}`,
+        requiere: 'Revisar identity/view/autorizacion LIKE de OPP; no copiar writes ERP',
+      };
+    } else if (oppTest && oppTest.exists !== true) {
+      report.blockerOpp = {
+        code: 'BLOCKER',
+        causa: 'TEST_OPP no existe tras COPY',
+        requiere: 'CREATE TABLE JAVIER.TEST_OPP LIKE DSEDAC.OPP en schema JAVIER',
+      };
+    }
 
     console.log(JSON.stringify(report, null, 2));
   } finally {

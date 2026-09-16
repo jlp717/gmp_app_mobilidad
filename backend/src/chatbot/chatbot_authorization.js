@@ -3,6 +3,7 @@ const {
   CHATBOT_LOG_EVENTS,
   emitChatbotLog,
 } = require("./chatbot_log");
+const { comercialErpTable } = require("../../utils/comercial-erp-tables");
 const SAFE_SCOPE_DENIED_RESPONSE =
   "No tengo acceso a esa informacion. Solo puedes consultar tus propios datos o los de tus clientes asignados.";
 const SAFE_SCOPE_UNVERIFIED_RESPONSE =
@@ -175,12 +176,12 @@ FROM (
      AND CLP.VENDEDORCOMERCIAL IS NOT NULL
   UNION ALL
   SELECT TRIM(L.CODIGOVENDEDOR) AS VENDEDOR, 2 AS PRIORIDAD
-    FROM DSEDAC.LAC L
+    FROM ${comercialErpTable('LAC')} L
    WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
      AND L.CODIGOVENDEDOR IS NOT NULL
   UNION ALL
   SELECT TRIM(L.LCCDVD) AS VENDEDOR, 3 AS PRIORIDAD
-    FROM DSED.LACLAE L
+    FROM ${comercialErpTable('LACLAE')} L
    WHERE TRIM(L.LCCDCL) = ?
      AND L.LCCDVD IS NOT NULL
      AND L.LCAADC >= 2018

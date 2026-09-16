@@ -7,6 +7,7 @@ const { PlannerRepository } = require('../domain/planner-repository');
 const { LoadPlan } = require('../domain/load-plan');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { sanitizeCodeList } = require('../../../../utils/common');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 class Db2PlannerRepository extends PlannerRepository {
   constructor(dbPool) {
@@ -125,8 +126,8 @@ class Db2PlannerRepository extends PlannerRepository {
         OPP.VOLUMEN_TOTAL,
         OPP.ESTADO,
         OPP.OBSERVACIONES
-      FROM DSEDAC.OPP OPP
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(OPP.CODIGO_CLIENTE)
+      FROM ${comercialErpTable('OPP')} OPP
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(OPP.CODIGO_CLIENTE)
       WHERE DATE(OPP.FECHA_ENTREGA) = ?
         AND ${vendorFilter}
         AND OPP.ESTADO = 'P'

@@ -5,6 +5,7 @@ const { getCurrentDate, LACLAE_SALES_FILTER, aggregateBSalesByMonth } = require(
 const { TTL, redisCache } = require('../../services/redis-cache');
 const { beginRouteFill, endRouteFill } = require('../../services/route-cache-stampede');
 const { buildVendedorFilterParameterized } = require('../utils/dashboardFilters');
+const { comercialErpTable } = require('../../utils/comercial-erp-tables');
 
 const DASHBOARD_CACHE_VERSION = 'v20260914-hist-ttl';
 const CLOSED_YEAR_TTL_SECONDS = 7 * 24 * 3600;
@@ -72,7 +73,7 @@ class DashboardService {
             COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) as margin,
             COALESCE(SUM(L.LCCTEV), 0) as boxes,
             COUNT(DISTINCT L.LCCDCL) as activeClients
-          FROM DSED.LACLAE L
+          FROM ${comercialErpTable('LACLAE')} L
           WHERE L.LCAADC = ?
             AND L.LCMMDC = ?
             AND L.TPDC = 'LAC'
@@ -86,7 +87,7 @@ class DashboardService {
             COALESCE(SUM(L.LCIMVT), 0) as sales,
             COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) as margin,
             COALESCE(SUM(L.LCCTEV), 0) as boxes
-          FROM DSED.LACLAE L
+          FROM ${comercialErpTable('LACLAE')} L
           WHERE L.LCAADC = ?
             AND L.LCMMDC = ?
             AND ${LACLAE_SALES_FILTER}
@@ -105,7 +106,7 @@ class DashboardService {
         }
         const todayDataSql = `
                 SELECT COALESCE(SUM(L.LCIMVT), 0) as sales, COUNT(DISTINCT L.LCNRAB) as orders
-                FROM DSED.LACLAE L
+                FROM ${comercialErpTable('LACLAE')} L
                 WHERE L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC = ? AND ${LACLAE_SALES_FILTER} ${vendorFilter}
         `;
         const params = [ctx.year, ctx.month, ctx.now.getDate(), ...vendorParams];
@@ -285,7 +286,7 @@ class DashboardService {
                SUM(L.LCIMVT) as sales,
                COUNT(DISTINCT L.LCNRAB) as orders,
                COUNT(DISTINCT L.LCCDCL) as clients
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${vendorResult.filter} ${dateFilter}
         GROUP BY L.LCAADC, L.LCMMDC, L.LCDDDC
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
@@ -320,7 +321,7 @@ class DashboardService {
                SUM(L.LCIMVT) as totalSales,
                COUNT(DISTINCT L.LCNRAB) as totalOrders,
                COUNT(DISTINCT L.LCCDCL) as uniqueClients
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${vendorResult.filter} ${dateFilter}
         GROUP BY L.LCAADC, L.LCMMDC
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC
