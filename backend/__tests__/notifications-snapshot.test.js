@@ -85,6 +85,35 @@ describe('GET /api/notifications/snapshot', () => {
         expect(loaders.orders).toHaveBeenCalledTimes(1);
     });
 
+    test('runs badge loaders before heavy dashboard loaders', async () => {
+        const order = [];
+        const loaders = okLoaders({
+            orders: jest.fn(async () => {
+                order.push('orders');
+                return { borrador: 1, pendiente: 2 };
+            }),
+            kpi: jest.fn(async () => {
+                order.push('kpi');
+                return { totals: { alerts: 3 } };
+            }),
+            metrics: jest.fn(async () => {
+                order.push('metrics');
+                return { todaySales: 50 };
+            }),
+            commissions: jest.fn(async () => {
+                order.push('commissions');
+                return { months: [] };
+            }),
+        });
+        await assembleSnapshot(loaders, { user: { code: '80' }, scope: { csv: '80' }, now: new Date() });
+        expect(order.indexOf('orders')).toBeGreaterThanOrEqual(0);
+        expect(order.indexOf('kpi')).toBeGreaterThanOrEqual(0);
+        expect(Math.max(order.indexOf('orders'), order.indexOf('kpi')))
+            .toBeLessThan(order.indexOf('metrics'));
+        expect(Math.max(order.indexOf('orders'), order.indexOf('kpi')))
+            .toBeLessThan(order.indexOf('commissions'));
+    });
+
     test('Promise.allSettled: failed loader becomes null, others remain', async () => {
         const loaders = okLoaders({
             kpi: jest.fn(async () => { throw new Error('kpi down'); }),

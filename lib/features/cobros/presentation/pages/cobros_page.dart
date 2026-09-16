@@ -131,15 +131,19 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _isInitialized = true;
-      _loadClients();
       _loadPendingSummary();
+      if (_searchController.text.trim().isNotEmpty) {
+        _loadClients();
+      }
     });
 
     _vendorSubscription =
         ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
-        _loadClients();
         _loadPendingSummary();
+        if (_searchController.text.trim().isNotEmpty) {
+          _loadClients();
+        }
       }
     });
   }

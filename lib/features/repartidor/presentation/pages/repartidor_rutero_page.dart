@@ -184,27 +184,26 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       autoReload: false,
     );
 
-    // Backend supports multi-ID for week endpoint (uses IN clause)
-    final loadAllDeliveryPages = () async {
-      await entregas.cargarAlbaranesPendientes(forceRefresh: forceRefresh);
-
-      // A route is a working list, so the main screen must not silently stop
-      // at the first 100 rows. The endpoint is bounded to five 100-row pages.
-      for (var page = 1; page <= 5; page += 1) {
-        if (!mounted) break;
-        final current = ref.read(entregasProvider);
-        if (!current.hasMore || current.error != null) break;
-        final previousOffset = current.nextOffset;
-        await entregas.cargarMasAlbaranes();
-        final next = ref.read(entregasProvider);
-        if (next.hasMore && next.nextOffset <= previousOffset) break;
-      }
-    };
-
     await Future.wait([
-      loadAllDeliveryPages(),
+      entregas.cargarAlbaranesPendientes(forceRefresh: forceRefresh),
       _loadWeekData(targetId, forceRefresh: forceRefresh),
     ]);
+    // First 500 stops paint immediately; remaining pages fill in background.
+    unawaited(_loadRemainingDeliveryPages());
+  }
+
+  Future<void> _loadRemainingDeliveryPages() async {
+    for (var page = 1; page <= 5; page += 1) {
+      if (!mounted) break;
+      final current = ref.read(entregasProvider);
+      if (!current.hasMore || current.error != null || current.isLoading) {
+        break;
+      }
+      final previousOffset = current.nextOffset;
+      await ref.read(entregasProvider.notifier).cargarMasAlbaranes();
+      final next = ref.read(entregasProvider);
+      if (next.hasMore && next.nextOffset <= previousOffset) break;
+    }
   }
 
   Future<void> _loadWeekData(

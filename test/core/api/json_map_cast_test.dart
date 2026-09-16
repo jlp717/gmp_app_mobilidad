@@ -49,6 +49,36 @@ void main() {
         }),
         isTrue,
       );
+      expect(
+        isBulkyJsonMap({
+          'facturas': List.generate(80, (i) => {'id': i}),
+        }),
+        isTrue,
+      );
+      expect(
+        isBulkyJsonMap({
+          'products': List.generate(80, (i) => {'id': i}),
+        }),
+        isTrue,
+      );
+      expect(
+        isBulkyJsonMap({
+          'orders': List.generate(80, (i) => {'id': i}),
+        }),
+        isTrue,
+      );
+      expect(
+        isBulkyJsonMap({
+          'promotions': List.generate(80, (i) => {'id': i}),
+        }),
+        isTrue,
+      );
+      expect(
+        isBulkyJsonMap({
+          'lines': List.generate(80, (i) => {'id': i}),
+        }),
+        isTrue,
+      );
     });
 
     test('ignores small payloads', () {

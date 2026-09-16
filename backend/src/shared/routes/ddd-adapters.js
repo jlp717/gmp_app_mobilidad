@@ -1623,15 +1623,19 @@ function createPedidosRoutes() {
         SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR
         FROM DSED.LACLAE L WHERE ${lastYearWhereSql}`;
 
-      // queryGate max=4: five parallel LACLAE scans on JEFE ALL queue-timeout at 12s.
+      const fromYmd = from.getFullYear() * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
+      const toYmd = to.getFullYear() * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
+      const cacheKeyParts = `${fromYmd}:${toYmd}:${isAllVendor ? 'ALL' : vendor}:${clientCode}:${productCode}:${familia}:${marca}:${limit}:${offset}`;
+
+      // queryGate max=4: keep 3+2 waves. cachedQuery (TTL.SHORT) matches legacy.
       const [detail, summary, topProducts] = await Promise.all([
-        queryWithParams(detailSql, params, false),
-        queryWithParams(summarySql, params, false),
-        queryWithParams(topProductosSql, params, false),
+        cachedQuery((sql) => queryWithParams(sql, params, false), detailSql, `pedidos:purchase-history-global:detail:${cacheKeyParts}`, RedisTTL.SHORT),
+        cachedQuery((sql) => queryWithParams(sql, params, false), summarySql, `pedidos:purchase-history-global:summary:${cacheKeyParts}`, RedisTTL.SHORT),
+        cachedQuery((sql) => queryWithParams(sql, params, false), topProductosSql, `pedidos:purchase-history-global:top:${cacheKeyParts}`, RedisTTL.SHORT),
       ]);
       const [lastYear, monthlyByYear] = await Promise.all([
-        queryWithParams(lastYearTotalSql, lastYearParams, false),
-        queryWithParams(monthlyByYearSql, params, false),
+        cachedQuery((sql) => queryWithParams(sql, lastYearParams, false), lastYearTotalSql, `pedidos:purchase-history-global:lastyear:${cacheKeyParts}`, RedisTTL.SHORT),
+        cachedQuery((sql) => queryWithParams(sql, params, false), monthlyByYearSql, `pedidos:purchase-history-global:monthly:${cacheKeyParts}`, RedisTTL.SHORT),
       ]);
 
       const s = summary?.[0] || {};

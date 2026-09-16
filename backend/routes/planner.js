@@ -1633,11 +1633,15 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
             `, [primaryVendor, normalizedDay], false, false)
             : Promise.resolve([]));
         const schedule = createRuteroQueryLimit(RUTERO_DAY_BATCH_CONCURRENCY);
+        // One wave: LACLAE sales must not wait for CLI/GPS. Limiter stays at 3
+        // so the pool (max 5) / queryGate (max 4) is not flooded.
         const [
             clientDetailsRows,
             gpsResult,
             notesResult,
             configRows,
+            salesRows,
+            orderStatusResult,
         ] = await Promise.all([
             runBatchedRuteroQuery({
                 batches: clientBatches,
@@ -1664,8 +1668,6 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
                 schedule,
             }).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; }),
             schedule(configRowsPromise),
-        ]);
-        const [salesRows, orderStatusResult] = await Promise.all([
             runBatchedRuteroQuery({
                 batches: clientBatches,
                 buildSql: salesSql,

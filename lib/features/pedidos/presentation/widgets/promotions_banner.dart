@@ -84,7 +84,7 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
           cacheKey: cacheKey,
           cacheTTL: const Duration(minutes: 30),
           cacheResponse: false,
-          forceRefresh: true,
+          forceRefresh: false,
         );
         if (shouldReusePromotionsCache(response)) {
           await CacheService.set(

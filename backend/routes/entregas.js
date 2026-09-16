@@ -464,10 +464,8 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         const placeholders = idList.map(() => '?').join(',');
         const sortBy = req.query.sortBy || 'default';
 
-        // The same normalized catalog is used by the list and detail
-        // endpoints; otherwise the detail silently defaulted to optional.
-        const paymentConditions = await loadPaymentConditions();
-        logger.info('[ENTREGAS] Payment catalog loaded');
+        // Catalog (cachedQuery on `query`) starts with the CPC scan.
+        const paymentConditionsPromise = loadPaymentConditions();
 
 
         // CORRECTO: Usar OPP â†’ CPC â†’ CAC para repartidores
@@ -654,6 +652,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             ) || [];
         } catch (queryError) {
             logger.error('[ENTREGAS] Pending-delivery query unavailable');
+            paymentConditionsPromise.catch(() => {});
             return sendEntregasUnavailable(res, 'PENDING_DELIVERIES_UNAVAILABLE', 'No se pudo consultar el listado de entregas');
         }
 
@@ -663,6 +662,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         // driver route-order mode. Keep that contract: only single-driver
         // walks can 503, multi-driver pages terminate via hasMore.
         if (sourceHasMore && idList.length === 1 && pageOffset >= RUTERO_DATASET_FETCH_MAX) {
+            paymentConditionsPromise.catch(() => {});
             return sendEntregasUnavailable(res, 'ROUTE_TOO_LARGE', 'La ruta supera el límite de 500 paradas');
         }
         rows = rows.slice(0, RUTERO_DATASET_FETCH_MAX);
@@ -694,6 +694,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 // Usually status is the same per Albaran ID.
             }
         });
+        const paymentConditions = await paymentConditionsPromise;
         try {
             const anteroomRows = await pedidosService.getConfirmedPedidosForRutero({
                 repartidorIds: idList,

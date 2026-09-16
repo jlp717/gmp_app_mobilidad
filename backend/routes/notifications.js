@@ -24,6 +24,14 @@ const LOADER_KEYS = Object.freeze([
     'topClients',
     'stats',
 ]);
+// Badge first: cheap loaders. Heavy LACLAE/dashboard after, so login+JEFE warmer
+// do not share queryGate=4 with two full /rutero/day scans.
+const SNAPSHOT_PRIORITY_KEYS = Object.freeze([
+    'orders',
+    'kpi',
+    'ruteroHoy',
+    'ruteroManana',
+]);
 
 function dartWeekday(date) {
     const js = date.getDay();
@@ -32,10 +40,6 @@ function dartWeekday(date) {
 
 function weekdayName(date) {
     return ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'][dartWeekday(date) - 1];
-}
-
-function ruteroWeek(date) {
-    return Math.floor((date.getDate() + dartWeekday(date) - 2) / 7) + 1;
 }
 
 function dateKey(date) {
@@ -129,30 +133,20 @@ function invokeExpressHandler(handler, reqLike) {
 }
 
 async function loadRuteroDay(ctx, date) {
-    const planner = require('./planner');
-    const handler = lastRouteHandler(planner, '/rutero/day/:day');
-    if (!handler) return null;
+    const { getClientsForDay } = require('../services/laclae');
     const dayName = weekdayName(date);
-    const body = await invokeExpressHandler(handler, {
-        user: ctx.user,
-        params: { day: dayName },
-        query: {
-            vendedorCodes: ctx.scope.csv,
-            role: 'comercial',
-            year: String(date.getFullYear()),
-            month: String(date.getMonth() + 1),
-            week: String(ruteroWeek(date)),
-        },
-    });
-    if (!body) return null;
-    const clients = Array.isArray(body.clients) ? body.clients : [];
+    const csv = String(ctx.scope?.csv || '').trim();
+    const vendorArg = csv && csv.toUpperCase() !== 'ALL'
+        ? csv
+        : (Array.isArray(ctx.scope?.list) && ctx.scope.list.length > 0
+            ? ctx.scope.list.join(',')
+            : '');
+    const codes = getClientsForDay(vendorArg, dayName, 'comercial', false) || [];
     return {
-        count: Number(body.count ?? clients.length) || 0,
+        count: codes.length,
         day: dayName,
         date: dateKey(date),
-        clients: clients.slice(0, 4).map((item) => ({
-            name: item.name || item.nombre || item.clientName || null,
-        })),
+        clients: codes.slice(0, 4).map((code) => ({ name: code })),
     };
 }
 
@@ -274,16 +268,15 @@ function defaultCache() {
     };
 }
 
-async function assembleSnapshot(loaders, ctx) {
+async function runLoaderWave(loaders, ctx, keys, snapshot) {
     const settled = await Promise.allSettled(
-        LOADER_KEYS.map((key) => {
+        keys.map((key) => {
             const fn = loaders[key];
             if (typeof fn !== 'function') return Promise.resolve(null);
             return Promise.resolve().then(() => fn(ctx));
         }),
     );
-    const snapshot = {};
-    LOADER_KEYS.forEach((key, index) => {
+    keys.forEach((key, index) => {
         const result = settled[index];
         if (result.status === 'fulfilled') {
             snapshot[key] = result.value === undefined ? null : result.value;
@@ -292,6 +285,13 @@ async function assembleSnapshot(loaders, ctx) {
         logger.warn(`[notifications] loader ${key} failed: ${result.reason?.message || result.reason}`);
         snapshot[key] = null;
     });
+}
+
+async function assembleSnapshot(loaders, ctx) {
+    const snapshot = {};
+    const deferredKeys = LOADER_KEYS.filter((key) => !SNAPSHOT_PRIORITY_KEYS.includes(key));
+    await runLoaderWave(loaders, ctx, SNAPSHOT_PRIORITY_KEYS, snapshot);
+    await runLoaderWave(loaders, ctx, deferredKeys, snapshot);
     return snapshot;
 }
 
@@ -345,5 +345,6 @@ module.exports = createNotificationsRouter();
 module.exports.createNotificationsRouter = createNotificationsRouter;
 module.exports.assembleSnapshot = assembleSnapshot;
 module.exports.LOADER_KEYS = LOADER_KEYS;
+module.exports.SNAPSHOT_PRIORITY_KEYS = SNAPSHOT_PRIORITY_KEYS;
 module.exports.SNAPSHOT_TTL_SECONDS = SNAPSHOT_TTL_SECONDS;
 module.exports.resolveVendorScope = resolveVendorScope;

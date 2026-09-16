@@ -14,7 +14,12 @@ bool isBulkyJsonMap(Map<dynamic, dynamic> src) {
       src['items'] ??
       src['albaranes'] ??
       src['documents'] ??
-      src['yearlyData'];
+      src['yearlyData'] ??
+      src['facturas'] ??
+      src['products'] ??
+      src['orders'] ??
+      src['promotions'] ??
+      src['lines'];
   return bulky is List && bulky.length >= 80;
 }
 
