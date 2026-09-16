@@ -1615,7 +1615,7 @@ function createPedidosRoutes() {
 
       let stampede = { fill: true, lock: null, busy: false, hit: null };
       if (redisCache && redisCache.isConnected) {
-        stampede = await beginRouteFill(stampedeKey, { waitMs: 20000 });
+        stampede = await beginRouteFill(stampedeKey, { waitMs: 45000 });
         if (stampede.hit) {
           return res.json(stampede.hit);
         }

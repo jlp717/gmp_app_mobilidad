@@ -50,10 +50,10 @@ function buildJefeHotPaths(now = new Date(), { vendorCode, includeAll = true } =
       `/api/dashboard/metrics?vendedorCodes=ALL&year=${year}`,
       `/api/objectives/evolution?vendedorCodes=ALL&years=${year}`,
       `/api/objectives/by-client?vendedorCodes=ALL&years=${year}&months=${allMonths}&limit=100`,
+      buildPurchaseHistoryUiPath(now, 'ALL'),
       `/api/commissions/summary?vendedorCode=ALL&year=${year}`,
       `/api/dashboard/matrix-data?vendedorCodes=ALL&year=${year}&years=${year}&groupBy=vendor&limit=240&months=${ytdMonths}`,
       `/api/clients/list?vendedorCodes=ALL&limit=50`,
-      buildPurchaseHistoryUiPath(now, 'ALL'),
     ]
     : [];
   const code = String(vendorCode || '').trim();
