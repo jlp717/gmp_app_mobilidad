@@ -1,6 +1,7 @@
 'use strict';
 
-const DEBT_VIEW = 'DSEDAC.CVC';
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
+
 const DEBT_FETCH_FIRST_MAX = 500;
 const CVC_LIVE_TYPES = Object.freeze(['COB', 'CAC', 'PGC', 'PGP', 'PAG', 'CNP', 'DEV']);
 
@@ -18,8 +19,12 @@ const DEBT_COLUMNS = Object.freeze({
   documentNumber: 'NUMERODOCUMENTO',
 });
 
+function getDebtView() {
+  return comercialErpTable('CVC');
+}
+
 function debtViewFrom(alias = 'CVC') {
-  return `FROM ${DEBT_VIEW} ${alias}`;
+  return `FROM ${getDebtView()} ${alias}`;
 }
 
 function cvcPendingPredicate(alias = 'CVC') {
@@ -31,23 +36,27 @@ function cvcLiveTypeSql(alias = 'CVC') {
 }
 
 function cvcPendientesJoins(alias = 'C') {
+  const fpg = comercialErpTable('FPG');
   return `
-            LEFT JOIN DSEDAC.FPG FPG
+            LEFT JOIN ${fpg} FPG
               ON FPG.CODIGOFORMAPAGO = ${alias}.CODIGOFORMAPAGO`;
 }
 
 function cvcDocumentJoins(alias = 'C') {
+  const cac = comercialErpTable('CAC');
+  const cpc = comercialErpTable('CPC');
+  const fpg = comercialErpTable('FPG');
   return `
-            LEFT JOIN DSEDAC.CAC CAC
+            LEFT JOIN ${cac} CAC
               ON ${alias}.EJERCICIODOCUMENTO = CAC.EJERCICIOFACTURA
              AND TRIM(${alias}.SERIEDOCUMENTO) = TRIM(CAC.SERIEFACTURA)
              AND ${alias}.NUMERODOCUMENTO = CAC.NUMEROFACTURA
-            LEFT JOIN DSEDAC.CPC CPC
+            LEFT JOIN ${cpc} CPC
               ON ${alias}.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
              AND TRIM(${alias}.SERIEDOCUMENTO) = TRIM(CPC.SERIEALBARAN)
              AND ${alias}.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
              AND ${alias}.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            LEFT JOIN DSEDAC.FPG FPG
+            LEFT JOIN ${fpg} FPG
               ON FPG.CODIGOFORMAPAGO = ${alias}.CODIGOFORMAPAGO`;
 }
 
@@ -87,7 +96,10 @@ function isBelowMinCobro({ cobroRiguroso, porcentajeMinimoCobro, pendingAmount, 
 }
 
 module.exports = {
-  DEBT_VIEW,
+  get DEBT_VIEW() {
+    return getDebtView();
+  },
+  getDebtView,
   DEBT_FETCH_FIRST_MAX,
   CVC_LIVE_TYPES,
   DEBT_COLUMNS,

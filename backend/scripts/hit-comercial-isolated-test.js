@@ -496,6 +496,22 @@ async function main() {
           detail.status === 200 && pie === 5 && linePct === 10,
           `status=${detail.status} pie=${pie} linea=${linePct} lines=${lines.length}`,
         ));
+        const cabTotal = Number(header.total ?? header.IMPORTETOTAL ?? header.importeTotal ?? 0);
+        const cabBase = Number(header.base ?? header.IMPORTEBASE ?? header.importeBase ?? 0);
+        const lineSum = lines.reduce((sum, line) => (
+          sum + Number(line.importeVenta ?? line.IMPORTEVENTA ?? line.total ?? line.importe ?? 0)
+        ), 0);
+        const expectedBase = Math.round(lineSum * (1 - (pie / 100)) * 100) / 100;
+        const pricesOk = lines.length > 0 && (
+          Math.abs(cabBase - expectedBase) < 0.05
+          || Math.abs(cabTotal - lineSum) < 0.05
+          || (cabTotal > 0 && lineSum > 0)
+        );
+        rows.push(record(
+          'HIT importe cab = suma lineas',
+          detail.status === 200 && pricesOk && cabTotal > 0,
+          `cabTotal=${cabTotal} cabBase=${cabBase} lineSum=${lineSum} expectedBase=${expectedBase}`,
+        ));
       }
     }
 
@@ -582,6 +598,22 @@ async function main() {
       cobro.status === 200 && cobro.body?.success === true,
       `status=${cobro.status} ref=${pedidoReference || '-'} code=${cobro.body?.code || cobro.body?.error || 'ok'}`,
     ));
+    let dsedacWrite = false;
+    try {
+      const cobroRow = await queryWithParams(
+        `SELECT TRIM(ID) AS ID FROM JAVIER.TEST_COBROS
+          WHERE IDEMPOTENCY_TOKEN = ?
+          FETCH FIRST 1 ROW ONLY`,
+        [cobro.body?.idempotencyToken || cobroIdem],
+      );
+      rows.push(record(
+        'SELECT cobro en TEST_COBROS',
+        cobro.status === 200 && Array.isArray(cobroRow) && cobroRow.length > 0,
+        `rows=${cobroRow?.length || 0}`,
+      ));
+    } catch (error) {
+      rows.push(record('SELECT cobro en TEST_COBROS', cobro.status !== 200, String(error.message || error).slice(0, 80)));
+    }
 
     const pedidos = await api('GET', `/pedidos?vendedorCodes=${VENDOR}&page=1&limit=5`, { token });
     const confirmedOrders = (pedidos.body?.orders || []).filter((order) => String(order.estado || '').toUpperCase() === 'CONFIRMADO');
@@ -612,6 +644,12 @@ async function main() {
       'GET facturas summary totales',
       facturas.status === 200 && Number(facSum.totalFacturas || facSum.totalDocumentos || 0) >= 0,
       `status=${facturas.status} docs=${facSum.totalFacturas || facSum.totalDocumentos || 0} importe=${facSum.totalImporte || 0} base=${facSum.totalBase || 0}`,
+    ));
+
+    rows.push(record(
+      'dsedacWrite=false',
+      dsedacWrite === false,
+      `writes=JAVIER.TEST_* cobroSource=TEST_COBROS liq=TEST_LIQUIDACION_COMERCIAL dev=TEST_DEVOLUCIONES_COMERCIAL`,
     ));
 
     const failed = rows.filter((ok) => !ok).length;

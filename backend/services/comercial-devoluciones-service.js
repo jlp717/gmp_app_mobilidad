@@ -5,6 +5,7 @@ const { db2AppTable } = require('../utils/db2-schemas');
 const { db2InsertSql } = require('../utils/db2-identifiers');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
+const { comercialErpTable, comercialErpSchemaAndName } = require('../utils/comercial-erp-tables');
 const logger = require('../middleware/logger');
 const {
   buildReturnPdfPath,
@@ -163,7 +164,7 @@ function mapReturnRow(row) {
     yaCobrada: Number(row.YA_COBRADA) === 1,
     formaPago: String(row.FORMA_PAGO || '').trim() || null,
     formaPagoDias: Number.isFinite(diasFp) && diasFp > 0 ? diasFp : null,
-    source: String(row.SOURCE || 'DSED.LACLAE').trim() || 'DSED.LACLAE',
+    source: String(row.SOURCE || comercialErpTable('LACLAE')).trim() || comercialErpTable('LACLAE'),
     documentoOrigen: String(row.DOCUMENTO_ORIGEN || '').trim() || null,
     albaranOrigen: String(row.ALBARAN_ORIGEN || '').trim() || null,
     vencimiento: String(row.VENCIMIENTO || '').trim() || null,
@@ -187,7 +188,7 @@ async function lookupFormaPagoDias(formaPago, deps = {}) {
     const rows = await run(
       `SELECT PRIMERPAGO AS DIAS,
               TRIM(DESCRIPCIONFORMAPAGO) AS DESC
-         FROM DSEDAC.FPG
+         FROM ${comercialErpTable('FPG')}
         WHERE TRIM(CODIGOFORMAPAGO) = CAST(? AS CHAR(2))
         FETCH FIRST 1 ROW ONLY`,
       [code],
@@ -207,6 +208,7 @@ async function getVendorMinimoCobro(vendorCodes, deps = {}) {
   const vendor = sanitizeVendorCodes(vendorCodes)[0];
   if (!vendor) return 0;
   try {
+    const vddx = comercialErpSchemaAndName('VDDX');
     const cols = await run(
       `SELECT COLUMN_NAME
          FROM QSYS2.SYSCOLUMNS
@@ -214,12 +216,12 @@ async function getVendorMinimoCobro(vendorCodes, deps = {}) {
           AND TABLE_NAME = ?
           AND COLUMN_NAME = ?
         FETCH FIRST 1 ROW ONLY`,
-      ['DSEDAC', 'VDDX', 'PORCENTAJEMINIMOCOBRO'],
+      [vddx.schema, vddx.table, 'PORCENTAJEMINIMOCOBRO'],
     );
     if (!(cols || []).length) return 0;
     const rows = await run(
       `SELECT COALESCE(PORCENTAJEMINIMOCOBRO, 0) AS PCT
-         FROM DSEDAC.VDDX
+         FROM ${vddx.qualified}
         WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
         FETCH FIRST 1 ROW ONLY`,
       [vendor],
@@ -313,6 +315,9 @@ async function listReturns({
   const clientClause = client ? 'AND TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10))' : '';
   const fetchLimit = Math.min(Math.max(Number(limit) || 100, 1), 200);
 
+  const laclae = comercialErpTable('LACLAE');
+  const cvc = comercialErpTable('CVC');
+  const fpg = comercialErpTable('FPG');
   const sql = `
     SELECT L.LCAADC AS YEAR,
            L.LCMMDC AS MONTH,
@@ -326,14 +331,14 @@ async function listReturns({
            MAX(CASE WHEN CVC.IMPORTEPENDIENTE = 0 THEN 1 ELSE 0 END) AS YA_COBRADA,
            MAX(TRIM(COALESCE(FPG.DESCRIPCIONFORMAPAGO, CVC.CODIGOFORMAPAGO, ''))) AS FORMA_PAGO,
            MAX(FPG.PRIMERPAGO) AS DIAS_FP
-    FROM DSED.LACLAE L
-    LEFT JOIN DSEDAC.CVC CVC
+    FROM ${laclae} L
+    LEFT JOIN ${cvc} CVC
       ON TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(L.LCCDCL)
      AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(L.LCSRAB)
      AND CVC.NUMERODOCUMENTO = L.LCNRAB
      AND TRIM(CVC.TIPODOCUMENTO) = 'DEV'
      AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-    LEFT JOIN DSEDAC.FPG FPG
+    LEFT JOIN ${fpg} FPG
       ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(CVC.CODIGOFORMAPAGO)
     WHERE (L.LCSRAB = ? OR L.LCTPVT = ?)
       AND L.LCAADC = ?
@@ -358,8 +363,17 @@ async function listReturns({
   ];
   if (client) params.push(client);
 
-  const rows = await run(sql, params);
-  const erpReturns = (rows || []).map((row) => mapReturnRow({ ...row, SOURCE: 'DSED.LACLAE' }));
+  let rows = [];
+  try {
+    rows = await run(sql, params);
+  } catch (error) {
+    if (!isTableMissingError(error) || !String(laclae).startsWith('JAVIER.TEST_')) throw error;
+    logger.warn('[COMERCIAL_LIQUIDACION] TEST LACLAE missing; overlay-only returns', {
+      error: error.message,
+    });
+    rows = [];
+  }
+  const erpReturns = (rows || []).map((row) => mapReturnRow({ ...row, SOURCE: laclae }));
   const overlay = await listTestReturns({
     vendorCodes,
     date: parsedDate.iso,
@@ -410,7 +424,7 @@ async function listTestReturns({
            COALESCE(FORMA_PAGO_DIAS, FPG.PRIMERPAGO) AS DIAS_FP,
            TRIM(COALESCE(FPG.DESCRIPCIONFORMAPAGO, '')) AS FP_DESC
       FROM ${TEST_DEVOLUCIONES_TABLE} D
-      LEFT JOIN DSEDAC.FPG FPG
+      LEFT JOIN ${comercialErpTable('FPG')} FPG
         ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(COALESCE(D.FORMA_PAGO, ''))
      WHERE D.FECHA = ?
        ${vendorFilter.clause}
@@ -519,20 +533,20 @@ async function listPgCollectedDocuments({
            CPC.NUMEROALBARAN AS CPC_NUM,
            TRIM(COALESCE(CLX.COBRORIGUROSOSN, '')) AS SN_CLX,
            COALESCE(CLX.PORCENTAJECOBRORIGUROSO, 0) AS PCT_CLX
-      FROM DSEDAC.CVC CVC
-      JOIN DSEDAC.FPG FPG
+      FROM ${comercialErpTable('CVC')} CVC
+      JOIN ${comercialErpTable('FPG')} FPG
         ON FPG.CODIGOFORMAPAGO = CVC.CODIGOFORMAPAGO
-      LEFT JOIN DSEDAC.CAC CAC
+      LEFT JOIN ${comercialErpTable('CAC')} CAC
         ON CAC.EJERCICIOFACTURA = CVC.EJERCICIODOCUMENTO
        AND CAC.SERIEFACTURA = CVC.SERIEDOCUMENTO
        AND CAC.TERMINALFACTURA = CVC.TERMINALDOCUMENTO
        AND CAC.NUMEROFACTURA = CVC.NUMERODOCUMENTO
-      LEFT JOIN DSEDAC.CPC CPC
+      LEFT JOIN ${comercialErpTable('CPC')} CPC
         ON CPC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
        AND CPC.SERIEALBARAN = CAC.SERIEALBARAN
        AND CPC.TERMINALALBARAN = CAC.TERMINALALBARAN
        AND CPC.NUMEROALBARAN = CAC.NUMEROALBARAN
-      LEFT JOIN DSEDAC.CLX CLX
+      LEFT JOIN ${comercialErpTable('CLX')} CLX
         ON CLX.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
      WHERE CVC.TIPODOCUMENTO = CAST(? AS CHAR(3))
        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
@@ -550,11 +564,17 @@ async function listPgCollectedDocuments({
   try {
     rows = await run(sql, params);
   } catch (error) {
-    if (!isColumnMissingError(error)) throw error;
-    const fallbackSql = sql
-      .replace(/,\s*TRIM\(COALESCE\(CLX\.COBRORIGUROSOSN, ''\)\) AS SN_CLX,\s*COALESCE\(CLX\.PORCENTAJECOBRORIGUROSO, 0\) AS PCT_CLX/, '')
-      .replace(/\s*LEFT JOIN DSEDAC\.CLX CLX\s+ON CLX\.CODIGOCLIENTE = CAC\.CODIGOCLIENTEFACTURA/, '');
-    rows = await run(fallbackSql, params);
+    if (isTableMissingError(error) && String(comercialErpTable('CVC')).startsWith('JAVIER.TEST_')) {
+      logger.warn('[COMERCIAL_LIQUIDACION] TEST CVC/FPG missing; empty PG list', { error: error.message });
+      rows = [];
+    } else if (!isColumnMissingError(error)) {
+      throw error;
+    } else {
+      const fallbackSql = sql
+        .replace(/,\s*TRIM\(COALESCE\(CLX\.COBRORIGUROSOSN, ''\)\) AS SN_CLX,\s*COALESCE\(CLX\.PORCENTAJECOBRORIGUROSO, 0\) AS PCT_CLX/, '')
+        .replace(/\s*LEFT JOIN \S+\.CLX CLX\s+ON CLX\.CODIGOCLIENTE = CAC\.CODIGOCLIENTEFACTURA/, '');
+      rows = await run(fallbackSql, params);
+    }
   }
   const seen = new Map();
   const docs = [];
@@ -707,6 +727,7 @@ async function getLqdForVendorDay({
     return null;
   }
 
+  const lqdTable = comercialErpTable('LQD');
   const sql = `
     SELECT COALESCE(SUM(LQD.IMPORTEEFECTIVO), 0) AS TOTAL_EFECTIVO,
            COALESCE(SUM(LQD.IMPORTECHEQUES), 0) AS TOTAL_CHEQUES,
@@ -714,13 +735,20 @@ async function getLqdForVendorDay({
            COALESCE(SUM(LQD.IMPORTESALDOACTUAL), 0) AS SALDO_ACTUAL,
            COALESCE(SUM(LQD.IMPORTETOTALAINGRESAR), 0) AS TOTAL_A_INGRESAR,
            COUNT(*) AS FILAS
-      FROM DSEDAC.LQD LQD
+      FROM ${lqdTable} LQD
      WHERE TRIM(LQD.CODIGOVENDEDOR) IN (${codes.map(() => 'CAST(? AS VARCHAR(2))').join(',')})
        AND LQD.ANOLIQUIDACION = ?
        AND LQD.MESLIQUIDACION = ?
        AND LQD.DIALIQUIDACION = ?
   `;
-  const rows = await run(sql, [...codes, parsedDate.year, parsedDate.month, parsedDate.day]);
+  let rows;
+  try {
+    rows = await run(sql, [...codes, parsedDate.year, parsedDate.month, parsedDate.day]);
+  } catch (error) {
+    if (!isTableMissingError(error) || !String(lqdTable).startsWith('JAVIER.TEST_')) throw error;
+    logger.warn('[COMERCIAL_LIQUIDACION] TEST LQD missing; cobros fallback', { error: error.message });
+    return null;
+  }
   const row = rows?.[0];
   const filas = Number(row?.FILAS) || 0;
   if (!row || filas <= 0) return null;
@@ -731,7 +759,7 @@ async function getLqdForVendorDay({
     saldoActual: money(row.SALDO_ACTUAL),
     totalAIngresar: money(row.TOTAL_A_INGRESAR),
     filas,
-    source: 'DSEDAC.LQD',
+    source: lqdTable,
   };
 }
 
@@ -767,7 +795,7 @@ async function getDailySummary({
     saldoActual: lqd ? lqd.saldoActual : saldoActual,
     devolucionesYaCobradas,
     totalAIngresar: lqd ? lqd.totalAIngresar : undefined,
-    source: lqd ? 'DSEDAC.LQD' : 'COBROS',
+    source: lqd ? lqd.source : 'COBROS',
   });
 
   logger.info('[COMERCIAL_LIQUIDACION] daily summary built', {
@@ -788,8 +816,8 @@ async function getDailySummary({
     minimoCobro: {
       porcentajeMinimoVendedor: Number(porcentajeMinimoVendedor) || 0,
       porcentajeMinimoCobro: Number(porcentajeMinimoVendedor) || 0,
-      source: 'DSEDAC.VDDX.PORCENTAJEMINIMOCOBRO',
-      clienteSource: 'DSEDAC.CLX.PORCENTAJECOBRORIGUROSO',
+      source: `${comercialErpTable('VDDX')}.PORCENTAJEMINIMOCOBRO`,
+      clienteSource: `${comercialErpTable('CLX')}.PORCENTAJECOBRORIGUROSO`,
     },
   };
 }

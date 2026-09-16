@@ -103,6 +103,7 @@ describe('comercial devoluciones domain', () => {
 describe('listReturns', () => {
   beforeEach(() => {
     mockQueryWithParams.mockReset();
+    delete process.env.REPARTO_TABLE_SET;
   });
 
   test('queries LACLAE return documents with bound vendor and date', async () => {
@@ -157,6 +158,7 @@ describe('listReturns', () => {
 describe('getDailySummary', () => {
   beforeEach(() => {
     mockQueryWithParams.mockReset();
+    delete process.env.REPARTO_TABLE_SET;
   });
 
   test('combines commercial cobros and return documents without subtracting returns from deposit', async () => {
@@ -429,10 +431,10 @@ describe('pizarra PG ya cobrados', () => {
       impactoLqd: 'YA_COBRADOS',
     });
     const [sql, params] = mockQueryWithParams.mock.calls[0];
-    expect(sql).toMatch(/DSEDAC\.CVC/);
-    expect(sql).toMatch(/DSEDAC\.FPG/);
-    expect(sql).toMatch(/DSEDAC\.CAC/);
-    expect(sql).toMatch(/DSEDAC\.CPC/);
+    expect(sql).toMatch(/JAVIER\.TEST_CVC/);
+    expect(sql).toMatch(/JAVIER\.TEST_FPG/);
+    expect(sql).toMatch(/JAVIER\.TEST_CAC/);
+    expect(sql).toMatch(/JAVIER\.TEST_CPC/);
     expect(sql).toMatch(/EJERCICIOFACTURA/);
     expect(sql).toMatch(/TERMINALFACTURA/);
     expect(sql).toMatch(/TERMINALALBARAN/);
@@ -443,8 +445,8 @@ describe('pizarra PG ya cobrados', () => {
     expect(sql).toMatch(/TIPODOCUMENTO = CAST\(\? AS CHAR\(3\)\)/);
     expect(sql).toMatch(/PAGARESN = CAST\(\? AS CHAR\(1\)\)/);
     expect(sql).toMatch(/CAC\.CODIGOVENDEDOR/);
-    expect(sql).toMatch(/LEFT JOIN DSEDAC\.CAC/);
-    expect(sql).not.toMatch(/INSERT|UPDATE|DELETE/i);
+    expect(sql).toMatch(/LEFT JOIN JAVIER\.TEST_CAC/);
+    expect(sql).not.toMatch(/INSERT INTO DSEDAC|UPDATE DSEDAC|DELETE FROM DSEDAC/i);
     expect(sql).not.toMatch(/VISTA_DEUDA_BASE/i);
     expect(params[0]).toBe('PAG');
     expect(params[1]).toBe('S');

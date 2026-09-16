@@ -17,7 +17,7 @@ const {
 } = require('../../../../utils/common');
 const { getClientCodesFromCache } = require('../../../../services/laclae');
 const {
-  DEBT_VIEW,
+  getDebtView,
   boundDebtFetchFirst,
   cvcPendientesJoins,
   cvcLiveTypeSql,
@@ -25,6 +25,7 @@ const {
   formaPagoLabel,
   isBelowMinCobro,
 } = require('../../../../services/debt-view-contract');
+const { comercialErpTable, comercialErpSchemaAndName } = require('../../../../utils/comercial-erp-tables');
 
 const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2AppTable('COBROS');
@@ -768,7 +769,7 @@ class Db2CobrosRepository extends CobrosRepository {
             TRIM(C.TIPODOCUMENTO) AS TIPO_DOCUMENTO,
             TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO,
             TRIM(FPG.DESCRIPCIONFORMAPAGO) AS FORMA_PAGO_DESC
-        FROM ${DEBT_VIEW} C
+        FROM ${getDebtView()} C
         ${cvcPendientesJoins('C')}
         WHERE C.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10))
           AND ${cvcPendingPredicate('C')}
@@ -1132,7 +1133,7 @@ class Db2CobrosRepository extends CobrosRepository {
                SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
                    <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
-         FROM ${DEBT_VIEW} CVC
+         FROM ${getDebtView()} CVC
          WHERE ${cvcPendingPredicate('CVC')}
            ${docFilters.clause}
            ${emptyClientFilter}
@@ -1291,7 +1292,7 @@ class Db2CobrosRepository extends CobrosRepository {
           FROM ${COBROS_TABLE} C
          WHERE EXISTS (
            SELECT 1
-            FROM ${DEBT_VIEW} CVC
+            FROM ${getDebtView()} CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
               AND ${cvcPendingPredicate('CVC')}
               ${vendorClause}
@@ -1321,7 +1322,7 @@ class Db2CobrosRepository extends CobrosRepository {
           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
          WHERE EXISTS (
            SELECT 1
-             FROM ${DEBT_VIEW} CVC
+             FROM ${getDebtView()} CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)
               AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(R.SERIEDOCUMENTO)
               AND TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) = TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))
@@ -1748,7 +1749,7 @@ class Db2CobrosRepository extends CobrosRepository {
       const clxRows = await queryWithParams(`
         SELECT TRIM(COBRORIGUROSOSN) AS SN,
                COALESCE(PORCENTAJECOBRORIGUROSO, 0) AS PCT
-          FROM DSEDAC.CLX
+          FROM ${comercialErpTable('CLX')}
          WHERE CODIGOCLIENTE = CAST(? AS CHAR(10))
          FETCH FIRST 1 ROW ONLY
       `, [client], []);
@@ -1774,20 +1775,21 @@ class Db2CobrosRepository extends CobrosRepository {
     if (Db2CobrosRepository._vddxMinColumn === false) return 0;
     try {
       if (Db2CobrosRepository._vddxMinColumn == null) {
+        const vddx = comercialErpSchemaAndName('VDDX');
         const cols = await queryWithParams(`
           SELECT COLUMN_NAME
             FROM QSYS2.SYSCOLUMNS
-           WHERE TABLE_SCHEMA = 'DSEDAC'
-             AND TABLE_NAME = 'VDDX'
-             AND COLUMN_NAME = 'PORCENTAJEMINIMOCOBRO'
+           WHERE TABLE_SCHEMA = ?
+             AND TABLE_NAME = ?
+             AND COLUMN_NAME = ?
            FETCH FIRST 1 ROW ONLY
-        `, [], []);
+        `, [vddx.schema, vddx.table, 'PORCENTAJEMINIMOCOBRO'], []);
         Db2CobrosRepository._vddxMinColumn = (cols || []).length > 0;
       }
       if (!Db2CobrosRepository._vddxMinColumn) return 0;
       const rows = await queryWithParams(`
         SELECT COALESCE(PORCENTAJEMINIMOCOBRO, 0) AS PCT
-          FROM DSEDAC.VDDX
+          FROM ${comercialErpTable('VDDX')}
          WHERE TRIM(CODIGOVENDEDOR) = ?
          FETCH FIRST 1 ROW ONLY
       `, [vendor], []);
@@ -1895,12 +1897,12 @@ class Db2CobrosRepository extends CobrosRepository {
         'PENDIENTE' AS ESTADO,
         (
           SELECT COUNT(DISTINCT ${cvcReferenceSql('C2')})
-            FROM ${DEBT_VIEW} C2
+            FROM ${getDebtView()} C2
            WHERE TRIM(C2.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGOCLIENTEALBARAN)
              AND ${cvcLegacyReferenceSql('C2')} = ${cvcLegacyReferenceSql('C')}
              AND ${cvcPendingPredicate('C2')}
         ) AS LEGACY_COLLISION_COUNT
-      FROM ${DEBT_VIEW} C
+      FROM ${getDebtView()} C
       WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
         AND ${cvcPendingPredicate('C')}
         AND ${cvcRefWhere}

@@ -8,10 +8,10 @@ const rateLimit = require('express-rate-limit');
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, invalidateCache: invalidateCachePattern } = require('../services/redis-cache');
-const { DEBT_VIEW, cvcPendientesJoins, cvcCliJoin, cvcLiveTypeSql, cvcPendingPredicate, formaPagoLabel } = require('../services/debt-view-contract');
+const { getDebtView, cvcPendientesJoins, cvcCliJoin, cvcLiveTypeSql, cvcPendingPredicate, formaPagoLabel } = require('../services/debt-view-contract');
 const logger = require('../middleware/logger');
-const { db2QualifiedTable, db2InsertSql } = require('../utils/db2-identifiers');
-const { getDb2WriteSchema } = require('../utils/db2-schemas');
+const { db2InsertSql } = require('../utils/db2-identifiers');
+const { getDb2WriteSchema, db2AppTable } = require('../utils/db2-schemas');
 const {
     buildCvcVendorScopeFilter,
     buildClientVendorParamFilter,
@@ -21,7 +21,8 @@ const crypto = require('crypto');
 const { parsePage, paginationContract, db2OffsetFetch } = require('../src/utils/pagination');
 
 const APP_SCHEMA = getDb2WriteSchema();
-const COBROS_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS');
+const COBROS_TABLE = db2AppTable('COBROS');
+const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
 
 // CTR / contra-reembolso: cobro en manos del repartidor, no del comercial.
 const FORMAS_PAGO_REPARTIDOR = ['01', 'CO', 'CTR', 'EF'];
@@ -163,10 +164,10 @@ async function getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams) {
             'SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,',
             '       TRIM(C.REFERENCIA) AS REF,',
             '       COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP',
-            '  FROM ' + APP_SCHEMA + '.COBROS C',
+            '  FROM ' + COBROS_TABLE + ' C',
             ' WHERE EXISTS (',
             '   SELECT 1',
-            '     FROM ' + DEBT_VIEW + ' CVC',
+            '     FROM ' + getDebtView() + ' CVC',
             '    WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)',
             '      AND CVC.IMPORTEPENDIENTE <> 0',
             '      AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> \'S\')',
@@ -193,7 +194,7 @@ async function getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams) {
             '  FROM ' + APP_SCHEMA + '.REPARTIDOR_COBROS R',
             ' WHERE EXISTS (',
             '   SELECT 1',
-            '     FROM ' + DEBT_VIEW + ' CVC',
+            '     FROM ' + getDebtView() + ' CVC',
             '    WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)',
             '      AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(R.SERIEDOCUMENTO)',
             '      AND TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) = TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))',
@@ -519,7 +520,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 TRIM(C.TIPODOCUMENTO) AS TIPO_DOCUMENTO,
                 TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO,
                 TRIM(FPG.DESCRIPCIONFORMAPAGO) AS FORMA_PAGO_DESC
-            FROM ${DEBT_VIEW} C
+            FROM ${getDebtView()} C
             ${cvcPendientesJoins('C')}
             WHERE C.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10))
               AND ${cvcPendingPredicate('C')}
@@ -543,7 +544,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 SELECT PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
                     PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
                     PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
-                FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
+                FROM ${PEDIDOS_CAB_TABLE} PC
                 WHERE TRIM(PC.CODIGOCLIENTE) = ?
                   AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
                   AND PC.IMPORTETOTAL > 0
@@ -590,7 +591,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         try {
             const comRows = await queryWithParams(
                 `SELECT TRIM(REFERENCIA) AS REF, COALESCE(SUM(IMPORTE), 0) AS TOTAL
-                   FROM ${APP_SCHEMA}.COBROS
+                   FROM ${COBROS_TABLE}
                   WHERE TRIM(CODIGO_CLIENTE) = ?
                   GROUP BY TRIM(REFERENCIA)`,
                 [codigoCliente], false, false
@@ -722,7 +723,7 @@ router.get('/:codigoCliente/historico', async (req, res) => {
             SELECT
                 C.ID, C.CODIGO_CLIENTE, C.IMPORTE, C.FORMA_PAGO,
                 C.REFERENCIA, C.OBSERVACIONES, C.FECHA
-            FROM ${APP_SCHEMA}.COBROS C
+            FROM ${COBROS_TABLE} C
             WHERE TRIM(C.CODIGO_CLIENTE) = ?
             ORDER BY C.FECHA DESC
             ${db2OffsetFetch(page)}`;
@@ -764,7 +765,7 @@ router.get('/:codigoCliente/estado', async (req, res) => {
             const rows = await queryWithParams(`
                 SELECT COALESCE(SUM(C.IMPORTEPENDIENTE), 0) AS TOTAL_PENDIENTE,
                        COUNT(*) AS NUM_DOCS
-                FROM ${DEBT_VIEW} C
+                FROM ${getDebtView()} C
                 WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
                   AND ${cvcPendingPredicate('C')}
             `, [codigoCliente], false);
@@ -776,7 +777,7 @@ router.get('/:codigoCliente/estado', async (req, res) => {
                 const rows = await queryWithParams(`
                     SELECT COALESCE(SUM(PC.IMPORTETOTAL), 0) AS TOTAL_PENDIENTE,
                            COUNT(*) AS NUM_PEDIDOS
-                    FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
+                    FROM ${PEDIDOS_CAB_TABLE} PC
                     WHERE TRIM(PC.CODIGOCLIENTE) = ?
                       AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
                       AND PC.IMPORTETOTAL > 0
@@ -791,7 +792,7 @@ router.get('/:codigoCliente/estado', async (req, res) => {
         const [appRows, repRows, cliRows] = await Promise.all([
             queryWithParams(`
                 SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_APP
-                  FROM ${APP_SCHEMA}.COBROS
+                  FROM ${COBROS_TABLE}
                  WHERE TRIM(CODIGO_CLIENTE) = ?
             `, [codigoCliente], false).catch((adjustErr) => {
                 logger.warn('[COBROS] Error leyendo cobros app-side: ' + adjustErr.message);
@@ -945,7 +946,7 @@ router.post('/:codigoCliente/registrar', limitRegistrarCobro, async (req, res) =
         try {
             const existingRows = await queryWithParams(
                 `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
-                   FROM ${APP_SCHEMA}.COBROS WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
+                   FROM ${COBROS_TABLE} WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
                 [paymentId, normalizedIdempotencyToken], false, false
             );
             if (existingRows && existingRows.length > 0) {
@@ -1017,7 +1018,7 @@ router.post('/:codigoCliente/registrar', limitRegistrarCobro, async (req, res) =
                 logger.warn(`[COBROS] Colision PK (race idempotencia) paymentId=${paymentId.slice(0, 12)}: ${msg}`);
                 const existingRows = await queryWithParams(
                     `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
-                       FROM ${APP_SCHEMA}.COBROS WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
+                       FROM ${COBROS_TABLE} WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
                     [paymentId, normalizedIdempotencyToken], false, false
                 );
                 const existing = existingRows && existingRows[0];
@@ -1144,7 +1145,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                  SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
                      <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                      THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
-            FROM ${DEBT_VIEW} CVC
+            FROM ${getDebtView()} CVC
             WHERE ${cvcPendingPredicate('CVC')}
               ${cvcLiveTypeSql('CVC')}
               ${emptyClientFilter}
@@ -1162,7 +1163,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                      THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO,
                  TRIM(MIN(CLI.NOMBREALTERNATIVO)) AS NOMBRE_ALT,
                  TRIM(MIN(CLI.NOMBRECLIENTE)) AS NOMBRE_CLI
-            FROM ${DEBT_VIEW} CVC
+            FROM ${getDebtView()} CVC
             ${cvcCliJoin('CVC')}
             WHERE ${cvcPendingPredicate('CVC')}
               ${cvcLiveTypeSql('CVC')}
@@ -1204,7 +1205,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                     '       P.DOC_KEY AS REF,',
                     '       COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP',
                     '  FROM PAGE_DOCS P',
-                    '  JOIN ' + APP_SCHEMA + '.COBROS C',
+                    '  JOIN ' + COBROS_TABLE + ' C',
                     '    ON TRIM(C.CODIGO_CLIENTE) = P.CLIENTE',
                     '   AND (TRIM(C.REFERENCIA) = P.DOC_KEY OR TRIM(C.REFERENCIA) LIKE ' + db2StringLiteral('%:') + ' || P.DOC_KEY)',
                     ' GROUP BY P.CLIENTE, P.DOC_KEY',

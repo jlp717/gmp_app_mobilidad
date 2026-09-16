@@ -44,6 +44,11 @@ describe('commercial isolated_test table mapping', () => {
     expect(db2AppTable('COBROS')).toBe('JAVIER.TEST_COBROS');
     expect(db2AppTable('PEDIDOS_CAB')).toBe('JAVIER.TEST_PEDIDOS_CAB');
     expect(db2AppTable('PEDIDOS_LIN')).toBe('JAVIER.TEST_PEDIDOS_LIN');
+    const { comercialErpTable } = require('../utils/comercial-erp-tables');
+    expect(comercialErpTable('CVC')).toBe('JAVIER.TEST_CVC');
+    expect(comercialErpTable('FPG')).toBe('JAVIER.TEST_FPG');
+    expect(comercialErpTable('LQD')).toBe('JAVIER.TEST_LQD');
+    expect(comercialErpTable('LACLAE')).toBe('JAVIER.TEST_LACLAE');
   });
 
   test('cobros repository SQL targets TEST_COBROS and never VISTA_DEUDA_BASE', () => {

@@ -14,10 +14,39 @@ const {
 } = require('../services/debt-view-contract');
 
 describe('debt-view-contract', () => {
+  const previousTableSet = process.env.REPARTO_TABLE_SET;
+
+  afterEach(() => {
+    if (previousTableSet === undefined) delete process.env.REPARTO_TABLE_SET;
+    else process.env.REPARTO_TABLE_SET = previousTableSet;
+    jest.resetModules();
+  });
+
   test('uses DSEDAC.CVC and never JAVIER.VISTA_DEUDA_BASE', () => {
+    delete process.env.REPARTO_TABLE_SET;
+    jest.resetModules();
+    const {
+      DEBT_VIEW,
+      debtViewFrom,
+    } = require('../services/debt-view-contract');
     expect(DEBT_VIEW).toBe('DSEDAC.CVC');
     expect(debtViewFrom('CVC')).toBe('FROM DSEDAC.CVC CVC');
     expect(DEBT_VIEW).not.toMatch(/VISTA_DEUDA_BASE/i);
+  });
+
+  test('isolated_test debt reads JAVIER.TEST_CVC/FPG copies', () => {
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    jest.resetModules();
+    const {
+      getDebtView,
+      cvcPendientesJoins,
+      cvcDocumentJoins,
+    } = require('../services/debt-view-contract');
+    expect(getDebtView()).toBe('JAVIER.TEST_CVC');
+    expect(cvcPendientesJoins('C')).toMatch(/LEFT JOIN JAVIER\.TEST_FPG FPG/i);
+    expect(cvcDocumentJoins('C')).toMatch(/LEFT JOIN JAVIER\.TEST_CAC CAC/i);
+    expect(cvcDocumentJoins('C')).toMatch(/LEFT JOIN JAVIER\.TEST_CPC CPC/i);
+    expect(cvcDocumentJoins('C')).not.toMatch(/VISTA_DEUDA_BASE/i);
   });
 
   test('caps FETCH FIRST at 500', () => {
@@ -28,6 +57,13 @@ describe('debt-view-contract', () => {
   });
 
   test('joins CAC/CPC/FPG and CLI for commercial live debt', () => {
+    delete process.env.REPARTO_TABLE_SET;
+    const {
+      cvcDocumentJoins,
+      cvcPendientesJoins,
+      cvcCliJoin,
+      cvcLiveTypeSql,
+    } = require('../services/debt-view-contract');
     const joins = cvcDocumentJoins('C');
     expect(joins).toMatch(/LEFT JOIN DSEDAC\.CAC CAC/i);
     expect(joins).toMatch(/LEFT JOIN DSEDAC\.CPC CPC/i);
