@@ -73,7 +73,10 @@ jest.mock('../services/query-optimizer', () => ({ cachedQuery: jest.fn() }));
 jest.mock('../services/redis-cache', () => ({
   TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 },
 }));
-jest.mock('../services/laclae', () => ({ getClientCodesFromCache: jest.fn() }));
+jest.mock('../services/laclae', () => ({
+  getClientCodesFromCache: jest.fn(),
+  isCacheReady: jest.fn(() => true),
+}));
 jest.mock('../config/db', () => ({
   query: jest.fn(),
   queryWithParams: jest.fn(),
@@ -880,6 +883,27 @@ describe('DDD pedidos route contracts', () => {
     expect(scopedCall[1]).toContain('35');
   });
 
+  test('GET /purchase-history-global maps query-gate timeout to 503 Retry-After', async () => {
+    const optimizer = require('../services/query-optimizer');
+    const err = new Error('query queue timeout');
+    err.code = 'DB_QUERY_QUEUE_TIMEOUT';
+    optimizer.cachedQuery.mockRejectedValue(err);
+
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      isJefeVentas: true,
+    }))
+      .get('/purchase-history-global')
+      .query({ vendedorCode: 'ALL', limit: 50 });
+
+    expect(res.status).toBe(503);
+    expect(res.headers['retry-after']).toBe('2');
+    expect(res.body.code).toBe('ROUTE_FILL_BUSY');
+    expect(res.body.success).toBe(false);
+  });
+
   test('GET /promotions ignores empty cache and caches only n>0', async () => {
     const promotions = Array.from({ length: 27 }, (_, i) => ({
       code: `PMR${i}`,
@@ -1477,5 +1501,26 @@ describe('DDD entregas document route contracts', () => {
 
     expect(whatsapp.status).toBe(200);
     expect(whatsapp.body).toEqual({ success: true, entregaId: 'E001', channel: 'whatsapp' });
+  });
+});
+
+describe('DDD clients list cache-ready contract', () => {
+  test('GET /list returns 503 when LACLAE memory is not ready', async () => {
+    const laclae = require('../services/laclae');
+    laclae.isCacheReady.mockReturnValue(false);
+
+    const res = await request(makeApp(createClientsRoutes(), {
+      id: '98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      isJefeVentas: true,
+    }))
+      .get('/list')
+      .query({ vendedorCodes: 'ALL', limit: 50 });
+
+    expect(res.status).toBe(503);
+    expect(res.headers['retry-after']).toBe('2');
+    expect(res.body.code).toBe('ROUTE_FILL_BUSY');
+    expect(require('../config/db').queryWithParams).not.toHaveBeenCalled();
   });
 });

@@ -14,12 +14,17 @@ function isJefeUser({ isJefeVentas, role } = {}) {
 
 function buildJefeHotPaths(now = new Date()) {
   const year = now.getFullYear();
-  const months = '1,2,3,4,5,6,7,8,9,10,11,12';
+  const month = now.getMonth() + 1;
+  const ytdMonths = Array.from({ length: month }, (_, i) => i + 1).join(',');
+  const allMonths = '1,2,3,4,5,6,7,8,9,10,11,12';
   return [
     `/api/dashboard/metrics?vendedorCodes=ALL&year=${year}`,
     `/api/objectives/evolution?vendedorCodes=ALL&years=${year}`,
-    `/api/objectives/by-client?vendedorCodes=ALL&years=${year}&months=${months}&limit=100`,
+    `/api/objectives/by-client?vendedorCodes=ALL&years=${year}&months=${allMonths}&limit=100`,
     `/api/commissions/summary?vendedorCode=ALL&year=${year}`,
+    `/api/dashboard/matrix-data?vendedorCodes=ALL&year=${year}&years=${year}&groupBy=vendor&limit=240&months=${ytdMonths}`,
+    `/api/clients/list?vendedorCodes=ALL&limit=50`,
+    `/api/pedidos/purchase-history-global?vendedorCode=ALL&limit=50`,
   ];
 }
 
@@ -56,16 +61,28 @@ function getOnce(path, token) {
 
 async function runJefeHotRouteWarmup({ token, now } = {}) {
   if (!token) return [];
-  const [metrics, evolution, byClient, commissions] = buildJefeHotPaths(now);
+  const [
+    metrics,
+    evolution,
+    byClient,
+    commissions,
+    matrix,
+    clients,
+    purchaseHistory,
+  ] = buildJefeHotPaths(now);
   // Metrics first and alone: dashboard first paint must not queue behind
   // LACLAE GROUP BY (gate max=4). Then at most two heavy queries.
+  // Late wave is sequential: never 500 from a stacked purchase-history fill.
   const first = await getOnce(metrics, token);
   const heavy = await Promise.all([
     getOnce(evolution, token),
     getOnce(byClient, token),
   ]);
-  const last = await getOnce(commissions, token);
-  const results = [first, ...heavy, last];
+  const late = [];
+  for (const path of [commissions, matrix, clients, purchaseHistory]) {
+    late.push(await getOnce(path, token));
+  }
+  const results = [first, ...heavy, ...late];
   for (const result of results) {
     logger.info(`[JefeHotWarmup] ${result.status} ${result.ms}ms ${result.path}`);
   }

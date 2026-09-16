@@ -1796,7 +1796,7 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
                 }
             }
 
-            return {
+            const clientPayload = {
                 code,
                 name: (r.NAME ?? r.name)?.trim() || null,
                 address: (r.ADDRESS ?? r.address)?.trim() || null,
@@ -1810,12 +1810,21 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
                     yoyVariation: parseFloat(growth.toFixed(1)),
                     isPositive: growth >= 0
                 },
-                lat: gps.lat,
-                lon: gps.lon,
-                orderStatus,
-                observation: note ? note.text : null,
+                orderStatus: {
+                    state: orderStatus.state,
+                    label: orderStatus.label,
+                    hasOrder: !!orderStatus.hasOrder,
+                },
                 order: clientOrder
             };
+            if (gps.lat != null && gps.lon != null) {
+                clientPayload.lat = gps.lat;
+                clientPayload.lon = gps.lon;
+            }
+            if (note && note.text) {
+                clientPayload.observation = note.text;
+            }
+            return clientPayload;
         });
 
         // SORTING STRATEGY

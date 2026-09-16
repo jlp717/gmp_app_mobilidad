@@ -1064,6 +1064,7 @@ function handleRouteError(error, res, userMessage = 'Error interno del servidor'
     let safeUserMessage = userMessage;
     if (dbUnavailableCodes.has(error?.code)) {
         safeUserMessage = 'Base de datos temporalmente no disponible';
+        res.set('Retry-After', '2');
     } else if (safeStatusCode < 500 && error?.expose !== false && error?.message) {
         safeUserMessage = sanitizeErrorMessage(error, userMessage);
     }

@@ -49,6 +49,9 @@ describe('handleRouteError', () => {
         this.body = payload;
         return this;
       },
+      set() {
+        return this;
+      },
     };
   }
 
@@ -69,5 +72,16 @@ describe('handleRouteError', () => {
     expect(res.body.error).toBe('Error procesando pedido');
     expect(res.body.code).toBe('PEDIDOS_ERROR');
     expect(JSON.stringify(res.body)).not.toMatch(/hunter2|SELECT \*/);
+  });
+
+  test('DB_QUERY_QUEUE_TIMEOUT is 503 with Retry-After', () => {
+    const res = mockRes();
+    res.set = jest.fn();
+    const err = new Error('queue full');
+    err.code = 'DB_QUERY_QUEUE_TIMEOUT';
+    handleRouteError(err, res, 'Error interno', 500);
+    expect(res.statusCode).toBe(503);
+    expect(res.set).toHaveBeenCalledWith('Retry-After', '2');
+    expect(res.body.code).toBe('DB_QUERY_QUEUE_TIMEOUT');
   });
 });

@@ -18,6 +18,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
@@ -958,13 +959,25 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 forceShow: widget.forceShowVendorSelector,
               ),
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
+              child: LazyIndexedStack(
+                index: _tabController.index,
                 children: [
-                  _buildNuevoPedidoTab(),
-                  _buildMisPedidosTab(),
-                  _buildEvolucionTab(),
-                  _buildDevolucionesTab(),
+                  KeyedSubtree(
+                    key: const PageStorageKey<String>('pedidos-nuevo'),
+                    child: Builder(builder: (_) => _buildNuevoPedidoTab()),
+                  ),
+                  KeyedSubtree(
+                    key: const PageStorageKey<String>('pedidos-lista'),
+                    child: Builder(builder: (_) => _buildMisPedidosTab()),
+                  ),
+                  KeyedSubtree(
+                    key: const PageStorageKey<String>('pedidos-evolucion'),
+                    child: Builder(builder: (_) => _buildEvolucionTab()),
+                  ),
+                  KeyedSubtree(
+                    key: const PageStorageKey<String>('pedidos-devoluciones'),
+                    child: Builder(builder: (_) => _buildDevolucionesTab()),
+                  ),
                 ],
               ),
             ),

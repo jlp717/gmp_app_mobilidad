@@ -242,17 +242,22 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               ),
             ),
 
-            // Tree List — lazy rows; parent scroll view owns vertical physics.
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: flatRows.length,
-              itemBuilder: (context, index) {
-                final row = flatRows[index];
-                return RepaintBoundary(
-                  child: _buildNodeRow(row.key, row.value),
-                );
-              },
+            // Tree list — bounded viewport so ranking virtualizes instead of
+            // shrinkWrap-building every vendor row inside the parent scroll.
+            SizedBox(
+              height: (flatRows.length * 56.0).clamp(
+                120.0,
+                MediaQuery.sizeOf(context).height * 0.55,
+              ),
+              child: ListView.builder(
+                itemCount: flatRows.length,
+                itemBuilder: (context, index) {
+                  final row = flatRows[index];
+                  return RepaintBoundary(
+                    child: _buildNodeRow(row.key, row.value),
+                  );
+                },
+              ),
             ),
 
             // TOTAL ROW (ORANGE)

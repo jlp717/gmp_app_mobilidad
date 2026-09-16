@@ -6,6 +6,7 @@ const { verifyToken } = require('../middleware/auth');
 const { query, queryWithParams } = require('../middleware/db-timing');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, redisCache } = require('../services/redis-cache');
+const { beginRouteFill, endRouteFill, sendFillBusy } = require('../services/route-cache-stampede');
 const {
     getCurrentDate,
     buildVendedorFilter,
@@ -115,6 +116,20 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
             return res.json(cachedResult);
         }
 
+        let stampede = { fill: true, lock: null, busy: false, hit: null };
+        if (redisCache && redisCache.isConnected) {
+            stampede = await beginRouteFill(cacheKey, { namespace: 'matrix', waitMs: 20000 });
+            if (stampede.hit) {
+                logger.info(`⚡ Cache hit: matrix-data`);
+                res.set('X-Cache-Hit', 'true');
+                return res.json(stampede.hit);
+            }
+            if (stampede.busy) {
+                return sendFillBusy(res);
+            }
+        }
+
+        try {
         let selectedYear = parseInt(year) || getCurrentDate().getFullYear();
         let prevYear = selectedYear - 1;
         let yearParams = [];
@@ -405,6 +420,9 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
         await redisCache.set('matrix', cacheKey, responseStub, TTL.MEDIUM);
         res.set('X-Cache-Hit', 'false');
         res.json(responseStub);
+        } finally {
+            await endRouteFill(cacheKey, stampede.lock, { namespace: 'matrix' });
+        }
 
     } catch (error) {
         const odbcInfo = error.odbcErrors ? ` ODBC: ${JSON.stringify(error.odbcErrors)}` : '';

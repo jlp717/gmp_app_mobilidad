@@ -28,7 +28,8 @@ const { ResponseCache } = require('../../core/infrastructure/cache/response-cach
 const { performanceCache } = require('../../core/infrastructure/cache/performance-cache');
 const { cachedQuery } = require('../../../services/query-optimizer');
 const { query, queryWithParams } = require('../../../config/db');
-const { TTL: RedisTTL } = require('../../../services/redis-cache');
+const { TTL: RedisTTL, redisCache } = require('../../../services/redis-cache');
+const { beginRouteFill, endRouteFill, sendFillBusy } = require('../../../services/route-cache-stampede');
 const {
   loginLimiter,
   sanitizeInput,
@@ -48,7 +49,7 @@ const {
   sanitizeCodeListForParams,
   normalizeCvcTipoDocumentoFilter,
 } = require('../../../utils/common');
-const { getClientCodesFromCache } = require('../../../services/laclae');
+const { getClientCodesFromCache, isCacheReady } = require('../../../services/laclae');
 const { verifyVendorPin } = require('../../../services/vendor-pin-auth');
 const { resolveVendorScope } = require('../../../middleware/vendor-scope');
 const authTokenService = require('../../../middleware/auth');
@@ -64,6 +65,13 @@ function publicErrorMessageForStatus(error, status, fallbackMessage = INTERNAL_S
 
 function sendInternalServerError(res, fallbackMessage = INTERNAL_SERVER_ERROR_MESSAGE) {
   return res.status(500).json({ success: false, code: 'INTERNAL_SERVER_ERROR', error: fallbackMessage });
+}
+
+function isQueryGateError(error) {
+  return error?.code === 'DB_QUERY_QUEUE_TIMEOUT'
+    || error?.code === 'DB_QUERY_TIMEOUT'
+    || error?.code === 'DB_CIRCUIT_OPEN'
+    || error?.code === 'ROUTE_FILL_BUSY';
 }
 
 const pedidoLineSchema = z.object({
@@ -1626,37 +1634,60 @@ function createPedidosRoutes() {
       const fromYmd = from.getFullYear() * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
       const toYmd = to.getFullYear() * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
       const cacheKeyParts = `${fromYmd}:${toYmd}:${isAllVendor ? 'ALL' : vendor}:${clientCode}:${productCode}:${familia}:${marca}:${limit}:${offset}`;
+      const stampedeKey = `pedidos:purchase-history-global:${cacheKeyParts}`;
 
-      // queryGate max=4: keep 3+2 waves. cachedQuery (TTL.SHORT) matches legacy.
-      const [detail, summary, topProducts] = await Promise.all([
-        cachedQuery((sql) => queryWithParams(sql, params, false), detailSql, `pedidos:purchase-history-global:detail:${cacheKeyParts}`, RedisTTL.SHORT),
-        cachedQuery((sql) => queryWithParams(sql, params, false), summarySql, `pedidos:purchase-history-global:summary:${cacheKeyParts}`, RedisTTL.SHORT),
-        cachedQuery((sql) => queryWithParams(sql, params, false), topProductosSql, `pedidos:purchase-history-global:top:${cacheKeyParts}`, RedisTTL.SHORT),
-      ]);
-      const [lastYear, monthlyByYear] = await Promise.all([
-        cachedQuery((sql) => queryWithParams(sql, lastYearParams, false), lastYearTotalSql, `pedidos:purchase-history-global:lastyear:${cacheKeyParts}`, RedisTTL.SHORT),
-        cachedQuery((sql) => queryWithParams(sql, params, false), monthlyByYearSql, `pedidos:purchase-history-global:monthly:${cacheKeyParts}`, RedisTTL.SHORT),
-      ]);
+      let stampede = { fill: true, lock: null, busy: false, hit: null };
+      if (redisCache && redisCache.isConnected) {
+        stampede = await beginRouteFill(stampedeKey, { waitMs: 20000 });
+        if (stampede.hit) {
+          return res.json(stampede.hit);
+        }
+        if (stampede.busy) {
+          return sendFillBusy(res);
+        }
+      }
 
-      const s = summary?.[0] || {};
-      const totalThisPeriod = parseFloat(s.TOTAL_VENDIDO) || 0;
-      const totalLastYear = parseFloat(lastYear?.[0]?.TOTAL_LAST_YEAR) || 0;
-      const variation = totalLastYear > 0 ? ((totalThisPeriod - totalLastYear) / totalLastYear) * 100 : null;
+      try {
+        // queryGate max=4: keep 3+2 waves. cachedQuery (TTL.SHORT) matches legacy.
+        const [detail, summary, topProducts] = await Promise.all([
+          cachedQuery((sql) => queryWithParams(sql, params, false), detailSql, `pedidos:purchase-history-global:detail:${cacheKeyParts}`, RedisTTL.SHORT),
+          cachedQuery((sql) => queryWithParams(sql, params, false), summarySql, `pedidos:purchase-history-global:summary:${cacheKeyParts}`, RedisTTL.SHORT),
+          cachedQuery((sql) => queryWithParams(sql, params, false), topProductosSql, `pedidos:purchase-history-global:top:${cacheKeyParts}`, RedisTTL.SHORT),
+        ]);
+        const [lastYear, monthlyByYear] = await Promise.all([
+          cachedQuery((sql) => queryWithParams(sql, lastYearParams, false), lastYearTotalSql, `pedidos:purchase-history-global:lastyear:${cacheKeyParts}`, RedisTTL.SHORT),
+          cachedQuery((sql) => queryWithParams(sql, params, false), monthlyByYearSql, `pedidos:purchase-history-global:monthly:${cacheKeyParts}`, RedisTTL.SHORT),
+        ]);
 
-      res.json({
-        success: true,
-        filters: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10), vendedorCode: isAllVendor ? 'ALL' : vendor, clientCode: clientCode || null, productCode: productCode || null, familia: familia || null, marca: marca || null },
-        summary: {
-          numLineas: parseInt(s.NUM_LINEAS) || 0, numClientes: parseInt(s.NUM_CLIENTES) || 0, numProductos: parseInt(s.NUM_PRODUCTOS) || 0,
-          totalVendido: totalThisPeriod, totalSinDescuento: parseFloat(s.TOTAL_SIN_DESCUENTO) || 0, totalDescuento: parseFloat(s.TOTAL_DESCUENTO) || 0, totalUnidades: parseFloat(s.TOTAL_UNIDADES) || 0,
-          comparativaAnoAnterior: { totalAnoAnterior: totalLastYear, variacionPct: variation },
-        },
-        topProducts: (topProducts || []).map(t => ({ code: (t.CODE || '').trim(), name: (t.NAME || '').trim(), importe: parseFloat(t.IMPORTE) || 0, unidades: parseFloat(t.UNIDADES) || 0, numLineas: parseInt(t.NUM_LINEAS) || 0 })),
-        lines: (detail || []).map(r => ({ fecha: `${r.ANO}-${String(r.MES).padStart(2, '0')}-${String(r.DIA).padStart(2, '0')}`, clienteCode: (r.CODIGOCLIENTE || '').trim(), clienteName: (r.NOMBRECLIENTE || '').trim(), vendedorCode: (r.CODIGOVENDEDOR || '').trim(), productCode: (r.CODIGOARTICULO || '').trim(), productName: (r.DESCRIPCIONARTICULO || '').trim(), cantidad: parseFloat(r.CANTIDADUNIDADES) || 0, envases: parseFloat(r.CANTIDADENVASES) || 0, precio: parseFloat(r.PRECIOVENTA) || 0, descuentoPct: parseFloat(r.PORCENTAJEDESCUENTO) || 0, importe: parseFloat(r.IMPORTEVENTA) || 0, importeSinDescuento: parseFloat(r.IMPORTESINDESCUENTO) || 0, importeDescuento: parseFloat(r.IMPORTEDESCUENTO) || 0, formaPago: (r.CODIGOFORMAPAGO || '').trim(), albaran: `${(r.SERIEALBARAN || '').trim()}-${r.NUMEROALBARAN || ''}` })),
-        monthlyByYear: (monthlyByYear || []).map(r => ({ year: parseInt(r.ANO), month: parseInt(r.MES), totalVendido: parseFloat(r.TOTAL_VENDIDO) || 0, totalSinDescuento: parseFloat(r.TOTAL_SIN_DESCUENTO) || 0, totalDescuento: parseFloat(r.TOTAL_DESCUENTO) || 0, totalUnidades: parseFloat(r.TOTAL_UNIDADES) || 0, numLineas: parseInt(r.NUM_LINEAS) || 0 })),
-        pagination: { limit, offset, hasMore: (detail || []).length === limit },
-      });
+        const s = summary?.[0] || {};
+        const totalThisPeriod = parseFloat(s.TOTAL_VENDIDO) || 0;
+        const totalLastYear = parseFloat(lastYear?.[0]?.TOTAL_LAST_YEAR) || 0;
+        const variation = totalLastYear > 0 ? ((totalThisPeriod - totalLastYear) / totalLastYear) * 100 : null;
+
+        const payload = {
+          success: true,
+          filters: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10), vendedorCode: isAllVendor ? 'ALL' : vendor, clientCode: clientCode || null, productCode: productCode || null, familia: familia || null, marca: marca || null },
+          summary: {
+            numLineas: parseInt(s.NUM_LINEAS) || 0, numClientes: parseInt(s.NUM_CLIENTES) || 0, numProductos: parseInt(s.NUM_PRODUCTOS) || 0,
+            totalVendido: totalThisPeriod, totalSinDescuento: parseFloat(s.TOTAL_SIN_DESCUENTO) || 0, totalDescuento: parseFloat(s.TOTAL_DESCUENTO) || 0, totalUnidades: parseFloat(s.TOTAL_UNIDADES) || 0,
+            comparativaAnoAnterior: { totalAnoAnterior: totalLastYear, variacionPct: variation },
+          },
+          topProducts: (topProducts || []).map(t => ({ code: (t.CODE || '').trim(), name: (t.NAME || '').trim(), importe: parseFloat(t.IMPORTE) || 0, unidades: parseFloat(t.UNIDADES) || 0, numLineas: parseInt(t.NUM_LINEAS) || 0 })),
+          lines: (detail || []).map(r => ({ fecha: `${r.ANO}-${String(r.MES).padStart(2, '0')}-${String(r.DIA).padStart(2, '0')}`, clienteCode: (r.CODIGOCLIENTE || '').trim(), clienteName: (r.NOMBRECLIENTE || '').trim(), vendedorCode: (r.CODIGOVENDEDOR || '').trim(), productCode: (r.CODIGOARTICULO || '').trim(), productName: (r.DESCRIPCIONARTICULO || '').trim(), cantidad: parseFloat(r.CANTIDADUNIDADES) || 0, envases: parseFloat(r.CANTIDADENVASES) || 0, precio: parseFloat(r.PRECIOVENTA) || 0, descuentoPct: parseFloat(r.PORCENTAJEDESCUENTO) || 0, importe: parseFloat(r.IMPORTEVENTA) || 0, importeSinDescuento: parseFloat(r.IMPORTESINDESCUENTO) || 0, importeDescuento: parseFloat(r.IMPORTEDESCUENTO) || 0, formaPago: (r.CODIGOFORMAPAGO || '').trim(), albaran: `${(r.SERIEALBARAN || '').trim()}-${r.NUMEROALBARAN || ''}` })),
+          monthlyByYear: (monthlyByYear || []).map(r => ({ year: parseInt(r.ANO), month: parseInt(r.MES), totalVendido: parseFloat(r.TOTAL_VENDIDO) || 0, totalSinDescuento: parseFloat(r.TOTAL_SIN_DESCUENTO) || 0, totalDescuento: parseFloat(r.TOTAL_DESCUENTO) || 0, totalUnidades: parseFloat(r.TOTAL_UNIDADES) || 0, numLineas: parseInt(r.NUM_LINEAS) || 0 })),
+          pagination: { limit, offset, hasMore: (detail || []).length === limit },
+        };
+        if (redisCache && redisCache.isConnected && stampede.fill) {
+          await redisCache.set('route', stampedeKey, payload, RedisTTL.SHORT);
+        }
+        return res.json(payload);
+      } finally {
+        await endRouteFill(stampedeKey, stampede.lock);
+      }
     } catch (error) {
+      if (isQueryGateError(error)) {
+        return sendFillBusy(res);
+      }
       const odbc0 = error.odbcErrors && error.odbcErrors[0];
       const odbcMsg = odbc0 ? `${odbc0.state} (${odbc0.code}): ${odbc0.message}` : '';
       logger.error(`[DDD-PEDIDOS] purchase-history-global ERROR: ${error.message}
@@ -2771,6 +2802,11 @@ function createClientsRoutes() {
         const queryParams = searchClause.params;
 
         if (!safeSearch) {
+          if (!isCacheReady()) {
+            const notReady = new Error('LACLAE cache not ready');
+            notReady.code = 'ROUTE_FILL_BUSY';
+            throw notReady;
+          }
           const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
           if (Array.isArray(cachedClientCodes) && cachedClientCodes.length > 0) {
             const pageCodes = [...new Set(cachedClientCodes.map(c => sanitizeForSQL(c)).filter(Boolean))]
@@ -3000,6 +3036,9 @@ function createClientsRoutes() {
       res.set('X-Query-Type', isAllQuery ? 'ALL-OPTIMIZED' : 'standard');
       res.json(result.data);
     } catch (error) {
+      if (isQueryGateError(error)) {
+        return sendFillBusy(res);
+      }
       logger.error(`[DDD-CLIENTS] Error: ${error.message}`);
       sendInternalServerError(res);
     }

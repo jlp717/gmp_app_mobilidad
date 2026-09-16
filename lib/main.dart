@@ -91,50 +91,56 @@ void main() async {
       ]);
       debugPrint('[MAIN] ✅ Cache initialized');
       await ApiClient.initialize();
-      // Start monitoring WiFi ↔ mobile data changes for adaptive timeouts
       ApiClient.startConnectivityMonitoring();
-      // Initialize offline infrastructure
-      await ConnectivityService.instance.initialize();
-      await SyncQueueService.instance.initialize();
       debugPrint(
         '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}',
       );
-      debugPrint('[MAIN] ✅ Offline infrastructure initialized');
     }()
-        .timeout(const Duration(seconds: 12));
+        .timeout(const Duration(seconds: 8));
   } catch (e, stack) {
     debugPrint('[MAIN] ❌ Initialization error: $e');
     debugPrint('[MAIN] Stack: $stack');
     await Sentry.captureException(e, stackTrace: stack);
   }
 
+  const sentryDsn = String.fromEnvironment('SENTRY_DSN');
+  // Bindings were initialized on this zone; wrapping runApp in a new
+  // runZonedGuarded zone throws "Zone mismatch" in debug and can drop
+  // the first frame. PlatformDispatcher.onError already captures async errors.
+  const app = ProviderScope(child: GMPSalesAnalyticsApp());
+  runApp(sentryDsn.isEmpty ? app : SentryWidget(child: app));
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_deferredStartup(sentryDsn));
+  });
+}
+
+Future<void> _deferredStartup(String sentryDsn) async {
+  try {
+    await ConnectivityService.instance.initialize();
+    await SyncQueueService.instance.initialize();
+    debugPrint('[MAIN] ✅ Offline infrastructure initialized');
+  } catch (e, stack) {
+    debugPrint('[MAIN] ❌ Deferred init error: $e');
+    await Sentry.captureException(e, stackTrace: stack);
+  }
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-
-  const sentryDsn = String.fromEnvironment('SENTRY_DSN');
-  if (sentryDsn.isNotEmpty) {
-    await SentryFlutter.init(
-      (options) {
-        options.dsn = sentryDsn;
-        options.environment = const String.fromEnvironment(
-          'SENTRY_ENVIRONMENT',
-          defaultValue: 'production',
-        );
-        options.tracesSampleRate = 0.2;
-        options.debug = kDebugMode;
-      },
-    );
-  }
-
-  // Bindings were initialized on this zone; wrapping runApp in a new
-  // runZonedGuarded zone throws "Zone mismatch" in debug and can drop
-  // the first frame. PlatformDispatcher.onError already captures async errors.
-  const app = ProviderScope(child: GMPSalesAnalyticsApp());
-  runApp(sentryDsn.isEmpty ? app : SentryWidget(child: app));
+  if (sentryDsn.isEmpty) return;
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = sentryDsn;
+      options.environment = const String.fromEnvironment(
+        'SENTRY_ENVIRONMENT',
+        defaultValue: 'production',
+      );
+      options.tracesSampleRate = 0.2;
+      options.debug = kDebugMode;
+    },
+  );
 }
 
 class GMPSalesAnalyticsApp extends ConsumerStatefulWidget {

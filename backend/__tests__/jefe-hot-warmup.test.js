@@ -74,6 +74,10 @@ describe('jefe-hot-route-warmer', () => {
     expect(paths[1]).toContain('/api/objectives/evolution?vendedorCodes=ALL&years=2026');
     expect(paths[2]).toContain('/api/objectives/by-client?vendedorCodes=ALL&years=2026');
     expect(paths[3]).toContain('/api/commissions/summary?vendedorCode=ALL&year=2026');
+    expect(paths[4]).toContain('/api/dashboard/matrix-data?vendedorCodes=ALL');
+    expect(paths[4]).toContain('groupBy=vendor');
+    expect(paths[5]).toContain('/api/clients/list?vendedorCodes=ALL&limit=50');
+    expect(paths[6]).toContain('/api/pedidos/purchase-history-global?vendedorCode=ALL');
     expect(paths.join()).not.toMatch(/VENDEDOR='ALL'/);
   });
 
