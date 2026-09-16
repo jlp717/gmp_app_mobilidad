@@ -4,6 +4,7 @@ const {
     buildMonthFilterParameterized,
     buildVendedorFilterParameterized,
     buildVendedorFilterLACLAEParameterized,
+    buildLaclaeDateRangeFilter,
     resolveMatrixFetchLimit,
 } = require('../src/utils/dashboardFilters');
 
@@ -104,6 +105,19 @@ describe('dashboardFilters', () => {
             expect(resolveMatrixFetchLimit('vendor')).toBe(240);
             expect(resolveMatrixFetchLimit('vendor,client')).toBe(500);
             expect(resolveMatrixFetchLimit('vendor,client,product')).toBe(1000);
+        });
+    });
+
+    describe('buildLaclaeDateRangeFilter', () => {
+        test('same-year window is sargable on LCAADC/LCMMDC/LCDDDC', () => {
+            const result = buildLaclaeDateRangeFilter(
+                'L',
+                new Date(2026, 0, 1),
+                new Date(2026, 8, 16),
+            );
+            expect(result.sql).toContain('L.LCAADC = ?');
+            expect(result.sql).not.toMatch(/LCAADC \* 10000/);
+            expect(result.params).toEqual([2026, 1, 1, 1, 9, 9, 16]);
         });
     });
 });

@@ -20,8 +20,11 @@ const { comercialErpWriteForbiddenSql } = require('../utils/comercial-erp-tables
 const APPLY = process.argv.includes('--apply');
 const REPLACE = process.argv.includes('--replace');
 const TRY_FULL = process.argv.includes('--full');
-const HIT_VENDORS = ['80', '35', '02', '03', '81', '97', '72', '73', '83'];
-const LARGE_FULL_MAX = 20000;
+const APPEND = process.argv.includes('--append');
+const HIT_VENDORS = ['80', '35', '98', '02', '03', '81', '97', '72', '73', '83'];
+const CORE_VENDORS = ['80', '35', '98'];
+const LARGE_FULL_MAX = 80000;
+const SCOPED_FETCH = 25000;
 
 function n(row, key) {
   const wanted = String(key).toUpperCase();
@@ -150,14 +153,19 @@ async function replaceIfNeeded(dest, { force = REPLACE, minRows = 1 } = {}) {
   return { dest, skipped: count > 0 ? 'has rows' : 'empty', before: count };
 }
 
-async function copyInsert(dest, insertSql, note) {
+async function copyInsert(dest, insertSql, note, { full = false } = {}) {
   assertJavierTest(dest);
   refuseErpWrite(insertSql);
   const destName = dest.split('.')[1];
   const before = await tableInfo('JAVIER', destName);
   const current = typeof before.count === 'number' ? before.count : 0;
   const action = { dest, note, before: current };
-  if (current > 0 && !REPLACE) {
+  if (current > 0 && full && !REPLACE) {
+    action.skippedInsert = 'complete catalog already copied';
+    action.after = current;
+    return action;
+  }
+  if (current > 0 && !REPLACE && !APPEND) {
     action.skippedInsert = 'already has rows';
     action.after = current;
     return action;
@@ -170,6 +178,18 @@ async function copyInsert(dest, insertSql, note) {
 }
 
 const vendorListSql = HIT_VENDORS.map((code) => `'${code}'`).join(', ');
+const coreVendorSql = CORE_VENDORS.map((code) => `'${code}'`).join(', ');
+
+const hitClientSql = `
+  SELECT TRIM(CLP.CODIGOCLIENTE) FROM DSEDAC.CLP CLP
+   WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${coreVendorSql})
+  UNION
+  SELECT TRIM(P.CODIGOCLIENTE) FROM DSEDAC.PMR P
+   WHERE TRIM(COALESCE(P.CODIGOCLIENTE, '')) <> ''
+  UNION
+  SELECT TRIM(C.CODIGOCLIENTE) FROM DSEDAC.PMRC C
+   WHERE TRIM(COALESCE(C.CODIGOCLIENTE, '')) <> ''
+`;
 
 function commercialCopyJobs(lacSchema) {
   return [
@@ -200,7 +220,18 @@ function commercialCopyJobs(lacSchema) {
             OR TRIM(CODIGOCLIENTE) IN (
                  SELECT TRIM(CODIGOCLIENTE) FROM DSEDAC.CLP
                   WHERE TRIM(VENDEDORCOMERCIAL) IN (${vendorListSql})
-                  FETCH FIRST 400 ROWS ONLY
+                  FETCH FIRST 800 ROWS ONLY
+               )
+         FETCH FIRST 8000 ROWS ONLY`,
+      appendSql: `INSERT INTO JAVIER.TEST_CLX
+        SELECT S.* FROM DSEDAC.CLX S
+         WHERE (
+              COBRORIGUROSOSN = 'S'
+              OR TRIM(CODIGOCLIENTE) IN (${hitClientSql})
+            )
+           AND NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CLX T
+                  WHERE TRIM(T.CODIGOCLIENTE) = TRIM(S.CODIGOCLIENTE)
                )
          FETCH FIRST 4000 ROWS ONLY`,
       fullSql: 'INSERT INTO JAVIER.TEST_CLX SELECT * FROM DSEDAC.CLX',
@@ -213,7 +244,7 @@ function commercialCopyJobs(lacSchema) {
       insertSql: `INSERT INTO JAVIER.TEST_LQD
         SELECT * FROM DSEDAC.LQD
          WHERE TRIM(CODIGOVENDEDOR) IN (${vendorListSql})
-         FETCH FIRST 8000 ROWS ONLY`,
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
       fullSql: 'INSERT INTO JAVIER.TEST_LQD SELECT * FROM DSEDAC.LQD',
     },
     {
@@ -234,35 +265,136 @@ function commercialCopyJobs(lacSchema) {
       insertSql: 'INSERT INTO JAVIER.TEST_PMRC SELECT * FROM DSEDAC.PMRC FETCH FIRST 8000 ROWS ONLY',
     },
     {
-      source: 'DSEDAC.LPC',
-      dest: 'JAVIER.TEST_LPC',
-      note: 'precios LPC si existe',
+      source: 'DSEDAC.CLI',
+      dest: 'JAVIER.TEST_CLI',
+      note: 'clientes HIT 80/35/98 + PMR (catalogo, no dump si >80k)',
+      minRows: 1,
+      insertSql: `INSERT INTO JAVIER.TEST_CLI
+        SELECT * FROM DSEDAC.CLI
+         WHERE TRIM(CODIGOCLIENTE) IN (${hitClientSql})
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
+      appendSql: `INSERT INTO JAVIER.TEST_CLI
+        SELECT S.* FROM DSEDAC.CLI S
+         WHERE TRIM(S.CODIGOCLIENTE) IN (${hitClientSql})
+           AND NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CLI T
+                  WHERE TRIM(T.CODIGOCLIENTE) = TRIM(S.CODIGOCLIENTE)
+               )
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
+      fullSql: 'INSERT INTO JAVIER.TEST_CLI SELECT * FROM DSEDAC.CLI',
+    },
+    {
+      source: 'DSEDAC.CLC',
+      dest: 'JAVIER.TEST_CLC',
+      note: 'tarifa cliente HIT',
       minRows: 0,
       optional: true,
-      insertSql: 'INSERT INTO JAVIER.TEST_LPC SELECT * FROM DSEDAC.LPC FETCH FIRST 8000 ROWS ONLY',
+      insertSql: `INSERT INTO JAVIER.TEST_CLC
+        SELECT * FROM DSEDAC.CLC
+         WHERE TRIM(CODIGOCLIENTE) IN (${hitClientSql})
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
+      appendSql: `INSERT INTO JAVIER.TEST_CLC
+        SELECT S.* FROM DSEDAC.CLC S
+         WHERE TRIM(S.CODIGOCLIENTE) IN (${hitClientSql})
+           AND NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CLC T
+                  WHERE TRIM(T.CODIGOCLIENTE) = TRIM(S.CODIGOCLIENTE)
+               )
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
+      fullSql: 'INSERT INTO JAVIER.TEST_CLC SELECT * FROM DSEDAC.CLC',
+    },
+    {
+      source: 'DSEDAC.ART',
+      dest: 'JAVIER.TEST_ART',
+      note: 'catalogo articulos (full si <=80k; si no PMR/vendors)',
+      minRows: 1,
+      insertSql: 'INSERT INTO JAVIER.TEST_ART SELECT * FROM DSEDAC.ART FETCH FIRST 40000 ROWS ONLY',
+      appendSql: `INSERT INTO JAVIER.TEST_ART
+        SELECT S.* FROM DSEDAC.ART S
+         WHERE NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_ART T
+                  WHERE TRIM(T.CODIGOARTICULO) = TRIM(S.CODIGOARTICULO)
+               )
+         FETCH FIRST 40000 ROWS ONLY`,
+      fullSql: 'INSERT INTO JAVIER.TEST_ART SELECT * FROM DSEDAC.ART',
+    },
+    {
+      source: 'DSEDAC.ARA',
+      dest: 'JAVIER.TEST_ARA',
+      note: 'tarifas 1/2 + clientes HIT',
+      minRows: 1,
+      insertSql: `INSERT INTO JAVIER.TEST_ARA
+        SELECT * FROM DSEDAC.ARA
+         WHERE CODIGOTARIFA IN (1, 2)
+            OR CODIGOARTICULO IN (SELECT CODIGOARTICULO FROM JAVIER.TEST_ART)
+         FETCH FIRST 80000 ROWS ONLY`,
+      appendSql: `INSERT INTO JAVIER.TEST_ARA
+        SELECT S.* FROM DSEDAC.ARA S
+         WHERE (S.CODIGOTARIFA IN (1, 2) OR S.CODIGOARTICULO IN (SELECT CODIGOARTICULO FROM JAVIER.TEST_ART))
+           AND NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_ARA T
+                  WHERE TRIM(T.CODIGOARTICULO) = TRIM(S.CODIGOARTICULO)
+                    AND T.CODIGOTARIFA = S.CODIGOTARIFA
+               )
+         FETCH FIRST 40000 ROWS ONLY`,
+      fullSql: 'INSERT INTO JAVIER.TEST_ARA SELECT * FROM DSEDAC.ARA',
+    },
+    {
+      source: 'DSEDAC.LPC',
+      dest: 'JAVIER.TEST_LPC',
+      note: 'lineas albaran vendors HIT (no dump 2.5M)',
+      minRows: 0,
+      optional: true,
+      insertSql: 'INSERT INTO JAVIER.TEST_LPC SELECT * FROM DSEDAC.LPC FETCH FIRST 40000 ROWS ONLY',
+      appendSql: `INSERT INTO JAVIER.TEST_LPC
+        SELECT LPC.* FROM DSEDAC.LPC LPC
+         WHERE EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CPC CPC
+                  WHERE LPC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                    AND TRIM(LPC.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
+                    AND LPC.TERMINALALBARAN = CPC.TERMINALALBARAN
+                    AND LPC.NUMEROALBARAN = CPC.NUMEROALBARAN
+               )
+           AND NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_LPC T
+                  WHERE T.EJERCICIOALBARAN = LPC.EJERCICIOALBARAN
+                    AND TRIM(T.SERIEALBARAN) = TRIM(LPC.SERIEALBARAN)
+                    AND T.TERMINALALBARAN = LPC.TERMINALALBARAN
+                    AND T.NUMEROALBARAN = LPC.NUMEROALBARAN
+               )
+         FETCH FIRST 20000 ROWS ONLY`,
     },
     {
       source: 'DSEDAC.CVC',
       dest: 'JAVIER.TEST_CVC',
-      note: 'deuda + PAG cobrado vendors HIT / PMR',
+      note: 'deuda + PAG cobrado vendors HIT / PMR / PG',
       minRows: 40,
       insertSql: `INSERT INTO JAVIER.TEST_CVC
         SELECT CVC.* FROM DSEDAC.CVC CVC
          WHERE TRIM(CVC.CODIGOVENDEDOR) IN (${vendorListSql})
-            OR TRIM(CVC.CODIGOCLIENTEALBARAN) IN (
-                 SELECT TRIM(P.CODIGOCLIENTE) FROM DSEDAC.PMR P
-                  WHERE TRIM(COALESCE(P.CODIGOCLIENTE, '')) <> ''
-                  FETCH FIRST 80 ROWS ONLY
+            OR TRIM(CVC.CODIGOCLIENTEALBARAN) IN (${hitClientSql})
+            OR (
+                 TRIM(CVC.CODIGOVENDEDOR) IN (${coreVendorSql})
+                 AND TRIM(CVC.CODIGOFORMAPAGO) IN (
+                       SELECT FPG.CODIGOFORMAPAGO FROM DSEDAC.FPG FPG WHERE FPG.PAGARESN = 'S'
+                     )
                )
-            OR EXISTS (
-                 SELECT 1 FROM DSEDAC.CAC CAC
-                  WHERE CAC.EJERCICIOFACTURA = CVC.EJERCICIODOCUMENTO
-                    AND TRIM(CAC.SERIEFACTURA) = TRIM(CVC.SERIEDOCUMENTO)
-                    AND CAC.TERMINALFACTURA = CVC.TERMINALDOCUMENTO
-                    AND CAC.NUMEROFACTURA = CVC.NUMERODOCUMENTO
-                    AND TRIM(CAC.CODIGOVENDEDOR) IN (${vendorListSql})
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
+      appendSql: `INSERT INTO JAVIER.TEST_CVC
+        SELECT CVC.* FROM DSEDAC.CVC CVC
+         WHERE (
+              TRIM(CVC.CODIGOVENDEDOR) IN (${coreVendorSql})
+              OR TRIM(CVC.CODIGOCLIENTEALBARAN) IN (${hitClientSql})
+            )
+           AND NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CVC T
+                  WHERE T.EJERCICIODOCUMENTO = CVC.EJERCICIODOCUMENTO
+                    AND TRIM(T.SERIEDOCUMENTO) = TRIM(CVC.SERIEDOCUMENTO)
+                    AND T.TERMINALDOCUMENTO = CVC.TERMINALDOCUMENTO
+                    AND T.NUMERODOCUMENTO = CVC.NUMERODOCUMENTO
+                    AND TRIM(T.TIPODOCUMENTO) = TRIM(CVC.TIPODOCUMENTO)
                )
-         FETCH FIRST 8000 ROWS ONLY`,
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
     },
     {
       source: 'DSEDAC.CAC',
@@ -279,12 +411,32 @@ function commercialCopyJobs(lacSchema) {
                     AND CAC.TERMINALFACTURA = CVC.TERMINALDOCUMENTO
                     AND CAC.NUMEROFACTURA = CVC.NUMERODOCUMENTO
                )
-         FETCH FIRST 8000 ROWS ONLY`,
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
+      appendSql: `INSERT INTO JAVIER.TEST_CAC
+        SELECT CAC.* FROM DSEDAC.CAC CAC
+         WHERE (
+              TRIM(CAC.CODIGOVENDEDOR) IN (${coreVendorSql})
+              OR EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CVC CVC
+                  WHERE CAC.EJERCICIOFACTURA = CVC.EJERCICIODOCUMENTO
+                    AND TRIM(CAC.SERIEFACTURA) = TRIM(CVC.SERIEDOCUMENTO)
+                    AND CAC.TERMINALFACTURA = CVC.TERMINALDOCUMENTO
+                    AND CAC.NUMEROFACTURA = CVC.NUMERODOCUMENTO
+               )
+            )
+           AND NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CAC T
+                  WHERE T.EJERCICIOFACTURA = CAC.EJERCICIOFACTURA
+                    AND TRIM(T.SERIEFACTURA) = TRIM(CAC.SERIEFACTURA)
+                    AND T.TERMINALFACTURA = CAC.TERMINALFACTURA
+                    AND T.NUMEROFACTURA = CAC.NUMEROFACTURA
+               )
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
     },
     {
       source: 'DSEDAC.CPC',
       dest: 'JAVIER.TEST_CPC',
-      note: 'albaranes ligados a TEST_CAC',
+      note: 'albaranes ligados a TEST_CAC / vendors HIT',
       minRows: 20,
       insertSql: `INSERT INTO JAVIER.TEST_CPC
         SELECT CPC.* FROM DSEDAC.CPC CPC
@@ -296,18 +448,64 @@ function commercialCopyJobs(lacSchema) {
                     AND CPC.NUMEROALBARAN = CAC.NUMEROALBARAN
                )
             OR TRIM(CPC.CODIGOVENDEDOR) IN (${vendorListSql})
-         FETCH FIRST 8000 ROWS ONLY`,
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
+      appendSql: `INSERT INTO JAVIER.TEST_CPC
+        SELECT CPC.* FROM DSEDAC.CPC CPC
+         WHERE (
+              TRIM(CPC.CODIGOVENDEDOR) IN (${coreVendorSql})
+              OR EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CAC CAC
+                  WHERE CPC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
+                    AND TRIM(CPC.SERIEALBARAN) = TRIM(CAC.SERIEALBARAN)
+                    AND CPC.TERMINALALBARAN = CAC.TERMINALALBARAN
+                    AND CPC.NUMEROALBARAN = CAC.NUMEROALBARAN
+               )
+            )
+           AND NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_CPC T
+                  WHERE T.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                    AND TRIM(T.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
+                    AND T.TERMINALALBARAN = CPC.TERMINALALBARAN
+                    AND T.NUMEROALBARAN = CPC.NUMEROALBARAN
+               )
+         FETCH FIRST ${SCOPED_FETCH} ROWS ONLY`,
     },
     {
       source: `${lacSchema}.LACLAE`,
       dest: 'JAVIER.TEST_LACLAE',
-      note: 'devoluciones serie D vendors HIT (no dump ERP)',
+      note: 'serie D + ventas 2024+ vendors 80/35/98 (no dump 2.9M)',
       minRows: 1,
       insertSql: `INSERT INTO JAVIER.TEST_LACLAE
         SELECT * FROM ${lacSchema}.LACLAE
-         WHERE LCSRAB = 'D'
-           AND TRIM(LCCDVD) IN (${vendorListSql})
-         FETCH FIRST 2000 ROWS ONLY`,
+         WHERE (
+              (LCSRAB = 'D' AND TRIM(LCCDVD) IN (${vendorListSql}))
+              OR (
+                   LCAADC >= 2024
+                   AND (TRIM(LCCDVD) IN (${coreVendorSql}) OR TRIM(R1_T8CDVD) IN (${coreVendorSql}))
+                 )
+            )
+         FETCH FIRST 40000 ROWS ONLY`,
+      appendSql: `INSERT INTO JAVIER.TEST_LACLAE
+        SELECT S.* FROM ${lacSchema}.LACLAE S
+         WHERE (
+              (S.LCSRAB = 'D' AND TRIM(S.LCCDVD) IN (${vendorListSql}))
+              OR (
+                   S.LCAADC >= 2024
+                   AND (TRIM(S.LCCDVD) IN (${coreVendorSql}) OR TRIM(S.R1_T8CDVD) IN (${coreVendorSql}))
+                 )
+            )
+           AND NOT EXISTS (
+                 SELECT 1 FROM JAVIER.TEST_LACLAE T
+                  WHERE T.LCSRAB = S.LCSRAB
+                    AND T.LCNRAB = S.LCNRAB
+                    AND TRIM(T.LCCDRF) = TRIM(S.LCCDRF)
+                    AND TRIM(T.LCCDCL) = TRIM(S.LCCDCL)
+                    AND T.LCAADC = S.LCAADC
+                    AND T.LCMMDC = S.LCMMDC
+                    AND T.LCDDDC = S.LCDDDC
+                    AND T.LCTPVT = S.LCTPVT
+               )
+         FETCH FIRST 30000 ROWS ONLY`,
     },
     {
       source: 'JAVIER.COBROS',
@@ -343,6 +541,10 @@ const INDEXES = [
   'CREATE INDEX JAVIER.IX_TEST_CAC_VD ON JAVIER.TEST_CAC (CODIGOVENDEDOR)',
   'CREATE INDEX JAVIER.IX_TEST_LQD_VD ON JAVIER.TEST_LQD (CODIGOVENDEDOR, ANOLIQUIDACION, MESLIQUIDACION, DIALIQUIDACION)',
   'CREATE INDEX JAVIER.IX_TEST_CLX_CLI ON JAVIER.TEST_CLX (CODIGOCLIENTE)',
+  'CREATE INDEX JAVIER.IX_TEST_CLI_COD ON JAVIER.TEST_CLI (CODIGOCLIENTE)',
+  'CREATE INDEX JAVIER.IX_TEST_ART_COD ON JAVIER.TEST_ART (CODIGOARTICULO)',
+  'CREATE INDEX JAVIER.IX_TEST_ARA_ART ON JAVIER.TEST_ARA (CODIGOARTICULO, CODIGOTARIFA)',
+  'CREATE INDEX JAVIER.IX_TEST_LACLAE_VD ON JAVIER.TEST_LACLAE (LCCDVD, LCAADC, LCMMDC)',
 ];
 
 async function main() {
@@ -350,6 +552,7 @@ async function main() {
     mode: APPLY ? 'APPLY' : 'DRY-RUN',
     replace: REPLACE,
     tryFull: TRY_FULL,
+    append: APPEND,
     writes: 'JAVIER.TEST_* only',
     dsedacWrite: false,
     qsys2: { find: {}, origin: {}, test: {} },
@@ -361,10 +564,11 @@ async function main() {
   await initDb();
   try {
     const names = [
-      'FPG', 'CVC', 'CAC', 'CPC', 'LQD', 'CLX', 'VDDX', 'LACLAE', 'PMR', 'PMRC', 'LPC', 'ARA', 'ART',
+      'FPG', 'CVC', 'CAC', 'CPC', 'LQD', 'CLX', 'VDDX', 'LACLAE', 'PMR', 'PMRC', 'LPC', 'ARA', 'ART', 'CLI', 'CLC',
       'COBROS', 'PEDIDOS_CAB', 'PEDIDOS_LIN',
       'TEST_FPG', 'TEST_CVC', 'TEST_CAC', 'TEST_CPC', 'TEST_LQD', 'TEST_CLX', 'TEST_VDDX',
-      'TEST_LACLAE', 'TEST_PMR', 'TEST_COBROS', 'TEST_PEDIDOS_CAB', 'TEST_PEDIDOS_LIN',
+      'TEST_LACLAE', 'TEST_PMR', 'TEST_CLI', 'TEST_CLC', 'TEST_ART', 'TEST_ARA', 'TEST_LPC',
+      'TEST_COBROS', 'TEST_PEDIDOS_CAB', 'TEST_PEDIDOS_LIN',
       'TEST_LIQUIDACION_COMERCIAL', 'TEST_DEVOLUCIONES_COMERCIAL',
     ];
     for (const name of names) {
@@ -379,6 +583,7 @@ async function main() {
       ['DSEDAC', 'FPG'], ['DSEDAC', 'CVC'], ['DSEDAC', 'CAC'], ['DSEDAC', 'CPC'],
       ['DSEDAC', 'LQD'], ['DSEDAC', 'CLX'], ['DSEDAC', 'VDDX'], [lacSchema, 'LACLAE'],
       ['DSEDAC', 'PMR'], ['DSEDAC', 'PMRC'], ['DSEDAC', 'LPC'], ['DSEDAC', 'ARA'],
+      ['DSEDAC', 'ART'], ['DSEDAC', 'CLI'], ['DSEDAC', 'CLC'],
     ];
     for (const [schema, table] of originSpecs) {
       const info = await tableInfo(schema, table);
@@ -416,8 +621,31 @@ async function main() {
       if (REPLACE) {
         await replaceIfNeeded(job.dest, { force: true });
       }
+      if (APPEND && !job.appendSql && !REPLACE) {
+        const destName = job.dest.split('.')[1];
+        const existing = await tableInfo('JAVIER', destName);
+        if ((existing.count || 0) > 0) {
+          report.copies.push({
+            dest: job.dest,
+            skippedInsert: 'APPEND without appendSql; keep existing rows',
+            after: existing.count,
+            originCount: origin.count,
+          });
+          continue;
+        }
+      }
       let insertSql = job.insertSql;
-      if (TRY_FULL && (job.full || job.fullSql)) {
+      if (APPEND && job.appendSql) {
+        insertSql = job.appendSql;
+      } else if (
+        job.fullSql
+        && typeof origin.count === 'number'
+        && origin.count <= LARGE_FULL_MAX
+        && !job.full
+      ) {
+        insertSql = job.fullSql;
+      }
+      if (TRY_FULL && (job.full || job.fullSql) && !(APPEND && job.appendSql)) {
         const originCount = typeof origin.count === 'number' ? origin.count : null;
         if (originCount != null && originCount > LARGE_FULL_MAX && !job.full) {
           report.copies.push({ dest: job.dest, scoped: true, reason: `origin ${originCount} > ${LARGE_FULL_MAX}` });
@@ -425,7 +653,7 @@ async function main() {
           insertSql = job.fullSql || job.insertSql;
         }
       }
-      const copied = await copyInsert(job.dest, insertSql, job.note);
+      const copied = await copyInsert(job.dest, insertSql, job.note, { full: job.full === true });
       copied.originCount = origin.count;
       copied.scoped = insertSql !== (job.fullSql || job.insertSql) || !job.full;
       if (copied.insertResult && copied.insertResult.ok === false && job.fullSql && insertSql === job.fullSql) {
@@ -447,7 +675,8 @@ async function main() {
 
     const testNames = [
       'TEST_FPG', 'TEST_VDDX', 'TEST_CLX', 'TEST_LQD', 'TEST_CVC', 'TEST_CAC', 'TEST_CPC',
-      'TEST_LACLAE', 'TEST_PMR', 'TEST_PMRC', 'TEST_LPC', 'TEST_COBROS', 'TEST_PEDIDOS_CAB',
+      'TEST_LACLAE', 'TEST_PMR', 'TEST_PMRC', 'TEST_LPC', 'TEST_CLI', 'TEST_CLC', 'TEST_ART',
+      'TEST_ARA', 'TEST_COBROS', 'TEST_PEDIDOS_CAB',
       'TEST_PEDIDOS_LIN', 'TEST_LIQUIDACION_COMERCIAL', 'TEST_DEVOLUCIONES_COMERCIAL',
     ];
     for (const name of testNames) {
@@ -465,6 +694,10 @@ async function main() {
       TEST_CPC: report.qsys2.origin['DSEDAC.CPC'],
       TEST_LACLAE: report.qsys2.origin[`${lacSchema}.LACLAE`],
       TEST_PMR: report.qsys2.origin['DSEDAC.PMR'],
+      TEST_CLI: report.qsys2.origin['DSEDAC.CLI'],
+      TEST_ART: report.qsys2.origin['DSEDAC.ART'],
+      TEST_ARA: report.qsys2.origin['DSEDAC.ARA'],
+      TEST_LPC: report.qsys2.origin['DSEDAC.LPC'],
     };
     for (const [testName, origin] of Object.entries(originByLogical)) {
       report.counts.push({
@@ -485,9 +718,10 @@ async function main() {
       isolatedReads: {
         deudaFpAlbaran: 'JAVIER.TEST_CVC/FPG/CAC/CPC if copied, else DSEDAC SELECT',
         lqdClxVddx: 'JAVIER.TEST_LQD/CLX/VDDX',
-        laclae: 'JAVIER.TEST_LACLAE (serie D scoped); overlay TEST_DEVOLUCIONES',
-        productosPreciosPmr: 'DSEDAC.ART/ARA SELECT; TEST_PMR if copied else DSEDAC.PMR SELECT',
-        cliAuth: 'DSEDAC.CLI / DSEDAC.VDDX SELECT (no TEST copy)',
+        laclaeDevoluciones: 'JAVIER.TEST_LACLAE (serie D + 2024+ vendors 80/35/98); overlay TEST_DEVOLUCIONES',
+        laclaeHistoricoAll: 'DSED.LACLAE SELECT (TEST no cubre 2.9M / ALL)',
+        productosPrecios: 'JAVIER.TEST_ART/ARA/CLC if copied, else DSEDAC SELECT; PIN/VDPL1 DSEDAC SELECT',
+        cliCatalog: 'JAVIER.TEST_CLI if copied; auth PIN sigue DSEDAC.VDPL1 SELECT',
       },
       dsedacWrite: false,
     };
@@ -510,4 +744,5 @@ module.exports = {
   assertJavierTest,
   commercialCopyJobs,
   HIT_VENDORS,
+  CORE_VENDORS,
 };

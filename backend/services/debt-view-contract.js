@@ -61,7 +61,8 @@ function cvcDocumentJoins(alias = 'C') {
 }
 
 function cvcCliJoin(alias = 'CVC') {
-  return `LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(${alias}.CODIGOCLIENTEALBARAN)`;
+  const cli = comercialErpTable('CLI');
+  return `LEFT JOIN ${cli} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(${alias}.CODIGOCLIENTEALBARAN)`;
 }
 
 function formaPagoLabel(code, fpgDescription) {

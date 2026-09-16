@@ -440,6 +440,34 @@ async function main() {
       `client=${minHit.client} vendor=${minHit.vendor} riguroso=${minHit.riguroso} clxPct=${minHit.clxPct} vddxPct=${minHit.vddxPct}${minHit.error ? ` err=${minHit.error}` : ''}`,
     ));
 
+    for (const vddxVendor of ['80', '35']) {
+      try {
+        const vddxPin = await pinForVendor(vddxVendor);
+        if (!vddxPin) {
+          rows.push(record(`VDDX ${vddxVendor}`, false, 'sin PIN'));
+          continue;
+        }
+        const vddxLogin = vddxVendor === VENDOR
+          ? { status: 200, body: { token } }
+          : await api('POST', '/auth/login', { body: { username: vddxVendor, password: vddxPin } });
+        const vddxToken = vddxLogin.body?.token || (vddxVendor === VENDOR ? token : '');
+        const vddxRow = await queryWithParams(
+          `SELECT PORCENTAJEMINIMOCOBRO AS PCT FROM JAVIER.TEST_VDDX
+            WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
+            FETCH FIRST 1 ROW ONLY`,
+          [vddxVendor],
+        );
+        const pct = Number(vddxRow?.[0]?.PCT ?? vddxRow?.[0]?.pct ?? 0);
+        rows.push(record(
+          `VDDX ${vddxVendor} TEST minimo`,
+          Boolean(vddxToken) && pct >= 0 && Array.isArray(vddxRow),
+          `login=${vddxToken ? 'ok' : 'fail'} pct=${Number.isFinite(pct) ? pct : '-'} rows=${vddxRow?.length || 0}`,
+        ));
+      } catch (error) {
+        rows.push(record(`VDDX ${vddxVendor} TEST minimo`, false, String(error.message || error).slice(0, 80)));
+      }
+    }
+
     let createdId = null;
     let confirmedEstado = '';
     let confirmedSync = '';

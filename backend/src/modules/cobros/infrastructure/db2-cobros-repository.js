@@ -1156,7 +1156,7 @@ class Db2CobrosRepository extends CobrosRepository {
              T.TOTAL_PENDIENTE,
              T.TOTAL_VENCIDO
         FROM CVC_CLIENTS T
-        LEFT JOIN DSEDAC.CLI CLI
+        LEFT JOIN ${comercialErpTable('CLI')} CLI
           ON TRIM(CLI.CODIGOCLIENTE) = T.CLIENTE
        ORDER BY T.TOTAL_PENDIENTE DESC, T.CLIENTE ASC
        FETCH FIRST ${clientFetchLimit} ROWS ONLY

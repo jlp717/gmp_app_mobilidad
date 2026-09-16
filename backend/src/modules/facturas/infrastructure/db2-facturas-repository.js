@@ -5,6 +5,7 @@ const { FacturasRepository } = require('../domain/facturas-repository');
 const { Factura } = require('../domain/factura');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { sanitizeCodeList } = require('../../../../utils/common');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 class Db2FacturasRepository extends FacturasRepository {
   constructor(dbPool) {
@@ -35,8 +36,8 @@ class Db2FacturasRepository extends FacturasRepository {
         TRIM(CAC.CODIGOCLIENTEFACTURA) AS CLIENTE_ID,
         TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) AS CLIENTE_NOMBRE,
         COALESCE(CAC.IMPORTETOTAL, 0) AS TOTAL
-      FROM DSEDAC.CAC CAC
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
+      FROM ${comercialErpTable('CAC')} CAC
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
       WHERE CAC.NUMEROFACTURA > 0
         AND CAC.NUMEROFACTURA < 900000
         AND ${vendorFilter}
@@ -69,8 +70,8 @@ class Db2FacturasRepository extends FacturasRepository {
         TRIM(CAC.CODIGOCLIENTEFACTURA) AS CLIENTE_ID,
         TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) AS CLIENTE_NOMBRE,
         COALESCE(CAC.IMPORTETOTAL, 0) AS TOTAL
-      FROM DSEDAC.CAC CAC
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
+      FROM ${comercialErpTable('CAC')} CAC
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
       WHERE CAC.NUMEROFACTURA > 0
         AND CAC.NUMEROFACTURA < 900000
         AND TRIM(CAC.CODIGOCLIENTEFACTURA) = ?
@@ -97,7 +98,7 @@ class Db2FacturasRepository extends FacturasRepository {
       SELECT
         COUNT(DISTINCT TRIM(SERIEFACTURA) || '-' || NUMEROFACTURA) AS NUM_FACTURAS,
         COALESCE(SUM(IMPORTETOTAL), 0) AS TOTAL
-      FROM DSEDAC.CAC CAC
+      FROM ${comercialErpTable('CAC')} CAC
       WHERE CAC.NUMEROFACTURA > 0
         AND CAC.NUMEROFACTURA < 900000
         AND ${vendorFilter}
@@ -124,8 +125,8 @@ class Db2FacturasRepository extends FacturasRepository {
         MIN(TRIM(COALESCE(CLI.POBLACION, ''))) AS POBLACIONCLIENTEFACTURA,
         MIN(TRIM(COALESCE(CLI.NIF, ''))) AS CIFCLIENTEFACTURA,
         SUM(CAC.IMPORTETOTAL) AS TOTALFACTURA
-      FROM DSEDAC.CAC CAC
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
+      FROM ${comercialErpTable('CAC')} CAC
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
       WHERE TRIM(CAC.SERIEFACTURA) = ?
         AND CAC.NUMEROFACTURA = ?
         AND CAC.EJERCICIOFACTURA = ?
@@ -148,7 +149,7 @@ class Db2FacturasRepository extends FacturasRepository {
         LAC.IMPORTEVENTA AS IMPORTE,
         LAC.IMPORTECOSTO AS COSTO
       FROM DSEDAC.LAC LAC
-      INNER JOIN DSEDAC.CAC CAC
+      INNER JOIN ${comercialErpTable('CAC')} CAC
         ON LAC.NUMEROALBARAN = CAC.NUMEROALBARAN
         AND LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
         AND LAC.SERIEALBARAN = CAC.SERIEALBARAN
@@ -202,8 +203,8 @@ class Db2FacturasRepository extends FacturasRepository {
         TRIM(CAC.CODIGOCLIENTEFACTURA) AS CLIENTE_ID,
         TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) AS CLIENTE_NOMBRE,
         COALESCE(CAC.IMPORTETOTAL, 0) AS TOTAL
-      FROM DSEDAC.CAC CAC
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
+      FROM ${comercialErpTable('CAC')} CAC
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEFACTURA)
       WHERE CAC.NUMEROFACTURA > 0
         AND CAC.NUMEROFACTURA < 900000
         AND ${vendorFilter}
@@ -222,7 +223,7 @@ class Db2FacturasRepository extends FacturasRepository {
 
     const sql = `
       SELECT DISTINCT EJERCICIOFACTURA AS YEAR
-      FROM DSEDAC.CAC
+      FROM ${comercialErpTable('CAC')}
       WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
         AND ${vendorFilter}
       ORDER BY YEAR DESC

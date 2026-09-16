@@ -238,7 +238,8 @@ describe('runtime performance configuration', () => {
       source.indexOf('module.exports'),
     );
 
-    expect(source).toMatch(/function buildLaclaeDateRangeFilter/);
+    expect(source).toMatch(/buildLaclaeDateRangeFilter/);
+    expect(source).toMatch(/require\('\.\.\/\.\.\/utils\/dashboardFilters'\)/);
     expect(purchaseHistoryBlock).toMatch(/buildLaclaeDateRangeFilter\('L', from, to\)/);
     expect(purchaseHistoryBlock).toMatch(/TRIM\(L\.LCCDVD\) IN/);
     expect(purchaseHistoryBlock).toMatch(/TRIM\(L\.LCCDCL\) = \?/);

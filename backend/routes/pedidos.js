@@ -49,6 +49,7 @@ const { cachedQuery } = require('../services/query-optimizer');
 const { verifyToken } = require('../middleware/auth');
 const { TTL } = require('../services/redis-cache');
 const { db2WriteTable } = require('../utils/db2-schemas');
+const { buildLaclaeDateRangeFilter } = require('../src/utils/dashboardFilters');
 const BROAD_PEDIDO_VENDOR_SCOPE_THRESHOLD = 50;
 
 // =============================================================================
@@ -2083,13 +2084,13 @@ router.get('/purchase-history-global', async (req, res) => {
         // the same WHERE/params shape; offset only varies the detail page).
         const cacheKeyParts = `${fromYmd}:${toYmd}:${isAllVendor ? 'ALL' : vendor}:${clientCode}:${productCode}:${familia}:${marca}:${limit}:${offset}`;
 
-        // Condiciones WHERE
+        const dateRange = buildLaclaeDateRangeFilter('L', from, to);
         const where = [
-            `(L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ?`,
+            dateRange.sql,
             `L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('VT','AB')`,
             `L.LCSRAB NOT IN ('N','Z','G','D')`,
         ];
-        const params = [fromYmd, toYmd];
+        const params = [...dateRange.params];
 
         if (!isAllVendor) {
             // Soporta lista separada por comas
@@ -2184,14 +2185,18 @@ router.get('/purchase-history-global', async (req, res) => {
         `;
 
         // 4) Comparacion misma fecha año anterior (lo que el usuario llamo "a estas alturas")
+        const lastYearFromDate = new Date(from);
+        lastYearFromDate.setFullYear(from.getFullYear() - 1);
+        const lastYearToDate = new Date(to);
+        lastYearToDate.setFullYear(to.getFullYear() - 1);
+        const lastYearDateRange = buildLaclaeDateRangeFilter('L', lastYearFromDate, lastYearToDate);
+        const lastYearWhereSql = [lastYearDateRange.sql, ...where.slice(1)].join(' AND ');
         const lastYearSql = `
             SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR
             FROM DSED.LACLAE L
-            WHERE ${whereSql}
+            WHERE ${lastYearWhereSql}
         `;
-        const lastYearFrom = (from.getFullYear() - 1) * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
-        const lastYearTo = (to.getFullYear() - 1) * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
-        const lastYearParams = [lastYearFrom, lastYearTo, ...params.slice(2)];
+        const lastYearParams = [...lastYearDateRange.params, ...params.slice(dateRange.params.length)];
 
         // 5) Mensual por año: agrupa importe por ANO y MES para gráfico multi-año
         const monthlyByYearSql = `

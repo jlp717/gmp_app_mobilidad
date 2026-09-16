@@ -77,6 +77,7 @@ function invalidatePedidosCache(pedidoId) {
     }
 }
 const { formatErpDocumentLabel } = require('../../utils/erp-document-label');
+const { comercialErpTable } = require('../../utils/comercial-erp-tables');
 const { LACLAE_SALES_FILTER } = require('../../utils/common');
 const { CircuitBreaker } = require('../circuit-breaker');
 const { getClientDays } = require('../laclae');
@@ -2228,7 +2229,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
                         A.DESCRIPCIONARTICULO ASC,
                         TRIM(A.CODIGOARTICULO) ASC
                 ) AS RN
-            FROM DSEDAC.ART A
+            FROM ${comercialErpTable('ART')} A
             LEFT JOIN PH ON TRIM(A.CODIGOARTICULO) = PH.CODIGOARTICULO
             ${where}
         ), ART_PAGE AS (
@@ -2238,7 +2239,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
                AND RN <= ?
         ), CLIENT_TARIFF AS (
             SELECT COALESCE(CODIGOTARIFA, 1) AS CODIGOTARIFA
-              FROM DSEDAC.CLC CLC
+              FROM ${comercialErpTable('CLC')} CLC
              WHERE TRIM(CLC.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
              FETCH FIRST 1 ROW ONLY
         ), STOCK AS (
@@ -2299,10 +2300,10 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
         FROM ART_PAGE A
         LEFT JOIN STOCK S ON A.CODIGOARTICULO = S.CODIGOARTICULO
         LEFT JOIN RESERVED RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
-        LEFT JOIN DSEDAC.ARA T1 ON A.CODIGOARTICULO = T1.CODIGOARTICULO AND T1.CODIGOTARIFA = 1
-        LEFT JOIN DSEDAC.ARA T2 ON A.CODIGOARTICULO = T2.CODIGOARTICULO AND T2.CODIGOTARIFA = 2
+        LEFT JOIN ${comercialErpTable('ARA')} T1 ON A.CODIGOARTICULO = T1.CODIGOARTICULO AND T1.CODIGOTARIFA = 1
+        LEFT JOIN ${comercialErpTable('ARA')} T2 ON A.CODIGOARTICULO = T2.CODIGOARTICULO AND T2.CODIGOTARIFA = 2
         LEFT JOIN CLIENT_TARIFF CT ON 1 = 1
-        LEFT JOIN DSEDAC.ARA TC ON A.CODIGOARTICULO = TC.CODIGOARTICULO
+        LEFT JOIN ${comercialErpTable('ARA')} TC ON A.CODIGOARTICULO = TC.CODIGOARTICULO
             AND TC.CODIGOTARIFA = CT.CODIGOTARIFA
         LEFT JOIN LAST_COST LC ON A.CODIGOARTICULO = LC.CA
         ORDER BY A.RN ASC`;

@@ -37,6 +37,16 @@ describe('comercial ERP table mapping', () => {
     expect(comercialErpTable('VDDX')).toBe('JAVIER.TEST_VDDX');
     expect(comercialErpTable('LACLAE')).toBe('JAVIER.TEST_LACLAE');
     expect(comercialErpTable('PMR')).toBe('JAVIER.TEST_PMR');
+    expect(comercialErpTable('ART')).toBe('JAVIER.TEST_ART');
+    expect(comercialErpTable('CLI')).toBe('JAVIER.TEST_CLI');
+    expect(comercialErpTable('ARA')).toBe('JAVIER.TEST_ARA');
+    const facturas = require('fs').readFileSync(
+      require('path').join(__dirname, '../src/modules/facturas/infrastructure/db2-facturas-repository.js'),
+      'utf8',
+    );
+    expect(facturas).toMatch(/comercialErpTable\('CAC'\)/);
+    expect(facturas).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(facturas).toMatch(/FROM DSEDAC\.LAC LAC/);
   });
 
   test('COMERCIAL_ERP_READ_TEST=false falls back to DSEDAC SELECT', () => {

@@ -100,9 +100,38 @@ function resolveMatrixFetchLimit(groupBy, requestedLimit) {
     return 1000;
 }
 
+/**
+ * Sargable LACLAE date window (LCAADC/LCMMDC/LCDDDC). Avoids
+ * (year*10000+month*100+day) BETWEEN which cannot use indexes.
+ */
+function buildLaclaeDateRangeFilter(alias, from, to) {
+    const prefix = alias ? `${alias}.` : '';
+    const fromYear = from.getFullYear();
+    const fromMonth = from.getMonth() + 1;
+    const fromDay = from.getDate();
+    const toYear = to.getFullYear();
+    const toMonth = to.getMonth() + 1;
+    const toDay = to.getDate();
+    const startClause = `(${prefix}LCMMDC > ? OR (${prefix}LCMMDC = ? AND ${prefix}LCDDDC >= ?))`;
+    const endClause = `(${prefix}LCMMDC < ? OR (${prefix}LCMMDC = ? AND ${prefix}LCDDDC <= ?))`;
+
+    if (fromYear === toYear) {
+        return {
+            sql: `${prefix}LCAADC = ? AND ${startClause} AND ${endClause}`,
+            params: [fromYear, fromMonth, fromMonth, fromDay, toMonth, toMonth, toDay],
+        };
+    }
+
+    return {
+        sql: `(${prefix}LCAADC > ? OR (${prefix}LCAADC = ? AND ${startClause})) AND (${prefix}LCAADC < ? OR (${prefix}LCAADC = ? AND ${endClause}))`,
+        params: [fromYear, fromYear, fromMonth, fromMonth, fromDay, toYear, toYear, toMonth, toMonth, toDay],
+    };
+}
+
 module.exports = {
     buildVendedorFilterParameterized,
     buildVendedorFilterLACLAEParameterized,
     buildMonthFilterParameterized,
+    buildLaclaeDateRangeFilter,
     resolveMatrixFetchLimit,
 };

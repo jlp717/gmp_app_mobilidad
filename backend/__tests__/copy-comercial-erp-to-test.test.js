@@ -26,6 +26,12 @@ describe('copy-comercial-erp-to-test', () => {
     }
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_CVC')).toBe(true);
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_FPG')).toBe(true);
+    expect(jobs.some((job) => job.dest === 'JAVIER.TEST_CLI')).toBe(true);
+    expect(jobs.some((job) => job.dest === 'JAVIER.TEST_ART')).toBe(true);
     expect(jobs.some((job) => /PAG|CAC|CODIGOVENDEDOR/.test(job.insertSql))).toBe(true);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_CVC').appendSql).toMatch(/NOT EXISTS/);
+    expect(require('../scripts/copy-comercial-erp-to-test').HIT_VENDORS).toEqual(
+      expect.arrayContaining(['80', '35', '98']),
+    );
   });
 });

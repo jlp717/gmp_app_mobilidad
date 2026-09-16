@@ -55,6 +55,7 @@ const { resolveVendorScope } = require('../../../middleware/vendor-scope');
 const authTokenService = require('../../../middleware/auth');
 const { createAuthClaimsResolver } = require('../../modules/auth/application/auth-claims-resolver');
 const { createAuthClaimsLoginHandler } = require('../../modules/auth/application/auth-claims-login-handler');
+const { buildLaclaeDateRangeFilter } = require('../../utils/dashboardFilters');
 
 // TTL constants (milliseconds)
 const INTERNAL_SERVER_ERROR_MESSAGE = 'Error interno del servidor';
@@ -142,30 +143,6 @@ function normalizeSearchTerm(value) {
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .slice(0, 80)
     .toUpperCase();
-}
-
-function buildLaclaeDateRangeFilter(alias, from, to) {
-  const prefix = alias ? `${alias}.` : '';
-  const fromYear = from.getFullYear();
-  const fromMonth = from.getMonth() + 1;
-  const fromDay = from.getDate();
-  const toYear = to.getFullYear();
-  const toMonth = to.getMonth() + 1;
-  const toDay = to.getDate();
-  const startClause = `(${prefix}LCMMDC > ? OR (${prefix}LCMMDC = ? AND ${prefix}LCDDDC >= ?))`;
-  const endClause = `(${prefix}LCMMDC < ? OR (${prefix}LCMMDC = ? AND ${prefix}LCDDDC <= ?))`;
-
-  if (fromYear === toYear) {
-    return {
-      sql: `${prefix}LCAADC = ? AND ${startClause} AND ${endClause}`,
-      params: [fromYear, fromMonth, fromMonth, fromDay, toMonth, toMonth, toDay],
-    };
-  }
-
-  return {
-    sql: `(${prefix}LCAADC > ? OR (${prefix}LCAADC = ? AND ${startClause})) AND (${prefix}LCAADC < ? OR (${prefix}LCAADC = ? AND ${endClause}))`,
-    params: [fromYear, fromYear, fromMonth, fromMonth, fromDay, toYear, toYear, toMonth, toMonth, toDay],
-  };
 }
 
 function buildClientSearchFilter(safeSearch, alias = 'C') {
@@ -1649,14 +1626,15 @@ function createPedidosRoutes() {
 
       try {
         // queryGate max=4: keep 3+2 waves. cachedQuery (TTL.SHORT) matches legacy.
-        const [detail, summary, topProducts] = await Promise.all([
-          cachedQuery((sql) => queryWithParams(sql, params, false), detailSql, `pedidos:purchase-history-global:detail:${cacheKeyParts}`, RedisTTL.SHORT),
-          cachedQuery((sql) => queryWithParams(sql, params, false), summarySql, `pedidos:purchase-history-global:summary:${cacheKeyParts}`, RedisTTL.SHORT),
-          cachedQuery((sql) => queryWithParams(sql, params, false), topProductosSql, `pedidos:purchase-history-global:top:${cacheKeyParts}`, RedisTTL.SHORT),
+        const historyTtl = isAllVendor ? (RedisTTL.MEDIUM || 300) : (RedisTTL.SHORT || 60);
+      const [detail, summary, topProducts] = await Promise.all([
+          cachedQuery((sql) => queryWithParams(sql, params, false), detailSql, `pedidos:purchase-history-global:detail:${cacheKeyParts}`, historyTtl),
+          cachedQuery((sql) => queryWithParams(sql, params, false), summarySql, `pedidos:purchase-history-global:summary:${cacheKeyParts}`, historyTtl),
+          cachedQuery((sql) => queryWithParams(sql, params, false), topProductosSql, `pedidos:purchase-history-global:top:${cacheKeyParts}`, historyTtl),
         ]);
         const [lastYear, monthlyByYear] = await Promise.all([
-          cachedQuery((sql) => queryWithParams(sql, lastYearParams, false), lastYearTotalSql, `pedidos:purchase-history-global:lastyear:${cacheKeyParts}`, RedisTTL.SHORT),
-          cachedQuery((sql) => queryWithParams(sql, params, false), monthlyByYearSql, `pedidos:purchase-history-global:monthly:${cacheKeyParts}`, RedisTTL.SHORT),
+          cachedQuery((sql) => queryWithParams(sql, lastYearParams, false), lastYearTotalSql, `pedidos:purchase-history-global:lastyear:${cacheKeyParts}`, historyTtl),
+          cachedQuery((sql) => queryWithParams(sql, params, false), monthlyByYearSql, `pedidos:purchase-history-global:monthly:${cacheKeyParts}`, historyTtl),
         ]);
 
         const s = summary?.[0] || {};
@@ -1678,7 +1656,7 @@ function createPedidosRoutes() {
           pagination: { limit, offset, hasMore: (detail || []).length === limit },
         };
         if (redisCache && redisCache.isConnected && stampede.fill) {
-          await redisCache.set('route', stampedeKey, payload, RedisTTL.SHORT);
+          await redisCache.set('route', stampedeKey, payload, historyTtl);
         }
         return res.json(payload);
       } finally {

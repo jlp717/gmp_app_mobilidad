@@ -41,12 +41,14 @@ describe('debt-view-contract', () => {
       getDebtView,
       cvcPendientesJoins,
       cvcDocumentJoins,
+      cvcCliJoin,
     } = require('../services/debt-view-contract');
     expect(getDebtView()).toBe('JAVIER.TEST_CVC');
     expect(cvcPendientesJoins('C')).toMatch(/LEFT JOIN JAVIER\.TEST_FPG FPG/i);
     expect(cvcDocumentJoins('C')).toMatch(/LEFT JOIN JAVIER\.TEST_CAC CAC/i);
     expect(cvcDocumentJoins('C')).toMatch(/LEFT JOIN JAVIER\.TEST_CPC CPC/i);
     expect(cvcDocumentJoins('C')).not.toMatch(/VISTA_DEUDA_BASE/i);
+    expect(cvcCliJoin('CVC')).toMatch(/LEFT JOIN JAVIER\.TEST_CLI CLI/i);
   });
 
   test('caps FETCH FIRST at 500', () => {
