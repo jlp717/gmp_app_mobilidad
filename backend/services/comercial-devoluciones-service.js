@@ -63,6 +63,24 @@ function money(value) {
   return Math.round(amount * 100) / 100;
 }
 
+function parseDiasFormaPago({ primerPago, descripcion } = {}) {
+  const fromCol = Number.parseInt(primerPago, 10);
+  if (Number.isFinite(fromCol) && fromCol > 0) return fromCol;
+  const text = String(descripcion || '');
+  const dff = /(\d+)\s*DFF/i.exec(text);
+  if (dff) return Number(dff[1]);
+  return null;
+}
+
+function addDaysIso(iso, days) {
+  const parsed = parseIsoDate(iso);
+  const offset = Number.parseInt(days, 10);
+  if (!parsed || !Number.isFinite(offset) || offset <= 0) return null;
+  const dt = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day));
+  dt.setUTCDate(dt.getUTCDate() + offset);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+}
+
 function classifyFormaPago(code) {
   const normalized = String(code || '').trim().toUpperCase();
   if (!normalized) return 'EFECTIVO';
@@ -126,7 +144,10 @@ function mapReturnRow(row) {
   const date = year && month && day
     ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     : null;
-  const diasFp = Number.parseInt(row.DIAS_FP ?? row.FORMA_PAGO_DIAS, 10);
+  const diasFp = parseDiasFormaPago({
+    primerPago: row.DIAS_FP ?? row.FORMA_PAGO_DIAS ?? row.PRIMERPAGO,
+    descripcion: row.FP_DESC || row.FORMA_PAGO,
+  });
   return {
     year,
     month,
@@ -164,14 +185,17 @@ async function lookupFormaPagoDias(formaPago, deps = {}) {
   if (!code) return null;
   try {
     const rows = await run(
-      `SELECT NUMERODIASVENCIMIENTO AS DIAS
+      `SELECT PRIMERPAGO AS DIAS,
+              TRIM(DESCRIPCIONFORMAPAGO) AS DESC
          FROM DSEDAC.FPG
         WHERE TRIM(CODIGOFORMAPAGO) = CAST(? AS CHAR(2))
         FETCH FIRST 1 ROW ONLY`,
       [code],
     );
-    const dias = Number.parseInt(rows?.[0]?.DIAS, 10);
-    return Number.isFinite(dias) && dias > 0 ? dias : null;
+    return parseDiasFormaPago({
+      primerPago: rows?.[0]?.DIAS,
+      descripcion: rows?.[0]?.DESC,
+    });
   } catch (error) {
     logger.warn('[COMERCIAL_LIQUIDACION] FPG days lookup skipped', { error: error.message });
     return null;
@@ -289,13 +313,9 @@ async function listReturns({
            TRIM(L.LCCDVD) AS VENDEDOR,
            SUM(L.LCIMVT) AS AMOUNT,
            SUM(L.LCCTUD) AS UNITS,
-           MAX(CASE
-             WHEN CVC.IMPORTEPENDIENTE = 0
-               OR UPPER(TRIM(COALESCE(FPG.PAGARESN, ''))) = 'S'
-               OR UPPER(TRIM(COALESCE(CVC.CODIGOFORMAPAGO, ''))) = 'PG'
-             THEN 1 ELSE 0
-           END) AS YA_COBRADA,
-           MAX(TRIM(COALESCE(FPG.DESCRIPCIONFORMAPAGO, CVC.CODIGOFORMAPAGO, ''))) AS FORMA_PAGO
+           MAX(CASE WHEN CVC.IMPORTEPENDIENTE = 0 THEN 1 ELSE 0 END) AS YA_COBRADA,
+           MAX(TRIM(COALESCE(FPG.DESCRIPCIONFORMAPAGO, CVC.CODIGOFORMAPAGO, ''))) AS FORMA_PAGO,
+           MAX(FPG.PRIMERPAGO) AS DIAS_FP
     FROM DSED.LACLAE L
     LEFT JOIN DSEDAC.CVC CVC
       ON TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(L.LCCDCL)
@@ -377,7 +397,8 @@ async function listTestReturns({
            TRIM(COALESCE(ALBARAN_ORIGEN, '')) AS ALBARAN_ORIGEN,
            VARCHAR_FORMAT(VENCIMIENTO, 'YYYY-MM-DD') AS VENCIMIENTO,
            TRIM(COALESCE(IMPACTO_LQD, '')) AS IMPACTO_LQD,
-           COALESCE(FORMA_PAGO_DIAS, FPG.NUMERODIASVENCIMIENTO) AS DIAS_FP
+           COALESCE(FORMA_PAGO_DIAS, FPG.PRIMERPAGO) AS DIAS_FP,
+           TRIM(COALESCE(FPG.DESCRIPCIONFORMAPAGO, '')) AS FP_DESC
       FROM ${TEST_DEVOLUCIONES_TABLE} D
       LEFT JOIN DSEDAC.FPG FPG
         ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(COALESCE(D.FORMA_PAGO, ''))
@@ -457,9 +478,10 @@ async function listPgCollectedDocuments({
     ? `AND (CAC.CODIGOCLIENTEFACTURA = CAST(? AS CHAR(10))
          OR CAC.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10)))`
     : '';
-  const fetchLimit = Math.min(Math.max(Number(limit) || 40, 1), 80);
+  const uniqueLimit = Math.min(Math.max(Number(limit) || 40, 1), 80);
+  const fetchLimit = uniqueLimit * 4;
   const sql = `
-    SELECT TRIM(COALESCE(NULLIF(TRIM(CAC.CODIGOCLIENTEFACTURA), ''), CAC.CODIGOCLIENTEALBARAN)) AS CLIENTE,
+    SELECT TRIM(COALESCE(NULLIF(TRIM(CAC.CODIGOCLIENTEFACTURA), ''), CAC.CODIGOCLIENTEALBARAN, CVC.CODIGOCLIENTEALBARAN)) AS CLIENTE,
            TRIM(CVC.TIPODOCUMENTO) AS TIPO,
            TRIM(CVC.SERIEDOCUMENTO) AS SERIE,
            CVC.NUMERODOCUMENTO AS NUMERO,
@@ -469,6 +491,7 @@ async function listPgCollectedDocuments({
            TRIM(CVC.CODIGOFORMAPAGO) AS FP,
            TRIM(COALESCE(FPG.DESCRIPCIONFORMAPAGO, '')) AS FP_DESC,
            TRIM(COALESCE(FPG.PAGARESN, '')) AS PAGARESN,
+           FPG.PRIMERPAGO AS DIAS_FP,
            CVC.ANOEMISION AS ANO,
            CVC.MESEMISION AS MES,
            CVC.DIAEMISION AS DIA,
@@ -481,16 +504,24 @@ async function listPgCollectedDocuments({
            TRIM(CAC.SERIEFACTURA) AS SERIE_FAC,
            CAC.TERMINALFACTURA AS TERM_FAC,
            CAC.NUMEROFACTURA AS NUM_FAC,
-           FPG.NUMERODIASVENCIMIENTO AS DIAS_FP,
+           TRIM(COALESCE(CPC.SERIEALBARAN, '')) AS CPC_SERIE,
+           CPC.TERMINALALBARAN AS CPC_TERM,
+           CPC.NUMEROALBARAN AS CPC_NUM,
            TRIM(COALESCE(CLX.COBRORIGUROSOSN, '')) AS SN_CLX,
            COALESCE(CLX.PORCENTAJECOBRORIGUROSO, 0) AS PCT_CLX
       FROM DSEDAC.CVC CVC
-      JOIN DSEDAC.CAC CAC
+      JOIN DSEDAC.FPG FPG
+        ON FPG.CODIGOFORMAPAGO = CVC.CODIGOFORMAPAGO
+      LEFT JOIN DSEDAC.CAC CAC
         ON CAC.EJERCICIOFACTURA = CVC.EJERCICIODOCUMENTO
        AND CAC.SERIEFACTURA = CVC.SERIEDOCUMENTO
+       AND CAC.TERMINALFACTURA = CVC.TERMINALDOCUMENTO
        AND CAC.NUMEROFACTURA = CVC.NUMERODOCUMENTO
-      LEFT JOIN DSEDAC.FPG FPG
-        ON FPG.CODIGOFORMAPAGO = CVC.CODIGOFORMAPAGO
+      LEFT JOIN DSEDAC.CPC CPC
+        ON CPC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
+       AND CPC.SERIEALBARAN = CAC.SERIEALBARAN
+       AND CPC.TERMINALALBARAN = CAC.TERMINALALBARAN
+       AND CPC.NUMEROALBARAN = CAC.NUMEROALBARAN
       LEFT JOIN DSEDAC.CLX CLX
         ON CLX.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
      WHERE CVC.TIPODOCUMENTO = CAST(? AS CHAR(3))
@@ -515,7 +546,7 @@ async function listPgCollectedDocuments({
       .replace(/\s*LEFT JOIN DSEDAC\.CLX CLX\s+ON CLX\.CODIGOCLIENTE = CAC\.CODIGOCLIENTEFACTURA/, '');
     rows = await run(fallbackSql, params);
   }
-  const seen = new Set();
+  const seen = new Map();
   const docs = [];
   for (const row of rows || []) {
     const year = Number(row.ANO) || 0;
@@ -524,19 +555,42 @@ async function listPgCollectedDocuments({
     const vYear = Number(row.ANOV) || 0;
     const vMonth = Number(row.MESV) || 0;
     const vDay = Number(row.DIAV) || 0;
-    const serieAlb = String(row.SERIE_ALB || '').trim();
-    const numAlb = row.NUM_ALB == null ? '' : String(row.NUM_ALB).trim();
+    const serieAlb = String(row.SERIE_ALB || row.CPC_SERIE || '').trim();
+    const termAlb = row.TERM_ALB == null || row.TERM_ALB === '' ? row.CPC_TERM : row.TERM_ALB;
+    const numAlb = row.NUM_ALB == null || String(row.NUM_ALB).trim() === ''
+      ? (row.CPC_NUM == null ? '' : String(row.CPC_NUM).trim())
+      : String(row.NUM_ALB).trim();
     const serieFac = String(row.SERIE_FAC || '').trim();
     const numFac = row.NUM_FAC == null ? '' : String(row.NUM_FAC).trim();
-    const diasFp = Number.parseInt(row.DIAS_FP, 10);
+    const fpDesc = String(row.FP_DESC || '').trim();
+    const diasFp = parseDiasFormaPago({
+      primerPago: row.DIAS_FP,
+      descripcion: fpDesc,
+    });
+    const fecha = year && month && day
+      ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      : null;
+    const vencimiento = vYear && vMonth && vDay
+      ? `${vYear}-${String(vMonth).padStart(2, '0')}-${String(vDay).padStart(2, '0')}`
+      : null;
     const documento = formatErpDocumentLabel({
       serie: row.SERIE,
       terminal: row.TERM_DOC,
       numero: row.NUMERO,
     }) || `${String(row.SERIE || '').trim()}-${row.NUMERO == null ? '' : row.NUMERO}`;
-    if (seen.has(documento)) continue;
-    seen.add(documento);
-    docs.push({
+    const albaran = formatErpDocumentLabel({
+      serie: serieAlb,
+      terminal: termAlb,
+      numero: numAlb,
+    }) || null;
+    const existing = seen.get(documento);
+    if (existing) {
+      if (albaran && !String(existing.albaran || '').split(', ').includes(albaran)) {
+        existing.albaran = existing.albaran ? `${existing.albaran}, ${albaran}` : albaran;
+      }
+      continue;
+    }
+    const mapped = {
       cliente: String(row.CLIENTE || '').trim(),
       tipoDocumento: String(row.TIPO || '').trim(),
       documento,
@@ -548,27 +602,25 @@ async function listPgCollectedDocuments({
       importe: money(row.IMPORTE),
       pendiente: money(row.PENDIENTE),
       formaPago: String(row.FP || '').trim(),
-      formaPagoDesc: String(row.FP_DESC || '').trim(),
+      formaPagoDesc: fpDesc,
       pagare: String(row.PAGARESN || '').trim().toUpperCase() === 'S'
         || isPagareFormaPago(row.FP),
-      formaPagoDias: Number.isFinite(diasFp) && diasFp > 0 ? diasFp : null,
+      formaPagoDias: diasFp,
+      formaPagoDiasLabel: diasFp ? `${diasFp} D F.Factura` : null,
       pendienteTecnicoMovimiento: false,
-      fecha: year && month && day
-        ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-        : null,
-      vencimiento: vYear && vMonth && vDay
-        ? `${vYear}-${String(vMonth).padStart(2, '0')}-${String(vDay).padStart(2, '0')}`
-        : null,
-      albaran: formatErpDocumentLabel({
-        serie: serieAlb,
-        terminal: row.TERM_ALB,
-        numero: numAlb,
-      }) || null,
+      fecha,
+      vencimiento,
+      vencimientoCalculado: addDaysIso(fecha, diasFp),
+      vencimientoSource: 'CVC.ANOVENCIMIENTO',
+      albaran,
       impactoLqd: 'YA_COBRADOS',
       yaCobrada: true,
       cobroRiguroso: String(row.SN_CLX || '').trim().toUpperCase() === 'S',
       porcentajeMinimoCobro: Number(row.PCT_CLX) || 0,
-    });
+    };
+    seen.set(documento, mapped);
+    docs.push(mapped);
+    if (docs.length >= uniqueLimit) break;
   }
   return docs;
 }
@@ -725,6 +777,7 @@ async function getDailySummary({
     summary,
     minimoCobro: {
       porcentajeMinimoVendedor: Number(porcentajeMinimoVendedor) || 0,
+      porcentajeMinimoCobro: Number(porcentajeMinimoVendedor) || 0,
       source: 'DSEDAC.VDDX.PORCENTAJEMINIMOCOBRO',
       clienteSource: 'DSEDAC.CLX.PORCENTAJECOBRORIGUROSO',
     },
@@ -1172,6 +1225,8 @@ module.exports = {
   saveLiquidacion,
   registerReturn,
   lookupFormaPagoDias,
+  parseDiasFormaPago,
+  addDaysIso,
   getVendorMinimoCobro,
   renderReturnPdf,
   assertIsolatedTestWrites,

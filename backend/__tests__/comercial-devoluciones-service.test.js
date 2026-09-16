@@ -11,6 +11,9 @@ const {
   getDailySummary,
   saveLiquidacion,
   registerReturn,
+  parseDiasFormaPago,
+  lookupFormaPagoDias,
+  addDaysIso,
 } = require('../services/comercial-devoluciones-service');
 
 const mockQueryWithParams = jest.fn();
@@ -53,6 +56,15 @@ describe('comercial devoluciones domain', () => {
     expect(classifyFormaPago('CTR')).toBe('REPARTIDOR');
     expect(classifyFormaPago('PG')).toBe('POSTDATADOS');
     expect(classifyFormaPago('P1')).toBe('POSTDATADOS');
+  });
+
+  test('reads FPG days from PRIMERPAGO and never hardcodes 30', () => {
+    expect(parseDiasFormaPago({ primerPago: 30, descripcion: 'PAGARE 30 DFF' })).toBe(30);
+    expect(parseDiasFormaPago({ primerPago: 75, descripcion: 'PAGARE 75 DFF' })).toBe(75);
+    expect(parseDiasFormaPago({ primerPago: 0, descripcion: 'PAGARE 60 DFF' })).toBe(60);
+    expect(parseDiasFormaPago({ primerPago: 0, descripcion: 'PAGARE' })).toBeNull();
+    expect(addDaysIso('2025-12-24', 30)).toBe('2026-01-23');
+    expect(addDaysIso('2025-10-23', 75)).toBe('2026-01-06');
   });
 
   test('does not subtract returns from the amount to deposit', () => {
@@ -119,7 +131,8 @@ describe('listReturns', () => {
     expect(sql).toMatch(/LEFT JOIN DSEDAC\.CVC CVC/);
     expect(sql).toMatch(/LEFT JOIN DSEDAC\.FPG FPG/);
     expect(sql).toMatch(/TIPODOCUMENTO\) = 'DEV'/);
-    expect(sql).toMatch(/FPG\.PAGARESN/);
+    expect(sql).toMatch(/FPG\.PRIMERPAGO/);
+    expect(sql).not.toMatch(/NUMERODIASVENCIMIENTO/);
     expect(sql).toMatch(/L\.LCSRAB = \? OR L\.LCTPVT = \?/);
     expect(sql).not.toMatch(/VENDEDOR\s*=\s*'ALL'/i);
     expect(sql).not.toMatch(/VISTA_DEUDA_BASE/i);
@@ -173,6 +186,7 @@ describe('getDailySummary', () => {
     expect(result.summary.devolucionesYaCobradas).toBe(1000);
     expect(result.summary.totalAIngresar).toBe(1000);
     expect(result.returns).toHaveLength(1);
+    expect(result.minimoCobro.source).toMatch(/VDDX/);
 
     const cobrosSql = mockQueryWithParams.mock.calls.find(([sql]) => /JAVIER\.COBROS/i.test(sql))[0];
     expect(cobrosSql).toMatch(/JAVIER\.COBROS/);
@@ -397,9 +411,12 @@ describe('pizarra PG ya cobrados', () => {
       formaPago: 'P1',
       pagare: true,
       vencimiento: '2026-08-31',
+      vencimientoCalculado: '2026-06-30',
+      vencimientoSource: 'CVC.ANOVENCIMIENTO',
       albaran: 'P-2-1',
       factura: 'F-1-1',
       formaPagoDias: 30,
+      formaPagoDiasLabel: '30 D F.Factura',
       pendienteTecnicoMovimiento: false,
       impactoLqd: 'YA_COBRADOS',
     });
@@ -407,18 +424,64 @@ describe('pizarra PG ya cobrados', () => {
     expect(sql).toMatch(/DSEDAC\.CVC/);
     expect(sql).toMatch(/DSEDAC\.FPG/);
     expect(sql).toMatch(/DSEDAC\.CAC/);
+    expect(sql).toMatch(/DSEDAC\.CPC/);
     expect(sql).toMatch(/EJERCICIOFACTURA/);
+    expect(sql).toMatch(/TERMINALFACTURA/);
     expect(sql).toMatch(/TERMINALALBARAN/);
-    expect(sql).toMatch(/NUMERODIASVENCIMIENTO/);
+    expect(sql).toMatch(/PRIMERPAGO/);
+    expect(sql).not.toMatch(/NUMERODIASVENCIMIENTO/);
     expect(sql).toMatch(/IMPORTEPENDIENTE = 0/);
     expect(sql).toMatch(/CODIGOCLIENTEFACTURA/);
     expect(sql).toMatch(/TIPODOCUMENTO = CAST\(\? AS CHAR\(3\)\)/);
     expect(sql).toMatch(/PAGARESN = CAST\(\? AS CHAR\(1\)\)/);
     expect(sql).toMatch(/CAC\.CODIGOVENDEDOR/);
+    expect(sql).toMatch(/LEFT JOIN DSEDAC\.CAC/);
     expect(sql).not.toMatch(/INSERT|UPDATE|DELETE/i);
     expect(sql).not.toMatch(/VISTA_DEUDA_BASE/i);
     expect(params[0]).toBe('PAG');
     expect(params[1]).toBe('S');
+  });
+
+  test('lists P2 75 D F.Factura from PRIMERPAGO not 30', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([{
+      CLIENTE: '4300008587',
+      TIPO: 'PAG',
+      SERIE: 'F',
+      NUMERO: 1244,
+      TERM_DOC: 0,
+      IMPORTE: '659.29',
+      PENDIENTE: '0',
+      FP: 'P2',
+      FP_DESC: 'PAGARE 75 DFF',
+      PAGARESN: 'S',
+      ANO: 2025,
+      MES: 10,
+      DIA: 23,
+      ANOV: 2026,
+      MESV: 1,
+      DIAV: 10,
+      SERIE_ALB: 'P',
+      TERM_ALB: 2,
+      NUM_ALB: 483,
+      SERIE_FAC: 'F',
+      TERM_FAC: 0,
+      NUM_FAC: 1244,
+      DIAS_FP: 75,
+    }]);
+    const docs = await listPgCollectedDocuments({ vendorCodes: ['02'] });
+    expect(docs[0].formaPagoDias).toBe(75);
+    expect(docs[0].formaPagoDiasLabel).toBe('75 D F.Factura');
+    expect(docs[0].vencimiento).toBe('2026-01-10');
+    expect(docs[0].vencimientoCalculado).toBe('2026-01-06');
+    expect(docs[0].albaran).toBe('P-2-483');
+  });
+
+  test('lookupFormaPagoDias reads PRIMERPAGO', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([{ DIAS: 60, DESC: 'PAGARE 60 DFF' }]);
+    await expect(lookupFormaPagoDias('P6')).resolves.toBe(60);
+    const [sql] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/PRIMERPAGO/);
+    expect(sql).not.toMatch(/NUMERODIASVENCIMIENTO/);
   });
 
   test('registerReturn keeps PG already-collected impact on TEST overlay', async () => {

@@ -228,6 +228,52 @@ void main() {
     expect(find.textContaining('D-5'), findsOneWidget);
   });
 
+  testWidgets('Devuelve pinta 75 D F.Factura cuando FPG no es 30',
+      (tester) async {
+    await _pumpPage(
+      tester,
+      pgCollectedLoader: () async => [
+        {
+          'cliente': '4300008587',
+          'documento': 'F-0-1244',
+          'importe': 659.29,
+          'formaPago': 'P2',
+          'albaran': 'P-2-483',
+          'factura': 'F-0-1244',
+          'formaPagoDias': 75,
+          'formaPagoDiasLabel': '75 D F.Factura',
+          'vencimiento': '2026-01-10',
+        },
+      ],
+      onRegisterReturn: ({
+        required clientCode,
+        required amount,
+        documentoOrigen,
+        yaCobrada = true,
+        formaPago,
+        albaranOrigen,
+        vencimiento,
+      }) async {
+        return ComercialDevolucionItem(
+          documento: 'D-75',
+          cliente: clientCode,
+          amount: -amount,
+          yaCobrada: yaCobrada,
+          formaPago: formaPago,
+          formaPagoDias: 75,
+          impactoLqd: 'YA_COBRADOS',
+        );
+      },
+    );
+
+    await tester.tap(
+        find.byKey(const ValueKey('comercial-liquidacion-devuelve-button')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('75 D F.Factura'), findsWidgets);
+    expect(find.textContaining('30 D F.Factura'), findsNothing);
+    expect(find.textContaining('P-2-483'), findsWidgets);
+  });
+
   testWidgets(
       'Devuelve queda visible junto a Guardar en viewport Pixel 5 sin scroll',
       (tester) async {

@@ -8,6 +8,7 @@ class ComercialLiquidacionSummary {
     this.saldoActual = 0,
     this.devolucionesYaCobradas = 0,
     this.source = 'COBROS',
+    this.porcentajeMinimoVendedor = 0,
     double? totalAIngresar,
   }) : totalAIngresar = totalAIngresar ??
             totalEfectivo + totalCheques + totalPostdatados + saldoActual;
@@ -30,6 +31,9 @@ class ComercialLiquidacionSummary {
   /// Source of deposit total: DSEDAC.LQD or app cobros.
   final String source;
 
+  /// Vendor minimum collection percent from DSEDAC.VDDX.PORCENTAJEMINIMOCOBRO.
+  final double porcentajeMinimoVendedor;
+
   /// Total amount the commercial employee must deposit.
   final double totalAIngresar;
 }
@@ -48,6 +52,7 @@ class ComercialDevolucionItem {
     this.impactoLqd,
     this.albaranOrigen,
     this.vencimiento,
+    this.formaPagoDias,
     this.pendienteTecnicoMovimiento = false,
   });
 
@@ -80,6 +85,9 @@ class ComercialDevolucionItem {
 
   /// Due date of the collected pagaré.
   final String? vencimiento;
+
+  /// Real FPG.PRIMERPAGO days painted as "N D F.Factura".
+  final int? formaPagoDias;
 
   /// TEST overlay is pending ERP technical movement (LAC/CVC/LQD not written).
   final bool pendienteTecnicoMovimiento;

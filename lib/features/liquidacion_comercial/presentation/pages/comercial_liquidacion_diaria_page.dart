@@ -256,6 +256,21 @@ class _ComercialLiquidacionDiariaPageState
                                   ),
                                 ],
                               ),
+                              if (_summary.porcentajeMinimoVendedor > 0) ...[
+                                const SizedBox(height: 12),
+                                Semantics(
+                                  label:
+                                      'Porcentaje mínimo de cobro del vendedor',
+                                  child: Text(
+                                    'Mínimo cobro vendedor (VDDX): ${_summary.porcentajeMinimoVendedor.toStringAsFixed(0)}%',
+                                    style: TextStyle(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 16),
                               _DevolucionesList(returns: _returns),
                               const SizedBox(height: 16),
@@ -498,7 +513,7 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Ajusta caja ya cobrada (LIQ.Vd), no una factura a 30 días impagada. Overlay TEST: Pendiente técnico movimiento (ERP LAC/CVC/LQD no se escribe).',
+                'Ajusta caja ya cobrada (LIQ.Vd), no una factura impagada a N D F.Factura. Overlay TEST: Pendiente técnico movimiento (ERP LAC/CVC/LQD no se escribe).',
                 style: TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 12),
@@ -550,7 +565,13 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                           subtitle: Text(
                             [
                               '${_pgDocs[i]['cliente'] ?? ''} · ${_pgDocs[i]['importe'] ?? ''} €',
-                              if (_pgDocs[i]['formaPagoDias'] != null)
+                              if (_pgDocs[i]
+                                          ['formaPagoDiasLabel']
+                                      ?.toString()
+                                      .isNotEmpty ==
+                                  true)
+                                _pgDocs[i]['formaPagoDiasLabel'].toString()
+                              else if (_pgDocs[i]['formaPagoDias'] != null)
                                 '${_pgDocs[i]['formaPagoDias']} D F.Factura'
                               else if (_pgDocs[i]['formaPagoDesc']
                                       ?.toString()
@@ -610,7 +631,7 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Ya cobrada (PG / LIQ.Vd)'),
                 subtitle: const Text(
-                  'Ajusta caja ya cobrada, no una factura a 30 días impagada.',
+                  'Ajusta caja ya cobrada, no una factura impagada a N D F.Factura.',
                 ),
                 value: _yaCobrada,
                 onChanged: (value) => setState(() => _yaCobrada = value),
@@ -1542,6 +1563,7 @@ class _DevolucionesList extends StatelessWidget {
                       child: Text(
                         '${item.documento} · ${item.cliente}'
                         '${item.yaCobrada ? ' · ya cobrada (LIQ.Vd)' : ''}'
+                        '${item.formaPagoDias != null ? ' · ${item.formaPagoDias} D F.Factura' : ''}'
                         '${item.albaranOrigen != null && item.albaranOrigen!.isNotEmpty ? ' · alb ${item.albaranOrigen}' : ''}'
                         '${item.pendienteTecnicoMovimiento ? ' · Pde. Tech. Mov.' : ''}',
                         style: TextStyle(

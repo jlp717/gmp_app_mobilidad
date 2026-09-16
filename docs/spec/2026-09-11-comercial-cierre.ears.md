@@ -56,7 +56,7 @@ AND THE SYSTEM SHALL devolver esos porcentajes en el detalle del pedido.
 WHEN el comercial pulsa Devuelve sobre una factura cobrada con pagaré (`DSEDAC.FPG.PAGARESN='S'` o código PG/P1)
 THE SYSTEM SHALL registrar overlay TEST con `YA_COBRADA=1` e `IMPACTO_LQD=YA_COBRADOS`
 AND THE SYSTEM SHALL NOT restar esa devolución de `DSEDAC.LQD.IMPORTETOTALAINGRESAR`
-AND THE SYSTEM SHALL NOT tratarla como factura impagada a 30 días.
+AND THE SYSTEM SHALL NOT tratarla como factura impagada a N D F.Factura (N sale de `DSEDAC.FPG.PRIMERPAGO`; 30 es solo ejemplo).
 
 ### REQ-PED-03
 WHEN un comercial consulta ofertas de un cliente con filas vigentes en `DSEDAC.PMR` o `DSEDAC.PMRC`
@@ -68,7 +68,9 @@ CPES puede estar vacío; no se finge count>0 con CPES=0.
 WHEN se lista un pagaré ya cobrado para Devuelve
 THE SYSTEM SHALL leer `DSEDAC.CVC` tipo `PAG` con `IMPORTEPENDIENTE=0` y `FPG.PAGARESN='S'`
 AND THE SYSTEM SHALL resolver cliente, vendedor y albarán por `DSEDAC.CAC` (factura→albarán), porque CVC PAG deja cliente/vendedor en blancos EBCDIC
-AND THE SYSTEM SHALL usar vencimiento de `CVC.ANOVENCIMIENTO/MES/DIA` (P1 = PAGARE 30 DFF en FPG).
+AND THE SYSTEM SHALL pintar `N D F.Factura` con `N = FPG.PRIMERPAGO` (P1=30, P2=75, P6=60, P7=90; nunca hardcodear 30)
+AND THE SYSTEM SHALL mostrar vencimiento almacenado en `CVC.ANOVENCIMIENTO/MES/DIA` (puede diferir de fecha factura + N por redondeo ERP)
+AND THE SYSTEM SHALL etiquetar el albarán completo `serie-terminal-numero` vía `CAC` + `CPC`.
 
 ### REQ-COB-02
 WHEN Cobros muestra un cliente con `CLX.COBRORIGUROSOSN='S'`

@@ -57,6 +57,36 @@ function api(method, path, { token, body, headers } = {}) {
   });
 }
 
+function apiPdf(path, { token } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      hostname: HOST,
+      port: PORT,
+      path: `/api${path}`,
+      method: 'GET',
+      headers: {
+        'User-Agent': UA,
+        Accept: 'application/pdf',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        resolve({
+          status: res.statusCode,
+          contentType: String(res.headers['content-type'] || ''),
+          bytes: buffer.length,
+          magic: buffer.subarray(0, 5).toString('latin1'),
+        });
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 async function pinForVendor(vendor) {
   const rows = await queryWithParams(
     `SELECT TRIM(CODIGOPIN) AS PIN
@@ -166,7 +196,7 @@ async function main() {
     rows.push(record(
       'GET resumen-diario',
       summary.status === 200 && summary.body?.success === true,
-      `status=${summary.status} source=${summary.body?.summary?.source || '-'} returns=${summary.body?.returns?.length ?? '-'}`,
+      `status=${summary.status} source=${summary.body?.summary?.source || '-'} returns=${summary.body?.returns?.length ?? '-'} minimo=${summary.body?.minimoCobro?.porcentajeMinimoVendedor ?? '-'}`,
     ));
     const noDoubleSub = summary.body?.summary?.totalAIngresar == null
       || summary.body.summary.totalAIngresar === summary.body.summary.totalAIngresar;
@@ -215,8 +245,24 @@ async function main() {
     rows.push(record(
       'POST Devuelve TEST',
       (ret.status === 201 || ret.status === 200) && String(ret.body?.return?.source || '').startsWith('JAVIER.TEST_'),
-      `status=${ret.status} doc=${ret.body?.return?.documento || ret.body?.code || ret.body?.error || '-'} impacto=${ret.body?.return?.impactoLqd || '-'}`,
+      `status=${ret.status} doc=${ret.body?.return?.documento || ret.body?.code || ret.body?.error || '-'} impacto=${ret.body?.return?.impactoLqd || '-'} pde=${ret.body?.return?.pendienteTecnicoMovimiento === true}`,
     ));
+    const retSerie = String(ret.body?.return?.serie || '').trim();
+    const retNumero = String(ret.body?.return?.numero == null ? '' : ret.body.return.numero).trim();
+    const retFecha = String(ret.body?.return?.date || new Date().toISOString().slice(0, 10)).trim();
+    if (retSerie && retNumero) {
+      const pdf = await apiPdf(
+        `/comercial-liquidacion/devoluciones/pdf?vendedor=${encodeURIComponent(VENDOR)}&fecha=${encodeURIComponent(retFecha)}&serie=${encodeURIComponent(retSerie)}&numero=${encodeURIComponent(retNumero)}`,
+        { token },
+      );
+      rows.push(record(
+        'GET devolucion PDF %PDF',
+        pdf.status === 200 && pdf.magic === '%PDF-' && /pdf/i.test(pdf.contentType),
+        `status=${pdf.status} magic=${pdf.magic} type=${pdf.contentType} bytes=${pdf.bytes}`,
+      ));
+    } else {
+      rows.push(record('GET devolucion PDF %PDF', false, 'sin serie/numero en POST Devuelve'));
+    }
     try {
       const overlay = await queryWithParams(
         `SELECT TRIM(CLIENTE) AS CLIENTE, IMPORTE, YA_COBRADA
@@ -243,51 +289,56 @@ async function main() {
       status: pgDocs.status,
       count: Array.isArray(pgDocs.body?.documents) ? pgDocs.body.documents.length : 0,
       vendor: VENDOR,
+      documents: Array.isArray(pgDocs.body?.documents) ? pgDocs.body.documents : [],
     };
     if (pgHit.status === 200 && pgHit.count === 0) {
-      try {
-        const samplePg = await queryWithParams(
-          `SELECT TRIM(COALESCE(NULLIF(TRIM(CVC.CODIGOCLIENTEFACTURA), ''), CVC.CODIGOCLIENTEALBARAN)) AS CLIENTE,
-                  TRIM(CVC.CODIGOVENDEDORCOBRO) AS VD
-             FROM DSEDAC.CVC CVC
-             LEFT JOIN DSEDAC.FPG FPG
-               ON TRIM(FPG.CODIGOFORMAPAGO) = TRIM(CVC.CODIGOFORMAPAGO)
-            WHERE CVC.IMPORTEPENDIENTE = 0
-              AND CVC.IMPORTEVENCIMIENTO > 0
-              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-              AND TRIM(CVC.TIPODOCUMENTO) <> CAST(? AS VARCHAR(3))
-              AND TRIM(COALESCE(CVC.CODIGOVENDEDORCOBRO, '')) <> ''
-              AND (
-                   UPPER(TRIM(COALESCE(FPG.PAGARESN, ''))) = CAST(? AS VARCHAR(1))
-                OR UPPER(TRIM(CVC.CODIGOFORMAPAGO)) = CAST(? AS VARCHAR(2))
-              )
-            FETCH FIRST 1 ROW ONLY`,
-          ['DEV', 'S', 'PG'],
-        );
-        const pgVendor = String(samplePg?.[0]?.VD || '').trim();
-        const pgPin = pgVendor ? await pinForVendor(pgVendor) : '';
-        if (pgPin) {
+      for (const pgVendor of ['02', '03', '97', '81']) {
+        try {
+          const pgPin = await pinForVendor(pgVendor);
+          if (!pgPin) continue;
           const pgLogin = await api('POST', '/auth/login', {
             body: { username: pgVendor, password: pgPin },
           });
           const pgToken = pgLogin.body?.token;
-          if (pgToken) {
-            const otherPg = await api('GET', `/comercial-liquidacion/ya-cobrados-pg?vendedor=${pgVendor}`, { token: pgToken });
-            pgHit = {
-              status: otherPg.status,
-              count: Array.isArray(otherPg.body?.documents) ? otherPg.body.documents.length : 0,
-              vendor: pgVendor,
-            };
-          }
+          if (!pgToken) continue;
+          const otherPg = await api('GET', `/comercial-liquidacion/ya-cobrados-pg?vendedor=${pgVendor}`, { token: pgToken });
+          const docs = Array.isArray(otherPg.body?.documents) ? otherPg.body.documents : [];
+          pgHit = {
+            status: otherPg.status,
+            count: docs.length,
+            vendor: pgVendor,
+            documents: docs,
+          };
+          if (pgHit.count > 0) break;
+        } catch (error) {
+          pgHit = { ...pgHit, error: String(error.message || error).slice(0, 80) };
         }
-      } catch (error) {
-        pgHit = { ...pgHit, error: String(error.message || error).slice(0, 80) };
       }
     }
+    const pgDias = [...new Set(pgHit.documents.map((doc) => Number(doc.formaPagoDias)).filter((n) => n > 0))];
+    const pgNe30 = pgHit.documents.find((doc) => Number(doc.formaPagoDias) > 0 && Number(doc.formaPagoDias) !== 30);
+    const pgAlb = pgHit.documents.find((doc) => String(doc.albaran || '').includes('-'));
     rows.push(record(
       'GET ya-cobrados-pg',
       pgHit.status === 200 && pgHit.count > 0,
       `status=${pgHit.status} count=${pgHit.count} vendor=${pgHit.vendor}${pgHit.error ? ` err=${pgHit.error}` : ''}`,
+    ));
+    rows.push(record(
+      'PG dias FPG reales N D F.Factura',
+      pgDias.length > 0,
+      `dias=${pgDias.join(',') || '-'} labels=${[...new Set(pgHit.documents.map((d) => d.formaPagoDiasLabel).filter(Boolean))].slice(0, 4).join('|') || '-'}`,
+    ));
+    rows.push(record(
+      'HIT FP ≠30',
+      Boolean(pgNe30),
+      pgNe30
+        ? `fp=${pgNe30.formaPago} dias=${pgNe30.formaPagoDias} doc=${pgNe30.documento} alb=${pgNe30.albaran || '-'}`
+        : 'sin documento FPG.PRIMERPAGO distinto de 30',
+    ));
+    rows.push(record(
+      'PG albaran serie-terminal-numero',
+      Boolean(pgAlb),
+      pgAlb ? `alb=${pgAlb.albaran} vto=${pgAlb.vencimiento || '-'} calc=${pgAlb.vencimientoCalculado || '-'}` : 'sin albaran',
     ));
 
     const summaryPend = await api('GET', `/cobros/pending-summary/${VENDOR}?limit=5&page=1`, { token });
@@ -328,10 +379,49 @@ async function main() {
     const vendorPct = Number(pendientes.body?.resumen?.porcentajeMinimoVendedor || 0);
     const cobrosRig = pendientes.body?.resumen?.cobroRiguroso === true
       || (pendientes.body?.cobros || []).some((doc) => doc.cobroRiguroso === true);
+    let minHit = {
+      ok: pendientes.status === 200 && (cobrosPct > 0 || vendorPct > 0),
+      client: cobrosClient,
+      vendor: VENDOR,
+      clxPct: cobrosPct,
+      vddxPct: vendorPct,
+      riguroso: cobrosRig,
+    };
+    if (!minHit.ok) {
+      const knownMin = { client: '4300004433', vendor: '03' };
+      try {
+        const minPin = await pinForVendor(knownMin.vendor);
+        if (minPin) {
+          const minLogin = await api('POST', '/auth/login', {
+            body: { username: knownMin.vendor, password: minPin },
+          });
+          const minToken = minLogin.body?.token;
+          if (minToken) {
+            const minPend = await api(
+              'GET',
+              `/cobros/${encodeURIComponent(knownMin.client)}/pendientes?vendedorCodes=${knownMin.vendor}`,
+              { token: minToken },
+            );
+            const minClx = Number(minPend.body?.resumen?.porcentajeMinimoCobro || 0);
+            const minVddx = Number(minPend.body?.resumen?.porcentajeMinimoVendedor || 0);
+            minHit = {
+              ok: minPend.status === 200 && (minClx > 0 || minVddx > 0),
+              client: knownMin.client,
+              vendor: knownMin.vendor,
+              clxPct: minClx,
+              vddxPct: minVddx,
+              riguroso: minPend.body?.resumen?.cobroRiguroso === true,
+            };
+          }
+        }
+      } catch (error) {
+        minHit = { ...minHit, error: String(error.message || error).slice(0, 80) };
+      }
+    }
     rows.push(record(
       'cobros % minimo CLX/VDDX en payload',
-      pendientes.status === 200,
-      `riguroso=${cobrosRig} clxPct=${cobrosPct} vddxPct=${vendorPct} tipos=${[...new Set((pendientes.body?.cobros || []).map((d) => d.tipoDocumento || d.tipo || '-'))].slice(0, 6).join(',')}`,
+      minHit.ok,
+      `client=${minHit.client} vendor=${minHit.vendor} riguroso=${minHit.riguroso} clxPct=${minHit.clxPct} vddxPct=${minHit.vddxPct}${minHit.error ? ` err=${minHit.error}` : ''}`,
     ));
 
     let createdId = null;

@@ -145,6 +145,8 @@ class ComercialLiquidacionDailySnapshot {
         const <String, dynamic>{};
     final returnsJson = (json['returns'] as List?) ?? const [];
     final savedJson = (json['savedDraft'] as Map?)?.cast<String, dynamic>();
+    final minimoJson = (json['minimoCobro'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
     return ComercialLiquidacionDailySnapshot(
       date: json['date']?.toString(),
       summary: ComercialLiquidacionSummary(
@@ -158,6 +160,10 @@ class ComercialLiquidacionDailySnapshot {
             ? null
             : _num(summaryJson['totalAIngresar']),
         source: (summaryJson['source'] ?? 'COBROS').toString(),
+        porcentajeMinimoVendedor: _num(
+          minimoJson['porcentajeMinimoVendedor'] ??
+              minimoJson['porcentajeMinimoCobro'],
+        ),
       ),
       returns: returnsJson
           .whereType<Map>()
@@ -205,6 +211,9 @@ class ComercialLiquidacionDailySnapshot {
       impactoLqd: item['impactoLqd']?.toString(),
       albaranOrigen: item['albaranOrigen']?.toString(),
       vencimiento: item['vencimiento']?.toString(),
+      formaPagoDias: item['formaPagoDias'] is num
+          ? (item['formaPagoDias'] as num).toInt()
+          : int.tryParse(item['formaPagoDias']?.toString() ?? ''),
       pendienteTecnicoMovimiento: item['pendienteTecnicoMovimiento'] == true ||
           (item['source']?.toString() ?? '').startsWith('JAVIER.TEST_'),
     );
