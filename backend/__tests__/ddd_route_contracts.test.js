@@ -856,6 +856,30 @@ describe('DDD pedidos route contracts', () => {
     expect(lastYearCall[1]).not.toContain('99');
   });
 
+  test('GET /purchase-history-global JEFE honours vendedorCodes plural', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockResolvedValue([]);
+
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      isJefeVentas: true,
+    }))
+      .get('/purchase-history-global')
+      .query({
+        from: '2026-01-01',
+        to: '2026-01-31',
+        vendedorCodes: '35',
+      });
+
+    expect(res.status).toBe(200);
+    const scopedCall = db.queryWithParams.mock.calls.find(([sql]) => /FROM DSED\.LACLAE/i.test(sql));
+    expect(scopedCall).toBeDefined();
+    expect(scopedCall[0]).toMatch(/TRIM\(L\.LCCDVD\) IN \(\?\)/);
+    expect(scopedCall[1]).toContain('35');
+  });
+
   test('GET /promotions ignores empty cache and caches only n>0', async () => {
     const promotions = Array.from({ length: 27 }, (_, i) => ({
       code: `PMR${i}`,

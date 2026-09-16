@@ -20,6 +20,10 @@ const { verifyToken } = require('../middleware/auth');
 const { authorizeVendorScope, isFinancialRole, requireVendorQueryScope } = require('../middleware/vendor-scope');
 const { buildVendedorFilterParameterized } = require('../src/utils/dashboardFilters');
 
+function asTrimmedText(value) {
+    if (value == null) return '';
+    return String(value).trim();
+}
 
 // =============================================================================
 // YOY COMPARISON (Using LACLAE with LCIMVT for sales without VAT)
@@ -417,7 +421,7 @@ router.get('/sales-history', verifyToken, requireVendorQueryScope, async (req, r
         // Filter by Product (Code or Description) or Batch/Reference - safe interpolation
         if (productSearch) {
             const safeTerm = sanitizeForSQL(productSearch.toUpperCase().trim()).replace(/[%_\\]/g, '');
-            whereClause += ' AND (UPPER(L.DESCRIPCION) LIKE ? OR L.CODIGOARTICULO LIKE ? OR L.REFERENCIA LIKE ?)';
+            whereClause += ' AND (UPPER(L.DESCRIPCION) LIKE ? OR L.CODIGOARTICULO LIKE ? OR CHAR(L.REFERENCIADOCUMENTO) LIKE ?)';
             const searchPattern = `%${safeTerm}%`;
             whereParams.push(searchPattern, searchPattern, searchPattern);
         }
@@ -510,22 +514,22 @@ router.get('/sales-history', verifyToken, requireVendorQueryScope, async (req, r
             date: `${r.YEAR}-${String(r.MONTH).padStart(2, '0')}-${String(r.DAY).padStart(2, '0')}`,
             year: r.YEAR,
             month: r.MONTH,
-            clientCode: r.CLIENTCODE?.trim(),
-            productCode: r.PRODUCTCODE?.trim(),
-            productName: r.PRODUCTNAME?.trim(),
+            clientCode: asTrimmedText(r.CLIENTCODE),
+            productCode: asTrimmedText(r.PRODUCTCODE),
+            productName: asTrimmedText(r.PRODUCTNAME),
             price: formatCurrency(r.PRICE),
             quantity: parseFloat(r.QUANTITY) || 0,
             total: formatCurrency(r.TOTAL),
-            lote: r.LOTE?.trim() || '',
-            ref: r.REF?.trim() || '',
-            invoice: r.INVOICE?.trim(),
-            family: r.FAMILY?.trim() || '',
-            subfamily: r.SUBFAMILY?.trim() || 'General',
-            fi1: r.FI1?.trim() || '',
-            fi2: r.FI2?.trim() || '',
-            fi3: r.FI3?.trim() || '',
-            fi4: r.FI4?.trim() || '',
-            fi5: r.FI5?.trim() || ''
+            lote: asTrimmedText(r.LOTE),
+            ref: asTrimmedText(r.REF),
+            invoice: asTrimmedText(r.INVOICE),
+            family: asTrimmedText(r.FAMILY),
+            subfamily: asTrimmedText(r.SUBFAMILY) || 'General',
+            fi1: asTrimmedText(r.FI1),
+            fi2: asTrimmedText(r.FI2),
+            fi3: asTrimmedText(r.FI3),
+            fi4: asTrimmedText(r.FI4),
+            fi5: asTrimmedText(r.FI5)
         }));
 
         res.json({

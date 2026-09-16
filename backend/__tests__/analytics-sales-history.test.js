@@ -71,7 +71,44 @@ describe('GET /sales-history', () => {
     expect(sql).toMatch(/L\.CODIGOLOTE/);
     expect(sql).not.toMatch(/TRAZABILIDADALBARAN/);
     expect(sql).not.toMatch(/L\.REFERENCIA as ref/i);
+    expect(sql).not.toMatch(/L\.REFERENCIA LIKE/i);
     expect(params).toEqual(expect.arrayContaining(['15', 2026, 3, 1, 31]));
+  });
+
+  test('coerces numeric LAC invoice/lote fields instead of calling trim()', async () => {
+    mockQueryWithParams.mockResolvedValue([{
+      YEAR: 2026,
+      MONTH: 5,
+      DAY: 31,
+      CLIENTCODE: '4300030056',
+      PRODUCTCODE: 'P1',
+      PRODUCTNAME: 'Helado',
+      PRICE: 1.5,
+      QUANTITY: 2,
+      TOTAL: 3,
+      LOTE: 12,
+      REF: 2296,
+      INVOICE: 7320,
+      FAMILY: '01',
+      SUBFAMILY: 'A',
+      FI1: 'X',
+      FI2: '',
+      FI3: '',
+      FI4: '',
+      FI5: '',
+    }]);
+
+    const res = await request(makeApp())
+      .get('/sales-history')
+      .query({ vendedorCodes: '15', clientCode: '4300030056', limit: 20 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.rows[0]).toMatchObject({
+      invoice: '7320',
+      lote: '12',
+      ref: '2296',
+      clientCode: '4300030056',
+    });
   });
 
   test('rejects COMERCIAL ALL before any sales-history query', async () => {

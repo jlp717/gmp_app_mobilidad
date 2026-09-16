@@ -1516,7 +1516,7 @@ function createPedidosRoutes() {
       const from = req.query.from ? new Date(String(req.query.from)) : defaultFrom;
       const to = req.query.to ? new Date(String(req.query.to)) : now;
 
-      let vendor = String(req.query.vendedorCode || '').trim();
+      let vendor = String(req.query.vendedorCode || req.query.vendedorCodes || '').trim();
       if (!userIsJefe) {
         // Igual que la ruta legacy: un comercial sin código autenticado no
         // puede consultar el histórico global de ningún vendedor.
@@ -1623,10 +1623,13 @@ function createPedidosRoutes() {
         SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR
         FROM DSED.LACLAE L WHERE ${lastYearWhereSql}`;
 
-      const [detail, summary, topProducts, lastYear, monthlyByYear] = await Promise.all([
+      // queryGate max=4: five parallel LACLAE scans on JEFE ALL queue-timeout at 12s.
+      const [detail, summary, topProducts] = await Promise.all([
         queryWithParams(detailSql, params, false),
         queryWithParams(summarySql, params, false),
         queryWithParams(topProductosSql, params, false),
+      ]);
+      const [lastYear, monthlyByYear] = await Promise.all([
         queryWithParams(lastYearTotalSql, lastYearParams, false),
         queryWithParams(monthlyByYearSql, params, false),
       ]);

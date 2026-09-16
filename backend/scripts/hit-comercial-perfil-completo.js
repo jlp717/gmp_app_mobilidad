@@ -514,7 +514,7 @@ async function hitActor(actor) {
   });
 
   const factQuery = actor.isJefe
-    ? `/facturas?year=${year}&limit=20`
+    ? `/facturas?vendedorCodes=${encodeURIComponent(teamCodes.join(',') || 'ALL')}&year=${year}&limit=20`
     : `/facturas?vendedorCodes=${encodeURIComponent(vendor)}&year=${year}&month=${month}&limit=20`;
   const factList = await api('GET', factQuery, { token, timeoutMs: 40000 });
   const factCount = countOf(factList.body, ['facturas', 'invoices', 'data']) ?? 0;
@@ -593,10 +593,17 @@ async function hitActor(actor) {
   record('Pedidos', 'GET /pedidos/analytics', roleLabel, pedAna, {
     sample: `keys=${Object.keys(pedAna.body?.analytics || pedAna.body || {}).slice(0, 8).join(',')}`,
   });
-  const yoyPed = await api('GET', `/pedidos/purchase-history-global?vendedorCodes=${encodeURIComponent(vendor)}`, { token, timeoutMs: 30000 });
+  const yoyVendor = actor.isJefe ? (scopeVendor || vendor) : vendor;
+  const yoyPed = await api('GET', `/pedidos/purchase-history-global?vendedorCode=${encodeURIComponent(yoyVendor)}`, { token, timeoutMs: 60000 });
   record('Pedidos', 'GET /pedidos/purchase-history-global', roleLabel, yoyPed, {
-    sample: `keys=${Object.keys(yoyPed.body || {}).slice(0, 8).join(',')}`,
+    sample: `vendor=${yoyVendor} keys=${Object.keys(yoyPed.body || {}).slice(0, 8).join(',')}`,
   });
+  if (actor.isJefe) {
+    const yoyAll = await api('GET', '/pedidos/purchase-history-global?vendedorCode=ALL&limit=20', { token, timeoutMs: 60000 });
+    record('Pedidos', 'GET /pedidos/purchase-history-global ALL', roleLabel, yoyAll, {
+      sample: `keys=${Object.keys(yoyAll.body || {}).slice(0, 8).join(',')}`,
+    });
+  }
 
   if (clientCode) {
     const promo = await api('GET', `/pedidos/promotions?clientCode=${encodeURIComponent(clientCode)}&vendedorCode=${encodeURIComponent(scopeVendor)}`, { token, timeoutMs: 25000 });
