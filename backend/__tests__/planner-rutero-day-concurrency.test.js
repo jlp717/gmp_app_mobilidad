@@ -81,6 +81,7 @@ describe('Planner rutero/day shared concurrency', () => {
     test('app.js uses /rutero/day for the report timeout, not /planner/rutero/day', () => {
         const source = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
         expect(source).toMatch(/originalUrl\.includes\('\/rutero\/day'\)/);
+        expect(source).toMatch(/originalUrl\.includes\('\/purchase-history-global'\)/);
         expect(source).not.toMatch(/originalUrl\.includes\('\/planner\/rutero\/day'\)/);
     });
 
