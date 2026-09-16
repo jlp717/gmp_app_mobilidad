@@ -2,19 +2,17 @@ const express = require('express');
 const { createHash } = require('crypto');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { query, queryWithParams } = require('../config/db');
+const { queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
 const {
     getCurrentDate,
-    buildVendedorFilter,
-    buildVendedorFilterLACLAE,
+    getVendorColumn,
     formatCurrency,
     MIN_YEAR,
     LACLAE_SALES_FILTER,
     sanitizeForSQL,
-    sanitizeCodeList,
     handleRouteError,
     sargableDocumentDateBound,
 } = require('../utils/common');
@@ -30,10 +28,14 @@ router.get('/yoy-comparison', verifyToken, requireVendorQueryScope, async (req, 
     try {
         const { vendedorCodes, year, month } = req.query;
         const currentYear = parseInt(year) || getCurrentDate().getFullYear();
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
-
-        // Optional month filter
-        const monthFilter = month ? `AND L.LCMMDC = ${parseInt(month) || 0}` : '';
+        const monthNum = month ? parseInt(month, 10) : 0;
+        const monthFilter = monthNum >= 1 && monthNum <= 12 ? 'AND L.LCMMDC = ?' : '';
+        const monthParams = monthNum >= 1 && monthNum <= 12 ? [monthNum] : [];
+        const vendorFilter = buildVendedorFilterParameterized(
+            vendedorCodes,
+            'L',
+            getVendorColumn(currentYear, monthNum || undefined),
+        );
         const cacheKeyBase = `analytics:yoy:${currentYear}:${month || 'all'}:${vendedorCodes}`;
 
         const getData = (yr) => {
@@ -43,9 +45,12 @@ router.get('/yoy-comparison', verifyToken, requireVendorQueryScope, async (req, 
             SUM(L.LCIMVT - L.LCIMCT) as margin,
             COUNT(DISTINCT L.LCCDCL) as clients
           FROM DSED.LACLAE L 
-          WHERE L.LCAADC = ${yr} AND ${LACLAE_SALES_FILTER} ${monthFilter} ${vendedorFilter}
+          WHERE L.LCAADC = ? AND ${LACLAE_SALES_FILTER} ${monthFilter} ${vendorFilter.filter}
         `;
-            return cachedQuery(query, sql, `${cacheKeyBase}:${yr}`, TTL.LONG);
+            return cachedQuery(queryWithParams, sql, {
+                cacheKey: `${cacheKeyBase}:${yr}`,
+                ttl: TTL.LONG,
+            }, [yr, ...monthParams, ...vendorFilter.params]);
         };
 
 
@@ -98,13 +103,25 @@ router.get('/yoy-comparison', verifyToken, requireVendorQueryScope, async (req, 
 router.get('/top-clients', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes, year, month, limit = 10 } = req.query;
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
-
+        const yearNum = year ? parseInt(year, 10) : 0;
+        const monthNum = month ? parseInt(month, 10) : 0;
+        const dateParams = [];
         let dateFilter = '';
-        if (year) dateFilter += ` AND L.LCAADC = ${parseInt(year) || 0}`;
-        if (month) dateFilter += ` AND L.LCMMDC = ${parseInt(month) || 0}`;
+        if (yearNum) {
+            dateFilter += ' AND L.LCAADC = ?';
+            dateParams.push(yearNum);
+        }
+        if (monthNum >= 1 && monthNum <= 12) {
+            dateFilter += ' AND L.LCMMDC = ?';
+            dateParams.push(monthNum);
+        }
+        const vendorFilter = buildVendedorFilterParameterized(
+            vendedorCodes,
+            'L',
+            getVendorColumn(yearNum || undefined, monthNum || undefined),
+        );
 
-        const safeLimit = parseInt(limit) || 10;
+        const safeLimit = parseInt(limit, 10) || 10;
         const sql = `
       SELECT
         T.code,
@@ -122,7 +139,7 @@ router.get('/top-clients', verifyToken, requireVendorQueryScope, async (req, res
           SUM(L.LCIMVT) as totalSales,
           COUNT(*) as transactions
         FROM DSED.LACLAE L
-        WHERE ${LACLAE_SALES_FILTER} ${dateFilter} ${vendedorFilter}
+        WHERE ${LACLAE_SALES_FILTER} ${dateFilter} ${vendorFilter.filter}
         GROUP BY L.LCCDCL
         ORDER BY totalSales DESC
         FETCH FIRST ${safeLimit} ROWS ONLY
@@ -134,7 +151,10 @@ router.get('/top-clients', verifyToken, requireVendorQueryScope, async (req, res
         const now = getCurrentDate();
         const yearMeta = historicalYearsCacheMeta([year || now.getFullYear()], now);
         const cacheKey = `analytics:top_clients:${yearMeta.bucket}:${year || 'current'}:${month || 'all'}:${vendedorCodes || 'ALL'}:${limit}`;
-        const topClients = await cachedQuery(query, sql, cacheKey, yearMeta.ttl);
+        const topClients = await cachedQuery(queryWithParams, sql, {
+            cacheKey,
+            ttl: yearMeta.ttl,
+        }, [...dateParams, ...vendorFilter.params]);
 
         if (!Array.isArray(topClients) || topClients.length === 0) {
             return res.json({ clients: [] });
@@ -169,18 +189,25 @@ router.get('/top-clients', verifyToken, requireVendorQueryScope, async (req, res
 router.get('/trends', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes } = req.query;
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        const vendorFilter = buildVendedorFilterParameterized(
+            vendedorCodes,
+            'L',
+            getVendorColumn(),
+        );
 
         // Get last 6 months from LACLAE
         const sql = `
       SELECT L.LCAADC as year, L.LCMMDC as month, SUM(L.LCIMVT) as sales
       FROM DSED.LACLAE L
-      WHERE L.LCAADC >= ${MIN_YEAR} AND ${LACLAE_SALES_FILTER} ${vendedorFilter}
+      WHERE L.LCAADC >= ? AND ${LACLAE_SALES_FILTER} ${vendorFilter.filter}
       GROUP BY L.LCAADC, L.LCMMDC
       ORDER BY L.LCAADC DESC, L.LCMMDC DESC
       FETCH FIRST 6 ROWS ONLY
     `;
-        const history = await cachedQuery(query, sql, `analytics:trends:${vendedorCodes}`, TTL.LONG);
+        const history = await cachedQuery(queryWithParams, sql, {
+            cacheKey: `analytics:trends:${vendedorCodes}`,
+            ttl: TTL.LONG,
+        }, [MIN_YEAR, ...vendorFilter.params]);
 
         // Simple prediction logic
         let trend = 'stable';
@@ -213,8 +240,9 @@ router.get('/top-products', verifyToken, requireVendorQueryScope, async (req, re
     try {
         const { vendedorCodes, limit = 20 } = req.query;
         const now = getCurrentDate();
-        const year = parseInt(req.query.year) || now.getFullYear();
-        const vendedorFilter = buildVendedorFilter(vendedorCodes);
+        const year = parseInt(req.query.year, 10) || now.getFullYear();
+        const vendorFilter = buildVendedorFilterParameterized(vendedorCodes, 'L', 'CODIGOVENDEDOR');
+        const safeLimit = parseInt(limit, 10) || 20;
 
         const sql = `
       SELECT L.CODIGOARTICULO as code,
@@ -228,13 +256,16 @@ router.get('/top-products', verifyToken, requireVendorQueryScope, async (req, re
   COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) as numClients
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      WHERE L.ANODOCUMENTO = ${year} ${vendedorFilter}
+      WHERE L.ANODOCUMENTO = ? ${vendorFilter.filter}
       GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, A.CODIGOMARCA, A.CODIGOFAMILIA
       ORDER BY totalSales DESC
-      FETCH FIRST ${parseInt(limit)} ROWS ONLY
+      FETCH FIRST ${safeLimit} ROWS ONLY
     `;
 
-        const products = await cachedQuery(query, sql, `analytics:top_products:${year}:${vendedorCodes}:${limit}`, TTL.MEDIUM);
+        const products = await cachedQuery(queryWithParams, sql, {
+            cacheKey: `analytics:top_products:${year}:${vendedorCodes}:${limit}`,
+            ttl: TTL.MEDIUM,
+        }, [year, ...vendorFilter.params]);
 
         res.json({
             year,
@@ -264,8 +295,9 @@ router.get('/margins', verifyToken, requireVendorQueryScope, async (req, res) =>
     try {
         const { vendedorCodes } = req.query;
         const now = getCurrentDate();
-        const year = parseInt(req.query.year) || now.getFullYear();
-        const vendedorFilter = buildVendedorFilter(vendedorCodes);
+        const year = parseInt(req.query.year, 10) || now.getFullYear();
+        const vendorFilter = buildVendedorFilterParameterized(vendedorCodes, '', 'CODIGOVENDEDOR');
+        const vendorFilterAliased = buildVendedorFilterParameterized(vendedorCodes, 'L', 'CODIGOVENDEDOR');
 
         const cacheKey = `analytics:margins:${year}:${vendedorCodes}`;
 
@@ -275,7 +307,7 @@ router.get('/margins', verifyToken, requireVendorQueryScope, async (req, res) =>
   SUM(IMPORTEVENTA) as sales,
   SUM(IMPORTEMARGENREAL) as margin
       FROM DSEDAC.LINDTO
-      WHERE ANODOCUMENTO = ${year} ${vendedorFilter}
+      WHERE ANODOCUMENTO = ? ${vendorFilter.filter}
       GROUP BY MESDOCUMENTO
       ORDER BY MESDOCUMENTO
   `;
@@ -287,15 +319,21 @@ router.get('/margins', verifyToken, requireVendorQueryScope, async (req, res) =>
   SUM(L.IMPORTEMARGENREAL) as margin
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      WHERE L.ANODOCUMENTO = ${year} ${vendedorFilter}
+      WHERE L.ANODOCUMENTO = ? ${vendorFilterAliased.filter}
       GROUP BY A.CODIGOFAMILIA
       ORDER BY sales DESC
       FETCH FIRST 10 ROWS ONLY
     `;
 
         const [monthlyMargins, familyMargins] = await Promise.all([
-            cachedQuery(query, monthlySql, `${cacheKey}:monthly`, TTL.MEDIUM),
-            cachedQuery(query, familySql, `${cacheKey}:family`, TTL.MEDIUM)
+            cachedQuery(queryWithParams, monthlySql, {
+                cacheKey: `${cacheKey}:monthly`,
+                ttl: TTL.MEDIUM,
+            }, [year, ...vendorFilter.params]),
+            cachedQuery(queryWithParams, familySql, {
+                cacheKey: `${cacheKey}:family`,
+                ttl: TTL.MEDIUM,
+            }, [year, ...vendorFilterAliased.params]),
         ]);
 
         res.json({
@@ -513,12 +551,7 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
         // Build filters for LACLAE table
         const LACLAE_FILTER = `L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC') AND L.LCCLLN IN ('AB', 'VT') AND L.LCSRAB NOT IN ('N', 'Z')`;
 
-        // Vendedor filter - adaptar para LACLAE (LCCDVD) - SECURITY: sanitize
-        let vendedorFilter = '';
-        if (vendedorCodes) {
-            const codes = sanitizeCodeList(vendedorCodes);
-            if (codes) vendedorFilter = `AND L.LCCDVD IN (${codes})`;
-        }
+        const vendorFilter = buildVendedorFilterParameterized(vendedorCodes, 'L', 'LCCDVD');
 
         const extraParams = [];
         const clientFilter = clientCode ? 'AND L.LCCDCL = ?' : '';
@@ -542,11 +575,11 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
                 FROM DSED.LACLAE L
                 WHERE ${LACLAE_FILTER}
                   AND L.LCAADC = ?
-                  ${vendedorFilter}
+                  ${vendorFilter.filter}
                   ${clientFilter}
                   ${searchFilter}
             `;
-            const result = await queryWithParams(queryStr, [year, ...extraParams]);
+            const result = await queryWithParams(queryStr, [year, ...vendorFilter.params, ...extraParams]);
             return result[0] || {};
         };
 
@@ -561,13 +594,13 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
                 FROM DSED.LACLAE L
                 WHERE ${LACLAE_FILTER}
                   AND L.LCAADC BETWEEN ? AND ?
-                  ${vendedorFilter}
+                  ${vendorFilter.filter}
                   ${clientFilter}
                   ${searchFilter}
                 GROUP BY L.LCAADC
                 ORDER BY L.LCAADC DESC
             `;
-            return await queryWithParams(queryStr, [startYear, endYear, ...extraParams]);
+            return await queryWithParams(queryStr, [startYear, endYear, ...vendorFilter.params, ...extraParams]);
         };
 
         // Helper for Monthly Breakdown (Current vs Last Year)
@@ -581,13 +614,13 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
                 FROM DSED.LACLAE L
                 WHERE ${LACLAE_FILTER}
                   AND L.LCAADC IN (?, ?)
-                  ${vendedorFilter}
+                  ${vendorFilter.filter}
                   ${clientFilter}
                   ${searchFilter}
                 GROUP BY L.LCAADC, L.LCMMDC
                 ORDER BY L.LCMMDC
             `;
-            const rows = await queryWithParams(queryStr, [year, prevYear, ...extraParams]);
+            const rows = await queryWithParams(queryStr, [year, prevYear, ...vendorFilter.params, ...extraParams]);
 
             // Merge rows into Month objects
             const months = {};

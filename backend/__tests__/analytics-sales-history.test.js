@@ -4,7 +4,7 @@ const request = require('supertest');
 const express = require('express');
 
 const mockQueryWithParams = jest.fn();
-let mockUser = { code: '98', role: 'JEFE_VENTAS' };
+let mockUser = { code: '98', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['15', '98'] };
 
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => {
@@ -47,7 +47,7 @@ function makeApp() {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockUser = { code: '98', role: 'JEFE_VENTAS' };
+  mockUser = { code: '98', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['15', '98'] };
   mockQueryWithParams.mockResolvedValue([]);
 });
 
@@ -77,7 +77,54 @@ describe('GET /sales-history', () => {
       .query({ vendedorCodes: 'ALL', startDate: '2026-03-01' });
 
     expect(res.status).toBe(403);
-    expect(res.body.code).toBe('VENDOR_SCOPE_FORBIDDEN');
+    expect(res.body.code).toBe('FORBIDDEN_VENDOR');
     expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /sales-history/summary', () => {
+  test('JEFE ALL omits vendor IN and never interpolates codes', async () => {
+    mockQueryWithParams.mockResolvedValue([{ SALES: 0, MARGIN: 0, UNITS: 0, PRODUCT_COUNT: 0 }]);
+    const res = await request(makeApp())
+      .get('/sales-history/summary')
+      .query({ vendedorCodes: 'ALL' });
+
+    expect(res.status).toBe(200);
+    expect(mockQueryWithParams.mock.calls.length).toBeGreaterThan(0);
+    for (const [sql, params] of mockQueryWithParams.mock.calls) {
+      expect(sql).not.toMatch(/LCCDVD IN\s*\('/i);
+      expect(sql).not.toMatch(/IN\s*\(\s*'ALL'\s*\)/i);
+      expect(params).not.toContain('ALL');
+    }
+  });
+
+  test('binds vendor codes instead of concatenating IN lists', async () => {
+    mockQueryWithParams.mockResolvedValue([{ SALES: 0, MARGIN: 0, UNITS: 0, PRODUCT_COUNT: 0 }]);
+    const res = await request(makeApp())
+      .get('/sales-history/summary')
+      .query({ vendedorCodes: '15' });
+
+    expect(res.status).toBe(200);
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/L\.LCCDVD IN \(\?\)/);
+    expect(sql).not.toMatch(/IN \(\s*'15'\s*\)/);
+    expect(params).toEqual(expect.arrayContaining(['15']));
+  });
+});
+
+describe('GET /yoy-comparison', () => {
+  test('binds year and vendor instead of interpolating IN lists', async () => {
+    mockQueryWithParams.mockResolvedValue([{ SALES: 0, MARGIN: 0, CLIENTS: 0 }]);
+    const res = await request(makeApp())
+      .get('/yoy-comparison')
+      .query({ vendedorCodes: '15', year: '2026' });
+
+    expect(res.status).toBe(200);
+    expect(mockQueryWithParams.mock.calls.length).toBeGreaterThan(0);
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/LCAADC = \?/);
+    expect(sql).toMatch(/IN \(\?\)/);
+    expect(sql).not.toMatch(/IN \(\s*'15'\s*\)/);
+    expect(params).toEqual(expect.arrayContaining([2026, '15']));
   });
 });

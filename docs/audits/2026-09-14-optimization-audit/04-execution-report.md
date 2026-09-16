@@ -6,7 +6,7 @@ Deploy 2026-09-16: `git pull origin test` + `pm2 restart gmp-api` en `/opt/gmp-a
 
 Antes del pull el 230 estaba en `c17250e` (el código de optimización **sí** era ancestro; faltaba el restart y el fix de login). Tras deploy: SHA `1c4ee92` (incluye `711449a` login nombre).
 
-`01-executor-tasks.md` no está en `test`; títulos y aceptación se reconstruyeron desde el plan en transcripción `4474caf9` + PRs reales. El código actual gana sobre rutas desfasadas del plan.
+`01-executor-tasks.md` es un índice de las 41 IDs (spec larga original ausente en `test`). Estado vivo en esta tabla. El código actual gana sobre rutas desfasadas del plan.
 
 Latencias de producto en móvil: **no verificado en campo**. Cifras nuevas de 2026-09-16 van con etiqueta `[servidor]` (localhost:3335 en el 230) o `[LAN]` (PC Windows). Ningún número es `[campo]`.
 
@@ -26,9 +26,9 @@ Latencias de producto en móvil: **no verificado en campo**. Cifras nuevas de 20
 | APP-03 | Desmontar ráfaga de arranque/resume | PARTIAL | [#10](https://github.com/jlp717/gmp_app_mobilidad/pull/10) | Código en PR. **no verificado en campo**. |
 | APP-04 | Refresh token: logging `AUTH_REFRESH_RESULT` | PARTIAL | [#11](https://github.com/jlp717/gmp_app_mobilidad/pull/11) | Solo logging. Sin 48 h de logs; Flutter refresh no tocado. |
 | APP-05 | Rutero: paralelizar week+day + `recipientSuggestion` | PARTIAL | [#8](https://github.com/jlp717/gmp_app_mobilidad/pull/8) | Código en PR. **no verificado en campo**. |
-| BE-01 | JEFE `ALL` literal + clave de caché compartida | PARTIAL | [#12](https://github.com/jlp717/gmp_app_mobilidad/pull/12) + `ee1f01a` | Tras restart el catálogo VDC vacío expandía ALL a `IN` ×80. JEFE con ≥20 códigos JWT ahora `literalAll`. Logs metrics **sin** `LCCDVD IN`. |
+| BE-01 | JEFE `ALL` literal + clave de caché compartida | DONE | [#12](https://github.com/jlp717/gmp_app_mobilidad/pull/12) + `ee1f01a` | `[servidor]` metrics SQL **sin** `LCCDVD IN`. JEFE ≥20 códigos → `literalAll`. Caliente 3–6 ms. |
 | BE-02 | `/rutero/day` fan-out acotado | PARTIAL | [#14](https://github.com/jlp717/gmp_app_mobilidad/pull/14) | Código en PR. **no verificado en campo**. |
-| BE-03 | Caché agregados históricos (interina) | PARTIAL | [#13](https://github.com/jlp717/gmp_app_mobilidad/pull/13) | Código en PR. **no verificado en campo**. |
+| BE-03 | Caché agregados históricos (interina) | PARTIAL | [#13](https://github.com/jlp717/gmp_app_mobilidad/pull/13) | Código en PR. HIT `[servidor]` tras frío. **no verificado en campo**. |
 | DB-01 | Agregados mensuales `JAVIER.LACLAE_MONTHLY` | BLOCKED | — | by-client ALL frío **7,7 s** (SQL 5,8 s) y evolution ALL **16,6 s**. Sin índice/tabla no baja de 5 s. |
 | DB-02 | Propuesta de índices DSEDAC (sin DDL) | DONE | [#18](https://github.com/jlp717/gmp_app_mobilidad/pull/18) | Añadido índice propuesto `DSED.LACLAE (LCAADC, TPDC, …)` en `db2-index-proposal.md`. Sin DDL. |
 | BE-04 | `matrix-data` sargable / sales-history | PARTIAL | [#17](https://github.com/jlp717/gmp_app_mobilidad/pull/17) | Jest `[lab]` verde. Re-sonda túnel: HTTP timeout. **no verificado en campo**. |
@@ -52,11 +52,13 @@ Latencias de producto en móvil: **no verificado en campo**. Cifras nuevas de 20
 | APP-10 | Código muerto y dispose de controllers | DONE | [#37](https://github.com/jlp717/gmp_app_mobilidad/pull/37) | Dispose en diálogos/páginas tocadas. No se borró `albaran_detail_page.dart`. Analyze de rutas tocadas: hang → kill + chequeo de fuente. |
 | SEC-01 | Login por nombre exacto | DONE + hotfix | [#34](https://github.com/jlp717/gmp_app_mobilidad/pull/34) + `711449a` | Exacto rompía `diego`. Restaurado LIKE `%token%` + PIN; sin lockout colateral. |
 | SEC-02 | Alcance `vendedorCodes` analytics/KPI | DONE | [#38](https://github.com/jlp717/gmp_app_mobilidad/pull/38) | COMERCIAL `ALL` → 403; JEFE `ALL`; comercial 80 `ALL` → equipo 72/73/81/83. |
-| SEC-03 | Credencial versionada / rotar PIN | DONE (código) / BLOCKED (rotar PIN) | commit en `test` | Probe de `_deploy_finance_fix.sh` lee `GMP_TEST_VENDOR` / `GMP_TEST_PIN`. Rotar PIN ERP sigue siendo Javier. |
+| SEC-03 | Credencial versionada / rotar PIN | BLOCKED | commit en `test` | Código del probe usa env. Rotar PIN ERP es Javier. |
 | SEC-04 | Precio de línea en servidor | DONE | [#39](https://github.com/jlp717/gmp_app_mobilidad/pull/39) | ARA tarifa / mínimo; 422 si `<min` (salvo JEFE+motivo). No se cambiaron importes CPC/cobros. |
-| SEC-05 | Hardening KPI + SQL parametrizado | PARTIAL | [#40](https://github.com/jlp717/gmp_app_mobilidad/pull/40) | ETL/debug JEFE; `queryWithParams` en export/clients/master. Algunos `IN` de `vendedorFilter` siguen concatenados. |
+| SEC-05 | Hardening KPI + SQL parametrizado | DONE | [#40](https://github.com/jlp717/gmp_app_mobilidad/pull/40) + este turno | KPI JEFE; `queryWithParams` export/clients/master; analytics `IN` de vendedor ahora `?` (Jest 5 passed). FETCH FIRST sigue `parseInt`. |
 | SEC-06 | Dependencias CVE alta | DONE | `b23aa20` en `test` | multer `^2.4.0`, nodemailer `^9.1.1`, js-yaml `^4.3.2`. Sin PR propio. No revertido. |
 | SEC-07 | ADR pinning TLS | DONE | [#33](https://github.com/jlp717/gmp_app_mobilidad/pull/33) | Solo documento de decisión. |
+
+**Recuento plan:** DONE **18** · PARTIAL **18** (causa: sin `[campo]` o lab) · BLOCKED Javier **5** (P0-03, DB-01, SRV-01, SRV-02, SEC-03 PIN) · PENDIENTE código ejecutor **0**.
 
 **Conteo código en `test`:** integrable DONE. Sigue BLOCKED solo lo de Javier (campo, 230, Sentry, DB-01 DDL, rotar PIN). P0-02 en `test` hará fallar `flutter analyze` en CI (ese era el target).
 
@@ -72,7 +74,7 @@ Latencias de producto en móvil: **no verificado en campo**. Cifras nuevas de 20
 | SEC-02 | #38 | https://github.com/jlp717/gmp_app_mobilidad/pull/38 |
 | SEC-04 | #39 | https://github.com/jlp717/gmp_app_mobilidad/pull/39 |
 | SEC-05 | #40 | https://github.com/jlp717/gmp_app_mobilidad/pull/40 |
-| SEC-06 | — | **BLOCKED** — ver §4 |
+| SEC-06 | — | DONE en `test` (`b23aa20`); sin PR propio |
 | informe | este PR | `perf/docs-execution-report` |
 
 ---
@@ -119,7 +121,6 @@ Presupuestos de `docs/perf/latency-budgets.md` siguen `PENDIENTE_VALIDAR_CON_BAS
 | P0-04 Sentry | Secret GitHub | Crear `SENTRY_DSN` (no pegar el valor en chat). |
 | APP-04 causa 401 | Sin 48 h de `AUTH_REFRESH_RESULT` | Dejar logs y pegar histograma `reason=`. |
 | SEC-03 | PIN ERP no rotado | Código del probe ya usa env. Javier rota el PIN y exporta `GMP_TEST_VENDOR`/`GMP_TEST_PIN` para ejecutar el script. |
-| SEC-06 | — | Código ya en `test` (`b23aa20`). Sin PR. No revertir. |
 
 ---
 
@@ -139,7 +140,7 @@ El merge del código de optimización **no espera** a esos ítems.
 
 ## 6. Hallazgos
 
-- Plan `01-executor-tasks.md` ausente en `test`; varias rutas del plan estaban desfasadas. Código actual ganó (rutero DDD, `vendor-scope`, KPI alerts de comerciales).
+- Plan `01-executor-tasks.md` es índice de IDs en `test`; spec larga original no versionada. Código actual gana (rutero DDD, `vendor-scope`, KPI alerts de comerciales).
 - Comercial 80 con `ALL` no es 403: se expande a 72/73/81/83 (`userScopeCodes`).
 - KPI: `requireJefeVentas` solo en etl/debug. Un `router.use` global rompería alertas comerciales.
 - SEC-04 valida precio **antes** del INSERT de cabecera para no huérfano en 422.
@@ -183,5 +184,11 @@ SHA de `origin/test` tras el push final: ver `git rev-parse origin/test` (se ano
 - by-client frío **19,5 s → 7,7 s** (sigue **>5 s**). **BLOCKED DB-01**.
 - SHA `origin/test` = 230 = `82674d9` (informe). Código = `ee1f01a`.
 - Remida post-`pm2 restart` (mismo código, Redis L2 vivo): evolution 8 ms, by-client 5 ms, metrics 3 ms, facturas lista 570 ms / summary 4 ms, commissions 19 ms. **No es SQL frío**; el SQL frío canónico es el de ciclo 2.
+
+## 11. Cierre plan original 2026-09-16 (este turno)
+
+Hueco de código que quedaba: SEC-05 `analytics.js` interpolaba `sanitizeCodeList` / `buildVendedorFilter*` en yoY, top-clients, trends, top-products, margins y sales-history/summary. Ahora `queryWithParams` + `?`. Jest `__tests__/analytics-sales-history.test.js` 5 passed. Índice `01-executor-tasks.md` restaurado (IDs; estado en este informe).
+
+No se abre backlog nuevo de cache/refactor. Campo: **no verificado**.
 
 
