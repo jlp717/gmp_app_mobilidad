@@ -4,10 +4,13 @@
 // moduleNameMapper); this suite tests the CommonJS DashboardService class.
 const { DashboardService } = require('../../src/services/dashboard.service.js');
 
-// Fecha real del sistema: los tests derivan expectativas dinamicamente para
-// no acoplarse a un dia concreto (paridad con getCurrentDate legacy).
 jest.mock('../../middleware/logger', () => ({
     info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
+}));
+
+jest.mock('../../services/redis-cache', () => ({
+    TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 },
+    redisCache: { isConnected: false },
 }));
 
 function makeRepo(overrides = {}) {

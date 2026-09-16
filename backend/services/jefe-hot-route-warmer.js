@@ -16,10 +16,10 @@ function buildJefeHotPaths(now = new Date()) {
   const year = now.getFullYear();
   const months = '1,2,3,4,5,6,7,8,9,10,11,12';
   return [
-    `/api/objectives/by-client?vendedorCodes=ALL&years=${year}&months=${months}&limit=100`,
-    `/api/objectives/evolution?vendedorCodes=ALL&years=${year}`,
-    `/api/commissions/summary?vendedorCode=ALL&year=${year}`,
     `/api/dashboard/metrics?vendedorCodes=ALL&year=${year}`,
+    `/api/objectives/evolution?vendedorCodes=ALL&years=${year}`,
+    `/api/objectives/by-client?vendedorCodes=ALL&years=${year}&months=${months}&limit=100`,
+    `/api/commissions/summary?vendedorCode=ALL&year=${year}`,
   ];
 }
 
@@ -56,16 +56,16 @@ function getOnce(path, token) {
 
 async function runJefeHotRouteWarmup({ token, now } = {}) {
   if (!token) return [];
-  const [byClient, evolution, commissions, metrics] = buildJefeHotPaths(now);
-  const firstWave = await Promise.all([
-    getOnce(byClient, token),
+  const [metrics, evolution, byClient, commissions] = buildJefeHotPaths(now);
+  // Metrics first and alone: dashboard first paint must not queue behind
+  // LACLAE GROUP BY (gate max=4). Then at most two heavy queries.
+  const first = await getOnce(metrics, token);
+  const heavy = await Promise.all([
     getOnce(evolution, token),
+    getOnce(byClient, token),
   ]);
-  const secondWave = await Promise.all([
-    getOnce(commissions, token),
-    getOnce(metrics, token),
-  ]);
-  const results = [...firstWave, ...secondWave];
+  const last = await getOnce(commissions, token);
+  const results = [first, ...heavy, last];
   for (const result of results) {
     logger.info(`[JefeHotWarmup] ${result.status} ${result.ms}ms ${result.path}`);
   }

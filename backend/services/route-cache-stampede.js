@@ -14,16 +14,17 @@ async function beginRouteFill(cacheKey, {
   waitMs = 45000,
   lockTtlMs = 180000,
   pollMs = 400,
+  namespace = 'route',
 } = {}) {
   const { redisCache } = require('./redis-cache');
-  const hit = await redisCache.get('route', cacheKey);
+  const hit = await redisCache.get(namespace, cacheKey);
   if (hit) return { hit, fill: false, lock: null, busy: false };
 
-  const lock = await redisCache.acquireLock('route', `fill:${cacheKey}`, lockTtlMs);
+  const lock = await redisCache.acquireLock(namespace, `fill:${cacheKey}`, lockTtlMs);
   if (lock) {
-    const again = await redisCache.get('route', cacheKey);
+    const again = await redisCache.get(namespace, cacheKey);
     if (again) {
-      await redisCache.releaseLock('route', `fill:${cacheKey}`, lock);
+      await redisCache.releaseLock(namespace, `fill:${cacheKey}`, lock);
       return { hit: again, fill: false, lock: null, busy: false };
     }
     return { hit: null, fill: true, lock, busy: false };
@@ -32,21 +33,21 @@ async function beginRouteFill(cacheKey, {
   const started = Date.now();
   while (Date.now() - started < waitMs) {
     await new Promise((resolve) => setTimeout(resolve, pollMs));
-    const waited = await redisCache.get('route', cacheKey);
+    const waited = await redisCache.get(namespace, cacheKey);
     if (waited) return { hit: waited, fill: false, lock: null, busy: false };
   }
 
-  const stillHeld = await redisCache.hasLock('route', `fill:${cacheKey}`);
+  const stillHeld = await redisCache.hasLock(namespace, `fill:${cacheKey}`);
   if (stillHeld) {
     logger.warn(`[RouteFill] Waited ${waitMs}ms; filler still holds ${cacheKey}; not computing`);
     return { hit: null, fill: false, lock: null, busy: true };
   }
 
-  const takeover = await redisCache.acquireLock('route', `fill:${cacheKey}`, lockTtlMs);
+  const takeover = await redisCache.acquireLock(namespace, `fill:${cacheKey}`, lockTtlMs);
   if (takeover) {
-    const afterCrash = await redisCache.get('route', cacheKey);
+    const afterCrash = await redisCache.get(namespace, cacheKey);
     if (afterCrash) {
-      await redisCache.releaseLock('route', `fill:${cacheKey}`, takeover);
+      await redisCache.releaseLock(namespace, `fill:${cacheKey}`, takeover);
       return { hit: afterCrash, fill: false, lock: null, busy: false };
     }
     logger.warn(`[RouteFill] Filler lock expired for ${cacheKey}; taking over`);
@@ -57,10 +58,10 @@ async function beginRouteFill(cacheKey, {
   return { hit: null, fill: false, lock: null, busy: true };
 }
 
-async function endRouteFill(cacheKey, lock) {
+async function endRouteFill(cacheKey, lock, { namespace = 'route' } = {}) {
   if (!lock) return;
   const { redisCache } = require('./redis-cache');
-  await redisCache.releaseLock('route', `fill:${cacheKey}`, lock);
+  await redisCache.releaseLock(namespace, `fill:${cacheKey}`, lock);
 }
 
 function sendFillBusy(res) {

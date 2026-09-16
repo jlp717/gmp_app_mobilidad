@@ -70,10 +70,10 @@ describe('route-cache-stampede', () => {
 describe('jefe-hot-route-warmer', () => {
   test('builds Flutter-default JEFE ALL paths', () => {
     const paths = buildJefeHotPaths(new Date('2026-09-16T10:00:00Z'));
-    expect(paths[0]).toContain('/api/objectives/by-client?vendedorCodes=ALL&years=2026');
+    expect(paths[0]).toContain('/api/dashboard/metrics?vendedorCodes=ALL&year=2026');
     expect(paths[1]).toContain('/api/objectives/evolution?vendedorCodes=ALL&years=2026');
-    expect(paths[2]).toContain('/api/commissions/summary?vendedorCode=ALL&year=2026');
-    expect(paths[3]).toContain('/api/dashboard/metrics?vendedorCodes=ALL&year=2026');
+    expect(paths[2]).toContain('/api/objectives/by-client?vendedorCodes=ALL&years=2026');
+    expect(paths[3]).toContain('/api/commissions/summary?vendedorCode=ALL&year=2026');
     expect(paths.join()).not.toMatch(/VENDEDOR='ALL'/);
   });
 

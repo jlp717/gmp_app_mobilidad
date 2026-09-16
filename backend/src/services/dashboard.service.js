@@ -2,7 +2,8 @@
 
 const logger = require('../../middleware/logger');
 const { getCurrentDate, LACLAE_SALES_FILTER, aggregateBSalesByMonth } = require('../../utils/common');
-const { TTL } = require('../../services/redis-cache');
+const { TTL, redisCache } = require('../../services/redis-cache');
+const { beginRouteFill, endRouteFill } = require('../../services/route-cache-stampede');
 const { buildVendedorFilterParameterized } = require('../utils/dashboardFilters');
 
 const DASHBOARD_CACHE_VERSION = 'v20260914-hist-ttl';
@@ -202,26 +203,44 @@ class DashboardService {
             }
         }
 
-        const vendor = buildVendedorFilterParameterized(vendedorCodes);
-        // _computeTodaySales does not depend on period aggregates — run in parallel
-        // instead of paying its latency serially before B-sales enrichment.
-        const [aggregateRows, todayInfo] = await Promise.all([
-            this._fetchPeriodAggregates(ctx, vendor.filter, vendor.params),
-            this._computeTodaySales(ctx, vendor.filter, vendor.params),
-        ]);
-        const [currentRows, lastRows] = aggregateRows;
-        const { curr, last } = this._normalizeAggregates(currentRows[0] || {}, lastRows[0] || {});
-        const salesTotals = await this._enrichWithBSales(vendedorCodes, ctx.year, ctx.month, curr, last);
-        const payload = this._buildMetricsPayload(
-            { year: ctx.year, month: ctx.month },
-            curr,
-            last,
-            salesTotals,
-            todayInfo,
-        );
+        let stampede = { fill: true, lock: null, busy: false, hit: null };
+        if (!forceRefresh && redisCache.isConnected) {
+            stampede = await beginRouteFill(ctx.responseCacheKey, { namespace: 'dashboard' });
+            if (stampede.hit) {
+                return { payload: stampede.hit, fromCache: true, cacheScope: ctx.cacheScope };
+            }
+            if (stampede.busy) {
+                const error = new Error('ROUTE_FILL_BUSY');
+                error.statusCode = 503;
+                error.code = 'ROUTE_FILL_BUSY';
+                throw error;
+            }
+        }
 
-        await this._cache.set('dashboard', ctx.responseCacheKey, payload, ctx.currentTTL);
-        return { payload, fromCache: false, cacheScope: ctx.cacheScope };
+        try {
+            const vendor = buildVendedorFilterParameterized(vendedorCodes);
+            // _computeTodaySales does not depend on period aggregates — run in parallel
+            // instead of paying its latency serially before B-sales enrichment.
+            const [aggregateRows, todayInfo] = await Promise.all([
+                this._fetchPeriodAggregates(ctx, vendor.filter, vendor.params),
+                this._computeTodaySales(ctx, vendor.filter, vendor.params),
+            ]);
+            const [currentRows, lastRows] = aggregateRows;
+            const { curr, last } = this._normalizeAggregates(currentRows[0] || {}, lastRows[0] || {});
+            const salesTotals = await this._enrichWithBSales(vendedorCodes, ctx.year, ctx.month, curr, last);
+            const payload = this._buildMetricsPayload(
+                { year: ctx.year, month: ctx.month },
+                curr,
+                last,
+                salesTotals,
+                todayInfo,
+            );
+
+            await this._cache.set('dashboard', ctx.responseCacheKey, payload, ctx.currentTTL);
+            return { payload, fromCache: false, cacheScope: ctx.cacheScope };
+        } finally {
+            await endRouteFill(ctx.responseCacheKey, stampede.lock, { namespace: 'dashboard' });
+        }
     }
 
     /**

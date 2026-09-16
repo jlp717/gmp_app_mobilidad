@@ -10,6 +10,12 @@ function slimMonthForWire(month) {
     liveMetrics,
     historicalSnapshot,
     paymentSnapshot,
+    snapshotRecorded,
+    paymentSnapshotRecorded,
+    paymentSnapshotApplied,
+    snapshotApplied,
+    snapshotSource,
+    targetSource,
     ...kept
   } = month;
   return kept;
@@ -33,8 +39,9 @@ function slimVendorForWire(vendor) {
 function slimGroupedSummaryForWire(result) {
   if (!result || typeof result !== 'object') return result;
   if (!Array.isArray(result.breakdown)) return result;
+  const { config, ...rest } = result;
   return {
-    ...result,
+    ...rest,
     breakdown: result.breakdown.map(slimVendorForWire),
     months: Array.isArray(result.months)
       ? result.months.map(slimMonthForWire)
