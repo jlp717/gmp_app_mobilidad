@@ -64,6 +64,17 @@ function buildMonthFilterParameterized(months, column = 'L.LCMMDC') {
             .filter((month) => Number.isInteger(month) && month >= 1 && month <= 12),
     )];
     if (unique.length === 0) return { filter: '', params: [] };
+    if (unique.length === 12) {
+        const set = new Set(unique);
+        let fullYear = true;
+        for (let month = 1; month <= 12; month += 1) {
+            if (!set.has(month)) {
+                fullYear = false;
+                break;
+            }
+        }
+        if (fullYear) return { filter: '', params: [] };
+    }
     const placeholders = unique.map(() => '?').join(',');
     return {
         filter: `AND ${column} IN (${placeholders})`,

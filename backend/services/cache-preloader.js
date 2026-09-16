@@ -30,7 +30,7 @@ const SHARED_STARTUP_WARMUP_LOCK_TTL_MS =
 const SHARED_STARTUP_WARMUP_DELAY_MS =
     parseInt(process.env.CACHE_PRELOAD_SHARED_DELAY_MS, 10) || 5000;
 const STARTUP_EVOLUTION_WARMUP_ENABLED =
-    process.env.CACHE_PRELOAD_EVOLUTION_ALL === 'true';
+    process.env.CACHE_PRELOAD_EVOLUTION_ALL !== 'false';
 
 function scheduleWarmup(delayMs, label, fn) {
     setTimeout(() => {
@@ -264,7 +264,7 @@ async function runSharedStartupWarmups() {
     if (STARTUP_EVOLUTION_WARMUP_ENABLED) {
         await warmUpEvolutionAll();
     } else {
-        logger.info('[CachePreWarmer] Evolution ALL startup warmup skipped (set CACHE_PRELOAD_EVOLUTION_ALL=true to enable)');
+        logger.info('[CachePreWarmer] Evolution ALL startup warmup skipped (CACHE_PRELOAD_EVOLUTION_ALL=false)');
     }
 
     logger.info(`[CachePreWarmer] Shared startup warmups completed in ${Date.now() - start}ms`);

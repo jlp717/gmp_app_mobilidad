@@ -21,6 +21,11 @@ describe('objectives by-client route contracts', () => {
     expect(source).not.toMatch(/limit\s*\?\s*parseInt\(limit\)\s*:\s*1000/);
   });
 
+  test('by-client omits full-year LCMMDC IN so the year predicate stays sargable', () => {
+    expect(source).toContain('buildMonthFilterParameterized');
+    expect(source).toContain('monthPred.filter');
+  });
+
   test('by-client avoids giant DB2 IN clauses and batches per-client lookups', () => {
     expect(source).toContain('BY_CLIENT_MAX_CLIENT_CODE_IN_PARAMS');
     expect(source).toContain('using vendor-filter SQL instead of giant IN clause');

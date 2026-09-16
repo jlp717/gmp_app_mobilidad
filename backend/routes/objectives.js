@@ -50,6 +50,7 @@ const {
 
 const OBJECTIVES_CACHE_VERSION = 'v20260914-hist-ttl';
 const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
+const { buildMonthFilterParameterized } = require('../src/utils/dashboardFilters');
 
 function byClientHistoricalCache(effectiveVendorCodes, years, months, rowsLimit, now) {
     const yearsArray = years
@@ -71,7 +72,7 @@ const BY_CLIENT_DEFAULT_LIMIT = 100;
 const BY_CLIENT_MAX_LIMIT = 250;
 const BY_CLIENT_MAX_CLIENT_CODE_IN_PARAMS = 200;
 const BY_CLIENT_CODE_BATCH_SIZE = 40;
-const BY_CLIENT_BATCH_CONCURRENCY = 2;
+const BY_CLIENT_BATCH_CONCURRENCY = 4;
 
 function clampByClientLimit(value) {
     const parsed = parseInt(value, 10);
@@ -2533,6 +2534,8 @@ async function handleByClientRequest(req, res) {
         // Parse years and months - default to full year
         const yearsArray = years ? years.split(',').map(y => parseInt(y.trim())).filter(y => y >= MIN_YEAR) : [now.getFullYear()];
         const monthsArray = months ? months.split(',').map(m => parseInt(m.trim())).filter(m => m >= 1 && m <= 12) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        const monthPred = buildMonthFilterParameterized(monthsArray.join(','), 'L.LCMMDC');
+        const monthPredBare = buildMonthFilterParameterized(monthsArray.join(','), 'LCMMDC');
         let extraFilters = '';
         const extraFilterParams = [];
         if (city && city.trim()) {
@@ -2593,13 +2596,13 @@ async function handleByClientRequest(req, res) {
                     SELECT L.LCCDCL as CODE, SUM(L.LCIMVT) as SALES, SUM(L.LCIMCT) as COST
                     FROM DSED.LACLAE L
                     WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
-                      AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                      ${monthPred.filter}
                       AND ${LACLAE_SALES_FILTER}
                       AND L.LCCDCL IN (${safeClientCodes.map(() => '?').join(',')})
                     GROUP BY L.LCCDCL
                     ORDER BY SALES DESC
                     FETCH FIRST ? ROWS ONLY
-                `, [...yearsArray, ...monthsArray, ...safeClientCodes, rowsLimit], false);
+                `, [...yearsArray, ...monthPred.params, ...safeClientCodes, rowsLimit], false);
 
                 const topCodes = salesRows
                     .map(r => (r.CODE || '').toString().trim())
@@ -2676,7 +2679,7 @@ async function handleByClientRequest(req, res) {
                         SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
                         FROM DSED.LACLAE
                         WHERE LCAADC IN (${yearsArray.map(() => '?').join(',')})
-                          AND LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                          ${monthPredBare.filter}
                           AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
                           AND LCCDCL IN (${safeClientCodes.map(() => '?').join(',')})
                         GROUP BY LCCDCL
@@ -2685,7 +2688,7 @@ async function handleByClientRequest(req, res) {
                       ${extraFilters}
                     ORDER BY COALESCE(S.SALES, 0) DESC
                     FETCH FIRST ? ROWS ONLY
-                `, [...yearsArray, ...monthsArray, ...safeClientCodes, ...safeClientCodes, ...extraFilterParams, rowsLimit]);
+                `, [...yearsArray, ...monthPredBare.params, ...safeClientCodes, ...safeClientCodes, ...extraFilterParams, rowsLimit]);
             }
         } else {
             // Fallback: Use original query with vendedor filter if cache not available
@@ -2699,13 +2702,13 @@ async function handleByClientRequest(req, res) {
                         SUM(L.LCIMCT) as COST
                     FROM DSED.LACLAE L
                     WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
-                      AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                      ${monthPred.filter}
                       AND ${LACLAE_SALES_FILTER}
                       ${vendedorFilterSales}
                     GROUP BY L.LCCDCL
                     ORDER BY SALES DESC
                     FETCH FIRST ? ROWS ONLY
-                `, [...yearsArray, ...monthsArray, rowsLimit], false);
+                `, [...yearsArray, ...monthPred.params, rowsLimit], false);
 
                 const topCodes = salesRows
                     .map(r => (r.CODE || '').toString().trim())
@@ -2756,14 +2759,14 @@ async function handleByClientRequest(req, res) {
                     FROM DSED.LACLAE L
                     LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
                     WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
-                      AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                      ${monthPred.filter}
                       AND ${LACLAE_SALES_FILTER}
                       ${vendedorFilterSales}
                       ${extraFilters}
                     GROUP BY L.LCCDCL
                     ORDER BY SALES DESC
                     FETCH FIRST ? ROWS ONLY
-                `, [...yearsArray, ...monthsArray, ...extraFilterParams, rowsLimit]);
+                `, [...yearsArray, ...monthPred.params, ...extraFilterParams, rowsLimit]);
             }
             totalClientsCount = cachedClientCodeCount && !extraFilters
                 ? cachedClientCodeCount
@@ -2801,11 +2804,11 @@ async function handleByClientRequest(req, res) {
                         SUM(L.LCIMVT) as PREV_SALES
                     FROM DSED.LACLAE L
                     WHERE L.LCAADC = ?
-                      AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                      ${monthPred.filter}
                       AND ${LACLAE_SALES_FILTER}
                       AND L.LCCDCL IN (${chunk.map(() => '?').join(',')})
                     GROUP BY L.LCCDCL
-                `, [prevYear, ...monthsArray, ...chunk], false)
+                `, [prevYear, ...monthPred.params, ...chunk], false)
             ).then(results => results.flat());
 
             const confRowsPromise = (async () => {

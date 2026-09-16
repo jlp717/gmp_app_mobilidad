@@ -14,6 +14,13 @@ describe('dashboardFilters', () => {
             expect(buildMonthFilterParameterized('')).toEqual({ filter: '', params: [] });
         });
 
+        test('omits the month predicate for a full calendar year (sargable year scan)', () => {
+            expect(buildMonthFilterParameterized('1,2,3,4,5,6,7,8,9,10,11,12')).toEqual({
+                filter: '',
+                params: [],
+            });
+        });
+
         test('builds IN list for valid months', () => {
             const result = buildMonthFilterParameterized('1,3,12,3');
             expect(result.filter).toBe('AND L.LCMMDC IN (?,?,?)');

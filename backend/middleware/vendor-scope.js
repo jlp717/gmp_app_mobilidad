@@ -50,6 +50,8 @@ function authorizeVendorScope(req, requestedCodes) {
 
 const CATALOG_TTL_MS = 60 * 60 * 1000;
 const GMP_SUBEMPRESA = 'GMP';
+/** JWT de JEFE trae ~80-90 comerciales. Equipo 80 tiene 5. */
+const COMPANY_WIDE_SALES_VENDOR_MIN = 20;
 
 let catalogCache = { codes: null, at: 0 };
 let catalogLoader = null;
@@ -141,6 +143,10 @@ function visibleContainsCatalog(visibleCodes, catalog) {
     return catalog.every((code) => visible.has(normalizeCode(code)));
 }
 
+function isCompanyWideVisibleSet(visibleCodes) {
+    return salesVendorCodesFrom(visibleCodes).length >= COMPANY_WIDE_SALES_VENDOR_MIN;
+}
+
 function requestedIsAll(requested) {
     if (requested == null) return true;
     if (Array.isArray(requested)) {
@@ -201,7 +207,12 @@ function resolveVendorScope(user, requested, options = {}) {
         if (visible.length === 0) {
             return { ok: true, literalAll: true, codes: [] };
         }
-        if (isLiteralAllFlagEnabled() && visibleContainsCatalog(visible, catalog)) {
+        // Catalog VDC se carga async: el primer request tras restart lo ve vacío
+        // y expandía ALL a IN ×80. JEFE con catálogo JWT amplio = empresa.
+        if (
+            isLiteralAllFlagEnabled()
+            && (visibleContainsCatalog(visible, catalog) || isCompanyWideVisibleSet(visible))
+        ) {
             return { ok: true, literalAll: true, codes: [] };
         }
         return { ok: true, literalAll: false, codes: visible };
@@ -285,4 +296,5 @@ module.exports = {
     setActiveVendorCatalogLoader,
     refreshActiveGmpVendorCatalog,
     ensureActiveGmpVendorCatalogLoad,
+    COMPANY_WIDE_SALES_VENDOR_MIN,
 };

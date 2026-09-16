@@ -29,6 +29,18 @@ CREATE INDEX JAVIER_IX_CPC_SIT
 
 CREATE INDEX JAVIER_IX_LAC_CLI_ART
   ON DSEDAC.LAC (CODIGOCLIENTEALBARAN, CODIGOARTICULO);
+
+-- 2026-09-16 [servidor]: GET /objectives/by-client ALL ~15 s
+--   SELECT LCCDCL, SUM(LCIMVT), SUM(LCIMCT)
+--   FROM DSED.LACLAE
+--   WHERE LCAADC = ? AND TPDC='LAC' AND LCTPVT IN ('CC','VC')
+--     AND LCCLLN IN ('AB','VT') AND LCSRAB NOT IN ('N','Z','G','D')
+--   GROUP BY LCCDCL ORDER BY SUM(LCIMVT) DESC FETCH FIRST 100 ROWS ONLY
+-- Cubrir año + filtros de venta. DSED.LACLAE es ERP; solo Javier/proveedor.
+-- CREATE INDEX JAVIER_IX_LACLAE_YEAR_SALES
+--   ON DSED.LACLAE (LCAADC, TPDC, LCTPVT, LCCLLN)
+--   INCLUDE (LCCDCL, LCIMVT, LCIMCT, LCSRAB, LCMMDC);
+
 ```
 
 Coste estimado: clave de 4 columnas CHAR/SMALLINT × ~750k filas en CAC ≈ minutos en AS400 fuera de pico. CPC/LAC dependen del volumen real; pedir `SYSTABLESTAT` al proveedor antes de go.

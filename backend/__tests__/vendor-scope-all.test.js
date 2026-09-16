@@ -95,6 +95,22 @@ describe('resolveVendorScope literal ALL', () => {
         ).ok).toBe(true);
     });
 
+    test('JEFE with a company-wide JWT gets literal ALL even when VDC catalog is empty', () => {
+        resetVendorCatalogCache();
+        const codes = Array.from({ length: 24 }, (_, i) => String(i + 1).padStart(2, '0'));
+        const jefe = {
+            code: '98',
+            role: 'JEFE_VENTAS',
+            isJefeVentas: true,
+            vendorCodes: codes,
+        };
+        const scope = resolveVendorScope(jefe, 'ALL');
+        expect(scope).toEqual({ ok: true, literalAll: true, codes: [] });
+        const scoped = resolveDashboardVendedorCodes({ user: jefe }, 'ALL');
+        expect(scoped).toEqual({ ok: true, vendedorCodes: 'ALL' });
+        expect(buildVendedorFilterParameterized(scoped.vendedorCodes)).toEqual({ filter: '', params: [] });
+    });
+
     test('dashboard JEFE with full catalog uses cache key ALL and SQL without IN', () => {
         const scoped = resolveDashboardVendedorCodes(
             { user: { code: '98', role: 'JEFE_VENTAS', vendorCodes: CATALOG } },
