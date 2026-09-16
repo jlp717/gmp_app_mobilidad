@@ -110,7 +110,7 @@ class DashboardState {
 // NOTIFIER
 // ============================================================
 
-class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
+class DashboardNotifier extends AsyncNotifier<DashboardState> {
   @override
   Future<DashboardState> build() async {
     // Read auth state to know when user is logged in
@@ -134,6 +134,12 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
     final fetchMonth = month ?? currentState.selectedMonth;
 
     final keepPrevious = currentState.hasData && !forceRefresh;
+    if (!forceRefresh &&
+        currentState.hasData &&
+        fetchYear == currentState.selectedYear &&
+        fetchMonth == currentState.selectedMonth) {
+      return;
+    }
     if (!keepPrevious) {
       state = const AsyncLoading();
     }
@@ -363,7 +369,7 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
 // ============================================================
 
 final dashboardProvider =
-    AsyncNotifierProvider.autoDispose<DashboardNotifier, DashboardState>(
+    AsyncNotifierProvider<DashboardNotifier, DashboardState>(
   DashboardNotifier.new,
 );
 

@@ -6,6 +6,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/cache/fresh_fetch.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
@@ -418,6 +419,9 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
 
   Future<void> _fetchAllData({bool forceRefresh = false}) async {
     if (!mounted) return;
+    if (!forceRefresh && isUiDataFresh(_lastFetchTime) && !_isLoading) {
+      return;
+    }
     final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;

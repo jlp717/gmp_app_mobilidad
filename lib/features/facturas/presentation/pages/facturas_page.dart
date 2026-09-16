@@ -9,6 +9,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/cache/fresh_fetch.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
@@ -60,6 +61,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   FacturaSummary? _summary;
   bool _isLoading = true;
   String? _error;
+  DateTime? _lastFetchTime;
 
   // Search Controllers (Debounce)
   final TextEditingController _clientSearchController = TextEditingController();
@@ -154,6 +156,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     bool showLoading = true,
     bool forceRefresh = false,
   ]) async {
+    if (!forceRefresh &&
+        showLoading &&
+        isUiDataFresh(_lastFetchTime) &&
+        _facturas.isNotEmpty) {
+      return;
+    }
     final generation = ++_loadGeneration;
     try {
       if (showLoading) {
@@ -241,6 +249,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         _summary = results[2] as FacturaSummary?;
         _error = null;
         _isLoading = false;
+        _lastFetchTime = DateTime.now();
       });
 
       unawaited(_fadeController.forward());
@@ -699,6 +708,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   Future<void> _refreshData({bool forceRefresh = false}) async {
     if (!mounted) return;
     if (_vendedorCodes.isEmpty) return;
+    if (!forceRefresh &&
+        isUiDataFresh(_lastFetchTime) &&
+        _facturas.isNotEmpty) {
+      return;
+    }
 
     try {
       final generation = ++_loadGeneration;
@@ -744,6 +758,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       setState(() {
         _facturas = results[0]! as List<Factura>;
         _summary = results[1] as FacturaSummary?;
+        _lastFetchTime = DateTime.now();
       });
     } catch (e) {
       if (!mounted) return;

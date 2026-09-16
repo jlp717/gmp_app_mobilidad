@@ -17,7 +17,8 @@ const { validateQuery, validateBody } = require('../middleware/security');
 const { authorizeVendorScope, isFinancialRole } = require('../middleware/vendor-scope');
 const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
-const { beginRouteFill, endRouteFill } = require('../services/route-cache-stampede');
+const { beginRouteFill, endRouteFill, sendFillBusy } = require('../services/route-cache-stampede');
+const { slimGroupedSummaryForWire } = require('../services/commissions-summary-wire');
 const {
     isTeamLeader,
     getTeamCommission,
@@ -2126,12 +2127,15 @@ router.get('/summary', verifyToken, validateQuery(summaryQuerySchema), async (re
             const cachedResult = await redisCache.get('route', aggregatedCacheKey);
             if (cachedResult) {
                 logger.info(`[COMMISSIONS] ⚡ Cache HIT for grouped summary (${aggregatedCacheKey})`);
-                return res.json({ success: true, ...cachedResult });
+                return res.json({ success: true, ...slimGroupedSummaryForWire(cachedResult) });
             }
             const stampede = await beginRouteFill(aggregatedCacheKey);
             if (stampede.hit) {
                 logger.info(`[COMMISSIONS] ⚡ Cache HIT for grouped summary after wait (${aggregatedCacheKey})`);
-                return res.json({ success: true, ...stampede.hit });
+                return res.json({ success: true, ...slimGroupedSummaryForWire(stampede.hit) });
+            }
+            if (stampede.busy) {
+                return sendFillBusy(res);
             }
             req._commFillLock = stampede.lock;
             req._commFillKey = aggregatedCacheKey;
@@ -2526,7 +2530,10 @@ router.get('/summary', verifyToken, validateQuery(summaryQuerySchema), async (re
         }
 
         // AUDIT: Log what data the server actually returned (proof of response)
-        const responsePayload = { success: true, ...paginatedResult };
+        const wireResult = isGroupedRequest
+            ? slimGroupedSummaryForWire(paginatedResult)
+            : paginatedResult;
+        const responsePayload = { success: true, ...wireResult };
         const responseHash = crypto.createHash('sha256')
             .update(JSON.stringify(responsePayload))
             .digest('hex')

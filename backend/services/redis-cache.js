@@ -606,6 +606,22 @@ class RedisCacheService {
     /**
      * Acquire a short-lived distributed lock. Returns a token on success.
      */
+    async hasLock(namespace, key) {
+        if (!this.isConnected || !this.client) return false;
+        const fullKey = this._generateKey(namespace, `lock:${key}`);
+        try {
+            const current = await this._withTimeout(
+                this.client.get(fullKey),
+                REDIS_COMMAND_TIMEOUT_MS,
+                'lock exists'
+            );
+            return Boolean(current);
+        } catch (error) {
+            logger.debug(`[RedisCache] Lock check failed for ${fullKey}: ${error.message}`);
+            return false;
+        }
+    }
+
     async acquireLock(namespace, key, ttlMs = 10000) {
         if (!this.isConnected) return null;
         const fullKey = this._generateKey(namespace, `lock:${key}`);

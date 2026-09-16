@@ -42,6 +42,18 @@ jest.mock('../services/redis-cache', () => ({
   TTL: { SHORT: 60, MEDIUM: 300, LONG: 86400, STATIC: 3600 },
 }));
 
+const mockFillEvolution = jest.fn(async () => ({
+  skipped: false,
+  cacheKey: 'obj:evolution:v20260914-hist-ttl:ALL:2026:open',
+  assembled: true,
+}));
+jest.mock('../routes/objectives', () => ({
+  fillEvolutionRouteCacheForAll: (...args) => mockFillEvolution(...args),
+  buildEvolutionRouteCacheKey: () => ({
+    key: 'obj:evolution:v20260914-hist-ttl:ALL:2026:open',
+  }),
+}));
+
 const cachePreloader = require('../services/cache-preloader');
 
 beforeEach(() => {
@@ -56,21 +68,14 @@ beforeEach(() => {
 });
 
 describe('cache preloader DB2 contracts', () => {
-  test('warmUpEvolutionAll uses real LACLAE cost column and bound params', async () => {
-    mockQueryWithParams.mockResolvedValue([{ ANO: 2026, MES: 6, TOTAL_VENTAS: 10, TOTAL_COSTO: 4 }]);
+  test('warmUpEvolutionAll fills the HTTP obj:evolution key', async () => {
+    const result = await cachePreloader._internal.warmUpEvolutionAll();
 
-    await cachePreloader._internal.warmUpEvolutionAll();
-
-    expect(mockCachedQuery).toHaveBeenCalledTimes(1);
-    const [queryFn, sql, options, params] = mockCachedQuery.mock.calls[0];
-
-    expect(typeof queryFn).toBe('function');
-    expect(sql).toContain('LCIMCT');
-    expect(sql).not.toContain('LCIMCO');
-    expect(options).toMatchObject({ cacheKey: 'evolution:monthly:ALL::24', queryType: 'evolution' });
-    expect(params).toEqual([2024, 2024, 7]);
-    expect(mockQueryWithParams).toHaveBeenCalledWith(sql, [2024, 2024, 7], false);
-    expect(mockQuery).not.toHaveBeenCalledWith(expect.any(String), expect.any(Array));
+    expect(mockFillEvolution).toHaveBeenCalledTimes(1);
+    expect(mockCachedQuery).not.toHaveBeenCalled();
+    expect(result.cacheKey).toContain('obj:evolution:');
+    expect(result.cacheKey).not.toContain('evolution:monthly');
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   test('warmUpClientsAll no longer writes unused clients:list:v6 keys', async () => {

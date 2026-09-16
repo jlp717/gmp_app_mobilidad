@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/cache/fresh_fetch.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -185,6 +186,12 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   Future<void> _loadData(
       {bool forceRefresh = false, bool silent = false}) async {
     if (!mounted) return;
+    if (!forceRefresh &&
+        !silent &&
+        isUiDataFresh(_lastFetchTime) &&
+        _yearlyData.isNotEmpty) {
+      return;
+    }
     final generation = ++_loadGeneration;
     final keepCurrent = silent && _yearlyData.isNotEmpty;
     if (!keepCurrent) {

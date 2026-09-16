@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/cache/fresh_fetch.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
@@ -138,6 +139,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage>
     bool forceRefresh = false,
     bool silent = false,
   }) async {
+    if (!forceRefresh &&
+        !silent &&
+        isUiDataFresh(_lastFetchTime) &&
+        _data != null) {
+      return;
+    }
     final generation = ++_loadGeneration;
     if (_isCommissionsHiddenForUser()) {
       if (!mounted) return;

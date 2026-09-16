@@ -343,43 +343,22 @@ async function preloadCache(port = 3000) {
 
 async function warmUpEvolutionAll() {
     try {
-        const now = getCurrentDate();
-        const year = now.getFullYear();
-        const month = now.getMonth() + 1;
-        const startPeriod = new Date(year, month - 24, 1);
-        const startYear = startPeriod.getFullYear();
-        const startMonth = startPeriod.getMonth() + 1;
-
-        const evolutionSQL = `
-            SELECT L.LCAADC AS ANO, L.LCMMDC AS MES,
-                   COUNT(DISTINCT L.LCCDCL) AS NUM_CLIENTES,
-                   COUNT(*) AS NUM_LINEAS,
-                   SUM(L.LCIMVT) AS TOTAL_VENTAS,
-                   SUM(L.LCIMCT) AS TOTAL_COSTO,
-                   SUM(L.LCIMVT - L.LCIMCT) AS TOTAL_MARGEN
-            FROM DSED.LACLAE L
-            WHERE (L.LCAADC > ? OR (L.LCAADC = ? AND L.LCMMDC >= ?))
-              AND L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC')
-              AND L.LCCLLN IN ('AB', 'VT') AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
-            GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC, L.LCMMDC
-        `;
-
-        const cacheKey = `evolution:monthly:ALL::24`;
+        const {
+            fillEvolutionRouteCacheForAll,
+            buildEvolutionRouteCacheKey,
+        } = require('../routes/objectives');
         const start = Date.now();
-        await cachedQuery(
-            (sql, params) => queryWithParams(sql, params, false),
-            evolutionSQL,
-            {
-                cacheKey,
-                ttl: 1800, // 30 min TTL
-                params: { startYear, startMonth },
-                queryType: 'evolution',
-            },
-            [startYear, startYear, startMonth]
+        const expected = buildEvolutionRouteCacheKey('ALL', String(getCurrentDate().getFullYear()));
+        const result = await fillEvolutionRouteCacheForAll();
+        logger.info(
+            `🔥 Evolution HTTP cache ${result.skipped ? 'already warm' : 'filled'} `
+            + `key=${result.cacheKey || expected.key} assembled=${result.assembled !== false} `
+            + `in ${Date.now() - start}ms`
         );
-        logger.info(`🔥 Evolution ALL warmed in ${Date.now() - start}ms (30min TTL)`);
+        return result;
     } catch (e) {
         logger.warn(`[CachePreWarmer] Evolution warmup error (non-fatal): ${e.message}`);
+        return { skipped: false, error: e.message };
     }
 }
 

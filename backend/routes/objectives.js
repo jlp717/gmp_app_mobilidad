@@ -20,7 +20,7 @@ const {
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
 const { redisCache, TTL } = require('../services/redis-cache');
-const { beginRouteFill, endRouteFill } = require('../services/route-cache-stampede');
+const { beginRouteFill, endRouteFill, sendFillBusy } = require('../services/route-cache-stampede');
 const {
     isCommercial80User,
     resolveAllModeVendorCodesString,
@@ -735,7 +735,10 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
         .filter(Boolean))];
 
     if (!effectiveVendorCodes || effectiveVendorCodes === 'ALL') {
-        return queryWithParams(`
+        const rowsKey = `obj:evolution:rows:${OBJECTIVES_CACHE_VERSION}:ALL:${uniqueYears.join(',')}`;
+        const cachedRows = await redisCache.get('route', rowsKey);
+        if (cachedRows) return cachedRows;
+        const rows = await queryWithParams(`
             SELECT 
                 L.LCAADC as YEAR,
                 L.LCMMDC as MONTH,
@@ -748,6 +751,8 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
             GROUP BY L.LCAADC, L.LCMMDC
             ORDER BY YEAR, MONTH
         `, uniqueYears);
+        await redisCache.set('route', rowsKey, rows, 600).catch(() => {});
+        return rows;
     }
 
     if (safeVendorCodes.length === 0) {
@@ -956,6 +961,19 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
     }
 });
 
+function buildEvolutionRouteCacheKey(effectiveVendorCodes, years, now = getCurrentDate()) {
+    const yearsArrayPreview = years
+        ? String(years).split(',').map((token) => parseInt(token.trim(), 10)).filter((year) => year >= MIN_YEAR)
+        : [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
+    const evolutionMeta = historicalYearsCacheMeta(yearsArrayPreview, now);
+    return {
+        key: `obj:evolution:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${years || 'default'}:${evolutionMeta.bucket}`,
+        ttl: evolutionMeta.ttl,
+        yearsArray: yearsArrayPreview,
+        bucket: evolutionMeta.bucket,
+    };
+}
+
 // =============================================================================
 // OBJECTIVES EVOLUTION
 // =============================================================================
@@ -968,11 +986,10 @@ router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) 
         const { getVendorActiveDaysFromCache } = require('../services/laclae');
 
         // PERF: Route-level cache for evolution data
-        const yearsArrayPreview = years
-            ? years.split(',').map(y => parseInt(y.trim())).filter(y => y >= MIN_YEAR)
-            : [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
-        const evolutionMeta = historicalYearsCacheMeta(yearsArrayPreview, now);
-        const cacheKey = `obj:evolution:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${years || 'default'}:${evolutionMeta.bucket}`;
+        const evolutionCache = buildEvolutionRouteCacheKey(effectiveVendorCodes, years, now);
+        const cacheKey = evolutionCache.key;
+        const evolutionMeta = { bucket: evolutionCache.bucket, ttl: evolutionCache.ttl };
+        const yearsArrayPreview = evolutionCache.yearsArray;
         const cachedResult = await redisCache.get('route', cacheKey);
         if (cachedResult) {
             logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution (${cacheKey})`);
@@ -982,6 +999,9 @@ router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) 
         if (stampede.hit) {
             logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution after wait (${cacheKey})`);
             return res.json(stampede.hit);
+        }
+        if (stampede.busy) {
+            return sendFillBusy(res);
         }
         try {
 
@@ -2545,6 +2565,9 @@ async function handleByClientRequest(req, res) {
                 if (!res.headersSent) return res.json(stampede.hit);
                 return;
             }
+            if (stampede.busy) {
+                return sendFillBusy(res);
+            }
             req._byClientFillLock = stampede.lock;
         }
 
@@ -2997,4 +3020,65 @@ async function handleByClientRequest(req, res) {
     }
 }
 
+async function fillEvolutionRouteCacheForAll(now = getCurrentDate()) {
+    const years = String(now.getFullYear());
+    const cache = buildEvolutionRouteCacheKey('ALL', years, now);
+    const existing = await redisCache.get('route', cache.key);
+    if (existing) {
+        return { skipped: true, cacheKey: cache.key, assembled: true };
+    }
+
+    const layer = router.stack.find((item) => item.route && item.route.path === '/evolution');
+    const handlers = layer?.route?.stack?.map((item) => item.handle) || [];
+    const handler = handlers[handlers.length - 1];
+    if (typeof handler !== 'function') {
+        throw new Error('objectives /evolution handler not found');
+    }
+
+    return new Promise((resolve, reject) => {
+        const req = {
+            method: 'GET',
+            url: `/evolution?vendedorCodes=ALL&years=${years}`,
+            query: { vendedorCodes: 'ALL', years },
+            params: {},
+            user: { code: '98', role: 'JEFE_VENTAS', isJefeVentas: true },
+            headers: {},
+            get: () => undefined,
+        };
+        const res = {
+            headersSent: false,
+            statusCode: 200,
+            setHeader() {},
+            set() { return this; },
+            status(code) {
+                this.statusCode = code;
+                return this;
+            },
+            json() {
+                this.headersSent = true;
+                resolve({
+                    skipped: false,
+                    cacheKey: cache.key,
+                    assembled: this.statusCode === 200,
+                    status: this.statusCode,
+                });
+                return this;
+            },
+        };
+        Promise.resolve(handler(req, res)).then(() => {
+            if (!res.headersSent) {
+                resolve({
+                    skipped: false,
+                    cacheKey: cache.key,
+                    assembled: false,
+                    status: res.statusCode,
+                });
+            }
+        }).catch(reject);
+    });
+}
+
 module.exports = router;
+module.exports.buildEvolutionRouteCacheKey = buildEvolutionRouteCacheKey;
+module.exports.fillEvolutionRouteCacheForAll = fillEvolutionRouteCacheForAll;
+module.exports.OBJECTIVES_CACHE_VERSION = OBJECTIVES_CACHE_VERSION;

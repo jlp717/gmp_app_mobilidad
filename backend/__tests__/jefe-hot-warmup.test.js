@@ -6,12 +6,14 @@ const { buildJefeHotPaths, isJefeUser, scheduleJefeHotRouteWarmup } = require('.
 const mockGet = jest.fn();
 const mockAcquire = jest.fn();
 const mockRelease = jest.fn();
+const mockHasLock = jest.fn();
 
 jest.mock('../services/redis-cache', () => ({
   redisCache: {
     get: (...args) => mockGet(...args),
     acquireLock: (...args) => mockAcquire(...args),
     releaseLock: (...args) => mockRelease(...args),
+    hasLock: (...args) => mockHasLock(...args),
   },
 }));
 
@@ -30,7 +32,7 @@ describe('route-cache-stampede', () => {
   test('returns HIT without taking a lock', async () => {
     mockGet.mockResolvedValue({ ok: true });
     const result = await beginRouteFill('obj:evolution:ALL');
-    expect(result).toEqual({ hit: { ok: true }, fill: false, lock: null });
+    expect(result).toEqual({ hit: { ok: true }, fill: false, lock: null, busy: false });
     expect(mockAcquire).not.toHaveBeenCalled();
   });
 
@@ -44,6 +46,17 @@ describe('route-cache-stampede', () => {
     const result = await beginRouteFill('k', { waitMs: 800, pollMs: 50 });
     expect(result.hit).toEqual({ ready: true });
     expect(result.fill).toBe(false);
+    expect(result.busy).toBe(false);
+  });
+
+  test('waiter does not compute a second SQL while filler lock is held', async () => {
+    mockGet.mockResolvedValue(null);
+    mockAcquire.mockResolvedValue(null);
+    mockHasLock.mockResolvedValue(true);
+
+    const result = await beginRouteFill('k', { waitMs: 80, pollMs: 20 });
+    expect(result).toEqual({ hit: null, fill: false, lock: null, busy: true });
+    expect(mockAcquire).toHaveBeenCalledTimes(1);
   });
 
   test('endRouteFill releases only when a lock exists', async () => {
@@ -60,6 +73,7 @@ describe('jefe-hot-route-warmer', () => {
     expect(paths[0]).toContain('/api/objectives/by-client?vendedorCodes=ALL&years=2026');
     expect(paths[1]).toContain('/api/objectives/evolution?vendedorCodes=ALL&years=2026');
     expect(paths[2]).toContain('/api/commissions/summary?vendedorCode=ALL&year=2026');
+    expect(paths[3]).toContain('/api/dashboard/metrics?vendedorCodes=ALL&year=2026');
     expect(paths.join()).not.toMatch(/VENDEDOR='ALL'/);
   });
 
