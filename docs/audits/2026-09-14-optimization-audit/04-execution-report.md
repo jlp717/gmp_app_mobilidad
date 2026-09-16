@@ -1,12 +1,14 @@
 # Informe de ejecución — auditoría de optimización 2026-09-14
 
-Fecha del informe: **2026-09-15** (actualizado tras integración en `test`). Código del plan integrado en la rama **test** (sin merge a `main`, sin deploy, sin `/adelante-production`).
+Fecha del informe: **2026-09-16** (login nombre restaurado + deploy whitelist 230 + sonda `[servidor]`). Código del plan integrado en **test** (sin merge a `main`).
 
-Ningún `pm2`/`kill` en `192.168.1.230`. Intocables no tocados (`backend/config/db.js`, `backend/middleware/auth.js`, `albaran_detail_page.dart`). Cero secretos en este documento. SEC-06 `b23aa20` se conservó (no revertido, no duplicado).
+Deploy 2026-09-16: `git pull origin test` + `pm2 restart gmp-api` en `/opt/gmp-api`. SHA servidor = `origin/test`. Intocables no tocados (`backend/config/db.js`, `backend/middleware/auth.js`, `albaran_detail_page.dart`). Cero secretos/PIN en este documento. SEC-06 `b23aa20` se conservó.
+
+Antes del pull el 230 estaba en `c17250e` (el código de optimización **sí** era ancestro; faltaba el restart y el fix de login). Tras deploy: SHA `1c4ee92` (incluye `711449a` login nombre).
 
 `01-executor-tasks.md` no está en `test`; títulos y aceptación se reconstruyeron desde el plan en transcripción `4474caf9` + PRs reales. El código actual gana sobre rutas desfasadas del plan.
 
-Latencias de producto: **no verificado en campo**. Donde hay cifra de laboratorio (APK, Jest, sonda túnel) se etiqueta explícitamente `[lab]`, `[túnel]` o `[DB2]`. Ningún número de este informe es `[campo]`.
+Latencias de producto en móvil: **no verificado en campo**. Cifras nuevas de 2026-09-16 van con etiqueta `[servidor]` (localhost:3335 en el 230) o `[LAN]` (PC Windows). Ningún número es `[campo]`.
 
 ---
 
@@ -18,13 +20,13 @@ Latencias de producto: **no verificado en campo**. Donde hay cifra de laboratori
 | P0-02 | Dejar de silenciar errores de compilación en el analizador | PARTIAL | [#4](https://github.com/jlp717/gmp_app_mobilidad/pull/4) | YAML+CI; `flutter analyze lib` sigue con errores de hijas. Stacked sobre P0-01. |
 | P0-03 | Baseline de campo en dispositivo físico | BLOCKED | — | Tarea humana. **no verificado en campo**. |
 | P0-04 | Telemetría RUM + log por request + Sentry | PARTIAL | [#3](https://github.com/jlp717/gmp_app_mobilidad/pull/3) | Tests `[lab]` verdes. Correlación `t=req`/`t=rum` y secret `SENTRY_DSN` pendientes de Javier. |
-| P0-05 | Acciones manuales inmediatas en el 230 | BLOCKED | — | Comandos para Javier. **No ejecutados en 230.** |
+| P0-05 | Acciones manuales inmediatas en el 230 | PARTIAL | — | Whitelist 2026-09-16 hecha (`pull`+`restart`). El resto (`pm2 delete`, logrotate, kill huérfanos) sigue BLOCKED Javier. |
 | APP-01 | Reutilización TLS keep-alive | PARTIAL | [#6](https://github.com/jlp717/gmp_app_mobilidad/pull/6) | Analyze/tests `[lab]` verdes. **no verificado en campo**. |
 | APP-02 | Timeouts y un solo reintento | PARTIAL | [#7](https://github.com/jlp717/gmp_app_mobilidad/pull/7) | Analyze/tests `[lab]` verdes. **no verificado en campo**. |
 | APP-03 | Desmontar ráfaga de arranque/resume | PARTIAL | [#10](https://github.com/jlp717/gmp_app_mobilidad/pull/10) | Código en PR. **no verificado en campo**. |
 | APP-04 | Refresh token: logging `AUTH_REFRESH_RESULT` | PARTIAL | [#11](https://github.com/jlp717/gmp_app_mobilidad/pull/11) | Solo logging. Sin 48 h de logs; Flutter refresh no tocado. |
 | APP-05 | Rutero: paralelizar week+day + `recipientSuggestion` | PARTIAL | [#8](https://github.com/jlp717/gmp_app_mobilidad/pull/8) | Código en PR. **no verificado en campo**. |
-| BE-01 | JEFE `ALL` literal + clave de caché compartida | PARTIAL | [#12](https://github.com/jlp717/gmp_app_mobilidad/pull/12) | Jest `[lab]` verde. HIT en pre/campo **no verificado en campo**. |
+| BE-01 | JEFE `ALL` literal + clave de caché compartida | PARTIAL | [#12](https://github.com/jlp717/gmp_app_mobilidad/pull/12) | HIT `[servidor]` en evolution/by-client. Flutter facturas mandaba join ×94; hotfix `resolveScopedVendorCodes` → ALL. Dashboard metrics ALL aún expande a `IN` ×~80. |
 | BE-02 | `/rutero/day` fan-out acotado | PARTIAL | [#14](https://github.com/jlp717/gmp_app_mobilidad/pull/14) | Código en PR. **no verificado en campo**. |
 | BE-03 | Caché agregados históricos (interina) | PARTIAL | [#13](https://github.com/jlp717/gmp_app_mobilidad/pull/13) | Código en PR. **no verificado en campo**. |
 | DB-01 | Agregados mensuales `JAVIER.LACLAE_MONTHLY` | BLOCKED | — | Spec draft; sin `spec_approved`. Sin DDL. |
@@ -48,7 +50,7 @@ Latencias de producto: **no verificado en campo**. Donde hay cifra de laboratori
 | APP-09 | SWR liquidación/rutero; POST liquidación sin caché | PARTIAL | [#35](https://github.com/jlp717/gmp_app_mobilidad/pull/35) | SWR vía `OfflineAwareApi.revalidate`. POST liquidación no cacheado. Saldo cobrable = CPC documento. **no verificado en campo**. |
 | REL-03 | Release R8 / obfuscate / plist / gradle | PARTIAL | [#36](https://github.com/jlp717/gmp_app_mobilidad/pull/36) | R8 minify+shrink, `--obfuscate`, GoogleFonts runtime fetch off. AAB local no generado (disco `[lab]` ~3,4 GB). **no verificado en campo**. |
 | APP-10 | Código muerto y dispose de controllers | DONE | [#37](https://github.com/jlp717/gmp_app_mobilidad/pull/37) | Dispose en diálogos/páginas tocadas. No se borró `albaran_detail_page.dart`. Analyze de rutas tocadas: hang → kill + chequeo de fuente. |
-| SEC-01 | Login por nombre exacto | DONE | [#34](https://github.com/jlp717/gmp_app_mobilidad/pull/34) | Código en PR. |
+| SEC-01 | Login por nombre exacto | DONE + hotfix | [#34](https://github.com/jlp717/gmp_app_mobilidad/pull/34) + `711449a` | Exacto rompía `diego`. Restaurado LIKE `%token%` + PIN; sin lockout colateral. |
 | SEC-02 | Alcance `vendedorCodes` analytics/KPI | DONE | [#38](https://github.com/jlp717/gmp_app_mobilidad/pull/38) | COMERCIAL `ALL` → 403; JEFE `ALL`; comercial 80 `ALL` → equipo 72/73/81/83. |
 | SEC-03 | Credencial versionada / rotar PIN | DONE (código) / BLOCKED (rotar PIN) | commit en `test` | Probe de `_deploy_finance_fix.sh` lee `GMP_TEST_VENDOR` / `GMP_TEST_PIN`. Rotar PIN ERP sigue siendo Javier. |
 | SEC-04 | Precio de línea en servidor | DONE | [#39](https://github.com/jlp717/gmp_app_mobilidad/pull/39) | ARA tarifa / mínimo; 422 si `<min` (salvo JEFE+motivo). No se cambiaron importes CPC/cobros. |
@@ -81,10 +83,18 @@ Ninguna fila es `[campo]`.
 
 | Superficie | Etiqueta | Resultado |
 |---|---|---|
-| Baseline túnel HTTP (`POST /auth/login` y resto) | `[túnel]` | Socket timeout. `PROBE_EXIT=1`. **no verificado en campo**. |
-| Lookup PIN `DSEDAC.VDPL1` (sonda 2026-09-14) | `[DB2]` | ~6,3 s (no es login de producto). PIN no impreso. |
-| `/api/ready` LAN/túnel (re-sonda BE-04) | `[túnel]` | No responde. **no verificado en campo**. |
-| HIT caché JEFE `ALL` (BE-01) | `[lab]` | Tests unitarios. HIT pre/prod **no verificado en campo**. |
+| `POST /api/auth/login` usuario `diego` (nombre) | `[servidor]` | HTTP 200, 1142 ms, code 98. PIN no impreso. |
+| `POST /api/auth/login` usuario `98` (código) | `[servidor]` | HTTP 200, 190 ms, code 98. |
+| `/api/ready` localhost 230 | `[servidor]` | `status=ready`, DB 3 ms, Redis connected. |
+| `/api/ready` PC Windows → `:3335` | `[LAN]` | curl timeout 8 s. Puerto no abierto a LAN. |
+| Baseline túnel HTTP | `[túnel]` | Sin URL alcanzable desde el PC. **no verificado en campo**. |
+| Objetivos `GET /objectives/evolution?ALL` | `[servidor]` | frío 12205 ms; caliente 2–10 ms. |
+| Objetivos `GET /objectives/by-client?ALL` | `[servidor]` | frío 19526 ms (`SLOW_QUERY` LACLAE 15116 ms); caliente 12 ms. |
+| Facturas `GET /facturas?ALL` + `/summary?ALL` | `[servidor]` | lista ~1,0–1,3 s; summary 4 ms (HIT). |
+| Facturas mismos endpoints con JWT join ×94 | `[servidor]` | lista 3516–4025 ms; summary frío 4749 ms. Flutter mandaba el join. |
+| Dashboard `GET /metrics?ALL` | `[servidor]` | frío 3690 ms (SQL `LCCDVD IN` ×~80); caliente 3 ms. |
+| `GET /evolution` concurrente (logs) | `[servidor]` | 59008 ms — cola LACLAE bajo carga, no el HIT. |
+| HIT caché JEFE `ALL` (BE-01) | `[servidor]` | evolution/by-client/summary HIT tras el primer frío. |
 | Arranque app / INP / LCP / tab switch (APP-06/07/08) | — | **no verificado en campo**. |
 | SWR liquidación / GET rutero (APP-09) | — | **no verificado en campo**. POST liquidación no se cachea (spec). |
 | APK release arm64 (P0-01) | `[lab]` | 58 187 782 bytes (55,49 MB). |
@@ -104,7 +114,7 @@ Presupuestos de `docs/perf/latency-budgets.md` siguen `PENDIENTE_VALIDAR_CON_BAS
 | P0-05 | Acciones en 230 fuera de whitelist | Javier: `ps`/`kill` de PIDs huérfanos, `pm2-logrotate`, `pm2 delete` jobs cache; **no** `pm2 save` hasta decidir. |
 | SRV-01 | cloudflared | Javier en el host. |
 | SRV-02 | Higiene prod | Javier en el host. |
-| DB-01 | Sin gate `spec_approved` | `gate_set { name: spec_approved, value: PASS, evidence: "DB-01 LACLAE_MONTHLY EARS 2026-09-14" }`. |
+| DB-01 | Sin gate `spec_approved` | `GET /objectives/by-client` ALL escanea `DSED.LACLAE` ~15 s `[servidor]`. Requiere spec + tabla mensual. |
 | Sonda `[túnel]` | HTTP timeout | Túnel/API alcanzable; repetir probe. |
 | P0-04 Sentry | Secret GitHub | Crear `SENTRY_DSN` (no pegar el valor en chat). |
 | APP-04 causa 401 | Sin 48 h de `AUTH_REFRESH_RESULT` | Dejar logs y pegar histograma `reason=`. |
@@ -155,3 +165,13 @@ Método: `gh pr merge --merge` para #5; el resto **merge local** `ort` de `origi
 PRs cuyo código quedó en `test`: #3–#41 (salvo que GitHub aún los muestre abiertos hasta `gh pr close`). #5 cerrado en GitHub. SEC-06 sin PR (`b23aa20`).
 
 SHA de `origin/test` tras el push final: ver `git rev-parse origin/test` (se anota en el commit de informe si ya está empujado).
+
+## 9. Deploy y login 2026-09-16
+
+- Causa login `diego`: SEC-01 exigía `NOMBREVENDEDOR` exacto y abortaba si había más de un Diego, **sin probar PIN**. `98` por código seguía bien.
+- Fix `711449a`: LIKE parametrizado `%DIEGO%` + desambiguación PIN con `skipLockout` (no bloquea a los otros Diegos). Trim y caracteres especiales se mantienen.
+- Servidor **antes**: `c17250e` (plan de perf **sí** estaba en el árbol; PM2 no se había reiniciado con el login fix).
+- Servidor **después**: `git pull` + `pm2 restart gmp-api` → SHA = `origin/test` (incluye `711449a`).
+- `/api/ready`: `status=ready`.
+- Cuello que queda: `DSED.LACLAE` en `/objectives/by-client` (~15 s frío) y `/commissions/summary`; DB-01. Facturas en frío ~1 s con ALL, ~4 s con join ×94 (Flutter ahora manda ALL en catálogo jefe).
+

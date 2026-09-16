@@ -66,6 +66,10 @@ List<String>? effectiveAllowedVendorCodes({
   return null;
 }
 
+/// JWT de JEFE trae el catálogo GMP (~90 códigos). Por debajo de este umbral
+/// se trata como equipo (p.ej. comercial 80 → 72/73/81/83) y no se manda ALL.
+const int _companyWideVendorCatalogMin = 20;
+
 String resolveScopedVendorCodes({
   required String? userCode,
   required List<String> authVendorCodes,
@@ -80,7 +84,12 @@ String resolveScopedVendorCodes({
 
   if (selectedVendor == null ||
       selectedVendor.isEmpty ||
-      selectedVendor == 'ALL') {
+      selectedVendor.toUpperCase() == 'ALL') {
+    // BE-01: Facturas/cobros/KPI deben pedir ALL (caché y SQL sin IN ×94),
+    // no el join del JWT. El equipo 80 sigue mandando su lista corta.
+    if (allowedCodes.length >= _companyWideVendorCatalogMin) {
+      return 'ALL';
+    }
     return scopedFallback;
   }
 

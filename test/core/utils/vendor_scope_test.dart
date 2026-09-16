@@ -80,4 +80,30 @@ void main() {
       '02',
     );
   });
+
+  test('jefe catalog sends ALL instead of joining ~90 JWT codes', () {
+    final catalog =
+        List<String>.generate(24, (i) => '${i + 1}'.padLeft(2, '0'));
+    expect(
+      resolveScopedVendorCodes(
+        userCode: '98',
+        authVendorCodes: catalog,
+        selectedVendor: null,
+        fallbackVendorCodes: catalog.join(','),
+      ),
+      'ALL',
+    );
+  });
+
+  test('team commercial 80 keeps the short joined list, not company ALL', () {
+    expect(
+      resolveScopedVendorCodes(
+        userCode: '80',
+        authVendorCodes: const <String>['80', '72', '73', '81', '83'],
+        selectedVendor: 'ALL',
+        fallbackVendorCodes: '80,72,73,81,83',
+      ),
+      '80,72,73,81,83',
+    );
+  });
 }
