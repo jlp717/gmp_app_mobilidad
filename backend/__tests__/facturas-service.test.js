@@ -583,4 +583,26 @@ describe('facturas service fiscal totals', () => {
       totalAlbaranes: 3,
     });
   });
+
+  test('isolated_test factura detail reads TEST_LAC/TEST_CAC not DSEDAC.LAC', async () => {
+    const previous = process.env.REPARTO_TABLE_SET;
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    try {
+      mockQueryWithParams.mockImplementation(async (sql) => {
+        if (/FROM\s+DSEDAC\.CFC\s+CFC/i.test(sql)) return [f4306Header];
+        if (/FROM\s+JAVIER\.TEST_LAC\s+LAC/i.test(sql) && /JAVIER\.TEST_CAC/i.test(sql)) return [];
+        throw new Error(`Unexpected SQL: ${sql}`);
+      });
+
+      const factura = await facturasService.getFacturaDetail('F', 4306, 2026);
+      expect(factura.header.total).toBe(3618.44);
+      const linesSql = mockQueryWithParams.mock.calls.find(([sql]) => /TEST_LAC/i.test(sql))?.[0];
+      expect(linesSql).toContain('FROM JAVIER.TEST_LAC LAC');
+      expect(linesSql).toContain('INNER JOIN JAVIER.TEST_CAC CAC');
+      expect(linesSql).not.toMatch(/FROM\s+DSEDAC\.LAC/i);
+    } finally {
+      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previous;
+    }
+  });
 });

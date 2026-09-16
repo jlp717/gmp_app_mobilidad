@@ -4,6 +4,7 @@
 const { RuteroRepository } = require('../domain/rutero-repository');
 const { RutaConfig } = require('../domain/ruta-config');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 const LACLAE_SALES_FILTER = `
         L.TPDC = 'LAC'
@@ -94,8 +95,8 @@ class Db2RuteroRepository extends RuteroRepository {
         COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_VENTAS,
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS TOTAL_COMISION,
         COUNT(*) as NUM_VENTAS
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.CLI CL ON TRIM(CL.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+      FROM ${comercialErpTable('LACLAE')} L
+      LEFT JOIN ${comercialErpTable('CLI')} CL ON TRIM(CL.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       WHERE L.R1_T8CDVD = CAST(? AS CHAR(2))
         ${dateFilter}
         AND ${LACLAE_SALES_FILTER}
@@ -124,7 +125,7 @@ class Db2RuteroRepository extends RuteroRepository {
         COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_VENTAS,
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS TOTAL_COMISION,
         COUNT(DISTINCT L.LCCDCL) AS CLIENTES_CON_VENTA
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE L.R1_T8CDVD = CAST(? AS CHAR(2))
         ${dateFilter}
         AND ${LACLAE_SALES_FILTER}

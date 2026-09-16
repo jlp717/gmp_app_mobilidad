@@ -42,13 +42,29 @@ describe('comercial ERP table mapping', () => {
     expect(comercialErpTable('ARA')).toBe('JAVIER.TEST_ARA');
     expect(comercialErpTable('LAC')).toBe('JAVIER.TEST_LAC');
     expect(comercialErpTable('LPC')).toBe('JAVIER.TEST_LPC');
-    const facturas = require('fs').readFileSync(
-      require('path').join(__dirname, '../src/modules/facturas/infrastructure/db2-facturas-repository.js'),
+    const fs = require('fs');
+    const path = require('path');
+    const facturas = fs.readFileSync(
+      path.join(__dirname, '../src/modules/facturas/infrastructure/db2-facturas-repository.js'),
       'utf8',
     );
     expect(facturas).toMatch(/comercialErpTable\('CAC'\)/);
     expect(facturas).toMatch(/comercialErpTable\('CLI'\)/);
     expect(facturas).toMatch(/comercialErpTable\('LAC'\)/);
+    const planner = fs.readFileSync(path.join(__dirname, '../routes/planner.js'), 'utf8');
+    expect(planner).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(planner).not.toMatch(/FROM DSED\.LACLAE/);
+    const facturasService = fs.readFileSync(path.join(__dirname, '../services/facturas.service.js'), 'utf8');
+    expect(facturasService).toMatch(/comercialErpTable\('LAC'\)/);
+    expect(facturasService).toMatch(/comercialErpTable\('CAC'\)/);
+    expect(facturasService).not.toMatch(/FROM DSEDAC\.LAC /);
+    expect(facturasService).not.toMatch(/FROM DSEDAC\.CAC /);
+    const ruteroRepo = fs.readFileSync(
+      path.join(__dirname, '../src/modules/rutero/infrastructure/db2-rutero-repository.js'),
+      'utf8',
+    );
+    expect(ruteroRepo).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(ruteroRepo).not.toMatch(/FROM DSED\.LACLAE/);
   });
 
   test('COMERCIAL_ERP_READ_TEST=false falls back to DSEDAC SELECT', () => {

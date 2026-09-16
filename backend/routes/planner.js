@@ -15,6 +15,7 @@ const {
     handleRouteError
 } = require('../utils/common');
 const { db2ErpTable } = require('../utils/db2-schemas');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { resolvePlannerRole, PlannerRoleError } = require('../src/modules/planner/domain/planner-role-policy');
 const { resolveVendorScope } = require('../middleware/vendor-scope');
 
@@ -1604,7 +1605,7 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
                     AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?))
                     THEN L.LCIMCT ELSE 0 END) AS PREV_COST,
                 SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS PREV_TOTAL
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCCDCL IN (${batchPlaceholders(batch)})
               AND ${LACLAE_SALES_FILTER}
               AND (
@@ -1905,7 +1906,7 @@ router.get('/diagnose/client/:code', requirePlannerPrivilege, async (req, res) =
             results.analysis.push(`✗ Error consultando CLI: ${e.message}`);
         }
 
-        // 2. Get sales history from DSED.LACLAE to see which vendors have sold to this client
+        // 2. Get sales history from LACLAE (TEST_* in isolated_test) to see which vendors have sold to this client
         try {
             const laclaeData = await queryWithParams(`
                 SELECT DISTINCT
@@ -1913,7 +1914,7 @@ router.get('/diagnose/client/:code', requirePlannerPrivilege, async (req, res) =
                     L.LCYEAB as YEAR,
                     L.R1_T8DIVL as VIS_L, L.R1_T8DIVM as VIS_M, L.R1_T8DIVX as VIS_X,
                     L.R1_T8DIVJ as VIS_J, L.R1_T8DIVV as VIS_V, L.R1_T8DIVS as VIS_S
-                FROM DSED.LACLAE L
+                FROM ${comercialErpTable('LACLAE')} L
                 WHERE L.LCCDCL = ?
                 ORDER BY L.LCYEAB DESC
                 FETCH FIRST 10 ROWS ONLY
@@ -2070,7 +2071,7 @@ router.get('/rutero/client/:code/detail', requirePlannerClientOwnership, async (
                 SUM(L.LCIMVT) as SALES,
                 SUM(L.LCIMCT) as COST,
                 SUM(L.LCIMVT - L.LCIMCT) as MARGIN
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCCDCL = ?
               AND L.LCYEAB IN (?, ?)
               AND ${LACLAE_SALES_FILTER}
@@ -2084,7 +2085,7 @@ router.get('/rutero/client/:code/detail', requirePlannerClientOwnership, async (
             SELECT
                 L.LCYEAB as YEAR,
                 SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCCDCL = ?
               AND L.LCYEAB >= ?
               AND ${LACLAE_SALES_FILTER}
@@ -2096,7 +2097,7 @@ router.get('/rutero/client/:code/detail', requirePlannerClientOwnership, async (
                 COUNT(DISTINCT L.LCDDDC || '-' || L.LCMMDC || '-' || L.LCAADC) as ORDER_COUNT,
                 COUNT(*) as LINE_COUNT,
                 MAX(L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) as LAST_ORDER_DATE
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCCDCL = ?
               AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}

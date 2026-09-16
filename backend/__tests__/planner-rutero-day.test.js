@@ -269,6 +269,8 @@ describe('Planner rutero/day route', () => {
   expect(res.status).toBe(200);
   const salesCall = mockQueryWithParams.mock.calls.find(([sql]) => sql.includes('AS PREV_TOTAL'));
   expect(salesCall).toBeDefined();
+  const { comercialErpTable } = require('../utils/comercial-erp-tables');
+  expect(salesCall[0]).toContain(`FROM ${comercialErpTable('LACLAE')} L`);
   const params = salesCall[1];
   expect(params[0]).toBe(2026);
   expect(params[1]).toBe(2026);
@@ -277,4 +279,29 @@ describe('Planner rutero/day route', () => {
   expect(params[10]).toBe(2025);
   expect(params.slice(11, 13)).toEqual(['4300000001', '4300000002']);
 });
+
+  test('GET /rutero/day/:day isolated_test sales uses TEST_LACLAE not DSED.LACLAE', async () => {
+    const previous = process.env.REPARTO_TABLE_SET;
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    try {
+      const res = await request(app)
+        .get('/rutero/day/martes')
+        .query({
+          vendedorCodes: '02',
+          role: 'comercial',
+          year: '2026',
+          month: '4',
+          week: '4',
+          forceRefresh: '1',
+        });
+      expect(res.status).toBe(200);
+      const salesCall = mockQueryWithParams.mock.calls.find(([sql]) => sql.includes('AS PREV_TOTAL'));
+      expect(salesCall).toBeDefined();
+      expect(salesCall[0]).toContain('FROM JAVIER.TEST_LACLAE L');
+      expect(salesCall[0]).not.toContain('FROM DSED.LACLAE');
+    } finally {
+      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previous;
+    }
+  });
 });

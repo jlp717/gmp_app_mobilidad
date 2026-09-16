@@ -8,6 +8,7 @@
  */
 
 const { query, queryWithParams } = require('../config/db');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const logger = require('../middleware/logger');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 const { CircuitBreaker } = require('./circuit-breaker');
@@ -641,7 +642,7 @@ class FacturasService {
         CAC.IMPORTETOTAL as TOTAL,
         ${cacTaxableBaseSql()} as BASE,
         ${cacIvaSql()} as IVA
-      FROM DSEDAC.CAC CAC
+      FROM ${comercialErpTable('CAC')} CAC
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
       WHERE CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000
         AND NOT (CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000)
@@ -820,7 +821,7 @@ class FacturasService {
     `;
         const albaranYearsSql = `
       SELECT DISTINCT CAC.EJERCICIOALBARAN as YEAR
-      FROM DSEDAC.CAC CAC
+      FROM ${comercialErpTable('CAC')} CAC
       WHERE CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000
         AND @VENDOR_IN@
         AND NOT (CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000)
@@ -1089,7 +1090,7 @@ class FacturasService {
         SUM(CAC.IMPORTETOTAL) as TOTAL,
         SUM(${cacTaxableBaseSql()}) as BASE,
         SUM(${cacIvaSql()}) as IVA
-      FROM DSEDAC.CAC CAC
+      FROM ${comercialErpTable('CAC')} CAC
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
       WHERE CAC.NUMEROALBARAN > 0 AND CAC.NUMEROALBARAN < 900000
         AND NOT (CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000)
@@ -1266,8 +1267,8 @@ class FacturasService {
           LAC.DIADOCUMENTO,
           LAC.MESDOCUMENTO,
           LAC.ANODOCUMENTO
-        FROM DSEDAC.LAC LAC
-        INNER JOIN DSEDAC.CAC CAC 
+        FROM ${comercialErpTable('LAC')} LAC
+        INNER JOIN ${comercialErpTable('CAC')} CAC 
           ON LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
           AND LAC.SERIEALBARAN = CAC.SERIEALBARAN
           AND LAC.TERMINALALBARAN = CAC.TERMINALALBARAN
@@ -1443,7 +1444,7 @@ class FacturasService {
         CAC.IMPORTEBASEIMPONIBLE5,
         CAC.PORCENTAJEIVA5,
         CAC.IMPORTEIVA5
-      FROM DSEDAC.CAC CAC
+      FROM ${comercialErpTable('CAC')} CAC
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
       WHERE CAC.NUMEROALBARAN = ?
         AND TRIM(CAC.SERIEALBARAN) = ?
@@ -1483,7 +1484,7 @@ class FacturasService {
           0 as PORCENTAJERECARGOARTICULO,
           LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
           LAC.PRECIOVENTA as PRECIOARTICULO
-        FROM DSEDAC.LAC LAC
+        FROM ${comercialErpTable('LAC')} LAC
         WHERE LAC.EJERCICIOALBARAN = ?
           AND TRIM(LAC.SERIEALBARAN) = ?
           AND LAC.TERMINALALBARAN = ?
