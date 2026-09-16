@@ -6,26 +6,63 @@ const logger = require('../middleware/logger');
 const DELAY_MS = parseInt(process.env.JEFE_HOT_WARMUP_DELAY_MS, 10) || 0;
 const PORT = parseInt(process.env.PORT, 10) || 3335;
 
+// Must match Flutter ProductsHistoryTab / ProductsHistoryPage first paint:
+// last 3 years (Jan 1 of year-2 .. Dec 31 of current) and limit=300.
+const PURCHASE_HISTORY_UI_LIMIT = 300;
+const PURCHASE_HISTORY_UI_YEAR_SPAN = 2;
+
+function buildPurchaseHistoryUiPath(now = new Date(), vendedorCode = 'ALL') {
+  const year = now.getFullYear();
+  const from = `${year - PURCHASE_HISTORY_UI_YEAR_SPAN}-01-01`;
+  const to = `${year}-12-31`;
+  const code = encodeURIComponent(String(vendedorCode || 'ALL').trim() || 'ALL');
+  return `/api/pedidos/purchase-history-global?vendedorCode=${code}&from=${from}&to=${to}&limit=${PURCHASE_HISTORY_UI_LIMIT}`;
+}
+
 function isJefeUser({ isJefeVentas, role } = {}) {
   if (isJefeVentas === true) return true;
   const normalized = String(role || '').trim().toUpperCase();
   return normalized === 'JEFE_VENTAS' || normalized === 'ADMIN';
 }
 
-function buildJefeHotPaths(now = new Date()) {
+function shouldWarmHotRoutes({ isJefeVentas, role, code } = {}) {
+  if (isJefeUser({ isJefeVentas, role })) return true;
+  return String(code || '').trim() === '80';
+}
+
+function buildVendorHotPaths(now, vendorCode) {
+  const year = now.getFullYear();
+  const code = encodeURIComponent(String(vendorCode || '').trim());
+  return [
+    `/api/objectives/evolution?vendedorCodes=${code}&years=${year}`,
+    `/api/commissions/summary?vendedorCode=${code}&year=${year}`,
+    buildPurchaseHistoryUiPath(now, vendorCode),
+  ];
+}
+
+function buildJefeHotPaths(now = new Date(), { vendorCode, includeAll = true } = {}) {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
   const ytdMonths = Array.from({ length: month }, (_, i) => i + 1).join(',');
   const allMonths = '1,2,3,4,5,6,7,8,9,10,11,12';
-  return [
-    `/api/dashboard/metrics?vendedorCodes=ALL&year=${year}`,
-    `/api/objectives/evolution?vendedorCodes=ALL&years=${year}`,
-    `/api/objectives/by-client?vendedorCodes=ALL&years=${year}&months=${allMonths}&limit=100`,
-    `/api/commissions/summary?vendedorCode=ALL&year=${year}`,
-    `/api/dashboard/matrix-data?vendedorCodes=ALL&year=${year}&years=${year}&groupBy=vendor&limit=240&months=${ytdMonths}`,
-    `/api/clients/list?vendedorCodes=ALL&limit=50`,
-    `/api/pedidos/purchase-history-global?vendedorCode=ALL&limit=50`,
-  ];
+  const allPaths = includeAll
+    ? [
+      `/api/dashboard/metrics?vendedorCodes=ALL&year=${year}`,
+      `/api/objectives/evolution?vendedorCodes=ALL&years=${year}`,
+      `/api/objectives/by-client?vendedorCodes=ALL&years=${year}&months=${allMonths}&limit=100`,
+      `/api/commissions/summary?vendedorCode=ALL&year=${year}`,
+      `/api/dashboard/matrix-data?vendedorCodes=ALL&year=${year}&years=${year}&groupBy=vendor&limit=240&months=${ytdMonths}`,
+      `/api/clients/list?vendedorCodes=ALL&limit=50`,
+      buildPurchaseHistoryUiPath(now, 'ALL'),
+    ]
+    : [];
+  const code = String(vendorCode || '').trim();
+  if (code && code.toUpperCase() !== 'ALL') {
+    const scoped = buildVendorHotPaths(now, code);
+    if (!includeAll) return scoped;
+    allPaths.splice(1, 0, scoped[0], scoped[1]);
+  }
+  return allPaths;
 }
 
 function getOnce(path, token) {
@@ -59,27 +96,14 @@ function getOnce(path, token) {
   });
 }
 
-async function runJefeHotRouteWarmup({ token, now } = {}) {
+async function runJefeHotRouteWarmup({ token, now, vendorCode, includeAll = true } = {}) {
   if (!token) return [];
-  const [
-    metrics,
-    evolution,
-    byClient,
-    commissions,
-    matrix,
-    clients,
-    purchaseHistory,
-  ] = buildJefeHotPaths(now);
-  // Metrics first and alone: dashboard first paint must not queue behind
-  // LACLAE GROUP BY (gate max=4). Then at most two heavy queries.
-  // Late wave is sequential: never 500 from a stacked purchase-history fill.
-  const first = await getOnce(metrics, token);
-  const heavy = await Promise.all([
-    getOnce(evolution, token),
-    getOnce(byClient, token),
-  ]);
+  const paths = buildJefeHotPaths(now, { vendorCode, includeAll });
+  if (paths.length === 0) return [];
+  const first = await getOnce(paths[0], token);
+  const heavy = await Promise.all(paths.slice(1, 3).map((path) => getOnce(path, token)));
   const late = [];
-  for (const path of [commissions, matrix, clients, purchaseHistory]) {
+  for (const path of paths.slice(3)) {
     late.push(await getOnce(path, token));
   }
   const results = [first, ...heavy, ...late];
@@ -89,10 +113,17 @@ async function runJefeHotRouteWarmup({ token, now } = {}) {
   return results;
 }
 
-function scheduleJefeHotRouteWarmup({ token, isJefeVentas, role, delayMs = DELAY_MS } = {}) {
-  if (!token || !isJefeUser({ isJefeVentas, role })) return false;
+function scheduleJefeHotRouteWarmup({
+  token,
+  isJefeVentas,
+  role,
+  code,
+  delayMs = DELAY_MS,
+} = {}) {
+  if (!token || !shouldWarmHotRoutes({ isJefeVentas, role, code })) return false;
+  const includeAll = isJefeUser({ isJefeVentas, role });
   const timer = setTimeout(() => {
-    runJefeHotRouteWarmup({ token }).catch((error) => {
+    runJefeHotRouteWarmup({ token, vendorCode: code, includeAll }).catch((error) => {
       logger.warn(`[JefeHotWarmup] ${error.message}`);
     });
   }, Math.max(0, delayMs));
@@ -104,5 +135,9 @@ module.exports = {
   scheduleJefeHotRouteWarmup,
   runJefeHotRouteWarmup,
   buildJefeHotPaths,
+  buildVendorHotPaths,
+  buildPurchaseHistoryUiPath,
   isJefeUser,
+  shouldWarmHotRoutes,
+  PURCHASE_HISTORY_UI_LIMIT,
 };

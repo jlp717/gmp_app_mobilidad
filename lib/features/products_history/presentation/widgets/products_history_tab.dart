@@ -14,6 +14,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
@@ -76,7 +77,9 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
       _clientCode = widget.initialClientCode!;
     }
     final now = DateTime.now().year;
-    _selectedYears = {now, now - 1, now - 2};
+    _selectedYears = {
+      for (var i = 0; i <= ApiConfig.purchaseHistoryUiYearSpan; i++) now - i,
+    };
     _load();
   }
 
@@ -107,7 +110,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
           if (_productCode.isNotEmpty) 'productCode': _productCode,
           if (_familiaFilter.isNotEmpty) 'familia': _familiaFilter,
           if (_marcaFilter.isNotEmpty) 'marca': _marcaFilter,
-          'limit': '300',
+          'limit': '${ApiConfig.purchaseHistoryUiLimit}',
         },
         cacheKey: [
           'products-history-tab',

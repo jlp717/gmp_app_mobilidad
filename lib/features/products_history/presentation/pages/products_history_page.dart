@@ -12,6 +12,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
@@ -59,7 +60,9 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
   void initState() {
     super.initState();
     final now = DateTime.now().year;
-    _selectedYears = {now, now - 1, now - 2};
+    _selectedYears = {
+      for (var i = 0; i <= ApiConfig.purchaseHistoryUiYearSpan; i++) now - i,
+    };
     _load();
   }
 
@@ -88,7 +91,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
           'vendedorCode': widget.initialVendedorCode ?? 'ALL',
           if (_clientCode.isNotEmpty) 'clientCode': _clientCode,
           if (_productCode.isNotEmpty) 'productCode': _productCode,
-          'limit': '300',
+          'limit': '${ApiConfig.purchaseHistoryUiLimit}',
         },
         cacheKey: [
           'products-history-page',
