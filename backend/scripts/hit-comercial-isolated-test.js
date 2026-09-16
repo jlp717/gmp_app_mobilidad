@@ -343,28 +343,44 @@ async function main() {
 
     const summaryPend = await api('GET', `/cobros/pending-summary/${VENDOR}?limit=5&page=1`, { token });
     const summaryMap = summaryPend.body?.summary || {};
-    const cobrosClient = String(
-      process.env.HIT_COBROS_CLIENT
-      || Object.keys(summaryMap).find((code) => Number(summaryMap[code]?.total) > 0)
-      || '',
-    ).trim();
-    rows.push(record(
-      'GET cobros pending-summary',
-      summaryPend.status === 200 && Boolean(cobrosClient),
-      `status=${summaryPend.status} client=${cobrosClient || '-'} clients=${Object.keys(summaryMap).length}`,
-    ));
-
-    const pendientesPath = `/cobros/${encodeURIComponent(cobrosClient)}/pendientes?vendedorCodes=${VENDOR}`;
-    const cold = await api('GET', `${pendientesPath}&_ts=${Date.now()}`, { token });
-    const samples = [];
+    const clientsList = await api('GET', `/clients/list?limit=20&vendedorCodes=${VENDOR}`, { token });
+    const scopedClients = [
+      ...(clientsList.body?.clients || []),
+      ...(clientsList.body?.data || []),
+    ].map((row) => String(row?.code || row?.codigo || row?.CODIGOCLIENTE || row?.clientCode || '').trim()).filter(Boolean);
+    const summaryClients = Object.keys(summaryMap).filter((code) => Number(summaryMap[code]?.total) > 0);
+    const clientCandidates = [...new Set([
+      process.env.HIT_COBROS_CLIENT,
+      ...scopedClients,
+      ...summaryClients,
+    ].filter(Boolean))];
+    let cobrosClient = scopedClients[0] || '';
+    let cold = { status: 0, ms: 0, body: {} };
     let pendientes = cold;
-    for (let i = 0; i < 3; i += 1) {
-      pendientes = await api('GET', pendientesPath, { token });
-      samples.push(pendientes.ms);
+    const samples = [];
+    let docs = [];
+    for (const candidate of clientCandidates.slice(0, 8)) {
+      const path = `/cobros/${encodeURIComponent(candidate)}/pendientes?vendedorCodes=${VENDOR}`;
+      const probe = await api('GET', `${path}&_ts=${Date.now()}`, { token });
+      if (probe.status === 200) {
+        cobrosClient = candidate;
+        cold = probe;
+        pendientes = probe;
+        for (let i = 0; i < 3; i += 1) {
+          pendientes = await api('GET', path, { token });
+          samples.push(pendientes.ms);
+        }
+        docs = pendientes.body?.cobros || [];
+        break;
+      }
     }
     samples.sort((a, b) => a - b);
-    const p95ish = samples[samples.length - 1];
-    const docs = pendientes.body?.cobros || [];
+    const p95ish = samples[samples.length - 1] || cold.ms;
+    rows.push(record(
+      'GET cobros pending-summary',
+      summaryPend.status === 200 && Boolean(cobrosClient || scopedClients.length),
+      `status=${summaryPend.status} client=${cobrosClient || '-'} clients=${Object.keys(summaryMap).length} scoped=${scopedClients.length}`,
+    ));
     rows.push(record(
       'GET cobros pendientes',
       pendientes.status === 200 && cold.status === 200,
@@ -428,8 +444,9 @@ async function main() {
     let confirmedEstado = '';
     let confirmedSync = '';
     let pedidoReference = '';
-    if (cobrosClient) {
-      const products = await api('GET', `/pedidos/products?vendedorCodes=${VENDOR}&clientCode=${encodeURIComponent(cobrosClient)}&limit=80`, { token });
+    const pedidoClient = cobrosClient || scopedClients[0] || '';
+    if (pedidoClient) {
+      const products = await api('GET', `/pedidos/products?vendedorCodes=${VENDOR}&clientCode=${encodeURIComponent(pedidoClient)}&limit=80`, { token });
       const catalog = products.body?.products || [];
       const candidates = catalog
         .filter((item) => Number(item.precioCliente || item.precioTarifa1) > 0)
@@ -445,7 +462,7 @@ async function main() {
         const created = await api('POST', '/pedidos/create', {
           token,
           body: {
-            clientCode: cobrosClient,
+            clientCode: pedidoClient,
             clientName: 'HIT comercial',
             vendedorCode: VENDOR,
             descuentoGlobal: 5,
@@ -569,7 +586,7 @@ async function main() {
     const cobroIdem = `HitCob${String(Date.now()).slice(-10)}`;
     let cobro = { status: 0, body: {} };
     if (pedidoReference && confirmedEstado === 'CONFIRMADO') {
-      cobro = await api('POST', `/cobros/${encodeURIComponent(cobrosClient)}/registrar`, {
+      cobro = await api('POST', `/cobros/${encodeURIComponent(pedidoClient || cobrosClient)}/registrar`, {
         token,
         body: {
           referencia: pedidoReference,
@@ -582,7 +599,7 @@ async function main() {
     if (cobro.status !== 200) {
       const payable = docs.find((doc) => Number(doc.importePendiente) >= 1 && String(doc.referencia || '').trim());
       if (payable) {
-        cobro = await api('POST', `/cobros/${encodeURIComponent(cobrosClient)}/registrar`, {
+        cobro = await api('POST', `/cobros/${encodeURIComponent(cobrosClient || pedidoClient)}/registrar`, {
           token,
           body: {
             referencia: payable.referencia,

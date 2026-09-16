@@ -446,6 +446,8 @@ describe('pizarra PG ya cobrados', () => {
     expect(sql).toMatch(/PAGARESN = CAST\(\? AS CHAR\(1\)\)/);
     expect(sql).toMatch(/CAC\.CODIGOVENDEDOR/);
     expect(sql).toMatch(/LEFT JOIN JAVIER\.TEST_CAC/);
+    expect(sql).toMatch(/TRIM\(CAC\.SERIEFACTURA\) = TRIM\(CVC\.SERIEDOCUMENTO\)/);
+    expect(sql).toMatch(/TRIM\(CAC\.CODIGOVENDEDOR\)/);
     expect(sql).not.toMatch(/INSERT INTO DSEDAC|UPDATE DSEDAC|DELETE FROM DSEDAC/i);
     expect(sql).not.toMatch(/VISTA_DEUDA_BASE/i);
     expect(params[0]).toBe('PAG');

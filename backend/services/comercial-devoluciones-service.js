@@ -483,8 +483,8 @@ function buildPgVendorClause(vendorCodes) {
   // Client and vendor live on CAC (factura → albarán), CHAR equality.
   return {
     clause: `AND (
-      CAC.CODIGOVENDEDOR IN (${inList})
-      OR CAC.CODIGOVENDEDORCOBRO IN (${inList})
+      TRIM(CAC.CODIGOVENDEDOR) IN (${inList})
+      OR TRIM(CAC.CODIGOVENDEDORCOBRO) IN (${inList})
     )`,
     params: [...codes, ...codes],
   };
@@ -538,12 +538,12 @@ async function listPgCollectedDocuments({
         ON FPG.CODIGOFORMAPAGO = CVC.CODIGOFORMAPAGO
       LEFT JOIN ${comercialErpTable('CAC')} CAC
         ON CAC.EJERCICIOFACTURA = CVC.EJERCICIODOCUMENTO
-       AND CAC.SERIEFACTURA = CVC.SERIEDOCUMENTO
+       AND TRIM(CAC.SERIEFACTURA) = TRIM(CVC.SERIEDOCUMENTO)
        AND CAC.TERMINALFACTURA = CVC.TERMINALDOCUMENTO
        AND CAC.NUMEROFACTURA = CVC.NUMERODOCUMENTO
       LEFT JOIN ${comercialErpTable('CPC')} CPC
         ON CPC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
-       AND CPC.SERIEALBARAN = CAC.SERIEALBARAN
+       AND TRIM(CPC.SERIEALBARAN) = TRIM(CAC.SERIEALBARAN)
        AND CPC.TERMINALALBARAN = CAC.TERMINALALBARAN
        AND CPC.NUMEROALBARAN = CAC.NUMEROALBARAN
       LEFT JOIN ${comercialErpTable('CLX')} CLX

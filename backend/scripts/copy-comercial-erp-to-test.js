@@ -257,7 +257,7 @@ function commercialCopyJobs(lacSchema) {
             OR EXISTS (
                  SELECT 1 FROM DSEDAC.CAC CAC
                   WHERE CAC.EJERCICIOFACTURA = CVC.EJERCICIODOCUMENTO
-                    AND CAC.SERIEFACTURA = CVC.SERIEDOCUMENTO
+                    AND TRIM(CAC.SERIEFACTURA) = TRIM(CVC.SERIEDOCUMENTO)
                     AND CAC.TERMINALFACTURA = CVC.TERMINALDOCUMENTO
                     AND CAC.NUMEROFACTURA = CVC.NUMERODOCUMENTO
                     AND TRIM(CAC.CODIGOVENDEDOR) IN (${vendorListSql})
@@ -275,7 +275,7 @@ function commercialCopyJobs(lacSchema) {
             OR EXISTS (
                  SELECT 1 FROM JAVIER.TEST_CVC CVC
                   WHERE CAC.EJERCICIOFACTURA = CVC.EJERCICIODOCUMENTO
-                    AND CAC.SERIEFACTURA = CVC.SERIEDOCUMENTO
+                    AND TRIM(CAC.SERIEFACTURA) = TRIM(CVC.SERIEDOCUMENTO)
                     AND CAC.TERMINALFACTURA = CVC.TERMINALDOCUMENTO
                     AND CAC.NUMEROFACTURA = CVC.NUMERODOCUMENTO
                )
@@ -291,7 +291,7 @@ function commercialCopyJobs(lacSchema) {
          WHERE EXISTS (
                  SELECT 1 FROM JAVIER.TEST_CAC CAC
                   WHERE CPC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
-                    AND CPC.SERIEALBARAN = CAC.SERIEALBARAN
+                    AND TRIM(CPC.SERIEALBARAN) = TRIM(CAC.SERIEALBARAN)
                     AND CPC.TERMINALALBARAN = CAC.TERMINALALBARAN
                     AND CPC.NUMEROALBARAN = CAC.NUMEROALBARAN
                )
