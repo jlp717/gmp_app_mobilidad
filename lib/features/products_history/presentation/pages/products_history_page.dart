@@ -102,6 +102,7 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
           _productCode,
         ].join(':'),
         cacheTTL: CacheService.defaultTTL,
+        receiveTimeout: ApiConfig.purchaseHistoryReceiveTimeout,
       );
       if (response['success'] == true) {
         setState(() {

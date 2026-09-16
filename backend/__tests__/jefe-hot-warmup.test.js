@@ -71,21 +71,24 @@ describe('jefe-hot-route-warmer', () => {
   test('builds Flutter-default JEFE ALL paths', () => {
     const paths = buildJefeHotPaths(new Date('2026-09-16T10:00:00Z'));
     expect(paths[0]).toContain('/api/dashboard/metrics?vendedorCodes=ALL&year=2026');
-    expect(paths[1]).toContain('/api/objectives/evolution?vendedorCodes=ALL&years=2026');
-    expect(paths[2]).toContain('/api/objectives/by-client?vendedorCodes=ALL&years=2026');
-    expect(paths[3]).toContain('/api/pedidos/purchase-history-global?vendedorCode=ALL');
-    expect(paths[3]).toContain('from=2024-01-01');
-    expect(paths[3]).toContain('to=2026-12-31');
-    expect(paths[3]).toContain('limit=300');
+    expect(paths[1]).toContain('/api/pedidos/purchase-history-global?vendedorCode=ALL');
+    expect(paths[1]).toContain('from=2024-01-01');
+    expect(paths[1]).toContain('to=2026-12-31');
+    expect(paths[1]).toContain('limit=300');
+    expect(paths[2]).toContain('/api/objectives/evolution?vendedorCodes=ALL&years=2026');
+    expect(paths[3]).toContain('/api/objectives/by-client?vendedorCodes=ALL&years=2026');
+    expect(paths[paths.length - 1]).toContain('limit=1');
     expect(PURCHASE_HISTORY_UI_LIMIT).toBe(300);
     expect(paths.join()).not.toMatch(/VENDEDOR='ALL'/);
   });
 
-  test('JEFE 80 warms personal evolution/commissions before ALL LACLAE', () => {
+  test('JEFE 80 keeps Flutter history ALL before personal evo', () => {
     const paths = buildJefeHotPaths(new Date('2026-09-16T10:00:00Z'), { vendorCode: '80' });
     expect(paths[0]).toContain('/api/dashboard/metrics?vendedorCodes=ALL');
-    expect(paths[1]).toContain('/api/objectives/evolution?vendedorCodes=80&years=2026');
-    expect(paths[2]).toContain('/api/commissions/summary?vendedorCode=80&year=2026');
+    expect(paths[1]).toContain('/api/pedidos/purchase-history-global?vendedorCode=ALL');
+    expect(paths[1]).toContain('limit=300');
+    expect(paths[2]).toContain('/api/objectives/evolution?vendedorCodes=80&years=2026');
+    expect(paths[3]).toContain('/api/commissions/summary?vendedorCode=80&year=2026');
     expect(paths.some((path) => path.includes('vendedorCodes=ALL&years=2026'))).toBe(true);
   });
 

@@ -219,6 +219,7 @@ class ApiConfig {
   /// Keep in sync with backend `PURCHASE_HISTORY_UI_LIMIT` / year span.
   static const int purchaseHistoryUiLimit = 300;
   static const int purchaseHistoryUiYearSpan = 2;
+  static const Duration purchaseHistoryReceiveTimeout = Duration(seconds: 60);
   static const String pedidosCreate = '/pedidos/create';
   static const String pedidosProducts = '/pedidos/products';
   static const String pedidosRecommendations = '/pedidos/recommendations';

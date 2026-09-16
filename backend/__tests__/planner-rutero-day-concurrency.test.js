@@ -82,6 +82,7 @@ describe('Planner rutero/day shared concurrency', () => {
         const source = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
         expect(source).toMatch(/originalUrl\.includes\('\/rutero\/day'\)/);
         expect(source).toMatch(/originalUrl\.includes\('\/purchase-history-global'\)/);
+        expect(source).toMatch(/HTTP_HISTORY_TIMEOUT_MS/);
         expect(source).not.toMatch(/originalUrl\.includes\('\/planner\/rutero\/day'\)/);
     });
 

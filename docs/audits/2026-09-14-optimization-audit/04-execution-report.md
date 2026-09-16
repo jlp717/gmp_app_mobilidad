@@ -191,4 +191,38 @@ Hueco de código que quedaba: SEC-05 `analytics.js` interpolaba `sanitizeCodeLis
 
 No se abre backlog nuevo de cache/refactor. Campo: **no verificado**.
 
+## 12. Cierre 2026-09-16 21:40 VPN (historial HIT + warmer)
+
+Deploy whitelist 230: `git pull origin test` + `pm2 restart gmp-api`. Health `/api/ready` **ready**. Redis connected.
+
+### SHA
+
+| Sitio | SHA |
+|---|---|
+| `origin/test` pre-fix | `79f1a13769a7e1be5a6e4d8594fab74c6fada1e0` |
+| 230 tras pull `79f1a13` | `79f1a13769a7e1be5a6e4d8594fab74c6fada1e0` |
+| Ancestros | `fe7d08e` y `6c98aa8` siguen en `test` |
+
+### GET historial Flutter `[servidor]`
+
+Path: `/api/pedidos/purchase-history-global?vendedorCode=ALL&from=2024-01-01&to=2026-12-31&limit=300` (JEFE 98, PIN VDPL1, sin volcar secreto).
+
+| Paso | HTTP | ms | bytes | notas |
+|---|---|---|---|---|
+| flush | — | — | — | `*purchase-history*` |
+| inmediato (carrera vs warmer) | 503 | 59011 | 125 | `Retry-After: 2` — **no usar**; come el slot del queryGate |
+| **t+40s limpio** (login, sleep 40, GET) | **200** | **29** | 111023 | HIT práctico (Redis route); `X-Cache-Status` HTTP=MISS |
+| caliente | 200 | 3 | 111023 | HIT |
+
+**HIT a 40s: SÍ** (protocolo limpio, SHA `79f1a13` en 230). NO si se lanza el GET inmediato a la vez que el warmer.
+
+Código posterior (este mismo turno): historial ALL se calienta **solo** tras metrics; timeout servidor 90 s; Flutter 60 s; splash `runApp` inmediato; CREATE INDEX LACLAE documentado **sin ejecutar**.
+
+### Gaps que siguen (solo Javier / BLOCKED real)
+
+- **DB-01 DDL LACLAE**: SQL listo en `db-01-laclae-create-index.sql.md`. No ejecutado.
+- **P0-03 campo** en su móvil.
+- **pm2 save/set**, kill, `.env` remoto.
+- Intocables y secretos: no tocados.
+
 

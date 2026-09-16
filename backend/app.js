@@ -253,6 +253,7 @@ const HTTP_REQUEST_TIMEOUT_MS = parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS, 10
 const HTTP_LIST_TIMEOUT_MS = parseInt(process.env.HTTP_LIST_TIMEOUT_MS, 10) || HTTP_REQUEST_TIMEOUT_MS;
 const HTTP_ACTION_TIMEOUT_MS = parseInt(process.env.HTTP_ACTION_TIMEOUT_MS, 10) || 20000;
 const HTTP_REPORT_TIMEOUT_MS = parseInt(process.env.HTTP_REPORT_TIMEOUT_MS, 10) || 60000;
+const HTTP_HISTORY_TIMEOUT_MS = parseInt(process.env.HTTP_HISTORY_TIMEOUT_MS, 10) || 90000;
 const HTTP_PDF_TIMEOUT_MS = parseInt(process.env.HTTP_PDF_TIMEOUT_MS, 10) || 180000;
 const HEALTH_DB_TIMEOUT_MS = parseInt(process.env.HEALTH_DB_TIMEOUT_MS, 10) || 1500;
 const HEALTH_DB_CACHE_MS = parseInt(process.env.HEALTH_DB_CACHE_MS, 10) || 5000;
@@ -266,6 +267,9 @@ function resolveRequestTimeoutMs(req) {
   if (path.includes('/pdf')) {
     return HTTP_PDF_TIMEOUT_MS;
   }
+  if (originalUrl.includes('/purchase-history-global')) {
+    return HTTP_HISTORY_TIMEOUT_MS;
+  }
   if (
     path.includes('/report') ||
     path.includes('/export') ||
@@ -275,8 +279,7 @@ function resolveRequestTimeoutMs(req) {
     originalUrl.includes('/objectives/by-client') ||
     originalUrl.includes('/commissions/summary') ||
     originalUrl.includes('/cobros/pending-summary') ||
-    originalUrl.includes('/rutero/day') ||
-    originalUrl.includes('/purchase-history-global')
+    originalUrl.includes('/rutero/day')
   ) {
     return HTTP_REPORT_TIMEOUT_MS;
   }
@@ -324,10 +327,12 @@ function requestTimeoutMiddleware(req, res, next) {
       res.locals.requestTimedOut = true;
       res.locals.sendingTimeoutResponse = true;
       logger.warn(`[REQUEST_TIMEOUT] ${req.method} ${req.path} timeoutMs=${timeoutMs}`);
+      res.set('Retry-After', '2');
       res.status(503).json({
         success: false,
         error: 'Request timeout',
         code: 'REQUEST_TIMEOUT',
+        retryAfterSec: 2,
       });
       res.locals.sendingTimeoutResponse = false;
     }

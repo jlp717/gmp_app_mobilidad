@@ -1617,6 +1617,8 @@ function createPedidosRoutes() {
       if (redisCache && redisCache.isConnected) {
         stampede = await beginRouteFill(stampedeKey, { waitMs: 45000 });
         if (stampede.hit) {
+          res.set('X-Cache-Hit', 'true');
+          res.set('X-Cache-Source', 'redis');
           return res.json(stampede.hit);
         }
         if (stampede.busy) {

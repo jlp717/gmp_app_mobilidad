@@ -83,35 +83,69 @@ void main() async {
     };
   }
 
-  try {
-    await () async {
-      await Future.wait<void>([
-        CacheService.init(),
-        initializeDateFormatting('es'),
-      ]);
-      debugPrint('[MAIN] ✅ Cache initialized');
-      await ApiClient.initialize();
-      ApiClient.startConnectivityMonitoring();
-      debugPrint(
-        '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}',
-      );
-    }()
-        .timeout(const Duration(seconds: 8));
-  } catch (e, stack) {
-    debugPrint('[MAIN] ❌ Initialization error: $e');
-    debugPrint('[MAIN] Stack: $stack');
-    await Sentry.captureException(e, stackTrace: stack);
+  runApp(const _BootstrapApp());
+}
+
+class _BootstrapApp extends StatefulWidget {
+  const _BootstrapApp();
+
+  @override
+  State<_BootstrapApp> createState() => _BootstrapAppState();
+}
+
+class _BootstrapAppState extends State<_BootstrapApp> {
+  Widget? _ready;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_boot());
   }
 
-  const sentryDsn = String.fromEnvironment('SENTRY_DSN');
-  // Bindings were initialized on this zone; wrapping runApp in a new
-  // runZonedGuarded zone throws "Zone mismatch" in debug and can drop
-  // the first frame. PlatformDispatcher.onError already captures async errors.
-  const app = ProviderScope(child: GMPSalesAnalyticsApp());
-  runApp(sentryDsn.isEmpty ? app : SentryWidget(child: app));
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(_deferredStartup(sentryDsn));
-  });
+  Future<void> _boot() async {
+    try {
+      await () async {
+        await Future.wait<void>([
+          CacheService.init(),
+          initializeDateFormatting('es'),
+        ]);
+        debugPrint('[MAIN] ✅ Cache initialized');
+        await ApiClient.initialize();
+        ApiClient.startConnectivityMonitoring();
+        debugPrint(
+          '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}',
+        );
+      }()
+          .timeout(const Duration(seconds: 8));
+    } catch (e, stack) {
+      debugPrint('[MAIN] ❌ Initialization error: $e');
+      debugPrint('[MAIN] Stack: $stack');
+      await Sentry.captureException(e, stackTrace: stack);
+    }
+
+    const sentryDsn = String.fromEnvironment('SENTRY_DSN');
+    final app = ProviderScope(child: GMPSalesAnalyticsApp());
+    final ready = sentryDsn.isEmpty ? app : SentryWidget(child: app);
+    if (!mounted) return;
+    setState(() => _ready = ready);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_deferredStartup(sentryDsn));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_ready != null) return _ready!;
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: AppColors.darkCanvas,
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.ochre),
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> _deferredStartup(String sentryDsn) async {

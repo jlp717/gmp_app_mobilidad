@@ -40,6 +40,14 @@ function buildVendorHotPaths(now, vendorCode) {
   ];
 }
 
+function buildPurchaseHistoryYoyPath(now = new Date(), vendedorCode = 'ALL') {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const code = encodeURIComponent(String(vendedorCode || 'ALL').trim() || 'ALL');
+  return `/api/pedidos/purchase-history-global?vendedorCode=${code}&from=${year}-01-01&to=${year}-${month}-${day}&limit=1`;
+}
+
 function buildJefeHotPaths(now = new Date(), { vendorCode, includeAll = true } = {}) {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
@@ -48,19 +56,21 @@ function buildJefeHotPaths(now = new Date(), { vendorCode, includeAll = true } =
   const allPaths = includeAll
     ? [
       `/api/dashboard/metrics?vendedorCodes=ALL&year=${year}`,
+      buildPurchaseHistoryUiPath(now, 'ALL'),
       `/api/objectives/evolution?vendedorCodes=ALL&years=${year}`,
       `/api/objectives/by-client?vendedorCodes=ALL&years=${year}&months=${allMonths}&limit=100`,
-      buildPurchaseHistoryUiPath(now, 'ALL'),
       `/api/commissions/summary?vendedorCode=ALL&year=${year}`,
       `/api/dashboard/matrix-data?vendedorCodes=ALL&year=${year}&years=${year}&groupBy=vendor&limit=240&months=${ytdMonths}`,
       `/api/clients/list?vendedorCodes=ALL&limit=50`,
+      buildPurchaseHistoryYoyPath(now, 'ALL'),
     ]
     : [];
   const code = String(vendorCode || '').trim();
   if (code && code.toUpperCase() !== 'ALL') {
     const scoped = buildVendorHotPaths(now, code);
     if (!includeAll) return scoped;
-    allPaths.splice(1, 0, scoped[0], scoped[1]);
+    // Keep Flutter history ALL at index 1 so warmup can fill it before LACLAE evo.
+    allPaths.splice(2, 0, scoped[0], scoped[1]);
   }
   return allPaths;
 }
@@ -100,13 +110,17 @@ async function runJefeHotRouteWarmup({ token, now, vendorCode, includeAll = true
   if (!token) return [];
   const paths = buildJefeHotPaths(now, { vendorCode, includeAll });
   if (paths.length === 0) return [];
-  const first = await getOnce(paths[0], token);
-  const heavy = await Promise.all(paths.slice(1, 3).map((path) => getOnce(path, token)));
-  const late = [];
-  for (const path of paths.slice(3)) {
-    late.push(await getOnce(path, token));
+  const historyIdx = paths.findIndex((path) => path.includes('/purchase-history-global') && path.includes('limit=300'));
+  const results = [];
+  if (paths[0]) results.push(await getOnce(paths[0], token));
+  if (historyIdx > 0) results.push(await getOnce(paths[historyIdx], token));
+  const rest = paths.filter((_, index) => index !== 0 && index !== historyIdx);
+  if (rest.length > 0) {
+    results.push(...await Promise.all(rest.slice(0, 2).map((path) => getOnce(path, token))));
+    for (const path of rest.slice(2)) {
+      results.push(await getOnce(path, token));
+    }
   }
-  const results = [first, ...heavy, ...late];
   for (const result of results) {
     logger.info(`[JefeHotWarmup] ${result.status} ${result.ms}ms ${result.path}`);
   }
@@ -137,6 +151,7 @@ module.exports = {
   buildJefeHotPaths,
   buildVendorHotPaths,
   buildPurchaseHistoryUiPath,
+  buildPurchaseHistoryYoyPath,
   isJefeUser,
   shouldWarmHotRoutes,
   PURCHASE_HISTORY_UI_LIMIT,

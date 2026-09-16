@@ -123,6 +123,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
           _marcaFilter,
         ].join(':'),
         cacheTTL: CacheService.defaultTTL,
+        receiveTimeout: ApiConfig.purchaseHistoryReceiveTimeout,
       );
       if (response['success'] == true) {
         setState(() {
