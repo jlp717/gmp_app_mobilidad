@@ -134,14 +134,17 @@ class Db2AuthRepository extends AuthRepository {
   }
 
   /**
-   * Name login can match several vendors (e.g. "diego" → 22/25/86/98).
+   * Name login matches a token inside NOMBREVENDEDOR (e.g. "diego" → 22/25/86/98).
    * Caller must disambiguate with PIN; never invent a single row here.
    */
   async findNameLoginCandidates(name, { limit = 10 } = {}) {
     const requested = String(name || '').trim();
     if (!requested || requested.length > 50) return [];
     const max = Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 20) : 10;
-    const searchParam = requested.replace(/ /g, '').toUpperCase();
+    const token = requested.replace(/ /g, '').toUpperCase();
+    if (token.length < 3) return [];
+    const escaped = token.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const searchParam = `%${escaped}%`;
     const sql = `
       SELECT TRIM(P.CODIGOVENDEDOR) AS USUARIO,
         TRIM(D.NOMBREVENDEDOR) AS NOMBRE,
@@ -165,10 +168,10 @@ class Db2AuthRepository extends AuthRepository {
         SELECT 1 FROM DSEDAC.VDC V
         WHERE V.CODIGOVENDEDOR = P.CODIGOVENDEDOR
           AND V.SUBEMPRESA = 'GMP'
-      )
+        )
       AND COALESCE(NULLIF(TRIM(P.ESTADO), ''), '') <> 'A'
         AND REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '')
-          = CAST(? AS VARCHAR(100))
+          LIKE CAST(? AS VARCHAR(100)) ESCAPE '\\'
       ORDER BY TRIM(P.CODIGOVENDEDOR)
       FETCH FIRST ${max} ROWS ONLY
     `;

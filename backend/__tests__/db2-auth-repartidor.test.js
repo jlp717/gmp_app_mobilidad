@@ -105,17 +105,25 @@ describe('Db2AuthRepository reparto association', () => {
     expect(params).toEqual(['ANA']);
   });
 
-  test('findNameLoginCandidates uses exact normalized name, not LIKE', async () => {
+  test('findNameLoginCandidates uses parameterized LIKE contains, not exact name', async () => {
     const db = { executeParams: jest.fn().mockResolvedValue([
-      { USUARIO: '22', NOMBRE: 'DIEGO', ROL: 'COMERCIAL', PASSWORD_HASH: '0484', ACTIVO: 1 },
+      { USUARIO: '22', NOMBRE: '22 DIEGO ALCAZAR', ROL: 'COMERCIAL', PASSWORD_HASH: 'hash-22', ACTIVO: 1 },
+      { USUARIO: '98', NOMBRE: '98 DIEGO (98)', ROL: 'COMERCIAL', PASSWORD_HASH: 'hash-98', ACTIVO: 1 },
     ]) };
     const repo = new Db2AuthRepository(db);
     const users = await repo.findNameLoginCandidates('diego');
-    expect(users.map((u) => u.code)).toEqual(['22']);
+    expect(users.map((u) => u.code)).toEqual(['22', '98']);
     const [sql, params] = db.executeParams.mock.calls[0];
-    expect(sql).toMatch(/REPLACE\(UPPER\(TRIM\(D\.NOMBREVENDEDOR\)\), ' ', ''\)\s+= CAST/);
-    expect(sql).not.toMatch(/LIKE/);
-    expect(params).toEqual(['DIEGO']);
+    expect(sql).toMatch(/LIKE CAST\(\? AS VARCHAR\(100\)\) ESCAPE/);
+    expect(sql).not.toMatch(/REPLACE\(UPPER\(TRIM\(D\.NOMBREVENDEDOR\)\), ' ', ''\)\s+= CAST/);
+    expect(params).toEqual(['%DIEGO%']);
+  });
+
+  test('findNameLoginCandidates ignores tokens shorter than 3 characters', async () => {
+    const db = { executeParams: jest.fn() };
+    const repo = new Db2AuthRepository(db);
+    await expect(repo.findNameLoginCandidates('ab')).resolves.toEqual([]);
+    expect(db.executeParams).not.toHaveBeenCalled();
   });
   test('resolves commercial visibility without a DB round trip', async () => {
     const db = { execute: jest.fn(), executeParams: jest.fn() };

@@ -134,4 +134,31 @@ describe('vendor pin auth', () => {
 
         _private.clearPinFailures(code);
     });
+
+    test('skipLockout probes do not record PIN failures on other vendors', async () => {
+        const other = '22PROBE';
+        _private.clearPinFailures(other);
+        queryWithParams.mockResolvedValue([]);
+
+        for (let i = 0; i < 5; i += 1) {
+            const result = await verifyVendorPin({
+                vendedorCode: other,
+                candidatePin: `wrong${i}`,
+                dbPin: '9999',
+                requestId: 'test',
+                skipLockout: true,
+            });
+            expect(result.valid).toBe(false);
+        }
+
+        expect(_private.pinAccountLocked(other)).toBe(false);
+        const stillOpen = await verifyVendorPin({
+            vendedorCode: other,
+            candidatePin: '9999',
+            dbPin: '9999',
+            requestId: 'test',
+        });
+        expect(stillOpen.reason).not.toBe('account_locked');
+        _private.clearPinFailures(other);
+    });
 });

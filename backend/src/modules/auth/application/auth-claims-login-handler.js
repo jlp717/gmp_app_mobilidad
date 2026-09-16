@@ -69,6 +69,37 @@ async function requireLoginAudit(authRepository, userId, success, ip) {
     throw error;
   }
 }
+
+function usableCredential(profile) {
+  return Boolean(profile && profile.isActive === true && profile._passwordHash);
+}
+
+async function resolveNameLoginProfile({
+  authRepository,
+  verifyVendorPin,
+  username,
+  password,
+  requestId,
+}) {
+  if (typeof authRepository.findNameLoginCandidates !== 'function') return null;
+  const candidates = await authRepository.findNameLoginCandidates(username, { limit: 10 });
+  const usable = (Array.isArray(candidates) ? candidates : []).filter(usableCredential);
+  if (usable.length === 0) return null;
+  if (usable.length === 1) return usable[0];
+
+  const matches = [];
+  for (const candidate of usable) {
+    const probe = await verifyVendorPin({
+      vendedorCode: candidate.code,
+      candidatePin: password,
+      dbPin: candidate._passwordHash,
+      requestId,
+      skipLockout: true,
+    });
+    if (probe?.valid) matches.push(candidate);
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
 function createAuthClaimsLoginHandler({
   authRepository,
   authClaimsResolver,
@@ -97,27 +128,15 @@ function createAuthClaimsLoginHandler({
     let credentialProfile;
     try {
       credentialProfile = await authRepository.findByCode(username);
-      if (
-        (!credentialProfile || credentialProfile.isActive !== true || !credentialProfile._passwordHash)
-        && typeof authRepository.findNameLoginCandidates === 'function'
-      ) {
-        const candidates = await authRepository.findNameLoginCandidates(username, { limit: 2 });
-        if (candidates.length === 1) {
-          const only = candidates[0];
-          if (only && only.isActive === true && only._passwordHash) {
-            credentialProfile = only;
-          }
-        } else if (candidates.length > 1) {
-          try {
-            await requireLoginAudit(authRepository, null, false, req.ip);
-          } catch (error) {
-            return sendError(res, error);
-          }
-          return res.status(401).json({
-            error: 'Credenciales invalidas',
-            code: 'INVALID_CREDENTIALS',
-          });
-        }
+      if (!usableCredential(credentialProfile)) {
+        const named = await resolveNameLoginProfile({
+          authRepository,
+          verifyVendorPin,
+          username,
+          password,
+          requestId: req.requestId || 'AUTH',
+        });
+        if (named) credentialProfile = named;
       }
     } catch (error) {
       return sendError(res, error);

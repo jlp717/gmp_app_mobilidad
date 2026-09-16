@@ -98,7 +98,19 @@ async function migratePlaintextPinHash(vendedorCode, candidatePin, requestId = '
     }
 }
 
-async function verifyVendorPin({ vendedorCode, candidatePin, dbPin, requestId = 'auth' }) {
+function applyPinOutcome(code, requestId, valid, skipLockout) {
+    if (skipLockout) return;
+    if (valid) clearPinFailures(code);
+    else recordPinFailure(code, requestId);
+}
+
+async function verifyVendorPin({
+    vendedorCode,
+    candidatePin,
+    dbPin,
+    requestId = 'auth',
+    skipLockout = false,
+} = {}) {
     const code = normalizePin(vendedorCode);
     const pin = normalizePin(candidatePin);
     const legacyPin = normalizePin(dbPin);
@@ -115,7 +127,7 @@ async function verifyVendorPin({ vendedorCode, candidatePin, dbPin, requestId = 
     const migratedHash = await loadMigratedPinHash(code, requestId);
     if (migratedHash) {
         const valid = await verifyPassword(pin, migratedHash);
-        if (valid) clearPinFailures(code); else recordPinFailure(code, requestId);
+        applyPinOutcome(code, requestId, valid, skipLockout);
         return {
             valid,
             method: valid ? 'migrated_hash' : null,
@@ -125,7 +137,7 @@ async function verifyVendorPin({ vendedorCode, candidatePin, dbPin, requestId = 
 
     if (isBcryptHash(legacyPin)) {
         const valid = await verifyPassword(pin, legacyPin);
-        if (valid) clearPinFailures(code); else recordPinFailure(code, requestId);
+        applyPinOutcome(code, requestId, valid, skipLockout);
         return {
             valid,
             method: valid ? 'legacy_bcrypt' : null,
@@ -135,15 +147,17 @@ async function verifyVendorPin({ vendedorCode, candidatePin, dbPin, requestId = 
 
     if (legacyPin && legacyPin === pin) {
         if (!allowPlaintextPinAuth()) {
-            recordPinFailure(code, requestId);
+            applyPinOutcome(code, requestId, false, skipLockout);
             return { valid: false, reason: 'plaintext_pin_denied' };
         }
-        await migratePlaintextPinHash(code, pin, requestId);
-        clearPinFailures(code);
+        if (!skipLockout) {
+            await migratePlaintextPinHash(code, pin, requestId);
+            clearPinFailures(code);
+        }
         return { valid: true, method: 'plaintext_migrated' };
     }
 
-    recordPinFailure(code, requestId);
+    applyPinOutcome(code, requestId, false, skipLockout);
     return { valid: false, reason: 'pin_mismatch' };
 }
 

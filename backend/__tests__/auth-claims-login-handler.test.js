@@ -137,6 +137,86 @@ describe('shared auth claims login handler', () => {
     expect(res.body.code).toBe('INVALID_USERNAME');
     expect(authRepository.findByCode).not.toHaveBeenCalled();
   });
+
+  test('logs in by vendor name when PIN matches exactly one candidate', async () => {
+    const { handler, authRepository, authClaimsResolver, verifyVendorPin, tokenService } = harness();
+    authRepository.findByCode.mockResolvedValue(null);
+    authRepository.findNameLoginCandidates.mockResolvedValue([
+      { id: '22', code: '22', name: '22 DIEGO ALCAZAR', isActive: true, _passwordHash: 'hash-22' },
+      { id: '25', code: '25', name: '25 DIEGO', isActive: true, _passwordHash: 'hash-25' },
+      { id: '86', code: '86', name: '86 DIEGO', isActive: true, _passwordHash: 'hash-86' },
+      { id: '98', code: '98', name: '98 DIEGO (98)', isActive: true, _passwordHash: 'hash-98' },
+    ]);
+    authClaimsResolver.resolve.mockResolvedValue(claims({
+      id: 'V098', user: '98', name: '98 DIEGO (98)',
+      codigoConductor: '98', vendorCodes: Object.freeze(['98']),
+      vendedorCodes: Object.freeze(['98']), repartidorCodes: Object.freeze(['98']),
+    }));
+    verifyVendorPin.mockImplementation(async ({ vendedorCode, skipLockout }) => {
+      if (vendedorCode === '98') return { valid: true, method: skipLockout ? 'probe' : 'test' };
+      return { valid: false };
+    });
+    const res = response();
+
+    await handler(request({ username: 'diego', password: 'pin-ok' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.user.code).toBe('98');
+    expect(authRepository.findNameLoginCandidates).toHaveBeenCalledWith('DIEGO', { limit: 10 });
+    expect(verifyVendorPin).toHaveBeenCalledWith(expect.objectContaining({
+      vendedorCode: '98', candidatePin: 'pin-ok', skipLockout: true,
+    }));
+    expect(verifyVendorPin).toHaveBeenCalledWith(expect.objectContaining({
+      vendedorCode: '98', candidatePin: 'pin-ok',
+    }));
+    expect(verifyVendorPin.mock.calls.some((call) => call[0].skipLockout === true && call[0].vendedorCode === '22')).toBe(true);
+    expect(authClaimsResolver.resolve).toHaveBeenCalledWith({ code: '98' });
+    expect(tokenService.signAccessToken).toHaveBeenCalled();
+  });
+
+  test('logs in by numeric vendor code without a name lookup', async () => {
+    const { handler, authRepository, authClaimsResolver, verifyVendorPin } = harness();
+    authRepository.findByCode.mockResolvedValue({
+      id: '98', code: '98', name: '98 DIEGO (98)', isActive: true, _passwordHash: 'hash-98',
+    });
+    authClaimsResolver.resolve.mockResolvedValue(claims({
+      id: 'V098', user: '98', name: '98 DIEGO (98)',
+      codigoConductor: '98', vendorCodes: Object.freeze(['98']),
+      vendedorCodes: Object.freeze(['98']), repartidorCodes: Object.freeze(['98']),
+    }));
+    const res = response();
+
+    await handler(request({ username: '98', password: 'pin-ok' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.user.code).toBe('98');
+    expect(authRepository.findByCode).toHaveBeenCalledWith('98');
+    expect(authRepository.findNameLoginCandidates).not.toHaveBeenCalled();
+    expect(verifyVendorPin).toHaveBeenCalledTimes(1);
+    expect(verifyVendorPin.mock.calls[0][0].skipLockout).toBeUndefined();
+  });
+
+  test('rejects vendor-name login when PIN matches more than one candidate', async () => {
+    const { handler, authRepository, authClaimsResolver, verifyVendorPin, tokenService } = harness();
+    authRepository.findByCode.mockResolvedValue(null);
+    authRepository.findNameLoginCandidates.mockResolvedValue([
+      { id: '22', code: '22', name: '22 DIEGO ALCAZAR', isActive: true, _passwordHash: 'hash-22' },
+      { id: '98', code: '98', name: '98 DIEGO (98)', isActive: true, _passwordHash: 'hash-98' },
+    ]);
+    verifyVendorPin.mockResolvedValue({ valid: true, method: 'probe' });
+    const res = response();
+
+    await handler(request({ username: 'diego', password: 'pin-ok' }), res);
+
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toEqual({
+      error: 'Credenciales invalidas', code: 'INVALID_CREDENTIALS',
+    });
+    expect(verifyVendorPin.mock.calls.filter((call) => call[0].skipLockout === true)).toHaveLength(2);
+    expect(authClaimsResolver.resolve).not.toHaveBeenCalled();
+    expect(tokenService.signAccessToken).not.toHaveBeenCalled();
+  });
   test('re-resolves claims only after valid credentials', async () => {
     const { handler, authClaimsResolver, verifyVendorPin } = harness();
     verifyVendorPin.mockResolvedValue({ valid: false });
@@ -227,22 +307,23 @@ describe('shared auth claims login handler', () => {
     expect(tokenService.signAccessToken).not.toHaveBeenCalled();
   });
 
-  test('rejects ambiguous exact name matches with uniform 401', async () => {
+  test('rejects ambiguous name matches when PIN does not select a single vendor', async () => {
     const { handler, authRepository, authClaimsResolver, verifyVendorPin, tokenService } = harness();
     authRepository.findByCode.mockResolvedValue(null);
     authRepository.findNameLoginCandidates.mockResolvedValue([
-      { id: '22', code: '22', name: '22 DIEGO ALCAZAR', isActive: true, _passwordHash: '0484' },
-      { id: '98', code: '98', name: '98 DIEGO (98)', isActive: true, _passwordHash: '9322' },
+      { id: '22', code: '22', name: '22 DIEGO ALCAZAR', isActive: true, _passwordHash: 'hash-22' },
+      { id: '98', code: '98', name: '98 DIEGO (98)', isActive: true, _passwordHash: 'hash-98' },
     ]);
+    verifyVendorPin.mockResolvedValue({ valid: false });
     const res = response();
 
-    await handler(request({ username: 'diego', password: '9322' }), res);
+    await handler(request({ username: 'diego', password: 'pin-miss' }), res);
 
     expect(res.statusCode).toBe(401);
     expect(res.body).toEqual({
       error: 'Credenciales invalidas', code: 'INVALID_CREDENTIALS',
     });
-    expect(verifyVendorPin).not.toHaveBeenCalled();
+    expect(verifyVendorPin).toHaveBeenCalled();
     expect(authClaimsResolver.resolve).not.toHaveBeenCalled();
     expect(tokenService.signAccessToken).not.toHaveBeenCalled();
   });
