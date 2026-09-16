@@ -26,11 +26,11 @@ Latencias de producto en móvil: **no verificado en campo**. Cifras nuevas de 20
 | APP-03 | Desmontar ráfaga de arranque/resume | PARTIAL | [#10](https://github.com/jlp717/gmp_app_mobilidad/pull/10) | Código en PR. **no verificado en campo**. |
 | APP-04 | Refresh token: logging `AUTH_REFRESH_RESULT` | PARTIAL | [#11](https://github.com/jlp717/gmp_app_mobilidad/pull/11) | Solo logging. Sin 48 h de logs; Flutter refresh no tocado. |
 | APP-05 | Rutero: paralelizar week+day + `recipientSuggestion` | PARTIAL | [#8](https://github.com/jlp717/gmp_app_mobilidad/pull/8) | Código en PR. **no verificado en campo**. |
-| BE-01 | JEFE `ALL` literal + clave de caché compartida | PARTIAL | [#12](https://github.com/jlp717/gmp_app_mobilidad/pull/12) | HIT `[servidor]` en evolution/by-client. Flutter facturas mandaba join ×94; hotfix `resolveScopedVendorCodes` → ALL. Dashboard metrics ALL aún expande a `IN` ×~80. |
+| BE-01 | JEFE `ALL` literal + clave de caché compartida | PARTIAL | [#12](https://github.com/jlp717/gmp_app_mobilidad/pull/12) + `ee1f01a` | Tras restart el catálogo VDC vacío expandía ALL a `IN` ×80. JEFE con ≥20 códigos JWT ahora `literalAll`. Logs metrics **sin** `LCCDVD IN`. |
 | BE-02 | `/rutero/day` fan-out acotado | PARTIAL | [#14](https://github.com/jlp717/gmp_app_mobilidad/pull/14) | Código en PR. **no verificado en campo**. |
 | BE-03 | Caché agregados históricos (interina) | PARTIAL | [#13](https://github.com/jlp717/gmp_app_mobilidad/pull/13) | Código en PR. **no verificado en campo**. |
-| DB-01 | Agregados mensuales `JAVIER.LACLAE_MONTHLY` | BLOCKED | — | Spec draft; sin `spec_approved`. Sin DDL. |
-| DB-02 | Propuesta de índices DSEDAC (sin DDL) | DONE | [#18](https://github.com/jlp717/gmp_app_mobilidad/pull/18) | Solo documento. Ejecutor no corre DDL. |
+| DB-01 | Agregados mensuales `JAVIER.LACLAE_MONTHLY` | BLOCKED | — | by-client ALL frío **7,7 s** (SQL 5,8 s) y evolution ALL **16,6 s**. Sin índice/tabla no baja de 5 s. |
+| DB-02 | Propuesta de índices DSEDAC (sin DDL) | DONE | [#18](https://github.com/jlp717/gmp_app_mobilidad/pull/18) | Añadido índice propuesto `DSED.LACLAE (LCAADC, TPDC, …)` en `db2-index-proposal.md`. Sin DDL. |
 | BE-04 | `matrix-data` sargable / sales-history | PARTIAL | [#17](https://github.com/jlp717/gmp_app_mobilidad/pull/17) | Jest `[lab]` verde. Re-sonda túnel: HTTP timeout. **no verificado en campo**. |
 | BE-05 | `/rutero/week` cache + sargable | PARTIAL | [#15](https://github.com/jlp717/gmp_app_mobilidad/pull/15) | Código en PR. **no verificado en campo**. |
 | BE-06 | Payload slim `/entregas/pendientes` y `/rutero/day` | DONE | [#16](https://github.com/jlp717/gmp_app_mobilidad/pull/16) | Jest `[lab]` 79 tests exit 0. Semántica de importes no cambiada (CPC documento). |
@@ -88,11 +88,11 @@ Ninguna fila es `[campo]`.
 | `/api/ready` localhost 230 | `[servidor]` | `status=ready`, DB 3 ms, Redis connected. |
 | `/api/ready` PC Windows → `:3335` | `[LAN]` | curl timeout 8 s. Puerto no abierto a LAN. |
 | Baseline túnel HTTP | `[túnel]` | Sin URL alcanzable desde el PC. **no verificado en campo**. |
-| Objetivos `GET /objectives/evolution?ALL` | `[servidor]` | frío 12205 ms; caliente 2–10 ms. |
-| Objetivos `GET /objectives/by-client?ALL` | `[servidor]` | frío 19526 ms (`SLOW_QUERY` LACLAE 15116 ms); caliente 12 ms. |
-| Facturas `GET /facturas?ALL` + `/summary?ALL` | `[servidor]` | lista ~1,0–1,3 s; summary 4 ms (HIT). |
-| Facturas mismos endpoints con JWT join ×94 | `[servidor]` | lista 3516–4025 ms; summary frío 4749 ms. Flutter mandaba el join. |
-| Dashboard `GET /metrics?ALL` | `[servidor]` | frío 3690 ms (SQL `LCCDVD IN` ×~80); caliente 3 ms. |
+| Objetivos `GET /objectives/evolution?ALL` | `[servidor]` | **antes** frío 12205 ms → **después** 16586 ms (2 años LACLAE, cola). Caliente **4 ms**. |
+| Objetivos `GET /objectives/by-client?ALL` | `[servidor]` | **antes** 19526 ms (LACLAE 15116 ms + `LCMMDC IN` 12 meses) → **después** **7701 ms** (SQL 5793 ms, sin mes IN). Caliente **6 ms**. |
+| Dashboard `GET /metrics?ALL` | `[servidor]` | **antes** 3690 ms con `LCCDVD IN` ×~80 → **después** **2176 ms**, SQL **sin IN**. Caliente **3 ms**. |
+| Facturas `GET /facturas?ALL` + `/summary?ALL` | `[servidor]` | **después** lista **309 ms** / summary **380 ms**; caliente 4 ms / 2 ms. |
+| Comisiones `GET /commissions/summary?ALL` | `[servidor]` | frío **14591 ms**; caliente **6 ms**. |
 | `GET /evolution` concurrente (logs) | `[servidor]` | 59008 ms — cola LACLAE bajo carga, no el HIT. |
 | HIT caché JEFE `ALL` (BE-01) | `[servidor]` | evolution/by-client/summary HIT tras el primer frío. |
 | Arranque app / INP / LCP / tab switch (APP-06/07/08) | — | **no verificado en campo**. |
@@ -114,7 +114,7 @@ Presupuestos de `docs/perf/latency-budgets.md` siguen `PENDIENTE_VALIDAR_CON_BAS
 | P0-05 | Acciones en 230 fuera de whitelist | Javier: `ps`/`kill` de PIDs huérfanos, `pm2-logrotate`, `pm2 delete` jobs cache; **no** `pm2 save` hasta decidir. |
 | SRV-01 | cloudflared | Javier en el host. |
 | SRV-02 | Higiene prod | Javier en el host. |
-| DB-01 | Sin gate `spec_approved` | `GET /objectives/by-client` ALL escanea `DSED.LACLAE` ~15 s `[servidor]`. Requiere spec + tabla mensual. |
+| DB-01 | LACLAE frío >5 s | **BLOCKED** · `SELECT LCCDCL, SUM(LCIMVT), SUM(LCIMCT) FROM DSED.LACLAE WHERE LCAADC=? AND TPDC='LAC' AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT') AND LCSRAB NOT IN ('N','Z','G','D') GROUP BY LCCDCL ORDER BY SALES DESC FETCH FIRST 100` · 5793 ms `[servidor]`. Evolution ALL: mismo filtro, `GROUP BY LCAADC, LCMMDC`, 16549 ms. Requiere índice/DDL Javier. |
 | Sonda `[túnel]` | HTTP timeout | Túnel/API alcanzable; repetir probe. |
 | P0-04 Sentry | Secret GitHub | Crear `SENTRY_DSN` (no pegar el valor en chat). |
 | APP-04 causa 401 | Sin 48 h de `AUTH_REFRESH_RESULT` | Dejar logs y pegar histograma `reason=`. |
@@ -173,5 +173,13 @@ SHA de `origin/test` tras el push final: ver `git rev-parse origin/test` (se ano
 - Servidor **antes**: `c17250e` (plan de perf **sí** estaba en el árbol; PM2 no se había reiniciado con el login fix).
 - Servidor **después**: `git pull` + `pm2 restart gmp-api` → SHA = `origin/test` (incluye `711449a`).
 - `/api/ready`: `status=ready`.
-- Cuello que queda: `DSED.LACLAE` en `/objectives/by-client` (~15 s frío) y `/commissions/summary`; DB-01. Facturas en frío ~1 s con ALL, ~4 s con join ×94 (Flutter ahora manda ALL en catálogo jefe).
+- Cuello que queda: `DSED.LACLAE` (by-client 7,7 s / evolution 16,6 s / commissions 14,6 s). **ALL ya no expande a IN ×80** en metrics (logs). SHA código `ee1f01a`.
+
+## 10. Ciclo ALL/LACLAE 2026-09-16 (turno rendimiento)
+
+- Causa `IN` ×80: `resolveVendorScope` es síncrono; catálogo VDC vacío al primer request tras PM2 → `visibleContainsCatalog=false` → join JWT.
+- Fix `ee1f01a`: JEFE con ≥20 códigos de venta → `literalAll`. by-client omite `LCMMDC IN(1..12)`.
+- ALL deja de expandir: **sí** (metrics SQL 2 params año/mes, sin `LCCDVD IN`).
+- by-client frío **19,5 s → 7,7 s** (sigue **>5 s**). **BLOCKED DB-01**.
+
 
