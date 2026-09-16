@@ -17,6 +17,7 @@ const { validateQuery, validateBody } = require('../middleware/security');
 const { authorizeVendorScope, isFinancialRole } = require('../middleware/vendor-scope');
 const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
+const { beginRouteFill, endRouteFill } = require('../services/route-cache-stampede');
 const {
     isTeamLeader,
     getTeamCommission,
@@ -2127,6 +2128,13 @@ router.get('/summary', verifyToken, validateQuery(summaryQuerySchema), async (re
                 logger.info(`[COMMISSIONS] ⚡ Cache HIT for grouped summary (${aggregatedCacheKey})`);
                 return res.json({ success: true, ...cachedResult });
             }
+            const stampede = await beginRouteFill(aggregatedCacheKey);
+            if (stampede.hit) {
+                logger.info(`[COMMISSIONS] ⚡ Cache HIT for grouped summary after wait (${aggregatedCacheKey})`);
+                return res.json({ success: true, ...stampede.hit });
+            }
+            req._commFillLock = stampede.lock;
+            req._commFillKey = aggregatedCacheKey;
         }
 
         if (singleSummaryCacheKey && !shouldForceRefresh) {
@@ -2536,6 +2544,11 @@ router.get('/summary', verifyToken, validateQuery(summaryQuerySchema), async (re
 
     } catch (error) {
         handleRouteError(error, res, 'Error calculando comisiones', 500, { success: false });
+    } finally {
+        if (req._commFillLock) {
+            await endRouteFill(req._commFillKey, req._commFillLock);
+            req._commFillLock = null;
+        }
     }
 });
 

@@ -35,10 +35,13 @@ void main() {
   });
 
   group('CachePreWarmer.deferredJefeTargets', () {
-    test('jefe deferred catalog is lightweight', () {
+    test('jefe deferred targets warm hot ALL routes first', () {
       expect(
         CachePreWarmer.deferredJefeTargets(),
         equals(const [
+          CachePrewarmTarget.objectivesEvolution,
+          CachePrewarmTarget.objectivesByClient,
+          CachePrewarmTarget.commissions,
           CachePrewarmTarget.vendedores,
           CachePrewarmTarget.pedidosCatalog,
         ]),

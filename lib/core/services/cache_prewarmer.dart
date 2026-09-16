@@ -10,6 +10,8 @@ import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
+import 'package:gmp_app_mobilidad/features/commissions/data/commissions_service.dart';
+import 'package:gmp_app_mobilidad/features/objectives/data/objectives_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 
 /// Which endpoints a role may pre-warm. Jefe first-paint owns the radio;
@@ -22,6 +24,8 @@ enum CachePrewarmTarget {
   vendedores,
   ruteroWeek,
   commissions,
+  objectivesEvolution,
+  objectivesByClient,
 }
 
 /// Dashboard completes this when `/dashboard/metrics` has painted (or 4 s).
@@ -94,6 +98,9 @@ class CachePreWarmer {
   @visibleForTesting
   static List<CachePrewarmTarget> deferredJefeTargets() {
     return const [
+      CachePrewarmTarget.objectivesEvolution,
+      CachePrewarmTarget.objectivesByClient,
+      CachePrewarmTarget.commissions,
       CachePrewarmTarget.vendedores,
       CachePrewarmTarget.pedidosCatalog,
     ];
@@ -120,18 +127,22 @@ class CachePreWarmer {
     if (generation != _warmGeneration || _hasPreWarmed) return;
 
     if (isJefeVentas) {
-      debugPrint('[CachePreWarmer] Deferred jefe catalog pre-warm');
+      debugPrint('[CachePreWarmer] Deferred jefe hot-route pre-warm');
       try {
-        await runWithConcurrency(const [
+        final year = DateTime.now().year;
+        await runWithConcurrency([
+          () => _preWarmObjectivesEvolution(),
+          () => _preWarmObjectivesByClient(),
+          () => _preWarmCommissionsAll(),
           _preWarmVendedores,
           _preWarmPedidosFamilies,
           _preWarmPedidosBrands,
         ]);
         if (generation != _warmGeneration) return;
         _hasPreWarmed = true;
-        debugPrint('[CachePreWarmer] Jefe catalog pre-warm completed');
+        debugPrint('[CachePreWarmer] Jefe hot-route pre-warm completed $year');
       } catch (e) {
-        debugPrint('[CachePreWarmer] Jefe catalog pre-warm failed: $e');
+        debugPrint('[CachePreWarmer] Jefe hot-route pre-warm failed: $e');
       }
       return;
     }
@@ -316,6 +327,43 @@ class CachePreWarmer {
       debugPrint('[CachePreWarmer] Rutero week pre-warmed');
     } catch (e) {
       debugPrint('[CachePreWarmer] Rutero week pre-warm failed: $e');
+    }
+  }
+
+  static Future<void> _preWarmObjectivesEvolution() async {
+    try {
+      final year = DateTime.now().year;
+      await ObjectivesService.getEvolution(
+        vendedorCodes: 'ALL',
+        years: [year],
+      );
+      debugPrint('[CachePreWarmer] Objectives evolution ALL pre-warmed');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] Objectives evolution pre-warm failed: $e');
+    }
+  }
+
+  static Future<void> _preWarmObjectivesByClient() async {
+    try {
+      final year = DateTime.now().year;
+      await ObjectivesService.getByClient(
+        vendedorCodes: 'ALL',
+        years: [year],
+        months: const [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        limit: 100,
+      );
+      debugPrint('[CachePreWarmer] Objectives by-client ALL pre-warmed');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] Objectives by-client pre-warm failed: $e');
+    }
+  }
+
+  static Future<void> _preWarmCommissionsAll() async {
+    try {
+      await CommissionsService.getSummary(vendedorCode: 'ALL');
+      debugPrint('[CachePreWarmer] Commissions ALL pre-warmed');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] Commissions ALL pre-warm failed: $e');
     }
   }
 

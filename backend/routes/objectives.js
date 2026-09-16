@@ -20,6 +20,7 @@ const {
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
 const { redisCache, TTL } = require('../services/redis-cache');
+const { beginRouteFill, endRouteFill } = require('../services/route-cache-stampede');
 const {
     isCommercial80User,
     resolveAllModeVendorCodesString,
@@ -977,6 +978,12 @@ router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) 
             logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution (${cacheKey})`);
             return res.json(cachedResult);
         }
+        const stampede = await beginRouteFill(cacheKey);
+        if (stampede.hit) {
+            logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution after wait (${cacheKey})`);
+            return res.json(stampede.hit);
+        }
+        try {
 
         const yearsArray = yearsArrayPreview;
 
@@ -1270,6 +1277,9 @@ router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) 
         logger.info(`[OBJECTIVES] 💾 Cached evolution (${cacheKey})`);
 
         res.json(responseData);
+        } finally {
+            await endRouteFill(cacheKey, stampede.lock);
+        }
 
     } catch (error) {
         handleRouteError(error, res, 'Error obteniendo evolución de objetivos', 500);
@@ -2529,6 +2539,13 @@ async function handleByClientRequest(req, res) {
                 if (!res.headersSent) return res.json(cachedResult);
                 return;
             }
+            const stampede = await beginRouteFill(cacheKey);
+            if (stampede.hit) {
+                logger.info(`[OBJECTIVES] ⚡ Cache HIT for by-client after wait (${cacheKey})`);
+                if (!res.headersSent) return res.json(stampede.hit);
+                return;
+            }
+            req._byClientFillLock = stampede.lock;
         }
 
         // Parse years and months - default to full year
@@ -2971,6 +2988,11 @@ async function handleByClientRequest(req, res) {
         logger.error(`Objectives by-client error: ${error.message}`);
         if (!res.headersSent) {
             handleRouteError(error, res, 'Error obteniendo objetivos por cliente', 500);
+        }
+    } finally {
+        if (req._byClientFillLock) {
+            await endRouteFill(cacheKey, req._byClientFillLock);
+            req._byClientFillLock = null;
         }
     }
 }

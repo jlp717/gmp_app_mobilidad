@@ -207,7 +207,7 @@ function createAuthClaimsLoginHandler({
         throw error;
       }
 
-      return res.json({
+      res.json({
         success: true,
         user: publicUser(resolvedClaims),
         role: resolvedClaims.role,
@@ -230,6 +230,17 @@ function createAuthClaimsLoginHandler({
         tokenExpiresIn: Math.floor(tokenService.ACCESS_TTL_MS / 1000),
         refreshExpiresIn: Math.floor(tokenService.REFRESH_TTL_MS / 1000),
       });
+      try {
+        const { scheduleJefeHotRouteWarmup } = require('../../../../services/jefe-hot-route-warmer');
+        scheduleJefeHotRouteWarmup({
+          token: accessToken,
+          isJefeVentas: resolvedClaims.isJefeVentas,
+          role: resolvedClaims.role,
+        });
+      } catch (_warmupError) {
+        // Login must not fail if background warmup cannot start.
+      }
+      return;
     } catch (error) {
       return sendError(res, error);
     }
