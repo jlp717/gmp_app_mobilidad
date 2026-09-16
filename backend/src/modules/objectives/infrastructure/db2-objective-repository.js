@@ -123,8 +123,8 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
         COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
         COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS
       FROM ${comercialErpTable('LACLAE')} L
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
-      LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = L.LCCDRF
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+      LEFT JOIN ${comercialErpTable('ART')} ART ON ART.CODIGOARTICULO = L.LCCDRF
       WHERE ${vendorFilter}
         AND ${LACLAE_SALES_FILTER}
         ${yearFilter}

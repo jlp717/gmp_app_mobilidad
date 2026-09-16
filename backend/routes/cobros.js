@@ -19,6 +19,7 @@ const {
 } = require('../utils/common');
 const crypto = require('crypto');
 const { parsePage, paginationContract, db2OffsetFetch } = require('../src/utils/pagination');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2AppTable('COBROS');
@@ -367,7 +368,7 @@ async function authorizeCobrosClientScope(req, codigoCliente, action = 'consulta
     const clientVendorFilter = buildClientVendorParamFilter([userId], 'CLI');
     const rows = await queryWithParams(
         `SELECT 1
-           FROM DSEDAC.CLI CLI
+           FROM ${comercialErpTable('CLI')} CLI
           WHERE TRIM(CLI.CODIGOCLIENTE) = ?
             ${clientVendorFilter.clause}
           FETCH FIRST 1 ROW ONLY`,
@@ -807,7 +808,7 @@ router.get('/:codigoCliente/estado', async (req, res) => {
                 return [];
             }),
             queryWithParams(`
-                SELECT LIMITECREDITO FROM DSEDAC.CLI
+                SELECT LIMITECREDITO FROM ${comercialErpTable('CLI')}
                 WHERE TRIM(CODIGOCLIENTE) = ?
                 FETCH FIRST 1 ROW ONLY
             `, [codigoCliente], []).catch((cliErr) => {

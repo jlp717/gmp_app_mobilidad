@@ -28,7 +28,7 @@ const { ResponseCache } = require('../../core/infrastructure/cache/response-cach
 const { performanceCache } = require('../../core/infrastructure/cache/performance-cache');
 const { cachedQuery } = require('../../../services/query-optimizer');
 const { query, queryWithParams } = require('../../../config/db');
-const { comercialErpTable } = require('../../../utils/comercial-erp-tables');
+const { comercialErpTable, comercialErpSchemaAndName } = require('../../../utils/comercial-erp-tables');
 const { TTL: RedisTTL, redisCache } = require('../../../services/redis-cache');
 const { beginRouteFill, endRouteFill, sendFillBusy } = require('../../../services/route-cache-stampede');
 const {
@@ -480,7 +480,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
     const existsRows = await cachedQuery(
       (sql, params = []) => queryWithParams(sql, params),
       `SELECT 1
-         FROM DSEDAC.CLI CLI
+         FROM ${comercialErpTable('CLI')} CLI
         WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
         FETCH FIRST 1 ROW ONLY`,
       {
@@ -505,7 +505,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
   const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, 'CLI');
   let rows = await queryWithParams(
     `SELECT 1
-       FROM DSEDAC.CLI CLI
+       FROM ${comercialErpTable('CLI')} CLI
       WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
         ${clientVendorFilter.clause}
       FETCH FIRST 1 ROW ONLY`,
@@ -518,7 +518,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
       const retryFilter = buildClientVendorParamFilter(assignedVendors, 'CLI');
       rows = await queryWithParams(
         `SELECT 1
-           FROM DSEDAC.CLI CLI
+           FROM ${comercialErpTable('CLI')} CLI
           WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
             ${retryFilter.clause}
           FETCH FIRST 1 ROW ONLY`,
@@ -1565,7 +1565,7 @@ function createPedidosRoutes() {
           TRIM(L.LCSRAB) AS SERIEALBARAN, L.LCNRAB AS NUMEROALBARAN
         FROM ${comercialErpTable('LACLAE')} L
         LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
-        LEFT JOIN DSEDAC.CLI C ON C.CODIGOCLIENTE = L.LCCDCL
+        LEFT JOIN ${comercialErpTable('CLI')} C ON C.CODIGOCLIENTE = L.LCCDCL
         WHERE ${whereSql}
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
         OFFSET ${offset} ROWS FETCH FIRST ${limit} ROWS ONLY`;
@@ -1795,7 +1795,7 @@ function createPedidosRoutes() {
       if (!vendorScope.ok) return res.status(403).json({ success: false, error: vendorScope.error });
       const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, "CLI");
       const laclaeVendorFilter = buildLaclaeVendorParamFilter(vendorScope.codes, "L");
-      const clientCheckSql = ['SELECT 1 FROM DSEDAC.CLI CLI WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))', clientVendorFilter.clause, 'FETCH FIRST 1 ROWS ONLY'].join(' ');
+      const clientCheckSql = [`SELECT 1 FROM ${comercialErpTable('CLI')} CLI WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))`, clientVendorFilter.clause, 'FETCH FIRST 1 ROWS ONLY'].join(' ');
       const clientCheck = await queryWithParams(clientCheckSql, [clientCode, ...clientVendorFilter.params]);
       if (!clientCheck || clientCheck.length === 0) return res.status(403).json({ success: false, error: "No tienes acceso a este cliente", message: "Cliente no encontrado o no tienes permiso para verlo" });
       const currentYear = new Date().getFullYear();
@@ -2194,6 +2194,7 @@ async function getCobrosCreditLimit(clientCode) {
   const code = String(clientCode || '').trim();
   if (!code) return 0;
   try {
+    const cliCatalog = comercialErpSchemaAndName('CLI');
     const columnRows = await queryWithParams(
       `SELECT COLUMN_NAME
          FROM QSYS2.SYSCOLUMNS
@@ -2201,7 +2202,7 @@ async function getCobrosCreditLimit(clientCode) {
           AND TABLE_NAME = ?
           AND COLUMN_NAME = ?
         FETCH FIRST 1 ROW ONLY`,
-      ['DSEDAC', 'CLI', 'LIMITECREDITO'],
+      [cliCatalog.schema, cliCatalog.table, 'LIMITECREDITO'],
       false,
       false,
     );
@@ -2209,7 +2210,7 @@ async function getCobrosCreditLimit(clientCode) {
     if (!hasLimiteCredito) return 0;
     const cliRows = await queryWithParams(
       `SELECT LIMITECREDITO
-         FROM DSEDAC.CLI
+         FROM ${comercialErpTable('CLI')}
         WHERE TRIM(CODIGOCLIENTE) = ?
         FETCH FIRST 1 ROW ONLY`,
       [code],
@@ -2814,7 +2815,7 @@ function createClientsRoutes() {
                   C.CODIGORUTA as route,
                   C.PERSONACONTACTO as contactPerson,
                   C.ANOBAJA as yearInactive
-                FROM DSEDAC.CLI C
+                FROM ${comercialErpTable('CLI')} C
                 WHERE C.ANOBAJA = 0
                   AND C.CODIGOCLIENTE IN (${placeholders})
               `, pageCodes, false),
@@ -2966,7 +2967,7 @@ function createClientsRoutes() {
             C.ANOBAJA as yearInactive,
             TRIM(V.NOMBREVENDEDOR) as vendorName,
             LV.LAST_VENDOR as vendorCode
-          FROM DSEDAC.CLI C
+          FROM ${comercialErpTable('CLI')} C
           LEFT JOIN LACLAE_AGG S ON C.CODIGOCLIENTE = S.CLIENT_CODE
           LEFT JOIN LACLAE_LAST LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
           LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR

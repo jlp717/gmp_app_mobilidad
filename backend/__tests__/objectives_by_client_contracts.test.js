@@ -38,6 +38,13 @@ describe('objectives by-client route contracts', () => {
     expect(source).toContain("name: 'objectives-by-client'");
     expect(source).toContain('objectivesByClientBreaker.execute');
     expect(source).toContain('Objetivos por cliente no disponibles dentro del timeout seguro');
+    expect(source).toContain('timeout: 35000');
+  });
+
+  test('populations and by-client read CLI via comercialErpTable, not DSEDAC.CLI', () => {
+    expect(source).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(source).not.toMatch(/FROM DSEDAC\.CLI/);
+    expect(source).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
   });
 
   test('ALL evolution and by-client can read JAVIER.LACLAE_MONTHLY', () => {

@@ -316,12 +316,14 @@ describe('pedidos client evolution route contract', () => {
       },
     ]);
 
+    const { comercialErpTable } = require('../utils/comercial-erp-tables');
     const clientScopeCall = mockQueryWithParams.mock.calls[0];
-    expect(clientScopeCall[0]).toContain('DSEDAC.CLI');
+    expect(clientScopeCall[0]).toContain(comercialErpTable('CLI'));
+    expect(clientScopeCall[0]).not.toMatch(/FROM \$\{comercialErpTable\('CLI'\)\}/);
     expect(clientScopeCall[1]).toEqual(['C001', '01', '01']);
 
     const monthlyCall = mockQueryWithParams.mock.calls[1];
-    expect(monthlyCall[0]).toContain('DSED.LACLAE');
+    expect(monthlyCall[0]).toContain(comercialErpTable('LACLAE'));
     const startYear = new Date().getFullYear() - 2;
     expect(monthlyCall[1]).toEqual(
       expect.arrayContaining(['C001', startYear, 'CC', 'VC', 'AB', 'VT', '01']),

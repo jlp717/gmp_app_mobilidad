@@ -69,7 +69,7 @@ const objectivesByClientBreaker = new CircuitBreaker({
     name: 'objectives-by-client',
     failureThreshold: 2,
     successThreshold: 1,
-    timeout: 20000
+    timeout: 35000
 });
 const BY_CLIENT_DEFAULT_LIMIT = 100;
 const BY_CLIENT_MAX_LIMIT = 250;
@@ -1359,7 +1359,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         const [contactRows, notesRows] = await Promise.all([
             queryWithParams(`
                 SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2 
-                FROM DSEDAC.CLI WHERE CODIGOCLIENTE = ? FETCH FIRST 1 ROWS ONLY
+                FROM ${comercialErpTable('CLI')} WHERE CODIGOCLIENTE = ? FETCH FIRST 1 ROWS ONLY
             `, [clientCode]).catch(e => { logger.warn(`Could not load contact info: ${e.message}`); return []; }),
             queryWithParams(`
                 SELECT OBSERVACIONES, MODIFIED_BY FROM JAVIER.CLIENT_NOTES 
@@ -2506,7 +2506,7 @@ router.get('/populations', verifyToken, async (req, res) => {
     try {
         const rows = await query(`
             SELECT DISTINCT TRIM(POBLACION) as CITY 
-            FROM DSEDAC.CLI 
+            FROM ${comercialErpTable('CLI')} 
             WHERE ANOBAJA = 0 
             AND TRIM(POBLACION) <> ''
             ORDER BY 1
@@ -2655,7 +2655,7 @@ async function handleByClientRequest(req, res) {
                         C.DIRECCION as ADDRESS,
                         C.CODIGOPOSTAL as POSTALCODE,
                         C.POBLACION as CITY
-                    FROM DSEDAC.CLI C
+                    FROM ${comercialErpTable('CLI')} C
                     WHERE C.CODIGOCLIENTE IN (${topCodes.map(() => '?').join(',')})
                 `, topCodes, false);
                 const detailsMap = new Map();
@@ -2685,7 +2685,7 @@ async function handleByClientRequest(req, res) {
             if (extraFilters) {
                 const countResult = await queryWithParams(`
                     SELECT COUNT(*) as TOTAL
-                    FROM DSEDAC.CLI C
+                    FROM ${comercialErpTable('CLI')} C
                     WHERE C.CODIGOCLIENTE IN (${safeClientCodes.map(() => '?').join(',')})
                       ${extraFilters}
                 `, [...safeClientCodes, ...extraFilterParams], false);
@@ -2721,7 +2721,7 @@ async function handleByClientRequest(req, res) {
                             C.DIRECCION as ADDRESS,
                             C.CODIGOPOSTAL as POSTALCODE,
                             C.POBLACION as CITY
-                        FROM DSEDAC.CLI C
+                        FROM ${comercialErpTable('CLI')} C
                         WHERE C.CODIGOCLIENTE IN (${topCodes.map(() => '?').join(',')})
                     `, topCodes, false);
 
@@ -2753,7 +2753,7 @@ async function handleByClientRequest(req, res) {
                             C.DIRECCION as ADDRESS,
                             C.CODIGOPOSTAL as POSTALCODE,
                             C.POBLACION as CITY
-                        FROM DSEDAC.CLI C
+                        FROM ${comercialErpTable('CLI')} C
                         WHERE C.CODIGOCLIENTE IN (${fallbackCodes.map(() => '?').join(',')})
                         FETCH FIRST ? ROWS ONLY
                     `, [...fallbackCodes, rowsLimit], false);
@@ -2779,7 +2779,7 @@ async function handleByClientRequest(req, res) {
                         C.POBLACION as CITY,
                         COALESCE(S.SALES, 0) as SALES,
                         COALESCE(S.COST, 0) as COST
-                    FROM DSEDAC.CLI C
+                    FROM ${comercialErpTable('CLI')} C
                     LEFT JOIN (
                         SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
                         FROM ${comercialErpTable('LACLAE')}
@@ -2827,7 +2827,7 @@ async function handleByClientRequest(req, res) {
                             C.DIRECCION as ADDRESS,
                             C.CODIGOPOSTAL as POSTALCODE,
                             C.POBLACION as CITY
-                        FROM DSEDAC.CLI C
+                        FROM ${comercialErpTable('CLI')} C
                         WHERE C.CODIGOCLIENTE IN (${topCodes.map(() => '?').join(',')})
                     `, topCodes, false);
 
@@ -2862,7 +2862,7 @@ async function handleByClientRequest(req, res) {
                         SUM(L.LCIMVT) as SALES,
                         SUM(L.LCIMCT) as COST
                     FROM ${comercialErpTable('LACLAE')} L
-                    LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
+                    LEFT JOIN ${comercialErpTable('CLI')} C ON L.LCCDCL = C.CODIGOCLIENTE
                     WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
                       ${monthPred.filter}
                       AND ${LACLAE_SALES_FILTER}

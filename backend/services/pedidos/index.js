@@ -1082,12 +1082,12 @@ async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
         const [rows, allVendorRows] = await Promise.all([vendorRowsPromise, allVendorRowsPromise]);
         const laclaeDays = deliveryDaysFromRows(rows, LACLAE_DELIVERY_COLUMNS);
         if (laclaeDays.length > 0) {
-            return { days: laclaeDays, source: 'DSED.LACLAE' };
+            return { days: laclaeDays, source: comercialErpTable('LACLAE') };
         }
         if (cleanVendor) {
             const allLaclaeDays = deliveryDaysFromRows(allVendorRows, LACLAE_DELIVERY_COLUMNS);
             if (allLaclaeDays.length > 0) {
-                return { days: allLaclaeDays, source: 'DSED.LACLAE' };
+                return { days: allLaclaeDays, source: comercialErpTable('LACLAE') };
             }
         }
     } catch (error) {
@@ -1136,8 +1136,8 @@ async function getClientOrderDefaults(clientCode) {
                    TRIM(COALESCE(CLI.CODIGORUTA, '')) AS CODIGORUTA,
                    COALESCE(CLC.CODIGOTARIFA, 1) AS CODIGOTARIFA,
                    TRIM(COALESCE(NULLIF(TRIM(CLC.CODIGOFORMAPAGO1), ''), NULLIF(TRIM(CLC.CODIGOFORMAPAGO2), ''), '')) AS CODIGOFORMAPAGO
-              FROM DSEDAC.CLI CLI
-              LEFT JOIN DSEDAC.CLC CLC
+              FROM ${comercialErpTable('CLI')} CLI
+              LEFT JOIN ${comercialErpTable('CLC')} CLC
                 ON TRIM(CLC.CODIGOCLIENTE) = TRIM(CLI.CODIGOCLIENTE)
              WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
              FETCH FIRST 1 ROW ONLY`,
@@ -1225,7 +1225,7 @@ async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDat
         vehicleDescription: '',
         routeCode: explicitRouteCode || defaults.routeCode || '',
         confidence: 'sin-datos',
-        source: defaults.routeCode ? 'DSEDAC.CLI' : 'none',
+        source: defaults.routeCode ? comercialErpTable('CLI') : 'none',
     };
 }
 
@@ -6036,7 +6036,7 @@ async function getConfirmedPedidosForRutero({ repartidorIds, day, month, year })
             'PEDIDO' AS ANTEROOM_DOC_TIPO,
             C.ID AS PEDIDO_ID
         FROM ${PEDIDOS_CAB_TABLE} C
-        LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(C.CODIGOCLIENTE)
+        LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(C.CODIGOCLIENTE)
         WHERE TRIM(C.ESTADO) = 'CONFIRMADO'
           AND TRIM(C.CODIGOREPARTIDOR) IN (${placeholders})
           AND TRIM(C.CODIGOREPARTIDOR) <> ''

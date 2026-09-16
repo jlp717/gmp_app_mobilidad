@@ -1,6 +1,6 @@
 /**
  * Clients Repository Implementation - DB2
- * REAL SCHEMA: DSEDAC.CLI (clients), DSED.LACLAE (sales), DSEDAC.ART (products), DSEDAC.CVC (payments)
+ * isolated_test reads JAVIER.TEST_* via comercialErpTable; production stays DSEDAC/DSED.
  */
 const { ClientRepository } = require('../domain/client-repository');
 const { Client, ClientDetail } = require('../domain/client');
@@ -12,6 +12,7 @@ const {
   MIN_YEAR,
   LACLAE_SALES_FILTER,
 } = require('../../../../utils/common');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 const CLIENT_VENDOR_SELECT_SQL = `
         COALESCE(
@@ -24,7 +25,7 @@ const CLIENT_VENDOR_SELECT_SQL = `
                       ROW_NUMBER() OVER (
                         ORDER BY LAC.LCAADC DESC, LAC.LCMMDC DESC, LAC.LCDDDC DESC
                       ) AS RN
-                 FROM DSED.LACLAE LAC
+                 FROM ${comercialErpTable('LACLAE')} LAC
                 WHERE TRIM(LAC.LCCDCL) = TRIM(CLI.CODIGOCLIENTE)
                   AND LAC.LCAADC >= ${MIN_YEAR}
                   AND LAC.TPDC = 'LAC'
@@ -95,7 +96,7 @@ class Db2ClientRepository extends ClientRepository {
         CLI.CODIGORUTA,
         ${CLIENT_VENDOR_SELECT_SQL},
         CASE WHEN CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0 THEN 1 ELSE 0 END AS ACTIVO
-      FROM DSEDAC.CLI CLI
+      FROM ${comercialErpTable('CLI')} CLI
       WHERE (CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0)
         ${vendorFilter}
         ${searchFilter.clause}
@@ -120,7 +121,7 @@ class Db2ClientRepository extends ClientRepository {
         CLI.CODCLI AS TARIFA,
         ${CLIENT_VENDOR_SELECT_SQL},
         CASE WHEN CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0 THEN 1 ELSE 0 END AS ACTIVO
-      FROM DSEDAC.CLI CLI
+      FROM ${comercialErpTable('CLI')} CLI
       WHERE TRIM(CLI.CODIGOCLIENTE) = ?
     `;
 
@@ -143,7 +144,7 @@ class Db2ClientRepository extends ClientRepository {
     const params = [code, ...vendorParams];
     if (year) params.push(year);
 
-    // Sales by month using DSED.LACLAE
+    // Sales by month using comercial LACLAE
     const salesSql = `
       SELECT 
         L.LCAADC AS ANIO,
@@ -151,7 +152,7 @@ class Db2ClientRepository extends ClientRepository {
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE TRIM(L.LCCDCL) = ?
         AND ${vendorFilter}
         AND ${LACLAE_SALES_FILTER}
@@ -160,15 +161,15 @@ class Db2ClientRepository extends ClientRepository {
       ORDER BY ANIO, MES
     `;
 
-    // Top products using DSED.LACLAE + DSEDAC.ART
+    // Top products using comercial LACLAE + ART
     const productsSql = `
       SELECT 
         L.LCCDRF AS CODIGO,
         COALESCE(ART.DESCRIPCIONARTICULO, L.LCCDRF) AS NOMBRE,
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
+      FROM ${comercialErpTable('LACLAE')} L
+      LEFT JOIN ${comercialErpTable('ART')} ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
       WHERE TRIM(L.LCCDCL) = ?
         AND ${vendorFilter}
         AND ${LACLAE_SALES_FILTER}
@@ -178,12 +179,12 @@ class Db2ClientRepository extends ClientRepository {
       FETCH FIRST 20 ROWS ONLY
     `;
 
-    // Payment status using DSEDAC.CVC
+    // Payment status using comercial CVC
     const paymentSql = `
       SELECT 
         COALESCE(SUM(CASE WHEN TRIM(SITUACION) = 'P' THEN IMPORTEPENDIENTE ELSE 0 END), 0) AS PENDIENTE,
         COALESCE(SUM(CASE WHEN TRIM(SITUACION) <> 'P' THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS COBRADO
-      FROM DSEDAC.CVC
+      FROM ${comercialErpTable('CVC')}
       WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
     `;
 
@@ -225,8 +226,8 @@ class Db2ClientRepository extends ClientRepository {
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCSRAB || L.LCNRAB) AS PEDIDOS,
         COUNT(DISTINCT L.LCCDRF) AS PRODUCTOS
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+      FROM ${comercialErpTable('LACLAE')} L
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       WHERE TRIM(L.LCCDCL) IN (${placeholders})
         AND ${vendorFilter}
         AND ${LACLAE_SALES_FILTER}
@@ -250,8 +251,8 @@ class Db2ClientRepository extends ClientRepository {
         L.LCCTUD AS CANTIDAD,
         L.LCIMVT AS VENTAS,
         L.LCIMVT - L.LCIMCT AS MARGEN
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
+      FROM ${comercialErpTable('LACLAE')} L
+      LEFT JOIN ${comercialErpTable('ART')} ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
       WHERE TRIM(L.LCCDCL) = ?
         AND ${LACLAE_SALES_FILTER}
         ${year ? `AND L.LCAADC = ?` : `AND L.LCAADC >= ${MIN_YEAR}`}
@@ -274,8 +275,8 @@ class Db2ClientRepository extends ClientRepository {
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
         COUNT(*) AS FRECUENCIA
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.ART ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
+      FROM ${comercialErpTable('LACLAE')} L
+      LEFT JOIN ${comercialErpTable('ART')} ART ON TRIM(ART.CODIGOARTICULO) = TRIM(L.LCCDRF)
       WHERE TRIM(L.LCCDCL) = ?
         AND ${LACLAE_SALES_FILTER}
         AND L.LCAADC >= ${MIN_YEAR}
@@ -293,7 +294,7 @@ class Db2ClientRepository extends ClientRepository {
         COALESCE(SUM(CASE WHEN TRIM(SITUACION) = 'P' THEN IMPORTEPENDIENTE ELSE 0 END), 0) AS PENDIENTE,
         COALESCE(SUM(CASE WHEN TRIM(SITUACION) <> 'P' THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS COBRADO,
         COUNT(*) AS TOTAL_RECEIPTS
-      FROM DSEDAC.CVC
+      FROM ${comercialErpTable('CVC')}
       WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
     `;
 

@@ -13,6 +13,7 @@ const logger = require('../middleware/logger');
 const { verifyToken, requireJefeVentas } = require('../middleware/auth');
 const { applyAuthorizedVendedorCodes } = require('../middleware/vendor-scope');
 const { getClientCodesFromCache } = require('../services/laclae');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 const router = Router();
 const vendorClientSetCache = new Map();
@@ -130,7 +131,7 @@ async function getVendorClientSet(vendorCodes, mode = 'current') {
       ),
       kpiQuery(
         `SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
-           FROM DSED.LACLAE
+           FROM ${comercialErpTable('LACLAE')}
           WHERE TRIM(LCCDVD) IN (${placeholders})
             AND ${yearClause}
             AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')`,
@@ -701,7 +702,7 @@ router.get('/dashboard', async (req, res) => {
       .sort((a, b) => b.critical - a.critical || b.warning - a.warning || b.total - a.total)
       .slice(0, 50);
 
-    // 4. Fetch client info from DSEDAC.CLI (name, address, city)
+    // 4. Fetch client info from comercial CLI (name, address, city)
     const clientCodes = sortedClients.map(c => c.code);
     const clientInfo = {}; // code â†’ { name, address, city }
     if (clientCodes.length > 0) {
@@ -713,7 +714,7 @@ router.get('/dashboard', async (req, res) => {
             `SELECT TRIM(C.CODIGOCLIENTE) AS CODE,
                     COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) AS NAME,
                     TRIM(C.DIRECCION) AS ADDRESS, TRIM(C.POBLACION) AS CITY
-             FROM DSEDAC.CLI C
+             FROM ${comercialErpTable('CLI')} C
              WHERE TRIM(C.CODIGOCLIENTE) IN (${placeholders})`,
             db2ClientCodes
           );

@@ -49,6 +49,7 @@ const { cachedQuery } = require('../services/query-optimizer');
 const { verifyToken } = require('../middleware/auth');
 const { TTL } = require('../services/redis-cache');
 const { db2WriteTable } = require('../utils/db2-schemas');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { buildLaclaeDateRangeFilter } = require('../src/utils/dashboardFilters');
 const BROAD_PEDIDO_VENDOR_SCOPE_THRESHOLD = 50;
 
@@ -294,7 +295,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
         const existsRows = await cachedQuery(
             (sql, params = []) => queryWithParams(sql, params),
             `SELECT 1
-               FROM DSEDAC.CLI CLI
+               FROM ${comercialErpTable('CLI')} CLI
               WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
               FETCH FIRST 1 ROW ONLY`,
             {
@@ -323,7 +324,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
     const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, 'CLI');
     let rows = await queryWithParams(
         `SELECT 1
-           FROM DSEDAC.CLI CLI
+           FROM ${comercialErpTable('CLI')} CLI
           WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
             ${clientVendorFilter.clause}
           FETCH FIRST 1 ROW ONLY`,
@@ -336,7 +337,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
             const retryFilter = buildClientVendorParamFilter(assignedVendors, 'CLI');
             rows = await queryWithParams(
                 `SELECT 1
-                   FROM DSEDAC.CLI CLI
+                   FROM ${comercialErpTable('CLI')} CLI
                   WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
                     ${retryFilter.clause}
                   FETCH FIRST 1 ROW ONLY`,
@@ -796,7 +797,7 @@ router.get('/product-history/:productCode/:clientCode', async (req, res) => {
                 AVG(L.LCPRT1) AS AVG_TARIFF,
                 AVG(CASE WHEN L.LCPJDT <> 0 THEN L.LCPJDT ELSE NULL END) AS AVG_DISCOUNT_PCT,
                 COUNT(*) AS LINE_COUNT
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE L.LCCDCL = ?
           AND L.LCCDRF = ?
           AND L.LCAADC >= ?
@@ -1157,14 +1158,14 @@ router.get('/product-comparative/:productCode', async (req, res) => {
                 COALESCE(SUM(L.LCCTEV), 0) AS ENVASES,
                 COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
                 COALESCE(SUM(L.LCIMVT), 0) AS IMPORTE
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE ${whereSql} AND L.LCAADC IN (?, ?)
             GROUP BY L.LCAADC, L.LCMMDC
             ORDER BY L.LCAADC, L.LCMMDC
         `;
         const sqlProductName = `
             SELECT TRIM(DESCRIPCIONARTICULO) AS NAME
-            FROM DSEDAC.ART WHERE TRIM(CODIGOARTICULO) = ?
+            FROM ${comercialErpTable('ART')} WHERE TRIM(CODIGOARTICULO) = ?
             FETCH FIRST 1 ROW ONLY
         `;
 
@@ -1245,7 +1246,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
         
         // Verify client belongs to vendor scope
         const clientCheckQuery = `
-            SELECT 1 FROM DSEDAC.CLI CLI
+            SELECT 1 FROM ${comercialErpTable('CLI')} CLI
             WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
               ${clientVendorFilter.clause}
             FETCH FIRST 1 ROWS ONLY
@@ -1269,7 +1270,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
         const monthlyQuery = `
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
                    SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
               ${laclaeVendorFilter.clause}
@@ -1282,8 +1283,8 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
         const topProductsQuery = `
             SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
                    SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS
-            FROM DSED.LACLAE L
-            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            FROM ${comercialErpTable('LACLAE')} L
+            LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
               ${laclaeVendorFilter.clause}
@@ -1297,8 +1298,8 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
                    TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME,
                    SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT
-            FROM DSED.LACLAE L
-            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            FROM ${comercialErpTable('LACLAE')} L
+            LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
               AND (L.LCSRAB = 'D' OR L.LCTPVT = 'DV')
               ${laclaeVendorFilter.clause}
@@ -2118,11 +2119,11 @@ router.get('/purchase-history-global', async (req, res) => {
         // Filtros adicionales por familia y marca (vienen de DSEDAC.ART
         // via el JOIN con A en la consulta detalle/top).
         if (familia) {
-            where.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE TRIM(CODIGOFAMILIA) = ?)`);
+            where.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM ${comercialErpTable('ART')} WHERE TRIM(CODIGOFAMILIA) = ?)`);
             params.push(familia);
         }
         if (marca) {
-            where.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE TRIM(CODIGOMARCA) = ?)`);
+            where.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM ${comercialErpTable('ART')} WHERE TRIM(CODIGOMARCA) = ?)`);
             params.push(marca);
         }
 
@@ -2146,9 +2147,9 @@ router.get('/purchase-history-global', async (req, res) => {
                 (L.LCCTUD * L.LCPRVT - L.LCIMVT) AS IMPORTEDESCUENTO,
                 TRIM(L.LCCDFP) AS CODIGOFORMAPAGO,
                 TRIM(L.LCSRAB) AS SERIEALBARAN, L.LCNRAB AS NUMEROALBARAN
-            FROM DSED.LACLAE L
-            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
-            LEFT JOIN DSEDAC.CLI C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+            FROM ${comercialErpTable('LACLAE')} L
+            LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
+            LEFT JOIN ${comercialErpTable('CLI')} C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
             WHERE ${whereSql}
             ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
             OFFSET ${offset} ROWS FETCH FIRST ${limit} ROWS ONLY
@@ -2164,7 +2165,7 @@ router.get('/purchase-history-global', async (req, res) => {
                 COALESCE(SUM(L.LCCTUD * L.LCPRVT), 0) AS TOTAL_SIN_DESCUENTO,
                 COALESCE(SUM(L.LCCTUD * L.LCPRVT - L.LCIMVT), 0) AS TOTAL_DESCUENTO,
                 COALESCE(SUM(L.LCCTUD), 0) AS TOTAL_UNIDADES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE ${whereSql}
         `;
 
@@ -2176,8 +2177,8 @@ router.get('/purchase-history-global', async (req, res) => {
                 COALESCE(SUM(L.LCIMVT), 0) AS IMPORTE,
                 COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
                 COUNT(*) AS NUM_LINEAS
-            FROM DSED.LACLAE L
-            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            FROM ${comercialErpTable('LACLAE')} L
+            LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE ${whereSql}
             GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
             ORDER BY IMPORTE DESC
@@ -2193,7 +2194,7 @@ router.get('/purchase-history-global', async (req, res) => {
         const lastYearWhereSql = [lastYearDateRange.sql, ...where.slice(1)].join(' AND ');
         const lastYearSql = `
             SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE ${lastYearWhereSql}
         `;
         const lastYearParams = [...lastYearDateRange.params, ...params.slice(dateRange.params.length)];
@@ -2208,7 +2209,7 @@ router.get('/purchase-history-global', async (req, res) => {
                 COALESCE(SUM(L.LCCTUD * L.LCPRVT - L.LCIMVT), 0) AS TOTAL_DESCUENTO,
                 COALESCE(SUM(L.LCCTUD), 0) AS TOTAL_UNIDADES,
                 COUNT(*) AS NUM_LINEAS
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE ${whereSql}
             GROUP BY L.LCAADC, L.LCMMDC
             ORDER BY L.LCAADC DESC, L.LCMMDC

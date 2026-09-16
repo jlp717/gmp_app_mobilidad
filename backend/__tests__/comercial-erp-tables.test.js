@@ -93,6 +93,51 @@ describe('comercial ERP table mapping', () => {
     expect(ruteroRepo).toMatch(/comercialErpTable\('LACLAE'\)/);
     expect(ruteroRepo).toMatch(/comercialErpTable\('CLI'\)/);
     expect(ruteroRepo).not.toMatch(/FROM DSED\.LACLAE/);
+    const objectives = fs.readFileSync(path.join(__dirname, '../routes/objectives.js'), 'utf8');
+    expect(objectives).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(objectives).not.toMatch(/FROM DSEDAC\.CLI/);
+    expect(objectives).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
+    const dddAdapters = fs.readFileSync(path.join(__dirname, '../src/shared/routes/ddd-adapters.js'), 'utf8');
+    expect(dddAdapters).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(dddAdapters).not.toMatch(/FROM DSEDAC\.CLI/);
+    expect(dddAdapters).not.toMatch(/SELECT 1 FROM DSEDAC\.CLI/);
+    const clientRepo = fs.readFileSync(
+      path.join(__dirname, '../src/modules/clients/infrastructure/db2-client-repository.js'),
+      'utf8',
+    );
+    expect(clientRepo).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(clientRepo).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(clientRepo).not.toMatch(/FROM DSEDAC\.CLI/);
+    expect(clientRepo).not.toMatch(/FROM DSED\.LACLAE/);
+    const kpiRoutes = fs.readFileSync(path.join(__dirname, '../kpi/routes.js'), 'utf8');
+    expect(kpiRoutes).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(kpiRoutes).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(kpiRoutes).not.toMatch(/FROM DSEDAC\.CLI/);
+    expect(kpiRoutes).not.toMatch(/FROM DSED\.LACLAE/);
+    const cobrosRepo = fs.readFileSync(
+      path.join(__dirname, '../src/modules/cobros/infrastructure/db2-cobros-repository.js'),
+      'utf8',
+    );
+    expect(cobrosRepo).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(cobrosRepo).not.toMatch(/FROM DSED\.LACLAE/);
+    const cobrosRoutes = fs.readFileSync(path.join(__dirname, '../routes/cobros.js'), 'utf8');
+    expect(cobrosRoutes).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(cobrosRoutes).not.toMatch(/FROM DSEDAC\.CLI/);
+    const kpiAlerts = fs.readFileSync(
+      path.join(__dirname, '../src/modules/kpi-alerts/infrastructure/db2-kpi-alert-repository.js'),
+      'utf8',
+    );
+    expect(kpiAlerts).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(kpiAlerts).not.toMatch(/FROM DSED\.LACLAE/);
+    const pedidosRoutes = fs.readFileSync(path.join(__dirname, '../routes/pedidos.js'), 'utf8');
+    expect(pedidosRoutes).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(pedidosRoutes).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(pedidosRoutes).not.toMatch(/FROM DSEDAC\.CLI/);
+    expect(pedidosRoutes).not.toMatch(/FROM DSED\.LACLAE/);
+    const pedidosIndex = fs.readFileSync(path.join(__dirname, '../services/pedidos/index.js'), 'utf8');
+    expect(pedidosIndex).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(pedidosIndex).not.toMatch(/FROM DSEDAC\.CLI/);
+    expect(pedidosIndex).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
   });
 
   test('COMERCIAL_ERP_READ_TEST=false falls back to DSEDAC SELECT', () => {

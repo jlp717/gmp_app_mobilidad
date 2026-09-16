@@ -1876,7 +1876,7 @@ class Db2CobrosRepository extends CobrosRepository {
            WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(C.CODIGOCLIENTEALBARAN)
         ), (
           SELECT TRIM(MIN(${getVendorColumnExpr('LAC')}))
-            FROM DSED.LACLAE LAC
+            FROM ${comercialErpTable('LACLAE')} LAC
            WHERE TRIM(LAC.LCCDCL) = TRIM(C.CODIGOCLIENTEALBARAN)
              AND LAC.LCAADC >= ${MIN_YEAR}
              AND LAC.TPDC = 'LAC'

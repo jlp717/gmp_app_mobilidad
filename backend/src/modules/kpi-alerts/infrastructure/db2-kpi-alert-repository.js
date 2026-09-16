@@ -7,6 +7,7 @@ const { KpiAlertRepository } = require('../domain/kpi-alert-repository');
 const { KpiAlert } = require('../domain/kpi-alert');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { VENDOR_COLUMN, LACLAE_SALES_FILTER, sanitizeCodeList } = require('../../../../utils/common');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 class Db2KpiAlertRepository extends KpiAlertRepository {
   constructor(dbPool) {
@@ -87,7 +88,7 @@ class Db2KpiAlertRepository extends KpiAlertRepository {
         COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT LCSRAB || LCNRAB) AS PEDIDOS,
         COUNT(DISTINCT LCCDCL) AS CLIENTES
-      FROM DSED.LACLAE
+      FROM ${comercialErpTable('LACLAE')}
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -107,7 +108,7 @@ class Db2KpiAlertRepository extends KpiAlertRepository {
         COALESCE(SUM(LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(LCIMVT - LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT LCSRAB || LCNRAB) AS PEDIDOS
-      FROM DSED.LACLAE
+      FROM ${comercialErpTable('LACLAE')}
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${prevYearFilter}
@@ -118,9 +119,9 @@ class Db2KpiAlertRepository extends KpiAlertRepository {
     const topClientSql = `
       SELECT 
         COALESCE(SUM(LCIMVT), 0) AS TOTAL,
-        (SELECT COALESCE(SUM(LCIMVT), 0) FROM DSED.LACLAE L2 
+        (SELECT COALESCE(SUM(LCIMVT), 0) FROM ${comercialErpTable('LACLAE')} L2 
          WHERE ${vendorFilter} AND ${dateFilter} ${yearFilter} ${monthFilter}) AS TOTAL_ALL
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
