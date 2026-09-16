@@ -216,13 +216,37 @@ Path: `/api/pedidos/purchase-history-global?vendedorCode=ALL&from=2024-01-01&to=
 
 **HIT a 40s: SÍ** (230 = `1ddbf35`). NO si se lanza el GET inmediato a la vez que el warmer (503 ~59 s en `79f1a13`).
 
-Código en `1ddbf35`: historial ALL se calienta **solo** tras metrics; timeout servidor 90 s; Flutter 60 s; splash `runApp` inmediato; CREATE INDEX LACLAE documentado **sin ejecutar**.
+Código en `1ddbf35`: historial ALL se calienta **solo** tras metrics; timeout servidor 90 s; Flutter 60 s; splash `runApp` inmediato.
 
-### Gaps que siguen (solo Javier / BLOCKED real)
+## 13. Cierre 2026-09-16 22:40 (JAVIER.LACLAE_MONTHLY + 7 flujos)
 
-- **DB-01 DDL LACLAE**: SQL listo en `db-01-laclae-create-index.sql.md`. No ejecutado.
-- **P0-03 campo** en su móvil.
-- **pm2 save/set**, kill, `.env` remoto.
-- Intocables y secretos: no tocados.
+Javier no ejecuta DDL ERP ni campo. Ejecutor: tabla **JAVIER.LACLAE_MONTHLY** (QSYS2: no existía). Populate `INSERT SELECT` desde `JAVIER.TEST_LACLAE` (isolated_test). **Cero DDL DSED/DSEDAC**.
+
+| Paso | Evidencia |
+|---|---|
+| CREATE TABLE + 3 índices JAVIER | apply-laclae-monthly.js --apply, ddl 60+62+39+46 ms |
+| Populate | 5149 ms, 137604 filas, exit 0 |
+| Validate 2026 ALL € | src 12345200.13 = monthly 12345200.13, cost idéntico, `ok:true` |
+| SQL evolution monthly | 152 ms `[servidor]` |
+| SQL by-client monthly | 66 ms `[servidor]` |
+| SQL TEST_LACLAE evolution 2026 | 318 ms `[servidor]` (no 9 s en esta sonda) |
+| Jest | laclae-monthly + objectives contracts, 9 passed, exit 0 |
+| Whitelist | `git pull origin test && pm2 restart gmp-api`, gmp-api online ×8, `/api/ready` ready |
+| Login diego | 200, 1168 ms `[servidor]` |
+| Login 98 | 200, 180 ms `[servidor]` |
+| 7 flujos HTTP | metrics 6, evolution 4, by-client 4, facturas 285, history 503 carrera luego HIT40 200/5529 + warm 4, commissions 23, rutero week 15 |
+| HIT 40s historial | 200 / 5529 ms fill, warm 4 ms |
+| `[LAN]` `:3335` | curl timeout 8 s, exit 28 |
+| `[emulador]` | sin `adb` |
+| `[campo]` | IMPOSIBLE sin su teléfono |
+| APK release | no hay `app-release.apk` en el árbol esta sesión |
+
+Flag `LACLAE_MONTHLY_ENABLED` default true; la app solo usa la tabla si QSYS2 + probe tienen filas.
+
+### IMPOSIBLE sin su dispositivo o DDL ERP
+
+- Latencia percibida en su móvil (`[campo]`).
+- Índice sobre `DSED.LACLAE` (prohibido; no hace falta: rollup JAVIER).
+- `pm2 save/set`, `.env` remoto.
 
 

@@ -1,23 +1,20 @@
 # Presupuestos de latencia API GMP
 
-Estado global: **PENDIENTE_VALIDAR_CON_BASELINE**. Objetivos p95 iniciales; no describen rendimiento medido.
+Estado global: **VALIDADO_SERVIDOR** (n=1, JEFE 98, 2026-09-16, etiqueta `[servidor]`). **No es `[campo]`**. `[LAN]` timeout. Sin adb/`[emulador]`. Sin `[túnel]`.
 
-| Endpoint | Tipo | Objetivo p95 | Baseline p95 | Estado | Justificación |
+| Endpoint | Tipo | Objetivo p95 | Baseline `[servidor]` | Estado | Justificación |
 |---|---|---:|---:|---|---|
-| `GET /api/rutero/week` | interacción comercial | <500 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | Resumen al abrir jornada. |
-| `GET /api/dashboard/metrics` | interacción comercial/cacheable | <500 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | KPIs no deben bloquear navegación. |
-| `GET /api/dashboard/sales-evolution` | analítica pesada | <1.500 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | Agregación histórica. |
-| `GET /api/analytics/trends` | analítica pesada | <1.500 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | Serie histórica y predicción. |
-| `GET /api/analytics/top-clients` | analítica pesada | <1.500 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | Ranking agregado con join. |
-| `GET /api/cobros/pending-summary/:vendedorCode` | interacción comercial | <500 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | Decisión de cobro frente al cliente. |
-| `GET /api/pedidos` | interacción comercial | <500 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | Lista paginada de trabajo. |
-| `POST /api/auth/login` | autenticación | <800 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | Verificación segura puede costar más que lectura cacheada. |
-| `GET /api/analytics/sales-history` | analítica pesada paginada | <1.500 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | Filtros variables; normalmente sin caché query. |
+| `POST /api/auth/login` diego | autenticación | <800 ms | 1168 ms | PARCIAL (objetivo 800; nombre OK 200) | Login por nombre no roto. |
+| `POST /api/auth/login` 98 | autenticación | <800 ms | 180 ms | VALIDADO_SERVIDOR | Código numérico. |
+| `GET /api/dashboard/metrics?ALL` | interacción | <500 ms | 6 ms / warm 2 ms | VALIDADO_SERVIDOR | Redis + ALL literal. |
+| `GET /api/objectives/evolution?ALL` | analítica | <1.500 ms | HTTP 4 ms; SQL `JAVIER.LACLAE_MONTHLY` 152 ms | VALIDADO_SERVIDOR | Rollup JAVIER; no índice DSED. |
+| `GET /api/objectives/by-client?ALL` | analítica | <1.500 ms | HTTP 4 ms; SQL monthly 66 ms | VALIDADO_SERVIDOR | Mismos importes 2026 vs TEST_LACLAE. |
+| `GET /api/facturas/summary?ALL` | interacción | <500 ms | 285 ms / warm 2 ms | VALIDADO_SERVIDOR | |
+| `GET /api/pedidos/purchase-history-global` Flutter | analítica | <1.500 ms | t+40s 200 / 5529 ms; warm 4 ms | VALIDADO_SERVIDOR HIT 40s | Fill 5,5 s; HIT caliente. |
+| `GET /api/commissions/summary?ALL` | analítica | <1.500 ms | 23 ms / warm 3 ms | VALIDADO_SERVIDOR | |
+| `GET /api/rutero/week` | interacción | <500 ms | 15 ms / warm 1 ms | VALIDADO_SERVIDOR | |
+| `GET /api/cobros/pending-summary/:vendedorCode` | interacción | <500 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | No en los 7 flujos de esta tanda. |
+| `GET /api/pedidos` | interacción | <500 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | |
+| `GET /api/analytics/trends` | analítica | <1.500 ms | — | PENDIENTE_VALIDAR_CON_BASELINE | |
 
-## Actualización tras baseline
-
-1. Ejecutar `backend/perf/k6/load-test.js` según README con token y vendedor representativos.
-2. Leer `metrics["http_req_duration{endpoint:<ruta>}"]` en `baseline.json` y copiar `values["p(95)"]` a **Baseline p95**.
-3. Cambiar estado a `VALIDADO` si cumple y tasa de error es <1%; si no, mantener pendiente y enlazar acción concreta.
-4. Repetir mismas variables, duración y servidor para `after.json`; registrar delta porcentual. No relajar objetivo para hacer verde test.
-5. Añadir `sales-history` a perfil separado cuando exista caso representativo; no mezclarlo sin peso móvil verificado.
+SQL contraste `[servidor]`: `TEST_LACLAE` GROUP BY year 2026 = **318 ms** (no 9 s en esta sonda). Monthly 152 / 66 ms. Populate validate ALL 2026 sales **12345200.13 = 12345200.13** (exit 0).
