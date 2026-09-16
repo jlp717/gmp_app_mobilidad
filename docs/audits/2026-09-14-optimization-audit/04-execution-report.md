@@ -173,7 +173,7 @@ SHA de `origin/test` tras el push final: ver `git rev-parse origin/test` (se ano
 - Servidor **antes**: `c17250e` (plan de perf **sí** estaba en el árbol; PM2 no se había reiniciado con el login fix).
 - Servidor **después**: `git pull` + `pm2 restart gmp-api` → SHA = `origin/test` (incluye `711449a`).
 - `/api/ready`: `status=ready`.
-- Cuello que queda: `DSED.LACLAE` (by-client 7,7 s / evolution 16,6 s / commissions 14,6 s). **ALL ya no expande a IN ×80** en metrics (logs). SHA código `ee1f01a`.
+- Cuello que queda: `DSED.LACLAE` (by-client 7,7 s / evolution 16,6 s / commissions 14,6 s). **ALL ya no expande a IN ×80** en metrics (logs). Código ALL `ee1f01a`; SHA desplegado `82674d9`.
 
 ## 10. Ciclo ALL/LACLAE 2026-09-16 (turno rendimiento)
 
@@ -181,5 +181,7 @@ SHA de `origin/test` tras el push final: ver `git rev-parse origin/test` (se ano
 - Fix `ee1f01a`: JEFE con ≥20 códigos de venta → `literalAll`. by-client omite `LCMMDC IN(1..12)`.
 - ALL deja de expandir: **sí** (metrics SQL 2 params año/mes, sin `LCCDVD IN`).
 - by-client frío **19,5 s → 7,7 s** (sigue **>5 s**). **BLOCKED DB-01**.
+- SHA `origin/test` = 230 = `82674d9` (informe). Código = `ee1f01a`.
+- Remida post-`pm2 restart` (mismo código, Redis L2 vivo): evolution 8 ms, by-client 5 ms, metrics 3 ms, facturas lista 570 ms / summary 4 ms, commissions 19 ms. **No es SQL frío**; el SQL frío canónico es el de ciclo 2.
 
 
