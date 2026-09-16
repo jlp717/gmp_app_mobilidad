@@ -10,6 +10,7 @@
  * Never use V_FACT_VENTAS / V_FACT_RESUMEN_VENTAS / V_STG_LAC.
  */
 const { queryWithParams } = require('../config/db');
+const { comercialErpTable } = require('./comercial-erp-tables');
 const { SNAPSHOT_SOURCE } = require('./commission-snapshot');
 const {
     SNAPSHOT_UNTIL_MONTH,
@@ -129,7 +130,7 @@ async function queryClientScopeMonthSales(vendorCode, year, month) {
         const placeholders = chunk.map(() => '?').join(',');
         const rows = await queryWithParams(`
             SELECT COALESCE(SUM(L.LCIMVT), 0) as SALES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC = ?
               AND L.LCMMDC = ?
               AND ${LACLAE_SALES_FILTER}
@@ -151,7 +152,7 @@ async function queryLiveLaclaeMonthSales(vendorCodes, year, month) {
     const placeholders = codeVariants.map(() => '?').join(',');
     const rows = await queryWithParams(`
         SELECT COALESCE(SUM(L.LCIMVT), 0) as SALES
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE L.LCAADC = ?
           AND L.LCMMDC = ?
           AND ${LACLAE_SALES_FILTER}
@@ -171,7 +172,7 @@ async function queryFallbackLacMonthSales(vendorCodes, year, month) {
     const vendedorFilter = buildVendedorFilter(vendorCodes);
     const rows = await queryWithParams(`
         SELECT COALESCE(SUM(IMPORTEVENTA), 0) as SALES
-        FROM DSEDAC.LAC L
+        FROM ${comercialErpTable('LAC')} L
         WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter}
     `, [year, month]);
     return parseFloat(rows?.[0]?.SALES) || 0;

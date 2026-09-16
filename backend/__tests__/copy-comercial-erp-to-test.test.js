@@ -28,10 +28,26 @@ describe('copy-comercial-erp-to-test', () => {
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_FPG')).toBe(true);
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_CLI')).toBe(true);
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_ART')).toBe(true);
+    expect(jobs.some((job) => job.dest === 'JAVIER.TEST_LAC')).toBe(true);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_LPC').appendSql).toMatch(/EJERCICIOPEDIDO/);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_LPC').appendSql).not.toMatch(/EJERCICIOALBARAN/);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_LPC').fullSql).toMatch(/SELECT \* FROM DSEDAC\.LPC/);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_CVC').fullSql).toMatch(/SELECT \* FROM DSEDAC\.CVC/);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_LAC').fullSql).toMatch(/SELECT \* FROM DSEDAC\.LAC/);
     expect(jobs.some((job) => /PAG|CAC|CODIGOVENDEDOR/.test(job.insertSql))).toBe(true);
     expect(jobs.find((job) => job.dest === 'JAVIER.TEST_CVC').appendSql).toMatch(/NOT EXISTS/);
     expect(require('../scripts/copy-comercial-erp-to-test').HIT_VENDORS).toEqual(
       expect.arrayContaining(['80', '35', '98']),
     );
+  });
+
+  test('intersect columns keeps only shared identifiers', () => {
+    const { intersectColumnNames, buildInsertSelectSql } = require('../scripts/copy-comercial-erp-to-test');
+    expect(intersectColumnNames(['A', 'B'], ['B', 'C'])).toEqual(['B']);
+    const sql = buildInsertSelectSql('JAVIER.TEST_LPC', 'DSEDAC.LPC', ['EJERCICIOPEDIDO', 'NUMEROPEDIDO']);
+    expect(sql).toBe(
+      'INSERT INTO JAVIER.TEST_LPC (EJERCICIOPEDIDO, NUMEROPEDIDO) SELECT EJERCICIOPEDIDO, NUMEROPEDIDO FROM DSEDAC.LPC',
+    );
+    expect(() => buildInsertSelectSql('DSEDAC.LPC', 'DSEDAC.LPC', ['ID'])).toThrow(/TEST/);
   });
 });

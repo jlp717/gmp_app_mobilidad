@@ -9,10 +9,18 @@
  *   node backend/scripts/copy-comercial-erp-to-test.js
  *   node backend/scripts/copy-comercial-erp-to-test.js --apply
  *   node backend/scripts/copy-comercial-erp-to-test.js --apply --replace
+ *   node backend/scripts/copy-comercial-erp-to-test.js --apply --server-full --replace --only=CVC,CAC,CPC,LPC,LACLAE,ARA,LAC,CLI
+ *
+ * --server-full: INSERT SELECT in DB2 (no row fetch to the client). Ignore 80k cap.
+ * LPC join uses pedido keys (LPC has no EJERCICIOALBARAN — SQL0205).
  */
 
 require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+
+if (!process.env.DB_QUERY_TIMEOUT_MS) {
+  process.env.DB_QUERY_TIMEOUT_MS = '3600000';
+}
 
 const { initDb, closePool, query, queryWithParams } = require('../config/db');
 const { comercialErpWriteForbiddenSql } = require('../utils/comercial-erp-tables');
@@ -20,11 +28,55 @@ const { comercialErpWriteForbiddenSql } = require('../utils/comercial-erp-tables
 const APPLY = process.argv.includes('--apply');
 const REPLACE = process.argv.includes('--replace');
 const TRY_FULL = process.argv.includes('--full');
+const SERVER_FULL = process.argv.includes('--server-full') || TRY_FULL;
 const APPEND = process.argv.includes('--append');
 const HIT_VENDORS = ['80', '35', '98', '02', '03', '81', '97', '72', '73', '83'];
 const CORE_VENDORS = ['80', '35', '98'];
 const LARGE_FULL_MAX = 80000;
 const SCOPED_FETCH = 25000;
+const onlyArg = process.argv.find((a) => a.startsWith('--only=') || a.startsWith('--tables='));
+const ONLY_KEYS = onlyArg
+  ? new Set(onlyArg.split('=')[1].split(',').map((token) => token.trim().toUpperCase()).filter(Boolean))
+  : null;
+const columnCache = new Map();
+
+function jobSelected(job) {
+  if (!ONLY_KEYS || ONLY_KEYS.size === 0) return true;
+  const destName = String(job.dest || '').split('.')[1] || '';
+  const logical = destName.replace(/^TEST_/, '');
+  const sourceName = String(job.source || '').split('.')[1] || '';
+  return ONLY_KEYS.has(destName)
+    || ONLY_KEYS.has(logical)
+    || ONLY_KEYS.has(sourceName)
+    || ONLY_KEYS.has(job.dest)
+    || ONLY_KEYS.has(job.source);
+}
+
+function safeIdent(name) {
+  const ident = String(name || '').trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9_]*$/.test(ident)) {
+    throw new Error(`Refusing unsafe SQL identifier: ${name}`);
+  }
+  return ident;
+}
+
+function intersectColumnNames(srcCols, dstCols) {
+  const dest = new Set((dstCols || []).map((col) => safeIdent(col)));
+  return (srcCols || [])
+    .map((col) => safeIdent(col))
+    .filter((col) => dest.has(col));
+}
+
+function buildInsertSelectSql(dest, source, columns, whereSql = '') {
+  assertJavierTest(dest);
+  const cols = (columns || []).map((col) => safeIdent(col));
+  if (!cols.length) {
+    throw new Error(`No intersecting columns for ${dest} <- ${source}`);
+  }
+  const list = cols.join(', ');
+  const where = whereSql ? ` ${whereSql}` : '';
+  return `INSERT INTO ${dest} (${list}) SELECT ${list} FROM ${source}${where}`;
+}
 
 function n(row, key) {
   const wanted = String(key).toUpperCase();
@@ -98,6 +150,7 @@ async function tableInfo(schema, table) {
       ORDER BY ORDINAL_POSITION`,
     [schema, table],
   );
+  const names = (cols.rows || []).map((row) => trim(n(row, 'COLUMN_NAME'))).filter(Boolean);
   return {
     schema,
     table,
@@ -107,8 +160,27 @@ async function tableInfo(schema, table) {
     identityCols: (cols.rows || [])
       .filter((row) => String(n(row, 'IDENTITY') || '').toUpperCase() === 'YES')
       .map((row) => trim(n(row, 'COLUMN_NAME'))),
-    colCount: (cols.rows || []).length,
+    columnNames: names,
+    colCount: names.length,
   };
+}
+
+async function cachedColumnNames(schema, table) {
+  const key = `${schema}.${table}`;
+  if (columnCache.has(key)) return columnCache.get(key);
+  const info = await tableInfo(schema, table);
+  const names = info.columnNames || [];
+  columnCache.set(key, names);
+  return names;
+}
+
+async function listedFullInsertSql(dest, source, whereSql = '') {
+  const [srcSchema, srcTable] = source.split('.');
+  const destName = dest.split('.')[1];
+  const srcCols = await cachedColumnNames(srcSchema, srcTable);
+  const dstCols = await cachedColumnNames('JAVIER', destName);
+  const cols = intersectColumnNames(srcCols, dstCols.length ? dstCols : srcCols);
+  return buildInsertSelectSql(dest, source, cols, whereSql);
 }
 
 async function findTable(name) {
@@ -153,19 +225,25 @@ async function replaceIfNeeded(dest, { force = REPLACE, minRows = 1 } = {}) {
   return { dest, skipped: count > 0 ? 'has rows' : 'empty', before: count };
 }
 
-async function copyInsert(dest, insertSql, note, { full = false } = {}) {
+async function copyInsert(dest, insertSql, note, { full = false, originCount = null } = {}) {
   assertJavierTest(dest);
   refuseErpWrite(insertSql);
   const destName = dest.split('.')[1];
   const before = await tableInfo('JAVIER', destName);
   const current = typeof before.count === 'number' ? before.count : 0;
   const action = { dest, note, before: current };
-  if (current > 0 && full && !REPLACE) {
+  const complete = originCount != null && originCount > 0 && current >= originCount;
+  if (complete) {
+    action.skippedInsert = 'TEST count already matches origin';
+    action.after = current;
+    return action;
+  }
+  if (current > 0 && full && !REPLACE && !SERVER_FULL) {
     action.skippedInsert = 'complete catalog already copied';
     action.after = current;
     return action;
   }
-  if (current > 0 && !REPLACE && !APPEND) {
+  if (current > 0 && !REPLACE && !APPEND && !SERVER_FULL) {
     action.skippedInsert = 'already has rows';
     action.after = current;
     return action;
@@ -175,6 +253,54 @@ async function copyInsert(dest, insertSql, note, { full = false } = {}) {
   const after = await tableInfo('JAVIER', destName);
   action.after = after.count;
   return action;
+}
+
+async function copyByYearChunks(job, originCount) {
+  const yearCol = job.chunkYearColumn;
+  if (!yearCol) return null;
+  const destName = job.dest.split('.')[1];
+  const chunks = [];
+  const thisYear = new Date().getFullYear();
+  const years = [];
+  for (let year = thisYear - 12; year <= thisYear; year += 1) years.push(year);
+  years.push('OLDER');
+  for (const year of years) {
+    const whereSql = year === 'OLDER'
+      ? `WHERE ${safeIdent(yearCol)} < ${thisYear - 12} OR ${safeIdent(yearCol)} > ${thisYear}`
+      : `WHERE ${safeIdent(yearCol)} = ${Number(year)}`;
+    const sql = await listedFullInsertSql(job.dest, job.source, whereSql);
+    refuseErpWrite(sql);
+    const before = await tableInfo('JAVIER', destName);
+    const result = APPLY ? await execWrite(sql) : { ok: true, dry: true };
+    const after = await tableInfo('JAVIER', destName);
+    chunks.push({
+      year,
+      before: before.count,
+      after: after.count,
+      ok: result.ok === true,
+      error: result.ok ? null : result.error,
+      sql: sql.slice(0, 180),
+    });
+    if (result.ok === false) {
+      return {
+        dest: job.dest,
+        note: `${job.note} (chunk fallback)`,
+        originCount,
+        chunks,
+        blocked: 'DB2 rejected a year chunk',
+        after: after.count,
+      };
+    }
+    if (originCount != null && after.count >= originCount) break;
+  }
+  const finalInfo = await tableInfo('JAVIER', destName);
+  return {
+    dest: job.dest,
+    note: `${job.note} (chunk fallback)`,
+    originCount,
+    chunks,
+    after: finalInfo.count,
+  };
 }
 
 const vendorListSql = HIT_VENDORS.map((code) => `'${code}'`).join(', ');
@@ -342,33 +468,38 @@ function commercialCopyJobs(lacSchema) {
     {
       source: 'DSEDAC.LPC',
       dest: 'JAVIER.TEST_LPC',
-      note: 'lineas albaran vendors HIT (no dump 2.5M)',
+      note: 'lineas pedido (LPC no tiene EJERCICIOALBARAN; join por pedido)',
       minRows: 0,
       optional: true,
+      chunkYearColumn: 'ANODOCUMENTO',
       insertSql: 'INSERT INTO JAVIER.TEST_LPC SELECT * FROM DSEDAC.LPC FETCH FIRST 40000 ROWS ONLY',
       appendSql: `INSERT INTO JAVIER.TEST_LPC
         SELECT LPC.* FROM DSEDAC.LPC LPC
          WHERE EXISTS (
                  SELECT 1 FROM JAVIER.TEST_CPC CPC
-                  WHERE LPC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-                    AND TRIM(LPC.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
-                    AND LPC.TERMINALALBARAN = CPC.TERMINALALBARAN
-                    AND LPC.NUMEROALBARAN = CPC.NUMEROALBARAN
+                  WHERE LPC.EJERCICIOPEDIDO = CPC.EJERCICIOPEDIDO
+                    AND TRIM(LPC.SERIEPEDIDO) = TRIM(CPC.SERIEPEDIDO)
+                    AND LPC.TERMINALPEDIDO = CPC.TERMINALPEDIDO
+                    AND LPC.NUMEROPEDIDO = CPC.NUMEROPEDIDO
                )
            AND NOT EXISTS (
                  SELECT 1 FROM JAVIER.TEST_LPC T
-                  WHERE T.EJERCICIOALBARAN = LPC.EJERCICIOALBARAN
-                    AND TRIM(T.SERIEALBARAN) = TRIM(LPC.SERIEALBARAN)
-                    AND T.TERMINALALBARAN = LPC.TERMINALALBARAN
-                    AND T.NUMEROALBARAN = LPC.NUMEROALBARAN
+                  WHERE T.EJERCICIOPEDIDO = LPC.EJERCICIOPEDIDO
+                    AND TRIM(T.SERIEPEDIDO) = TRIM(LPC.SERIEPEDIDO)
+                    AND T.TERMINALPEDIDO = LPC.TERMINALPEDIDO
+                    AND T.NUMEROPEDIDO = LPC.NUMEROPEDIDO
+                    AND T.SECUENCIAPEDIDO = LPC.SECUENCIAPEDIDO
                )
          FETCH FIRST 20000 ROWS ONLY`,
+      fullSql: 'INSERT INTO JAVIER.TEST_LPC SELECT * FROM DSEDAC.LPC',
     },
     {
       source: 'DSEDAC.CVC',
       dest: 'JAVIER.TEST_CVC',
-      note: 'deuda + PAG cobrado vendors HIT / PMR / PG',
+      note: 'deuda CVC (full INSERT SELECT en 230)',
       minRows: 40,
+      chunkYearColumn: 'ANODOCUMENTO',
+      fullSql: 'INSERT INTO JAVIER.TEST_CVC SELECT * FROM DSEDAC.CVC',
       insertSql: `INSERT INTO JAVIER.TEST_CVC
         SELECT CVC.* FROM DSEDAC.CVC CVC
          WHERE TRIM(CVC.CODIGOVENDEDOR) IN (${vendorListSql})
@@ -399,8 +530,10 @@ function commercialCopyJobs(lacSchema) {
     {
       source: 'DSEDAC.CAC',
       dest: 'JAVIER.TEST_CAC',
-      note: 'albaran-factura vendors HIT + ligados a TEST_CVC',
+      note: 'albaran-factura CAC (full INSERT SELECT en 230)',
       minRows: 20,
+      chunkYearColumn: 'ANODOCUMENTO',
+      fullSql: 'INSERT INTO JAVIER.TEST_CAC SELECT * FROM DSEDAC.CAC',
       insertSql: `INSERT INTO JAVIER.TEST_CAC
         SELECT CAC.* FROM DSEDAC.CAC CAC
          WHERE TRIM(CAC.CODIGOVENDEDOR) IN (${vendorListSql})
@@ -436,8 +569,10 @@ function commercialCopyJobs(lacSchema) {
     {
       source: 'DSEDAC.CPC',
       dest: 'JAVIER.TEST_CPC',
-      note: 'albaranes ligados a TEST_CAC / vendors HIT',
+      note: 'albaranes CPC (full INSERT SELECT en 230)',
       minRows: 20,
+      chunkYearColumn: 'ANODOCUMENTO',
+      fullSql: 'INSERT INTO JAVIER.TEST_CPC SELECT * FROM DSEDAC.CPC',
       insertSql: `INSERT INTO JAVIER.TEST_CPC
         SELECT CPC.* FROM DSEDAC.CPC CPC
          WHERE EXISTS (
@@ -473,8 +608,10 @@ function commercialCopyJobs(lacSchema) {
     {
       source: `${lacSchema}.LACLAE`,
       dest: 'JAVIER.TEST_LACLAE',
-      note: 'serie D + ventas 2024+ vendors 80/35/98 (no dump 2.9M)',
+      note: 'historico LACLAE (full INSERT SELECT en 230)',
       minRows: 1,
+      chunkYearColumn: 'LCAADC',
+      fullSql: 'INSERT INTO JAVIER.TEST_LACLAE SELECT * FROM DSED.LACLAE',
       insertSql: `INSERT INTO JAVIER.TEST_LACLAE
         SELECT * FROM ${lacSchema}.LACLAE
          WHERE (
@@ -506,6 +643,16 @@ function commercialCopyJobs(lacSchema) {
                     AND T.LCTPVT = S.LCTPVT
                )
          FETCH FIRST 30000 ROWS ONLY`,
+    },
+    {
+      source: 'DSEDAC.LAC',
+      dest: 'JAVIER.TEST_LAC',
+      note: 'lineas albaran LAC (full INSERT SELECT en 230)',
+      minRows: 0,
+      optional: true,
+      chunkYearColumn: 'ANODOCUMENTO',
+      insertSql: 'INSERT INTO JAVIER.TEST_LAC SELECT * FROM DSEDAC.LAC FETCH FIRST 40000 ROWS ONLY',
+      fullSql: 'INSERT INTO JAVIER.TEST_LAC SELECT * FROM DSEDAC.LAC',
     },
     {
       source: 'JAVIER.COBROS',
@@ -545,6 +692,10 @@ const INDEXES = [
   'CREATE INDEX JAVIER.IX_TEST_ART_COD ON JAVIER.TEST_ART (CODIGOARTICULO)',
   'CREATE INDEX JAVIER.IX_TEST_ARA_ART ON JAVIER.TEST_ARA (CODIGOARTICULO, CODIGOTARIFA)',
   'CREATE INDEX JAVIER.IX_TEST_LACLAE_VD ON JAVIER.TEST_LACLAE (LCCDVD, LCAADC, LCMMDC)',
+  'CREATE INDEX JAVIER.IX_TEST_LACLAE_R1 ON JAVIER.TEST_LACLAE (R1_T8CDVD, LCAADC, LCMMDC)',
+  'CREATE INDEX JAVIER.IX_TEST_LACLAE_CLI ON JAVIER.TEST_LACLAE (LCCDCL, LCAADC)',
+  'CREATE INDEX JAVIER.IX_TEST_LAC_VD ON JAVIER.TEST_LAC (CODIGOVENDEDOR, ANODOCUMENTO, MESDOCUMENTO)',
+  'CREATE INDEX JAVIER.IX_TEST_LPC_PED ON JAVIER.TEST_LPC (EJERCICIOPEDIDO, SERIEPEDIDO, TERMINALPEDIDO, NUMEROPEDIDO)',
 ];
 
 async function main() {
@@ -552,6 +703,8 @@ async function main() {
     mode: APPLY ? 'APPLY' : 'DRY-RUN',
     replace: REPLACE,
     tryFull: TRY_FULL,
+    serverFull: SERVER_FULL,
+    only: ONLY_KEYS ? [...ONLY_KEYS] : null,
     append: APPEND,
     writes: 'JAVIER.TEST_* only',
     dsedacWrite: false,
@@ -564,10 +717,10 @@ async function main() {
   await initDb();
   try {
     const names = [
-      'FPG', 'CVC', 'CAC', 'CPC', 'LQD', 'CLX', 'VDDX', 'LACLAE', 'PMR', 'PMRC', 'LPC', 'ARA', 'ART', 'CLI', 'CLC',
+      'FPG', 'CVC', 'CAC', 'CPC', 'LQD', 'CLX', 'VDDX', 'LACLAE', 'LAC', 'PMR', 'PMRC', 'LPC', 'ARA', 'ART', 'CLI', 'CLC',
       'COBROS', 'PEDIDOS_CAB', 'PEDIDOS_LIN',
       'TEST_FPG', 'TEST_CVC', 'TEST_CAC', 'TEST_CPC', 'TEST_LQD', 'TEST_CLX', 'TEST_VDDX',
-      'TEST_LACLAE', 'TEST_PMR', 'TEST_CLI', 'TEST_CLC', 'TEST_ART', 'TEST_ARA', 'TEST_LPC',
+      'TEST_LACLAE', 'TEST_LAC', 'TEST_PMR', 'TEST_CLI', 'TEST_CLC', 'TEST_ART', 'TEST_ARA', 'TEST_LPC',
       'TEST_COBROS', 'TEST_PEDIDOS_CAB', 'TEST_PEDIDOS_LIN',
       'TEST_LIQUIDACION_COMERCIAL', 'TEST_DEVOLUCIONES_COMERCIAL',
     ];
@@ -583,7 +736,7 @@ async function main() {
       ['DSEDAC', 'FPG'], ['DSEDAC', 'CVC'], ['DSEDAC', 'CAC'], ['DSEDAC', 'CPC'],
       ['DSEDAC', 'LQD'], ['DSEDAC', 'CLX'], ['DSEDAC', 'VDDX'], [lacSchema, 'LACLAE'],
       ['DSEDAC', 'PMR'], ['DSEDAC', 'PMRC'], ['DSEDAC', 'LPC'], ['DSEDAC', 'ARA'],
-      ['DSEDAC', 'ART'], ['DSEDAC', 'CLI'], ['DSEDAC', 'CLC'],
+      ['DSEDAC', 'ART'], ['DSEDAC', 'CLI'], ['DSEDAC', 'CLC'], ['DSEDAC', 'LAC'],
     ];
     for (const [schema, table] of originSpecs) {
       const info = await tableInfo(schema, table);
@@ -595,7 +748,7 @@ async function main() {
       };
     }
 
-    const jobs = commercialCopyJobs(lacSchema);
+    const jobs = commercialCopyJobs(lacSchema).filter(jobSelected);
     for (const job of jobs) {
       const [srcSchema, srcTable] = job.source.split('.');
       const origin = await tableInfo(srcSchema, srcTable);
@@ -618,10 +771,16 @@ async function main() {
         report.copies.push({ ...created, note: job.note });
         continue;
       }
-      if (REPLACE) {
+      columnCache.delete(job.dest);
+      const destNow = await tableInfo('JAVIER', job.dest.split('.')[1]);
+      const destCount = typeof destNow.count === 'number' ? destNow.count : 0;
+      const originCount = typeof origin.count === 'number' ? origin.count : null;
+      const incomplete = originCount != null && destCount > 0 && destCount < originCount;
+      if (REPLACE || (SERVER_FULL && incomplete)) {
         await replaceIfNeeded(job.dest, { force: true });
+        columnCache.delete(job.dest);
       }
-      if (APPEND && !job.appendSql && !REPLACE) {
+      if (APPEND && !job.appendSql && !REPLACE && !SERVER_FULL) {
         const destName = job.dest.split('.')[1];
         const existing = await tableInfo('JAVIER', destName);
         if ((existing.count || 0) > 0) {
@@ -635,8 +794,15 @@ async function main() {
         }
       }
       let insertSql = job.insertSql;
-      if (APPEND && job.appendSql) {
+      if (APPEND && job.appendSql && !SERVER_FULL) {
         insertSql = job.appendSql;
+      } else if (SERVER_FULL && (job.fullSql || job.full)) {
+        try {
+          insertSql = await listedFullInsertSql(job.dest, job.source);
+        } catch (error) {
+          insertSql = job.fullSql || job.insertSql;
+          report.copies.push({ dest: job.dest, columnIntersectError: String(error.message || error).slice(0, 180) });
+        }
       } else if (
         job.fullSql
         && typeof origin.count === 'number'
@@ -645,18 +811,34 @@ async function main() {
       ) {
         insertSql = job.fullSql;
       }
-      if (TRY_FULL && (job.full || job.fullSql) && !(APPEND && job.appendSql)) {
-        const originCount = typeof origin.count === 'number' ? origin.count : null;
+      if (!SERVER_FULL && TRY_FULL && (job.full || job.fullSql) && !(APPEND && job.appendSql)) {
         if (originCount != null && originCount > LARGE_FULL_MAX && !job.full) {
           report.copies.push({ dest: job.dest, scoped: true, reason: `origin ${originCount} > ${LARGE_FULL_MAX}` });
         } else {
           insertSql = job.fullSql || job.insertSql;
         }
       }
-      const copied = await copyInsert(job.dest, insertSql, job.note, { full: job.full === true });
+      console.log(JSON.stringify({
+        progress: job.dest,
+        originCount,
+        destBefore: destCount,
+        serverFull: SERVER_FULL,
+      }));
+      const copied = await copyInsert(job.dest, insertSql, job.note, {
+        full: job.full === true || SERVER_FULL,
+        originCount,
+      });
       copied.originCount = origin.count;
-      copied.scoped = insertSql !== (job.fullSql || job.insertSql) || !job.full;
-      if (copied.insertResult && copied.insertResult.ok === false && job.fullSql && insertSql === job.fullSql) {
+      copied.scoped = !SERVER_FULL && (insertSql !== (job.fullSql || job.insertSql) || !job.full);
+      if (copied.insertResult && copied.insertResult.ok === false && SERVER_FULL) {
+        copied.fullFailed = copied.insertResult.error;
+        copied.sql = insertSql.slice(0, 240);
+        const chunked = await copyByYearChunks(job, originCount);
+        if (chunked) {
+          copied.chunkFallback = chunked;
+          copied.after = chunked.after;
+        }
+      } else if (copied.insertResult && copied.insertResult.ok === false && job.fullSql && insertSql === job.fullSql) {
         copied.fullFailed = copied.insertResult.error;
         copied.retryScoped = await copyInsert(job.dest, job.insertSql, `${job.note} (scoped retry)`);
       }
@@ -675,7 +857,7 @@ async function main() {
 
     const testNames = [
       'TEST_FPG', 'TEST_VDDX', 'TEST_CLX', 'TEST_LQD', 'TEST_CVC', 'TEST_CAC', 'TEST_CPC',
-      'TEST_LACLAE', 'TEST_PMR', 'TEST_PMRC', 'TEST_LPC', 'TEST_CLI', 'TEST_CLC', 'TEST_ART',
+      'TEST_LACLAE', 'TEST_LAC', 'TEST_PMR', 'TEST_PMRC', 'TEST_LPC', 'TEST_CLI', 'TEST_CLC', 'TEST_ART',
       'TEST_ARA', 'TEST_COBROS', 'TEST_PEDIDOS_CAB',
       'TEST_PEDIDOS_LIN', 'TEST_LIQUIDACION_COMERCIAL', 'TEST_DEVOLUCIONES_COMERCIAL',
     ];
@@ -693,6 +875,7 @@ async function main() {
       TEST_CAC: report.qsys2.origin['DSEDAC.CAC'],
       TEST_CPC: report.qsys2.origin['DSEDAC.CPC'],
       TEST_LACLAE: report.qsys2.origin[`${lacSchema}.LACLAE`],
+      TEST_LAC: report.qsys2.origin['DSEDAC.LAC'],
       TEST_PMR: report.qsys2.origin['DSEDAC.PMR'],
       TEST_CLI: report.qsys2.origin['DSEDAC.CLI'],
       TEST_ART: report.qsys2.origin['DSEDAC.ART'],
@@ -718,10 +901,11 @@ async function main() {
       isolatedReads: {
         deudaFpAlbaran: 'JAVIER.TEST_CVC/FPG/CAC/CPC if copied, else DSEDAC SELECT',
         lqdClxVddx: 'JAVIER.TEST_LQD/CLX/VDDX',
-        laclaeDevoluciones: 'JAVIER.TEST_LACLAE (serie D + 2024+ vendors 80/35/98); overlay TEST_DEVOLUCIONES',
-        laclaeHistoricoAll: 'DSED.LACLAE SELECT (TEST no cubre 2.9M / ALL)',
-        productosPrecios: 'JAVIER.TEST_ART/ARA/CLC if copied, else DSEDAC SELECT; PIN/VDPL1 DSEDAC SELECT',
-        cliCatalog: 'JAVIER.TEST_CLI if copied; auth PIN sigue DSEDAC.VDPL1 SELECT',
+        laclaeDevoluciones: 'JAVIER.TEST_LACLAE',
+        laclaeHistoricoAll: 'JAVIER.TEST_LACLAE (PIN VDPL1 sigue DSEDAC.VDPL1 SELECT)',
+        productosPrecios: 'JAVIER.TEST_ART/ARA/CLC; PIN/VDPL1 DSEDAC SELECT',
+        cliCatalog: 'JAVIER.TEST_CLI; auth PIN sigue DSEDAC.VDPL1 SELECT',
+        lacLines: 'JAVIER.TEST_LAC if copied',
       },
       dsedacWrite: false,
     };
@@ -745,4 +929,7 @@ module.exports = {
   commercialCopyJobs,
   HIT_VENDORS,
   CORE_VENDORS,
+  intersectColumnNames,
+  buildInsertSelectSql,
+  jobSelected,
 };

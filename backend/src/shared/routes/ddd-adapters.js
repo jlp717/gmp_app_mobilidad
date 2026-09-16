@@ -28,6 +28,7 @@ const { ResponseCache } = require('../../core/infrastructure/cache/response-cach
 const { performanceCache } = require('../../core/infrastructure/cache/performance-cache');
 const { cachedQuery } = require('../../../services/query-optimizer');
 const { query, queryWithParams } = require('../../../config/db');
+const { comercialErpTable } = require('../../../utils/comercial-erp-tables');
 const { TTL: RedisTTL, redisCache } = require('../../../services/redis-cache');
 const { beginRouteFill, endRouteFill, sendFillBusy } = require('../../../services/route-cache-stampede');
 const {
@@ -1148,7 +1149,7 @@ function createPedidosRoutes() {
               COALESCE(SUM(L.LCCTEV), 0) AS ENVASES,
               COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
               COALESCE(SUM(L.LCIMVT), 0) AS IMPORTE
-          FROM DSED.LACLAE L
+          FROM ${comercialErpTable('LACLAE')} L
           WHERE ${whereSql} AND L.LCAADC IN (?, ?)
           GROUP BY L.LCAADC, L.LCMMDC
           ORDER BY L.LCAADC, L.LCMMDC
@@ -1345,7 +1346,7 @@ function createPedidosRoutes() {
           COALESCE(SUM(L.LCIMVT), 0) AS SALES,
           COALESCE(SUM(L.LCIMCT), 0) AS COST,
           COALESCE(SUM(L.LCCTUD), 0) AS UNITS
-        FROM DSEDAC.LAC L
+        FROM ${comercialErpTable('LAC')} L
         WHERE TRIM(L.LCCDCL) = ?
           AND TRIM(L.CODIGOARTICULO) = ?
           AND L.LCAADC >= ?
@@ -1562,8 +1563,8 @@ function createPedidosRoutes() {
           (L.LCCTUD * L.LCPRVT - L.LCIMVT) AS IMPORTEDESCUENTO,
           TRIM(L.LCCDFP) AS CODIGOFORMAPAGO,
           TRIM(L.LCSRAB) AS SERIEALBARAN, L.LCNRAB AS NUMEROALBARAN
-        FROM DSED.LACLAE L
-        LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+        FROM ${comercialErpTable('LACLAE')} L
+        LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
         LEFT JOIN DSEDAC.CLI C ON C.CODIGOCLIENTE = L.LCCDCL
         WHERE ${whereSql}
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
@@ -1576,13 +1577,13 @@ function createPedidosRoutes() {
           COALESCE(SUM(L.LCCTUD * L.LCPRVT), 0) AS TOTAL_SIN_DESCUENTO,
           COALESCE(SUM(L.LCCTUD * L.LCPRVT - L.LCIMVT), 0) AS TOTAL_DESCUENTO,
           COALESCE(SUM(L.LCCTUD), 0) AS TOTAL_UNIDADES
-        FROM DSED.LACLAE L WHERE ${whereSql}`;
+        FROM ${comercialErpTable('LACLAE')} L WHERE ${whereSql}`;
 
       const topProductosSql = `
         SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
           COALESCE(SUM(L.LCIMVT), 0) AS IMPORTE, COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
           COUNT(*) AS NUM_LINEAS
-        FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+        FROM ${comercialErpTable('LACLAE')} L LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
         WHERE ${whereSql}
         GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
         ORDER BY IMPORTE DESC FETCH FIRST 10 ROWS ONLY`;
@@ -1594,7 +1595,7 @@ function createPedidosRoutes() {
           COALESCE(SUM(L.LCCTUD * L.LCPRVT - L.LCIMVT), 0) AS TOTAL_DESCUENTO,
           COALESCE(SUM(L.LCCTUD), 0) AS TOTAL_UNIDADES,
           COUNT(*) AS NUM_LINEAS
-        FROM DSED.LACLAE L WHERE ${whereSql}
+        FROM ${comercialErpTable('LACLAE')} L WHERE ${whereSql}
         GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC DESC, L.LCMMDC`;
 
       const lastYearFromDate = new Date(from);
@@ -1606,7 +1607,7 @@ function createPedidosRoutes() {
       const lastYearParams = [...lastYearDateRange.params, ...filterParams];
       const lastYearTotalSql = `
         SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR
-        FROM DSED.LACLAE L WHERE ${lastYearWhereSql}`;
+        FROM ${comercialErpTable('LACLAE')} L WHERE ${lastYearWhereSql}`;
 
       const fromYmd = from.getFullYear() * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
       const toYmd = to.getFullYear() * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
@@ -1802,9 +1803,9 @@ function createPedidosRoutes() {
       const cacheSecurityScope = buildCacheSecurityScope(req, { includeMargin: false });
       const cacheKey = `ddd:client-evolution:${cacheSecurityScope}:${clientCode}:${vendorScope.codes.join(',') || 'ALL'}:${startYear}:${currentYear}`;
       await withCache(cache, cacheKey, TTL_MS.CLIENT_EVOLUTION, async () => {
-        const monthlyDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS FROM DSED.LACLAE L WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC ASC, L.LCMMDC ASC'].join(' ');
-        const topProductsDataSql = ['SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME, SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY TOTAL_SALES DESC FETCH FIRST 20 ROWS ONLY'].join(' ');
-        const returnsDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME, SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND (L.LCSRAB = ? OR L.LCTPVT = ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC FETCH FIRST 50 ROWS ONLY'].join(' ');
+        const monthlyDataSql = [`SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS FROM ${comercialErpTable('LACLAE')} L WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)`, laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC ASC, L.LCMMDC ASC'].join(' ');
+        const topProductsDataSql = [`SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME, SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS FROM ${comercialErpTable('LACLAE')} L LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)`, laclaeVendorFilter.clause, 'GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY TOTAL_SALES DESC FETCH FIRST 20 ROWS ONLY'].join(' ');
+        const returnsDataSql = [`SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME, SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT FROM ${comercialErpTable('LACLAE')} L LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND (L.LCSRAB = ? OR L.LCTPVT = ?)`, laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC FETCH FIRST 50 ROWS ONLY'].join(' ');
         const [monthlyData, topProductsData, returnsData] = await Promise.all([
           queryWithParams(monthlyDataSql, [clientCode, startYear, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]),
           queryWithParams(topProductsDataSql, [clientCode, currentYear - 1, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]),
@@ -2824,7 +2825,7 @@ function createClientsRoutes() {
                   SUM(L.LCIMVT - L.LCIMCT) AS TOTAL_MARGIN,
                   COUNT(DISTINCT L.LCAADC || L.LCMMDC || L.LCDDDC) AS NUM_ORDERS,
                   MAX(L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) AS LAST_PURCHASE_DATE
-                FROM DSED.LACLAE L
+                FROM ${comercialErpTable('LACLAE')} L
                 WHERE L.LCAADC >= ?
                   AND L.TPDC = 'LAC'
                   AND L.LCTPVT IN ('CC', 'VC')
@@ -2842,7 +2843,7 @@ function createClientsRoutes() {
                       PARTITION BY L.LCCDCL
                       ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
                     ) AS RN
-                  FROM DSED.LACLAE L
+                  FROM ${comercialErpTable('LACLAE')} L
                   WHERE L.LCAADC >= ?
                     AND L.TPDC = 'LAC'
                     AND L.LCTPVT IN ('CC', 'VC')
@@ -2929,7 +2930,7 @@ function createClientsRoutes() {
         const clients = await cachedQuery((sql, params = []) => queryWithParams(sql, params, false), `
           WITH LACLAE_SCOPED AS (
             SELECT LCCDCL, LCIMVT, LCIMCT, LCAADC, LCMMDC, LCDDDC, LCCDVD
-              FROM DSED.LACLAE
+              FROM ${comercialErpTable('LACLAE')}
              WHERE LCAADC >= ${MIN_YEAR} AND TPDC = 'LAC'
                AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
                AND LCSRAB NOT IN ('N', 'Z')

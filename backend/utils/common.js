@@ -2,6 +2,7 @@
 // DATE HELPERS & CONSTANTS
 // =============================================================================
 const logger = require('../middleware/logger');
+const { comercialErpTable } = require('./comercial-erp-tables');
 const getCurrentDate = () => new Date();
 const getCurrentYear = () => getCurrentDate().getFullYear();
 const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
@@ -291,7 +292,7 @@ function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
         )
         OR EXISTS (
           SELECT 1
-            FROM DSED.LACLAE LAC
+            FROM ${comercialErpTable('LACLAE')} LAC
            WHERE TRIM(LAC.LCCDCL) = TRIM(${clientAlias}.CODIGOCLIENTE)
              AND LAC.TPDC = 'LAC'
              AND LAC.LCTPVT IN ('CC', 'VC')
@@ -400,7 +401,7 @@ function buildClientListVendorSqlFilter(vendorCodes, clientAlias = 'C') {
         )
         OR EXISTS (
             SELECT 1
-              FROM DSED.LACLAE LAC
+              FROM ${comercialErpTable('LACLAE')} LAC
              WHERE TRIM(LAC.LCCDCL) = TRIM(${clientAlias}.CODIGOCLIENTE)
                AND LAC.LCAADC >= ${MIN_YEAR}
                AND LAC.TPDC = 'LAC'
@@ -443,19 +444,19 @@ async function lookupClientAssignedVendorCodes(clientCode) {
     }
     const laclaeVendorSelects = VENDOR_COLUMN === 'LCCDVD'
         ? `SELECT LAC.LCCDVD AS VENDOR_CODE
-               FROM DSED.LACLAE LAC
+               FROM ${comercialErpTable('LACLAE')} LAC
               WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
                 AND LAC.LCAADC >= ?
                 AND LAC.TPDC = 'LAC'`
         : `SELECT LAC.LCCDVD AS VENDOR_CODE
-               FROM DSED.LACLAE LAC
+               FROM ${comercialErpTable('LACLAE')} LAC
               WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
                 AND LAC.LCAADC >= ?
                 AND LAC.LCMMDC < ${TRANSITION_MONTH}
                 AND LAC.TPDC = 'LAC'
              UNION
              SELECT LAC.${VENDOR_COLUMN} AS VENDOR_CODE
-               FROM DSED.LACLAE LAC
+               FROM ${comercialErpTable('LACLAE')} LAC
               WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
                 AND LAC.LCAADC >= ?
                 AND LAC.LCMMDC >= ${TRANSITION_MONTH}

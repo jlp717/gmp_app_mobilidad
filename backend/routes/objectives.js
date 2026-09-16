@@ -19,6 +19,7 @@ const {
     handleRouteError
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { redisCache, TTL } = require('../services/redis-cache');
 const { beginRouteFill, endRouteFill, sendFillBusy } = require('../services/route-cache-stampede');
 const {
@@ -117,7 +118,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
     const col = getVendorColumn(currentYear);
     const rows = await queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE L.${col} = ?
           AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
@@ -128,7 +129,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
         const prevCol = getVendorColumn(currentYear - 1);
         const prevRows = await queryWithParams(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.${prevCol} = ?
               AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
@@ -154,7 +155,7 @@ async function getClientsMonthlySales(clientCodes, year) {
             SUM(L.LCIMVT) as SALES,
             SUM(L.LCIMCT) as COST,
             COUNT(DISTINCT L.LCCDCL) as CLIENTS
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE L.LCCDCL IN (${safeCodes.map(() => '?').join(',')})
           AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
@@ -347,7 +348,7 @@ async function fetchObjectiveEvolutionRowsByClientScope(vendorCode, uniqueYears)
                 SUM(L.LCIMVT) as SALES,
                 SUM(L.LCIMCT) as COST,
                 COUNT(DISTINCT L.LCCDCL) as CLIENTS
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC IN (${yearPlaceholders})
               AND ${LACLAE_SALES_FILTER}
               AND L.LCCDCL IN (${clientPlaceholders})
@@ -533,7 +534,7 @@ async function getGlobalObjectiveBaselineMonthly(year) {
             SUM(L.LCIMVT) as SALES,
             0 as COST,
             0 as CLIENTS
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCAADC, L.LCMMDC
@@ -618,7 +619,7 @@ async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
             SUM(L.LCIMVT) as SALES,
             SUM(L.LCIMCT) as COST,
             COUNT(DISTINCT L.LCCDCL) as CLIENTS
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE L.LCAADC IN (${uniqueYears.map(() => '?').join(',')})
           AND ${LACLAE_SALES_FILTER}
           ${vendedorFilter}
@@ -745,7 +746,7 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
                 SUM(L.LCIMVT) as SALES,
                 SUM(L.LCIMCT) as COST,
                 COUNT(DISTINCT L.LCCDCL) as CLIENTS
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC IN (${yearPlaceholders})
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCAADC, L.LCMMDC
@@ -780,7 +781,7 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
                 L.LCCDCL as CLIENT_CODE,
                 L.LCIMVT as SALES,
                 L.LCIMCT as COST
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC IN (${yearPlaceholders})
               AND L.LCMMDC < 3
               AND ${LACLAE_SALES_FILTER}
@@ -794,7 +795,7 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
                 L.LCCDCL as CLIENT_CODE,
                 L.LCIMVT as SALES,
                 L.LCIMCT as COST
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC IN (${yearPlaceholders})
               AND L.LCMMDC >= 3
               AND ${LACLAE_SALES_FILTER}
@@ -879,7 +880,7 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
                 SELECT
                     COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
                     COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
-                FROM DSEDAC.LAC L
+                FROM ${comercialErpTable('LAC')} L
                 WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter}
             `, [targetYear, targetMonth]),
             queryWithParams(`
@@ -887,7 +888,7 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
                     COALESCE(SUM(IMPORTEVENTA), 0) as sales,
                     COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
                     COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
-                FROM DSEDAC.LAC
+                FROM ${comercialErpTable('LAC')}
                 WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter}
             `, [targetYear - 1, targetMonth]),
         ]);
@@ -1447,7 +1448,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
                 COALESCE(TRIM(AX.FILTRO03), '') as FI3_CODE,
                 COALESCE(TRIM(AX.FILTRO04), '') as FI4_CODE,
                 COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as FI5_CODE
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
             LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
             WHERE L.LCCDCL = ?
@@ -2634,7 +2635,7 @@ async function handleByClientRequest(req, res) {
                 // fetch CLI details only for the returned top clients.
                 const salesRows = await queryWithParams(`
                     SELECT L.LCCDCL as CODE, SUM(L.LCIMVT) as SALES, SUM(L.LCIMCT) as COST
-                    FROM DSED.LACLAE L
+                    FROM ${comercialErpTable('LACLAE')} L
                     WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
                       ${monthPred.filter}
                       AND ${LACLAE_SALES_FILTER}
@@ -2717,7 +2718,7 @@ async function handleByClientRequest(req, res) {
                     FROM DSEDAC.CLI C
                     LEFT JOIN (
                         SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
-                        FROM DSED.LACLAE
+                        FROM ${comercialErpTable('LACLAE')}
                         WHERE LCAADC IN (${yearsArray.map(() => '?').join(',')})
                           ${monthPredBare.filter}
                           AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
@@ -2740,7 +2741,7 @@ async function handleByClientRequest(req, res) {
                         L.LCCDCL as CODE,
                         SUM(L.LCIMVT) as SALES,
                         SUM(L.LCIMCT) as COST
-                    FROM DSED.LACLAE L
+                    FROM ${comercialErpTable('LACLAE')} L
                     WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
                       ${monthPred.filter}
                       AND ${LACLAE_SALES_FILTER}
@@ -2796,7 +2797,7 @@ async function handleByClientRequest(req, res) {
                         MIN(C.POBLACION) as CITY,
                         SUM(L.LCIMVT) as SALES,
                         SUM(L.LCIMCT) as COST
-                    FROM DSED.LACLAE L
+                    FROM ${comercialErpTable('LACLAE')} L
                     LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
                     WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
                       ${monthPred.filter}
@@ -2842,7 +2843,7 @@ async function handleByClientRequest(req, res) {
                     SELECT
                         L.LCCDCL as CODE,
                         SUM(L.LCIMVT) as PREV_SALES
-                    FROM DSED.LACLAE L
+                    FROM ${comercialErpTable('LACLAE')} L
                     WHERE L.LCAADC = ?
                       ${monthPred.filter}
                       AND ${LACLAE_SALES_FILTER}

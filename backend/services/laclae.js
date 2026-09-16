@@ -1,5 +1,6 @@
 const logger = require('../middleware/logger');
 const { getPool } = require('../config/db');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 // Lazy require: redis-cache no importa laclae hoy, pero el lazy require evita
 // acoplar el arranque de la L1 de reparto a la disponibilidad de Redis.
 const { deleteCachePattern, onInvalidationPattern } = require('../services/redis-cache');
@@ -323,7 +324,7 @@ async function loadLaclaeCacheInternal() {
           L.R1_T8DIVJ as VIS_J, L.R1_T8DIVV as VIS_V, L.R1_T8DIVS as VIS_S, L.R1_T8DIVD as VIS_D,
           L.R1_T8DIRL as DEL_L, L.R1_T8DIRM as DEL_M, L.R1_T8DIRX as DEL_X,
           L.R1_T8DIRJ as DEL_J, L.R1_T8DIRV as DEL_V, L.R1_T8DIRS as DEL_S, L.R1_T8DIRD as DEL_D
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
         WHERE L.R1_T8CDVD IS NOT NULL 
           AND L.LCCDCL IS NOT NULL

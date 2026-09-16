@@ -1058,7 +1058,7 @@ async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
             ? queryWithParams(`
             SELECT R1_T8DIRL, R1_T8DIRM, R1_T8DIRX, R1_T8DIRJ,
                    R1_T8DIRV, R1_T8DIRS, R1_T8DIRD
-            FROM DSED.LACLAE
+            FROM ${comercialErpTable('LACLAE')}
             WHERE LCCDCL = CAST(? AS CHAR(10))
               AND LCAADC >= ?
               AND R1_T8CDVD = CAST(? AS CHAR(2))
@@ -1071,7 +1071,7 @@ async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
             ? queryWithParams(`
                 SELECT R1_T8DIRL, R1_T8DIRM, R1_T8DIRX, R1_T8DIRJ,
                        R1_T8DIRV, R1_T8DIRS, R1_T8DIRD
-                FROM DSED.LACLAE
+                FROM ${comercialErpTable('LACLAE')}
                 WHERE LCCDCL = CAST(? AS CHAR(10))
                   AND LCAADC >= ?
                 FETCH FIRST 20 ROWS ONLY`,
@@ -2195,7 +2195,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
                 SUM(CASE WHEN L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)) THEN L.LCIMVT ELSE 0 END) AS SALES_THIS_YEAR,
                 SUM(CASE WHEN L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)) THEN L.LCIMVT ELSE 0 END) AS SALES_PREV_YEAR,
                 COUNT(*) AS PURCHASE_COUNT
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10))
               AND L.LCAADC IN (?, ?)
               AND ((L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)))
@@ -6104,7 +6104,7 @@ async function getClientBalance(clientCode) {
                   AND L.LCSRAB NOT IN ('N','Z','G','D')
                 THEN L.LCIMVT ELSE 0 END
         ), 0) AS TOTAL_FACTURADO
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE L.LCCDCL = ?
           AND L.LCAADC = ?
     `;
@@ -6925,7 +6925,7 @@ async function getProductHistory(productCode, clientCode) {
             SUM(L.LCIMCT) AS COST,
             SUM(L.LCCTUD) AS UNITS,
             COALESCE(SUM(L.LCIMVT) / NULLIF(SUM(L.LCCTUD), 0), 0) AS AVG_PRICE
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE L.LCAADC >= ?
           AND L.LCCDCL = ?
           AND TRIM(L.LCCDPR) = ?

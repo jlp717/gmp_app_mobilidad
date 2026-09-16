@@ -12,6 +12,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }
 
 const http = require('http');
 const { initDb, closePool, queryWithParams } = require('../config/db');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 const HOST = process.env.API_HOST || '192.168.1.230';
 const PORT = Number.parseInt(process.env.API_PORT || '3335', 10);
@@ -134,7 +135,7 @@ async function pmrClients() {
 async function vendorForClient(client) {
   const rows = await queryWithParams(
     `SELECT TRIM(LAC.R1_T8CDVD) AS VD
-       FROM DSED.LACLAE LAC
+       FROM ${comercialErpTable('LACLAE')} LAC
       WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
         AND LAC.LCAADC >= ?
         AND TRIM(COALESCE(LAC.R1_T8CDVD, '')) <> ''
@@ -174,7 +175,7 @@ async function main() {
       const hist = await queryWithParams(
         `SELECT TRIM(LCSRAB) AS SERIE, LCNRAB AS NUMERO, TRIM(LCCDCL) AS CLIENTE,
                 TRIM(R1_T8CDVD) AS VD, LCIMVT AS IMP
-           FROM DSED.LACLAE
+           FROM ${comercialErpTable('LACLAE')}
           WHERE LCSRAB = CAST(? AS CHAR(1))
           FETCH FIRST 3 ROWS ONLY`,
         ['D'],
@@ -689,6 +690,58 @@ async function main() {
       'GET facturas summary totales',
       facturas.status === 200 && Number(facSum.totalFacturas || facSum.totalDocumentos || 0) >= 0,
       `status=${facturas.status} docs=${facSum.totalFacturas || facSum.totalDocumentos || 0} importe=${facSum.totalImporte || 0} base=${facSum.totalBase || 0}`,
+    ));
+
+    const year = new Date().getFullYear();
+    for (const hitVendor of ['80', '35']) {
+      let hitToken = token;
+      if (hitVendor !== VENDOR) {
+        const otherPin = await pinForVendor(hitVendor);
+        if (!otherPin) {
+          rows.push(record(`GET objectives/evolution ${hitVendor}`, false, 'sin PIN'));
+          rows.push(record(`GET commissions/summary ${hitVendor}`, false, 'sin PIN'));
+          continue;
+        }
+        const otherLogin = await api('POST', '/auth/login', {
+          body: { username: hitVendor, password: otherPin },
+        });
+        hitToken = otherLogin.body?.token || '';
+        if (!hitToken) {
+          rows.push(record(`GET objectives/evolution ${hitVendor}`, false, 'login fail'));
+          rows.push(record(`GET commissions/summary ${hitVendor}`, false, 'login fail'));
+          continue;
+        }
+      }
+      const evo = await api(
+        'GET',
+        `/objectives/evolution?vendedorCodes=${encodeURIComponent(hitVendor)}&years=${year}`,
+        { token: hitToken },
+      );
+      rows.push(record(
+        `GET objectives/evolution ${hitVendor}`,
+        evo.status === 200 && evo.ms < 19000,
+        `status=${evo.status} ms=${evo.ms} (objetivo <12s; fail si >=19s)`,
+      ));
+      const comm = await api(
+        'GET',
+        `/commissions/summary?vendedorCode=${encodeURIComponent(hitVendor)}&year=${year}`,
+        { token: hitToken },
+      );
+      rows.push(record(
+        `GET commissions/summary ${hitVendor}`,
+        comm.status === 200 && comm.ms < 19000,
+        `status=${comm.status} ms=${comm.ms} months=${Object.keys(comm.body?.data || comm.body?.summary || {}).length}`,
+      ));
+    }
+    const history = await api(
+      'GET',
+      `/sales-history?vendedorCodes=${encodeURIComponent(VENDOR)}&limit=20`,
+      { token },
+    );
+    rows.push(record(
+      'GET sales-history historico',
+      history.status === 200 && history.ms < 19000,
+      `status=${history.status} ms=${history.ms} rows=${(history.body?.data || history.body?.rows || history.body?.history || []).length || 0}`,
     ));
 
     rows.push(record(

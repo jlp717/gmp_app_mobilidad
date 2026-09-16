@@ -15,6 +15,7 @@ const logger = require('../middleware/logger');
 const { getCurrentDate, LACLAE_SALES_FILTER, MIN_YEAR } = require('../utils/common');
 const { cachedQuery } = require('./query-optimizer');
 const { query, queryWithParams } = require('../config/db');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { redisCache, TTL } = require('./redis-cache');
 const { refreshActiveGmpVendorCatalog } = require('../middleware/vendor-scope');
 
@@ -80,7 +81,7 @@ async function warmUpDashboardQueries() {
                    COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) as margin,
                    COALESCE(SUM(L.LCCTEV), 0) as boxes,
                    COUNT(DISTINCT L.LCCDCL) as activeClients
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC = ${year} AND L.LCMMDC = ${month} AND ${LACLAE_SALES_FILTER}
         `;
 
@@ -89,14 +90,14 @@ async function warmUpDashboardQueries() {
             SELECT COALESCE(SUM(L.LCIMVT), 0) as sales,
                    COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) as margin,
                    COALESCE(SUM(L.LCCTEV), 0) as boxes
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC = ${year - 1} AND L.LCMMDC = ${month} AND ${LACLAE_SALES_FILTER}
         `;
 
         // 3. Today's live data (real-time, short cache)
         const todaySQL = `
             SELECT COALESCE(SUM(L.LCIMVT), 0) as sales, COUNT(DISTINCT L.LCNRAB) as orders
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC = ${year} AND L.LCMMDC = ${month} AND L.LCDDDC = ${today} AND ${LACLAE_SALES_FILTER}
         `;
 
@@ -106,7 +107,7 @@ async function warmUpDashboardQueries() {
                    SUM(L.LCIMVT) as totalSales,
                    COUNT(DISTINCT L.LCNRAB) as totalOrders,
                    COUNT(DISTINCT L.LCCDCL) as uniqueClients
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE ${LACLAE_SALES_FILTER} AND L.LCAADC IN (${year}, ${year - 1}, ${year - 2})
             GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC, L.LCMMDC
             FETCH FIRST 36 ROWS ONLY
@@ -158,7 +159,7 @@ function buildClientsListV6Sql({ limit, offset, laclaeScopeFilter = '', clientCo
     return `
       WITH LACLAE_SCOPED AS (
         SELECT LCCDCL, LCIMVT, LCIMCT, LCAADC, LCMMDC, LCDDDC, LCCDVD
-          FROM DSED.LACLAE
+          FROM ${comercialErpTable('LACLAE')}
          WHERE LCAADC >= ${MIN_YEAR}
            AND TPDC = 'LAC'
            AND LCTPVT IN ('CC', 'VC')

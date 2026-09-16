@@ -6,6 +6,7 @@ const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache, getClientCodesFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, SNAPSHOT_UNTIL_MONTH, getCommissionVendorColumnExpr, getCommissionActualVendorColumnExprForYear, getCommissionActualVendorColumnExprForMonth, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const {
     resolveCommissionTarget,
     resolveHistoricalCommissionMonth,
@@ -503,7 +504,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
     const placeholders = codeVariants.map(() => '?').join(',');
     const rows = await queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE TRIM(${col}) IN (${placeholders})
           AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
@@ -512,7 +513,7 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
     if (rows.length === 0) {
         const prevRows = await queryWithParams(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE TRIM(${col}) IN (${placeholders})
               AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
@@ -537,7 +538,7 @@ async function getClientsMonthlySales(clientCodes, year) {
         SELECT 
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE L.LCCDCL IN (${placeholders})
           AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
@@ -600,7 +601,7 @@ async function getCommissionSalesRowsFromClientCache(vendedorCode, selectedYear,
             SELECT L.LCAADC as YEAR,
                    L.LCMMDC as MONTH,
                    SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC IN (?, ?)
               AND ${LACLAE_SALES_FILTER}
               AND L.LCCDCL IN (${placeholders})
@@ -658,7 +659,7 @@ async function getCommissionSalesRowsByClientScopeForVendors(vendorCodes, select
                    L.LCAADC as YEAR,
                    L.LCMMDC as MONTH,
                    SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC IN (?, ?)
               AND ${LACLAE_SALES_FILTER}
               AND L.LCCDCL IN (${placeholders})
@@ -722,7 +723,7 @@ async function fetchSingleVendorCommissionSalesRows(safeVendorCodes, selectedYea
             SELECT L.LCAADC as YEAR,
                    L.LCMMDC as MONTH,
                    SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
               AND ${currentSalesVendorCol} IN (${vendorPlaceholders})
@@ -732,7 +733,7 @@ async function fetchSingleVendorCommissionSalesRows(safeVendorCodes, selectedYea
             SELECT L.LCAADC as YEAR,
                    L.LCMMDC as MONTH,
                    SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC = ?
               AND L.LCMMDC < 3
               AND ${LACLAE_SALES_FILTER}
@@ -743,7 +744,7 @@ async function fetchSingleVendorCommissionSalesRows(safeVendorCodes, selectedYea
             SELECT L.LCAADC as YEAR,
                    L.LCMMDC as MONTH,
                    SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC = ?
               AND L.LCMMDC >= 3
               AND ${LACLAE_SALES_FILTER}
@@ -972,7 +973,7 @@ async function batchFetchAllVendorData(vendorCodes, year) {
                        L.LCAADC as YEAR,
                        L.LCMMDC as MONTH,
                        SUM(L.LCIMVT) as SALES
-                FROM DSED.LACLAE L
+                FROM ${comercialErpTable('LACLAE')} L
                 WHERE L.LCAADC = ?
                   AND ${LACLAE_SALES_FILTER}
                   AND TRIM(${currentSalesVendorCol}) IN (${fallbackPlaceholders})
@@ -984,7 +985,7 @@ async function batchFetchAllVendorData(vendorCodes, year) {
                        L.LCAADC as YEAR,
                        L.LCMMDC as MONTH,
                        SUM(L.LCIMVT) as SALES
-                FROM DSED.LACLAE L
+                FROM ${comercialErpTable('LACLAE')} L
                 WHERE L.LCAADC = ?
                   AND L.LCMMDC < 3
                   AND ${LACLAE_SALES_FILTER}
@@ -997,7 +998,7 @@ async function batchFetchAllVendorData(vendorCodes, year) {
                        L.LCAADC as YEAR,
                        L.LCMMDC as MONTH,
                        SUM(L.LCIMVT) as SALES
-                FROM DSED.LACLAE L
+                FROM ${comercialErpTable('LACLAE')} L
                 WHERE L.LCAADC = ?
                   AND L.LCMMDC >= 3
                   AND ${LACLAE_SALES_FILTER}
@@ -1815,7 +1816,7 @@ async function getMonthPaymentSnapshotFromDb(vendedorCode, year, month) {
         loadCommissionConfig(year),
         queryWithParams(`
             SELECT SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC = ?
               AND L.LCMMDC = ?
               AND ${LACLAE_SALES_FILTER}
@@ -1823,7 +1824,7 @@ async function getMonthPaymentSnapshotFromDb(vendedorCode, year, month) {
         `, [year, month, ...codeVariants], false),
         queryWithParams(`
             SELECT SUM(L.LCIMVT) as SALES
-            FROM DSED.LACLAE L
+            FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCAADC = ?
               AND L.LCMMDC = ?
               AND ${LACLAE_SALES_FILTER}
@@ -1987,7 +1988,7 @@ async function discoverVendorCodesForYear(year) {
     const colExpr = getCommissionVendorColumnExprForYear(safeYr, 'L');
     const vendorRows = await queryWithParams(`
         SELECT DISTINCT RTRIM(${colExpr}) as VENDOR_CODE
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE L.LCAADC IN (?, ?)
           AND ${colExpr} IS NOT NULL
           AND ${colExpr} <> ''
@@ -2634,7 +2635,7 @@ router.post('/pay', verifyToken, validateBody(payBodySchema), async (req, res) =
                     : 'AND 1=0';
                 const salesQuery = `
                     SELECT SUM(L.LCIMVT) as SALES
-                    FROM DSED.LACLAE L
+                    FROM ${comercialErpTable('LACLAE')} L
                     WHERE L.LCAADC = ?
                       AND L.LCMMDC = ?
                       AND ${LACLAE_SALES_FILTER}

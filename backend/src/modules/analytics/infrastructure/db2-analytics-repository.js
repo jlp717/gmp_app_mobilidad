@@ -6,6 +6,7 @@ const { AnalyticsRepository } = require('../domain/analytics-repository');
 const { AnalyticsMetrics, GrowthRate, Prediction, TopPerformer } = require('../domain/analytics-metrics');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { VENDOR_COLUMN, LACLAE_SALES_FILTER, sanitizeCodeList } = require('../../../../utils/common');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 class Db2AnalyticsRepository extends AnalyticsRepository {
   constructor(dbPool) {
@@ -37,7 +38,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         COUNT(DISTINCT L.LCCDRF) AS PRODUCTOS,
         L.LCAADC AS ANIO,
         L.LCMMDC AS MES
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -67,7 +68,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS,
         COUNT(DISTINCT L.LCCDCL) AS CLIENTES
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         ${yearFilter}
@@ -107,7 +108,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         AND ((L.LCAADC = ? AND L.LCMMDC = ?)
@@ -164,7 +165,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       LEFT JOIN DSEDAC.CLI C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       WHERE ${vendorFilter}
         AND ${dateFilter}
@@ -208,7 +209,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
         COALESCE(ART.CODIGOFAMILIA, '') AS FAMILIA
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = L.LCCDRF
       WHERE ${vendorFilter}
         AND ${dateFilter}
@@ -245,7 +246,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS,
         COUNT(DISTINCT L.LCCDCL) AS CLIENTES
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       WHERE ${vendorFilter}
         AND ${dateFilter}
         AND L.LCAADC >= YEAR(CURRENT DATE) - ?
@@ -273,7 +274,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         L.LCCDCL AS CODIGO,
         COALESCE(C.NOMBRECLIENTE, L.LCCDCL) AS NOMBRE,
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       LEFT JOIN DSEDAC.CLI C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       WHERE ${vendorFilter}
         AND ${dateFilter}
@@ -335,7 +336,7 @@ class Db2AnalyticsRepository extends AnalyticsRepository {
         COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) AS MARGEN,
         COUNT(DISTINCT L.LCCDRF) AS PRODUCTOS,
         COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = L.LCCDRF
       WHERE ${vendorFilter}
         AND ${dateFilter}

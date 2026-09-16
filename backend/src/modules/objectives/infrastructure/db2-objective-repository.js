@@ -5,6 +5,7 @@ const { ObjectiveRepository } = require('../domain/objective-repository');
 const { Objective, ObjectiveProgress } = require('../domain/objective');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { LACLAE_SALES_FILTER, sanitizeCodeList, getVendorColumnExpr } = require('../../../../utils/common');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 function clampInt(value, defaultValue, min, max) {
   const n = parseInt(value, 10);
@@ -51,7 +52,7 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
           L.LCAADC AS ANIO,
           L.LCMMDC AS MES,
           COALESCE(SUM(L.LCIMVT), 0) AS VENTAS
-        FROM DSED.LACLAE L
+        FROM ${comercialErpTable('LACLAE')} L
         WHERE ${LACLAE_SALES_FILTER}
           AND ${lacVendorFilter}
           ${year ? 'AND L.LCAADC = ?' : ''}
@@ -121,7 +122,7 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
         COALESCE(SUM(L.LCIMVT), 0) AS VENTAS,
         COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
         COUNT(DISTINCT L.LCSRAB || '-' || L.LCNRAB) AS PEDIDOS
-      FROM DSED.LACLAE L
+      FROM ${comercialErpTable('LACLAE')} L
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(L.LCCDCL)
       LEFT JOIN DSEDAC.ART ART ON ART.CODIGOARTICULO = L.LCCDRF
       WHERE ${vendorFilter}

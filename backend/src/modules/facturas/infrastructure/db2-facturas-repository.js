@@ -148,7 +148,7 @@ class Db2FacturasRepository extends FacturasRepository {
         LAC.CANTIDADUNIDADES AS CANTIDAD,
         LAC.IMPORTEVENTA AS IMPORTE,
         LAC.IMPORTECOSTO AS COSTO
-      FROM DSEDAC.LAC LAC
+      FROM ${comercialErpTable('LAC')} LAC
       INNER JOIN ${comercialErpTable('CAC')} CAC
         ON LAC.NUMEROALBARAN = CAC.NUMEROALBARAN
         AND LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN

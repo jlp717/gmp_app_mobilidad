@@ -23,6 +23,7 @@ const ERP_PROD = Object.freeze({
   ART: 'DSEDAC.ART',
   CLI: 'DSEDAC.CLI',
   CLC: 'DSEDAC.CLC',
+  LAC: 'DSEDAC.LAC',
   LACLAE: 'DSED.LACLAE',
 });
 
@@ -42,6 +43,7 @@ const ERP_TEST = Object.freeze({
   ART: 'JAVIER.TEST_ART',
   CLI: 'JAVIER.TEST_CLI',
   CLC: 'JAVIER.TEST_CLC',
+  LAC: 'JAVIER.TEST_LAC',
   LACLAE: 'JAVIER.TEST_LACLAE',
 });
 
