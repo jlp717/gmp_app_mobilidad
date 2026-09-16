@@ -20,6 +20,7 @@ const {
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
+const { isLaclaeMonthlyReady, monthlyTable } = require('../services/laclae-monthly');
 const { redisCache, TTL } = require('../services/redis-cache');
 const { beginRouteFill, endRouteFill, sendFillBusy } = require('../services/route-cache-stampede');
 const {
@@ -739,7 +740,21 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
         const rowsKey = `obj:evolution:rows:${OBJECTIVES_CACHE_VERSION}:ALL:${uniqueYears.join(',')}`;
         const cachedRows = await redisCache.get('route', rowsKey);
         if (cachedRows) return cachedRows;
-        const rows = await queryWithParams(`
+        const useMonthly = await isLaclaeMonthlyReady(queryWithParams);
+        const rows = useMonthly
+            ? await queryWithParams(`
+                SELECT
+                    M.ANO as YEAR,
+                    M.MES as MONTH,
+                    SUM(M.SALES) as SALES,
+                    SUM(M.COST) as COST,
+                    COUNT(DISTINCT M.CLIENTE) as CLIENTS
+                FROM ${monthlyTable()} M
+                WHERE M.ANO IN (${yearPlaceholders})
+                GROUP BY M.ANO, M.MES
+                ORDER BY YEAR, MONTH
+            `, uniqueYears)
+            : await queryWithParams(`
             SELECT 
                 L.LCAADC as YEAR,
                 L.LCMMDC as MONTH,
@@ -2609,12 +2624,61 @@ async function handleByClientRequest(req, res) {
 
         const cachedClientCodeCount = Array.isArray(cachedClientCodes) ? cachedClientCodes.length : 0;
         const canUseClientCodeSet = cachedClientCodeCount > 0 && cachedClientCodeCount <= BY_CLIENT_MAX_CLIENT_CODE_IN_PARAMS;
+        const isAllVendors = !effectiveVendorCodes || effectiveVendorCodes === 'ALL';
+        const useMonthlyAll = isAllVendors
+            && !extraFilters
+            && await isLaclaeMonthlyReady(queryWithParams);
+        const monthPredMonthly = buildMonthFilterParameterized(monthsArray.join(','), 'MES');
 
         if (cachedClientCodeCount > BY_CLIENT_MAX_CLIENT_CODE_IN_PARAMS) {
             logger.warn(`[OBJECTIVES] by-client cache scope has ${cachedClientCodeCount} clients; using vendor-filter SQL instead of giant IN clause`);
         }
 
-        if (canUseClientCodeSet) {
+        if (useMonthlyAll) {
+            const salesRows = await queryWithParams(`
+                SELECT M.CLIENTE as CODE, SUM(M.SALES) as SALES, SUM(M.COST) as COST
+                  FROM ${monthlyTable()} M
+                 WHERE M.ANO IN (${yearsArray.map(() => '?').join(',')})
+                   ${monthPredMonthly.filter}
+                 GROUP BY M.CLIENTE
+                 ORDER BY SALES DESC
+                 FETCH FIRST ? ROWS ONLY
+            `, [...yearsArray, ...monthPredMonthly.params, rowsLimit], false);
+            const topCodes = salesRows
+                .map((row) => (row.CODE || '').toString().trim())
+                .filter(Boolean);
+            if (topCodes.length > 0) {
+                const detailsRows = await queryWithParams(`
+                    SELECT
+                        C.CODIGOCLIENTE as CODE,
+                        COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
+                        C.DIRECCION as ADDRESS,
+                        C.CODIGOPOSTAL as POSTALCODE,
+                        C.POBLACION as CITY
+                    FROM DSEDAC.CLI C
+                    WHERE C.CODIGOCLIENTE IN (${topCodes.map(() => '?').join(',')})
+                `, topCodes, false);
+                const detailsMap = new Map();
+                detailsRows.forEach((row) => {
+                    const codeValue = (row.CODE || '').toString().trim();
+                    if (codeValue) detailsMap.set(codeValue, row);
+                });
+                currentRows = salesRows.map((row) => {
+                    const codeValue = (row.CODE || '').toString().trim();
+                    const details = detailsMap.get(codeValue) || {};
+                    return {
+                        CODE: codeValue,
+                        NAME: details.NAME,
+                        ADDRESS: details.ADDRESS,
+                        POSTALCODE: details.POSTALCODE,
+                        CITY: details.CITY,
+                        SALES: row.SALES,
+                        COST: row.COST,
+                    };
+                }).filter((row) => row.NAME);
+            }
+            totalClientsCount = cachedClientCodeCount || currentRows.length;
+        } else if (canUseClientCodeSet) {
             const safeClientCodes = cachedClientCodes.map(c => sanitizeForSQL(c));
 
             // Query 0: Count clients from cache (filtered by extra filters if any)
@@ -2839,7 +2903,16 @@ async function handleByClientRequest(req, res) {
             const prevRowsPromise = mapChunksWithConcurrency(
                 codeChunks,
                 BY_CLIENT_BATCH_CONCURRENCY,
-                (chunk) => queryWithParams(`
+                (chunk) => queryWithParams(useMonthlyAll ? `
+                    SELECT
+                        M.CLIENTE as CODE,
+                        SUM(M.SALES) as PREV_SALES
+                    FROM ${monthlyTable()} M
+                    WHERE M.ANO = ?
+                      ${monthPredMonthly.filter}
+                      AND M.CLIENTE IN (${chunk.map(() => '?').join(',')})
+                    GROUP BY M.CLIENTE
+                ` : `
                     SELECT
                         L.LCCDCL as CODE,
                         SUM(L.LCIMVT) as PREV_SALES
@@ -2849,7 +2922,7 @@ async function handleByClientRequest(req, res) {
                       AND ${LACLAE_SALES_FILTER}
                       AND L.LCCDCL IN (${chunk.map(() => '?').join(',')})
                     GROUP BY L.LCCDCL
-                `, [prevYear, ...monthPred.params, ...chunk], false)
+                `, [prevYear, ...(useMonthlyAll ? monthPredMonthly.params : monthPred.params), ...chunk], false)
             ).then(results => results.flat());
 
             const confRowsPromise = (async () => {

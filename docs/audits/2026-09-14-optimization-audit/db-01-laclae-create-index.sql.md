@@ -1,42 +1,19 @@
 ---
-title: DB-01 CREATE INDEX LACLAE (solo Javier)
-status: blocked
-owner: Javier + proveedor ERP
+title: DB-01 JAVIER.LACLAE_MONTHLY (no DDL ERP)
+status: active
+owner: ejecutor
 created: 2026-09-16
 ---
 
-# DB-01 — CREATE INDEX exacto para `DSED.LACLAE`
+# DB-01 — Agregado mensual en `JAVIER` (DSED/DSEDAC solo lectura)
 
-El ejecutor **no aplica este DDL**. Pegar en STRSQL / ACS fuera de horario comercial. Rollback: `DROP INDEX` a cargo de Javier.
+**PROHIBIDO** `CREATE INDEX` / `ALTER` sobre `DSED.LACLAE` o cualquier tabla ERP.
 
-La app ya usa SQL parametrizado sobre `DSED.LACLAE`. Sin este índice, historial ALL 3 años y by-client ALL siguen en rango 6–40 s en frío.
+Solución: tabla `JAVIER.LACLAE_MONTHLY` poblada con `INSERT … SELECT` desde `comercialErpTable('LACLAE')` (`JAVIER.TEST_LACLAE` en isolated_test; `DSED.LACLAE` en prod, solo SELECT).
 
-IBM i: **sin `INCLUDE`** (eso es DB2 LUW). Cubrir el `WHERE` de ventas/histórico.
+- DDL: `backend/migrations/047_javier_laclae_monthly.sql`
+- Apply: `DB_QUERY_TIMEOUT_MS=3600000 node backend/scripts/apply-laclae-monthly.js --apply`
+- Rollback: `DROP TABLE JAVIER.LACLAE_MONTHLY`
+- Flag: `LACLAE_MONTHLY_ENABLED` (default true). Si el validate de importes no cuadra, el script hace DROP y la app sigue leyendo LACLAE.
 
-```sql
--- Ventana: fuera de horario comercial. Confirmar que no exista el mismo nombre.
--- QSYS2.SYSTABLES: TABLE_SCHEMA='DSED' AND TABLE_NAME='LACLAE'
-
-CREATE INDEX DSED.IX_LACLAE_YEAR_SALES
-  ON DSED.LACLAE (LCAADC, TPDC, LCTPVT, LCCLLN);
-
-CREATE INDEX DSED.IX_LACLAE_APP_HIST
-  ON DSED.LACLAE (LCAADC, LCMMDC, LCDDDC, LCTPVT, LCCLLN, LCSRAB);
-```
-
-Comprobación post-DDL (solo lectura):
-
-```sql
-SELECT INDEX_NAME, COLUMN_NAME, ORDINAL_POSITION
-  FROM QSYS2.SYSINDEXSTAT
-  JOIN QSYS2.SYSKEYS ON 1=1
- WHERE 1=0;
--- Preferir:
-SELECT INDEX_NAME, INDEX_SCHEMA
-  FROM QSYS2.SYSTABLEINDEXSTAT
- WHERE TABLE_SCHEMA = 'DSED'
-   AND TABLE_NAME = 'LACLAE'
-   AND INDEX_NAME IN ('IX_LACLAE_YEAR_SALES', 'IX_LACLAE_APP_HIST');
-```
-
-No hay job ETL ni `JAVIER.LACLAE_MONTHLY` en este paquete (sigue BLOCKED spec).
+App: `GET /objectives/evolution?ALL` y `GET /objectives/by-client?ALL` leen el mensual cuando QSYS2 ve la tabla con filas.

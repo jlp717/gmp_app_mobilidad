@@ -39,4 +39,11 @@ describe('objectives by-client route contracts', () => {
     expect(source).toContain('objectivesByClientBreaker.execute');
     expect(source).toContain('Objetivos por cliente no disponibles dentro del timeout seguro');
   });
+
+  test('ALL evolution and by-client can read JAVIER.LACLAE_MONTHLY', () => {
+    expect(source).toContain("require('../services/laclae-monthly')");
+    expect(source).toContain('isLaclaeMonthlyReady');
+    expect(source).toContain('monthlyTable()');
+    expect(source).not.toMatch(/WHERE VENDEDOR='ALL'/);
+  });
 });
