@@ -14,6 +14,7 @@ const {
   parseDiasFormaPago,
   lookupFormaPagoDias,
   addDaysIso,
+  isColumnMissingError,
 } = require('../services/comercial-devoluciones-service');
 
 const mockQueryWithParams = jest.fn();
@@ -56,6 +57,13 @@ describe('comercial devoluciones domain', () => {
     expect(classifyFormaPago('CTR')).toBe('REPARTIDOR');
     expect(classifyFormaPago('PG')).toBe('POSTDATADOS');
     expect(classifyFormaPago('P1')).toBe('POSTDATADOS');
+  });
+
+  test('detects ODBC 42S22 from state even if message omits SQLSTATE', () => {
+    const error = Object.assign(new Error('[odbc] Error preparing the SQL statement'), {
+      odbcErrors: [{ state: '42S22', code: -206 }],
+    });
+    expect(isColumnMissingError(error)).toBe(true);
   });
 
   test('reads FPG days from PRIMERPAGO and never hardcodes 30', () => {

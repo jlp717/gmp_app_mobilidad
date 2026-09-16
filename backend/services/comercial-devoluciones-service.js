@@ -241,14 +241,24 @@ function returnDocKey(item) {
   ].join('|');
 }
 
+function odbcFingerprint(error) {
+  const parts = [
+    error?.message,
+    error?.state,
+    error?.code,
+    ...(Array.isArray(error?.odbcErrors)
+      ? error.odbcErrors.map((item) => `${item?.state || ''} ${item?.code || ''} ${item?.message || ''}`)
+      : []),
+  ];
+  return parts.filter(Boolean).join(' ');
+}
+
 function isTableMissingError(error) {
-  const msg = String(error?.message || error || '');
-  return /SQL0204|SQL5005|not (found|exist)|undefined name/i.test(msg);
+  return /SQL0204|SQL5005|42S02|not (found|exist)|undefined name/i.test(odbcFingerprint(error));
 }
 
 function isColumnMissingError(error) {
-  const msg = String(error?.message || error || '');
-  return /SQL0206|42S22|column .+ not found|undefined name/i.test(msg);
+  return /SQL0206|42S22|42703|column .+ not found|undefined name/i.test(odbcFingerprint(error));
 }
 
 function typedError(message, code, status) {
@@ -1224,6 +1234,7 @@ module.exports = {
   getSavedDraft,
   saveLiquidacion,
   registerReturn,
+  isColumnMissingError,
   lookupFormaPagoDias,
   parseDiasFormaPago,
   addDaysIso,
