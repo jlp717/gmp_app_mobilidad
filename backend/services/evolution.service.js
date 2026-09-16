@@ -211,7 +211,7 @@ async function getClientEvolution({ vendedorCodes, limit = 30 }) {
     const sql = `
         SELECT
             TRIM(L.LCCDCL) AS CODIGO_CLIENTE,
-            MAX(TRIM(C.NOMBRECOMERCIAL)) AS NOMBRE,
+            MAX(TRIM(C.NOMBRECLIENTE)) AS NOMBRE,
             SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS VENTAS_ACTUAL,
             SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS VENTAS_ANTERIOR,
             COUNT(DISTINCT CASE WHEN L.LCAADC = ${currentYear} THEN L.LCCDRF END) AS PRODUCTOS_ACTUAL

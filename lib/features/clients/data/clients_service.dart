@@ -172,7 +172,7 @@ class ClientsService {
     required String vendedorCodes,
   }) async {
     return ApiClient.get(
-      '/sales-history/summary',
+      '/analytics/sales-history/summary',
       queryParameters: {
         'clientCode': clientCode,
         'vendedorCodes': vendedorCodes,

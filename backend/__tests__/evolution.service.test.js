@@ -189,6 +189,9 @@ describe('Evolution Service', () => {
             expect(result[0].trend).toBe('UP');
             expect(result[1].trend).toBe('DOWN');
             expect(result[0].nombre).toBe('Cliente 1');
+            const [sql] = mockQuery.mock.calls[0];
+            expect(sql).toMatch(/NOMBRECLIENTE/);
+            expect(sql).not.toMatch(/NOMBRECOMERCIAL/);
         });
     });
 });

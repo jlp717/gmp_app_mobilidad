@@ -24,10 +24,12 @@ class EnhancedClientMatrixPage extends StatefulWidget {
     required this.clientName,
     super.key,
     this.isJefeVentas = false,
+    this.vendedorCodes,
   });
   final String clientCode;
   final String clientName;
   final bool isJefeVentas;
+  final String? vendedorCodes;
 
   @override
   State<EnhancedClientMatrixPage> createState() =>
@@ -149,6 +151,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           'years': _yearsParam,
           'startMonth': _startMonth.toString(),
           'endMonth': _endMonth.toString(),
+          if (widget.vendedorCodes != null &&
+              widget.vendedorCodes!.trim().isNotEmpty)
+            'vendedorCodes': widget.vendedorCodes!.trim(),
           if (_productCodeSearch.isNotEmpty) 'productCode': _productCodeSearch,
           if (_productNameSearch.isNotEmpty) 'productName': _productNameSearch,
           // NEW: FI hierarchical filters

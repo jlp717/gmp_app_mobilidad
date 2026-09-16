@@ -56,12 +56,15 @@ function resolveVendorCodes(req) {
   const userCode = String(context.userId || '').trim();
 
   if (!context.isJefeVentas && requestedIsAll) {
+    if (visible.length > 1) {
+      return { codes: visible };
+    }
     return { error: 'COMERCIAL no puede consultar ALL' };
   }
   if (!context.isJefeVentas) {
     const codes = requestedCodes.length > 0 ? requestedCodes : sanitizeVendorCodes([userCode]);
-    if (codes.some((code) => !codesMatch(code, userCode))) {
-      return { error: 'COMERCIAL solo puede consultar su vendedor' };
+    if (codes.some((code) => !visible.some((item) => codesMatch(code, item)))) {
+      return { error: 'COMERCIAL solo puede consultar vendedores de su alcance' };
     }
     return { codes };
   }

@@ -207,7 +207,7 @@ class ApiConfig {
 
   // Products Endpoints
   static const String productsList = '/products';
-  static const String salesHistory = '/sales-history';
+  static const String salesHistory = '/analytics/sales-history';
 
   // Vendedores Endpoints
   static const String vendedores = '/vendedores';

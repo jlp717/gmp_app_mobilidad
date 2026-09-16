@@ -2957,6 +2957,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                       clientCode: (client['code'] as String?) ?? '',
                       clientName: (client['name'] as String?) ?? 'Cliente',
                       isJefeVentas: widget.isJefeVentas,
+                      vendedorCodes: widget.employeeCode,
                     ),
                   ),
                 ),

@@ -781,6 +781,18 @@ if (USE_TS_ROUTES && global.__TS_APP__) {
   // Mount Protected Modules
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/analytics', analyticsRoutes);
+  // Flutter Clientes/Historial used /api/sales-history; OpenAPI lives under /analytics.
+  app.use('/api/sales-history', (req, res, next) => {
+    const qIndex = req.url.indexOf('?');
+    const pathOnly = qIndex >= 0 ? req.url.slice(0, qIndex) : req.url;
+    const qs = qIndex >= 0 ? req.url.slice(qIndex) : '';
+    if (pathOnly === '/' || pathOnly === '') {
+      req.url = `/sales-history${qs}`;
+    } else {
+      req.url = `/sales-history${pathOnly}${qs}`;
+    }
+    return analyticsRoutes(req, res, next);
+  });
   app.use('/api', masterRoutes); // mounts /products and /vendedores
   app.use('/api', plannerRoutes); // mounts /router/* and /rutero/*
   // Flutter reparto uses the legacy read contract. Keep it canonical in both

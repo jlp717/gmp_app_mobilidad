@@ -2082,12 +2082,12 @@ router.get('/rutero/client/:code/detail', requirePlannerClientOwnership, async (
         `, [clientCode, currentYear - 5], false, false);
         const frequencyResultPromise = queryWithParams(`
             SELECT
-                COUNT(DISTINCT L.LCDIDL || '-' || L.LCMIDL || '-' || L.LCAIDL) as ORDER_COUNT,
+                COUNT(DISTINCT L.LCDDDC || '-' || L.LCMMDC || '-' || L.LCAADC) as ORDER_COUNT,
                 COUNT(*) as LINE_COUNT,
-                MAX(L.LCAIDL * 10000 + L.LCMIDL * 100 + L.LCDIDL) as LAST_ORDER_DATE
+                MAX(L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) as LAST_ORDER_DATE
             FROM DSED.LACLAE L
             WHERE L.LCCDCL = ?
-              AND L.LCYEAB = ?
+              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
         `, [clientCode, currentYear], false, false);
         const monthlySales = await monthlySalesPromise;

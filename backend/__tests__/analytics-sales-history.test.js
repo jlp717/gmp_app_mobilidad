@@ -67,6 +67,10 @@ describe('GET /sales-history', () => {
     expect(sql).not.toMatch(/ANODOCUMENTO \* 10000/);
     expect(sql).toMatch(/L\.ANODOCUMENTO > \?/);
     expect(sql).toMatch(/L\.CODIGOVENDEDOR IN \(\?\)/);
+    expect(sql).toMatch(/L\.REFERENCIADOCUMENTO/);
+    expect(sql).toMatch(/L\.CODIGOLOTE/);
+    expect(sql).not.toMatch(/TRAZABILIDADALBARAN/);
+    expect(sql).not.toMatch(/L\.REFERENCIA as ref/i);
     expect(params).toEqual(expect.arrayContaining(['15', 2026, 3, 1, 31]));
   });
 

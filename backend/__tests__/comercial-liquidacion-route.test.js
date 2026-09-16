@@ -60,13 +60,49 @@ describe('GET /devoluciones', () => {
     expect(mockListReturns).not.toHaveBeenCalled();
   });
 
-  test('forbids ALL for a commercial', async () => {
-    const res = await request(makeApp({ code: '80', role: 'COMERCIAL' }))
+  test('forbids ALL for a commercial without team scope', async () => {
+    const res = await request(makeApp({ code: '35', role: 'COMERCIAL' }))
       .get('/devoluciones')
       .query({ vendedor: 'ALL', fecha: '2026-05-31' });
 
     expect(res.status).toBe(403);
     expect(mockListReturns).not.toHaveBeenCalled();
+  });
+
+  test('maps ALL to team codes for a scoped commercial leader', async () => {
+    mockListReturns.mockResolvedValueOnce([]);
+    const res = await request(makeApp({
+      code: '80',
+      role: 'COMERCIAL',
+      vendorCodes: ['80', '72', '73', '81', '83'],
+    }))
+      .get('/devoluciones')
+      .query({ vendedor: 'ALL', fecha: '2026-05-31' });
+
+    expect(res.status).toBe(200);
+    expect(mockListReturns).toHaveBeenCalledWith({
+      vendorCodes: ['80', '72', '73', '81', '83'],
+      date: '2026-05-31',
+      clientCode: '',
+    });
+  });
+
+  test('allows a scoped commercial to query a team vendor', async () => {
+    mockListReturns.mockResolvedValueOnce([]);
+    const res = await request(makeApp({
+      code: '80',
+      role: 'COMERCIAL',
+      vendorCodes: ['80', '72'],
+    }))
+      .get('/devoluciones')
+      .query({ vendedor: '72', fecha: '2026-05-31' });
+
+    expect(res.status).toBe(200);
+    expect(mockListReturns).toHaveBeenCalledWith({
+      vendorCodes: ['72'],
+      date: '2026-05-31',
+      clientCode: '',
+    });
   });
 
   test('lists returns for the commercial vendor and date', async () => {

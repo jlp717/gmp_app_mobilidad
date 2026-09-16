@@ -55,7 +55,7 @@ class SalesHistoryService {
           'sales_history_v2_${jsonEncode(SplayTreeMap.from(queryParams))}';
 
       final response = await _get(
-        '/sales-history',
+        '/analytics/sales-history',
         queryParameters: queryParams,
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 10),
@@ -102,7 +102,7 @@ class SalesHistoryService {
       final cacheKey = 'sales_history_summary_v2_${jsonEncode(sortedParams)}';
 
       return await _get(
-        '/sales-history/summary',
+        '/analytics/sales-history/summary',
         queryParameters: queryParams,
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 10),
