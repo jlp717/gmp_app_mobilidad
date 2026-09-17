@@ -1185,6 +1185,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         accessTokenKey: 'token',
         currentUser: currentState.user,
       );
+      final authenticated = state.value;
+      if (authenticated?.isAuthenticated == true) {
+        preWarmAuthenticatedSession(authenticated!);
+      }
       return true;
     } catch (e) {
       final statusCode = e is ApiException ? e.statusCode : null;

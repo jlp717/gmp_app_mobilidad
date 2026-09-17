@@ -19,9 +19,12 @@ jest.mock('../services/redis-cache', () => ({ TTL: { SHORT: 60, LONG: 3600 } }))
 jest.mock('../middleware/logger', () => ({
   info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
 }));
+const mockAuthUser = {
+  id: '98', code: '98', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['98'],
+};
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => {
-    req.user = { id: '98', code: '98', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['98'] };
+    req.user = { ...mockAuthUser };
     next();
   },
 }));
@@ -73,6 +76,9 @@ function pendingRow(overrides = {}) {
 
 describe('GET /pendientes contract', () => {
   beforeEach(() => {
+    Object.assign(mockAuthUser, {
+      id: '98', code: '98', role: 'ADMIN', activeMode: 'REPARTIDOR', repartidorCodes: ['98'],
+    });
     mockQueryWithParams.mockReset();
     mockQuery.mockReset();
     mockCachedQuery.mockReset();
@@ -257,6 +263,63 @@ describe('GET /pendientes contract', () => {
     expect(third.body.pagination.nextOffset).toBe(3);
   });
 
+  test('JEFE ALL unfiltered first paint honors limit in SQL without fetching 501', async () => {
+    Object.assign(mockAuthUser, {
+      id: '98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      activeMode: 'REPARTIDOR',
+      repartidorCodes: ['08', '09'],
+    });
+    mockQueryWithParams.mockResolvedValueOnce(Array.from(
+      { length: 81 },
+      (_, index) => pendingRow({ NUMEROALBARAN: index + 1, CLIENTE: `C${index + 1}` }),
+    ));
+    const response = await request(app()).get(
+      '/pendientes/08,09?date=2026-08-03&limit=80&offset=0',
+    );
+    expect(response.status).toBe(200);
+    const [, params] = mockQueryWithParams.mock.calls[0];
+    expect(params.slice(-2)).toEqual([0, 81]);
+    expect(response.body.albaranes).toHaveLength(80);
+    expect(response.body.pagination).toEqual(expect.objectContaining({
+      hasMore: true,
+      nextOffset: 80,
+      total: null,
+      totalIsExact: false,
+    }));
+    expect(response.body.albaranes[0].esCTR).toBe(true);
+    expect(response.body.albaranes[0].importe).toBe(12);
+  });
+
+  test('JEFE ALL filtered views still fetch the shared 501 dataset', async () => {
+    Object.assign(mockAuthUser, {
+      id: '98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      activeMode: 'REPARTIDOR',
+      repartidorCodes: ['08', '09'],
+    });
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('WITH ranked_deliveries')) {
+        return Promise.resolve([
+          pendingRow({ NUMEROALBARAN: 1, CLIENTE: 'TARGET', NOMBRE_CLIENTE: 'Cliente objetivo' }),
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    const response = await request(app()).get(
+      '/pendientes/08,09?date=2026-08-03&limit=80&offset=0&searchClient=TARGET',
+    );
+    expect(response.status).toBe(200);
+    const [, params] = mockQueryWithParams.mock.calls.find(
+      ([sql]) => String(sql).includes('WITH ranked_deliveries'),
+    );
+    expect(params.slice(-2)).toEqual([0, 501]);
+    expect(response.body.albaranes).toHaveLength(1);
+    expect(response.body.albaranes[0].codigoCliente).toBe('TARGET');
+  });
+
   test('does not infer ENTREGADO merely because the requested date is in the past', async () => {
     mockQueryWithParams.mockResolvedValueOnce([pendingRow()]);
     const response = await request(app()).get('/pendientes/98?date=2020-01-01');
@@ -387,6 +450,7 @@ describe('GET /payment-conditions errors', () => {
       success: false,
       code: 'PAYMENT_CATALOG_UNAVAILABLE',
       error: 'El catalogo de formas de pago no esta disponible',
+      retryAfterSec: 2,
     });
     expect(JSON.stringify(response.body)).not.toContain('secret SQL driver detail');
   });

@@ -135,11 +135,29 @@ function countRows(json) {
   return null;
 }
 
-async function hit(label, token, path) {
-  const cold = await request('GET', path, { token });
-  const warm = await request('GET', path, { token });
-  row(`${label}.cold`, cold, { rows: countRows(cold.json) });
-  row(`${label}.warm`, warm, { rows: countRows(warm.json) });
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function sample(label, token, path) {
+  const res = await request('GET', path, { token });
+  row(label, res, { rows: countRows(res.json) });
+  return res;
+}
+
+async function wave(tag, jobs) {
+  for (const job of jobs) {
+    await sample(`${tag}.${job.label}`, job.token, job.path);
+  }
+}
+
+async function measureMode(mode, jobs) {
+  await wave(`${mode}.cold`, jobs);
+  const started = Date.now();
+  await sleep(40000);
+  row(`${mode}.wait40s`, { status: 200, ms: Date.now() - started, bytes: 0 }, { waitedMs: 40000 });
+  await wave(`${mode}.40s`, jobs);
+  await wave(`${mode}.hot`, jobs);
 }
 
 async function main() {
@@ -162,18 +180,36 @@ async function main() {
   let jefeToken = await login(jefeUser, jefePin, 'jefe');
   let codes = [];
   if (jefeToken && jefeUser) {
+    const stayComercial = await request('POST', '/auth/switch-role', {
+      token: jefeToken,
+      body: { userId: jefeUser, newRole: 'JEFE_VENTAS' },
+    });
+    jefeToken = pickToken(stayComercial.json) || jefeToken;
+    row('jefe.switch-comercial', stayComercial, {
+      activeMode: stayComercial.json?.user?.activeMode || stayComercial.json?.activeMode || null,
+    });
+    await measureMode('comercial', [
+      { label: 'metrics', token: jefeToken, path: `/dashboard/metrics?vendedorCodes=ALL&year=${YEAR}` },
+      { label: 'facturas', token: jefeToken, path: `/facturas?vendedorCodes=ALL&year=${YEAR}&month=${MONTH}` },
+      { label: 'objectives.evolution', token: jefeToken, path: `/objectives/evolution?vendedorCodes=ALL&years=${YEAR}` },
+      { label: 'objectives.by-client', token: jefeToken, path: `/objectives/by-client?vendedorCodes=ALL&years=${YEAR}&limit=30` },
+    ]);
+
     jefeToken = await switchReparto(jefeToken, jefeUser);
     const fleet = await request('GET', '/auth/repartidores', { token: jefeToken });
     codes = fleetCodes(fleet.json);
     row('jefe.fleet', fleet, { count: codes.length });
     const allSelector = codes.slice(0, 80).join(',') || jefeUser;
     const single = codes[0] || jefeUser;
-    await hit('jefe.week.all', jefeToken, `/repartidor/rutero/week/${encodeURIComponent(allSelector)}?date=${TODAY}`);
-    await hit('jefe.week.one', jefeToken, `/repartidor/rutero/week/${encodeURIComponent(single)}?date=${TODAY}`);
-    await hit('jefe.pendientes.all', jefeToken, `/entregas/pendientes/${encodeURIComponent(allSelector)}?date=${TODAY}&limit=80&offset=0`);
-    await hit('jefe.pendientes.one', jefeToken, `/entregas/pendientes/${encodeURIComponent(single)}?date=${TODAY}&limit=80&offset=0`);
-    await hit('jefe.daily-summary.one', jefeToken, `/repartidor-finanzas/daily-summary/${encodeURIComponent(single)}?date=${TODAY}`);
-    await hit('jefe.vencimientos.one', jefeToken, `/repartidor-finanzas/vencimientos/${encodeURIComponent(single)}?from=${YEAR}-01-01&to=${TODAY}&limit=40`);
+    await measureMode('reparto', [
+      { label: 'week.all', token: jefeToken, path: `/repartidor/rutero/week/${encodeURIComponent(allSelector)}?date=${TODAY}` },
+      { label: 'week.one', token: jefeToken, path: `/repartidor/rutero/week/${encodeURIComponent(single)}?date=${TODAY}` },
+      { label: 'pendientes.all', token: jefeToken, path: `/entregas/pendientes/${encodeURIComponent(allSelector)}?date=${TODAY}&limit=80&offset=0` },
+      { label: 'pendientes.one', token: jefeToken, path: `/entregas/pendientes/${encodeURIComponent(single)}?date=${TODAY}&limit=80&offset=0` },
+      { label: 'daily-summary.one', token: jefeToken, path: `/repartidor-finanzas/daily-summary/${encodeURIComponent(single)}?date=${TODAY}` },
+      { label: 'vencimientos.one', token: jefeToken, path: `/repartidor-finanzas/vencimientos/${encodeURIComponent(single)}?from=${YEAR}-01-01&to=${TODAY}&limit=40` },
+    ]);
+
     const almacen = await request('POST', '/auth/switch-role', {
       token: jefeToken,
       body: { userId: jefeUser, newRole: 'ALMACEN' },
@@ -182,8 +218,10 @@ async function main() {
     row('jefe.switch-almacen', almacen, {
       activeMode: almacen.json?.user?.activeMode || almacen.json?.activeMode || null,
     });
-    await hit('warehouse.dashboard', almacenToken, `/warehouse/dashboard?year=${YEAR}&month=${MONTH}&day=${DAY}`);
-    await hit('warehouse.articles', almacenToken, '/warehouse/articles?limit=80');
+    await measureMode('almacen', [
+      { label: 'dashboard', token: almacenToken, path: `/warehouse/dashboard?year=${YEAR}&month=${MONTH}&day=${DAY}` },
+      { label: 'articles', token: almacenToken, path: '/warehouse/articles?limit=80' },
+    ]);
   }
 
   const rasoCandidates = [...new Set([
@@ -218,10 +256,12 @@ async function main() {
     }
   }
   if (driverToken && rasoId) {
-    await hit('raso.week', driverToken, `/repartidor/rutero/week/${encodeURIComponent(rasoId)}?date=${TODAY}`);
-    await hit('raso.pendientes', driverToken, `/entregas/pendientes/${encodeURIComponent(rasoId)}?date=${TODAY}&limit=80&offset=0`);
-    await hit('raso.daily-summary', driverToken, `/repartidor-finanzas/daily-summary/${encodeURIComponent(rasoId)}?date=${TODAY}`);
-    await hit('raso.vencimientos', driverToken, `/repartidor-finanzas/vencimientos/${encodeURIComponent(rasoId)}?from=${YEAR}-01-01&to=${TODAY}&limit=40`);
+    await measureMode('raso', [
+      { label: 'week', token: driverToken, path: `/repartidor/rutero/week/${encodeURIComponent(rasoId)}?date=${TODAY}` },
+      { label: 'pendientes', token: driverToken, path: `/entregas/pendientes/${encodeURIComponent(rasoId)}?date=${TODAY}&limit=80&offset=0` },
+      { label: 'daily-summary', token: driverToken, path: `/repartidor-finanzas/daily-summary/${encodeURIComponent(rasoId)}?date=${TODAY}` },
+      { label: 'vencimientos', token: driverToken, path: `/repartidor-finanzas/vencimientos/${encodeURIComponent(rasoId)}?from=${YEAR}-01-01&to=${TODAY}&limit=40` },
+    ]);
   }
 }
 

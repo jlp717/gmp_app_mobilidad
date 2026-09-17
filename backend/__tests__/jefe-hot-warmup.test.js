@@ -103,4 +103,18 @@ describe('jefe-hot-route-warmer', () => {
     expect(scheduleJefeHotRouteWarmup({ token: 't', role: 'JEFE_VENTAS', delayMs: 60_000 })).toBe(true);
     expect(scheduleJefeHotRouteWarmup({ token: 't', role: 'COMERCIAL', code: '80', delayMs: 60_000 })).toBe(true);
   });
+
+  test('REPARTO warmup uses fleet codes and never VENDEDOR=ALL', () => {
+    const { buildRepartoHotPaths, fleetSelectorFromCodes, buildAlmacenHotPaths } = require('../services/jefe-hot-route-warmer');
+    expect(fleetSelectorFromCodes(['ALL', '8', '09'])).toBe('08,09');
+    expect(fleetSelectorFromCodes(['ALL'])).toBe('');
+    const paths = buildRepartoHotPaths(new Date('2026-09-17T10:00:00Z'), {
+      repartidorCodes: ['08', '09', 'ALL'],
+    });
+    expect(paths[0]).toContain('/api/repartidor/rutero/week/08%2C09?date=2026-09-17');
+    expect(paths[1]).toContain('/api/entregas/pendientes/08%2C09?date=2026-09-17&limit=80&offset=0');
+    expect(paths.join()).not.toMatch(/VENDEDOR='ALL'/);
+    expect(paths.join()).not.toMatch(/\/ALL\?/);
+    expect(buildAlmacenHotPaths(new Date('2026-09-17T10:00:00Z'))[1]).toBe('/api/warehouse/articles?limit=80');
+  });
 });

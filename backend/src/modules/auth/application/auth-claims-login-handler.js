@@ -237,6 +237,8 @@ function createAuthClaimsLoginHandler({
           isJefeVentas: resolvedClaims.isJefeVentas,
           role: resolvedClaims.role,
           code: resolvedClaims.user || resolvedClaims.code,
+          activeMode: resolvedClaims.activeMode,
+          repartidorCodes: resolvedClaims.repartidorCodes,
         });
       } catch (_warmupError) {
         // Login must not fail if background warmup cannot start.

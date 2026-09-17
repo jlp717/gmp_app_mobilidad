@@ -48,6 +48,47 @@ function buildPurchaseHistoryYoyPath(now = new Date(), vendedorCode = 'ALL') {
   return `/api/pedidos/purchase-history-global?vendedorCode=${code}&from=${year}-01-01&to=${year}-${month}-${day}&limit=1`;
 }
 
+function canonicalWarmupDriverCode(value) {
+  const raw = String(value || '').trim().toUpperCase();
+  if (!raw || raw === 'ALL' || !/^[A-Z0-9]{1,2}$/.test(raw)) return null;
+  return /^\d{1,2}$/.test(raw) ? raw.padStart(2, '0') : raw;
+}
+
+function fleetSelectorFromCodes(repartidorCodes) {
+  const codes = [...new Set((Array.isArray(repartidorCodes) ? repartidorCodes : [])
+    .map(canonicalWarmupDriverCode)
+    .filter(Boolean))];
+  if (codes.length === 0 || codes.length > 100) return '';
+  return codes.slice(0, 80).join(',');
+}
+
+function isoDate(now = new Date()) {
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function buildRepartoHotPaths(now = new Date(), { repartidorCodes } = {}) {
+  const selector = fleetSelectorFromCodes(repartidorCodes);
+  if (!selector) return [];
+  const date = isoDate(now);
+  const encoded = encodeURIComponent(selector);
+  return [
+    `/api/repartidor/rutero/week/${encoded}?date=${date}`,
+    `/api/entregas/pendientes/${encoded}?date=${date}&limit=80&offset=0`,
+  ];
+}
+
+function buildAlmacenHotPaths(now = new Date()) {
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+  return [
+    `/api/warehouse/dashboard?year=${year}&month=${month}&day=${day}`,
+    '/api/warehouse/articles?limit=80',
+  ];
+}
+
 function buildJefeHotPaths(now = new Date(), { vendorCode, includeAll = true } = {}) {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
@@ -106,20 +147,30 @@ function getOnce(path, token) {
   });
 }
 
-async function runJefeHotRouteWarmup({ token, now, vendorCode, includeAll = true } = {}) {
+async function runJefeHotRouteWarmup({
+  token,
+  now,
+  vendorCode,
+  includeAll = true,
+  activeMode,
+  repartidorCodes,
+} = {}) {
   if (!token) return [];
-  const paths = buildJefeHotPaths(now, { vendorCode, includeAll });
+  const mode = String(activeMode || '').trim().toUpperCase();
+  let paths;
+  if (mode === 'REPARTIDOR') {
+    paths = buildRepartoHotPaths(now, { repartidorCodes });
+  } else if (mode === 'ALMACEN') {
+    paths = buildAlmacenHotPaths(now);
+  } else {
+    paths = buildJefeHotPaths(now, { vendorCode, includeAll });
+  }
   if (paths.length === 0) return [];
-  const historyIdx = paths.findIndex((path) => path.includes('/purchase-history-global') && path.includes('limit=300'));
+  // Sequential on purpose: queryGate max=4. Two LACLAE in parallel starve
+  // rutero/pendientes first paint.
   const results = [];
-  if (paths[0]) results.push(await getOnce(paths[0], token));
-  if (historyIdx > 0) results.push(await getOnce(paths[historyIdx], token));
-  const rest = paths.filter((_, index) => index !== 0 && index !== historyIdx);
-  if (rest.length > 0) {
-    results.push(...await Promise.all(rest.slice(0, 2).map((path) => getOnce(path, token))));
-    for (const path of rest.slice(2)) {
-      results.push(await getOnce(path, token));
-    }
+  for (const path of paths) {
+    results.push(await getOnce(path, token));
   }
   for (const result of results) {
     logger.info(`[JefeHotWarmup] ${result.status} ${result.ms}ms ${result.path}`);
@@ -132,12 +183,20 @@ function scheduleJefeHotRouteWarmup({
   isJefeVentas,
   role,
   code,
+  activeMode,
+  repartidorCodes,
   delayMs = DELAY_MS,
 } = {}) {
   if (!token || !shouldWarmHotRoutes({ isJefeVentas, role, code })) return false;
   const includeAll = isJefeUser({ isJefeVentas, role });
   const timer = setTimeout(() => {
-    runJefeHotRouteWarmup({ token, vendorCode: code, includeAll }).catch((error) => {
+    runJefeHotRouteWarmup({
+      token,
+      vendorCode: code,
+      includeAll,
+      activeMode,
+      repartidorCodes,
+    }).catch((error) => {
       logger.warn(`[JefeHotWarmup] ${error.message}`);
     });
   }, Math.max(0, delayMs));
@@ -150,8 +209,11 @@ module.exports = {
   runJefeHotRouteWarmup,
   buildJefeHotPaths,
   buildVendorHotPaths,
+  buildRepartoHotPaths,
+  buildAlmacenHotPaths,
   buildPurchaseHistoryUiPath,
   buildPurchaseHistoryYoyPath,
+  fleetSelectorFromCodes,
   isJefeUser,
   shouldWarmHotRoutes,
   PURCHASE_HISTORY_UI_LIMIT,

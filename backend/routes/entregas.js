@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { query, queryWithParams } = require('../middleware/db-timing');
 const { cachedQuery } = require('../services/query-optimizer');
-const { TTL } = require('../services/redis-cache');
+const { TTL, redisCache } = require('../services/redis-cache');
+const { beginRouteFill, endRouteFill, sendFillBusy } = require('../services/route-cache-stampede');
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema, getDeliveryStatusJoin } = require('../utils/delivery-status-check');
@@ -77,6 +78,27 @@ function parseRepartidorSelector(value, { single = false } = {}) {
     const codes = parts.map(canonicalRepartidorCode);
     if (codes.some((code) => !code) || codes.length > 100) return null;
     return [...new Set(codes)];
+}
+
+function pendientesNeedsFullDataset(query = {}) {
+    const search = String(query.search || '').trim();
+    const searchClient = String(query.searchClient || '').trim();
+    const searchAlbaran = String(query.searchAlbaran || '').trim();
+    const sortBy = String(query.sortBy || 'default').trim() || 'default';
+    const filterTipo = String(query.tipoPago || '').trim();
+    const filterCobrar = query.debeCobrar;
+    const filterDocTipo = String(query.docTipo || '').trim().toUpperCase();
+    return Boolean(
+        search
+        || searchClient
+        || searchAlbaran
+        || sortBy !== 'default'
+        || filterTipo
+        || filterCobrar === 'S'
+        || filterCobrar === 'N'
+        || filterDocTipo === 'ALBARAN'
+        || filterDocTipo === 'FACTURA'
+    );
 }
 
 function actorRepartidorCodes(user) {
@@ -247,7 +269,13 @@ function parseAlbaranRouteIdentity(params, query) {
 }
 
 function sendEntregasUnavailable(res, code, message) {
-    return res.status(503).json({ success: false, code, error: message });
+    res.set('Retry-After', '2');
+    return res.status(503).json({
+        success: false,
+        code,
+        error: message,
+        retryAfterSec: 2,
+    });
 }
 
 const PAYMENT_CONDITIONS_SQL = `
@@ -522,6 +550,12 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         const dayMoveWeekRangeWhere = dayMoveEnabled ? `
               AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
         ` : '';
+        // JEFE ALL first paint: honor limit in SQL. Filters/custom sort and
+        // single-driver saved order still need the shared 501 dataset.
+        const sqlPaged = idList.length > 1 && !pendientesNeedsFullDataset(req.query);
+        const sqlOrderBy = sqlPaged && dayMoveEnabled
+            ? `CASE WHEN ROUTE_MOVE_POSITION IS NULL THEN 1 ELSE 0 END, ROUTE_MOVE_POSITION, EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN, CLIENTE`
+            : `EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN, CLIENTE`;
         const sql = `
             WITH ranked_deliveries AS (
               SELECT
@@ -604,18 +638,20 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
               DS_STATUS, DS_OBS, DS_FIRMA
             FROM ranked_deliveries
             WHERE DELIVERY_RANK = 1
-            ORDER BY EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN, CLIENTE
+            ORDER BY ${sqlOrderBy}
             OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
         `;
 
         // Table initialization removed to prevent AS400 errors.
         // Tables JAVIER.DELIVERY_STATUS and JAVIER.CLIENT_SIGNERS are assumed to exist.
 
-        // The ERP dataset is fetched ONCE per (repartidorIds, date, moves|base)
-        // with fixed OFFSET 0 / FETCH 501. Pagination, filtering and sorting
-        // happen in memory below, so every limit/offset/sortBy combination
-        // shares the same cache entry and the CTE runs only on cold misses.
+        // Single-driver and filtered views share OFFSET 0 / FETCH 501 so
+        // search/sort/esCTR filters paginate in memory. JEFE ALL unfiltered
+        // first paint honors limit in SQL (FETCH pageLimit+1) without
+        // changing per-row esCTR/riesgo/importes on the returned page.
         const RUTERO_DATASET_FETCH_MAX = REPARTIDOR_ROUTE_ORDER_FETCH_MAX;
+        const fetchOffset = sqlPaged ? pageOffset : 0;
+        const fetchCount = sqlPaged ? pageLimit + 1 : RUTERO_DATASET_FETCH_MAX + 1;
         let rows = [];
         try {
             const queryParams = dayMoveEnabled ? [
@@ -627,36 +663,63 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 dia,
                 mes,
                 ano,
-                0,
-                RUTERO_DATASET_FETCH_MAX + 1,
+                fetchOffset,
+                fetchCount,
             ] : [
                 ...idList, dia, mes, ano,
-                0,
-                RUTERO_DATASET_FETCH_MAX + 1,
+                fetchOffset,
+                fetchCount,
             ];
             // Cache only the owner/date-scoped ERP source. Canonical
             // confirmation and cobro overlays are applied below on every
             // request, so a fresh payment/confirmation is never hidden.
             const routeCacheKey = [
-                'repartidor:rutero-pending:v4',
+                'repartidor:rutero-pending:v5',
                 idList.slice().sort().join(','),
                 targetDate.date,
                 dayMoveEnabled ? 'moves' : 'base',
+                sqlPaged ? `page:${pageOffset}:${pageLimit}` : 'dataset',
             ].join(':');
-            rows = await cachedQuery(
-                queryWithParams,
-                sql,
-                routeCacheKey,
-                TTL.SHORT,
-                queryParams,
-            ) || [];
+            let stampede = { fill: true, lock: null, busy: false, hit: null };
+            try {
+                stampede = await beginRouteFill(routeCacheKey, {
+                    waitMs: sqlPaged ? 4000 : 8000,
+                });
+            } catch (_stampedeError) {
+                stampede = { fill: true, lock: null, busy: false, hit: null };
+            }
+            if (Array.isArray(stampede.hit)) {
+                rows = stampede.hit;
+            } else if (stampede.busy) {
+                paymentConditionsPromise.catch(() => {});
+                return sendFillBusy(res);
+            } else {
+                try {
+                    rows = await cachedQuery(
+                        queryWithParams,
+                        sql,
+                        routeCacheKey,
+                        TTL.SHORT,
+                        queryParams,
+                    ) || [];
+                    if (stampede.fill && stampede.lock && redisCache && typeof redisCache.set === 'function') {
+                        await redisCache.set('route', routeCacheKey, rows, TTL.SHORT);
+                    }
+                } finally {
+                    try {
+                        await endRouteFill(routeCacheKey, stampede.lock);
+                    } catch (_unlockError) {
+                        // Fail-open: cachedQuery already stored the dataset.
+                    }
+                }
+            }
         } catch (queryError) {
             logger.error('[ENTREGAS] Pending-delivery query unavailable');
             paymentConditionsPromise.catch(() => {});
             return sendEntregasUnavailable(res, 'PENDING_DELIVERIES_UNAVAILABLE', 'No se pudo consultar el listado de entregas');
         }
 
-        const sourceHasMore = rows.length > RUTERO_DATASET_FETCH_MAX;
+        const sourceHasMore = rows.length > (sqlPaged ? pageLimit : RUTERO_DATASET_FETCH_MAX);
         // Multi-driver views historically served the complete combined list
         // via SQL pagination; the 500-stop budget only guarded the single
         // driver route-order mode. Keep that contract: only single-driver
@@ -665,7 +728,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             paymentConditionsPromise.catch(() => {});
             return sendEntregasUnavailable(res, 'ROUTE_TOO_LARGE', 'La ruta supera el límite de 500 paradas');
         }
-        rows = rows.slice(0, RUTERO_DATASET_FETCH_MAX);
+        rows = rows.slice(0, sqlPaged ? pageLimit + 1 : RUTERO_DATASET_FETCH_MAX);
         // Defensive deduplication. SQL already paginates DELIVERY_RANK = 1 rows.
         // Group by Albaran ID + Client and SUM financial fields
         const aggregatedMap = new Map();
@@ -1088,10 +1151,16 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         // sourceHasMore only extends the walk while the physical dataset is
         // still full at the cap AND the walk is single-driver (multi-driver
         // walks terminate at the filtered list, never an empty-page loop).
-        const hasMore = pageOffset + pageLimit < filteredAlbaranes.length
-            || (sourceHasMore && filteredAlbaranes.length >= RUTERO_DATASET_FETCH_MAX && idList.length === 1);
+        // sqlPaged already applied OFFSET in SQL — do not slice again.
+        const hasMore = sqlPaged
+            ? (filteredAlbaranes.length > pageLimit || sourceHasMore)
+            : (pageOffset + pageLimit < filteredAlbaranes.length
+                || (sourceHasMore && filteredAlbaranes.length >= RUTERO_DATASET_FETCH_MAX && idList.length === 1));
+        const pageSlice = sqlPaged
+            ? filteredAlbaranes.slice(0, pageLimit)
+            : filteredAlbaranes.slice(pageOffset, pageOffset + pageLimit);
         const paginatedAlbaranes = await enrichPendientesPage(
-            filteredAlbaranes.slice(pageOffset, pageOffset + pageLimit),
+            pageSlice,
             uniqueRows,
             idList,
         );
@@ -1106,7 +1175,9 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             ? pageOffset + pageLimit
             : pageOffset + paginatedAlbaranes.length;
         const totalIsExact = !hasMore;
-        const exactTotal = totalIsExact ? filteredAlbaranes.length : null;
+        const exactTotal = totalIsExact
+            ? (sqlPaged ? pageOffset + paginatedAlbaranes.length : filteredAlbaranes.length)
+            : null;
         const pagination = {
             limit: pageLimit,
             offset: pageOffset,

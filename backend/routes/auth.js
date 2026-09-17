@@ -99,6 +99,25 @@ router.post('/logout', verifyToken, async (req, res) => {
 });
 
 router.post('/switch-role', verifyToken, (req, res) => {
+    const originalJson = res.json.bind(res);
+    res.json = function captureSwitchRoleWarmup(body) {
+        try {
+            if (body && body.success === true && body.token) {
+                const { scheduleJefeHotRouteWarmup } = require('../services/jefe-hot-route-warmer');
+                scheduleJefeHotRouteWarmup({
+                    token: body.token,
+                    isJefeVentas: body.isJefeVentas === true || body.user?.isJefeVentas === true,
+                    role: body.role || body.user?.role,
+                    code: body.user?.code || req.user?.code,
+                    activeMode: body.activeMode || body.user?.activeMode,
+                    repartidorCodes: body.repartidorCodes || body.user?.repartidorCodes,
+                });
+            }
+        } catch (_warmupError) {
+            // Switch must not fail if background warmup cannot start.
+        }
+        return originalJson(body);
+    };
     return authTokenService.handleSwitchRole(req, res);
 });
 

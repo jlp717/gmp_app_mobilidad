@@ -26,6 +26,8 @@ enum CachePrewarmTarget {
   commissions,
   objectivesEvolution,
   objectivesByClient,
+  repartoWeek,
+  repartoPendientes,
 }
 
 /// Dashboard completes this when `/dashboard/metrics` has painted (or 4 s).
@@ -85,6 +87,12 @@ class CachePreWarmer {
     required bool isJefeVentas,
     bool isRepartidor = false,
   }) {
+    if (isJefeVentas && isRepartidor) {
+      return const [
+        CachePrewarmTarget.repartoWeek,
+        CachePrewarmTarget.repartoPendientes,
+      ];
+    }
     if (isRepartidor || isJefeVentas) return const <CachePrewarmTarget>[];
     return const [
       CachePrewarmTarget.facturas,
@@ -115,6 +123,21 @@ class CachePreWarmer {
   }) async {
     if (_hasPreWarmed) return;
     final generation = _warmGeneration;
+
+    if (isRepartidor && isJefeVentas) {
+      debugPrint('[CachePreWarmer] JEFE REPARTO fleet pre-warm');
+      try {
+        await runWithConcurrency([
+          _preWarmRepartoFleet,
+        ], concurrency: 1);
+        if (generation != _warmGeneration) return;
+        _hasPreWarmed = true;
+        debugPrint('[CachePreWarmer] JEFE REPARTO pre-warm completed');
+      } catch (e) {
+        debugPrint('[CachePreWarmer] JEFE REPARTO pre-warm failed: $e');
+      }
+      return;
+    }
 
     if (isRepartidor) {
       debugPrint(
@@ -364,6 +387,70 @@ class CachePreWarmer {
       debugPrint('[CachePreWarmer] Commissions ALL pre-warmed');
     } catch (e) {
       debugPrint('[CachePreWarmer] Commissions ALL pre-warm failed: $e');
+    }
+  }
+
+  static String _isoDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
+  static String? _fleetSelectorFrom(dynamic payload) {
+    final list = payload is List
+        ? payload
+        : (payload is Map
+            ? (payload['repartidores'] ??
+                payload['data'] ??
+                payload['items'] ??
+                payload['codes'])
+            : null);
+    if (list is! List) return null;
+    final codes = <String>{};
+    for (final entry in list) {
+      if (entry is String || entry is num) {
+        final code = entry.toString().trim();
+        if (code.isNotEmpty && code.toUpperCase() != 'ALL') codes.add(code);
+        continue;
+      }
+      if (entry is Map) {
+        final code = (entry['code'] ?? entry['codigo'] ?? entry['id'] ?? '')
+            .toString()
+            .trim();
+        if (code.isNotEmpty && code.toUpperCase() != 'ALL') codes.add(code);
+      }
+    }
+    if (codes.isEmpty || codes.length > 100) return null;
+    return codes.take(80).join(',');
+  }
+
+  static Future<void> _preWarmRepartoFleet() async {
+    try {
+      final fleet = await ApiClient.get(
+        '/auth/repartidores',
+        cacheKey: 'auth:repartidores:prewarm',
+        cacheTTL: CacheService.shortTTL,
+      );
+      final selector = _fleetSelectorFrom(fleet);
+      if (selector == null || selector.isEmpty) {
+        debugPrint(
+            '[CachePreWarmer] JEFE REPARTO fleet empty; skip pendientes');
+        return;
+      }
+      final today = _isoDate(DateTime.now());
+      await ApiClient.get(
+        '/repartidor/rutero/week/$selector?date=$today',
+        cacheKey: 'reparto:week:$selector:$today',
+        cacheTTL: CacheService.shortTTL,
+      );
+      await ApiClient.get(
+        '/entregas/pendientes/$selector?date=$today&limit=80&offset=0',
+        cacheKey: 'entregas:pendientes:prewarm:$selector:$today',
+        cacheTTL: CacheService.shortTTL,
+      );
+      debugPrint('[CachePreWarmer] JEFE REPARTO week+pendientes pre-warmed');
+    } catch (e) {
+      debugPrint('[CachePreWarmer] JEFE REPARTO fleet pre-warm failed: $e');
     }
   }
 

@@ -10,6 +10,19 @@ void main() {
       );
     });
 
+    test('jefe in REPARTO prewarms week and pendientes', () {
+      expect(
+        CachePreWarmer.immediateTargets(
+          isJefeVentas: true,
+          isRepartidor: true,
+        ),
+        containsAll(const [
+          CachePrewarmTarget.repartoWeek,
+          CachePrewarmTarget.repartoPendientes,
+        ]),
+      );
+    });
+
     test('repartidor skips all commercial prewarm', () {
       expect(
         CachePreWarmer.immediateTargets(
