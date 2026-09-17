@@ -7,6 +7,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/application/load_planner_provider.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/warehouse_ui.dart';
 
 /// Sort options for boxes/orders
 enum BoxSortMode { none, weightDesc, weightAsc, volumeDesc, client, order }
