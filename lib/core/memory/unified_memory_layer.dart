@@ -286,8 +286,8 @@ class UnifiedMemoryLayer {
         .where((r) => r.metadata?['type'] == 'product')
         .map((r) {
       return ProductSimilarityResult(
-        productCode: r.metadata?['code'] ?? r.id,
-        productName: r.metadata?['name'] ?? '',
+        productCode: '${r.metadata?['code'] ?? r.id}',
+        productName: '${r.metadata?['name'] ?? ''}',
         similarity: r.distance,
         metadata: r.metadata,
       );
@@ -410,7 +410,9 @@ class UnifiedMemoryLayer {
     if (config != null) {
       _globalState['config'] = config;
     }
-    return config;
+    if (config is Map<String, dynamic>) return config;
+    if (config is Map) return Map<String, dynamic>.from(config);
+    return null;
   }
 
   // ==================== DRAFTS ====================
@@ -438,7 +440,10 @@ class UnifiedMemoryLayer {
   /// Carga borrador de pedido
   Map<String, dynamic>? loadOrderDraft(String clientCode, String userId) {
     final draftKey = 'draft:order:$clientCode:$userId';
-    return _db.getPersistent(draftKey);
+    final draft = _db.getPersistent(draftKey);
+    if (draft is Map<String, dynamic>) return draft;
+    if (draft is Map) return Map<String, dynamic>.from(draft);
+    return null;
   }
 
   /// Elimina borrador
@@ -456,7 +461,7 @@ class UnifiedMemoryLayer {
   }) async {
     final favKey = 'favorites:$userId';
     final favorites = Set<String>.from(
-      _db.getPersistent(favKey) ?? [],
+      _db.getPersistent(favKey) as List? ?? const <dynamic>[],
     );
     favorites.add(productCode);
 
@@ -474,7 +479,7 @@ class UnifiedMemoryLayer {
   }) async {
     final favKey = 'favorites:$userId';
     final favorites = List<String>.from(
-      _db.getPersistent(favKey) ?? [],
+      _db.getPersistent(favKey) as List? ?? const <dynamic>[],
     );
     favorites.remove(productCode);
 
@@ -488,7 +493,9 @@ class UnifiedMemoryLayer {
   /// Obtiene favoritos
   List<String> getFavorites(String userId) {
     final favKey = 'favorites:$userId';
-    return List<String>.from(_db.getPersistent(favKey) ?? []);
+    return List<String>.from(
+      _db.getPersistent(favKey) as List? ?? const <dynamic>[],
+    );
   }
 
   // ==================== UTILITIES ====================
@@ -531,10 +538,12 @@ class EntityEntry {
   });
 
   factory EntityEntry.fromJson(Map<String, dynamic> json) => EntityEntry(
-        entityType: json['entityType'] ?? '',
-        entityId: json['entityId'] ?? '',
+        entityType: '${json['entityType'] ?? ''}',
+        entityId: '${json['entityId'] ?? ''}',
         data: json['data'],
-        metadata: Map<String, dynamic>.from(json['metadata'] ?? {}),
+        metadata: Map<String, dynamic>.from(
+          json['metadata'] as Map? ?? const <dynamic, dynamic>{},
+        ),
       );
   final String entityType;
   final String entityId;

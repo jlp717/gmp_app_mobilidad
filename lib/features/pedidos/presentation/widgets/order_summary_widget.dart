@@ -1746,9 +1746,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      w['description'] ??
-                                          w['product'] ??
-                                          'Producto',
+                                      '${w['description'] ?? w['product'] ?? 'Producto'}',
                                       style: TextStyle(
                                         color: AppTheme.textPrimary,
                                         fontWeight: FontWeight.w500,
@@ -1794,10 +1792,13 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                           return GestureDetector(
                             onTap: () {
                               setState(() {
-                                _selectedProductCode = prod['code'];
-                                _selectedProduct = prod;
+                                _selectedProductCode = prod['code']?.toString();
+                                _selectedProduct = prod is Map<String, dynamic>
+                                    ? prod
+                                    : Map<String, dynamic>.from(prod as Map);
                                 _quantity =
-                                    (prod['stockEnvases'] ?? 1).toDouble();
+                                    ((prod['stockEnvases'] as num?) ?? 1)
+                                        .toDouble();
                                 _unit = 'CAJAS';
                                 _qtyController.text =
                                     _quantity.toStringAsFixed(0);
@@ -1835,9 +1836,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          prod['name'] ??
-                                              prod['code'] ??
-                                              'Producto',
+                                          '${prod['name'] ?? prod['code'] ?? 'Producto'}',
                                           style: TextStyle(
                                             color: AppTheme.textPrimary,
                                             fontWeight: isSelected
@@ -1945,7 +1944,9 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                 onChanged: (val) {
                                   final qty = double.tryParse(val) ?? 1;
                                   final maxStock =
-                                      (_selectedProduct!['stockEnvases'] ?? 1)
+                                      ((_selectedProduct!['stockEnvases']
+                                                  as num?) ??
+                                              1)
                                           .toDouble();
                                   setState(() {
                                     _quantity =
@@ -2023,8 +2024,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                         onPressed: _quantity > 0
                             ? () => widget.onAddToCart(
                                   _selectedProductCode!,
-                                  _selectedProduct!['name'] ??
-                                      _selectedProductCode!,
+                                  '${_selectedProduct!['name'] ?? _selectedProductCode!}',
                                   _quantity,
                                   _unit,
                                 )

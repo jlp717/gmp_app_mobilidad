@@ -343,7 +343,7 @@ class PedidosOfflineService {
     for (final item in selected) {
       final syncKey = item['syncKey'].toString();
       try {
-        final prepared = await _prepareSyncItem(box, syncKey, item);
+        final prepared = await _prepareSyncItem(box, syncKey, item as Map);
         var orderId = _asIntOrNull(prepared['serverOrderId']);
         final saleType = prepared['saleType'] as String? ?? 'CC';
 
@@ -512,7 +512,7 @@ class PedidosOfflineService {
     );
   }
 
-  static Future _nextSyncKey(Box box) async {
+  static Future<String> _nextSyncKey(Box box) async {
     var key = _scopedKey('sync_${DateTime.now().microsecondsSinceEpoch}');
     while (box.containsKey(key)) {
       await Future.delayed(Duration.zero);
@@ -558,7 +558,11 @@ class PedidosOfflineService {
     return null;
   }
 
-  static Future _prepareSyncItem(Box box, String syncKey, Map item) async {
+  static Future<Map<String, dynamic>> _prepareSyncItem(
+    Box box,
+    String syncKey,
+    Map item,
+  ) async {
     final data = Map.from(item);
     data.remove('syncKey');
     final existingRequestId = data['clientRequestId']?.toString().trim();
@@ -569,7 +573,7 @@ class PedidosOfflineService {
     data['attempts'] = _asInt(data['attempts']);
     data['lastSyncStartedAt'] = DateTime.now().toIso8601String();
     await box.put(syncKey, jsonEncode(data));
-    return data;
+    return Map<String, dynamic>.from(data);
   }
 
   static List _decodeOrderLines(Object? rawLines) {

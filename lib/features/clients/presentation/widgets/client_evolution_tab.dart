@@ -256,7 +256,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
       itemCount: _topProducts.length > 10 ? 10 : _topProducts.length,
       itemBuilder: (context, index) {
         final product = _topProducts[index];
-        final name = product['name'] ?? 'Producto';
+        final name = '${product['name'] ?? 'Producto'}';
         final code = product['code'] ?? '';
         final sales = (product['totalSales'] as num?)?.toDouble() ?? 0;
         final units = (product['totalUnits'] as num?)?.toInt() ?? 0;
@@ -304,7 +304,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
       itemCount: _returns.length > 10 ? 10 : _returns.length,
       itemBuilder: (context, index) {
         final ret = _returns[index];
-        final name = ret['productName'] ?? 'Producto';
+        final name = '${ret['productName'] ?? 'Producto'}';
         final code = ret['productCode'] ?? '';
         final amount = (ret['amount'] as num?)?.toDouble() ?? 0;
         final units = (ret['units'] as num?)?.toInt() ?? 0;

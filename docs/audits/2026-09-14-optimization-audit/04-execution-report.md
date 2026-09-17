@@ -17,7 +17,7 @@ Latencias de producto en móvil: **no verificado en campo**. Cifras nuevas de 20
 | ID | Título | Estado | PR | Notas |
 |---|---|---|---|---|
 | P0-01 | Restaurar compilación release (imports faltantes) | DONE | [#5](https://github.com/jlp717/gmp_app_mobilidad/pull/5) | APK release arm64 `[lab]` 55,49 MB; `flutter test` repartidor exit 0. |
-| P0-02 | Dejar de silenciar errores de compilación en el analizador | PARTIAL | [#4](https://github.com/jlp717/gmp_app_mobilidad/pull/4) | YAML+CI; `flutter analyze lib` sigue con errores de hijas. Stacked sobre P0-01. |
+| P0-02 | Dejar de silenciar errores de compilación en el analizador | DONE | [#4](https://github.com/jlp717/gmp_app_mobilidad/pull/4) + fix hijas | YAML no oculta compile errors. `flutter analyze lib` **0 error •** (42→0, 2026-09-17). Siguen infos/lints (exit 1 si se cuentan infos). |
 | P0-03 | Baseline de campo en dispositivo físico | BLOCKED | — | Tarea humana. **no verificado en campo**. |
 | P0-04 | Telemetría RUM + log por request + Sentry | PARTIAL | [#3](https://github.com/jlp717/gmp_app_mobilidad/pull/3) | Tests `[lab]` verdes. Correlación `t=req`/`t=rum` y secret `SENTRY_DSN` pendientes de Javier. |
 | P0-05 | Acciones manuales inmediatas en el 230 | PARTIAL | — | Whitelist 2026-09-16 hecha (`pull`+`restart`). El resto (`pm2 delete`, logrotate, kill huérfanos) sigue BLOCKED Javier. |
@@ -60,7 +60,7 @@ Latencias de producto en móvil: **no verificado en campo**. Cifras nuevas de 20
 
 **Recuento plan:** DONE **19** · PARTIAL **18** (causa: sin `[campo]` o lab) · BLOCKED Javier **4** (P0-03 campo, P0-05/SRV-01/SRV-02 230 fuera de whitelist, SEC-03 PIN) · PENDIENTE código ejecutor **0** salvo el fix `/api/ready` de 2026-09-17 (esta tanda).
 
-**Conteo código en `test`:** integrable DONE. Sigue BLOCKED solo lo de Javier (campo, 230, Sentry, DB-01 DDL, rotar PIN). P0-02 en `test` hará fallar `flutter analyze` en CI (ese era el target).
+**Conteo código en `test`:** integrable DONE. Sigue BLOCKED solo lo de Javier (campo, LAN firewall, 230 fuera de whitelist, Sentry, rotar PIN). P0-02: **0 errors** en `flutter analyze lib` (infos/lints siguen).
 
 ---
 
@@ -282,5 +282,9 @@ Javier no ejecuta nada. 230 antes del deploy de este fix = `c046c69` = `origin/t
 | `[campo]` | **IMPOSIBLE** sin su teléfono |
 
 No es 100% percibido.
+
+## 16. Cierre 2026-09-17 08:20 (P0-02 analyze 0 errors)
+
+`flutter analyze lib`: **42 errors → 0 errors** (ciclo 2). YAML no revertido. Casts `strict-casts` en 8 ficheros de `lib/`. Infos/lints ~6528 siguen (no compile). `albaran_detail_page.dart` no tocado. Backend no tocado: sin `pm2 restart`. Tests memory+pedidos **62 passed**. `[campo]` IMPOSIBLE.
 
 

@@ -833,10 +833,14 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage>
                             size: 18,
                           ),
                         ),
-                        title: Text(product['name'] ?? 'Producto desconocido'),
+                        title: Text(
+                          '${product['name'] ?? 'Producto desconocido'}',
+                        ),
                         subtitle: Text('Código: ${product['code']}'),
                         trailing: Text(
-                          _formatCurrency(product['sales'] ?? 0),
+                          _formatCurrency(
+                            (product['sales'] as num?)?.toDouble() ?? 0,
+                          ),
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: AppTheme.success,

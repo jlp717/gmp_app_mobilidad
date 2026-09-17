@@ -128,11 +128,15 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
       if (response['success'] == true) {
         setState(() {
           _summary = response['summary'] as Map<String, dynamic>?;
-          _topProducts =
-              List<Map<String, dynamic>>.from(response['topProducts'] ?? []);
-          _lines = List<Map<String, dynamic>>.from(response['lines'] ?? []);
-          _monthlyByYear =
-              List<Map<String, dynamic>>.from(response['monthlyByYear'] ?? []);
+          _topProducts = List<Map<String, dynamic>>.from(
+            response['topProducts'] as List? ?? const <dynamic>[],
+          );
+          _lines = List<Map<String, dynamic>>.from(
+            response['lines'] as List? ?? const <dynamic>[],
+          );
+          _monthlyByYear = List<Map<String, dynamic>>.from(
+            response['monthlyByYear'] as List? ?? const <dynamic>[],
+          );
         });
       } else {
         setState(
@@ -1018,7 +1022,7 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                     ),
                     Expanded(
                       child: Text(
-                        _fmtMoney(p['importe']),
+                        _fmtMoney(p['importe'] as num?),
                         textAlign: TextAlign.right,
                         style: const TextStyle(
                           color: AppTheme.success,
@@ -1114,10 +1118,11 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                                   '0',
                             ),
                           ),
-                          DataCell(Text(_fmtMoney(l['precio']))),
-                          DataCell(Text(_fmtPct(l['descuentoPct']))),
-                          DataCell(Text(_fmtMoney(l['importeSinDescuento']))),
-                          DataCell(Text(_fmtMoney(l['importe']))),
+                          DataCell(Text(_fmtMoney(l['precio'] as num?))),
+                          DataCell(Text(_fmtPct(l['descuentoPct'] as num?))),
+                          DataCell(Text(
+                              _fmtMoney(l['importeSinDescuento'] as num?))),
+                          DataCell(Text(_fmtMoney(l['importe'] as num?))),
                           DataCell(
                             Text(l['vendedorCode']?.toString() ?? ''),
                           ),

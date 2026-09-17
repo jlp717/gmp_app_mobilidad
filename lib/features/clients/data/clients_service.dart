@@ -109,7 +109,7 @@ class ClientsService {
       cacheTTL: CacheService.defaultTTL,
     );
     final rawList = response['history'] ?? [];
-    final isGrouped = response['grouped'] ?? false;
+    final isGrouped = response['grouped'] == true;
     final result = (rawList as List)
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
