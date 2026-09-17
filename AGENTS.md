@@ -121,8 +121,10 @@ Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero":
 - Para validar el perfil de reparto, usar REPARTIDOR: jefe de ventas en modo reparto y repartidor raso; no el perfil comercial.
 - Las pruebas de rendimiento deben hacerse en móvil con el rol jefe de ventas (el que más datos carga).
 - No declarar el perfil de reparto cerrado al 100% mientras queden huecos o no se haya validado en emulador.
+- No afirmar 100% de latencia o rendimiento percibido sin medición `[campo]` en dispositivo; cifras de túnel/servidor no sustituyen el móvil.
 - El perfil comercial es un workstream aparte del de reparto (pedidos, devoluciones y liquidación diaria); no mezclar su validación con la de REPARTIDOR.
 - Identificadores de albarán/factura en UI y PDF deben mostrar la serie completa (p.ej. P-15-2296, no P-2296).
+- En cartera y deuda comercial, consultar tablas DSEDAC (CVC, FPG, CAC, CPC), no VISTA_DEUDA_BASE.
 
 ## Learned Workspace Facts
 
@@ -131,8 +133,11 @@ Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero":
 - La sección Cobros del perfil repartidor no es solo lectura: un cobro parcial del rutero debe poder cobrarse el resto desde Cobros.
 - En cobro del rutero hay 4 métodos (Efectivo, Tarjeta, Bizum, Talón): Transferencia se sustituye por Talón (el usuario nunca ve Transferencia). Talón exige número, vencimiento y banco del catálogo ENB.
 - Si las unidades entregadas difieren de las previstas, el albarán recalcula precio unitario/totales y la liquidación diaria debe cuadrar con esos importes.
-- Devoluciones sobre facturas ya cobradas (PG) ajustan la liquidación del vendedor (ya cobrados / caja); no restar otra vez el total LQD.
+- Devoluciones sobre facturas ya cobradas (PG = FPG/pagaré, no es tipo de documento) ajustan la liquidación del vendedor (ya cobrados / caja); no restar otra vez el total LQD. Los días de plazo salen de FPG; 30 es un ejemplo, no un hardcode.
 - El saldo cobrable de una entrega se limita al importe del documento (CPC), no a la deuda CVC del cliente; la UI distingue este albarán vs deuda del cliente.
 - En facturas, la lista debe mostrar totales agregados (importe, recuento, base con/sin IVA).
 - Las escrituras a base de datos van solo a TEST (isolated_test / JAVIER.TEST_*); DSEDAC es lectura o copia hacia test, nunca escritura.
 - En isolated_test, el correo usa sink/allowlist y no debe enviarse a bandejas reales de clientes ERP; la lista to/cc de producto debe construirse completa igual (operaciones + repartidor de la acción).
+- El login acepta nombre de vendedor (p.ej. diego) y código numérico; el match exacto de SEC-01 no debe romper el alias de nombre.
+- jefe_ventas con catálogo de vendedores ≥20 debe enviar ALL; no expandir el JWT a un IN de ~80–94 códigos.
+- El cuello SQL restante en frío es DSED.LACLAE (GROUP BY); bajarlo exige índice/DDL de Javier, no más parches de aplicación.

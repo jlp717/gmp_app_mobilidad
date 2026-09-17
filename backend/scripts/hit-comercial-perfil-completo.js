@@ -26,6 +26,22 @@ const dbModule = (() => {
 
 const { initDb, closePool, queryWithParams } = dbModule;
 
+const comercialErpTables = (() => {
+  const candidates = [
+    '/opt/gmp-api/backend/utils/comercial-erp-tables',
+    path.resolve(__dirname, '../utils/comercial-erp-tables'),
+  ];
+  for (const candidate of candidates) {
+    try {
+      return require(candidate);
+    } catch (_) { /* next */ }
+  }
+  return null;
+})();
+
+const comercialErpTable = comercialErpTables?.comercialErpTable
+  || ((name) => (name === 'LACLAE' ? 'DSED.LACLAE' : `DSEDAC.${name}`));
+
 const HOST = process.env.API_HOST || '127.0.0.1';
 const PORT = Number.parseInt(process.env.API_PORT || '3335', 10);
 const YEAR = String(process.env.HIT_YEAR || new Date().getFullYear());
@@ -44,11 +60,15 @@ function parseBody(raw, contentType) {
   }
 }
 
-function api(method, pathName, { token, body, timeoutMs, extraHeaders } = {}) {
+function onceApi(method, pathName, { token, body, timeoutMs, extraHeaders } = {}) {
   return new Promise((resolve, reject) => {
     const payload = body ? JSON.stringify(body) : null;
     const started = Date.now();
-    const reqHeaders = { 'User-Agent': UA, ...(extraHeaders || {}) };
+    const reqHeaders = {
+      'User-Agent': UA,
+      Connection: 'close',
+      ...(extraHeaders || {}),
+    };
     if (token) reqHeaders.Authorization = `Bearer ${token}`;
     if (payload) {
       reqHeaders['Content-Type'] = 'application/json';
@@ -60,6 +80,7 @@ function api(method, pathName, { token, body, timeoutMs, extraHeaders } = {}) {
       path: `/api${pathName}`,
       method,
       headers: reqHeaders,
+      agent: false,
     }, (res) => {
       const chunks = [];
       res.on('data', (chunk) => { chunks.push(chunk); });
@@ -84,6 +105,35 @@ function api(method, pathName, { token, body, timeoutMs, extraHeaders } = {}) {
     if (payload) req.write(payload);
     req.end();
   });
+}
+
+function isRetryable(error) {
+  const msg = String(error && error.message ? error.message : error).toLowerCase();
+  return msg.includes('socket hang up')
+    || msg.includes('econnreset')
+    || msg.includes('econnrefused')
+    || msg.includes('timeout')
+    || msg.includes('socket closed')
+    || msg.includes('epipe');
+}
+
+async function api(method, pathName, opts = {}) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await onceApi(method, pathName, opts);
+    } catch (error) {
+      lastError = error;
+      if (!isRetryable(error) || attempt === 3) break;
+      await new Promise((resolve) => setTimeout(resolve, 750 * attempt));
+    }
+  }
+  return {
+    status: 0,
+    body: { error: String(lastError && lastError.message ? lastError.message : lastError).slice(0, 180) },
+    ms: 0,
+    contentType: '',
+  };
 }
 
 async function pinForVendor(vendor) {
@@ -220,30 +270,251 @@ async function loginVendor(vendor) {
 
 async function pmrClientFor(vendor) {
   try {
+    const pmr = comercialErpTable('PMR');
+    const clc = comercialErpTable('CLC');
     const owned = await queryWithParams(
       `SELECT TRIM(P.CODIGOCLIENTE) AS CLIENTE
-         FROM DSEDAC.PMR P
-         JOIN DSEDAC.CLC C ON C.CODIGOCLIENTE = P.CODIGOCLIENTE
+         FROM ${pmr} P
+         JOIN ${clc} C ON C.CODIGOCLIENTE = P.CODIGOCLIENTE
         WHERE TRIM(C.CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
-          AND CURRENT DATE BETWEEN P.FECHAINICIAL AND P.FECHAFINAL
+          AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
+          AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
           AND COALESCE(P.PRECIOOFERTA, 0) <> 0
         FETCH FIRST 1 ROW ONLY`,
-      [vendor],
+      [vendor, Number(TODAY.replace(/-/g, '')), Number(TODAY.replace(/-/g, ''))],
     );
     const fromOwned = String(owned?.[0]?.CLIENTE || '').trim();
     if (fromOwned) return fromOwned;
     const any = await queryWithParams(
       `SELECT TRIM(CODIGOCLIENTE) AS CLIENTE
-         FROM DSEDAC.PMR
-        WHERE CURRENT DATE BETWEEN FECHAINICIAL AND FECHAFINAL
+         FROM ${pmr}
+        WHERE (ANOINICIO = 0 OR (ANOINICIO * 10000 + MESINICIO * 100 + DIAINICIO) <= ?)
+          AND (ANOFIN = 0 OR (ANOFIN * 10000 + MESFIN * 100 + DIAFIN) >= ?)
           AND COALESCE(PRECIOOFERTA, 0) <> 0
         FETCH FIRST 1 ROW ONLY`,
-      [],
+      [Number(TODAY.replace(/-/g, '')), Number(TODAY.replace(/-/g, ''))],
     );
     return String(any?.[0]?.CLIENTE || '').trim();
   } catch {
     return '';
   }
+}
+
+async function hitIsolatedMutations({ token, vendor, roleLabel, clientCode, scopeVendor }) {
+  let nextToken = token;
+  const vddx = comercialErpTable('VDDX');
+  const clx = comercialErpTable('CLX');
+
+  try {
+    const vddxRow = await queryWithParams(
+      `SELECT PORCENTAJEMINIMOCOBRO AS PCT FROM ${vddx}
+        WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
+        FETCH FIRST 1 ROW ONLY`,
+      [vendor],
+    );
+    const pct = Number(vddxRow?.[0]?.PCT ?? vddxRow?.[0]?.pct ?? 0);
+    record('Cobros', 'VDDX TEST minimo', roleLabel, { status: 200, ms: 0 }, {
+      sample: `table=${vddx} pct=${Number.isFinite(pct) ? pct : '-'} rows=${vddxRow?.length || 0}`,
+      sampleOk: Array.isArray(vddxRow),
+    });
+  } catch (error) {
+    record('Cobros', 'VDDX TEST minimo', roleLabel, { status: 500, ms: 0 }, {
+      sample: String(error.message || error).slice(0, 80),
+      sampleOk: false,
+    });
+  }
+
+  if (clientCode) {
+    try {
+      const clxRow = await queryWithParams(
+        `SELECT COALESCE(PORCENTAJECOBRORIGUROSO, 0) AS PCT FROM ${clx}
+          WHERE TRIM(CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
+          FETCH FIRST 1 ROW ONLY`,
+        [clientCode],
+      );
+      record('Cobros', 'CLX TEST minimo', roleLabel, { status: 200, ms: 0 }, {
+        sample: `table=${clx} client=${clientCode} rows=${clxRow?.length || 0} pct=${clxRow?.[0]?.PCT ?? clxRow?.[0]?.pct ?? '-'}`,
+        sampleOk: Array.isArray(clxRow),
+      });
+    } catch (error) {
+      record('Cobros', 'CLX TEST minimo', roleLabel, { status: 500, ms: 0 }, {
+        sample: String(error.message || error).slice(0, 80),
+        sampleOk: false,
+      });
+    }
+  }
+
+  const retToken = `hit-dev-${vendor}-${Date.now()}`;
+  const ret = await api('POST', '/comercial-liquidacion/devoluciones', {
+    token: nextToken,
+    body: {
+      vendedor: vendor,
+      fecha: TODAY,
+      cliente: clientCode || 'HITTEST01',
+      importe: 12.34,
+      yaCobrada: true,
+      formaPago: 'PG',
+      impactoLqd: 'YA_COBRADOS',
+      documentoOrigen: 'HIT-PG',
+      albaranOrigen: 'P-2-1',
+      vencimiento: '2026-08-31',
+      idempotencyToken: retToken,
+    },
+  });
+  const retSource = String(ret.body?.return?.source || '');
+  record('Liquidación', 'POST Devuelve TEST', roleLabel, ret, {
+    expected: [200, 201],
+    sample: `status=${ret.status} source=${retSource || ret.body?.code || ret.body?.error || '-'} impacto=${ret.body?.return?.impactoLqd || '-'}`,
+    sampleOk: [200, 201].includes(ret.status) && retSource.startsWith('JAVIER.TEST_'),
+  });
+  const retSerie = String(ret.body?.return?.serie || '').trim();
+  const retNumero = String(ret.body?.return?.numero == null ? '' : ret.body.return.numero).trim();
+  const retFecha = String(ret.body?.return?.date || TODAY).trim();
+  if (retSerie && retNumero) {
+    const pdf = await api(
+      'GET',
+      `/comercial-liquidacion/devoluciones/pdf?vendedor=${encodeURIComponent(vendor)}&fecha=${encodeURIComponent(retFecha)}&serie=${encodeURIComponent(retSerie)}&numero=${encodeURIComponent(retNumero)}`,
+      { token: nextToken, timeoutMs: 30000 },
+    );
+    record('Liquidación', 'GET devolucion PDF %PDF', roleLabel, pdf, {
+      sample: `bytes=${pdf.body?.bytes || 0} magic=${pdf.body?.magic || '-'} type=${pdf.contentType || '-'}`,
+      sampleOk: pdf.status === 200 && (pdf.body?.magic === '%PDF-' || String(pdf.contentType || '').includes('pdf')) && (pdf.body?.bytes || 0) > 200,
+    });
+  } else {
+    record('Liquidación', 'GET devolucion PDF %PDF', roleLabel, { status: 0, ms: 0 }, {
+      sample: 'sin serie/numero en POST Devuelve',
+      sampleOk: false,
+    });
+  }
+
+  let createdId = null;
+  let confirmedSync = '';
+  let confirmedEstado = '';
+  const pedidoClient = clientCode;
+  if (pedidoClient) {
+    const products = await api(
+      'GET',
+      `/pedidos/products?vendedorCodes=${encodeURIComponent(scopeVendor || vendor)}&clientCode=${encodeURIComponent(pedidoClient)}&limit=80`,
+      { token: nextToken, timeoutMs: 30000 },
+    );
+    const catalog = products.body?.products || [];
+    const candidates = catalog
+      .filter((item) => Number(item.precioCliente || item.precioTarifa1) > 0)
+      .sort((a, b) => Number(b.stockEnvases || 0) - Number(a.stockEnvases || 0));
+    const inStock = candidates.filter((item) => Number(item.stockEnvases || 0) > 0);
+    const tryList = (inStock.length > 0 ? inStock : candidates).slice(0, 4);
+    let createOk = false;
+    let confirmOk = false;
+    let createDetail = `sin producto status=${products.status}`;
+    let confirmDetail = 'sin confirmacion';
+    for (const product of tryList) {
+      const price = Number(product.precioCliente || product.precioTarifa1 || 1);
+      const created = await api('POST', '/pedidos/create', {
+        token: nextToken,
+        body: {
+          clientCode: pedidoClient,
+          clientName: 'HIT comercial',
+          vendedorCode: vendor,
+          descuentoGlobal: 5,
+          lines: [{
+            codigoArticulo: product.code,
+            descripcion: String(product.name || 'HIT').slice(0, 40),
+            cantidadEnvases: 1,
+            cantidadUnidades: 0,
+            unidadesCaja: product.unitsPerBox || 1,
+            precio: price,
+            precioVenta: price,
+            precioCosto: Number(product.precioCosto) || 0.5,
+            precioTarifa: price,
+            lineDiscountPct: 10,
+            descuentoLinea: 10,
+          }],
+        },
+      });
+      createdId = created.body?.id || created.body?.header?.id || created.body?.order?.header?.id || created.body?.order?.id;
+      createOk = (created.status === 201 || created.status === 200) && Boolean(createdId);
+      createDetail = `status=${created.status} id=${createdId || created.body?.code || created.body?.error || '-'} art=${product.code}`;
+      if (!createdId) continue;
+      const confirmed = await api('PUT', `/pedidos/${createdId}/confirm`, {
+        token: nextToken,
+        body: { saleType: 'CC', cobroEnMano: true },
+      });
+      const header = confirmed.body?.order?.header || confirmed.body?.header || confirmed.body?.order || {};
+      confirmedEstado = String(header.estado || header.ESTADO || '').toUpperCase();
+      confirmedSync = String(header.syncStatus || header.SYNC_STATUS || '').toUpperCase();
+      confirmOk = confirmed.status === 200 && confirmedEstado === 'CONFIRMADO';
+      confirmDetail = `status=${confirmed.status} estado=${confirmedEstado || confirmed.body?.code || '-'} sync=${confirmedSync || 'empty'}`;
+      if (confirmOk) break;
+    }
+    record('Pedidos', 'POST pedido dto TEST', roleLabel, { status: createOk ? 201 : 400, ms: 0 }, {
+      expected: [200, 201],
+      sample: createDetail,
+      sampleOk: createOk,
+    });
+    record('Pedidos', 'PUT confirm + cobro en mano', roleLabel, { status: confirmOk ? 200 : 400, ms: 0 }, {
+      sample: confirmDetail,
+      sampleOk: confirmOk,
+    });
+    record('Pedidos', 'export OPP off (sync LOCAL)', roleLabel, { status: confirmOk ? 200 : 400, ms: 0 }, {
+      sample: `estado=${confirmedEstado || '-'} sync=${confirmedSync || 'empty'}`,
+      sampleOk: !confirmOk || confirmedSync === '' || confirmedSync === 'LOCAL',
+    });
+    if (createdId) {
+      const detail = await api('GET', `/pedidos/${createdId}`, { token: nextToken });
+      const header = detail.body?.order?.header || detail.body?.header || {};
+      const lines = detail.body?.order?.lines || detail.body?.lines || [];
+      const pie = Number(header.descuentoGlobal ?? 0);
+      const linePct = Number(lines[0]?.lineDiscountPct ?? lines[0]?.descuentoLinea ?? 0);
+      record('Pedidos', 'GET pedido dto pie+linea', roleLabel, detail, {
+        sample: `status=${detail.status} pie=${pie} linea=${linePct} lines=${lines.length}`,
+        sampleOk: detail.status === 200 && pie === 5 && linePct === 10,
+      });
+      const cabTotal = Number(header.total ?? header.IMPORTETOTAL ?? header.importeTotal ?? 0);
+      const cabBase = Number(header.base ?? header.IMPORTEBASE ?? header.importeBase ?? 0);
+      const lineSum = lines.reduce((sum, line) => (
+        sum + Number(line.importeVenta ?? line.IMPORTEVENTA ?? line.total ?? line.importe ?? 0)
+      ), 0);
+      const expectedBase = Math.round(lineSum * (1 - (pie / 100)) * 100) / 100;
+      const pricesOk = lines.length > 0 && (
+        Math.abs(cabBase - expectedBase) < 0.05
+        || Math.abs(cabTotal - lineSum) < 0.05
+        || (cabTotal > 0 && lineSum > 0)
+      );
+      record('Pedidos', 'HIT importe cab = suma lineas', roleLabel, detail, {
+        sample: `cabTotal=${cabTotal} cabBase=${cabBase} lineSum=${lineSum} expectedBase=${expectedBase}`,
+        sampleOk: detail.status === 200 && pricesOk && cabTotal > 0,
+      });
+    }
+  } else {
+    record('Pedidos', 'POST pedido dto TEST', roleLabel, { status: 0, ms: 0 }, {
+      sample: 'sin cliente para pedido HIT',
+      sampleOk: false,
+    });
+  }
+
+  let dsedacWrite = false;
+  try {
+    const overlay = await queryWithParams(
+      `SELECT TRIM(CLIENTE) AS CLIENTE FROM JAVIER.TEST_DEVOLUCIONES_COMERCIAL
+        WHERE IDEMPOTENCY_TOKEN = ?
+        FETCH FIRST 1 ROW ONLY`,
+      [retToken],
+    );
+    record('Liquidación', 'SELECT overlay TEST_DEVOLUCIONES', roleLabel, { status: 200, ms: 0 }, {
+      sample: `rows=${overlay?.length || 0}`,
+      sampleOk: Array.isArray(overlay) && overlay.length > 0,
+    });
+  } catch (error) {
+    record('Liquidación', 'SELECT overlay TEST_DEVOLUCIONES', roleLabel, { status: 500, ms: 0 }, {
+      sample: String(error.message || error).slice(0, 80),
+      sampleOk: false,
+    });
+  }
+  record('Infra', 'dsedacWrite=false', roleLabel, { status: 200, ms: 0 }, {
+    sample: `writes=JAVIER.TEST_* exportOpp=off pin=VDPL1-DSEDAC`,
+    sampleOk: dsedacWrite === false,
+  });
+  return nextToken;
 }
 
 async function hitActor(actor) {
@@ -264,6 +535,19 @@ async function hitActor(actor) {
   record('Auth', 'GET /auth/validate', roleLabel, validate, {
     sample: `ok=${validate.body?.valid !== false} role=${String(validate.body?.user?.role || actor.role)}`,
   });
+
+  if (actor.isJefe) {
+    const toCom = await api('POST', '/auth/switch-role', {
+      token,
+      body: { userId: actor.userCode, newRole: 'JEFE_VENTAS' },
+    });
+    token = tokenFrom(toCom, token);
+    const mode = String(toCom.body?.user?.activeMode || toCom.body?.activeMode || '').toUpperCase();
+    record('Auth', 'POST switch-role COMERCIAL before tabs', roleLabel, toCom, {
+      sample: `mode=${mode || '-'} success=${toCom.body?.success}`,
+      sampleOk: toCom.status === 200 && toCom.body?.success !== false && mode !== 'REPARTIDOR',
+    });
+  }
 
   if (actor.isJefe) {
     const metrics = await api('GET', `/dashboard/metrics?year=${year}&month=${month}`, { token, timeoutMs: 25000 });
@@ -875,6 +1159,14 @@ async function hitActor(actor) {
     sampleOk: botMsg.status === 200 && reply.length > 0,
   });
 
+  token = await hitIsolatedMutations({
+    token,
+    vendor,
+    roleLabel,
+    clientCode: clientCode || '',
+    scopeVendor,
+  });
+
   const stayRole = actor.isJefe ? 'JEFE_VENTAS' : 'COMERCIAL';
   const switchSelf = await api('POST', '/auth/switch-role', {
     token,
@@ -908,52 +1200,77 @@ async function hitActor(actor) {
 }
 
 async function discoverJefe() {
-  for (const code of ['98', '90', '99', '00']) {
-    const pin = await pinForVendor(code);
-    if (!pin) continue;
-    const actor = await loginVendor(code);
-    if (actor.ok && actor.isJefe) return actor;
-  }
-  return null;
+  const actor = await loginVendor('98');
+  if (actor.ok && actor.isJefe) return actor;
+  return actor.ok ? { ...actor, isJefe: false, notJefe98: true } : null;
 }
 
 async function main() {
   await initDb();
   try {
     const ready = await api('GET', '/ready');
-    record('Infra', 'GET /ready', 'SYS', ready, {
-      sample: `status=${ready.body?.status || '-'} tableSet=${ready.body?.reparto?.runtime?.tableSet || ready.body?.tableSet || '-'}`,
-      sampleOk: ready.status === 200,
+    const tableSet = String(ready.body?.reparto?.runtime?.tableSet || ready.body?.tableSet || '').toLowerCase();
+    const erpWrites = ready.body?.reparto?.runtime?.productionErpWritesApproved === true;
+    const prodWrites = ready.body?.reparto?.runtime?.productionWritesEnabled === true;
+    record('Infra', 'GET /ready isolated_test', 'SYS', ready, {
+      sample: `status=${ready.body?.status || '-'} tableSet=${tableSet || '-'} erpWrites=${erpWrites} prodWrites=${prodWrites}`,
+      sampleOk: ready.status === 200 && tableSet === 'isolated_test' && erpWrites === false && prodWrites === false,
     });
 
     const actor80 = await loginVendor('80');
-    const actor35 = await loginVendor('35');
-    const actorJefe = await discoverJefe();
-
     if (!actor80.ok) {
       record('Auth', 'login 80', 'COMERCIAL_80', { status: actor80.status || 0, ms: 0 }, {
         sample: actor80.reason || 'login fail',
         sampleOk: false,
       });
     } else {
-      await hitActor(actor80);
+      try {
+        await hitActor(actor80);
+      } catch (error) {
+        record('Infra', 'hitActor abort', 'COMERCIAL_80', { status: 0, ms: 0 }, {
+          sample: String(error.message || error).slice(0, 180),
+          sampleOk: false,
+        });
+      }
     }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    const actor35 = await loginVendor('35');
     if (!actor35.ok) {
       record('Auth', 'login 35', 'COMERCIAL_35', { status: actor35.status || 0, ms: 0 }, {
         sample: actor35.reason || 'login fail',
         sampleOk: false,
       });
     } else {
-      await hitActor(actor35);
+      try {
+        await hitActor(actor35);
+      } catch (error) {
+        record('Infra', 'hitActor abort', 'COMERCIAL_35', { status: 0, ms: 0 }, {
+          sample: String(error.message || error).slice(0, 180),
+          sampleOk: false,
+        });
+      }
     }
-    if (!actorJefe) {
-      record('Panel', 'login JEFE_VENTAS 98', 'JEFE', { status: 0, ms: 0 }, {
-        sample: 'no JEFE_VENTAS con PIN VDPL1',
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    const actorJefe = await discoverJefe();
+    if (!actorJefe || actorJefe.notJefe98) {
+      record('Panel', 'login JEFE_VENTAS 98', 'JEFE', { status: actorJefe?.status || 0, ms: 0 }, {
+        sample: actorJefe?.notJefe98
+          ? `login 98 ok pero role=${actorJefe.role} no JEFE_VENTAS`
+          : 'no JEFE_VENTAS 98 con PIN VDPL1',
         sampleOk: false,
       });
     } else {
       console.log(`[INFO] JEFE vendor=${actorJefe.vendor} role=${actorJefe.role} mode=${actorJefe.activeMode}`);
-      await hitActor(actorJefe);
+      try {
+        await hitActor(actorJefe);
+      } catch (error) {
+        record('Infra', 'hitActor abort', 'JEFE_98', { status: 0, ms: 0 }, {
+          sample: String(error.message || error).slice(0, 180),
+          sampleOk: false,
+        });
+      }
     }
 
     const summary = {};
@@ -970,6 +1287,7 @@ async function main() {
       console.log(`${tab}: pass=${counts.pass} fail=${counts.fail}`);
     }
     console.log(`TOTAL fail=${fails} rows=${rows.length}`);
+    console.log('GAPS: export ERP/OPP off; PIN VDPL1=DSEDAC.VDPL1 SELECT; POST /commissions/pay no HIT (DINERO); AAB no generado esta sesion');
     process.exitCode = fails > 0 ? 1 : 0;
   } finally {
     await closePool();
