@@ -26,6 +26,48 @@ const warehouseBreaker = new CircuitBreaker({
     timeout: 10000
 });
 const WAREHOUSE_BULK_INSERT_CHUNK_SIZE = Math.max(1, parseInt(process.env.WAREHOUSE_BULK_INSERT_CHUNK_SIZE, 10) || 50);
+const RECENT_ARTICLES_SQL = `
+                    SELECT LAC2.CODIGOARTICULO AS ART_CODE
+                    FROM DSEDAC.OPP OPP2
+                    INNER JOIN DSEDAC.CPC CPC2
+                        ON OPP2.NUMEROORDENPREPARACION = CPC2.NUMEROORDENPREPARACION
+                        AND OPP2.EJERCICIOORDENPREPARACION = CPC2.EJERCICIOORDENPREPARACION
+                    INNER JOIN DSEDAC.LAC LAC2
+                        ON CPC2.NUMEROALBARAN = LAC2.NUMEROALBARAN
+                        AND CPC2.EJERCICIOALBARAN = LAC2.EJERCICIOALBARAN
+                        AND CPC2.SERIEALBARAN = LAC2.SERIEALBARAN
+                    WHERE OPP2.ANOREPARTO = ? AND OPP2.MESREPARTO = ? AND OPP2.DIAREPARTO BETWEEN ? AND ?
+                    FETCH FIRST 400 ROWS ONLY
+                `;
+
+function loadRecentArticleRows(year, month, day) {
+    const fromDay = Math.max(1, day - 7);
+    return cachedQuery(
+        queryWithParams,
+        RECENT_ARTICLES_SQL,
+        `warehouse:recent-arts:v2:${year}:${month}:${day}`,
+        TTL.MEDIUM,
+        [year, month, fromDay, day],
+    );
+}
+
+function setFromArticleRows(rows) {
+    return new Set((rows || []).map((row) => String(row.ART_CODE || row.art_code || '').trim()).filter(Boolean));
+}
+
+async function recentArticleCodesNonBlocking(year, month, day, waitMs = 150) {
+    const pending = loadRecentArticleRows(year, month, day)
+        .then(setFromArticleRows)
+        .catch((error) => {
+            logger.warn(`Recent articles query failed (non-blocking): ${error.message}`);
+            return new Set();
+        });
+    const raced = await Promise.race([
+        pending.then((set) => ({ set })),
+        new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), waitMs)),
+    ]);
+    return raced.set || new Set();
+}
 
 async function closeQuiet(conn) {
     if (!conn) return;
@@ -870,35 +912,18 @@ router.get('/articles', verifyToken, async (req, res) => {
         }
 
         let orderBy = 'A.CODIGOARTICULO';
-        // Fetch recent order article codes separately (fast, avoids heavy JOIN)
-        let recentArticleCodes = new Set();
+        const now = new Date();
+        const recentPromise = !search
+            ? recentArticleCodesNonBlocking(now.getFullYear(), now.getMonth() + 1, now.getDate())
+            : Promise.resolve(new Set());
         if (!search) {
-            try {
-                const now = new Date();
-                const y = now.getFullYear();
-                const m = now.getMonth() + 1;
-                const d = now.getDate();
-                const recentRows = await queryWithParams(`
-                    SELECT DISTINCT TRIM(LAC2.CODIGOARTICULO) AS ART_CODE
-                    FROM DSEDAC.OPP OPP2
-                    INNER JOIN DSEDAC.CPC CPC2
-                        ON OPP2.NUMEROORDENPREPARACION = CPC2.NUMEROORDENPREPARACION
-                        AND OPP2.EJERCICIOORDENPREPARACION = CPC2.EJERCICIOORDENPREPARACION
-                    INNER JOIN DSEDAC.LAC LAC2
-                        ON CPC2.NUMEROALBARAN = LAC2.NUMEROALBARAN
-                        AND CPC2.EJERCICIOALBARAN = LAC2.EJERCICIOALBARAN
-                        AND CPC2.SERIEALBARAN = LAC2.SERIEALBARAN
-                    WHERE OPP2.ANOREPARTO = ? AND OPP2.MESREPARTO = ? AND OPP2.DIAREPARTO BETWEEN ? AND ?
-                    FETCH FIRST 2000 ROWS ONLY
-                `, [y, m, Math.max(1, d - 7), d]);
-                recentArticleCodes = new Set(recentRows.map(r => (r.ART_CODE || '').trim()));
-            } catch (e) {
-                logger.warn(`Recent articles query failed (non-blocking): ${e.message}`);
-            }
             orderBy = 'CASE WHEN D.CODIGOARTICULO IS NOT NULL THEN 0 ELSE 1 END, A.CODIGOARTICULO';
         }
 
-        const rows = await queryWithParams(`
+        const articleCacheKey = `warehouse:articles:v3:${search || ''}:${onlyWithDimensions || ''}:${page.limit}:${page.offset}`;
+        const [recentArticleCodes, rows] = await Promise.all([
+            recentPromise,
+            cachedQuery(queryWithParams, `
             SELECT TRIM(A.CODIGOARTICULO) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
                    COALESCE(A.PESO, 0) AS PESO, COALESCE(A.UNIDADESCAJA, 1) AS UNIDADESCAJA,
                    D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG, D.NOTAS
@@ -907,7 +932,8 @@ router.get('/articles', verifyToken, async (req, res) => {
             WHERE ${where}
             ORDER BY ${orderBy}
             ${db2OffsetFetch(page)}
-        `, queryParams);
+        `, articleCacheKey, TTL.SHORT, queryParams),
+        ]);
 
         const estimateFn = estimateBoxDimensions;
         const articles = (rows || []).map((r) => {

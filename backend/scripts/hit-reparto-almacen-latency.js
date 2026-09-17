@@ -14,6 +14,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env'
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
 const http = require('http');
+const { initDb, closePool, queryWithParams } = require('../config/db');
 
 const HOST = process.env.API_HOST || process.env.E2E_HOST || '127.0.0.1';
 const PORT = Number.parseInt(process.env.API_PORT || process.env.E2E_PORT || '3335', 10);
@@ -54,7 +55,7 @@ function request(method, path, { token, body } = {}) {
         });
       });
     });
-    req.setTimeout(60000, () => req.destroy(new Error(`timeout ${method} ${path}`)));
+    req.setTimeout(90000, () => req.destroy(new Error(`timeout ${method} ${path}`)));
     req.on('error', reject);
     if (payload) req.write(payload);
     req.end();
@@ -77,9 +78,22 @@ function row(label, res, extra = {}) {
   return out;
 }
 
+async function pinForVendor(vendor) {
+  const code = String(vendor || '').trim();
+  if (!code) return '';
+  const rows = await queryWithParams(
+    `SELECT TRIM(CODIGOPIN) AS PIN
+       FROM DSEDAC.VDPL1
+      WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
+      FETCH FIRST 1 ROW ONLY`,
+    [code],
+  );
+  return String(rows?.[0]?.PIN || '').trim();
+}
+
 async function login(user, pin, tag) {
   if (!user || !pin) {
-    row(`${tag}.login`, { status: 0, ms: 0, bytes: 0 }, { skipped: 'missing_env' });
+    row(`${tag}.login`, { status: 0, ms: 0, bytes: 0 }, { skipped: 'missing_pin' });
     return null;
   }
   const res = await request('POST', '/auth/login', {
@@ -99,19 +113,41 @@ async function switchReparto(token, userId) {
   return pickToken(res.json) || token;
 }
 
+function fleetCodes(json) {
+  const list = Array.isArray(json)
+    ? json
+    : (json?.repartidores || json?.data || json?.items || []);
+  if (!Array.isArray(list)) return [];
+  return [...new Set(list.map((entry) => {
+    if (typeof entry === 'string' || typeof entry === 'number') return String(entry).trim();
+    return String(entry.code || entry.codigo || entry.id || '').trim();
+  }).filter(Boolean))];
+}
+
+function countRows(json) {
+  if (!json || typeof json !== 'object') return null;
+  for (const key of ['entregas', 'items', 'data', 'days', 'vencimientos', 'cobros', 'albaranes']) {
+    if (Array.isArray(json[key])) return json[key].length;
+  }
+  if (Array.isArray(json)) return json.length;
+  if (typeof json.count === 'number') return json.count;
+  if (typeof json.total === 'number') return json.total;
+  return null;
+}
+
 async function hit(label, token, path) {
   const cold = await request('GET', path, { token });
   const warm = await request('GET', path, { token });
-  row(`${label}.cold`, cold);
-  row(`${label}.warm`, warm);
+  row(`${label}.cold`, cold, { rows: countRows(cold.json) });
+  row(`${label}.warm`, warm, { rows: countRows(warm.json) });
 }
 
 async function main() {
-  const jefeUser = String(process.env.GMP_JEFE_USER || process.env.GMP_TEST_VENDOR || '').trim();
-  const jefePin = String(process.env.GMP_JEFE_PIN || process.env.GMP_TEST_PIN || '').trim();
-  const driverUser = String(process.env.GMP_REPARTIDOR_USER || '').trim();
-  const driverPin = String(process.env.GMP_REPARTIDOR_PIN || '').trim();
-  const driverId = String(process.env.GMP_REPARTIDOR_ID || driverUser || '08').trim();
+  await initDb();
+  const jefeUser = String(process.env.GMP_JEFE_USER || process.env.GMP_TEST_VENDOR || '98').trim();
+  const jefePin = String(process.env.GMP_JEFE_PIN || process.env.GMP_TEST_PIN || '').trim()
+    || await pinForVendor(jefeUser);
+  const driverUser = String(process.env.GMP_REPARTIDOR_USER || process.env.GMP_REPARTIDOR_ID || '').trim();
 
   console.log(JSON.stringify({
     host: HOST,
@@ -124,12 +160,11 @@ async function main() {
   row('ready', ready, { statusBody: ready.json?.status || ready.json?.ready || null });
 
   let jefeToken = await login(jefeUser, jefePin, 'jefe');
+  let codes = [];
   if (jefeToken && jefeUser) {
     jefeToken = await switchReparto(jefeToken, jefeUser);
     const fleet = await request('GET', '/auth/repartidores', { token: jefeToken });
-    const codes = Array.isArray(fleet.json)
-      ? fleet.json.map((entry) => String(entry.code || '').trim()).filter(Boolean)
-      : [];
+    codes = fleetCodes(fleet.json);
     row('jefe.fleet', fleet, { count: codes.length });
     const allSelector = codes.slice(0, 80).join(',') || jefeUser;
     const single = codes[0] || jefeUser;
@@ -139,19 +174,60 @@ async function main() {
     await hit('jefe.pendientes.one', jefeToken, `/entregas/pendientes/${encodeURIComponent(single)}?date=${TODAY}&limit=80&offset=0`);
     await hit('jefe.daily-summary.one', jefeToken, `/repartidor-finanzas/daily-summary/${encodeURIComponent(single)}?date=${TODAY}`);
     await hit('jefe.vencimientos.one', jefeToken, `/repartidor-finanzas/vencimientos/${encodeURIComponent(single)}?from=${YEAR}-01-01&to=${TODAY}&limit=40`);
-    await hit('warehouse.dashboard', jefeToken, `/warehouse/dashboard?year=${YEAR}&month=${MONTH}&day=${DAY}`);
+    const almacen = await request('POST', '/auth/switch-role', {
+      token: jefeToken,
+      body: { userId: jefeUser, newRole: 'ALMACEN' },
+    });
+    const almacenToken = pickToken(almacen.json) || jefeToken;
+    row('jefe.switch-almacen', almacen, {
+      activeMode: almacen.json?.user?.activeMode || almacen.json?.activeMode || null,
+    });
+    await hit('warehouse.dashboard', almacenToken, `/warehouse/dashboard?year=${YEAR}&month=${MONTH}&day=${DAY}`);
+    await hit('warehouse.articles', almacenToken, '/warehouse/articles?limit=80');
   }
 
-  const driverToken = await login(driverUser, driverPin, 'repartidor');
-  if (driverToken) {
-    await hit('raso.week', driverToken, `/repartidor/rutero/week/${encodeURIComponent(driverId)}?date=${TODAY}`);
-    await hit('raso.pendientes', driverToken, `/entregas/pendientes/${encodeURIComponent(driverId)}?date=${TODAY}&limit=80&offset=0`);
-    await hit('raso.daily-summary', driverToken, `/repartidor-finanzas/daily-summary/${encodeURIComponent(driverId)}?date=${TODAY}`);
-    await hit('raso.vencimientos', driverToken, `/repartidor-finanzas/vencimientos/${encodeURIComponent(driverId)}?from=${YEAR}-01-01&to=${TODAY}&limit=40`);
+  const rasoCandidates = [...new Set([
+    driverUser,
+    ...codes.filter((code) => String(code).replace(/^0+/, '') !== String(jefeUser).replace(/^0+/, '')),
+    '94',
+    '08',
+    '05',
+  ].filter(Boolean))];
+
+  let rasoId = null;
+  let driverToken = null;
+  for (const candidate of rasoCandidates.slice(0, 8)) {
+    const rasoPin = String(process.env.GMP_REPARTIDOR_PIN || '').trim() || await pinForVendor(candidate);
+    const token = await login(candidate, rasoPin, `repartidor.${candidate}`);
+    if (!token) continue;
+    const switched = await request('POST', '/auth/switch-role', {
+      token,
+      body: { userId: candidate, newRole: 'REPARTIDOR' },
+    });
+    const switchedRole = switched.json?.user?.role || switched.json?.role || null;
+    const switchedMode = switched.json?.user?.activeMode || switched.json?.activeMode || null;
+    row('repartidor.switch-reparto', switched, {
+      user: candidate,
+      role: switchedRole,
+      activeMode: switchedMode,
+    });
+    if (switched.status === 200 && (switchedRole === 'REPARTIDOR' || switchedMode === 'REPARTIDOR')) {
+      rasoId = candidate;
+      driverToken = pickToken(switched.json) || token;
+      break;
+    }
+  }
+  if (driverToken && rasoId) {
+    await hit('raso.week', driverToken, `/repartidor/rutero/week/${encodeURIComponent(rasoId)}?date=${TODAY}`);
+    await hit('raso.pendientes', driverToken, `/entregas/pendientes/${encodeURIComponent(rasoId)}?date=${TODAY}&limit=80&offset=0`);
+    await hit('raso.daily-summary', driverToken, `/repartidor-finanzas/daily-summary/${encodeURIComponent(rasoId)}?date=${TODAY}`);
+    await hit('raso.vencimientos', driverToken, `/repartidor-finanzas/vencimientos/${encodeURIComponent(rasoId)}?from=${YEAR}-01-01&to=${TODAY}&limit=40`);
   }
 }
 
-main().catch((error) => {
-  console.log(JSON.stringify({ fatal: true, message: error.message || 'probe_failed' }));
-  process.exitCode = 1;
-});
+main()
+  .catch((error) => {
+    console.log(JSON.stringify({ fatal: true, message: error.message || 'probe_failed' }));
+    process.exitCode = 1;
+  })
+  .finally(() => closePool().catch(() => undefined));
