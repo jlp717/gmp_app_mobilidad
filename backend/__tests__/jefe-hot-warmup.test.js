@@ -116,5 +116,12 @@ describe('jefe-hot-route-warmer', () => {
     expect(paths.join()).not.toMatch(/VENDEDOR='ALL'/);
     expect(paths.join()).not.toMatch(/\/ALL\?/);
     expect(buildAlmacenHotPaths(new Date('2026-09-17T10:00:00Z'))[1]).toBe('/api/warehouse/articles?limit=80');
+    expect(scheduleJefeHotRouteWarmup({
+      token: 't',
+      role: 'JEFE_VENTAS',
+      activeMode: 'REPARTIDOR',
+      repartidorCodes: ['08', '09'],
+      delayMs: 60_000,
+    })).toBe(true);
   });
 });

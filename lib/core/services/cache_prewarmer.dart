@@ -82,6 +82,90 @@ class CachePreWarmer {
   @visibleForTesting
   static int debugMaxInFlight = 0;
 
+  /// Same TTL as JEFE REPARTO first paint of week + pendientes.
+  static const Duration repartoFirstPaintTtl = Duration(minutes: 2);
+
+  static String fleetListCacheKey({
+    required String userCode,
+    required int claimsVersion,
+    required String activeMode,
+  }) {
+    final mode = activeMode.trim().toUpperCase();
+    return 'auth:repartidores:${userCode.trim()}:claims$claimsVersion:$mode';
+  }
+
+  static String pendientesFirstPaintCacheKey({
+    required String repartidorId,
+    required String formattedDate,
+    int pageOffset = 0,
+    String searchQuery = '',
+    String searchClient = '',
+    String searchAlbaran = '',
+    String sortBy = 'default',
+    String filterTipoPago = '',
+    String filterDebeCobrar = '',
+    String filterDocTipo = '',
+  }) {
+    final routeLoadRequested =
+        sortBy == 'default' && repartidorId.trim().isNotEmpty;
+    return [
+      'entregas:pendientes',
+      routeLoadRequested ? 'rutero-page-v2' : 'source-page',
+      repartidorId,
+      formattedDate,
+      searchQuery,
+      searchClient,
+      searchAlbaran,
+      sortBy,
+      filterTipoPago,
+      filterDebeCobrar,
+      pageOffset,
+      filterDocTipo,
+    ].join(':');
+  }
+
+  static String weekFirstPaintCacheKey(String repartidorId, String isoDate) {
+    return 'repartidor:rutero-week:$repartidorId:$isoDate';
+  }
+
+  static String pendientesFirstPaintPath(String selector, String date) {
+    return '/entregas/pendientes/$selector?date=$date&limit=80&offset=0';
+  }
+
+  static String weekFirstPaintPath(String selector, String date) {
+    return '/repartidor/rutero/week/$selector?date=$date';
+  }
+
+  /// Same join as MainShell ALL fleet selection (sorted codes).
+  @visibleForTesting
+  static String? fleetSelectorFrom(dynamic payload) {
+    final list = payload is List
+        ? payload
+        : (payload is Map
+            ? (payload['repartidores'] ??
+                payload['data'] ??
+                payload['items'] ??
+                payload['codes'])
+            : null);
+    if (list is! List) return null;
+    final codes = <String>[];
+    for (final entry in list) {
+      String code = '';
+      if (entry is String || entry is num) {
+        code = entry.toString().trim();
+      } else if (entry is Map) {
+        code = (entry['code'] ?? entry['codigo'] ?? entry['id'] ?? '')
+            .toString()
+            .trim();
+      }
+      if (code.isEmpty || code.toUpperCase() == 'ALL') continue;
+      codes.add(code);
+    }
+    codes.sort();
+    if (codes.isEmpty || codes.length > 100) return null;
+    return codes.take(80).join(',');
+  }
+
   @visibleForTesting
   static List<CachePrewarmTarget> immediateTargets({
     required bool isJefeVentas,
@@ -120,6 +204,9 @@ class CachePreWarmer {
     required List<String> vendedorCodes,
     required bool isJefeVentas,
     bool isRepartidor = false,
+    String userCode = '',
+    int claimsVersion = 0,
+    String activeMode = '',
   }) async {
     if (_hasPreWarmed) return;
     final generation = _warmGeneration;
@@ -128,7 +215,11 @@ class CachePreWarmer {
       debugPrint('[CachePreWarmer] JEFE REPARTO fleet pre-warm');
       try {
         await runWithConcurrency([
-          _preWarmRepartoFleet,
+          () => _preWarmRepartoFleet(
+                userCode: userCode,
+                claimsVersion: claimsVersion,
+                activeMode: activeMode.isEmpty ? 'REPARTIDOR' : activeMode,
+              ),
         ], concurrency: 1);
         if (generation != _warmGeneration) return;
         _hasPreWarmed = true;
@@ -396,42 +487,25 @@ class CachePreWarmer {
     return '${date.year}-$month-$day';
   }
 
-  static String? _fleetSelectorFrom(dynamic payload) {
-    final list = payload is List
-        ? payload
-        : (payload is Map
-            ? (payload['repartidores'] ??
-                payload['data'] ??
-                payload['items'] ??
-                payload['codes'])
-            : null);
-    if (list is! List) return null;
-    final codes = <String>{};
-    for (final entry in list) {
-      if (entry is String || entry is num) {
-        final code = entry.toString().trim();
-        if (code.isNotEmpty && code.toUpperCase() != 'ALL') codes.add(code);
-        continue;
-      }
-      if (entry is Map) {
-        final code = (entry['code'] ?? entry['codigo'] ?? entry['id'] ?? '')
-            .toString()
-            .trim();
-        if (code.isNotEmpty && code.toUpperCase() != 'ALL') codes.add(code);
-      }
-    }
-    if (codes.isEmpty || codes.length > 100) return null;
-    return codes.take(80).join(',');
-  }
-
-  static Future<void> _preWarmRepartoFleet() async {
+  static Future<void> _preWarmRepartoFleet({
+    required String userCode,
+    required int claimsVersion,
+    required String activeMode,
+  }) async {
     try {
-      final fleet = await ApiClient.get(
+      // `/auth/repartidores` returns a JSON array — get() throws and the
+      // JOIN never starts. Use the same getList + cache key as MainShell so
+      // first paint dedupes fleet and then pendientes/week.
+      final fleet = await ApiClient.getList(
         '/auth/repartidores',
-        cacheKey: 'auth:repartidores:prewarm',
-        cacheTTL: CacheService.shortTTL,
+        cacheKey: fleetListCacheKey(
+          userCode: userCode,
+          claimsVersion: claimsVersion,
+          activeMode: activeMode,
+        ),
+        cacheTTL: CacheService.longTTL,
       );
-      final selector = _fleetSelectorFrom(fleet);
+      final selector = fleetSelectorFrom(fleet);
       if (selector == null || selector.isEmpty) {
         debugPrint(
             '[CachePreWarmer] JEFE REPARTO fleet empty; skip pendientes');
@@ -439,14 +513,17 @@ class CachePreWarmer {
       }
       final today = _isoDate(DateTime.now());
       await ApiClient.get(
-        '/entregas/pendientes/$selector?date=$today&limit=80&offset=0',
-        cacheKey: 'entregas:pendientes:prewarm:$selector:$today',
-        cacheTTL: CacheService.shortTTL,
+        pendientesFirstPaintPath(selector, today),
+        cacheKey: pendientesFirstPaintCacheKey(
+          repartidorId: selector,
+          formattedDate: today,
+        ),
+        cacheTTL: repartoFirstPaintTtl,
       );
       await ApiClient.get(
-        '/repartidor/rutero/week/$selector?date=$today',
-        cacheKey: 'reparto:week:$selector:$today',
-        cacheTTL: CacheService.shortTTL,
+        weekFirstPaintPath(selector, today),
+        cacheKey: weekFirstPaintCacheKey(selector, today),
+        cacheTTL: repartoFirstPaintTtl,
       );
       debugPrint('[CachePreWarmer] JEFE REPARTO week+pendientes pre-warmed');
     } catch (e) {

@@ -922,6 +922,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
               role: user.role,
             ),
             isRepartidor: activeMode == 'REPARTIDOR' || user.isRepartidor,
+            userCode: user.code,
+            claimsVersion: user.claimsVersion,
+            activeMode: activeMode,
           ),
         );
 
@@ -1074,6 +1077,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         ),
         isRepartidor:
             authenticated.activeMode == 'REPARTIDOR' || user.isRepartidor,
+        userCode: user.code,
+        claimsVersion: user.claimsVersion,
+        activeMode: authenticated.activeMode,
       ),
     );
   }

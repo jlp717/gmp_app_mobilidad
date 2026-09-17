@@ -8,6 +8,7 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -396,8 +397,11 @@ class _MainShellState extends ConsumerState<MainShell> {
       return;
     }
     final mode = authState!.activeMode.trim().toUpperCase();
-    final cacheKey =
-        'auth:repartidores:${user.code.trim()}:claims${user.claimsVersion}:$mode';
+    final cacheKey = CachePreWarmer.fleetListCacheKey(
+      userCode: user.code,
+      claimsVersion: user.claimsVersion,
+      activeMode: mode,
+    );
 
     setState(() {
       _isLoadingRepartidores = true;

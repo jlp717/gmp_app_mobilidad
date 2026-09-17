@@ -189,7 +189,7 @@ function scheduleJefeHotRouteWarmup({
 } = {}) {
   if (!token || !shouldWarmHotRoutes({ isJefeVentas, role, code })) return false;
   const includeAll = isJefeUser({ isJefeVentas, role });
-  const timer = setTimeout(() => {
+  const run = () => {
     runJefeHotRouteWarmup({
       token,
       vendorCode: code,
@@ -199,7 +199,16 @@ function scheduleJefeHotRouteWarmup({
     }).catch((error) => {
       logger.warn(`[JefeHotWarmup] ${error.message}`);
     });
-  }, Math.max(0, delayMs));
+  };
+  const wait = Math.max(0, delayMs);
+  // setImmediate (delay 0) starts the JOIN before the client first-paints,
+  // without blocking the login/switch-role response.
+  if (wait === 0 && typeof setImmediate === 'function') {
+    const timer = setImmediate(run);
+    if (typeof timer.unref === 'function') timer.unref();
+    return true;
+  }
+  const timer = setTimeout(run, wait);
   if (typeof timer.unref === 'function') timer.unref();
   return true;
 }

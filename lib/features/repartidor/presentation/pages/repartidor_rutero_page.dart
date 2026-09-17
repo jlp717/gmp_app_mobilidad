@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
@@ -225,10 +226,15 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               forceRefresh: forceRefresh,
             )
           : await ApiClient.get(
-              '/repartidor/rutero/week/$repartidorId?date=${requestDate.toIso8601String().substring(0, 10)}',
-              cacheKey:
-                  'repartidor:rutero-week:$repartidorId:${requestDate.toIso8601String().substring(0, 10)}',
-              cacheTTL: const Duration(minutes: 2),
+              CachePreWarmer.weekFirstPaintPath(
+                repartidorId,
+                requestDate.toIso8601String().substring(0, 10),
+              ),
+              cacheKey: CachePreWarmer.weekFirstPaintCacheKey(
+                repartidorId,
+                requestDate.toIso8601String().substring(0, 10),
+              ),
+              cacheTTL: CachePreWarmer.repartoFirstPaintTtl,
               forceRefresh: forceRefresh,
             );
       if (generation != _weekLoadGeneration || !mounted) return;

@@ -23,6 +23,58 @@ void main() {
       );
     });
 
+    test('JEFE REPARTO cache keys match first paint, not a sidecar prefix', () {
+      const selector = '05,08,09';
+      const today = '2026-09-17';
+      expect(
+        CachePreWarmer.fleetListCacheKey(
+          userCode: '98',
+          claimsVersion: 3,
+          activeMode: 'repartidor',
+        ),
+        'auth:repartidores:98:claims3:REPARTIDOR',
+      );
+      expect(
+        CachePreWarmer.pendientesFirstPaintCacheKey(
+          repartidorId: selector,
+          formattedDate: today,
+        ),
+        'entregas:pendientes:rutero-page-v2:$selector:$today::::default:::0:',
+      );
+      expect(
+        CachePreWarmer.weekFirstPaintCacheKey(selector, today),
+        'repartidor:rutero-week:$selector:$today',
+      );
+      expect(
+        CachePreWarmer.pendientesFirstPaintPath(selector, today),
+        '/entregas/pendientes/$selector?date=$today&limit=80&offset=0',
+      );
+      expect(
+        CachePreWarmer.weekFirstPaintPath(selector, today),
+        '/repartidor/rutero/week/$selector?date=$today',
+      );
+      expect(
+        CachePreWarmer.pendientesFirstPaintCacheKey(
+          repartidorId: selector,
+          formattedDate: today,
+        ),
+        isNot(contains('prewarm')),
+      );
+    });
+
+    test('fleet selector sorts like MainShell ALL and never emits ALL', () {
+      expect(
+        CachePreWarmer.fleetSelectorFrom([
+          {'code': '09', 'name': 'Nueve'},
+          {'code': 'ALL'},
+          {'code': '05', 'name': 'Cinco'},
+          {'code': '08', 'name': 'Ocho'},
+        ]),
+        '05,08,09',
+      );
+      expect(CachePreWarmer.fleetSelectorFrom(const <Object?>[]), isNull);
+    });
+
     test('repartidor skips all commercial prewarm', () {
       expect(
         CachePreWarmer.immediateTargets(

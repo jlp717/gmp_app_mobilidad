@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
+import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/utils/erp_document_label.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
@@ -1006,21 +1007,19 @@ class EntregasNotifier extends Notifier<EntregasState> {
 
       final response = await ApiClient.get(
         url,
-        cacheKey: [
-          'entregas:pendientes',
-          routeLoadRequested ? 'rutero-page-v2' : 'source-page',
-          requestState.repartidorId,
-          formattedDate,
-          requestState.searchQuery,
-          requestState.searchClient,
-          requestState.searchAlbaran,
-          requestState.sortBy,
-          requestState.filterTipoPago,
-          requestState.filterDebeCobrar,
-          pageOffset,
-          requestState.filterDocTipo,
-        ].join(':'),
-        cacheTTL: const Duration(minutes: 2),
+        cacheKey: CachePreWarmer.pendientesFirstPaintCacheKey(
+          repartidorId: requestState.repartidorId,
+          formattedDate: formattedDate,
+          pageOffset: pageOffset,
+          searchQuery: requestState.searchQuery,
+          searchClient: requestState.searchClient,
+          searchAlbaran: requestState.searchAlbaran,
+          sortBy: requestState.sortBy,
+          filterTipoPago: requestState.filterTipoPago,
+          filterDebeCobrar: requestState.filterDebeCobrar,
+          filterDocTipo: requestState.filterDocTipo,
+        ),
+        cacheTTL: CachePreWarmer.repartoFirstPaintTtl,
         forceRefresh: forceRefresh,
       );
 
