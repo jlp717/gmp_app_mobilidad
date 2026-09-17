@@ -171,7 +171,7 @@ async function main() {
     host: HOST,
     port: PORT,
     date: TODAY,
-    tag: '[servidor]',
+    tag: (HOST === '127.0.0.1' || HOST === 'localhost') && PORT === 3335 ? '[servidor]' : '[túnel]',
   }));
 
   const ready = await request('GET', '/ready');
