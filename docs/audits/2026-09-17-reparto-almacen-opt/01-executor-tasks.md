@@ -13,6 +13,7 @@ Spec viva: `00-plan.md`. Un solo writer. Rollback = revert del commit en `test` 
 | P0-05 | `backend/repositories/repartidor-route-db2-repository.js:1907-1955` | `runCached` TTL.SHORT week | test sargable sigue verde; cache key incluye ids+rango | revert hunk |
 | P0-06 | `lib/features/repartidor_finanzas/presentation/pages/liquidacion_diaria_page.dart:69-88` | no `forceRefresh` inmediato; skip ALL (comma) | primer frame 1 GET | revert hunk |
 | P0-07 | `backend/routes/warehouse.js:309-336` | JOINs sargables + `queryWithParams` | SQL sin TRIM en JOIN/WHERE vehículo | revert hunk |
+| P0-08 | `backend/routes/warehouse.js` recent LAC en `/articles` | `cachedQuery` TTL.MEDIUM + race 150 ms; catálogo ART en paralelo | first paint no espera 4 s de LAC | revert hunk |
 
 ## P1
 

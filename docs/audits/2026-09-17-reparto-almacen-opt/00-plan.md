@@ -38,6 +38,7 @@ El plan 2026-09-14 aceleró el perfil **COMERCIAL** (ALL literal, LACLAE_MONTHLY
 | P0-05 | Week sin caché | `TTL.SHORT` (60 s) sobre agregados de calendario |
 | P0-06 | Liquidación `forceRefresh` al primer frame | No stampede; ALL no revalida en caliente |
 | P0-07 | Almacén dashboard TRIM + scan OPP del día | JOINs sargables + `queryWithParams` |
+| P0-08 | Artículos espera LAC 7 días DISTINCT FETCH 2000 | No bloquear first paint; caché 5 min; FETCH 400 |
 
 ### P1
 
