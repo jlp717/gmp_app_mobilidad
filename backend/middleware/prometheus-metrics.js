@@ -142,6 +142,19 @@ function canSeeInternalDetails(req) {
     return isInternalRequest(req);
 }
 
+/**
+ * Public liveness/readiness must not leak pool, PIN or Redis internals.
+ * Cloudflare (loopback + CF-Connecting-IP) is not an internal caller.
+ */
+function publicReadyPayload(body, canSee) {
+    if (canSee) return body;
+    return {
+        status: body.status,
+        timestamp: body.timestamp,
+        responseTime: body.responseTime,
+    };
+}
+
 function requireInternalMetricsAccess(req, res, next) {
     if (isInternalRequest(req)) return next();
     return res.status(403).json({
@@ -513,6 +526,7 @@ module.exports = {
     requireInternalMetricsAccess,
     isInternalRequest,
     canSeeInternalDetails,
+    publicReadyPayload,
     socketRemoteAddress,
     resetMetrics,
     stopPeriodicCleanup,

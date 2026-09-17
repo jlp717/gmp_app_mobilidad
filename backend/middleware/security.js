@@ -651,15 +651,15 @@ exports.detectSuspiciousAgents = (req, res, next) => {
     // Allow our own app and health checks
     if (!userAgent) {
         // Allow health checks without User-Agent (monitoring probes)
-        if (req.path === '/api/health' || req.path === '/health') {
+        if (req.path === '/api/health' || req.path === '/health' || req.path === '/api/ready') {
             return next();
         }
         logger.warn(`[Security] Blocked request with empty User-Agent on ${req.path}`);
         return res.status(403).json({ error: 'User-Agent header required' });
     }
     
-    // Whitelist our own app and Dart runtime
-    if (userAgent.startsWith('GMP-App/') || userAgent.startsWith('Dart/')) {
+    // Whitelist our own app, Dart runtime, and SRE probes
+    if (userAgent.startsWith('GMP-App/') || userAgent.startsWith('Dart/') || userAgent.startsWith('GMP-SRE-HealthCheck/')) {
         return next();
     }
     

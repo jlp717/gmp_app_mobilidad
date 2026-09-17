@@ -88,6 +88,22 @@ describe('detectSuspiciousAgents', () => {
         expect(next).toHaveBeenCalled();
     });
 
+    test('should allow SRE healthcheck user-agent', () => {
+        const req = createMockReq({ headers: {'user-agent': 'GMP-SRE-HealthCheck/1.0' }, path: '/api/ready' });
+        const res = createMockRes();
+        const next = jest.fn();
+        detectSuspiciousAgents(req, res, next);
+        expect(next).toHaveBeenCalled();
+    });
+
+    test('should allow empty user-agent on /api/ready', () => {
+        const req = createMockReq({ headers: {}, path: '/api/ready' });
+        const res = createMockRes();
+        const next = jest.fn();
+        detectSuspiciousAgents(req, res, next);
+        expect(next).toHaveBeenCalled();
+    });
+
     test('should block sqlmap user-agent', () => {
         const req = createMockReq({ headers: {'user-agent': 'sqlmap/1.0' }});
         const res = createMockRes();

@@ -15,6 +15,7 @@ const {
   metricsHandler,
   requireInternalMetricsAccess,
   canSeeInternalDetails,
+  publicReadyPayload,
   resetMetrics,
   stopPeriodicCleanup,
 } = require('../middleware/prometheus-metrics');
@@ -116,6 +117,30 @@ describe('metrics and health internal access gates', () => {
     expect(canSeeInternalDetails(makeReq({ ip: '127.0.0.1' }))).toBe(true);
     process['env'].INTERNAL_HEALTH_TOKEN = 'secret-token';
     expect(canSeeInternalDetails(makeReq({ headers: { 'x-healthcheck-token': 'secret-token' } }))).toBe(true);
+  });
+
+  test('publicReadyPayload strips pool and auth internals', () => {
+    const full = {
+      status: 'ready',
+      timestamp: '2026-09-17T00:00:00.000Z',
+      responseTime: '4ms',
+      database: { status: 'connected', poolMetrics: { active: 1 } },
+      auth: { pinHashes: { hashedVendors: 67 } },
+    };
+    expect(publicReadyPayload(full, false)).toEqual({
+      status: 'ready',
+      timestamp: '2026-09-17T00:00:00.000Z',
+      responseTime: '4ms',
+    });
+    expect(publicReadyPayload(full, true)).toBe(full);
+  });
+
+  test('app.js does not gate /api/ready behind metrics access', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const source = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8');
+    expect(source).not.toMatch(/app\.get\('\/api\/ready',\s*requireInternalMetricsAccess/);
+    expect(source).toMatch(/publicReadyPayload\(body,\s*canSeeInternalDetails\(req\)\)/);
   });
 
   test('loopback with CF-Connecting-IP requires metrics token', () => {

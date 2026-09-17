@@ -89,7 +89,7 @@ const { cacheMiddleware, invalidationMiddleware, getCacheStats: getHttpCacheStat
 const { createOptimizedQuery } = require('./services/query-optimizer');
 const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
 const { createCompressionMiddleware } = require('./middleware/compression');
-const { prometheusMetrics, metricsHandler, requireInternalMetricsAccess, canSeeInternalDetails } = require('./middleware/prometheus-metrics');
+const { prometheusMetrics, metricsHandler, requireInternalMetricsAccess, canSeeInternalDetails, publicReadyPayload } = require('./middleware/prometheus-metrics');
 const { checkAuthPinHashReadiness } = require('./services/auth-pin-readiness');
 
 // =============================================================================
@@ -666,15 +666,15 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
-app.get('/api/ready', requireInternalMetricsAccess, async (req, res) => {
+app.get('/api/ready', async (req, res) => {
   const start = Date.now();
   if (app.locals.databaseStatus === 'unavailable') {
-    return res.status(503).json({
+    return res.status(503).json(publicReadyPayload({
       status: 'not_ready',
       database: 'unavailable',
       timestamp: new Date().toISOString(),
       responseTime: `${Date.now() - start}ms`,
-    });
+    }, canSeeInternalDetails(req)));
   }
   const dbHealth = await checkDbHealth();
   const redisHealth = getRedisHealth();
@@ -689,7 +689,7 @@ app.get('/api/ready', requireInternalMetricsAccess, async (req, res) => {
     && authPinHashes.status === 'ready'
     && liquidacionWritable;
 
-  res.status(ready ? 200 : 503).json({
+  const body = {
     status: ready ? 'ready' : 'not_ready',
     database: {
       status: dbHealth.status,
@@ -719,7 +719,8 @@ app.get('/api/ready', requireInternalMetricsAccess, async (req, res) => {
     },
     timestamp: new Date().toISOString(),
     responseTime: `${Date.now() - start}ms`,
-  });
+  };
+  res.status(ready ? 200 : 503).json(publicReadyPayload(body, canSeeInternalDetails(req)));
 });
 
 // Version check (Public for mobile app updates)

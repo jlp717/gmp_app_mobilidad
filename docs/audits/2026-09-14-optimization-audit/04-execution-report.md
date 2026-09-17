@@ -29,7 +29,7 @@ Latencias de producto en móvil: **no verificado en campo**. Cifras nuevas de 20
 | BE-01 | JEFE `ALL` literal + clave de caché compartida | DONE | [#12](https://github.com/jlp717/gmp_app_mobilidad/pull/12) + `ee1f01a` | `[servidor]` metrics SQL **sin** `LCCDVD IN`. JEFE ≥20 códigos → `literalAll`. Caliente 3–6 ms. |
 | BE-02 | `/rutero/day` fan-out acotado | PARTIAL | [#14](https://github.com/jlp717/gmp_app_mobilidad/pull/14) | Código en PR. **no verificado en campo**. |
 | BE-03 | Caché agregados históricos (interina) | PARTIAL | [#13](https://github.com/jlp717/gmp_app_mobilidad/pull/13) | Código en PR. HIT `[servidor]` tras frío. **no verificado en campo**. |
-| DB-01 | Agregados mensuales `JAVIER.LACLAE_MONTHLY` | BLOCKED | — | by-client ALL frío **7,7 s** (SQL 5,8 s) y evolution ALL **16,6 s**. Sin índice/tabla no baja de 5 s. |
+| DB-01 | Agregados mensuales `JAVIER.LACLAE_MONTHLY` | DONE | — | Tabla JAVIER + populate 137604 filas; HTTP evolution/by-client ALL `[túnel]` 132/281 ms. Cero DDL DSED. |
 | DB-02 | Propuesta de índices DSEDAC (sin DDL) | DONE | [#18](https://github.com/jlp717/gmp_app_mobilidad/pull/18) | Añadido índice propuesto `DSED.LACLAE (LCAADC, TPDC, …)` en `db2-index-proposal.md`. Sin DDL. |
 | BE-04 | `matrix-data` sargable / sales-history | PARTIAL | [#17](https://github.com/jlp717/gmp_app_mobilidad/pull/17) | Jest `[lab]` verde. Re-sonda túnel: HTTP timeout. **no verificado en campo**. |
 | BE-05 | `/rutero/week` cache + sargable | PARTIAL | [#15](https://github.com/jlp717/gmp_app_mobilidad/pull/15) | Código en PR. **no verificado en campo**. |
@@ -58,7 +58,7 @@ Latencias de producto en móvil: **no verificado en campo**. Cifras nuevas de 20
 | SEC-06 | Dependencias CVE alta | DONE | `b23aa20` en `test` | multer `^2.4.0`, nodemailer `^9.1.1`, js-yaml `^4.3.2`. Sin PR propio. No revertido. |
 | SEC-07 | ADR pinning TLS | DONE | [#33](https://github.com/jlp717/gmp_app_mobilidad/pull/33) | Solo documento de decisión. |
 
-**Recuento plan:** DONE **18** · PARTIAL **18** (causa: sin `[campo]` o lab) · BLOCKED Javier **5** (P0-03, DB-01, SRV-01, SRV-02, SEC-03 PIN) · PENDIENTE código ejecutor **0**.
+**Recuento plan:** DONE **19** · PARTIAL **18** (causa: sin `[campo]` o lab) · BLOCKED Javier **4** (P0-03 campo, P0-05/SRV-01/SRV-02 230 fuera de whitelist, SEC-03 PIN) · PENDIENTE código ejecutor **0** salvo el fix `/api/ready` de 2026-09-17 (esta tanda).
 
 **Conteo código en `test`:** integrable DONE. Sigue BLOCKED solo lo de Javier (campo, 230, Sentry, DB-01 DDL, rotar PIN). P0-02 en `test` hará fallar `flutter analyze` en CI (ese era el target).
 
@@ -248,5 +248,39 @@ Flag `LACLAE_MONTHLY_ENABLED` default true; la app solo usa la tabla si QSYS2 + 
 - Latencia percibida en su móvil (`[campo]`).
 - Índice sobre `DSED.LACLAE` (prohibido; no hace falta: rollup JAVIER).
 - `pm2 save/set`, `.env` remoto.
+
+## 14. Cierre 2026-09-16 23:25 (APK + túnel SSH + emulador)
+
+Javier no ejecuta nada. 230 = `origin/test` = `0580b932`. **Sin pull/restart** (no hay commits nuevos en test). gmp-api only; cero `pm2 save/set`.
+
+| Paso | Evidencia |
+|---|---|
+| APK release arm64 | `flutter build apk --release --target-platform android-arm64` **exit 0**, 52.653.774 bytes (50,2 MB) |
+| `[LAN]` `:3335` | curl timeout 8 s, **exit 28** |
+| Cloudflare `api.mari-pepa.com` | timeout 12 s, **exit 60** |
+| `[túnel]` SSH `-L 13335:127.0.0.1:3335` | `/api/ready` 200, 16 ms |
+| `[túnel]` 7 flujos HTTP | login diego 1395, login 98 378, metrics 132 HIT, evolution 132, by-client 281, facturas 132, history 306 HIT redis / warm 302, rutero 156, liquidación 152, commissions 476 |
+| AVD | `pixel_5_-_api_35` `emulator-5554 device`; `C:\Android\platform-tools\adb.exe` |
+| `[emulador]` 7 flujos UI | fail=0; login 18 s, dashboard 3,5 s, objetivos 10 s, facturas 15 s, historial 15 s, rutero 8,7 s, liquidación 12 s (wall UI, no p95 HTTP) |
+| `[campo]` | **IMPOSIBLE** sin su teléfono |
+
+No es 100% percibido. Números de emulador son wall de taps/dumps, no Dio en dispositivo real.
+
+## 15. Cierre 2026-09-17 08:00 (VPN + Cloudflare + `/api/ready` público)
+
+Javier no ejecuta nada. 230 antes del deploy de este fix = `c046c69` = `origin/test`. gmp-api cluster **online ×8**. Cero `pm2 save/set`. Cloudflared/nginx **solo lectura** (no matados).
+
+| Paso | Evidencia |
+|---|---|
+| VPN / SSH | `gmp@192.168.1.230` OK |
+| `[servidor]` `/api/ready` | 200 ready, 2 ms |
+| `[LAN]` `:3335` | timeout 8 s **exit 28**. ss: LISTEN 0.0.0.0:3335. `sudo iptables/ufw` pide password → BLOCKED Javier |
+| Cloudflare | **sí**. `/api/app/version` 200 UA `GMP-App`. Login dummy PIN **401** `INVALID_CREDENTIALS` (diego no roto). curl UA `curl/x` → 403 Forbidden (lista agentes) |
+| `/api/ready` vía CF **antes** | 403 `METRICS_FORBIDDEN` (`requireInternalMetricsAccess` + `CF-Connecting-IP`) |
+| Fix | liveness público redactado; métricas siguen internas. Jest metrics-health 8 passed + security-middleware 29 passed |
+| Splash / ALL / LACLAE | splash `runApp` primero; `literalAll` testeado; monthly JAVIER DONE |
+| `[campo]` | **IMPOSIBLE** sin su teléfono |
+
+No es 100% percibido.
 
 
