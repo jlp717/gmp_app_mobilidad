@@ -710,7 +710,7 @@ class WarehouseDataService {
   static Future<List<ArticleDimension>> getArticles({
     String? search,
     bool? onlyWithDimensions,
-    int limit = 200,
+    int limit = 80,
     bool forceRefresh = false,
     CancelToken? cancelToken,
   }) async {

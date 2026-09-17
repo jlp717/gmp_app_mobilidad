@@ -138,7 +138,9 @@ describe('GET /pendientes contract', () => {
     }));
     expect(response.body.albaranes).toHaveLength(100);
     expect(sql).not.toMatch(/SELECT \*\s+FROM ranked_deliveries/i);
-    expect(sql).toContain('CPC.IMPORTETOTAL');
+    expect(sql).not.toMatch(/WHERE[\s\S]*TRIM\(OPP\.CODIGOREPARTIDOR\)\s+IN/i);
+    expect(sql).toContain('WHERE OPP.CODIGOREPARTIDOR IN (');
+    expect(sql).toContain('CLI.CODIGOCLIENTE = CPC.CODIGOCLIENTEALBARAN');
     expect(sql).toContain('CPC_BASE1');
     const firstRow = response.body.albaranes[0];
     expect(firstRow.importe).toBe(12);

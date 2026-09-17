@@ -973,7 +973,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
           requestState.repartidorId.isNotEmpty;
       final routeOrderRequested =
           routeLoadRequested && !requestState.repartidorId.contains(',');
-      final requestLimit = routeLoadRequested ? 500 : 100;
+      final requestLimit = 80;
       var url =
           '/entregas/pendientes/${requestState.repartidorId}?date=$formattedDate&limit=$requestLimit&offset=$pageOffset';
       if (routeOrderRequested) {

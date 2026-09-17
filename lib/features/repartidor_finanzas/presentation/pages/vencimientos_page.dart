@@ -310,7 +310,7 @@ class _RepartidorVencimientosPageState
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
-  static const _pageSize = 100;
+  static const _pageSize = 40;
 
   final List<RepartidorVencimiento> _items = [];
   late DateTime _from;

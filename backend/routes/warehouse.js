@@ -305,8 +305,8 @@ router.get('/dashboard', verifyToken, async (req, res) => {
         const month = parseInt(req.query.month) || (now.getMonth() + 1);
         const day = parseInt(req.query.day) || now.getDate();
 
-        const cacheKey = `warehouse:dashboard:${year}:${month}:${day}`;
-        const trucks = await cachedQuery(query, `
+        const cacheKey = `warehouse:dashboard:v2:${year}:${month}:${day}`;
+        const trucks = await cachedQuery(queryWithParams, `
       SELECT 
         TRIM(OPP.CODIGOVEHICULO) AS VEHICULO,
         TRIM(V.DESCRIPCIONVEHICULO) AS DESCRIPCION,
@@ -320,19 +320,19 @@ router.get('/dashboard', verifyToken, async (req, res) => {
         COALESCE(V.NUMEROCONTENEDORES, 0) AS NUM_PALETS,
         COALESCE(C.TOLERANCIA_EXCESO, 5) AS TOLERANCIA
       FROM DSEDAC.OPP OPP
-      LEFT JOIN DSEDAC.VEH V ON TRIM(V.CODIGOVEHICULO) = TRIM(OPP.CODIGOVEHICULO)
-      LEFT JOIN DSEDAC.VDD VDD ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
-      LEFT JOIN JAVIER.ALMACEN_CAMIONES_CONFIG C ON TRIM(OPP.CODIGOVEHICULO) = C.CODIGOVEHICULO
+      LEFT JOIN DSEDAC.VEH V ON V.CODIGOVEHICULO = OPP.CODIGOVEHICULO
+      LEFT JOIN DSEDAC.VDD VDD ON VDD.CODIGOVENDEDOR = OPP.CODIGOREPARTIDOR
+      LEFT JOIN JAVIER.ALMACEN_CAMIONES_CONFIG C ON C.CODIGOVEHICULO = OPP.CODIGOVEHICULO
       WHERE OPP.ANOREPARTO = ?
         AND OPP.MESREPARTO = ?
         AND OPP.DIAREPARTO = ?
-        AND TRIM(OPP.CODIGOVEHICULO) <> ''
-      GROUP BY TRIM(OPP.CODIGOVEHICULO), TRIM(V.DESCRIPCIONVEHICULO),
-               TRIM(V.MATRICULA), TRIM(OPP.CODIGOREPARTIDOR),
-               TRIM(VDD.NOMBREVENDEDOR), V.CARGAMAXIMA, V.CONTENEDORVOLUMEN,
+        AND OPP.CODIGOVEHICULO <> ''
+      GROUP BY OPP.CODIGOVEHICULO, V.DESCRIPCIONVEHICULO,
+               V.MATRICULA, OPP.CODIGOREPARTIDOR,
+               VDD.NOMBREVENDEDOR, V.CARGAMAXIMA, V.CONTENEDORVOLUMEN,
                COALESCE(V.NUMEROCONTENEDORES, 0),
                COALESCE(C.TOLERANCIA_EXCESO, 5)
-      ORDER BY TRIM(OPP.CODIGOVEHICULO)
+      ORDER BY OPP.CODIGOVEHICULO
     `, cacheKey, TTL.MEDIUM, [year, month, day]);
 
         res.json({
@@ -836,7 +836,7 @@ router.post('/personnel/:id/delete', verifyToken, requireRoles('JEFE_VENTAS', 'A
 router.get('/articles', verifyToken, async (req, res) => {
     try {
         const { search, onlyWithDimensions, limit, offset } = req.query;
-        const page = parsePage({ limit, offset }, { defaultLimit: 500, maxLimit: 500 });
+        const page = parsePage({ limit, offset }, { defaultLimit: 80, maxLimit: 200 });
         let where = "TRIM(A.CODIGOARTICULO) <> '' AND (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)";
 
         const garbageKeywords = [
@@ -887,7 +887,7 @@ router.get('/articles', verifyToken, async (req, res) => {
                     INNER JOIN DSEDAC.LAC LAC2
                         ON CPC2.NUMEROALBARAN = LAC2.NUMEROALBARAN
                         AND CPC2.EJERCICIOALBARAN = LAC2.EJERCICIOALBARAN
-                        AND TRIM(CPC2.SERIEALBARAN) = TRIM(LAC2.SERIEALBARAN)
+                        AND CPC2.SERIEALBARAN = LAC2.SERIEALBARAN
                     WHERE OPP2.ANOREPARTO = ? AND OPP2.MESREPARTO = ? AND OPP2.DIAREPARTO BETWEEN ? AND ?
                     FETCH FIRST 2000 ROWS ONLY
                 `, [y, m, Math.max(1, d - 7), d]);
@@ -903,7 +903,7 @@ router.get('/articles', verifyToken, async (req, res) => {
                    COALESCE(A.PESO, 0) AS PESO, COALESCE(A.UNIDADESCAJA, 1) AS UNIDADESCAJA,
                    D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG, D.NOTAS
             FROM DSEDAC.ART A
-            LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
+            LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON A.CODIGOARTICULO = D.CODIGOARTICULO
             WHERE ${where}
             ORDER BY ${orderBy}
             ${db2OffsetFetch(page)}
@@ -972,8 +972,8 @@ router.get('/article-dimensions/:code', verifyToken, async (req, res) => {
         A.PESO, A.UNIDADESCAJA,
         D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG, D.NOTAS
       FROM DSEDAC.ART A
-      LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
-      WHERE TRIM(A.CODIGOARTICULO) = ?
+      LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON A.CODIGOARTICULO = D.CODIGOARTICULO
+      WHERE A.CODIGOARTICULO = ?
     `, [code]);
 
         if (!rows.length) return res.status(404).json({ error: 'Artículo no encontrado' });
@@ -1167,7 +1167,7 @@ router.post('/articles/bulk-estimate', verifyToken, requireRoles('JEFE_VENTAS', 
             SELECT TRIM(A.CODIGOARTICULO) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
                    COALESCE(A.PESO, 0) AS PESO, COALESCE(A.UNIDADESCAJA, 1) AS UNIDADESCAJA
             FROM DSEDAC.ART A
-            LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
+            LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON A.CODIGOARTICULO = D.CODIGOARTICULO
             WHERE D.CODIGOARTICULO IS NULL
               AND TRIM(A.CODIGOARTICULO) <> ''
               AND (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)
@@ -1264,11 +1264,11 @@ router.get('/truck/:vehicleCode/orders', verifyToken, async (req, res) => {
       INNER JOIN DSEDAC.LAC LAC 
         ON CPC.NUMEROALBARAN = LAC.NUMEROALBARAN 
         AND CPC.EJERCICIOALBARAN = LAC.EJERCICIOALBARAN 
-        AND TRIM(CPC.SERIEALBARAN) = TRIM(LAC.SERIEALBARAN)
-      LEFT JOIN DSEDAC.ART A ON TRIM(LAC.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CPC.CODIGOCLIENTEALBARAN) = TRIM(CLI.CODIGOCLIENTE)
-      LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(LAC.CODIGOARTICULO) = D.CODIGOARTICULO
-      WHERE TRIM(OPP.CODIGOVEHICULO) = ?
+        AND CPC.SERIEALBARAN = LAC.SERIEALBARAN
+      LEFT JOIN DSEDAC.ART A ON A.CODIGOARTICULO = LAC.CODIGOARTICULO
+      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CPC.CODIGOCLIENTEALBARAN
+      LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON D.CODIGOARTICULO = LAC.CODIGOARTICULO
+      WHERE OPP.CODIGOVEHICULO = ?
         AND OPP.ANOREPARTO = ?
         AND OPP.MESREPARTO = ?
         AND OPP.DIAREPARTO = ?

@@ -1890,8 +1890,8 @@ async function getRuteroWeekWithDayMoves(weekStartNum, weekEndNum, repartidorIdL
     ...repartidorIdList,
     ...confirmationScope.params,
   ];
-  // The query joins canonical state; stale aggregate cache can regress a terminal state.
-  const rows = await runQueryWithParams(sql, params, false);
+  const cacheKey = `repartidor:rutero-week:moves:v1:${table}:${[...repartidorIdList].sort().join(',')}:${weekStartNum}:${weekEndNum}`;
+  const rows = await runCached(sql, cacheKey, 60, params);
   return (rows || []).map((row) => {
     const target = routeWeekDateParts(row.ROUTE_TARGET_DATE);
     return {
@@ -1951,8 +1951,8 @@ async function getRuteroWeek(weekStartNum, weekEndNum, repartidorIdList) {
             ORDER BY ANO, MES, DIA
         `;
   const params = [...weekRange.params, ...repartidorIdList, ...confirmationScope.params];
-  // Canonical status is mutable; weekly aggregates must always read fresh DB2 state.
-  return runQueryWithParams(sql, params, false);
+  const cacheKey = `repartidor:rutero-week:v1:${[...repartidorIdList].sort().join(',')}:${weekStartNum}:${weekEndNum}`;
+  return runCached(sql, cacheKey, 60, params);
 }
 
 async function getHistoryDeliveries({ startInt, endInt, repartidorIdList, search, offset, limit }) {

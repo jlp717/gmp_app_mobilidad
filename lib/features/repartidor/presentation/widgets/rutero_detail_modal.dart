@@ -17,6 +17,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
+import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
@@ -849,7 +850,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       onIssueTap: _focusValidationIssue,
                     ),
                     Expanded(
-                      child: IndexedStack(
+                      child: LazyIndexedStack(
                         index: _tabController.index,
                         children: [
                           _RuteroKeepAliveTab(
@@ -2802,7 +2803,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         observaciones: _observacionesController.text,
         incidenciaMotivo: _incidenciaMotivoController.text,
         isUrgent: _isUrgent,
-        importeDisponibleCobro: _albaran.importeDisponibleCobro,
+        importeDisponibleCobro: effectiveDocumentCollectable(_albaran),
         importeMaxCobrable: _maxCollectableAmount(),
         isPaid: _isPaid,
         paymentMethod: _canonicalPaymentMethod,

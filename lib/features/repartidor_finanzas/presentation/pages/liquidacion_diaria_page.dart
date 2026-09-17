@@ -76,6 +76,11 @@ class _RepartidorLiquidacionDiariaPageState
 
   Future<void> _softRefresh() async {
     if (!mounted) return;
+    // Jefe ALL (comma fleet) already paid a heavy GET on first paint.
+    // Do not stampede DB2 with an immediate forceRefresh.
+    if (widget.repartidorId.contains(',')) return;
+    await Future<void>.delayed(const Duration(seconds: 12));
+    if (!mounted) return;
     setState(() => _isRevalidating = true);
     try {
       await ref.read(

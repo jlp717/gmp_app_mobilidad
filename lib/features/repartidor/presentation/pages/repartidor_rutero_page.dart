@@ -188,12 +188,15 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       entregas.cargarAlbaranesPendientes(forceRefresh: forceRefresh),
       _loadWeekData(targetId, forceRefresh: forceRefresh),
     ]);
-    // First 500 stops paint immediately; remaining pages fill in background.
-    unawaited(_loadRemainingDeliveryPages());
+    // First page paints immediately. Remaining pages fill in background for a
+    // single driver only — jefe ALL must not walk N serial fleet pages.
+    if (!targetId.contains(',')) {
+      unawaited(_loadRemainingDeliveryPages());
+    }
   }
 
   Future<void> _loadRemainingDeliveryPages() async {
-    for (var page = 1; page <= 5; page += 1) {
+    for (var page = 1; page <= 3; page += 1) {
       if (!mounted) break;
       final current = ref.read(entregasProvider);
       if (!current.hasMore || current.error != null || current.isLoading) {

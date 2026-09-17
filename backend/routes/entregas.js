@@ -580,12 +580,12 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
               AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
               AND CAC.TERMINALALBARAN = CPC.TERMINALALBARAN
               AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
-              AND TRIM(CAC.CODIGOCLIENTEALBARAN) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+              AND CAC.CODIGOCLIENTEALBARAN = CPC.CODIGOCLIENTEALBARAN
             ${dayMoveJoin}
-            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            LEFT JOIN DSEDAC.VDD VDD ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
+            LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CPC.CODIGOCLIENTEALBARAN
+            LEFT JOIN DSEDAC.VDD VDD ON VDD.CODIGOVENDEDOR = OPP.CODIGOREPARTIDOR
             ${dsJoin}
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${placeholders})
+            WHERE OPP.CODIGOREPARTIDOR IN (${placeholders})
               ${dayMoveWeekRangeWhere}
               ${dayMoveDateWhere}
             )
@@ -721,19 +721,6 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 .map(row => (row.CLIENTE || '').trim())
                 .filter(Boolean)
         ));
-        const geoByClient = new Map();
-        if (clientCodes.length > 0) {
-            try {
-                const geoRows = await ruteroOrdenRepo.fetchClientGeo(clientCodes);
-                for (const [clientCode, geo] of geoRows.entries()) {
-                    if (geo && Number.isFinite(geo.lat) && Number.isFinite(geo.lng)) {
-                        geoByClient.set(clientCode, geo);
-                    }
-                }
-            } catch (geoError) {
-                logger.warn(`[ENTREGAS] Could not load route GPS: ${geoError?.message || geoError}`);
-            }
-        }
         const parseMoney = (val) => {
             if (val === null || val === undefined) return 0;
             if (typeof val === 'number') return val;
@@ -766,47 +753,33 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 60,
                 params,
             );
-            const cvcDocumentPlan = buildCvcAvailabilityQuery(
-                uniqueRows.filter((row) => (row.ANTEROOM_DOC_TIPO || '').trim() !== 'PEDIDO'),
-            );
-            const cvcDocumentCacheKey = cvcDocumentPlan
-                ? cvcDocumentPlan.documents.map(documentKey).sort().join(',')
-                : 'empty';
-
-            const [clxRows, clpRows, cvcRows, cvcDocumentRows] = await Promise.allSettled([
+            const [clxRows, clpRows, cvcRows] = await Promise.allSettled([
                 cachedOverlayQuery(`
                     SELECT TRIM(CODIGOCLIENTE) as CLIENTE
                     FROM DSEDAC.CLX
-                    WHERE TRIM(CODIGOCLIENTE) IN (${clxPlaceholders})
-                      AND TRIM(COALESCE(COBRORIGUROSOSN, '')) = 'S'
-                `, `entregas:rutero:client-risk:clx:${clientOverlayKey}`),
+                    WHERE CODIGOCLIENTE IN (${clxPlaceholders})
+                      AND COALESCE(COBRORIGUROSOSN, '') = 'S'
+                `, `entregas:rutero:client-risk:clx:v2:${clientOverlayKey}`),
                 cachedOverlayQuery(`
                     SELECT
                       TRIM(CODIGOCLIENTE) as CLIENTE,
                       IMPORTELIMITERIESGO,
                       IMPORTELIMITERIESGOEMPRESA
                     FROM DSEDAC.CLP
-                    WHERE TRIM(CODIGOCLIENTE) IN (${clpPlaceholders})
-                `, `entregas:rutero:client-risk:clp:${clientOverlayKey}`),
+                    WHERE CODIGOCLIENTE IN (${clpPlaceholders})
+                `, `entregas:rutero:client-risk:clp:v2:${clientOverlayKey}`),
                 cachedOverlayQuery(`
                     SELECT
                       TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
                       COALESCE(SUM(IMPORTEPENDIENTE), 0) as PENDIENTE
                     FROM DSEDAC.CVC
-                    WHERE TRIM(CODIGOCLIENTEALBARAN) IN (${cvcPlaceholders})
+                    WHERE CODIGOCLIENTEALBARAN IN (${cvcPlaceholders})
                       AND COALESCE(ANULADOSN, '') <> 'S'
                       AND IMPORTEPENDIENTE <> 0
-                    GROUP BY TRIM(CODIGOCLIENTEALBARAN)
-                `, `entregas:rutero:client-risk:cvc:${clientOverlayKey}`),
-                cvcDocumentPlan
-                    ? cachedOverlayQuery(
-                        cvcDocumentPlan.sql,
-                        `entregas:rutero:document-cobro:${cvcDocumentCacheKey}`,
-                        cvcDocumentPlan.params,
-                    )
-                    : Promise.resolve([]),
+                    GROUP BY CODIGOCLIENTEALBARAN
+                `, `entregas:rutero:client-risk:cvc:v2:${clientOverlayKey}`),
             ]);
-            if ([clxRows, clpRows, cvcRows, cvcDocumentRows].some((result) => result.status === 'rejected')) {
+            if ([clxRows, clpRows, cvcRows].some((result) => result.status === 'rejected')) {
                 logger.error('[ENTREGAS] Client financial batch unavailable');
                 return sendEntregasUnavailable(res, 'PENDING_DELIVERIES_UNAVAILABLE', 'No se pudo completar el listado de entregas');
             }
@@ -828,10 +801,8 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 const cliente = (row.CLIENTE || '').trim();
                 if (cliente) pendingDebtByClient.set(cliente, parseMoney(row.PENDIENTE));
             });
-            cvcAvailabilityByKey = mapCvcAvailabilityRows(
-                cvcDocumentRows.status === 'fulfilled' ? (cvcDocumentRows.value || []) : [],
-                cvcDocumentPlan?.documents || [],
-            );
+            // CVC-per-document runs after pagination so jefe ALL does not
+            // scan 500 identities before the first paint.
         }
 
         // LAC is only needed while all header/tax sources are still zero.
@@ -910,11 +881,9 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 allowUnknown: esPedidoAnteroom,
             });
 
-            // The payment catalog determines whether collection is mandatory,
-            // but the actual collectability comes from the unique active CVC
-            // installment for this exact document identity. This prevents the
-            // UI from offering a payment that the confirmation transaction will
-            // necessarily reject as missing or ambiguous.
+            // Catalog says if cobro is mandatory. Collectable amount is the
+            // document (CPC) capped by unique CVC when it exists. Missing CVC
+            // is normal for CTR albaranes: we write TEST first, ERP cartera later.
             const cvcAvailability = cvcAvailabilityByKey.get(documentKey({
                 SUBEMPRESAALBARAN: row.SUBEMPRESAALBARAN,
                 EJERCICIOALBARAN: row.EJERCICIOALBARAN,
@@ -930,8 +899,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             });
             const importeDisponibleCobro = collectable.importeDisponibleCobro;
             const esCTR = paymentInfo.mustCollect || cobroRiguroso;
-            const puedeCobrarse = collectable.state === 'AVAILABLE'
-                && importeDisponibleCobro > 0.004;
+            const puedeCobrarse = importeDisponibleCobro > 0.004;
 
             const numeroFactura = row.NUMEROFACTURA || 0;
             const serieFactura = (row.SERIEFACTURA || '').trim();
@@ -1015,8 +983,6 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 ordenPreparacion: row.ORDEN_PREPARACION || null,
                 routeMovePosition: Number.isInteger(Number(row.ROUTE_MOVE_POSITION)) ? Number(row.ROUTE_MOVE_POSITION) : null,
                 estado: status,
-                observaciones: row.DS_OBS,
-                firma: row.DS_FIRMA
             };
             if (showIvaOnList) {
                 const ivaBreakdown = [];
@@ -1034,12 +1000,8 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 return null;
             }
         }).filter(Boolean);
-        const erpProjected = projectedAlbaranes.filter((item) => item.documentoTipo !== 'PEDIDO');
         const anteroomProjected = projectedAlbaranes.filter((item) => item.documentoTipo === 'PEDIDO');
-        const albaranes = [
-            ...(await overlayCanonicalConfirmationStatuses(erpProjected, idList)),
-            ...anteroomProjected,
-        ];
+        const albaranes = projectedAlbaranes;
 
         // --- FILTERING: Search by client name, code, albarÃ¡n or factura number ---
         const searchQuery = req.query.search?.toLowerCase().trim() || '';
@@ -1128,7 +1090,11 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         // walks terminate at the filtered list, never an empty-page loop).
         const hasMore = pageOffset + pageLimit < filteredAlbaranes.length
             || (sourceHasMore && filteredAlbaranes.length >= RUTERO_DATASET_FETCH_MAX && idList.length === 1);
-        const paginatedAlbaranes = filteredAlbaranes.slice(pageOffset, pageOffset + pageLimit);
+        const paginatedAlbaranes = await enrichPendientesPage(
+            filteredAlbaranes.slice(pageOffset, pageOffset + pageLimit),
+            uniqueRows,
+            idList,
+        );
         // Summaries describe this response page so the Flutter provider can
         // add them safely while it loads the remaining route pages.
         const summaryAlbaranes = paginatedAlbaranes;
@@ -1220,6 +1186,64 @@ router.get('/payment-conditions', verifyToken, async (req, res) => {
 // ===================================
 // GET /albaran/:numero/:ejercicio
 // ===================================
+function pendingSourceId(row) {
+    const cliente = String(row?.CLIENTE || '').trim();
+    if ((row?._anteroomId) || (row?.ANTEROOM_DOC_TIPO || '').trim() === 'PEDIDO' || row?.PEDIDO_ID) {
+        return row._anteroomId || `PED-${row.PEDIDO_ID}-${cliente}`;
+    }
+    return `${row.EJERCICIOALBARAN}-${String(row.SERIEALBARAN || '').trim()}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${cliente}`;
+}
+
+async function enrichPendientesPage(pageItems, uniqueRows, idList) {
+    if (!Array.isArray(pageItems) || pageItems.length === 0) return pageItems;
+    const byId = new Map((uniqueRows || []).map((row) => [pendingSourceId(row), row]));
+    const pageRows = pageItems
+        .map((item) => byId.get(item.id))
+        .filter((row) => row && (row.ANTEROOM_DOC_TIPO || '').trim() !== 'PEDIDO' && !row.PEDIDO_ID);
+    const cvcPlan = buildCvcAvailabilityQuery(pageRows);
+    let cvcMap = new Map();
+    if (cvcPlan) {
+        const cacheKey = `entregas:rutero:document-cobro:page:${cvcPlan.documents.map(documentKey).sort().join(',')}`;
+        const rows = await cachedQuery(
+            (sql, params) => queryWithParams(sql, params, false, false),
+            cvcPlan.sql,
+            cacheKey,
+            60,
+            cvcPlan.params,
+        );
+        cvcMap = mapCvcAvailabilityRows(rows || [], cvcPlan.documents);
+    }
+    for (const item of pageItems) {
+        if (item.documentoTipo === 'PEDIDO') continue;
+        const source = byId.get(item.id);
+        if (!source) continue;
+        const availability = cvcMap.get(documentKey({
+            SUBEMPRESAALBARAN: source.SUBEMPRESAALBARAN,
+            EJERCICIOALBARAN: source.EJERCICIOALBARAN,
+            SERIEALBARAN: String(source.SERIEALBARAN || '').trim(),
+            TERMINALALBARAN: source.TERMINALALBARAN,
+            NUMEROALBARAN: source.NUMEROALBARAN,
+            CLIENTE: String(source.CLIENTE || '').trim(),
+        })) || { state: 'MISSING', importeDisponibleCobro: 0 };
+        const collectable = resolveDocumentCollectable({
+            cvcState: availability.state,
+            cvcPending: availability.importeDisponibleCobro,
+            documentAmount: item.importe,
+        });
+        item.puedeCobrarse = collectable.importeDisponibleCobro > 0.004;
+        item.importeDisponibleCobro = collectable.importeDisponibleCobro;
+        item.importeCvcPendiente = collectable.importeCvcPendiente;
+        item.cobroSaldoCapped = collectable.capped === true;
+        item.cobroDocumentoEstado = collectable.state;
+    }
+    const erpPage = pageItems.filter((item) => item.documentoTipo !== 'PEDIDO');
+    const overlaid = await overlayCanonicalConfirmationStatuses(erpPage, idList);
+    const byOverlayId = new Map(overlaid.map((item) => [item.id, item]));
+    return pageItems.map((item) => (
+        item.documentoTipo === 'PEDIDO' ? item : (byOverlayId.get(item.id) || item)
+    ));
+}
+
 function confirmationTables() {
     const runtime = resolveRepartoRuntime(process.env);
     if (runtime?.valid && runtime.tables?.confirmation) {
@@ -1728,8 +1752,7 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             diasPago: detailPaymentInfo.diasPago,
             esCTR: detailEsCTR,
             cobroObligatorio: detailEsCTR,
-            puedeCobrarse: detailCollectable.state === 'AVAILABLE'
-                && detailCollectable.importeDisponibleCobro > 0.004,
+            puedeCobrarse: detailCollectable.importeDisponibleCobro > 0.004,
             importeDisponibleCobro: detailCollectable.importeDisponibleCobro,
             importeCvcPendiente: detailCollectable.importeCvcPendiente,
             cobroSaldoCapped: detailCollectable.capped === true,
