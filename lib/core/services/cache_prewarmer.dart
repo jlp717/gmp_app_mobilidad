@@ -89,8 +89,8 @@ class CachePreWarmer {
   }) {
     if (isJefeVentas && isRepartidor) {
       return const [
-        CachePrewarmTarget.repartoWeek,
         CachePrewarmTarget.repartoPendientes,
+        CachePrewarmTarget.repartoWeek,
       ];
     }
     if (isRepartidor || isJefeVentas) return const <CachePrewarmTarget>[];
@@ -439,13 +439,13 @@ class CachePreWarmer {
       }
       final today = _isoDate(DateTime.now());
       await ApiClient.get(
-        '/repartidor/rutero/week/$selector?date=$today',
-        cacheKey: 'reparto:week:$selector:$today',
+        '/entregas/pendientes/$selector?date=$today&limit=80&offset=0',
+        cacheKey: 'entregas:pendientes:prewarm:$selector:$today',
         cacheTTL: CacheService.shortTTL,
       );
       await ApiClient.get(
-        '/entregas/pendientes/$selector?date=$today&limit=80&offset=0',
-        cacheKey: 'entregas:pendientes:prewarm:$selector:$today',
+        '/repartidor/rutero/week/$selector?date=$today',
+        cacheKey: 'reparto:week:$selector:$today',
         cacheTTL: CacheService.shortTTL,
       );
       debugPrint('[CachePreWarmer] JEFE REPARTO week+pendientes pre-warmed');

@@ -111,8 +111,8 @@ describe('jefe-hot-route-warmer', () => {
     const paths = buildRepartoHotPaths(new Date('2026-09-17T10:00:00Z'), {
       repartidorCodes: ['08', '09', 'ALL'],
     });
-    expect(paths[0]).toContain('/api/repartidor/rutero/week/08%2C09?date=2026-09-17');
-    expect(paths[1]).toContain('/api/entregas/pendientes/08%2C09?date=2026-09-17&limit=80&offset=0');
+    expect(paths[0]).toContain('/api/entregas/pendientes/08%2C09?date=2026-09-17&limit=80&offset=0');
+    expect(paths[1]).toContain('/api/repartidor/rutero/week/08%2C09?date=2026-09-17');
     expect(paths.join()).not.toMatch(/VENDEDOR='ALL'/);
     expect(paths.join()).not.toMatch(/\/ALL\?/);
     expect(buildAlmacenHotPaths(new Date('2026-09-17T10:00:00Z'))[1]).toBe('/api/warehouse/articles?limit=80');

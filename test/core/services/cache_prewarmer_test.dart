@@ -16,9 +16,9 @@ void main() {
           isJefeVentas: true,
           isRepartidor: true,
         ),
-        containsAll(const [
-          CachePrewarmTarget.repartoWeek,
+        equals(const [
           CachePrewarmTarget.repartoPendientes,
+          CachePrewarmTarget.repartoWeek,
         ]),
       );
     });

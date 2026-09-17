@@ -55,7 +55,7 @@ function request(method, path, { token, body } = {}) {
         });
       });
     });
-    req.setTimeout(90000, () => req.destroy(new Error(`timeout ${method} ${path}`)));
+    req.setTimeout(60000, () => req.destroy(new Error(`timeout ${method} ${path}`)));
     req.on('error', reject);
     if (payload) req.write(payload);
     req.end();
@@ -178,6 +178,10 @@ async function main() {
   row('ready', ready, { statusBody: ready.json?.status || ready.json?.ready || null });
 
   let jefeToken = await login(jefeUser, jefePin, 'jefe');
+  const diegoPin = await pinForVendor('98');
+  if (diegoPin) {
+    await login('diego', diegoPin, 'diego');
+  }
   let codes = [];
   if (jefeToken && jefeUser) {
     const stayComercial = await request('POST', '/auth/switch-role', {
@@ -188,11 +192,24 @@ async function main() {
     row('jefe.switch-comercial', stayComercial, {
       activeMode: stayComercial.json?.user?.activeMode || stayComercial.json?.activeMode || null,
     });
+    const ytdMonths = Array.from({ length: MONTH }, (_, i) => i + 1).join(',');
+    const weekdayNames = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+    const weekday = weekdayNames[new Date().getDay()] || 'martes';
+    const histFrom = `${YEAR - 2}-01-01`;
+    const histTo = `${YEAR}-12-31`;
     await measureMode('comercial', [
       { label: 'metrics', token: jefeToken, path: `/dashboard/metrics?vendedorCodes=ALL&year=${YEAR}` },
-      { label: 'facturas', token: jefeToken, path: `/facturas?vendedorCodes=ALL&year=${YEAR}&month=${MONTH}` },
       { label: 'objectives.evolution', token: jefeToken, path: `/objectives/evolution?vendedorCodes=ALL&years=${YEAR}` },
       { label: 'objectives.by-client', token: jefeToken, path: `/objectives/by-client?vendedorCodes=ALL&years=${YEAR}&limit=30` },
+      { label: 'facturas', token: jefeToken, path: `/facturas?vendedorCodes=ALL&year=${YEAR}&month=${MONTH}` },
+      { label: 'facturas.summary', token: jefeToken, path: `/facturas/summary?vendedorCodes=ALL&year=${YEAR}&month=${MONTH}` },
+      { label: 'commissions.summary', token: jefeToken, path: `/commissions/summary?vendedorCode=ALL&year=${YEAR}` },
+      { label: 'purchase-history', token: jefeToken, path: `/pedidos/purchase-history-global?vendedorCode=ALL&from=${histFrom}&to=${histTo}&limit=300` },
+      { label: 'clients.list', token: jefeToken, path: `/clients/list?vendedorCodes=ALL&limit=50` },
+      { label: 'matrix-data', token: jefeToken, path: `/dashboard/matrix-data?vendedorCodes=ALL&year=${YEAR}&years=${YEAR}&groupBy=vendor&limit=240&months=${ytdMonths}` },
+      { label: 'notifications.snapshot', token: jefeToken, path: '/notifications/snapshot' },
+      { label: 'planner.week', token: jefeToken, path: `/rutero/week?vendedorCodes=ALL&year=${YEAR}&month=${MONTH}` },
+      { label: 'planner.day', token: jefeToken, path: `/rutero/day/${weekday}?vendedorCodes=ALL&year=${YEAR}&month=${MONTH}` },
     ]);
 
     jefeToken = await switchReparto(jefeToken, jefeUser);
@@ -202,10 +219,10 @@ async function main() {
     const allSelector = codes.slice(0, 80).join(',') || jefeUser;
     const single = codes[0] || jefeUser;
     await measureMode('reparto', [
-      { label: 'week.all', token: jefeToken, path: `/repartidor/rutero/week/${encodeURIComponent(allSelector)}?date=${TODAY}` },
-      { label: 'week.one', token: jefeToken, path: `/repartidor/rutero/week/${encodeURIComponent(single)}?date=${TODAY}` },
       { label: 'pendientes.all', token: jefeToken, path: `/entregas/pendientes/${encodeURIComponent(allSelector)}?date=${TODAY}&limit=80&offset=0` },
       { label: 'pendientes.one', token: jefeToken, path: `/entregas/pendientes/${encodeURIComponent(single)}?date=${TODAY}&limit=80&offset=0` },
+      { label: 'week.all', token: jefeToken, path: `/repartidor/rutero/week/${encodeURIComponent(allSelector)}?date=${TODAY}` },
+      { label: 'week.one', token: jefeToken, path: `/repartidor/rutero/week/${encodeURIComponent(single)}?date=${TODAY}` },
       { label: 'daily-summary.one', token: jefeToken, path: `/repartidor-finanzas/daily-summary/${encodeURIComponent(single)}?date=${TODAY}` },
       { label: 'vencimientos.one', token: jefeToken, path: `/repartidor-finanzas/vencimientos/${encodeURIComponent(single)}?from=${YEAR}-01-01&to=${TODAY}&limit=40` },
     ]);

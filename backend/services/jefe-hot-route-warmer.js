@@ -74,8 +74,8 @@ function buildRepartoHotPaths(now = new Date(), { repartidorCodes } = {}) {
   const date = isoDate(now);
   const encoded = encodeURIComponent(selector);
   return [
-    `/api/repartidor/rutero/week/${encoded}?date=${date}`,
     `/api/entregas/pendientes/${encoded}?date=${date}&limit=80&offset=0`,
+    `/api/repartidor/rutero/week/${encoded}?date=${date}`,
   ];
 }
 
