@@ -5,6 +5,7 @@ const { CommissionRepository } = require('../domain/commission-repository');
 const { Commission } = require('../domain/commission');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { sanitizeCodeList } = require('../../../../utils/common');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 class Db2CommissionRepository extends CommissionRepository {
   constructor(dbPool) {
@@ -93,8 +94,8 @@ class Db2CommissionRepository extends CommissionRepository {
         COALESCE(LAC.IMPORTEVENTA, 0) AS IMPORTE,
         0 AS PORCENTAJE,
         0 AS COMISION
-      FROM DSEDAC.LAC LAC
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(LAC.CODIGOCLIENTEALBARAN)
+      FROM ${comercialErpTable('LAC')} LAC
+      LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(LAC.CODIGOCLIENTEALBARAN)
       WHERE TRIM(LAC.CODIGOCLIENTEALBARAN) = ?
         AND ${vendorFilter}
         ${yearFilter}

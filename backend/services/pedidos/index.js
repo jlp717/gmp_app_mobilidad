@@ -2471,8 +2471,8 @@ async function getProductDetailRaw(code, clientCode) {
             TRIM(ALM.DESCRIPCIONALMACEN) AS almacenDesc,
             SUM(ARO.ENVASESDISPONIBLES) AS envases,
             SUM(ARO.UNIDADESDISPONIBLES) AS unidades
-        FROM ${comercialErpTable('ARO')}
-        JOIN ${comercialErpTable('ALM')} ON ARO.CODIGOALMACEN = ALM.CODIGOALMACEN
+        FROM ${comercialErpTable('ARO')} ARO
+        JOIN ${comercialErpTable('ALM')} ALM ON ARO.CODIGOALMACEN = ALM.CODIGOALMACEN
         WHERE TRIM(ARO.CODIGOARTICULO) = CAST(? AS VARCHAR(10))
         GROUP BY ARO.CODIGOALMACEN, ALM.DESCRIPCIONALMACEN`;
 

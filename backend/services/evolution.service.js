@@ -151,7 +151,7 @@ async function getProductEvolution({ vendedorCodes, clientCode, limit = 20 }) {
             SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS VENTAS_ANTERIOR,
             SUM(L.LCIMVT) AS VENTAS_TOTAL
         FROM ${comercialErpTable('LACLAE')} L
-        LEFT JOIN DSEDAC.ART A ON TRIM(L.LCCDRF) = TRIM(A.CODIGOARTICULO)
+        LEFT JOIN ${comercialErpTable('ART')} A ON TRIM(L.LCCDRF) = TRIM(A.CODIGOARTICULO)
         WHERE L.LCAADC IN (${currentYear}, ${prevYear})
           AND ${LACLAE_SALES_FILTER}
           ${vendorFilter}
@@ -217,7 +217,7 @@ async function getClientEvolution({ vendedorCodes, limit = 30 }) {
             SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS VENTAS_ANTERIOR,
             COUNT(DISTINCT CASE WHEN L.LCAADC = ${currentYear} THEN L.LCCDRF END) AS PRODUCTOS_ACTUAL
         FROM ${comercialErpTable('LACLAE')} L
-        LEFT JOIN DSEDAC.CLI C ON TRIM(L.LCCDCL) = TRIM(C.CODIGOCLIENTE)
+        LEFT JOIN ${comercialErpTable('CLI')} C ON TRIM(L.LCCDCL) = TRIM(C.CODIGOCLIENTE)
         WHERE L.LCAADC IN (${currentYear}, ${prevYear})
           AND ${LACLAE_SALES_FILTER}
           ${vendorFilter}

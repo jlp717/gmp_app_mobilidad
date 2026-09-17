@@ -146,18 +146,20 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/AND L\.LCCDCL IN \(\$\{placeholders\}\)/);
   });
 
-  test('DDD rutero sales endpoints use canonical DSED LACLAE tables without DATE column casts', () => {
+  test('DDD rutero sales endpoints use comercialErpTable LACLAE/CLI without DATE column casts', () => {
     const source = fs.readFileSync(
       path.join(backendRoot, 'src/modules/rutero/infrastructure/db2-rutero-repository.js'),
       'utf8',
     );
 
-    expect(source).toMatch(/FROM DSED\.LACLAE L/);
-    expect(source).toMatch(/LEFT JOIN DSEDAC\.CLI/);
+    expect(source).toMatch(/FROM \$\{comercialErpTable\('LACLAE'\)\} L/);
+    expect(source).toMatch(/LEFT JOIN \$\{comercialErpTable\('CLI'\)\}/);
     expect(source).toMatch(/L\.LCAADC = \?/);
     expect(source).toMatch(/L\.LCMMDC = \?/);
     expect(source).toMatch(/L\.LCDDDC = \?/);
     expect(source).toMatch(/L\.R1_T8CDVD = CAST\(\? AS CHAR\(2\)\)/);
+    expect(source).not.toMatch(/FROM DSED\.LACLAE L/);
+    expect(source).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
     expect(source).not.toMatch(/JAVIER\.LACLAE/);
     expect(source).not.toMatch(/JAVIER\.CLIENTES/);
     expect(source).not.toMatch(/DATE\(LAC\.FECHA\)/);
@@ -213,7 +215,7 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/Promise\.all\(\[vendorRowsPromise, allVendorRowsPromise\]\)/);
     expect(source).toMatch(/LCCDCL = CAST\(\? AS CHAR\(10\)\)/);
     expect(source).toMatch(/R1_T8CDVD = CAST\(\? AS CHAR\(2\)\)/);
-    expect(source).toMatch(/LEFT JOIN DSEDAC\.FAM F ON A\.CODIGOFAMILIA = F\.CODIGOFAMILIA/);
+    expect(source).toMatch(/LEFT JOIN \$\{comercialErpTable\('FAM'\)\} F ON A\.CODIGOFAMILIA = F\.CODIGOFAMILIA/);
     expect(source).not.toMatch(/WHERE TRIM\(LCCDCL\) = \?/);
     expect(source).not.toMatch(/MAX\(TRIM\(DESCRIPCIONFAMILIA\)\)/);
   });
@@ -222,7 +224,7 @@ describe('runtime performance configuration', () => {
     const source = fs.readFileSync(path.join(backendRoot, 'kpi/routes.js'), 'utf8');
 
     expect(source).toMatch(/getClientCodesFromCache\(codes\.join\(','\)\)/);
-    expect(source).toMatch(/FROM DSEDAC\.CLP/);
+    expect(source).toMatch(/FROM \$\{comercialErpTable\('CLP'\)\}/);
     expect(source).toMatch(/setVendorClientSetCache\(cacheKey, result\)/);
     expect(source).toMatch(/getVendorClientSet\(vendorCodes, 'recent'\)/);
   });

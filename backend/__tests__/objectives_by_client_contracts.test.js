@@ -41,6 +41,11 @@ describe('objectives by-client route contracts', () => {
     expect(source).toContain('timeout: 35000');
   });
 
+  test('by-client finally can release the fill lock without ReferenceError on cacheKey', () => {
+    expect(source).toMatch(/async function handleByClientRequest[\s\S]*let cacheKey;[\s\S]*try \{/);
+    expect(source).toContain('await endRouteFill(cacheKey, req._byClientFillLock)');
+  });
+
   test('populations and by-client read CLI via comercialErpTable, not DSEDAC.CLI', () => {
     expect(source).toMatch(/comercialErpTable\('CLI'\)/);
     expect(source).not.toMatch(/FROM DSEDAC\.CLI/);

@@ -12,6 +12,7 @@
 
 const { queryWithParams } = require('../config/db');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const logger = require('../middleware/logger');
 
 const CACHE_TTL_MS = Math.min(
@@ -139,8 +140,8 @@ async function resolveVendorProfile(vendorCode, { query = queryWithParams } = {}
   const vddxSql = `
     SELECT TRIM(X.CORREOELECTRONICO) AS EMAIL,
            TRIM(V.NOMBREVENDEDOR) AS NOMBRE
-      FROM DSEDAC.VDDX X
-      LEFT JOIN DSEDAC.VDD V ON TRIM(V.CODIGOVENDEDOR) = TRIM(X.CODIGOVENDEDOR)
+      FROM ${comercialErpTable('VDDX')} X
+      LEFT JOIN ${comercialErpTable('VDD')} V ON TRIM(V.CODIGOVENDEDOR) = TRIM(X.CODIGOVENDEDOR)
      WHERE TRIM(X.CODIGOVENDEDOR) = ?
      FETCH FIRST 1 ROW ONLY
   `;
@@ -203,8 +204,8 @@ async function resolveVendorByNameMatch(nameToken, { query = queryWithParams } =
     SELECT TRIM(V.CODIGOVENDEDOR) AS CODIGO,
            TRIM(V.NOMBREVENDEDOR) AS NOMBRE,
            TRIM(X.CORREOELECTRONICO) AS EMAIL
-      FROM DSEDAC.VDD V
-      LEFT JOIN DSEDAC.VDDX X ON TRIM(V.CODIGOVENDEDOR) = TRIM(X.CODIGOVENDEDOR)
+      FROM ${comercialErpTable('VDD')} V
+      LEFT JOIN ${comercialErpTable('VDDX')} X ON TRIM(V.CODIGOVENDEDOR) = TRIM(X.CODIGOVENDEDOR)
      WHERE UPPER(V.NOMBREVENDEDOR) LIKE ?
         OR ${foldedName} LIKE ?
      ORDER BY CASE WHEN NULLIF(TRIM(X.CORREOELECTRONICO), '') IS NULL THEN 1 ELSE 0 END,
@@ -374,7 +375,7 @@ async function resolveClientEmail(clienteCodigo, { query = queryWithParams } = {
 
   const sql = `
     SELECT TRIM(CORREOELECTRONICOCLIENTE) AS EMAIL
-      FROM DSEDAC.CLX
+      FROM ${comercialErpTable('CLX')}
      WHERE TRIM(CODIGOCLIENTE) = ?
      FETCH FIRST 1 ROW ONLY
   `;
@@ -583,7 +584,7 @@ async function resolveDayRouteComercialCodes({
       `
       SELECT DISTINCT TRIM(COALESCE(NULLIF(TRIM(CPC.CODIGOCOMERCIAL), ''), NULLIF(TRIM(CPC.CODIGOVENDEDOR), ''))) AS COMERCIAL
         FROM ${confirmations} C
-        INNER JOIN DSEDAC.CPC CPC
+        INNER JOIN ${comercialErpTable('CPC')} CPC
           ON CPC.EJERCICIOALBARAN = C.DOCUMENTO_EJERCICIO
          AND TRIM(CPC.SERIEALBARAN) = TRIM(C.DOCUMENTO_SERIE)
          AND CPC.TERMINALALBARAN = C.DOCUMENTO_TERMINAL
@@ -603,7 +604,7 @@ async function resolveDayRouteComercialCodes({
       `
       SELECT DISTINCT TRIM(COALESCE(NULLIF(TRIM(CPC.CODIGOCOMERCIAL), ''), NULLIF(TRIM(CPC.CODIGOVENDEDOR), ''))) AS COMERCIAL
         FROM ${cobros} P
-        INNER JOIN DSEDAC.CPC CPC
+        INNER JOIN ${comercialErpTable('CPC')} CPC
           ON CPC.EJERCICIOALBARAN = P.EJERCICIODOCUMENTO
          AND TRIM(CPC.SERIEALBARAN) = TRIM(P.SERIEDOCUMENTO)
          AND CPC.TERMINALALBARAN = P.TERMINALDOCUMENTO

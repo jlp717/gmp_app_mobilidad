@@ -148,6 +148,9 @@ describe('comercial ERP table mapping', () => {
     expect(pedidosIndex).not.toMatch(/FROM DSEDAC\.CLI/);
     expect(pedidosIndex).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
     expect(pedidosIndex).not.toMatch(/FROM DSEDAC\.CLP/);
+    expect(pedidosIndex).toMatch(/FROM \$\{comercialErpTable\('ARO'\)\} ARO/);
+    expect(pedidosIndex).toMatch(/JOIN \$\{comercialErpTable\('ALM'\)\} ALM ON/);
+    expect(pedidosIndex).not.toMatch(/JOIN \$\{comercialErpTable\('ALM'\)\} ON ARO\./);
     const commonJs = fs.readFileSync(path.join(__dirname, '../utils/common.js'), 'utf8');
     expect(commonJs).toMatch(/comercialErpTable\('CLP'\)/);
     expect(commonJs).not.toMatch(/FROM DSEDAC\.CLP/);
@@ -157,6 +160,29 @@ describe('comercial ERP table mapping', () => {
     expect(kpiRoutes).not.toMatch(/FROM DSEDAC\.CLP/);
     expect(cobrosRepo).toMatch(/comercialErpTable\('CLP'\)/);
     expect(cobrosRepo).not.toMatch(/FROM DSEDAC\.CLP/);
+    const evolution = fs.readFileSync(path.join(__dirname, '../services/evolution.service.js'), 'utf8');
+    expect(evolution).toMatch(/comercialErpTable\('ART'\)/);
+    expect(evolution).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(evolution).not.toMatch(/LEFT JOIN DSEDAC\.ART/);
+    expect(evolution).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
+    expect(commissionsPdf).toMatch(/comercialErpTable\('VDD'\)/);
+    expect(commissionsPdf).not.toMatch(/LEFT JOIN DSEDAC\.VDD/);
+    const staffEmail = fs.readFileSync(path.join(__dirname, '../services/staff-email-directory-service.js'), 'utf8');
+    expect(staffEmail).toMatch(/comercialErpTable\('VDDX'\)/);
+    expect(staffEmail).toMatch(/comercialErpTable\('VDD'\)/);
+    expect(staffEmail).toMatch(/comercialErpTable\('CLX'\)/);
+    expect(staffEmail).toMatch(/comercialErpTable\('CPC'\)/);
+    expect(staffEmail).not.toMatch(/FROM DSEDAC\.VDDX/);
+    expect(staffEmail).not.toMatch(/FROM DSEDAC\.CLX/);
+    expect(staffEmail).not.toMatch(/INNER JOIN DSEDAC\.CPC/);
+    const commissionRepo = fs.readFileSync(
+      path.join(__dirname, '../src/modules/commissions/infrastructure/db2-commission-repository.js'),
+      'utf8',
+    );
+    expect(commissionRepo).toMatch(/comercialErpTable\('LAC'\)/);
+    expect(commissionRepo).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(commissionRepo).not.toMatch(/FROM DSEDAC\.LAC/);
+    expect(commissionRepo).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
   });
 
   test('COMERCIAL_ERP_READ_TEST=false falls back to DSEDAC SELECT', () => {

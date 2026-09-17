@@ -1000,11 +1000,13 @@ async function main() {
     const names = [
       'FPG', 'CVC', 'CAC', 'CPC', 'CFC', 'OPP', 'LQD', 'CLX', 'VDDX', 'CLP', 'LACLAE', 'LAC', 'PMR', 'PMRC', 'LPC', 'ARA', 'ART', 'CLI', 'CLC',
       'LINDTO', 'FAM', 'FI1', 'FI2', 'FI3', 'FI4', 'FI5', 'COFC', 'CMV', 'CDVI', 'VDD', 'VDC', 'VEH', 'ARTX', 'PES', 'TRF', 'ARTALM',
+      'ARO', 'CRUT', 'CPES', 'PPU', 'ALM',
       'COBROS', 'PEDIDOS_CAB', 'PEDIDOS_LIN',
       'TEST_FPG', 'TEST_CVC', 'TEST_CAC', 'TEST_CPC', 'TEST_CFC', 'TEST_OPP', 'TEST_LQD', 'TEST_CLX', 'TEST_VDDX',
       'TEST_CLP', 'TEST_LACLAE', 'TEST_LAC', 'TEST_PMR', 'TEST_CLI', 'TEST_CLC', 'TEST_ART', 'TEST_ARA', 'TEST_LPC',
       'TEST_LINDTO', 'TEST_FAM', 'TEST_FI1', 'TEST_FI2', 'TEST_FI3', 'TEST_FI4', 'TEST_FI5', 'TEST_COFC', 'TEST_CMV',
       'TEST_CDVI', 'TEST_VDD', 'TEST_VDC', 'TEST_VEH', 'TEST_ARTX', 'TEST_PES', 'TEST_TRF', 'TEST_ARTALM',
+      'TEST_ARO', 'TEST_CRUT', 'TEST_CPES', 'TEST_PPU', 'TEST_ALM',
       'TEST_COBROS', 'TEST_PEDIDOS_CAB', 'TEST_PEDIDOS_LIN',
       'TEST_LIQUIDACION_COMERCIAL', 'TEST_DEVOLUCIONES_COMERCIAL',
     ];
@@ -1026,6 +1028,7 @@ async function main() {
       ['DSEDAC', 'FI4'], ['DSEDAC', 'FI5'], ['DSEDAC', 'COFC'], ['DSEDAC', 'CMV'], ['DSEDAC', 'CDVI'],
       ['DSEDAC', 'VDD'], ['DSEDAC', 'VDC'], ['DSEDAC', 'VEH'], ['DSEDAC', 'ARTX'], ['DSEDAC', 'PES'],
       ['DSEDAC', 'TRF'], ['DSEDAC', 'ARTALM'],
+      ['DSEDAC', 'ARO'], ['DSEDAC', 'CRUT'], ['DSEDAC', 'CPES'], ['DSEDAC', 'PPU'], ['DSEDAC', 'ALM'],
     ];
     for (const [schema, table] of originSpecs) {
       const info = await tableInfo(schema, table);
@@ -1149,7 +1152,8 @@ async function main() {
       'TEST_CLP', 'TEST_LACLAE', 'TEST_LAC', 'TEST_PMR', 'TEST_PMRC', 'TEST_LPC', 'TEST_CLI', 'TEST_CLC', 'TEST_ART',
       'TEST_ARA', 'TEST_LINDTO', 'TEST_FAM', 'TEST_FI1', 'TEST_FI2', 'TEST_FI3', 'TEST_FI4', 'TEST_FI5',
       'TEST_COFC', 'TEST_CMV', 'TEST_CDVI', 'TEST_VDD', 'TEST_VDC', 'TEST_VEH', 'TEST_ARTX', 'TEST_PES',
-      'TEST_TRF', 'TEST_ARTALM', 'TEST_COBROS', 'TEST_PEDIDOS_CAB',
+      'TEST_TRF', 'TEST_ARTALM', 'TEST_ARO', 'TEST_CRUT', 'TEST_CPES', 'TEST_PPU', 'TEST_ALM',
+      'TEST_COBROS', 'TEST_PEDIDOS_CAB',
       'TEST_PEDIDOS_LIN', 'TEST_LIQUIDACION_COMERCIAL', 'TEST_DEVOLUCIONES_COMERCIAL',
     ];
     for (const name of testNames) {

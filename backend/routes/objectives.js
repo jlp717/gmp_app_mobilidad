@@ -2558,6 +2558,7 @@ router.get('/by-client', verifyToken, requireVendorQueryScope, async (req, res, 
 });
 
 async function handleByClientRequest(req, res) {
+    let cacheKey;
     try {
         const { vendedorCodes, years, months, city, code, nif, name, limit } = req.query;
         const effectiveVendorCodes = scopeVendorCodesForUser(req.user?.code, vendedorCodes);
@@ -2567,7 +2568,7 @@ async function handleByClientRequest(req, res) {
         const hasFilters = city || code || nif || name;
         const rowsLimit = clampByClientLimit(limit);
         const byClientCache = byClientHistoricalCache(effectiveVendorCodes, years, months, rowsLimit, now);
-        const cacheKey = byClientCache.key;
+        cacheKey = byClientCache.key;
         if (!hasFilters) {
             const cachedResult = await redisCache.get('route', cacheKey);
             if (cachedResult) {
@@ -3087,7 +3088,7 @@ async function handleByClientRequest(req, res) {
             handleRouteError(error, res, 'Error obteniendo objetivos por cliente', 500);
         }
     } finally {
-        if (req._byClientFillLock) {
+        if (req._byClientFillLock && cacheKey) {
             await endRouteFill(cacheKey, req._byClientFillLock);
             req._byClientFillLock = null;
         }

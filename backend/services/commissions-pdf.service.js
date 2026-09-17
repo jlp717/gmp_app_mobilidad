@@ -305,7 +305,7 @@ async function getLacSalesData(year, startMonth, endMonth) {
                 L.LCMMDC as MES,
                 COALESCE(SUM(L.LCIMVT), 0) as LAC_TOTAL
             FROM ${comercialErpTable('LACLAE')} L
-            LEFT JOIN DSEDAC.VDD V ON RTRIM(${vendorColExpr}) = RTRIM(V.CODIGOVENDEDOR)
+            LEFT JOIN ${comercialErpTable('VDD')} V ON RTRIM(${vendorColExpr}) = RTRIM(V.CODIGOVENDEDOR)
             WHERE L.LCAADC = ?
               AND L.LCMMDC BETWEEN ? AND ?
               AND ${LACLAE_SALES_FILTER}
@@ -360,7 +360,7 @@ async function getCondorSalesData(year, startMonth, endMonth) {
                 B.MES,
                 SUM(B.IMPORTE) as VENTAS_CONDOR
             FROM JAVIER.VENTAS_B B
-            LEFT JOIN DSEDAC.VDD V ON TRIM(B.CODIGOVENDEDOR) = TRIM(V.CODIGOVENDEDOR)
+            LEFT JOIN ${comercialErpTable('VDD')} V ON TRIM(B.CODIGOVENDEDOR) = TRIM(V.CODIGOVENDEDOR)
             WHERE B.EJERCICIO = ?
               AND B.MES BETWEEN ? AND ?
             GROUP BY TRIM(B.CODIGOVENDEDOR), V.NOMBREVENDEDOR, B.MES
