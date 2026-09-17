@@ -1872,7 +1872,7 @@ class Db2CobrosRepository extends CobrosRepository {
         TRIM(C.CODIGOCLIENTEALBARAN) AS CODIGOCLIENTE,
         COALESCE((
           SELECT TRIM(MIN(CLP.VENDEDORCOMERCIAL))
-            FROM DSEDAC.CLP CLP
+            FROM ${comercialErpTable('CLP')} CLP
            WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(C.CODIGOCLIENTEALBARAN)
         ), (
           SELECT TRIM(MIN(${getVendorColumnExpr('LAC')}))

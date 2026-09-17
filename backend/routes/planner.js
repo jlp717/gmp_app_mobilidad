@@ -557,7 +557,7 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
   SUM(L.IMPORTEMARGENREAL) as totalMargin,
   COUNT(*) as numLines,
   COUNT(DISTINCT L.CODIGOARTICULO) as numProducts
-      FROM DSEDAC.LINDTO L
+      FROM ${comercialErpTable('LINDTO')} L
       LEFT JOIN ${comercialErpTable('CLI')} C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
       WHERE L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ? 
         AND L.TIPOVENTA IN ('CC', 'VC')
@@ -634,8 +634,8 @@ router.get('/rutero/vendedores', requirePlannerVendedoresAccess, requirePlannerR
             sql = `
                     SELECT DISTINCT TRIM(X.CODIGOVENDEDOR) AS code,
                         TRIM(D.NOMBREVENDEDOR) AS name
-                    FROM DSEDAC.VDDX X
-                    LEFT JOIN DSEDAC.VDD D
+                    FROM ${comercialErpTable('VDDX')} X
+                    LEFT JOIN ${comercialErpTable('VDD')} D
                       ON TRIM(D.CODIGOVENDEDOR) = TRIM(X.CODIGOVENDEDOR)
                     WHERE TRIM(X.PERMITEREPARTOSN) = 'S'
                       AND COALESCE(NULLIF(TRIM(X.JEFEVENTASSN), ''), 'N') <> 'S'
@@ -644,10 +644,10 @@ router.get('/rutero/vendedores', requirePlannerVendedoresAccess, requirePlannerR
         } else {
             sql = `
                     SELECT TRIM(VDD.CODIGOVENDEDOR) as code, TRIM(VDD.NOMBREVENDEDOR) as name
-                    FROM DSEDAC.VDD VDD
+                    FROM ${comercialErpTable('VDD')} VDD
                     WHERE EXISTS (
                         SELECT 1
-                        FROM DSEDAC.VDC VDC
+                        FROM ${comercialErpTable('VDC')} VDC
                         WHERE TRIM(VDC.CODIGOVENDEDOR) = TRIM(VDD.CODIGOVENDEDOR)
                           AND VDC.SUBEMPRESA = 'GMP'
                     )
@@ -1964,7 +1964,7 @@ router.get('/diagnose/client/:code', requirePlannerPrivilege, async (req, res) =
             try {
                 const vendorData = await queryWithParams(`
                     SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME
-                    FROM DSEDAC.VDD
+                    FROM ${comercialErpTable('VDD')}
                     WHERE CODIGOVENDEDOR = ?
                     FETCH FIRST 1 ROWS ONLY
                 `, [results.clientInfo.VENDOR_CLI]);
@@ -1981,7 +1981,7 @@ router.get('/diagnose/client/:code', requirePlannerPrivilege, async (req, res) =
         try {
             const zzVendors = await query(`
                 SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME
-                FROM DSEDAC.VDD
+                FROM ${comercialErpTable('VDD')}
                 WHERE CODIGOVENDEDOR LIKE 'ZZ%' OR NOMBREVENDEDOR LIKE '%CAYETANO%'
                 FETCH FIRST 5 ROWS ONLY
             `);

@@ -546,7 +546,7 @@ async function authorizeCobrosClientScope(req, clientCode, vendedorCodes, action
   const cvcVendorFilter = buildCvcVendorScopeFilter(vendorScope.codes);
   const cvcRows = await queryWithParams(
     `SELECT 1
-       FROM DSEDAC.CVC CVC
+       FROM ${comercialErpTable('CVC')} CVC
       WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = CAST(? AS VARCHAR(10))
         AND CVC.IMPORTEPENDIENTE > 0.01
         AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
@@ -1156,7 +1156,7 @@ function createPedidosRoutes() {
       `;
       const sqlProductName = `
           SELECT TRIM(DESCRIPCIONARTICULO) AS NAME
-          FROM DSEDAC.ART WHERE TRIM(CODIGOARTICULO) = ?
+          FROM ${comercialErpTable('ART')} WHERE TRIM(CODIGOARTICULO) = ?
           FETCH FIRST 1 ROW ONLY
       `;
 
@@ -1545,8 +1545,8 @@ function createPedidosRoutes() {
       }
       if (clientCode) { filters.push(`TRIM(L.LCCDCL) = ?`); filterParams.push(clientCode); }
       if (productCode) { filters.push(`TRIM(L.LCCDRF) = ?`); filterParams.push(productCode); }
-      if (familia) { filters.push(`TRIM(L.LCCDRF) IN (SELECT TRIM(CODIGOARTICULO) FROM DSEDAC.ART WHERE TRIM(CODIGOFAMILIA) = ?)`); filterParams.push(familia); }
-      if (marca) { filters.push(`TRIM(L.LCCDRF) IN (SELECT TRIM(CODIGOARTICULO) FROM DSEDAC.ART WHERE TRIM(CODIGOMARCA) = ?)`); filterParams.push(marca); }
+      if (familia) { filters.push(`TRIM(L.LCCDRF) IN (SELECT TRIM(CODIGOARTICULO) FROM ${comercialErpTable('ART')} WHERE TRIM(CODIGOFAMILIA) = ?)`); filterParams.push(familia); }
+      if (marca) { filters.push(`TRIM(L.LCCDRF) IN (SELECT TRIM(CODIGOARTICULO) FROM ${comercialErpTable('ART')} WHERE TRIM(CODIGOMARCA) = ?)`); filterParams.push(marca); }
 
       const whereSql = [dateRange.sql, ...filters].join(' AND ');
       const params = [...dateRange.params, ...filterParams];
@@ -2861,7 +2861,7 @@ function createClientsRoutes() {
             const vendorNameRows = vendorCodesForNames.length > 0
               ? await queryWithParams(`
                   SELECT TRIM(CODIGOVENDEDOR) as VENDOR_CODE, TRIM(NOMBREVENDEDOR) as VENDOR_NAME
-                  FROM DSEDAC.VDD
+                  FROM ${comercialErpTable('VDD')}
                   WHERE TRIM(CODIGOVENDEDOR) IN (${vendorCodesForNames.map(() => '?').join(',')})
                 `, vendorCodesForNames, false)
               : [];
@@ -2970,7 +2970,7 @@ function createClientsRoutes() {
           FROM ${comercialErpTable('CLI')} C
           LEFT JOIN LACLAE_AGG S ON C.CODIGOCLIENTE = S.CLIENT_CODE
           LEFT JOIN LACLAE_LAST LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
-          LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
+          LEFT JOIN ${comercialErpTable('VDD')} V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
           WHERE C.ANOBAJA = 0 ${clientCodesFilter || vendorScopedCliFilter} ${searchClause.clause}
           ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
           OFFSET ${safeOffset} ROWS FETCH FIRST ${safeLimit} ROWS ONLY

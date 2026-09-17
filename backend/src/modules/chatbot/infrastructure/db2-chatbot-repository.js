@@ -6,6 +6,7 @@
 const { ChatbotRepository } = require('../domain/chatbot-repository');
 const { ChatSession } = require('../domain/chat-session');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 class Db2ChatbotRepository extends ChatbotRepository {
   constructor(dbPool) {
@@ -81,7 +82,7 @@ class Db2ChatbotRepository extends ChatbotRepository {
         EMAIL,
         CODCLI AS TARIFA,
         CODIGOVENDEDOR AS VENDEDOR
-      FROM DSEDAC.CLI
+      FROM ${comercialErpTable('CLI')}
       WHERE TRIM(CODIGOCLIENTE) = ?
     `;
     const result = await this._db.executeParams(sql, [code]);
@@ -96,7 +97,7 @@ class Db2ChatbotRepository extends ChatbotRepository {
         CODIGOFAMILIA AS FAMILIA,
         PRECIOVENTA AS PRECIO,
         UNIDADESPORCAJA AS UDS_CAJA
-      FROM DSEDAC.ART
+      FROM ${comercialErpTable('ART')}
       WHERE TRIM(CODIGOARTICULO) = ?
     `;
     const result = await this._db.executeParams(sql, [code]);
@@ -111,7 +112,7 @@ class Db2ChatbotRepository extends ChatbotRepository {
         NOMBRECLIENTE AS NOMBRE,
         POBLACION,
         PROVINCIA
-      FROM DSEDAC.CLI
+      FROM ${comercialErpTable('CLI')}
       WHERE (UPPER(NOMBRECLIENTE) LIKE ? OR TRIM(CODIGOCLIENTE) LIKE ?)
         AND (ANOBAJA IS NULL OR ANOBAJA = 0)
       ORDER BY NOMBRECLIENTE
@@ -127,7 +128,7 @@ class Db2ChatbotRepository extends ChatbotRepository {
         CODIGOARTICULO AS CODIGO,
         DESCRIPCIONARTICULO AS NOMBRE,
         CODIGOFAMILIA AS FAMILIA
-      FROM DSEDAC.ART
+      FROM ${comercialErpTable('ART')}
       WHERE UPPER(DESCRIPCIONARTICULO) LIKE ? OR TRIM(CODIGOARTICULO) LIKE ?
       ORDER BY DESCRIPCIONARTICULO
       FETCH FIRST ? ROWS ONLY

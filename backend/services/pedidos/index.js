@@ -37,8 +37,9 @@ const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
 const PEDIDOS_LIN_TABLE = db2AppTable('PEDIDOS_LIN');
 const PRICING_CONFIG_SCHEMA = 'JAVIER';
 const BOLSA_PRODUCT_PRICE_TABLE = `${PRICING_CONFIG_SCHEMA}.BOLSA_PRODUCTO_PRECIO`;
-const CLIENT_SPECIAL_PRICE_TABLE = 'DSEDAC.PES';
-const CLIENT_UNIT_AMOUNT_PROMO_TABLE = 'DSEDAC.PPU';
+const { comercialErpTable } = require('../../utils/comercial-erp-tables');
+const CLIENT_SPECIAL_PRICE_TABLE = comercialErpTable('PES');
+const CLIENT_UNIT_AMOUNT_PROMO_TABLE = comercialErpTable('PPU');
 const PROMOTIONS_SCHEMA = db2Schema('DSEDAC', 'PROMOTIONS_SCHEMA');
 const PROMOTION_SOURCE_TABLES = new Set(['PRD', 'PMR', 'PMRC', 'PMP', 'CPES']);
 // App stock reserves are JAVIER-only (G2: no DSEDAC DML literals in deployable services).
@@ -77,7 +78,6 @@ function invalidatePedidosCache(pedidoId) {
     }
 }
 const { formatErpDocumentLabel } = require('../../utils/erp-document-label');
-const { comercialErpTable } = require('../../utils/comercial-erp-tables');
 const { LACLAE_SALES_FILTER } = require('../../utils/common');
 const { CircuitBreaker } = require('../circuit-breaker');
 const { getClientDays } = require('../laclae');
@@ -788,7 +788,7 @@ function getPedidosConfirmationTarget() {
     const storageApproved = isDsedacWriteApproved();
     const exportEnabled = String(process.env.PEDIDOS_EXPORT_TO_SYSTEM || 'false').trim().toLowerCase() === 'true';
     const exportApproved = String(process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED || 'false').trim().toLowerCase() === 'true';
-    // Export to DSEDAC.CPC is independent of local write schema (JAVIER.PEDIDOS_*).
+    // Export to ${comercialErpTable('CPC')} is independent of local write schema (JAVIER.PEDIDOS_*).
     const shouldExportToSystem = storageApproved && exportEnabled && exportApproved;
     const exportSchema = 'DSEDAC';
     const subempresa = trimString(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP').substring(0, 3) || 'GMP';
@@ -1017,7 +1017,7 @@ async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
             SELECT DIAREPARTOLUNESSN, DIAREPARTOMARTESSN, DIAREPARTOMIERCOLESSN,
                    DIAREPARTOJUEVESSN, DIAREPARTOVIERNESSN, DIAREPARTOSABADOSN,
                    DIAREPARTODOMINGOSN
-            FROM DSEDAC.CRUT
+            FROM ${comercialErpTable('CRUT')}
             WHERE TRIM(CODIGOCLIENTE) = ?
               ${vendorFilter}
               AND COALESCE(TRIM(MARCAACTUALIZACION), '') <> 'B'
@@ -1028,14 +1028,14 @@ async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
         );
         const crutDays = deliveryDaysFromRows(rows, CRUT_DELIVERY_COLUMNS);
         if (crutDays.length > 0) {
-            return { days: crutDays, source: 'DSEDAC.CRUT' };
+            return { days: crutDays, source: comercialErpTable('CRUT') };
         }
         if (cleanVendor) {
             const allVendorRows = await queryWithParams(`
                 SELECT DIAREPARTOLUNESSN, DIAREPARTOMARTESSN, DIAREPARTOMIERCOLESSN,
                        DIAREPARTOJUEVESSN, DIAREPARTOVIERNESSN, DIAREPARTOSABADOSN,
                        DIAREPARTODOMINGOSN
-                FROM DSEDAC.CRUT
+                FROM ${comercialErpTable('CRUT')}
                 WHERE TRIM(CODIGOCLIENTE) = ?
                   AND COALESCE(TRIM(MARCAACTUALIZACION), '') <> 'B'
                 ORDER BY SECUENCIA
@@ -1045,7 +1045,7 @@ async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
             );
             const allCrutDays = deliveryDaysFromRows(allVendorRows, CRUT_DELIVERY_COLUMNS);
             if (allCrutDays.length > 0) {
-                return { days: allCrutDays, source: 'DSEDAC.CRUT' };
+                return { days: allCrutDays, source: comercialErpTable('CRUT') };
             }
         }
     } catch (error) {
@@ -1188,11 +1188,11 @@ async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDat
                    TRIM(VEH.DESCRIPCIONVEHICULO) AS DESC_VEHICULO,
                    COUNT(*) AS USOS,
                    MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) AS ULTIMA_FECHA
-            FROM DSEDAC.OPP OPP
-            LEFT JOIN DSEDAC.CPC CPC
+            FROM ${comercialErpTable('OPP')} OPP
+            LEFT JOIN ${comercialErpTable('CPC')} CPC
               ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
              AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
-            LEFT JOIN DSEDAC.VEH VEH ON TRIM(VEH.CODIGOVEHICULO) = TRIM(OPP.CODIGOVEHICULO)
+            LEFT JOIN ${comercialErpTable('VEH')} VEH ON TRIM(VEH.CODIGOVEHICULO) = TRIM(OPP.CODIGOVEHICULO)
             WHERE (TRIM(CPC.CODIGOCLIENTEALBARAN) = ?${vendorFilter})
               AND OPP.ANOREPARTO >= YEAR(CURRENT DATE) - 1
               AND TRIM(OPP.CODIGOVEHICULO) <> ''
@@ -1210,7 +1210,7 @@ async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDat
                 ...assignment,
                 routeCode: explicitRouteCode || assignment.routeCode || defaults.routeCode || '',
                 confidence: 'media',
-                source: 'DSEDAC.OPP',
+                source: comercialErpTable('OPP'),
             };
         }
     } catch (error) {
@@ -1281,7 +1281,7 @@ async function getAvailableVehicles() {
                 V.CODIGOCONDUCTOR AS driverCode,
                 V.TONELADAS      AS toneladas,
                 V.CARGAMAXIMA    AS cargaMaxima
-            FROM DSEDAC.VEH V
+            FROM ${comercialErpTable('VEH')} V
             ORDER BY V.CODIGOVEHICULO
         `;
         const rows = await queryWithParams(sql, []);
@@ -1492,7 +1492,7 @@ async function getConfiguredPricingMaps(articleCodes, clientCode) {
                     PARTITION BY TRIM(P.CODIGOARTICULO)
                     ORDER BY P.FECHA_INICIO DESC, P.PROMOCIONPRECIOESPECIAL DESC, P.SECUENCIA DESC
                 ) AS RN
-            FROM DSEDAC.CLP C
+            FROM ${comercialErpTable('CLP')} C
             JOIN (
                 SELECT
                     P0.PROMOCIONPRECIOESPECIAL,
@@ -1556,12 +1556,12 @@ async function getConfiguredPricingMaps(articleCodes, clientCode) {
                     'N' AS IS_SPECIAL_PRICE,
                     'N' AS PERMITE_BAJO_MINIMO,
                     'Ultimo precio real del cliente' AS MOTIVO,
-                    'DSEDAC.LINDTO' AS SOURCE,
+                    '${comercialErpTable('LINDTO')}' AS SOURCE,
                     ROW_NUMBER() OVER (
                         PARTITION BY TRIM(L.CODIGOARTICULO)
                         ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC, L.NUMERODOCUMENTO DESC
                     ) AS RN
-                FROM DSEDAC.LINDTO L
+                FROM ${comercialErpTable('LINDTO')} L
                 WHERE TRIM(L.CODIGOCLIENTEALBARAN) = CAST(? AS VARCHAR(10))
                   AND TRIM(L.CODIGOARTICULO) IN (${historyPlaceholders})
                   AND L.PRECIOVENTA > 0
@@ -2246,7 +2246,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
             SELECT S.CODIGOARTICULO,
                 SUM(S.ENVASESDISPONIBLES) AS ENVASES_DISP,
                 SUM(S.UNIDADESDISPONIBLES) AS UNIDADES_DISP
-            FROM DSEDAC.ARO S
+            FROM ${comercialErpTable('ARO')} S
             JOIN ART_PAGE P ON S.CODIGOARTICULO = P.CODIGOARTICULO
             WHERE S.CODIGOALMACEN = 1
             GROUP BY S.CODIGOARTICULO
@@ -2267,7 +2267,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
                          PARTITION BY TRIM(L.CODIGOARTICULO)
                          ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
                        ) AS RN
-                  FROM DSEDAC.LAC L
+                  FROM ${comercialErpTable('LAC')} L
                   JOIN ART_PAGE P ON TRIM(L.CODIGOARTICULO) = P.CODIGOARTICULO
                  WHERE L.PRECIOCOSTO > 0
               ) X
@@ -2452,8 +2452,8 @@ async function getProductDetailRaw(code, clientCode) {
             A.ANOALTA AS anoAlta,
             A.ANOBAJA AS anoBaja,
             A.MESBAJA AS mesBaja
-        FROM DSEDAC.ART A
-        LEFT JOIN DSEDAC.FAM F ON A.CODIGOFAMILIA = F.CODIGOFAMILIA
+        FROM ${comercialErpTable('ART')} A
+        LEFT JOIN ${comercialErpTable('FAM')} F ON A.CODIGOFAMILIA = F.CODIGOFAMILIA
         WHERE TRIM(A.CODIGOARTICULO) = CAST(? AS VARCHAR(10))`;
 
     // All tariffs
@@ -2461,8 +2461,8 @@ async function getProductDetailRaw(code, clientCode) {
         SELECT T.CODIGOTARIFA,
             TRIM(TRF.DESCRIPCIONTARIFA) AS tarifaDesc,
             T.PRECIOTARIFA
-        FROM DSEDAC.ARA T
-        JOIN DSEDAC.TRF TRF ON T.CODIGOTARIFA = TRF.CODIGOTARIFA
+        FROM ${comercialErpTable('ARA')} T
+        JOIN ${comercialErpTable('TRF')} TRF ON T.CODIGOTARIFA = TRF.CODIGOTARIFA
         WHERE TRIM(T.CODIGOARTICULO) = CAST(? AS VARCHAR(10)) AND T.PRECIOTARIFA > 0`;
 
     // Stock by warehouse
@@ -2471,8 +2471,8 @@ async function getProductDetailRaw(code, clientCode) {
             TRIM(ALM.DESCRIPCIONALMACEN) AS almacenDesc,
             SUM(ARO.ENVASESDISPONIBLES) AS envases,
             SUM(ARO.UNIDADESDISPONIBLES) AS unidades
-        FROM DSEDAC.ARO
-        JOIN DSEDAC.ALM ON ARO.CODIGOALMACEN = ALM.CODIGOALMACEN
+        FROM ${comercialErpTable('ARO')}
+        JOIN ${comercialErpTable('ALM')} ON ARO.CODIGOALMACEN = ALM.CODIGOALMACEN
         WHERE TRIM(ARO.CODIGOARTICULO) = CAST(? AS VARCHAR(10))
         GROUP BY ARO.CODIGOALMACEN, ALM.DESCRIPCIONALMACEN`;
 
@@ -2563,7 +2563,7 @@ async function getProductDetailRaw(code, clientCode) {
             try {
                 const clientPriceSql = `
                     SELECT L.PRECIOVENTA AS PRECIOCLIENTE
-                    FROM DSEDAC.LINDTO L
+                    FROM ${comercialErpTable('LINDTO')} L
                     WHERE TRIM(L.CODIGOARTICULO) = CAST(? AS VARCHAR(10))
                       AND TRIM(L.CODIGOCLIENTEALBARAN) = CAST(? AS VARCHAR(10))
                       AND L.TIPOVENTA IN ('CC', 'VC')
@@ -2591,7 +2591,7 @@ async function getProductDetailRaw(code, clientCode) {
             if (trimClient) {
                 const cliTarifaSql = `
                     SELECT COALESCE(CODIGOTARIFA, 1) AS CODIGOTARIFA
-                    FROM DSEDAC.CLC
+                    FROM ${comercialErpTable('CLC')}
                     WHERE TRIM(CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
                     FETCH FIRST 1 ROW ONLY`;
                 const cliRows = await queryWithParams(cliTarifaSql, [trimClient]);
@@ -2640,7 +2640,7 @@ async function getStock(code, almacen = 1, options = {}) {
         FROM (
             SELECT SUM(ENVASESDISPONIBLES) AS ENVASES,
                    SUM(UNIDADESDISPONIBLES) AS UNIDADES
-            FROM DSEDAC.ARO
+            FROM ${comercialErpTable('ARO')}
             WHERE TRIM(CODIGOARTICULO) = ? AND CODIGOALMACEN = ?
         ) S,
         (
@@ -2700,7 +2700,7 @@ async function getStockBatch(codes, almacen = 1, options = {}) {
                     SELECT TRIM(CODIGOARTICULO) AS CODE,
                            SUM(ENVASESDISPONIBLES) AS ENVASES,
                            SUM(UNIDADESDISPONIBLES) AS UNIDADES
-                      FROM DSEDAC.ARO
+                      FROM ${comercialErpTable('ARO')}
                      WHERE CODIGOALMACEN = ?
                        AND TRIM(CODIGOARTICULO) IN (${placeholders})
                      GROUP BY TRIM(CODIGOARTICULO)
@@ -3030,8 +3030,8 @@ async function getClientTariffsForLines(clientCode, lines) {
     const sql = `
         SELECT TRIM(ARA.CODIGOARTICULO) AS CODIGOARTICULO,
                ARA.PRECIOTARIFA
-          FROM DSEDAC.CLC CLC
-          JOIN DSEDAC.ARA ARA ON ARA.CODIGOTARIFA = COALESCE(CLC.CODIGOTARIFA, 1)
+          FROM ${comercialErpTable('CLC')} CLC
+          JOIN ${comercialErpTable('ARA')} ARA ON ARA.CODIGOTARIFA = COALESCE(CLC.CODIGOTARIFA, 1)
          WHERE TRIM(CLC.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
            AND TRIM(ARA.CODIGOARTICULO) IN (${placeholders})`;
 
@@ -3057,7 +3057,7 @@ async function getMinPricesForLines(lines) {
     const placeholders = articleCodes.map(() => '?').join(',');
     const sql = `
         SELECT TRIM(CODIGOARTICULO) AS CODIGOARTICULO, PRECIOTARIFA
-          FROM DSEDAC.ARA
+          FROM ${comercialErpTable('ARA')}
          WHERE CODIGOTARIFA = 2
            AND TRIM(CODIGOARTICULO) IN (${placeholders})`;
     try {
@@ -3083,7 +3083,7 @@ async function getArticleIvaCodesForLines(lines) {
     const sql = `
         SELECT TRIM(CODIGOARTICULO) AS CODIGOARTICULO,
                TRIM(COALESCE(NULLIF(TRIM(CODIGOIVA), ''), '2')) AS CODIGOIVA
-          FROM DSEDAC.ART
+          FROM ${comercialErpTable('ART')}
          WHERE TRIM(CODIGOARTICULO) IN (${placeholders})`;
 
     try {
@@ -5021,8 +5021,8 @@ async function getOrderAlbaran(orderId) {
                COALESCE(C.NUMEROFACTURA, 0) AS NUMEROFACTURA,
                TRIM(COALESCE(C.SERIEFACTURA, '')) AS SERIEFACTURA,
                COALESCE(C.EJERCICIOFACTURA, 0) AS EJERCICIOFACTURA
-          FROM DSEDAC.CPC P
-          LEFT JOIN DSEDAC.CAC C
+          FROM ${comercialErpTable('CPC')} P
+          LEFT JOIN ${comercialErpTable('CAC')} C
             ON C.EJERCICIOALBARAN = P.EJERCICIOALBARAN
            AND TRIM(C.SERIEALBARAN) = TRIM(P.SERIEALBARAN)
            AND C.TERMINALALBARAN = P.TERMINALALBARAN
@@ -5124,7 +5124,7 @@ async function getRecommendations(clientCode, vendedorCode) {
             COALESCE(SUM(L.IMPORTEVENTA), 0) AS totalAmount,
             COALESCE(AVG(L.CANTIDADENVASES), 0) AS avgEnvases,
             MAX(L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) AS lastPurchase
-        FROM DSEDAC.LINDTO L
+        FROM ${comercialErpTable('LINDTO')} L
         WHERE TRIM(L.CODIGOCLIENTEALBARAN) = CAST(? AS VARCHAR(10))
           AND L.ANODOCUMENTO >= YEAR(CURRENT_DATE) - 1
           AND L.TIPOVENTA IN ('CC', 'VC')
@@ -5173,14 +5173,14 @@ async function getRecommendations(clientCode, vendedorCode) {
             SELECT TRIM(L.CODIGOARTICULO) AS code,
                 TRIM(L.DESCRIPCION) AS name,
                 COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) AS clientCount
-            FROM DSEDAC.LINDTO L
+            FROM ${comercialErpTable('LINDTO')} L
             WHERE TRIM(L.CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
               AND L.ANODOCUMENTO = YEAR(CURRENT_DATE)
               AND L.TIPOVENTA IN ('CC', 'VC')
               AND L.CLASELINEA IN ('AB', 'VT')
               AND L.SERIEALBARAN NOT IN ('N', 'Z')
               AND NOT EXISTS (
-                  SELECT 1 FROM DSEDAC.LINDTO L2
+                  SELECT 1 FROM ${comercialErpTable('LINDTO')} L2
                   WHERE L2.CODIGOARTICULO = L.CODIGOARTICULO
                     AND TRIM(L2.CODIGOCLIENTEALBARAN) = CAST(? AS VARCHAR(10))
                     AND (L2.ANODOCUMENTO * 12 + L2.MESDOCUMENTO)
@@ -5228,19 +5228,19 @@ async function getRecommendations(clientCode, vendedorCode) {
                     COALESCE(T1.PRECIOTARIFA, 0) AS PRECIOTARIFA1,
                     COALESCE(T2.PRECIOTARIFA, 0) AS PRECIOMINIMO,
                     COALESCE(TC.PRECIOTARIFA, 0) AS PRECIOCLIENTE
-                FROM DSEDAC.ART A
+                FROM ${comercialErpTable('ART')} A
                 LEFT JOIN (
                     SELECT CODIGOARTICULO,
                         SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
                         SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
-                    FROM DSEDAC.ARO WHERE CODIGOALMACEN = 1
+                    FROM ${comercialErpTable('ARO')} WHERE CODIGOALMACEN = 1
                     GROUP BY CODIGOARTICULO
                 ) S ON A.CODIGOARTICULO = S.CODIGOARTICULO
-                LEFT JOIN DSEDAC.ARA T1 ON A.CODIGOARTICULO = T1.CODIGOARTICULO AND T1.CODIGOTARIFA = 1
-                LEFT JOIN DSEDAC.ARA T2 ON A.CODIGOARTICULO = T2.CODIGOARTICULO AND T2.CODIGOTARIFA = 2
-                LEFT JOIN DSEDAC.ARA TC ON A.CODIGOARTICULO = TC.CODIGOARTICULO
+                LEFT JOIN ${comercialErpTable('ARA')} T1 ON A.CODIGOARTICULO = T1.CODIGOARTICULO AND T1.CODIGOTARIFA = 1
+                LEFT JOIN ${comercialErpTable('ARA')} T2 ON A.CODIGOARTICULO = T2.CODIGOARTICULO AND T2.CODIGOTARIFA = 2
+                LEFT JOIN ${comercialErpTable('ARA')} TC ON A.CODIGOARTICULO = TC.CODIGOARTICULO
                     AND TC.CODIGOTARIFA = (
-                        SELECT CLC.CODIGOTARIFA FROM DSEDAC.CLC CLC
+                        SELECT CLC.CODIGOTARIFA FROM ${comercialErpTable('CLC')} CLC
                         WHERE TRIM(CLC.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
                         FETCH FIRST 1 ROW ONLY
                     )
@@ -5283,7 +5283,7 @@ async function getFamilies() {
     // Req #14: incluir prefamilia para agrupaciones tipo "Nestle".
     // Se devuelven tanto codigo simple (compat) como objeto completo cuando el caller
     // lo requiere via getFamiliesDetailed().
-    const sql = `SELECT DISTINCT TRIM(CODIGOFAMILIA) AS CODE FROM DSEDAC.ART WHERE ANOBAJA = 0 AND CODIGOFAMILIA != '' ORDER BY 1`;
+    const sql = `SELECT DISTINCT TRIM(CODIGOFAMILIA) AS CODE FROM ${comercialErpTable('ART')} WHERE ANOBAJA = 0 AND CODIGOFAMILIA != '' ORDER BY 1`;
     const cacheKey = 'pedidos:families';
 
     try {
@@ -5307,8 +5307,8 @@ async function getFamiliesDetailed() {
             COALESCE(MAX(TRIM(F.DESCRIPCIONFAMILIA)), MIN(TRIM(A.CODIGOFAMILIA))) AS NAME,
             COALESCE(MAX(TRIM(A.CODIGOPREFAMILIA)), '') AS PREFAMILY,
             COUNT(*) AS ART_COUNT
-        FROM DSEDAC.ART A
-        LEFT JOIN DSEDAC.FAM F ON A.CODIGOFAMILIA = F.CODIGOFAMILIA
+        FROM ${comercialErpTable('ART')} A
+        LEFT JOIN ${comercialErpTable('FAM')} F ON A.CODIGOFAMILIA = F.CODIGOFAMILIA
         WHERE (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)
           AND A.CODIGOFAMILIA <> ''
         GROUP BY TRIM(A.CODIGOFAMILIA)
@@ -5331,7 +5331,7 @@ async function getFamiliesDetailed() {
 }
 
 async function getBrands() {
-    const sql = `SELECT DISTINCT TRIM(CODIGOMARCA) AS CODE FROM DSEDAC.ART WHERE ANOBAJA = 0 AND CODIGOMARCA != '' ORDER BY 1`;
+    const sql = `SELECT DISTINCT TRIM(CODIGOMARCA) AS CODE FROM ${comercialErpTable('ART')} WHERE ANOBAJA = 0 AND CODIGOMARCA != '' ORDER BY 1`;
     const cacheKey = 'pedidos:brands';
 
     try {
@@ -5510,8 +5510,8 @@ async function getActivePromotions(clientCode) {
                    COALESCE(AR.STOCKACTUAL, 0) AS STOCK_ENVASES,
                    0 AS STOCK_UNIDADES
             FROM ${promotionsTable} P
-            LEFT JOIN DSEDAC.ART A ON ${colArticulo} = A.CODIGOARTICULO
-            LEFT JOIN DSEDAC.ARO AR ON ${colArticulo} = AR.CODIGOARTICULO AND AR.CODIGOALMACEN = 1
+            LEFT JOIN ${comercialErpTable('ART')} A ON ${colArticulo} = A.CODIGOARTICULO
+            LEFT JOIN ${comercialErpTable('ARO')} AR ON ${colArticulo} = AR.CODIGOARTICULO AND AR.CODIGOALMACEN = 1
             ${hasDateRange
               ? `WHERE (${colAnoHasta} * 10000 + ${colMesHasta} * 100 + ${colDiaHasta}) >= ?
                    AND (${colAnoDesde} * 10000 + ${colMesDesde} * 100 + ${colDiaDesde}) <= ?`
@@ -5556,7 +5556,7 @@ async function getActivePromotions(clientCode) {
 }
 
 /**
- * Query promociones de regalo desde DSEDAC.PMR.
+ * Query promociones de regalo desde ${comercialErpTable('PMR')}.
  * PMR es una tabla de cabecera: cada fila = una promocion regalo para un cliente especifico.
  * No tiene datos a nivel de producto; el nombre de la promocion describe la oferta.
  */
@@ -5571,7 +5571,7 @@ async function getActivePromotionsPMR(clientCode, today) {
             P.CANTIDADMINIMAPROMOCION,
             P.CANTIDADMAXIMAREGALO,
             P.PROMOCIONACUMULATIVASN
-        FROM DSEDAC.PMR P
+        FROM ${comercialErpTable('PMR')} P
         WHERE P.CODIGOCLIENTE = CAST(? AS CHAR(10))
           AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
           AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
@@ -5713,8 +5713,8 @@ async function getActivePrdPromotionsV2(today, cols) {
                    COALESCE(AR.ENVASESDISPONIBLES, 0) AS STOCK_ENVASES,
                    COALESCE(AR.UNIDADESDISPONIBLES, 0) AS STOCK_UNIDADES
             FROM ${promotionsTable} P
-            LEFT JOIN DSEDAC.ART A ON ${colArticulo} = A.CODIGOARTICULO
-            LEFT JOIN DSEDAC.ARO AR ON ${colArticulo} = AR.CODIGOARTICULO AND AR.CODIGOALMACEN = 1
+            LEFT JOIN ${comercialErpTable('ART')} A ON ${colArticulo} = A.CODIGOARTICULO
+            LEFT JOIN ${comercialErpTable('ARO')} AR ON ${colArticulo} = AR.CODIGOARTICULO AND AR.CODIGOALMACEN = 1
             ${hasDateRange
               ? `WHERE (${colAnoHasta} * 10000 + ${colMesHasta} * 100 + ${colDiaHasta}) >= ?
                    AND (${colAnoDesde} * 10000 + ${colMesDesde} * 100 + ${colDiaDesde}) <= ?`
@@ -5772,7 +5772,7 @@ async function getActiveGiftPromotionsV2(clientCode, today, options = {}) {
             CAST(0 AS DECIMAL(15, 5)) AS STOCK_UNIDADES,
             CAST(0 AS INTEGER) AS PRODUCT_ORDER,
             'PMR_DIRECT' AS ASSIGNMENT_SOURCE
-        FROM DSEDAC.PMR P
+        FROM ${comercialErpTable('PMR')} P
         WHERE P.CODIGOCLIENTE = CAST(? AS CHAR(10))
           AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
           AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
@@ -5809,18 +5809,18 @@ async function getActiveGiftPromotionsV2(clientCode, today, options = {}) {
                 COALESCE(S.STOCK_UNIDADES, 0) AS STOCK_UNIDADES,
                 G.ORDEN AS PRODUCT_ORDER,
                 'PMRC' AS ASSIGNMENT_SOURCE
-            FROM DSEDAC.PMRC C
-            JOIN DSEDAC.PMR P
+            FROM ${comercialErpTable('PMRC')} C
+            JOIN ${comercialErpTable('PMR')} P
               ON TRIM(P.CODIGOPROMOCIONREGALO) = TRIM(C.CODIGOPROMOCIONREGALO)
-            LEFT JOIN DSEDAC.PMP G
+            LEFT JOIN ${comercialErpTable('PMP')} G
               ON TRIM(G.CODIGOPROMOCION) = TRIM(C.CODIGOPROMOCIONREGALO)
-            LEFT JOIN DSEDAC.ART A
+            LEFT JOIN ${comercialErpTable('ART')} A
               ON TRIM(A.CODIGOARTICULO) = TRIM(G.CODIGOARTICULO)
             LEFT JOIN (
                 SELECT TRIM(CODIGOARTICULO) AS CODE,
                        SUM(ENVASESDISPONIBLES) AS STOCK_ENVASES,
                        SUM(UNIDADESDISPONIBLES) AS STOCK_UNIDADES
-                FROM DSEDAC.ARO
+                FROM ${comercialErpTable('ARO')}
                 WHERE CODIGOALMACEN = 1
                 GROUP BY TRIM(CODIGOARTICULO)
             ) S ON S.CODE = TRIM(G.CODIGOARTICULO)
@@ -5853,14 +5853,14 @@ async function getActiveSpecialPricePromotionsV2(clientCode, today) {
             C.SECUENCIA,
             COALESCE(S.STOCK_ENVASES, 0) AS STOCK_ENVASES,
             COALESCE(S.STOCK_UNIDADES, 0) AS STOCK_UNIDADES
-        FROM DSEDAC.CPES C
-        LEFT JOIN DSEDAC.ART A
+        FROM ${comercialErpTable('CPES')} C
+        LEFT JOIN ${comercialErpTable('ART')} A
           ON TRIM(A.CODIGOARTICULO) = TRIM(C.CODIGOARTICULO)
         LEFT JOIN (
             SELECT TRIM(CODIGOARTICULO) AS CODE,
                    SUM(ENVASESDISPONIBLES) AS STOCK_ENVASES,
                    SUM(UNIDADESDISPONIBLES) AS STOCK_UNIDADES
-            FROM DSEDAC.ARO
+            FROM ${comercialErpTable('ARO')}
             WHERE CODIGOALMACEN = 1
             GROUP BY TRIM(CODIGOARTICULO)
         ) S ON S.CODE = TRIM(C.CODIGOARTICULO)
@@ -6063,7 +6063,7 @@ async function getClientPricing(clientCode) {
             COALESCE(PORCENTAJEDECUENTO1, 0) AS PORCENTAJEDESCUENTO1,
             COALESCE(PORCENTAJEDECUENTO21, 0) AS PORCENTAJEDESCUENTO2,
             COALESCE(PORCENTAJEDECUENTO3, 0) AS PORCENTAJEDESCUENTO3
-        FROM DSEDAC.CLC
+        FROM ${comercialErpTable('CLC')}
         WHERE TRIM(CODIGOCLIENTE) = ?
         FETCH FIRST 1 ROW ONLY`;
     const rows = await queryWithParams(sql, [String(clientCode || '').trim()]);
@@ -6094,7 +6094,7 @@ async function getClientBalance(clientCode) {
     //   - "Cobrado" antes usaba L.LCTPVT='CO' en LACLAE, pero esa marca no
     //     existe (LACLAE tiene VT/AB para ventas/abonos, no cobros). Resultado:
     //     siempre 0.
-    //   - "Cobrado" REAL del cliente esta en DSEDAC.CVC.IMPORTECANCELADO,
+    //   - "Cobrado" REAL del cliente esta en ${comercialErpTable('CVC')}.IMPORTECANCELADO,
     //     sumando los vencimientos con ANOCOBRO = ano actual.
     //   - "Facturado" se mantiene desde LACLAE (ventas y abonos).
     const sqlFacturado = `
@@ -6120,7 +6120,7 @@ async function getClientBalance(clientCode) {
     // usuario espera ver.
     const sqlCobrado = `
         SELECT COALESCE(SUM(CVC.IMPORTECANCELADO), 0) AS TOTAL_COBRADO
-        FROM DSEDAC.CVC CVC
+        FROM ${comercialErpTable('CVC')} CVC
         WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = ?
           AND CVC.ANOEMISION = ?
           AND CVC.IMPORTECANCELADO > 0
@@ -6199,19 +6199,19 @@ async function getComplementaryProducts(productCodes, clientCode) {
                A.UNIDADESCAJA AS unitsPerBox,
                COALESCE(S.ENVASES_DISP, 0) AS stockEnvases,
                COALESCE(S.UNIDADES_DISP, 0) AS stockUnidades
-        FROM DSEDAC.LINDTO L1
-        JOIN DSEDAC.LINDTO L2
+        FROM ${comercialErpTable('LINDTO')} L1
+        JOIN ${comercialErpTable('LINDTO')} L2
             ON L2.CODIGOCLIENTEALBARAN = L1.CODIGOCLIENTEALBARAN
             AND L2.ANODOCUMENTO = L1.ANODOCUMENTO
             AND L2.NUMERODOCUMENTO = L1.NUMERODOCUMENTO
             AND TRIM(L2.CODIGOARTICULO) NOT IN (${placeholders})
-        JOIN DSEDAC.ART A ON TRIM(A.CODIGOARTICULO) = TRIM(L2.CODIGOARTICULO)
-        LEFT JOIN DSEDAC.ARA T ON TRIM(L2.CODIGOARTICULO) = TRIM(T.CODIGOARTICULO) AND T.CODIGOTARIFA = 1
+        JOIN ${comercialErpTable('ART')} A ON TRIM(A.CODIGOARTICULO) = TRIM(L2.CODIGOARTICULO)
+        LEFT JOIN ${comercialErpTable('ARA')} T ON TRIM(L2.CODIGOARTICULO) = TRIM(T.CODIGOARTICULO) AND T.CODIGOTARIFA = 1
         LEFT JOIN (
             SELECT CODIGOARTICULO,
                 SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
                 SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
-            FROM DSEDAC.ARO WHERE CODIGOALMACEN = 1
+            FROM ${comercialErpTable('ARO')} WHERE CODIGOALMACEN = 1
             GROUP BY CODIGOARTICULO
         ) S ON TRIM(L2.CODIGOARTICULO) = TRIM(S.CODIGOARTICULO)
         WHERE TRIM(L1.CODIGOARTICULO) IN (${placeholders})
@@ -6617,7 +6617,7 @@ async function getSimilarProducts(productCode) {
                    TRIM(COALESCE(CODIGOPRESENTACION, '')) AS PRESENTACION,
                    TRIM(COALESCE(CODIGOTIPO, '')) AS TIPO,
                    TRIM(DESCRIPCIONARTICULO) AS DESCRIPTION
-            FROM DSEDAC.ART WHERE TRIM(CODIGOARTICULO) = ?
+            FROM ${comercialErpTable('ART')} WHERE TRIM(CODIGOARTICULO) = ?
         `;
         const origRows = await queryWithParams(sqlOriginal, [code]);
         if (!origRows || origRows.length === 0) return [];
@@ -6637,12 +6637,12 @@ async function getSimilarProducts(productCode) {
                    COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCK_ENVASES,
                    COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCK_UNIDADES,
                    COALESCE(T.PRECIOTARIFA, 0) AS PRECIO
-            FROM DSEDAC.ART B
+            FROM ${comercialErpTable('ART')} B
             LEFT JOIN (
                 SELECT CODIGOARTICULO,
                     SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
                     SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
-                FROM DSEDAC.ARO
+                FROM ${comercialErpTable('ARO')}
                 WHERE CODIGOALMACEN = 1
                 GROUP BY CODIGOARTICULO
             ) S ON B.CODIGOARTICULO = S.CODIGOARTICULO
@@ -6654,7 +6654,7 @@ async function getSimilarProducts(productCode) {
                 JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
-            LEFT JOIN DSEDAC.ARA T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+            LEFT JOIN ${comercialErpTable('ARA')} T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
             WHERE TRIM(B.CODIGOFAMILIA) = ?
               AND TRIM(B.CODIGOARTICULO) != ?
               AND B.ANOBAJA = 0
@@ -6680,12 +6680,12 @@ async function getSimilarProducts(productCode) {
                    COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCK_ENVASES,
                    COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCK_UNIDADES,
                    COALESCE(T.PRECIOTARIFA, 0) AS PRECIO
-            FROM DSEDAC.ART B
+            FROM ${comercialErpTable('ART')} B
             LEFT JOIN (
                 SELECT CODIGOARTICULO,
                     SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
                     SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
-                FROM DSEDAC.ARO
+                FROM ${comercialErpTable('ARO')}
                 WHERE CODIGOALMACEN = 1
                 GROUP BY CODIGOARTICULO
             ) S ON B.CODIGOARTICULO = S.CODIGOARTICULO
@@ -6697,7 +6697,7 @@ async function getSimilarProducts(productCode) {
                 JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
-            LEFT JOIN DSEDAC.ARA T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+            LEFT JOIN ${comercialErpTable('ARA')} T ON B.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
             WHERE TRIM(B.CODIGOSUBFAMILIA) = ?
               AND TRIM(B.CODIGOARTICULO) != ?
               AND B.ANOBAJA = 0
@@ -6973,12 +6973,12 @@ async function searchProductsWithStock(searchTerm, limit = 20) {
                    COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0) AS STOCK_ENVASES,
                    COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS STOCK_UNIDADES,
                    COALESCE(T.PRECIOTARIFA, 0) AS PRECIO
-            FROM DSEDAC.ART A
+            FROM ${comercialErpTable('ART')} A
             LEFT JOIN (
                 SELECT CODIGOARTICULO,
                     SUM(ENVASESDISPONIBLES) AS ENVASES_DISP,
                     SUM(UNIDADESDISPONIBLES) AS UNIDADES_DISP
-                FROM DSEDAC.ARO
+                FROM ${comercialErpTable('ARO')}
                 WHERE CODIGOALMACEN = 1
                 GROUP BY CODIGOARTICULO
             ) S ON A.CODIGOARTICULO = S.CODIGOARTICULO
@@ -6990,7 +6990,7 @@ async function searchProductsWithStock(searchTerm, limit = 20) {
                 JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
-            LEFT JOIN DSEDAC.ARA T ON A.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
+            LEFT JOIN ${comercialErpTable('ARA')} T ON A.CODIGOARTICULO = T.CODIGOARTICULO AND T.CODIGOTARIFA = 1
             WHERE A.ANOBAJA = 0
               AND (COALESCE(S.ENVASES_DISP, 0) - COALESCE(RES.RES_ENV, 0)) > 0
               AND (

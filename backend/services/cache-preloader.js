@@ -123,8 +123,8 @@ async function warmUpDashboardQueries() {
                    SUM(L.CANTIDADENVASES) as totalBoxes,
                    SUM(L.IMPORTEMARGENREAL) as totalMargin,
                    COUNT(*) as numLines
-            FROM DSEDAC.LINDTO L
-            LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
+            FROM ${comercialErpTable('LINDTO')} L
+            LEFT JOIN ${comercialErpTable('CLI')} C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
             WHERE L.ANODOCUMENTO >= ${MIN_YEAR}
             GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO,
               L.CODIGOCLIENTEALBARAN, C.NOMBRECLIENTE, L.CODIGOVENDEDOR, L.SERIEDOCUMENTO
@@ -204,10 +204,10 @@ function buildClientsListV6Sql({ limit, offset, laclaeScopeFilter = '', clientCo
         C.ANOBAJA as yearInactive,
         TRIM(V.NOMBREVENDEDOR) as vendorName,
         LV.LAST_VENDOR as vendorCode
-      FROM DSEDAC.CLI C
+      FROM ${comercialErpTable('CLI')} C
       LEFT JOIN LACLAE_AGG S ON C.CODIGOCLIENTE = S.CLIENT_CODE
       LEFT JOIN LACLAE_LAST LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
-      LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
+      LEFT JOIN ${comercialErpTable('VDD')} V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
         ${clientCodesFilter || vendorScopedCliFilter}
         ${searchFilter}

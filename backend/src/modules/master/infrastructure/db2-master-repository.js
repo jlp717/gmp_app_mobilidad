@@ -1,11 +1,12 @@
 /**
  * Master Repository Implementation - DB2
- * READ-ONLY: DSEDAC.FAM (families), DSEDAC.TRF (tarifas), DSEDAC.VDD (vendors), DSEDAC.FPA (payment conditions)
+ * READ-ONLY: ${comercialErpTable('FAM')} (families), ${comercialErpTable('TRF')} (tarifas), ${comercialErpTable('VDD')} (vendors), DSEDAC.FPA (payment conditions)
  * READ/WRITE: JAVIER.PAYMENT_CONDITIONS
  */
 const { MasterRepository } = require('../domain/master-repository');
 const { MasterData } = require('../domain/master-data');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 class Db2MasterRepository extends MasterRepository {
   constructor(dbPool) {
@@ -57,7 +58,7 @@ class Db2MasterRepository extends MasterRepository {
       SELECT 
         CODIGOFAMILIA AS CODIGO,
         DESCRIPCIONFAMILIA AS NOMBRE
-      FROM DSEDAC.FAM
+      FROM ${comercialErpTable('FAM')}
       ORDER BY CODIGOFAMILIA
     `;
     const result = await this._db.executeParams(sql, []);
@@ -69,7 +70,7 @@ class Db2MasterRepository extends MasterRepository {
       SELECT 
         CODIGOTARIFA AS CODIGO,
         DESCRIPCIONTARIFA AS NOMBRE
-      FROM DSEDAC.TRF
+      FROM ${comercialErpTable('TRF')}
       ORDER BY CODIGOTARIFA
     `;
     const result = await this._db.executeParams(sql, []);
@@ -81,7 +82,7 @@ class Db2MasterRepository extends MasterRepository {
       SELECT 
         CODIGOVENDEDOR AS CODIGO,
         NOMBREVENDEDOR AS NOMBRE
-      FROM DSEDAC.VDD
+      FROM ${comercialErpTable('VDD')}
       ORDER BY NOMBREVENDEDOR
     `;
     const result = await this._db.executeParams(sql, []);
@@ -111,7 +112,7 @@ class Db2MasterRepository extends MasterRepository {
         }));
       }
     } catch (e) {
-      // Table may not exist, fall back to DSEDAC.FPG (FPA does not exist)
+      // Table may not exist, fall back to ${comercialErpTable('FPG')} (FPA does not exist)
     }
 
     const sql = `
@@ -123,7 +124,7 @@ class Db2MasterRepository extends MasterRepository {
           ELSE 0
         END AS ES_PAGARE,
         PRIMERPAGO AS DIAS
-      FROM DSEDAC.FPG
+      FROM ${comercialErpTable('FPG')}
       ORDER BY CODIGOFORMAPAGO
     `;
     const result = await this._db.executeParams(sql, []);

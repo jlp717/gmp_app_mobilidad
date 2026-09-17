@@ -7,6 +7,7 @@ const { ExportRepository } = require('../domain/export-repository');
 const { ExportJob } = require('../domain/export-job');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { VENDOR_COLUMN, LACLAE_SALES_FILTER, sanitizeCodeList } = require('../../../../utils/common');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 class Db2ExportRepository extends ExportRepository {
   constructor(dbPool) {
@@ -86,7 +87,7 @@ class Db2ExportRepository extends ExportRepository {
             LCIMVT - LCIMCT AS MARGEN,
             LCCTUD AS CANTIDAD,
             LCSRAB || LCNRAB AS DOCUMENTO
-          FROM DSED.LACLAE
+          FROM ${comercialErpTable('LACLAE')}
           WHERE ${vendorFilter}
             AND ${LACLAE_SALES_FILTER}
             AND LCAADC = ?
@@ -106,7 +107,7 @@ class Db2ExportRepository extends ExportRepository {
             TELEFONO1 AS TELEFONO,
             EMAIL,
             CODIGOVENDEDOR AS VENDEDOR
-          FROM DSEDAC.CLI
+          FROM ${comercialErpTable('CLI')}
           WHERE (ANOBAJA IS NULL OR ANOBAJA = 0)
             AND ${vendorFilter ? `CODIGOVENDEDOR IN (${sanitizeCodeList(vendorCodes)})` : '1=1'}
           ORDER BY NOMBRECLIENTE
@@ -121,7 +122,7 @@ class Db2ExportRepository extends ExportRepository {
             DESCRIPCIONARTICULO AS NOMBRE,
             CODIGOFAMILIA AS FAMILIA,
             PRECIOVENTA AS PRECIO
-          FROM DSEDAC.ART
+          FROM ${comercialErpTable('ART')}
           ORDER BY DESCRIPCIONARTICULO
         `;
         return await this._db.executeParams(sql, []);

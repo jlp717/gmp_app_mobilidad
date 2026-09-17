@@ -150,7 +150,7 @@ const LAC_SALES_FILTER = `
     AND L.LCCLLN IN ('AB', 'VT') 
     AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
     AND EXISTS (
-        SELECT 1 FROM DSEDAC.CAC CX
+        SELECT 1 FROM ${comercialErpTable('CAC')} CX
         WHERE L.LCSBAB = CX.CCSBAB 
           AND L.LCYEAB = CX.CCYEAB 
           AND L.LCSRAB = CX.CCSRAB 
@@ -286,7 +286,7 @@ function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
       AND (
         EXISTS (
           SELECT 1
-            FROM DSEDAC.CLP CLP
+            FROM ${comercialErpTable('CLP')} CLP
            WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(${clientAlias}.CODIGOCLIENTE)
              AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${placeholders})
         )
@@ -395,7 +395,7 @@ function buildClientListVendorSqlFilter(vendorCodes, clientAlias = 'C') {
     return `AND (
         EXISTS (
             SELECT 1
-              FROM DSEDAC.CLP CLP
+              FROM ${comercialErpTable('CLP')} CLP
              WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(${clientAlias}.CODIGOCLIENTE)
                AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${inList})
         )
@@ -428,7 +428,7 @@ function buildLaclaeBoundedClientCodesSql(vendorCodes) {
     const inList = codes.map((code) => `'${code}'`).join(',');
     const laclaeVendorCol = getVendorColumnExpr('');
     return `AND LCCDCL IN (
-        SELECT TRIM(CLP.CODIGOCLIENTE) FROM DSEDAC.CLP CLP WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${inList})
+        SELECT TRIM(CLP.CODIGOCLIENTE) FROM ${comercialErpTable('CLP')} CLP WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${inList})
     ) AND TRIM(${laclaeVendorCol}) IN (${inList})`;
 }
 
@@ -468,7 +468,7 @@ async function lookupClientAssignedVendorCodes(clientCode) {
         `SELECT DISTINCT TRIM(VENDOR_CODE) AS VENDOR_CODE
            FROM (
              SELECT TRIM(CLP.VENDEDORCOMERCIAL) AS VENDOR_CODE
-               FROM DSEDAC.CLP CLP
+               FROM ${comercialErpTable('CLP')} CLP
               WHERE TRIM(CLP.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
              UNION
              ${laclaeVendorSelects}
@@ -688,7 +688,7 @@ async function getVendorName(vendorCode) {
     
     if (_vendorNameCache.has(trimmed)) return _vendorNameCache.get(trimmed);
     try {
-        const rows = await queryWithParams(`SELECT NOMBREVENDEDOR FROM DSEDAC.VDD WHERE CODIGOVENDEDOR = ?`, [trimmed], false);
+        const rows = await queryWithParams(`SELECT NOMBREVENDEDOR FROM ${comercialErpTable('VDD')} WHERE CODIGOVENDEDOR = ?`, [trimmed], false);
         const name = (rows && rows.length > 0) ? rows[0].NOMBREVENDEDOR : vendorCode;
         _vendorNameCache.set(trimmed, name);
         return name;

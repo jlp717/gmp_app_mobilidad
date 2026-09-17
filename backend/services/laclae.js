@@ -207,7 +207,7 @@ _setupInvalidationPatternHook();
 
 
 // Load LACLAE visit/delivery data into memory cache
-// NOW ENHANCED: Merges data from DSEDAC.CDVI (Master Route Config) + DSED.LACLAE (Sales/History)
+// NOW ENHANCED: Merges data from ${comercialErpTable('CDVI')} (Master Route Config) + DSED.LACLAE (Sales/History)
 async function loadLaclaeCache() {
     if (laclaeCacheLoadPromise) {
         return laclaeCacheLoadPromise;
@@ -237,9 +237,9 @@ async function loadLaclaeCacheInternal() {
             const nextLaclaeCache = {};
             const nextLaclaeCacheAccessOrder = [];
 
-            // 1. Load Master Route Config from DSEDAC.CDVI (Cuadro de Visitas)
+            // 1. Load Master Route Config from ${comercialErpTable('CDVI')} (Cuadro de Visitas)
             // This ensures NEW clients without sales are included
-            logger.info('   Loading Master Route Config from DSEDAC.CDVI...');
+            logger.info(`   Loading Master Route Config from ${comercialErpTable('CDVI')}...`);
             // Include clients with ANOBAJA (vendor transfers mark the previous ficha as baja).
             // Sales scope needs them; visit helpers skip isBaja so they do not appear on the day route.
             const cdviRows = await conn.query(`
@@ -261,7 +261,7 @@ async function loadLaclaeCacheInternal() {
                     C.ORDENVISITAVIERNES as OR_V,
                     C.ORDENVISITASABADO as OR_S,
                     C.ORDENVISITADOMINGO as OR_D
-                FROM DSEDAC.CDVI C
+                FROM ${comercialErpTable('CDVI')} C
         JOIN ${comercialErpTable('CLI')} K ON C.CODIGOCLIENTE = K.CODIGOCLIENTE
                 WHERE (C.MARCAACTUALIZACION <> 'B' OR C.MARCAACTUALIZACION IS NULL OR TRIM(C.MARCAACTUALIZACION) = '')
                   AND (  -- EXCLUDE zombie entries with NO visit days assigned

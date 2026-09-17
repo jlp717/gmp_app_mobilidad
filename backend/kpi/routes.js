@@ -125,7 +125,7 @@ async function getVendorClientSet(vendorCodes, mode = 'current') {
     const [clpResult, vendorClientsResult] = await Promise.all([
       kpiQuery(
         `SELECT DISTINCT TRIM(CODIGOCLIENTE) AS CLIENT_CODE
-           FROM DSEDAC.CLP
+           FROM ${comercialErpTable('CLP')}
           WHERE TRIM(VENDEDORCOMERCIAL) IN (${placeholders})`,
         codes,
       ),

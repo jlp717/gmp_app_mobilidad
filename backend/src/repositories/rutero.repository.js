@@ -96,7 +96,7 @@ class RuteroRepository {
                 SUM(CASE WHEN DIAVISITAVIERNESSN = 'S' THEN 1 ELSE 0 END) as VIERNES,
                 SUM(CASE WHEN DIAVISITASABADOSN = 'S' THEN 1 ELSE 0 END) as SABADO,
                 SUM(CASE WHEN DIAVISITADOMINGOSN = 'S' THEN 1 ELSE 0 END) as DOMINGO
-            FROM DSEDAC.CDVI
+            FROM ${comercialErpTable('CDVI')}
             WHERE 1=1
         `;
         if (cleanCodes.length > 0) {

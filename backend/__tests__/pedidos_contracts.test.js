@@ -418,7 +418,10 @@ describe('pedidos create order persistence contract', () => {
     const rows = mockCreatedOrderReads();
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (/DSEDAC\.CLC/i.test(sql) && /DSEDAC\.ARA/i.test(sql)) {
-        return [{ CODIGOARTICULO: 'ART001', PRECIOTARIFA: 10 }];
+        return [
+          { CODIGOARTICULO: 'ART001', PRECIOTARIFA: 10 },
+          { CODIGOARTICULO: '4311', PRECIOTARIFA: 49.572 },
+        ];
       }
       if (/UPDATE\s+JAVIER\.PEDIDOS_SEQ\s+SET\s+ULTIMO_NUMERO/i.test(sql)) return [];
       if (/SELECT\s+ULTIMO_NUMERO\s+FROM\s+JAVIER\.PEDIDOS_SEQ/i.test(sql)) return [{ ULTIMO_NUMERO: 100 }];

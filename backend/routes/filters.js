@@ -14,6 +14,7 @@ const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
 const { query, queryWithParams } = require('../config/db');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 // Cache para los filtros (se refresca cada 5 minutos)
 let filtersCache = {
@@ -52,7 +53,7 @@ async function refreshCacheIfNeeded() {
 
     try {
         // FI1 - Categorías principales
-        const fi1Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI1 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
+        const fi1Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM ${comercialErpTable('FI1')} ORDER BY ORDEN, DESCRIPCIONFILTRO`;
         const fi1Result = await query(fi1Sql, false, true);
         logger.info(`🔍 FI1 raw result: ${fi1Result.length} rows, sample keys: ${fi1Result[0] ? Object.keys(fi1Result[0]).join(', ') : 'empty'}`);
         
@@ -65,7 +66,7 @@ async function refreshCacheIfNeeded() {
         }).filter(f => f.code && f.code.length > 0);
 
         // FI2 - Subcategorías
-        const fi2Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI2 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
+        const fi2Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM ${comercialErpTable('FI2')} ORDER BY ORDEN, DESCRIPCIONFILTRO`;
         const fi2Result = await query(fi2Sql, false, true);
         logger.info(`🔍 FI2 raw result: ${fi2Result.length} rows`);
         
@@ -77,7 +78,7 @@ async function refreshCacheIfNeeded() {
         }).filter(f => f.code && f.code.length > 0);
 
         // FI3 - Atributos adicionales
-        const fi3Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI3 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
+        const fi3Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM ${comercialErpTable('FI3')} ORDER BY ORDEN, DESCRIPCIONFILTRO`;
         const fi3Result = await query(fi3Sql, false, true);
         logger.info(`🔍 FI3 raw result: ${fi3Result.length} rows`);
         
@@ -89,7 +90,7 @@ async function refreshCacheIfNeeded() {
         }).filter(f => f.code && f.code.length > 0);
 
         // FI4 - Características especiales
-        const fi4Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI4 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
+        const fi4Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM ${comercialErpTable('FI4')} ORDER BY ORDEN, DESCRIPCIONFILTRO`;
         const fi4Result = await query(fi4Sql, false, true);
         logger.info(`🔍 FI4 raw result: ${fi4Result.length} rows`);
         
@@ -101,7 +102,7 @@ async function refreshCacheIfNeeded() {
         }).filter(f => f.code && f.code.length > 0);
 
         // FI5 - Secciones/Tipo conservación
-        const fi5Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM DSEDAC.FI5 ORDER BY ORDEN, DESCRIPCIONFILTRO`;
+        const fi5Sql = `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO, ORDEN FROM ${comercialErpTable('FI5')} ORDER BY ORDEN, DESCRIPCIONFILTRO`;
         const fi5Result = await query(fi5Sql, false, true);
         logger.info(`🔍 FI5 raw result: ${fi5Result.length} rows`);
         
@@ -117,10 +118,10 @@ async function refreshCacheIfNeeded() {
 
         // Si alguno está vacío, logueamos advertencia
         if (filtersCache.fi1.length === 0) {
-            logger.warn('⚠️ FI1 vacío - verificar tabla DSEDAC.FI1');
+            logger.warn(`FI1 vacio - verificar tabla ${comercialErpTable('FI1')}`);
         }
         if (filtersCache.fi2All.length === 0) {
-            logger.warn('⚠️ FI2 vacío - verificar tabla DSEDAC.FI2');
+            logger.warn(`FI2 vacio - verificar tabla ${comercialErpTable('FI2')}`);
         }
 
     } catch (err) {
@@ -171,8 +172,8 @@ router.get('/fi2', async (req, res) => {
             // Obtener FI2 que realmente existen para artículos con ese FI1
             const fi2Sql = `
                 SELECT DISTINCT FILTRO02
-                FROM DSEDAC.ARTX x
-                INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
+                FROM ${comercialErpTable('ARTX')} x
+                INNER JOIN ${comercialErpTable('ART')} a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
                 WHERE x.FILTRO01 = ?
                 AND x.FILTRO02 IS NOT NULL
                 AND TRIM(x.FILTRO02) <> ''
@@ -227,8 +228,8 @@ router.get('/fi3', async (req, res) => {
 
             const fi3Sql = `
                 SELECT DISTINCT FILTRO03
-                FROM DSEDAC.ARTX x
-                INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
+                FROM ${comercialErpTable('ARTX')} x
+                INNER JOIN ${comercialErpTable('ART')} a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
                 WHERE ${whereConditions.join(' AND ')}
                 AND x.FILTRO03 IS NOT NULL
                 AND TRIM(x.FILTRO03) <> ''
@@ -277,8 +278,8 @@ router.get('/fi4', async (req, res) => {
 
             const fi4Sql = `
                 SELECT DISTINCT FILTRO04
-                FROM DSEDAC.ARTX x
-                INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
+                FROM ${comercialErpTable('ARTX')} x
+                INNER JOIN ${comercialErpTable('ART')} a ON x.CODIGOARTICULO = a.CODIGOARTICULO AND a.BLOQUEADOSN <> 'S'
                 WHERE ${whereConditions.join(' AND ')}
                 AND x.FILTRO04 IS NOT NULL
                 AND TRIM(x.FILTRO04) <> ''
@@ -379,8 +380,8 @@ router.get('/articles', async (req, res) => {
         // Contar total
         const countResult = await queryWithParams(`
             SELECT COUNT(DISTINCT a.CODIGOARTICULO) as total
-            FROM DSEDAC.ART a
-            INNER JOIN DSEDAC.ARTX x ON a.CODIGOARTICULO = x.CODIGOARTICULO
+            FROM ${comercialErpTable('ART')} a
+            INNER JOIN ${comercialErpTable('ARTX')} x ON a.CODIGOARTICULO = x.CODIGOARTICULO
             ${whereClause}
         `, params);
 
@@ -398,8 +399,8 @@ router.get('/articles', async (req, res) => {
                 TRIM(a.CODIGOSECCIONLARGA) as fi5Code,
                 TRIM(a.CODIGOMARCA) as brand,
                 a.PESO as weight
-            FROM DSEDAC.ART a
-            INNER JOIN DSEDAC.ARTX x ON a.CODIGOARTICULO = x.CODIGOARTICULO
+            FROM ${comercialErpTable('ART')} a
+            INNER JOIN ${comercialErpTable('ARTX')} x ON a.CODIGOARTICULO = x.CODIGOARTICULO
             ${whereClause}
             ORDER BY a.DESCRIPCIONARTICULO
             OFFSET ? ROWS
@@ -443,9 +444,9 @@ router.get('/cascade', async (req, res) => {
                     TRIM(x.FILTRO02) as code,
                     COALESCE(TRIM(f.DESCRIPCIONFILTRO), TRIM(x.FILTRO02)) as name,
                     COUNT(DISTINCT x.CODIGOARTICULO) as count
-                FROM DSEDAC.ARTX x
-                INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO
-                LEFT JOIN DSEDAC.FI2 f ON TRIM(x.FILTRO02) = TRIM(f.CODIGOFILTRO)
+                FROM ${comercialErpTable('ARTX')} x
+                INNER JOIN ${comercialErpTable('ART')} a ON x.CODIGOARTICULO = a.CODIGOARTICULO
+                LEFT JOIN ${comercialErpTable('FI2')} f ON TRIM(x.FILTRO02) = TRIM(f.CODIGOFILTRO)
                 WHERE a.BLOQUEADOSN <> 'S'
                 AND TRIM(x.FILTRO01) = ?
                 AND x.FILTRO02 IS NOT NULL AND TRIM(x.FILTRO02) <> ''
@@ -467,9 +468,9 @@ router.get('/cascade', async (req, res) => {
                     TRIM(x.FILTRO03) as code,
                     COALESCE(TRIM(f.DESCRIPCIONFILTRO), TRIM(x.FILTRO03)) as name,
                     COUNT(DISTINCT x.CODIGOARTICULO) as count
-                FROM DSEDAC.ARTX x
-                INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO
-                LEFT JOIN DSEDAC.FI3 f ON TRIM(x.FILTRO03) = TRIM(f.CODIGOFILTRO)
+                FROM ${comercialErpTable('ARTX')} x
+                INNER JOIN ${comercialErpTable('ART')} a ON x.CODIGOARTICULO = a.CODIGOARTICULO
+                LEFT JOIN ${comercialErpTable('FI3')} f ON TRIM(x.FILTRO03) = TRIM(f.CODIGOFILTRO)
                 WHERE ${fi3Conditions.join(' AND ')}
                 AND x.FILTRO03 IS NOT NULL AND TRIM(x.FILTRO03) <> ''
                 GROUP BY TRIM(x.FILTRO03), f.DESCRIPCIONFILTRO
@@ -491,9 +492,9 @@ router.get('/cascade', async (req, res) => {
                     TRIM(x.FILTRO04) as code,
                     COALESCE(TRIM(f.DESCRIPCIONFILTRO), TRIM(x.FILTRO04)) as name,
                     COUNT(DISTINCT x.CODIGOARTICULO) as count
-                FROM DSEDAC.ARTX x
-                INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO
-                LEFT JOIN DSEDAC.FI4 f ON TRIM(x.FILTRO04) = TRIM(f.CODIGOFILTRO)
+                FROM ${comercialErpTable('ARTX')} x
+                INNER JOIN ${comercialErpTable('ART')} a ON x.CODIGOARTICULO = a.CODIGOARTICULO
+                LEFT JOIN ${comercialErpTable('FI4')} f ON TRIM(x.FILTRO04) = TRIM(f.CODIGOFILTRO)
                 WHERE ${fi4Conditions.join(' AND ')}
                 AND x.FILTRO04 IS NOT NULL AND TRIM(x.FILTRO04) <> ''
                 GROUP BY TRIM(x.FILTRO04), f.DESCRIPCIONFILTRO
@@ -511,8 +512,8 @@ router.get('/cascade', async (req, res) => {
 
         const countResult = await queryWithParams(`
             SELECT COUNT(DISTINCT x.CODIGOARTICULO) as total
-            FROM DSEDAC.ARTX x
-            INNER JOIN DSEDAC.ART a ON x.CODIGOARTICULO = a.CODIGOARTICULO
+            FROM ${comercialErpTable('ARTX')} x
+            INNER JOIN ${comercialErpTable('ART')} a ON x.CODIGOARTICULO = a.CODIGOARTICULO
             WHERE ${countConditions.join(' AND ')}
         `, countParams);
         result.articleCount = countResult[0]?.total || 0;

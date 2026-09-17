@@ -1,11 +1,12 @@
 /**
  * Filters Repository Implementation - DB2
- * READ-ONLY: DSEDAC.FI1, DSEDAC.FI2, DSEDAC.FI3, DSEDAC.FI4, DSEDAC.FI5
+ * READ-ONLY: ${comercialErpTable('FI1')}, ${comercialErpTable('FI2')}, ${comercialErpTable('FI3')}, ${comercialErpTable('FI4')}, ${comercialErpTable('FI5')}
  */
 const { FilterRepository } = require('../domain/filter-repository');
 const { Filter } = require('../domain/filter');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { sanitizeCodeList } = require('../../../../utils/common');
+const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 
 class Db2FilterRepository extends FilterRepository {
   constructor(dbPool) {
@@ -26,7 +27,7 @@ class Db2FilterRepository extends FilterRepository {
         F.ORDEN,
         F.ACTIVO,
         F.DESCRIPCION
-      FROM DSEDAC.FI1 F
+      FROM ${comercialErpTable('FI1')} F
       WHERE TRIM(F.TIPO) = ?
         AND ${vendorFilter}
       ORDER BY F.ORDEN
@@ -49,7 +50,7 @@ class Db2FilterRepository extends FilterRepository {
         F.ORDEN,
         F.ACTIVO,
         F.DESCRIPCION
-      FROM DSEDAC.FI1 F
+      FROM ${comercialErpTable('FI1')} F
       WHERE ${vendorFilter}
       ORDER BY F.TIPO, F.ORDEN
     `;
@@ -71,7 +72,7 @@ class Db2FilterRepository extends FilterRepository {
         F.ORDEN,
         F.ACTIVO,
         F.DESCRIPCION
-      FROM DSEDAC.FI1 F
+      FROM ${comercialErpTable('FI1')} F
       WHERE F.ACTIVO = 1
         AND TRIM(F.TIPO) = ?
         AND ${vendorFilter}
@@ -87,7 +88,13 @@ class Db2FilterRepository extends FilterRepository {
       ? '1=1'
       : `F.VENDEDOR IN (${sanitizeCodeList(vendorCodes)})`;
 
-    const tables = ['DSEDAC.FI1', 'DSEDAC.FI2', 'DSEDAC.FI3', 'DSEDAC.FI4', 'DSEDAC.FI5'];
+    const tables = [
+      comercialErpTable('FI1'),
+      comercialErpTable('FI2'),
+      comercialErpTable('FI3'),
+      comercialErpTable('FI4'),
+      comercialErpTable('FI5'),
+    ];
     const allFilters = [];
 
     for (const table of tables) {

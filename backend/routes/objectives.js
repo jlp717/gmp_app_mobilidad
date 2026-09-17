@@ -835,7 +835,7 @@ router.get('/', verifyToken, requireVendorQueryScope, async (req, res) => {
         // 1. Get Target Configuration (Global % increase)
         const targetPct = await getVendorTargetConfig(vendedorCodes);
 
-        // Intentar obtener objetivos desde DSEDAC.COFC (cuotas mensuales)
+        // Intentar obtener objetivos desde ${comercialErpTable('COFC')} (cuotas mensuales)
         let salesObjective = 0;
         let marginObjective = 0;
         let objectiveSource = 'calculated'; // 'database' o 'calculated'
@@ -849,7 +849,7 @@ router.get('/', verifyToken, requireVendorQueryScope, async (req, res) => {
                 // Por ahora mantenemos lógica global si no es específica
                 const quotaResult = await query(`
           SELECT COALESCE(SUM(${quotaField}), 0) as quota
-          FROM DSEDAC.COFC
+          FROM ${comercialErpTable('COFC')}
           WHERE CODIGOTIPOCUOTA IS NOT NULL
         `, false);
 
@@ -869,7 +869,7 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
                 const cmvResult = await queryWithParams(`
                     SELECT COALESCE(IMPORTEOBJETIVO, 0) as objetivo,
                            COALESCE(PORCENTAJEOBJETIVO, 0) as porcentaje
-                    FROM DSEDAC.CMV 
+                    FROM ${comercialErpTable('CMV')} 
                     WHERE CODIGOVENDEDOR = ?
                 `, [code], false);
 
@@ -1435,7 +1435,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         }
 
         // Build ARTX join if needed
-        const artxJoin = needsArtxJoin ? 'LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO' : '';
+        const artxJoin = needsArtxJoin ? `LEFT JOIN ${comercialErpTable('ARTX')} AX ON L.LCCDRF = AX.CODIGOARTICULO` : '';
 
         // Get product purchases for this client - USING DSED.LACLAE (which has data for all clients including PUA)
         const clientParams = [clientCode, ...filterParams];
@@ -1464,8 +1464,8 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
                 COALESCE(TRIM(AX.FILTRO04), '') as FI4_CODE,
                 COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as FI5_CODE
             FROM ${comercialErpTable('LACLAE')} L
-            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
-            LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
+            LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
+            LEFT JOIN ${comercialErpTable('ARTX')} AX ON L.LCCDRF = AX.CODIGOARTICULO
             WHERE L.LCCDCL = ?
               AND L.LCAADC IN(${uniqueYears.map(() => '?').join(',')})
               AND L.LCMMDC BETWEEN ? AND ?
@@ -1504,38 +1504,38 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         } else {
             // Fallback: load from database (slower)
             try {
-                const famRows = await query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM DSEDAC.FAM`, false, false);
+                const famRows = await query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM ${comercialErpTable('FAM')}`, false, false);
                 famRows.forEach(r => { familyNames[r.CODIGOFAMILIA?.trim()] = r.DESCRIPCIONFAMILIA?.trim() || r.CODIGOFAMILIA?.trim(); });
 
-                const fi1Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI1`, false, false);
+                const fi1Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI1')}`, false, false);
                 fi1Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi1Names[code] = name;
                 });
 
-                const fi2Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI2`, false, false);
+                const fi2Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI2')}`, false, false);
                 fi2Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi2Names[code] = name;
                 });
 
-                const fi3Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI3`, false, false);
+                const fi3Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI3')}`, false, false);
                 fi3Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi3Names[code] = name;
                 });
 
-                const fi4Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI4`, false, false);
+                const fi4Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI4')}`, false, false);
                 fi4Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi4Names[code] = name;
                 });
 
-                const fi5Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI5`, false, false);
+                const fi5Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI5')}`, false, false);
                 fi5Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();

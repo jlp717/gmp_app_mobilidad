@@ -17,7 +17,7 @@ const { comercialErpTable } = require('../../../../utils/comercial-erp-tables');
 const CLIENT_VENDOR_SELECT_SQL = `
         COALESCE(
           (SELECT TRIM(MIN(CLP.VENDEDORCOMERCIAL))
-             FROM DSEDAC.CLP CLP
+             FROM ${comercialErpTable('CLP')} CLP
             WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(CLI.CODIGOCLIENTE)),
           (SELECT TRIM(LAC_VENDOR)
              FROM (

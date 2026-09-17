@@ -41,7 +41,7 @@ class Db2ObjectiveRepository extends ObjectiveRepository {
         'ventas' AS TIPO,
         COALESCE(CT.IMPORTE_OBJETIVO, COALESCE(CMV.IMPORTEOBJETIVO, 0)) AS OBJETIVO,
         COALESCE(L.VENTAS, 0) AS ACTUAL
-      FROM DSEDAC.CMV CMV
+      FROM ${comercialErpTable('CMV')} CMV
       LEFT JOIN JAVIER.COMMERCIAL_TARGETS CT 
         ON CT.CODIGOVENDEDOR = CMV.CODIGOVENDEDOR
         AND CT.ACTIVO = 'S'

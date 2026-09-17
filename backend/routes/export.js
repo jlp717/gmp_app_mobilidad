@@ -11,6 +11,7 @@ const {
     sanitizeForSQL,
     handleRouteError
 } = require('../utils/common');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 // =============================================================================
 // EXPORT DATA (for PDF generation)
@@ -30,7 +31,7 @@ router.get('/client-report', verifyToken, requireVendorQueryScope, async (req, r
       SELECT CODIGOCLIENTE as code, NOMBRECLIENTE as name, NIF as nif,
              DIRECCION as address, POBLACION as city, PROVINCIA as province,
              CODIGOPOSTAL as postalCode, TELEFONO1 as phone, CODIGORUTA as route
-      FROM DSEDAC.CLI WHERE CODIGOCLIENTE = ?
+      FROM ${comercialErpTable('CLI')} WHERE CODIGOCLIENTE = ?
     `, [safeCode]);
         const clientInfo = clientRows && clientRows.length > 0 ? clientRows[0] : null;
 
@@ -41,7 +42,7 @@ router.get('/client-report', verifyToken, requireVendorQueryScope, async (req, r
              SUM(IMPORTEMARGENREAL) as margin,
              SUM(CANTIDADENVASES) as boxes,
              COUNT(DISTINCT MESDOCUMENTO) as activeMonths
-      FROM DSEDAC.LINDTO
+      FROM ${comercialErpTable('LINDTO')}
       WHERE CODIGOCLIENTEALBARAN = ?
         AND ANODOCUMENTO >= ? ${vendedorFilter}
       GROUP BY ANODOCUMENTO
@@ -55,8 +56,8 @@ router.get('/client-report', verifyToken, requireVendorQueryScope, async (req, r
              SUM(L.IMPORTEVENTA) as sales,
              SUM(L.CANTIDADENVASES) as boxes,
              COUNT(*) as orders
-      FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+      FROM ${comercialErpTable('LINDTO')} L
+      LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO
       WHERE L.CODIGOCLIENTEALBARAN = ?
         AND L.ANODOCUMENTO >= ? ${vendedorFilter}
       GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION

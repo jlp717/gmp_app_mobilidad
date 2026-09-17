@@ -259,8 +259,8 @@ router.get('/top-products', verifyToken, requireVendorQueryScope, async (req, re
   SUM(L.CANTIDADENVASES) as totalBoxes,
   SUM(L.CANTIDADUNIDADES) as totalUnits,
   COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) as numClients
-      FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+      FROM ${comercialErpTable('LINDTO')} L
+      LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO
       WHERE L.ANODOCUMENTO = ? ${vendorFilter.filter}
       GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, A.CODIGOMARCA, A.CODIGOFAMILIA
       ORDER BY totalSales DESC
@@ -311,7 +311,7 @@ router.get('/margins', verifyToken, requireVendorQueryScope, async (req, res) =>
       SELECT MESDOCUMENTO as month,
   SUM(IMPORTEVENTA) as sales,
   SUM(IMPORTEMARGENREAL) as margin
-      FROM DSEDAC.LINDTO
+      FROM ${comercialErpTable('LINDTO')}
       WHERE ANODOCUMENTO = ? ${vendorFilter.filter}
       GROUP BY MESDOCUMENTO
       ORDER BY MESDOCUMENTO
@@ -322,8 +322,8 @@ router.get('/margins', verifyToken, requireVendorQueryScope, async (req, res) =>
       SELECT COALESCE(A.CODIGOFAMILIA, 'SIN FAM') as family,
   SUM(L.IMPORTEVENTA) as sales,
   SUM(L.IMPORTEMARGENREAL) as margin
-      FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+      FROM ${comercialErpTable('LINDTO')} L
+      LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO
       WHERE L.ANODOCUMENTO = ? ${vendorFilterAliased.filter}
       GROUP BY A.CODIGOFAMILIA
       ORDER BY sales DESC
@@ -482,7 +482,7 @@ router.get('/sales-history', verifyToken, requireVendorQueryScope, async (req, r
         COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as fi5
       FROM ${comercialErpTable('LAC')} L
       LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      LEFT JOIN DSEDAC.ARTX AX ON L.CODIGOARTICULO = AX.CODIGOARTICULO
+      LEFT JOIN ${comercialErpTable('ARTX')} AX ON L.CODIGOARTICULO = AX.CODIGOARTICULO
       ${whereClause}
       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
       OFFSET ${parseInt(offset)} ROWS

@@ -11,6 +11,7 @@
 
 const { queryWithParams, getPool, initDb } = require('../config/db');
 const logger = require('../middleware/logger');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 const MAX_IDEMPOTENCY_LOOKUP_BATCH = 10;
 
@@ -457,7 +458,7 @@ function isAuthorizedMinFloorException(line) {
 
     if (isTruthyFlag(line.permiteBajoMinimo ?? line.PERMITEBAJOMINIMO)) return true;
     if (isTruthyFlag(line.precioEspecialCliente ?? line.PRECIOESPECIALCLIENTE)) return true;
-    if (source.includes('DSEDAC.PES') || source.includes('DSEDAC.PPU')) return true;
+    if (source.includes(comercialErpTable('PES')) || source.includes('DSEDAC.PES') || source.includes('DSEDAC.PPU')) return true;
     if (source.includes('DSEDAC.PMR') || source.includes('DSEDAC.PRD')) return true;
     if (source.includes('PROMO')) return true;
     if (promotionCode) return true;
@@ -641,8 +642,8 @@ function appendInvoiceDocumentExists(whereParts, params, docLike, numbers) {
     }
     whereParts.push([
         'EXISTS (SELECT 1',
-        'FROM DSEDAC.CPC P',
-        'INNER JOIN DSEDAC.CAC F',
+        `FROM ${comercialErpTable('CPC')} P`,
+        `INNER JOIN ${comercialErpTable('CAC')} F`,
         'ON F.EJERCICIOALBARAN = P.EJERCICIOALBARAN',
         'AND TRIM(F.SERIEALBARAN) = TRIM(P.SERIEALBARAN)',
         'AND F.TERMINALALBARAN = P.TERMINALALBARAN',

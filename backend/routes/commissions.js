@@ -1051,7 +1051,7 @@ async function batchFetchAllVendorData(vendorCodes, year) {
         // 5. Vendor names for ALL vendors (also use variants for code format tolerance)
         queryWithParams(`
             SELECT TRIM(CODIGOVENDEDOR) as VENDOR_CODE, TRIM(NOMBREVENDEDOR) as VENDOR_NAME
-            FROM DSEDAC.VDD
+            FROM ${comercialErpTable('VDD')}
             WHERE TRIM(CODIGOVENDEDOR) IN (${variantPlaceholders})
         `, [...codeVariants], false),
     ]);

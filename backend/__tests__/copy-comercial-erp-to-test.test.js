@@ -27,6 +27,10 @@ describe('copy-comercial-erp-to-test', () => {
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_CVC')).toBe(true);
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_FPG')).toBe(true);
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_CLI')).toBe(true);
+    expect(jobs.some((job) => job.dest === 'JAVIER.TEST_CLP')).toBe(true);
+    expect(jobs.find((job) => job.dest === 'JAVIER.TEST_CLP').fullSql).toMatch(/SELECT \* FROM DSEDAC\.CLP/);
+    expect(jobs.some((job) => job.dest === 'JAVIER.TEST_LINDTO')).toBe(true);
+    expect(jobs.some((job) => job.dest === 'JAVIER.TEST_CDVI')).toBe(true);
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_ART')).toBe(true);
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_LAC')).toBe(true);
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_CFC')).toBe(true);

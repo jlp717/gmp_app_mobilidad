@@ -286,7 +286,7 @@ const getClientsHandler = async (req, res) => {
       FROM ${comercialErpTable('CLI')} C
       LEFT JOIN LACLAE_AGG S ON C.CODIGOCLIENTE = S.CLIENT_CODE
       LEFT JOIN LACLAE_LAST LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
-      LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
+      LEFT JOIN ${comercialErpTable('VDD')} V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
         ${clientCodesFilter || vendorScopedCliFilter}
         ${searchClause.clause}
@@ -340,7 +340,7 @@ const getClientsHandler = async (req, res) => {
             assignedVendor = cachedDays.foundVendor;
           }
         }
-        // Dias de visita viven en DSEDAC.CDVI (cache laclae), no en columnas VISL de este SELECT.
+        // Dias de visita viven en ${comercialErpTable('CDVI')} (cache laclae), no en columnas VISL de este SELECT.
 
         return {
           code: c.CODE?.trim(),
@@ -482,7 +482,7 @@ router.get('/compare', verifyToken, async (req, res) => {
         AVG(L.IMPORTEVENTA) as avgOrderValue,
         MIN(L.ANODOCUMENTO * 100 + L.MESDOCUMENTO) as firstPurchase,
         MAX(L.ANODOCUMENTO * 100 + L.MESDOCUMENTO) as lastPurchase
-      FROM DSEDAC.LINDTO L
+      FROM ${comercialErpTable('LINDTO')} L
       LEFT JOIN ${comercialErpTable('CLI')} C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
       WHERE L.CODIGOCLIENTEALBARAN IN(${clientPlaceholders})
         AND L.ANODOCUMENTO >= ?
@@ -500,7 +500,7 @@ router.get('/compare', verifyToken, async (req, res) => {
         L.ANODOCUMENTO as year,
         L.MESDOCUMENTO as month,
         SUM(L.IMPORTEVENTA) as sales
-      FROM DSEDAC.LINDTO L
+      FROM ${comercialErpTable('LINDTO')} L
       WHERE L.CODIGOCLIENTEALBARAN IN(${clientPlaceholders})
         AND L.ANODOCUMENTO >= ?
         AND L.TIPOVENTA IN ('CC', 'VC')
@@ -611,7 +611,7 @@ router.get('/:code', verifyToken, async (req, res) => {
           SUM(CANTIDADENVASES) as totalBoxes,
           COUNT(*) as totalLines,
           COUNT(DISTINCT ANODOCUMENTO || '-' || MESDOCUMENTO || '-' || DIADOCUMENTO) as numOrders
-        FROM DSEDAC.LINDTO
+        FROM ${comercialErpTable('LINDTO')}
         WHERE CODIGOCLIENTEALBARAN = ?
           AND ANODOCUMENTO >= ?
           AND TIPOVENTA IN ('CC', 'VC')
@@ -623,7 +623,7 @@ router.get('/:code', verifyToken, async (req, res) => {
       queryWithParams(`
         SELECT ANODOCUMENTO as year, MESDOCUMENTO as month,
           SUM(IMPORTEVENTA) as sales, SUM(IMPORTEMARGENREAL) as margin
-        FROM DSEDAC.LINDTO
+        FROM ${comercialErpTable('LINDTO')}
         WHERE CODIGOCLIENTEALBARAN = ?
           AND ANODOCUMENTO >= ?
           AND TIPOVENTA IN ('CC', 'VC')
@@ -641,8 +641,8 @@ router.get('/:code', verifyToken, async (req, res) => {
   SUM(L.IMPORTEVENTA) as totalSales,
   SUM(L.CANTIDADENVASES) as totalBoxes,
   COUNT(*) as timesOrdered
-        FROM DSEDAC.LINDTO L
-        LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+        FROM ${comercialErpTable('LINDTO')} L
+        LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO
         WHERE L.CODIGOCLIENTEALBARAN = ? AND L.ANODOCUMENTO >= ? ${vendedorFilter}
         GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
         ORDER BY totalSales DESC
@@ -654,14 +654,14 @@ router.get('/:code', verifyToken, async (req, res) => {
           SUM(CASE WHEN CVC.SITUACION = 'C' THEN CVC.IMPORTEVENCIMIENTO ELSE 0 END) as paid,
           SUM(CASE WHEN CVC.SITUACION = 'P' THEN CVC.IMPORTEPENDIENTE ELSE 0 END) as pending,
           COUNT(CASE WHEN CVC.SITUACION = 'P' THEN 1 END) as pendingCount
-        FROM DSEDAC.CVC CVC
+        FROM ${comercialErpTable('CVC')} CVC
         WHERE CVC.CODIGOCLIENTEALBARAN = ? AND CVC.ANOEMISION >= ?
       `, [safeClientCode, MIN_YEAR]),
       // Query 6: CAC cross-validation (invoice totals)
       queryWithParams(`
         SELECT
           SUM(CAC.IMPORTETOTAL) as totalInvoiced
-        FROM DSEDAC.CAC CAC
+        FROM ${comercialErpTable('CAC')} CAC
         WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = ?
           AND CAC.EJERCICIOFACTURA >= ?
           AND CAC.NUMEROFACTURA > 0

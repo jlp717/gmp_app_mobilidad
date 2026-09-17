@@ -24,6 +24,9 @@ describe('comercial ERP table mapping', () => {
     expect(comercialErpTable('FPG')).toBe('DSEDAC.FPG');
     expect(comercialErpTable('LACLAE')).toBe('DSED.LACLAE');
     expect(comercialErpTable('LQD')).toBe('DSEDAC.LQD');
+    expect(comercialErpTable('CLP')).toBe('DSEDAC.CLP');
+    expect(comercialErpTable('LINDTO')).toBe('DSEDAC.LINDTO');
+    expect(comercialErpTable('CDVI')).toBe('DSEDAC.CDVI');
   });
 
   test('isolated_test reads JAVIER.TEST_* copies', () => {
@@ -44,6 +47,11 @@ describe('comercial ERP table mapping', () => {
     expect(comercialErpTable('LPC')).toBe('JAVIER.TEST_LPC');
     expect(comercialErpTable('CFC')).toBe('JAVIER.TEST_CFC');
     expect(comercialErpTable('OPP')).toBe('JAVIER.TEST_OPP');
+    expect(comercialErpTable('CLP')).toBe('JAVIER.TEST_CLP');
+    expect(comercialErpTable('LINDTO')).toBe('JAVIER.TEST_LINDTO');
+    expect(comercialErpTable('CDVI')).toBe('JAVIER.TEST_CDVI');
+    expect(comercialErpTable('VDD')).toBe('JAVIER.TEST_VDD');
+    expect(comercialErpTable('PES')).toBe('JAVIER.TEST_PES');
     const fs = require('fs');
     const path = require('path');
     const facturas = fs.readFileSync(
@@ -136,8 +144,19 @@ describe('comercial ERP table mapping', () => {
     expect(pedidosRoutes).not.toMatch(/FROM DSED\.LACLAE/);
     const pedidosIndex = fs.readFileSync(path.join(__dirname, '../services/pedidos/index.js'), 'utf8');
     expect(pedidosIndex).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(pedidosIndex).toMatch(/comercialErpTable\('CLP'\)/);
     expect(pedidosIndex).not.toMatch(/FROM DSEDAC\.CLI/);
     expect(pedidosIndex).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
+    expect(pedidosIndex).not.toMatch(/FROM DSEDAC\.CLP/);
+    const commonJs = fs.readFileSync(path.join(__dirname, '../utils/common.js'), 'utf8');
+    expect(commonJs).toMatch(/comercialErpTable\('CLP'\)/);
+    expect(commonJs).not.toMatch(/FROM DSEDAC\.CLP/);
+    expect(clientRepo).toMatch(/comercialErpTable\('CLP'\)/);
+    expect(clientRepo).not.toMatch(/FROM DSEDAC\.CLP/);
+    expect(kpiRoutes).toMatch(/comercialErpTable\('CLP'\)/);
+    expect(kpiRoutes).not.toMatch(/FROM DSEDAC\.CLP/);
+    expect(cobrosRepo).toMatch(/comercialErpTable\('CLP'\)/);
+    expect(cobrosRepo).not.toMatch(/FROM DSEDAC\.CLP/);
   });
 
   test('COMERCIAL_ERP_READ_TEST=false falls back to DSEDAC SELECT', () => {

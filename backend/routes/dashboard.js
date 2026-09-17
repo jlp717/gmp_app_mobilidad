@@ -73,11 +73,11 @@ function isDashboardForceRefresh(req) {
 }
 
 const DASHBOARD_FAMILY_DISTINCT_SQL = Object.freeze({
-    family1: "SELECT DISTINCT TRIM(FI1) as CODE FROM DSEDAC.ART WHERE FI1 IS NOT NULL AND NOT (TRIM(FI1) = '')",
-    family2: "SELECT DISTINCT TRIM(FI2) as CODE FROM DSEDAC.ART WHERE FI2 IS NOT NULL AND NOT (TRIM(FI2) = '')",
-    family3: "SELECT DISTINCT TRIM(FI3) as CODE FROM DSEDAC.ART WHERE FI3 IS NOT NULL AND NOT (TRIM(FI3) = '')",
-    family4: "SELECT DISTINCT TRIM(FI4) as CODE FROM DSEDAC.ART WHERE FI4 IS NOT NULL AND NOT (TRIM(FI4) = '')",
-    family5: "SELECT DISTINCT TRIM(FI5) as CODE FROM DSEDAC.ART WHERE FI5 IS NOT NULL AND NOT (TRIM(FI5) = '')",
+    family1: `SELECT DISTINCT TRIM(FI1) as CODE FROM ${comercialErpTable('ART')} WHERE FI1 IS NOT NULL AND NOT (TRIM(FI1) = '')`,
+    family2: `SELECT DISTINCT TRIM(FI2) as CODE FROM ${comercialErpTable('ART')} WHERE FI2 IS NOT NULL AND NOT (TRIM(FI2) = '')`,
+    family3: `SELECT DISTINCT TRIM(FI3) as CODE FROM ${comercialErpTable('ART')} WHERE FI3 IS NOT NULL AND NOT (TRIM(FI3) = '')`,
+    family4: `SELECT DISTINCT TRIM(FI4) as CODE FROM ${comercialErpTable('ART')} WHERE FI4 IS NOT NULL AND NOT (TRIM(FI4) = '')`,
+    family5: `SELECT DISTINCT TRIM(FI5) as CODE FROM ${comercialErpTable('ART')} WHERE FI5 IS NOT NULL AND NOT (TRIM(FI5) = '')`,
 });
 
 function buildBoundInSql(sqlPrefix, valueCount, sqlSuffix = ')') {
@@ -192,7 +192,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
         if (familyCodes && familyCodes !== 'ALL') {
             const fCodes = familyCodes.split(',').map(f => f.trim()).filter(f => /^[a-zA-Z0-9]+$/.test(f) && f !== '');
             if (fCodes.length > 0) {
-                const famProductsSql = buildBoundInSql('SELECT TRIM(CODIGOARTICULO) as CODE FROM DSEDAC.ART WHERE CODIGOFAMILIA IN (', fCodes.length);
+                const famProductsSql = buildBoundInSql(`SELECT TRIM(CODIGOARTICULO) as CODE FROM ${comercialErpTable('ART')} WHERE CODIGOFAMILIA IN (`, fCodes.length);
                 const famProducts = await cachedQuery(queryWithParams, famProductsSql, `fam_prods:${fCodes.join(',')}`, TTL.LONG, fCodes);
                 if (famProducts.length > 0) {
                     const pCodes = famProducts.slice(0, 1000).map(p => p.CODE);
@@ -267,7 +267,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
         selectClauses.push('SUM(L.LCIMVT - L.LCIMCT) as MARGIN');
         selectClauses.push('COUNT(DISTINCT L.LCNRAB) as ORDERS');
 
-        const artJoinClause = needsArtJoin ? 'LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO' : '';
+        const artJoinClause = needsArtJoin ? `LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO` : '';
 
         const aggregateSQL = `
             SELECT ${selectClauses.join(', ')}
@@ -298,7 +298,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
         if (hierarchy.includes('vendor')) {
             const vCodes = [...new Set(rawData.map(r => r.ID_1).filter(Boolean))];
             if (vCodes.length) {
-                const vendorNamesSql = buildBoundInSql('SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME FROM DSEDAC.VDD WHERE CODIGOVENDEDOR IN (', vCodes.length);
+                const vendorNamesSql = buildBoundInSql(`SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME FROM ${comercialErpTable('VDD')} WHERE CODIGOVENDEDOR IN (`, vCodes.length);
                 nameLookups.push(lookup(
                     vendorNamesSql,
                     'names:vendors:' + hashValues(vCodes),
@@ -332,7 +332,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
                 const placeholders = codesArr.map(() => '?').join(',');
                 nameLookups.push(lookup(
                     `SELECT TRIM(A.CODIGOARTICULO) as CODE, TRIM(A.DESCRIPCIONARTICULO) as NAME, TRIM(A.CODIGOFAMILIA) as FAM_CODE, COALESCE(TRIM(F.DESCRIPCIONFAMILIA), TRIM(A.CODIGOFAMILIA)) as FAM_NAME
-                     FROM DSEDAC.ART A LEFT JOIN DSEDAC.FAM F ON A.CODIGOFAMILIA = F.CODIGOFAMILIA
+                     FROM ${comercialErpTable('ART')} A LEFT JOIN ${comercialErpTable('FAM')} F ON A.CODIGOFAMILIA = F.CODIGOFAMILIA
                      WHERE A.CODIGOARTICULO IN (${placeholders})`,
                     `names:products:${hashValues(codesArr)}`,
                     codesArr
@@ -464,8 +464,8 @@ router.get('/recent-sales', verifyToken, async (req, res) => {
         SUM(L.CANTIDADENVASES) as totalBoxes,
         SUM(L.IMPORTEMARGENREAL) as totalMargin,
         COUNT(*) as numLines
-      FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
+      FROM ${comercialErpTable('LINDTO')} L
+      LEFT JOIN ${comercialErpTable('CLI')} C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
       WHERE L.ANODOCUMENTO >= ${recentSalesMinYear} ${vendedorResult.filter}
       GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO,
         L.CODIGOCLIENTEALBARAN, C.NOMBRECLIENTE, L.CODIGOVENDEDOR, L.SERIEDOCUMENTO
@@ -511,7 +511,7 @@ router.get('/products-search', verifyToken, async (req, res) => {
             SELECT TRIM(CODIGOARTICULO) as CODE,
                    TRIM(DESCRIPCIONARTICULO) as NAME,
                    TRIM(CODIGOFAMILIA) as FAMILY
-            FROM DSEDAC.ART
+            FROM ${comercialErpTable('ART')}
             ${whereClause}
             ORDER BY DESCRIPCIONARTICULO
             FETCH FIRST ${limit} ROWS ONLY

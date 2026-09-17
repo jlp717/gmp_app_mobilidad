@@ -11,6 +11,7 @@
 
 const { query } = require('../config/db');
 const logger = require('../middleware/logger');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DIMENSION ESTIMATION — estimates box size from weight when no real dims
@@ -84,7 +85,7 @@ function estimateBoxDimensions(pesoUnidad, unidadesCaja, articleName) {
 
 /**
  * Recupera la configuración del camión (dimensiones interiores + capacidad)
- * Combina datos de DSEDAC.VEH con JAVIER.ALMACEN_CAMIONES_CONFIG
+ * Combina datos de ${comercialErpTable('VEH')} con JAVIER.ALMACEN_CAMIONES_CONFIG
  * Si CARGAMAXIMA=0, estima desde CONTENEDORVOLUMEN
  */
 async function getTruckConfig(vehicleCode) {
@@ -104,7 +105,7 @@ async function getTruckConfig(vehicleCode) {
           COALESCE(C.ANCHO_INTERIOR_CM, 0) AS ANCHO_CM,
           COALESCE(C.ALTO_INTERIOR_CM, 0) AS ALTO_CM,
           COALESCE(C.TOLERANCIA_EXCESO, 5.00) AS TOLERANCIA
-        FROM DSEDAC.VEH V
+        FROM ${comercialErpTable('VEH')} V
         LEFT JOIN JAVIER.ALMACEN_CAMIONES_CONFIG C
           ON TRIM(V.CODIGOVEHICULO) = C.CODIGOVEHICULO
         WHERE TRIM(V.CODIGOVEHICULO) = ?
@@ -220,7 +221,7 @@ async function getArticleDimensions(articleCodes) {
           COALESCE(A.PESO, 0) AS PESO,
           COALESCE(A.UNIDADESCAJA, 1) AS UDS_CAJA,
           D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG
-        FROM DSEDAC.ART A
+        FROM ${comercialErpTable('ART')} A
         LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D
           ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
         WHERE TRIM(A.CODIGOARTICULO) IN (${articleCodes.map(() => '?').join(',')})
@@ -291,11 +292,11 @@ async function getOrdersForVehicle(vehicleCode, year, month, day) {
           LAC.CANTIDADENVASES AS CAJAS,
           COALESCE(LAC.IMPORTEVENTA, 0) AS IMPORTE_VENTA,
           COALESCE(LAC.IMPORTECOSTO, 0) AS IMPORTE_COSTO
-        FROM DSEDAC.OPP OPP
-        INNER JOIN DSEDAC.CPC CPC
+        FROM ${comercialErpTable('OPP')} OPP
+        INNER JOIN ${comercialErpTable('CPC')} CPC
           ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
           AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
-        INNER JOIN DSEDAC.LAC LAC
+        INNER JOIN ${comercialErpTable('LAC')} LAC
           ON CPC.NUMEROALBARAN = LAC.NUMEROALBARAN
           AND CPC.EJERCICIOALBARAN = LAC.EJERCICIOALBARAN
           AND TRIM(CPC.SERIEALBARAN) = TRIM(LAC.SERIEALBARAN)
@@ -492,7 +493,7 @@ async function planLoad(vehicleCode, year, month, day, customTolerance) {
     // 1. Get truck config
     const truck = await getTruckConfig(vehicleCode);
     if (!truck) {
-        throw new Error(`Vehículo '${vehicleCode}' no encontrado en DSEDAC.VEH`);
+        throw new Error(`Vehículo '${vehicleCode}' no encontrado en ${comercialErpTable('VEH')}`);
     }
 
     // 2. Get orders

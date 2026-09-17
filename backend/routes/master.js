@@ -10,6 +10,7 @@ const {
     sanitizeForSQL,
     handleRouteError
 } = require('../utils/common');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 // =============================================================================
 // PRODUCTS LIST (OPTIMIZED with caching)
@@ -33,7 +34,7 @@ router.get('/products', async (req, res) => {
       SELECT CODIGOARTICULO as code, DESCRIPCIONARTICULO as name,
   CODIGOMARCA as brand, CODIGOFAMILIA as family,
   UNIDADESCAJA as unitsPerBox, PESO as weight
-      FROM DSEDAC.ART
+      FROM ${comercialErpTable('ART')}
       WHERE ANOBAJA = 0 ${searchFilter}
       ORDER BY DESCRIPCIONARTICULO
       OFFSET ? ROWS
@@ -79,7 +80,7 @@ router.get('/vendedores', async (req, res) => {
             SELECT
                 TRIM(D.CODIGOVENDEDOR) as code,
                 TRIM(D.NOMBREVENDEDOR) as name
-            FROM DSEDAC.VDD D
+            FROM ${comercialErpTable('VDD')} D
             WHERE TRIM(D.CODIGOVENDEDOR) IN (${placeholders})
             ORDER BY D.CODIGOVENDEDOR
         `, {
@@ -126,7 +127,7 @@ router.get('/families', async (req, res) => {
         const cacheKey = `master:families:${search || 'all'}:${safeLimit}`;
         const families = await cachedQuery(queryWithParams, `
             SELECT TRIM(CODIGOFAMILIA) as CODE, TRIM(DESCRIPCIONFAMILIA) as NAME
-            FROM DSEDAC.FAM
+            FROM ${comercialErpTable('FAM')}
             ${whereClause}
             ORDER BY DESCRIPCIONFAMILIA
             FETCH FIRST ${safeLimit} ROWS ONLY

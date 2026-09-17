@@ -5,6 +5,7 @@
 
 const logger = require('../middleware/logger');
 const { getPool } = require('../config/db');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 // Cache storage
 let familyNames = {};
@@ -34,7 +35,7 @@ async function loadMetadataCache() {
         try {
             // Load Family names
             try {
-                const famRows = await conn.query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM DSEDAC.FAM`);
+                const famRows = await conn.query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM ${comercialErpTable('FAM')}`);
                 familyNames = {};
                 famRows.forEach(r => {
                     const code = (r.CODIGOFAMILIA || '').toString().trim();
@@ -48,7 +49,7 @@ async function loadMetadataCache() {
 
             // Load FI1 names
             try {
-                const fi1Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI1`);
+                const fi1Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI1')}`);
                 fi1Names = {};
                 fi1Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
@@ -62,7 +63,7 @@ async function loadMetadataCache() {
 
             // Load FI2 names
             try {
-                const fi2Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI2`);
+                const fi2Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI2')}`);
                 fi2Names = {};
                 fi2Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
@@ -76,7 +77,7 @@ async function loadMetadataCache() {
 
             // Load FI3 names
             try {
-                const fi3Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI3`);
+                const fi3Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI3')}`);
                 fi3Names = {};
                 fi3Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
@@ -90,7 +91,7 @@ async function loadMetadataCache() {
 
             // Load FI4 names
             try {
-                const fi4Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI4`);
+                const fi4Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI4')}`);
                 fi4Names = {};
                 fi4Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
@@ -104,7 +105,7 @@ async function loadMetadataCache() {
 
             // Load FI5 names
             try {
-                const fi5Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI5`);
+                const fi5Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI5')}`);
                 fi5Names = {};
                 fi5Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();

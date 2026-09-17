@@ -2,6 +2,7 @@
 // El token firmado trae el alcance del comercial (code, vendorCodes, vendedorCodes);
 // ningun endpoint debe devolver datos economicos de un codigo fuera de ese alcance.
 const FINANCIAL_ROLES = new Set(['ADMIN', 'JEFE_VENTAS']);
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 function normalizeCode(value) {
     const raw = String(value || '').trim().toUpperCase();
@@ -110,7 +111,7 @@ async function defaultCatalogLoader() {
     const { queryWithParams } = require('../config/db');
     const rows = await queryWithParams(
         `SELECT DISTINCT TRIM(CODIGOVENDEDOR) AS CODE
-           FROM DSEDAC.VDC
+           FROM ${comercialErpTable('VDC')}
           WHERE SUBEMPRESA = ?`,
         [GMP_SUBEMPRESA],
         false
