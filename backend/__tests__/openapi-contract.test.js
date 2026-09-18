@@ -3,6 +3,8 @@
 const fs = require("fs");
 const path = require("path");
 const yaml = require("js-yaml");
+const ts = require("typescript");
+const vm = require("node:vm");
 const { spawnSync } = require("child_process");
 
 const root = path.resolve(__dirname, "..", "..");
@@ -234,6 +236,56 @@ describe("OpenAPI documentation quality", () => {
   const operations = Object.entries(spec.paths).flatMap(([routePath, pathItem]) =>
     methods.filter((method) => pathItem[method]).map((method) => ({ routePath, operation: pathItem[method] })),
   );
+
+  test("limits the success-response exception to the retired direct confirmation", async () => {
+    const rules = yaml.load(fs.readFileSync(path.join(root, ".spectral.yaml"), "utf8"));
+    expect(rules.overrides).toEqual([{
+      files: ["docs/openapi/openapi.yaml#/paths/~1pedidos~1confirm/post"],
+      rules: { "operation-success-response": "off" },
+    }]);
+    expect(rules.rules["operation-success-response"]).toBeUndefined();
+    const operation = spec.paths["/pedidos/confirm"].post;
+    expect(Object.keys(operation.responses).some((status) => /^[23]/.test(status))).toBe(false);
+    expect(operation.responses[410].content["application/json"].example.code)
+      .toBe("DIRECT_CONFIRM_DISABLED");
+
+    // Extract the actual callback, without importing the DDD module or drivers.
+    // This tests its retired behavior; it does not stand in for auth middleware.
+    const source = fs.readFileSync(path.join(root, dddFile), "utf8");
+    const ast = ts.createSourceFile(dddFile, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    expect(ast.parseDiagnostics).toHaveLength(0);
+    const factory = ast.statements.find((node) =>
+      ts.isFunctionDeclaration(node) && node.name?.text === "createPedidosRoutes");
+    expect(factory).toBeDefined();
+    const callbacks = [];
+    function visit(node) {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+          && node.expression.expression.getText(ast) === "router"
+          && node.expression.name.text === "post"
+          && ts.isStringLiteral(node.arguments[0]) && node.arguments[0].text === "/confirm") {
+        callbacks.push(node.arguments[node.arguments.length - 1]);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(factory);
+    expect(callbacks).toHaveLength(1);
+    expect(ts.isArrowFunction(callbacks[0])).toBe(true);
+    const unexpectedDependency = () => { throw new Error("Retired callback changed: review its contract and Spectral exception"); };
+    const handler = vm.runInNewContext(`(${callbacks[0].getText(ast)})`, {
+      logger: { error: unexpectedDependency },
+      sendInternalServerError: unexpectedDependency,
+    }, { timeout: 1000 });
+    for (const [user, expectedStatus] of [[undefined, 401], [{ code: "TEST-USER" }, 410]]) {
+      const req = { user };
+      Object.defineProperty(req, "body", { get: unexpectedDependency });
+      const res = { status: jest.fn(), json: jest.fn() };
+      res.status.mockReturnValue(res);
+      await handler(req, res);
+      expect(res.status).toHaveBeenCalledWith(expectedStatus);
+      expect(res.json).toHaveBeenCalledTimes(1);
+      if (user) expect(res.json.mock.calls[0][0]).toMatchObject({ success: false, code: "DIRECT_CONFIRM_DISABLED" });
+    }
+  });
 
   test("every operation has descriptions, examples, security, and valid path parameters", () => {
     const operationIds = new Set();

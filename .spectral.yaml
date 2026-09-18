@@ -8,3 +8,12 @@ rules:
   no-$ref-siblings: off
   operation-tag-defined: warn
   openapi-tags-alphabetical: off
+
+# This retired operation deliberately returns 410. The OpenAPI contract test
+# executes its real callback and requires the exception to stay this narrow.
+# https://github.com/stoplightio/spectral/blob/develop/docs/guides/4d-overrides.md
+overrides:
+  - files:
+      - "docs/openapi/openapi.yaml#/paths/~1pedidos~1confirm/post"
+    rules:
+      operation-success-response: off
