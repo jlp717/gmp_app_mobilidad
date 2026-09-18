@@ -212,6 +212,11 @@ String? _paymentConfirmationErrorMessage(ApiException error) {
     case 'REPARTO_COBRO_COMMERCIAL_CONFLICT':
       return 'Este albarán o factura ya tiene cobros en el ERP. '
           'No se puede registrar otro cobro desde el rutero.';
+    case 'DELIVERY_OWNERSHIP_REQUIRED':
+    case 'EVIDENCE_OWNERSHIP_REQUIRED':
+    case 'REPARTO_CONFIRMATION_ROLE_REQUIRED':
+      return 'Esta entrega no pertenece a tu ruta. '
+          'Entra como el repartidor de este albarán e inténtalo de nuevo.';
     default:
       return null;
   }
@@ -326,6 +331,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   bool _isJournalBlocked = false;
   bool _isRestoringJournal = false;
   bool _lastConfirmWasQueued = false;
+  bool _isConfirmingWrite = false;
   bool _recipientSuggestionApplied = false;
   RepartoDeliveryStatus _deliveryStatus = RepartoDeliveryStatus.entregado;
   RepartoDifferenceReason _differenceReason = RepartoDifferenceReason.otro;
@@ -775,7 +781,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   /// Canonical terminal outcomes are read-only. A no-delivery is final too;
   /// reopening it as an editable confirmation risks an inconsistent replay.
-  bool get _isCompleted => switch (widget.albaran.estado) {
+  /// Use the local albarán so a successful write paints Entregado without
+  /// waiting for the parent list (or the documents dialog) to catch up.
+  bool get _isCompleted => switch (_albaran.estado) {
         EstadoEntrega.entregado ||
         EstadoEntrega.parcial ||
         EstadoEntrega.noEntregado ||
@@ -862,76 +870,82 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final finalizeErrorCount = _countIssues(RuteroDeliveryTab.finalize);
     // PopScope also vetoes barrier taps and drag-driven route pops while the
     // evidence transaction is active. Only the success path opts back in.
+    // A local Scaffold captures snackbars so 4xx/5xx are not painted behind
+    // the nearly full-screen sheet (silent failure on phone).
     return PopScope(
       canPop: !_isSubmitting || _allowProgrammaticDismiss,
-      child: Stack(
-        children: [
-          IgnorePointer(
-            ignoring: _isSubmitting,
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: RepartidorExecutiveSheet(
-                height: Responsive.modalHeight(
-                  context,
-                  portraitFraction: 0.92,
-                  landscapeFraction: 0.95,
-                ),
-                accentColor: _isCompleted
-                    ? _terminalAccentColor
-                    : _isUrgent
-                        ? AppTheme.obligatorio
-                        : AppTheme.info,
-                child: Column(
-                  children: [
-                    RuteroDetailHeader(
-                      albaran: _albaran,
-                      isCompleted: _isCompleted,
-                      liveImporteTotal: liveTotal,
-                    ),
-                    RuteroDetailTabBar(
-                      tabController: _tabController,
-                      isUrgent: _isUrgent,
-                      productErrorCount: _isCompleted ? 0 : productErrorCount,
-                      paymentErrorCount: _isCompleted ? 0 : paymentErrorCount,
-                      finalizeErrorCount: _isCompleted ? 0 : finalizeErrorCount,
-                    ),
-                    RuteroValidationBanner(
-                      issues: _isCompleted
-                          ? const <RuteroFieldIssue>[]
-                          : _validationIssues,
-                      onIssueTap: _focusValidationIssue,
-                    ),
-                    Expanded(
-                      child: LazyIndexedStack(
-                        index: _tabController.index,
-                        children: [
-                          _RuteroKeepAliveTab(
-                            builder: (_) => _buildProductsTab(),
-                          ),
-                          _RuteroKeepAliveTab(
-                            builder: (_) => _buildPaymentTab(),
-                          ),
-                          _RuteroKeepAliveTab(
-                            builder: (_) => _buildFinalizeTab(),
-                          ),
-                        ],
+      child: Scaffold(
+        backgroundColor: AppColors.transparent,
+        body: Stack(
+          children: [
+            IgnorePointer(
+              ignoring: _isSubmitting,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: RepartidorExecutiveSheet(
+                  height: Responsive.modalHeight(
+                    context,
+                    portraitFraction: 0.92,
+                    landscapeFraction: 0.95,
+                  ),
+                  accentColor: _isCompleted
+                      ? _terminalAccentColor
+                      : _isUrgent
+                          ? AppTheme.obligatorio
+                          : AppTheme.info,
+                  child: Column(
+                    children: [
+                      RuteroDetailHeader(
+                        albaran: _albaran,
+                        isCompleted: _isCompleted,
+                        liveImporteTotal: liveTotal,
                       ),
-                    ),
-                  ],
+                      RuteroDetailTabBar(
+                        tabController: _tabController,
+                        isUrgent: _isUrgent,
+                        productErrorCount: _isCompleted ? 0 : productErrorCount,
+                        paymentErrorCount: _isCompleted ? 0 : paymentErrorCount,
+                        finalizeErrorCount:
+                            _isCompleted ? 0 : finalizeErrorCount,
+                      ),
+                      RuteroValidationBanner(
+                        issues: _isCompleted
+                            ? const <RuteroFieldIssue>[]
+                            : _validationIssues,
+                        onIssueTap: _focusValidationIssue,
+                      ),
+                      Expanded(
+                        child: LazyIndexedStack(
+                          index: _tabController.index,
+                          children: [
+                            _RuteroKeepAliveTab(
+                              builder: (_) => _buildProductsTab(),
+                            ),
+                            _RuteroKeepAliveTab(
+                              builder: (_) => _buildPaymentTab(),
+                            ),
+                            _RuteroKeepAliveTab(
+                              builder: (_) => _buildFinalizeTab(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          if (_isSubmitting) ...[
-            const Positioned.fill(
-              child: ModalBarrier(
-                dismissible: false,
-                color: AppColors.systemBlack54,
+            if (_isSubmitting) ...[
+              const Positioned.fill(
+                child: ModalBarrier(
+                  dismissible: false,
+                  color: AppColors.systemBlack54,
+                ),
               ),
-            ),
-            Positioned.fill(child: _buildSubmissionOverlay()),
+              Positioned.fill(child: _buildSubmissionOverlay()),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -974,7 +988,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       albaran: _albaran,
       onPreviewDeliveryNotePdf: _previewReceiptPdf,
       onShareDeliveryNotePdf: _shareDeliveryNoteLocally,
-      onShareDeliveryNoteWhatsApp: _shareDeliveryNoteViaWhatsApp,
+      onShareDeliveryNoteWhatsApp: () {
+        unawaited(_shareDeliveryNoteViaWhatsApp());
+      },
       onPreviewCommercialPdf: _previewCommercialPdf,
       onShareCommercialPdf: _shareCommercialLocally,
       onShareCommercialWhatsApp: _shareCommercialViaWhatsApp,
@@ -1077,13 +1093,28 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             },
             onOpenFicha: _openFichaTecnica,
             onShowFullscreenImage: _showFullscreenImage,
-            onNoDelivery:
-                _isCompleted || _isSubmitting ? null : _activateNoEntregaMode,
+            onNoDelivery: _isCompleted || _isSubmitting || _isConfirmingWrite
+                ? null
+                : () {
+                    unawaited(_confirmAndActivateNoEntrega());
+                  },
             scrollController: _productsScrollController,
           ),
         ),
       ],
     );
+  }
+
+  Future<void> _confirmAndActivateNoEntrega() async {
+    if (_isCompleted || _isSubmitting || _isConfirmingWrite) return;
+    _isConfirmingWrite = true;
+    try {
+      final ok = await confirmRuteroNoEntregaIntent(context);
+      if (!ok || !mounted) return;
+      _activateNoEntregaMode();
+    } finally {
+      _isConfirmingWrite = false;
+    }
   }
 
   void _activateNoEntregaMode() {
@@ -1871,9 +1902,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ? 'Pedido pendiente de ERP. No se puede confirmar la entrega'
           : (noEntrega ? 'Registrar no entrega' : 'Confirmar entrega'),
       child: ElevatedButton(
-        onPressed: (_isSubmitting || _albaran.isPedidoAnteroom)
-            ? null
-            : _submitDelivery,
+        onPressed:
+            (_isSubmitting || _isConfirmingWrite || _albaran.isPedidoAnteroom)
+                ? null
+                : _submitDelivery,
         style: ElevatedButton.styleFrom(
           backgroundColor: noEntrega ? AppTheme.warning : AppTheme.success,
           foregroundColor: AppColors.themedWhite,
@@ -2593,7 +2625,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         await _emailReceiptTo(_cobroDestinationEmail, confirmFirst: false);
       }
       if (_sendCobroWhatsApp && mounted) {
-        await _shareDeliveryNoteViaWhatsApp();
+        await _shareDeliveryNoteViaWhatsApp(confirmFirst: false);
       }
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -2928,184 +2960,24 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Future<bool> _showConfirmationDialog() async {
     final noEntrega = _deliveryStatus == RepartoDeliveryStatus.noEntregado;
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.raisedSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(
-              noEntrega ? Icons.cancel_outlined : Icons.check_circle_outline,
-              color: noEntrega ? AppTheme.warning : AppTheme.success,
-              size: 28,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Semantics(
-                header: true,
-                child: Text(
-                  noEntrega
-                      ? '¿Estás seguro de registrar la no entrega?'
-                      : '¿Estás seguro de completar el albarán?',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              noEntrega
-                  ? 'Se registrará como no entregado sin cobro ni firma.'
-                  : 'Se confirmará la entrega con los datos actuales.',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.softPanel,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.borderColor),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.description,
-                        size: 16,
-                        color: AppTheme.textTertiary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        widget.albaran.erpDocumentLabel,
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.euro,
-                        size: 16,
-                        color: AppTheme.textTertiary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${_liveAlbaranTotal.toStringAsFixed(2).replaceAll('.', ',')} €',
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (noEntrega) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.notes,
-                          size: 16,
-                          color: AppTheme.textTertiary,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _observacionesController.text.trim().isEmpty
-                                ? _incidenciaMotivoController.text.trim()
-                                : _observacionesController.text.trim(),
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.person,
-                          size: 16,
-                          color: AppTheme.textTertiary,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${_nombreController.text} (${_dniController.text})',
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 13,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_isPaid) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.payment,
-                            size: 16,
-                            color: AppTheme.success,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Cobrado: ${ruteroPaymentMethodLabel(_selectedPaymentMethod)}',
-                            style: const TextStyle(
-                              color: AppTheme.success,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancelar',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: noEntrega ? AppTheme.warning : AppTheme.success,
-              foregroundColor: AppColors.themedWhite,
-            ),
-            child: Text(noEntrega ? 'Registrar' : 'Confirmar'),
-          ),
-        ],
-      ),
+    return confirmRuteroDeliveryWrite(
+      context,
+      noEntrega: noEntrega,
+      documentLabel: widget.albaran.erpDocumentLabel,
+      amountLabel:
+          '${_liveAlbaranTotal.toStringAsFixed(2).replaceAll('.', ',')} €',
+      receiverLine: noEntrega
+          ? null
+          : '${_nombreController.text.trim()} (${_dniController.text.trim()})',
+      incidentLine: noEntrega
+          ? (_observacionesController.text.trim().isEmpty
+              ? _incidenciaMotivoController.text.trim()
+              : _observacionesController.text.trim())
+          : null,
+      paid: _isPaid,
+      paymentLabel:
+          _isPaid ? ruteroPaymentMethodLabel(_selectedPaymentMethod) : null,
     );
-    return result ?? false;
   }
 
   EstadoEntrega _localDeliveryStatus() {
@@ -3128,7 +3000,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       );
       return;
     }
-    if (_isSubmitting) return;
+    if (_isSubmitting || _isConfirmingWrite) return;
     if (_isJournalBlocked) {
       try {
         await _confirmationJournal.resetIfNotAcknowledged(widget.albaran.id);
@@ -3154,11 +3026,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         return;
       }
     }
-    if (!_confirmationOperation.beginSubmit()) return;
-
+    _isConfirmingWrite = true;
     try {
       final confirmed = await _showConfirmationDialog();
       if (!confirmed || !mounted) return;
+      if (!_confirmationOperation.beginSubmit()) {
+        _showError(
+          'Ya hay una confirmación en curso. Espera o reabre el albarán.',
+        );
+        return;
+      }
 
       // Freeze every user-controlled value before the first awaited evidence
       // operation. The confirmation request must describe exactly what the
@@ -3229,7 +3106,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final signaturePng = frozenStatus == RepartoDeliveryStatus.noEntregado ||
               (_hasPersistedSignature && _signatureController.isEmpty)
           ? null
-          : await _signatureController.toPngBytes() ??
+          : await _signatureController.toPngBytes().timeout(
+                    const Duration(seconds: 8),
+                    onTimeout: () => throw Exception('Error al procesar firma'),
+                  ) ??
               (throw Exception('Error al procesar firma'));
       final success = await _evidenceCoordinator.uploadThenConfirm<bool>(
         entregaId: widget.albaran.id,
@@ -3265,6 +3145,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       // a loading state.
       if (!_lastConfirmWasQueued && mounted) {
         _albaran.estado = _localDeliveryStatus();
+        widget.albaran.estado = _localDeliveryStatus();
         _albaran = _albaran.copyWith(
           estado: _localDeliveryStatus(),
           importeTotal: frozenLiveTotal,
@@ -3319,24 +3200,24 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           _deliveryStatus == RepartoDeliveryStatus.entregado ||
               _deliveryStatus == RepartoDeliveryStatus.parcial;
       if (hasDeliveryDocument) {
-        try {
-          await runRuteroPostConfirmationEffects(
+        unawaited(
+          runRuteroPostConfirmationEffects(
             shouldPrint: _tieneImpresora,
             printTicket: _tryPrintTicketAfterConfirm,
             shareReceipt: _showShareReceiptDialog,
-          );
-        } catch (_) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Entrega guardada; el comprobante no está disponible ahora',
+          ).catchError((Object _) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Entrega guardada; el comprobante no está disponible ahora',
+                  ),
+                  backgroundColor: AppTheme.warning,
                 ),
-                backgroundColor: AppTheme.warning,
-              ),
-            );
-          }
-        }
+              );
+            }
+          }),
+        );
       }
 
       if (!mounted) return;
@@ -3398,6 +3279,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         }
       }
     } finally {
+      _isConfirmingWrite = false;
       _confirmationOperation.endSubmit();
       if (mounted && _isSubmitting) {
         setState(() => _isSubmitting = false);
@@ -3671,7 +3553,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   color: AppColors.whatsappGreen,
                   onTap: () async {
                     Navigator.pop(ctx);
-                    await _shareDeliveryNoteViaWhatsApp();
+                    await _shareDeliveryNoteViaWhatsApp(confirmFirst: false);
                   },
                 ),
                 const SizedBox(height: 8),
@@ -3954,7 +3836,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               },
               onWhatsAppTap: () {
                 Navigator.pop(context);
-                unawaited(_shareDeliveryNoteViaWhatsApp());
+                unawaited(_shareDeliveryNoteViaWhatsApp(confirmFirst: false));
               },
             ),
           ),
@@ -4037,11 +3919,22 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
-  Future<void> _shareDeliveryNoteViaWhatsApp() async {
+  Future<void> _shareDeliveryNoteViaWhatsApp({bool confirmFirst = true}) async {
     final owner = widget.albaran.codigoRepartidor.trim();
     if (!isValidRepartoOwnerId(owner)) {
       _showError('Selecciona un repartidor concreto para compartir.');
       return;
+    }
+    if (confirmFirst) {
+      final ok = await confirmRepartidorAction(
+        context,
+        title: '¿Enviar por WhatsApp?',
+        message:
+            'Se enviará la nota de entrega ${widget.albaran.erpDocumentLabel} '
+            'al número que indiques.',
+        confirmLabel: 'Continuar',
+      );
+      if (!ok || !mounted) return;
     }
     final form = await WhatsAppFormModal.show(
       context,
@@ -4213,13 +4106,27 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   Future<void> _dispatchFinalizeNotifications() async {
     if (!mounted) return;
-    if (_sendCobroEmail &&
-        isValidRepartoReceiptEmailAddress(_cobroDestinationEmail)) {
-      await _emailReceiptTo(_cobroDestinationEmail, confirmFirst: false);
-    }
-    if (!mounted) return;
-    if (_sendCobroWhatsApp) {
-      await _shareDeliveryNoteViaWhatsApp();
+    try {
+      await Future<void>(() async {
+        if (_sendCobroEmail &&
+            isValidRepartoReceiptEmailAddress(_cobroDestinationEmail)) {
+          await _emailReceiptTo(_cobroDestinationEmail, confirmFirst: false);
+        }
+        if (!mounted) return;
+        if (_sendCobroWhatsApp) {
+          await _shareDeliveryNoteViaWhatsApp(confirmFirst: false);
+        }
+      }).timeout(const Duration(seconds: 12));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Entrega guardada. El envío de documentos se puede repetir desde Finalizar.',
+          ),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
     }
   }
 

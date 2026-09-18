@@ -321,7 +321,10 @@ function parseConfirmationBody(raw) {
 }
 
 function canonicalRepartidorCode(value) {
-  const code = normalizeCode(value).toUpperCase();
+  let code = normalizeCode(value).toUpperCase();
+  // JWT subject is V94 while fleet/albarán use 94. Strip the vendor prefix
+  // before the 1-2 character repartidor alphabet so a raso token still maps.
+  if (/^V[A-Z0-9]{1,2}$/.test(code)) code = code.slice(1);
   if (!/^[A-Z0-9]{1,2}$/.test(code) || code === 'ALL') return '';
   return /^\d{1,2}$/.test(code) ? code.padStart(2, '0') : code;
 }
@@ -331,9 +334,14 @@ function isConcreteRepartidorCode(value) {
 }
 
 function actorFleetCodes(user) {
-  return (Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : [])
+  const listed = (Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : [])
     .filter((code) => typeof code === 'string' || typeof code === 'number')
     .map(canonicalRepartidorCode).filter(Boolean);
+  if (listed.length > 0) return listed;
+  const role = normalizeCode(user?.role).toUpperCase();
+  if (role !== 'REPARTIDOR') return [];
+  const self = canonicalRepartidorCode(user?.code || user?.user || user?.id);
+  return self ? [self] : [];
 }
 
 function ownershipError() {
@@ -421,6 +429,7 @@ module.exports = {
   RepartoContractError,
   buildConfirmationCommand,
   codesMatch,
+  canonicalRepartidorCode,
   EVIDENCE_ID_PATTERN,
   isValidDniNie,
   DIFFERENCE_REASONS,

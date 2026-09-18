@@ -3512,6 +3512,15 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
 
     if (result == null || !mounted) return;
 
+    final confirmed = await confirmRepartidorAction(
+      context,
+      title: '¿Enviar por WhatsApp?',
+      message: 'Se enviará $typeLabel ${doc.number} al número indicado, '
+          'con copia operativa cuando el bot corporativo esté activo.',
+      confirmLabel: 'Enviar WhatsApp',
+    );
+    if (!confirmed || !mounted) return;
+
     final modal = AsyncOperationModal.show(
       context,
       text: 'Enviando documento por WhatsApp...',
@@ -3639,6 +3648,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
           'Saludos - Granja Mari Pepa',
     );
     if (result == null || !mounted) return;
+
+    final confirmed = await confirmRepartidorAction(
+      context,
+      title: '¿Enviar por WhatsApp?',
+      message: 'Se enviará la nota de entrega $docRef al número indicado.',
+      confirmLabel: 'Enviar WhatsApp',
+    );
+    if (!confirmed || !mounted) return;
 
     final modal = AsyncOperationModal.show(
       context,

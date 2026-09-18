@@ -632,6 +632,15 @@ class _RepartidorLiquidacionDiariaPageState
       builder: (_) => _LiquidacionEntryDialog(kind: kind),
     );
     if (result == null || !mounted) return;
+    final confirmed = await confirmRepartidorAction(
+      context,
+      title: '¿Registrar este movimiento?',
+      message:
+          '${kind.title}: ${result.amount.toStringAsFixed(2).replaceAll('.', ',')} €. '
+          'Se grabará en la liquidación diaria.',
+      confirmLabel: 'Registrar',
+    );
+    if (!confirmed || !mounted) return;
     await _submitEntry(kind, result.amount, result.detail, result.observation);
   }
 

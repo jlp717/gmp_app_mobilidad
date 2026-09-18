@@ -64,6 +64,20 @@ void main() {
       expect(presentation.canRetry, isTrue);
       expect(presentation.message, contains('saldo cobrable'));
     });
+
+    test('maps raso ownership 403 to an actionable retry', () {
+      final presentation = repartoConfirmationErrorPresentation(
+        error: ApiException(
+          'La entrega no pertenece a la flota autenticada',
+          statusCode: 403,
+          code: 'DELIVERY_OWNERSHIP_REQUIRED',
+        ),
+        acknowledged: false,
+      );
+      expect(presentation.canRetry, isTrue);
+      expect(presentation.message, contains('repartidor de este albarán'));
+      expect(presentation.message, isNot(contains('no es concluyente')));
+    });
   });
 
   test('normalizeRepartoServerId coerces integers', () {

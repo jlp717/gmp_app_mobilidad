@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/rutero_route_api.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_route_feedback.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_confirm_dialog.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_day_move_dialog.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_stop_status_badges.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_route_map_view.dart';
@@ -412,6 +413,14 @@ class _RepartidorRuteroReorderModalState
         _isOptimizing ||
         _loadingOrder ||
         _remoteChangePending) return;
+    final confirmed = await confirmRepartidorAction(
+      context,
+      title: '¿Guardar el orden de la ruta?',
+      message: 'Se sustituirá el orden del día para este repartidor. '
+          'Los albaranes no cambian; solo la secuencia de paradas.',
+      confirmLabel: 'Guardar orden',
+    );
+    if (!confirmed || !mounted) return;
     setState(() {
       _isSaving = true;
       _error = null;

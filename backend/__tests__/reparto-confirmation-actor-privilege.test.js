@@ -69,6 +69,22 @@ describe('canonical reparto actor privilege', () => {
     expect(command.actor).toMatchObject({ repartidorId: '95', privileged: true, role: 'ADMIN' });
   });
 
+  test.each([
+    { id: 'V94', code: '94', role: 'REPARTIDOR', repartidorCodes: ['94'] },
+    { id: 'V94', code: '94', role: 'REPARTIDOR' },
+    { id: 'V94', role: 'REPARTIDOR' },
+  ])('accepts a raso confirming their own delivery without a fleet claim', (user) => {
+    const command = buildConfirmationCommand({
+      user,
+      ...requestFor('94'),
+    });
+    expect(command.actor).toMatchObject({
+      repartidorId: '94',
+      privileged: false,
+      role: 'REPARTIDOR',
+    });
+  });
+
   test('keeps typed ownership failures', () => {
     try {
       buildConfirmationCommand({
