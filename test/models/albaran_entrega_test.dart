@@ -209,6 +209,26 @@ void main() {
       expect(albaran.ivaBreakdown, hasLength(1));
       expect(albaran.estado, EstadoEntrega.pendiente);
     });
+
+    test(
+        'never uses lineSum 30.80/29.80 as importeTotal when CPC importe is 31',
+        () {
+      final albaran = AlbaranEntrega.fromJson({
+        'id': '2026-P-15-2296-C1',
+        'numero': 2296,
+        'ejercicio': 2026,
+        'serie': 'P',
+        'terminal': 15,
+        'importe': 31,
+        'importeTotal': 29.80,
+        'lineSum': 30.80,
+        'codigoCliente': 'C1',
+        'nombreCliente': 'Test',
+        'fecha': '18/09/2026',
+      });
+      expect(albaran.importeTotal, 31);
+      expect(albaran.lineSum, 30.80);
+    });
   });
 
   group('EntregaItem.fromJson', () {

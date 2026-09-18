@@ -960,7 +960,7 @@ class RepartidorFinanzasService {
       'formaPago': formaPago,
       'pantallaOrigen': 'VENCIMIENTOS',
       'idempotencyToken': idempotencyToken,
-      'notas': notas?.trim().isEmpty ?? true ? null : notas!.trim(),
+      'notas': (notas ?? '').trim(),
       if ((numeroTalon ?? '').trim().isNotEmpty)
         'numeroTalon': numeroTalon!.trim(),
       if ((fechaVencimientoTalon ?? '').trim().isNotEmpty)

@@ -125,6 +125,25 @@ class RepartoDeliveryLine {
       };
 }
 
+class RepartoNotificationPrefs {
+  const RepartoNotificationPrefs({
+    this.sendClientEmail = false,
+    this.sendWhatsApp = false,
+    this.clientEmail,
+  });
+
+  final bool sendClientEmail;
+  final bool sendWhatsApp;
+  final String? clientEmail;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'sendClientEmail': sendClientEmail,
+        'sendWhatsApp': sendWhatsApp,
+        if ((clientEmail ?? '').trim().isNotEmpty)
+          'clientEmail': clientEmail!.trim(),
+      };
+}
+
 class RepartoPayment {
   const RepartoPayment({
     required this.importeCobrado,
@@ -151,7 +170,7 @@ class RepartoPayment {
           'entregaId': entregaId!.trim(),
         'importeCobrado': importeCobrado,
         'formaPago': formaPago.trim(),
-        if (notas?.trim().isNotEmpty ?? false) 'notas': notas!.trim(),
+        'notas': (notas ?? '').trim(),
         if (numeroTalon?.trim().isNotEmpty ?? false)
           'numeroTalon': numeroTalon!.trim(),
         if (fechaVencimientoTalon?.trim().isNotEmpty ?? false)
@@ -230,6 +249,7 @@ class RepartoConfirmationRequest {
     this.latitud,
     this.longitud,
     this.cobro,
+    this.notifications,
     this.deferEvidence = false,
     this.pendingEvidence = const <RepartoPendingEvidenceRef>[],
     this.clock,
@@ -253,6 +273,7 @@ class RepartoConfirmationRequest {
   final double? latitud;
   final double? longitud;
   final RepartoPayment? cobro;
+  final RepartoNotificationPrefs? notifications;
 
   /// Offline-only mode: firma/evidencias are referenced by pendingEvidence
   /// slots instead of server `ev_` ids. Never serialized on the wire; the
@@ -285,6 +306,7 @@ class RepartoConfirmationRequest {
         'forceUpdate': false,
       },
       if (cobro != null) 'cobro': cobro!.toJson(),
+      if (notifications != null) 'notifications': notifications!.toJson(),
     };
   }
 
@@ -318,6 +340,7 @@ class RepartoConfirmationRequest {
         },
       },
       if (cobro != null) 'cobro': cobro!.toJson(),
+      if (notifications != null) 'notifications': notifications!.toJson(),
     };
   }
 
@@ -575,6 +598,8 @@ class RepartoConfirmationOperation {
         'allowEmptyLineas': request.allowEmptyLineas,
       },
       if (request.cobro != null) 'cobro': request.cobro!.toJson(),
+      if (request.notifications != null)
+        'notifications': request.notifications!.toJson(),
     };
     return fingerprintForJson(material);
   }
@@ -694,6 +719,7 @@ class RepartoPersistentConfirmationOperation {
         latitud: request.latitud,
         longitud: request.longitud,
         cobro: request.cobro,
+        notifications: request.notifications,
         deferEvidence: request.deferEvidence,
         pendingEvidence: request.pendingEvidence,
         clock: _clock,

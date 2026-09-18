@@ -1,6 +1,7 @@
 'use strict';
 
 const { RepartoPersistenceError } = require('./reparto-confirmation-service');
+const { resolvePersistedDocumentAmount } = require('./delivery-amount-resolver');
 
 function text(value) {
   return value == null ? null : String(value).trim();
@@ -122,18 +123,22 @@ function payment(source, confirmation) {
 
 function createRepartoReceiptService({ repository } = {}) {
 
+function parseReceiptProof(confirmation) {
+  const raw = row(confirmation, 'RESULT_JSON');
+  if (raw == null || raw === '') return null;
+  try {
+    const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return result?.receiptProof || null;
+  } catch (_error) {
+    return null;
+  }
+}
+
 function isExactZeroPrepaid(confirmation, storedLines, payments) {
   if (text(row(confirmation, 'STATUS')) !== 'ENTREGADO'
       || !Array.isArray(storedLines) || storedLines.length !== 0
       || !Array.isArray(payments) || payments.length !== 0) return false;
-  const raw = row(confirmation, 'RESULT_JSON');
-  let result;
-  try {
-    result = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  } catch (_error) {
-    return false;
-  }
-  const proof = result?.receiptProof;
+  const proof = parseReceiptProof(confirmation);
   return proof?.prepaidZeroWithoutLines === true
     && proof.plannedImporteTotal === 0
     && proof.plannedLineCount === 0
@@ -183,9 +188,17 @@ function isExactZeroPrepaid(confirmation, storedLines, payments) {
     if (!lines.length && !zeroPrepaid) {
       throw unavailable('REPARTO_RECEIPT_LINES_UNAVAILABLE', 'El recibo no contiene lineas confirmadas');
     }
-    const importeTotal = zeroPrepaid ? 0 : lines.reduce(
+    const proof = parseReceiptProof(confirmation);
+    const lineSum = lines.reduce(
       (sum, line) => sum + (line.cantidadEntregada * line.precioUnitario), 0,
     );
+    const importeTotal = zeroPrepaid
+      ? 0
+      : resolvePersistedDocumentAmount({
+        plannedAmount: proof?.plannedImporteTotal,
+        lineSum,
+        resultJson: row(confirmation, 'RESULT_JSON'),
+      });
     const evidence = (stored.evidences || []).map((item) => Object.freeze({
       evidenceId: text(row(item, 'EVIDENCE_ID')),
       kind: text(row(item, 'EVIDENCE_KIND')),

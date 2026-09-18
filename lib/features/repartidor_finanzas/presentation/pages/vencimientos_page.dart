@@ -273,7 +273,7 @@ class _VencimientosPageState extends State<VencimientosPage> {
       final key = switch (item.estado) {
         VencimientoEstado.vencido => 'Vencidos',
         VencimientoEstado.hoy => 'Vencen hoy',
-        VencimientoEstado.proximo => 'Proximos',
+        VencimientoEstado.proximo => 'Próximos',
         VencimientoEstado.sinFecha => 'Sin fecha válida',
         VencimientoEstado.cobrado => 'Cobrados',
       };
@@ -789,6 +789,13 @@ class _RepartidorVencimientosPageState
                 setState(() => errorText = 'Importe superior al pendiente');
                 return;
               }
+              if (notesController.text.trim().isEmpty) {
+                setState(
+                  () => errorText =
+                      'Las observaciones de cobro son obligatorias.',
+                );
+                return;
+              }
               final talonError = validateRuteroTalonFields(
                 paymentMethod: formaPago,
                 numeroTalon: numeroTalonController.text,
@@ -830,7 +837,7 @@ class _RepartidorVencimientosPageState
                   importePendiente: item.importePendiente - amount,
                   formaPago: formaPago,
                   idempotencyToken: idempotencyToken,
-                  notas: notesController.text,
+                  notas: notesController.text.trim(),
                   numeroTalon:
                       isTalon ? numeroTalonController.text.trim() : null,
                   fechaVencimientoTalon:
@@ -1050,7 +1057,7 @@ class _RepartidorVencimientosPageState
                         maxLines: 4,
                         style: TextStyle(color: AppTheme.textPrimary),
                         decoration: const InputDecoration(
-                          labelText: 'Observaciones (opcional)',
+                          labelText: 'Observaciones de cobro *',
                           prefixIcon: Icon(Icons.notes),
                         ),
                       ),
@@ -1197,7 +1204,7 @@ class _FilterStrip extends StatelessWidget {
             _chip(VencimientosFiltro.vencidos, 'Vencidos'),
             _chip(VencimientosFiltro.cobrados, 'Cobrados'),
             _chip(VencimientosFiltro.hoy, 'Hoy'),
-            _chip(VencimientosFiltro.proximos, 'Proximos'),
+            _chip(VencimientosFiltro.proximos, 'Próximos'),
           ],
         ),
       ),
@@ -1208,11 +1215,16 @@ class _FilterStrip extends StatelessWidget {
     final isSelected = selected == filtro;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: RepartidorExecutivePill(
-        label: label,
-        color: AppTheme.info,
+      child: Semantics(
+        button: true,
         selected: isSelected,
-        onTap: () => onSelected(filtro),
+        label: 'Filtro $label',
+        child: RepartidorExecutivePill(
+          label: label,
+          color: AppTheme.info,
+          selected: isSelected,
+          onTap: () => onSelected(filtro),
+        ),
       ),
     );
   }
@@ -1246,11 +1258,16 @@ class _DocumentTypeFilter extends StatelessWidget {
   Widget _chip(String? value, String label) {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: RepartidorExecutivePill(
-        label: label,
-        color: AppTheme.success,
+      child: Semantics(
+        button: true,
         selected: selected == value,
-        onTap: () => onSelected(value),
+        label: 'Tipo $label',
+        child: RepartidorExecutivePill(
+          label: label,
+          color: AppTheme.success,
+          selected: selected == value,
+          onTap: () => onSelected(value),
+        ),
       ),
     );
   }

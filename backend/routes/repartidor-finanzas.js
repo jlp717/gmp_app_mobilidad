@@ -149,7 +149,14 @@ const evidenceUpload = multer({
 });
 
 function actorCode(user) {
-  return String(user?.code || user?.id || user?.user || '').trim();
+  const candidates = [user?.code, user?.user, user?.id];
+  for (const value of candidates) {
+    const raw = String(value || '').trim();
+    if (!raw) continue;
+    const stripped = /^V[A-Za-z0-9]{1,2}$/i.test(raw) ? raw.slice(1) : raw;
+    if (stripped && stripped.toUpperCase() !== 'ALL') return stripped;
+  }
+  return '';
 }
 
 function evidenceRepartidorId(req, requested) {
@@ -363,9 +370,14 @@ function hasFinanceListRole(user) {
 }
 
 function financeFleetCodes(user) {
-  return (Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : [])
+  const listed = (Array.isArray(user?.repartidorCodes) ? user.repartidorCodes : [])
     .filter((code) => typeof code === 'string' || typeof code === 'number')
     .map(normalizeCode).filter(Boolean);
+  if (listed.length > 0) return listed;
+  const role = String(user?.role || '').trim().toUpperCase();
+  if (role !== 'REPARTIDOR') return [];
+  const self = actorCode(user);
+  return self ? [self] : [];
 }
 
 function requireFinanceRepartidorSelector(req, res, next) {
@@ -502,7 +514,7 @@ function canAccessRepartidor(req, repartidorId, { allowMultiple = false } = {}) 
       && selected.every((target) => visible.some((allowed) => codesMatch(allowed, target)));
   }
   if (role !== 'REPARTIDOR' || selected.length !== 1) return false;
-  const userCode = normalizeCode(user.code || user.id || user.user);
+  const userCode = actorCode(user);
   const visible = financeFleetCodes(user);
   return visible.length === 1 && codesMatch(userCode, selected[0])
     && codesMatch(visible[0], selected[0]);

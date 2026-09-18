@@ -185,7 +185,7 @@ class RepartidorExecutiveSheet extends StatelessWidget {
         children: [
           if (showHandle)
             Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              margin: const EdgeInsets.only(top: 8, bottom: 4),
               width: 42,
               height: 4,
               decoration: BoxDecoration(

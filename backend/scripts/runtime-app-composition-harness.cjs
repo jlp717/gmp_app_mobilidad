@@ -200,24 +200,28 @@ function createHarness({ repoRoot, mode, entry = 'app' }) {
   }
   Object.assign(trackedExpress, express, { Router: express.Router, json: express.json });
 
+  const preloadedAppPackages = new Map([
+    ['express', trackedExpress], ['cors', cors],
+    ['compression', compression], ['express-rate-limit', rateLimit],
+  ]);
   const originalLoad = Module._load;
   Module._load = function guardedLoad(request, parent, isMain) {
-    if (request === 'express' && parent && path.resolve(parent.filename) === appPath) return trackedExpress;
     if (BLOCKED_BUILTINS.has(request)) {
       operations.network += 1;
       throw new Error(`BLOCKED_COMPOSITION_IMPORT:${request}`);
     }
     let resolved;
     try { resolved = Module._resolveFilename(request, parent, isMain); } catch (error) { throw error; }
+    // Physical node_modules lives inside backendRoot. Only the canonical app
+    // may receive these exact, already-loaded dependencies before the local guard.
+    if (parent && path.resolve(parent.filename) === compositionAppPath
+      && preloadedAppPackages.has(request)) return preloadedAppPackages.get(request);
     if (stubsByPath.has(resolved)) return stubsByPath.get(resolved);
     if (realProductPaths.has(resolved)) return originalLoad.call(this, request, parent, isMain);
     if (isWithin(backendRoot, resolved)) {
       operations.unexpectedImport += 1;
       throw new Error(`UNEXPECTED_LOCAL_IMPORT:${path.basename(resolved)}`);
     }
-    if (request === 'cors') return cors;
-    if (request === 'compression') return compression;
-    if (request === 'express-rate-limit') return rateLimit;
     throw new Error(`BLOCKED_COMPOSITION_IMPORT:${request}`);
   };
   restorers.push(() => { Module._load = originalLoad; });

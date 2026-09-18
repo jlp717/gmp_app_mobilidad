@@ -4,7 +4,7 @@ import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.
 import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_standalone_cobro.dart';
 
 AlbaranEntrega _albaran({
-  EstadoEntrega estado = EstadoEntrega.pendiente,
+  EstadoEntrega estado = EstadoEntrega.entregado,
   double? saldoCvc = 3279.61,
   double importeDocumento = 2841.76,
   bool esCTR = false,
@@ -47,9 +47,21 @@ AlbaranEntrega _albaran({
 
 void main() {
   test('repartidor can collect optional credit with remaining CVC balance', () {
-    final albaran = _albaran();
+    final albaran = _albaran(estado: EstadoEntrega.entregado);
     expect(albaran.esCTR, isFalse);
     expect(canRegisterRuteroStandaloneCobro(albaran), isTrue);
+  });
+
+  test('in-progress rutero sheet cannot POST cobro before Finalizar', () {
+    expect(
+      canRegisterRuteroStandaloneCobro(
+          _albaran(estado: EstadoEntrega.pendiente)),
+      isFalse,
+    );
+    expect(
+      canRegisterRuteroStandaloneCobro(_albaran(estado: EstadoEntrega.enRuta)),
+      isFalse,
+    );
   });
 
   test('completed partial delivery with remaining balance stays collectible',
@@ -130,7 +142,7 @@ void main() {
       idempotencyToken: 'rut_94_abc_0123456789abcdef0123456789abcdef',
     );
     expect(payload['tipoDocumento'], 'CAC');
-    expect(payload.containsKey('notas'), isFalse);
+    expect(payload['notas'], '');
   });
 
   test('partial amount cannot exceed collectible balance', () {

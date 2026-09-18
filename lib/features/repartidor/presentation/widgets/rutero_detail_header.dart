@@ -53,7 +53,7 @@ class RuteroDetailHeader extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: Responsive.padding(context, small: 14, large: 20),
-        vertical: 12,
+        vertical: Responsive.isLandscapeCompact(context) ? 6 : 8,
       ),
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
@@ -77,7 +77,7 @@ class RuteroDetailHeader extends StatelessWidget {
                     _buildCloseButton(context),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 Align(
                   alignment: Alignment.centerRight,
                   child: _buildAmountBadge(),
@@ -93,12 +93,12 @@ class RuteroDetailHeader extends StatelessWidget {
                     _buildCloseButton(context),
                   ],
                 ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
               Text(
                 albaran.nombreCliente,
                 style: TextStyle(
                   color: AppTheme.textPrimary,
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
                 maxLines: 2,

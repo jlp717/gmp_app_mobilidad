@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const childProcess = require('node:child_process');
 const fs = require('node:fs');
+const Module = require('node:module');
 const path = require('node:path');
 const test = require('node:test');
 const { createHarness, loadComposedApp } = require('../runtime-app-composition-harness.cjs');
@@ -22,6 +23,49 @@ function hasMount(snapshot, prefix, expectedLabels) {
 function mountIndex(snapshot, predicate) {
   return snapshot.rootMounts.findIndex(predicate);
 }
+
+test('preloaded app packages remain allowed when resolved inside physical node_modules', { concurrency: false }, () => {
+  const originalResolve = Module._resolveFilename;
+  const appPath = path.join(repoRoot, 'backend', 'app.js');
+  const packages = new Set(['express', 'cors', 'compression', 'express-rate-limit']);
+  const observed = new Set();
+  Module._resolveFilename = function resolvePhysicalPackages(request, parent, ...rest) {
+    if (packages.has(request) && parent && path.resolve(parent.filename) === appPath) {
+      observed.add(request);
+      return path.join(repoRoot, 'backend', 'node_modules', request, 'index.js');
+    }
+    return originalResolve.call(this, request, parent, ...rest);
+  };
+  try {
+    const snapshot = loadComposedApp({ repoRoot, mode: 'legacy' });
+    assert.deepEqual(observed, packages);
+    assert.ok(snapshot.app);
+    assert.deepEqual(snapshot.operations, { network: 0, process: 0, protectedRead: 0, unexpectedImport: 0 });
+  } finally {
+    Module._resolveFilename = originalResolve;
+  }
+});
+
+test('physical package exception rejects other parents and non-allowlisted packages', { concurrency: false }, () => {
+  const harness = createHarness({ repoRoot, mode: 'legacy' });
+  const originalResolve = Module._resolveFilename;
+  Module._resolveFilename = function resolvePhysicalPackages(request, parent, ...rest) {
+    if (request === 'cors' || request === 'not-allowed-composition-package') {
+      return path.join(repoRoot, 'backend', 'node_modules', request, 'index.js');
+    }
+    return originalResolve.call(this, request, parent, ...rest);
+  };
+  try {
+    const otherParent = { filename: path.join(repoRoot, 'backend', 'routes', 'other.js') };
+    const appParent = { filename: path.join(repoRoot, 'backend', 'app.js') };
+    assert.throws(() => Module._load('cors', otherParent, false), /UNEXPECTED_LOCAL_IMPORT:index\.js/);
+    assert.throws(() => Module._load('not-allowed-composition-package', appParent, false), /UNEXPECTED_LOCAL_IMPORT:index\.js/);
+    assert.equal(harness.snapshot().operations.unexpectedImport, 2);
+  } finally {
+    Module._resolveFilename = originalResolve;
+    harness.close();
+  }
+});
 
 test('DDD composition registers canonical guards, DDD auth fallback and exclusive DDD domains', { concurrency: false }, () => {
   const composed = loadComposedApp({ repoRoot, mode: 'ddd' });

@@ -335,7 +335,89 @@ describe('entregas route coverage gaps', () => {
     expect(response.body.albaranes[0]).toMatchObject({
       estado: 'ENTREGADO',
       colorEstado: 'green',
-      importe: 37.5,
+      importe: 12,
+    });
+  });
+
+  test('overlay keeps CPC 31 instead of LAC 30.80 when qty was not changed', async () => {
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('FROM DSEDAC.OPP OPP')) {
+        return Promise.resolve([{ ...pendingRow(), IMPORTETOTAL: 31 }]);
+      }
+      if (sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES')) {
+        return Promise.resolve([{
+          DOCUMENT_ID: '2026-A-1-42-C1', REPARTIDOR_ID: '94', STATUS: 'ENTREGADO', ID: 99,
+          IMPORTE_ENTREGADO: '30.80',
+          RESULT_JSON: JSON.stringify({
+            receiptProof: {
+              plannedImporteTotal: 31,
+              deliveredImporteTotal: 31,
+              quantitiesChanged: false,
+            },
+          }),
+        }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const response = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.albaranes[0].importe).toBe(31);
+    expect(response.body.albaranes[0].importe).not.toBe(30.8);
+  });
+
+  test('list and detail cap collectable to CPC 161.58 not CVC 174.78', async () => {
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (sql.includes('FROM DSEDAC.OPP OPP')) {
+        return Promise.resolve([{
+          ...pendingRow(),
+          IMPORTETOTAL: 161.58,
+          SERIEALBARAN: 'P',
+          TERMINALALBARAN: 15,
+          NUMEROALBARAN: 2296,
+        }]);
+      }
+      if (sql.includes('CVC_ROW_COUNT')) {
+        return Promise.resolve([{
+          SUBEMPRESA: '01', EJERCICIO: 2026, SERIE: 'P', TERMINAL: 15, NUMERO: 2296, CLIENTE: 'C1',
+          CVC_ROW_COUNT: 1, IMPORTEPENDIENTE: 174.78,
+        }]);
+      }
+      if (sql.includes('FROM DSEDAC.CPC CPC')) {
+        return Promise.resolve([detailHeader({
+          IMPORTE: 161.58,
+          IMPORTE_BRUTO: 161.58,
+          SERIEALBARAN: 'P',
+          TERMINALALBARAN: 15,
+          NUMEROALBARAN: 2296,
+        })]);
+      }
+      if (sql.includes('FROM DSEDAC.LAC')) {
+        return Promise.resolve([{
+          SECUENCIA: 1, CODIGOARTICULO: 'POLLO', DESCRIPCION: 'Pollo',
+          CANTIDADUNIDADES: 5.75, CANTIDADENVASES: 1, IMPORTEVENTA: 30.80,
+          UNIDADMEDIDA: 'KILOGRAMOS',
+        }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const list = await authorized('get', '/pendientes/94?date=2026-08-03&limit=1');
+    expect(list.status).toBe(200);
+    expect(list.body.albaranes[0].importe).toBe(161.58);
+    expect(list.body.albaranes[0].importeDisponibleCobro).toBe(161.58);
+    expect(list.body.albaranes[0].importeCvcPendiente).toBe(174.78);
+
+    const detail = await authorized('get', '/albaran/2296/2026?serie=P&terminal=15&cliente=C1');
+    expect(detail.status).toBe(200);
+    expect(detail.body.albaran.importe).toBe(161.58);
+    expect(detail.body.albaran.importe).not.toBe(30.8);
+    expect(detail.body.albaran.importeDisponibleCobro).toBe(161.58);
+    expect(detail.body.albaran.importeCvcPendiente).toBe(174.78);
+    expect(detail.body.albaran.items[0]).toMatchObject({
+      unidad: 'KILOGRAMOS',
+      cantidadPedida: 5.75,
     });
   });
   test('returns a typed redacted error when the authorized pending query fails', async () => {

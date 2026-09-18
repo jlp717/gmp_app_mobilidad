@@ -25,6 +25,7 @@ RepartoConfirmationRequest _emptyPrepaidRequest({
   bool allowEmptyLineas = true,
   DateTime? occurredAt,
   DateTime Function()? clock,
+  RepartoNotificationPrefs? notifications,
 }) {
   final signatureId = 'ev_${List<String>.filled(64, 'a').join()}';
   return RepartoConfirmationRequest(
@@ -41,6 +42,7 @@ RepartoConfirmationRequest _emptyPrepaidRequest({
     ),
     firma: signatureId,
     clock: clock,
+    notifications: notifications,
   );
 }
 
@@ -181,6 +183,107 @@ void main() {
 
     expect(delivery['occurredAt'], '2030-01-02T03:04:05.000Z');
     expect(delivery, isNot(contains('clock')));
+    expect(prepared.fingerprint, fingerprint);
+  });
+
+  test('serializa cobro+notificaciones al Finalizar, no un cobro suelto', () {
+    final json = RepartoConfirmationRequest(
+      itemId: '2026-P-15-2296-C1',
+      status: RepartoDeliveryStatus.entregado,
+      occurredAt: DateTime.now().toUtc().subtract(const Duration(minutes: 5)),
+      lineas: const <RepartoDeliveryLine>[
+        RepartoDeliveryLine(
+          lineaId: '1',
+          codigoArticulo: 'POLLO',
+          cantidadPedida: 5.75,
+          cantidadEntregada: 5.75,
+          cantidadRechazada: 0,
+          cantidadPendiente: 0,
+        ),
+      ],
+      repartidorId: '08',
+      receiver: const RepartoReceiver(
+        nombre: 'Ana',
+        apellidos: 'Prueba',
+        dni: '12345678Z',
+      ),
+      firma: 'ev_${List<String>.filled(64, 'a').join()}',
+      cobro: const RepartoPayment(
+        entregaId: '2026-P-15-2296-C1',
+        importeCobrado: 161.58,
+        formaPago: 'EFECTIVO',
+        notas: 'Cobro en ruta',
+      ),
+      notifications: const RepartoNotificationPrefs(
+        sendClientEmail: true,
+        sendWhatsApp: true,
+        clientEmail: 'bar@cliente.test',
+      ),
+    ).toJson();
+
+    expect(json['cobro'], isA<Map<String, dynamic>>());
+    expect(json['cobro']['notas'], 'Cobro en ruta');
+    expect(json['cobro']['notas'], isNot(isNull));
+    expect(json['notifications'], {
+      'sendClientEmail': true,
+      'sendWhatsApp': true,
+      'clientEmail': 'bar@cliente.test',
+    });
+  });
+
+  test('cobro sin texto envía notas vacías, nunca null', () {
+    const payment = RepartoPayment(
+      importeCobrado: 10,
+      formaPago: 'EFECTIVO',
+    );
+    expect(payment.toJson()['notas'], '');
+    expect(payment.toJson().containsKey('notas'), isTrue);
+  });
+
+  test('integra reloj local y preferencias materiales de notificacion',
+      () async {
+    final fixedNow = DateTime.utc(2030, 1, 2, 3, 4, 5);
+    const notifications = RepartoNotificationPrefs(
+      sendClientEmail: true,
+      clientEmail: 'cliente@example.test',
+    );
+    final request = _emptyPrepaidRequest(
+      occurredAt: fixedNow,
+      clock: () => fixedNow,
+      notifications: notifications,
+    );
+    final otherClock = _emptyPrepaidRequest(
+      occurredAt: fixedNow,
+      clock: () => DateTime.utc(2040),
+      notifications: notifications,
+    );
+    final otherNotifications = _emptyPrepaidRequest(
+      occurredAt: fixedNow,
+      clock: () => fixedNow,
+      notifications: const RepartoNotificationPrefs(sendWhatsApp: true),
+    );
+    final fingerprint = RepartoConfirmationOperation.fingerprintFor(request);
+
+    expect(
+      RepartoConfirmationOperation.fingerprintFor(otherClock),
+      fingerprint,
+    );
+    expect(
+      RepartoConfirmationOperation.fingerprintFor(otherNotifications),
+      isNot(fingerprint),
+    );
+
+    final operation = RepartoPersistentConfirmationOperation(
+      RepartoConfirmationJournal(_MemoryJournalStore()),
+      keyGenerator: () => 'rep-clock-notifications',
+      clock: () => fixedNow,
+    );
+    final prepared = await operation.prepare(request);
+    final wire = prepared.toJson();
+
+    expect(wire['notifications'], notifications.toJson());
+    expect(wire, isNot(contains('clock')));
+    expect(wire['delivery'], isNot(contains('clock')));
     expect(prepared.fingerprint, fingerprint);
   });
 }

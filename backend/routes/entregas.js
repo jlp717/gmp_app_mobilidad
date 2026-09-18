@@ -17,6 +17,7 @@ const {
     resolveDeliveryAmount,
     documentAmountKey,
     sanitizeErpAmount,
+    resolvePersistedDocumentAmount,
 } = require('../services/delivery-amount-resolver');
 const {
     loadDeliveryLineAmountStats,
@@ -33,6 +34,7 @@ const {
     resolveCanonicalDeliveryStatuses,
 } = require('../services/deterministic-delivery-status');
 const { shouldShowIvaBreakdown } = require('../config/feature-flags');
+const { resolveClientEmail } = require('../services/staff-email-directory-service');
 const REPARTIDOR_ROUTE_ORDER_FETCH_MAX = 500;
 
 /**
@@ -1373,8 +1375,8 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
     try {
         const documentPlaceholders = documentIds.map(() => '?').join(', ');
         const deliveredAmountSql = tables.lines
-            ? `, (SELECT COALESCE(SUM(L.CANTIDAD_ENTREGADA * COALESCE(L.PRECIO_UNITARIO, 0)), 0) FROM ${tables.lines} L WHERE L.CONFIRMACION_ID = C.ID) AS IMPORTE_ENTREGADO`
-            : ', CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_ENTREGADO';
+            ? `, (SELECT COALESCE(SUM(L.CANTIDAD_ENTREGADA * COALESCE(L.PRECIO_UNITARIO, 0)), 0) FROM ${tables.lines} L WHERE L.CONFIRMACION_ID = C.ID) AS IMPORTE_ENTREGADO, C.RESULT_JSON`
+            : ', CAST(NULL AS DECIMAL(15, 2)) AS IMPORTE_ENTREGADO, C.RESULT_JSON';
         const paymentSelect = cobrosTable
             ? [
                 ', C.ID AS CONFIRMATION_ID',
@@ -1432,6 +1434,7 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
                 importeEntregado: Number.isFinite(Number(match.importeEntregado))
                     ? Math.round(Number(match.importeEntregado) * 100) / 100
                     : null,
+                resultJson: match.resultJson,
             });
         }
         if (!byId.size) return albaranes;
@@ -1441,6 +1444,11 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
             const ownerId = String(item.codigoRepartidor || '').trim();
             const match = byId.get(documentId) || byId.get(`${ownerId}\u001f${documentId}`);
             if (!match) return item;
+            const canonicalImporte = resolvePersistedDocumentAmount({
+                plannedAmount: item.importe,
+                lineSum: match.importeEntregado,
+                resultJson: match.resultJson,
+            });
             return {
                 ...item,
                 estado: match.status,
@@ -1452,7 +1460,7 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
                 importePendienteCobro: match.importePendienteCobro,
                 formaPagoCobro: match.formaPagoCobro,
                 cobroParcial: match.cobroParcial,
-                ...(match.importeEntregado != null ? { importe: match.importeEntregado } : {}),
+                importe: canonicalImporte,
             };
         });
     } catch (error) {
@@ -1754,8 +1762,8 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             (item) => (Number(item.cantidadPedida) || 0) > 0 && Math.abs(Number(item.totalLinea) || 0) < 0.005,
         ).length;
         const resolvedAmount = resolveDeliveryAmount({
-            cpcTotal: parseFloat(header.IMPORTE) || 0,
-            cacTotal: parseFloat(header.CAC_IMPORTE) || 0,
+            cpcTotal: sanitizeErpAmount(header.IMPORTE),
+            cacTotal: sanitizeErpAmount(header.CAC_IMPORTE),
             cpcNetoSum: netoSum,
             cpcIvaSum: ivaSum,
             lacLineSum: lineSumRounded,
@@ -1845,6 +1853,14 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
             discrepancy: resolvedAmount.discrepancy
                 || Math.abs(resolvedAmount.amount - Math.round((netoSum + ivaSum) * 100) / 100) > 0.01,
         };
+
+        let emailCliente = '';
+        try {
+            emailCliente = await resolveClientEmail(header.CLIENTE) || '';
+        } catch (_emailError) {
+            emailCliente = '';
+        }
+        albaran.emailCliente = emailCliente;
 
         let recipientSuggestion = null;
         try {

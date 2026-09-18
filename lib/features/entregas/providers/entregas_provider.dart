@@ -602,6 +602,7 @@ class AlbaranEntrega {
     String? formaPagoCobro,
     bool? cobroParcial,
     bool clearPaymentBalance = false,
+    String? emailCliente,
   }) {
     return AlbaranEntrega(
       id: id,
@@ -621,7 +622,7 @@ class AlbaranEntrega {
       telefono2: telefono2,
       latitud: latitud ?? this.latitud,
       longitud: longitud ?? this.longitud,
-      emailCliente: emailCliente,
+      emailCliente: emailCliente ?? this.emailCliente,
       fecha: fecha,
       importeTotal: importeTotal ?? this.importeTotal,
       importeBruto: importeBruto ?? this.importeBruto,
@@ -1104,6 +1105,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
     required Map<String, dynamic> response,
     double? acceptedPaymentAmount,
     String? acceptedPaymentMethod,
+    double? deliveredAmount,
   }) {
     if (!_selectedOwnerContains(state.repartidorId, repartidorId) ||
         response['queued'] == true) return;
@@ -1126,6 +1128,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
             cobroId: ack.cobroId, cobrado: paid ? true : null,
             importeCobrado: paid ? acceptedPaymentAmount : null,
             formaPagoCobro: paid ? acceptedPaymentMethod : null,
+            importeTotal: deliveredAmount,
             // The ACK doesn't return the server balance. Do not guess it from
             // invoice totals: partial deliveries can change the payable amount.
             clearPaymentBalance: paid,

@@ -22,6 +22,7 @@ const {
   DeliveryStatusResolutionError,
   resolveCanonicalDeliveryStatuses,
 } = require('../services/deterministic-delivery-status');
+const { resolvePersistedDocumentAmount } = require('../services/delivery-amount-resolver');
 
 const MUTATION_RE = /\b(INSERT|UPDATE|DELETE|MERGE)\b/i;
 const CANONICAL_CONFIRMATION_STATUSES = Object.freeze([
@@ -295,7 +296,8 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
               C.FIRMA_EVIDENCE_ID,
               (SELECT COALESCE(SUM(L.CANTIDAD_ENTREGADA * COALESCE(L.PRECIO_UNITARIO, 0)), 0)
                  FROM ${tables.lines} L
-                WHERE L.CONFIRMACION_ID = C.ID) AS IMPORTE_ENTREGADO
+                WHERE L.CONFIRMACION_ID = C.ID) AS IMPORTE_ENTREGADO,
+              C.RESULT_JSON
               ${paymentSelect}
          FROM ${tables.confirmations} C
          ${paymentJoin}
@@ -348,6 +350,7 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
         importeEntregado: Number.isFinite(Number(match.importeEntregado))
           ? Math.round(Number(match.importeEntregado) * 100) / 100
           : null,
+        resultJson: match.resultJson,
       });
     }
     if (!byId.size) return rows;
@@ -363,6 +366,11 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
       const match = byId.get(documentId) || byId.get(`${ownerId}\u001f${documentId}`);
       const safe = jsonSafeRow(row);
       if (!match) return safe;
+      const canonicalImporte = resolvePersistedDocumentAmount({
+        plannedAmount: safe.IMPORTETOTAL ?? safe.IMPORTE ?? row.IMPORTETOTAL ?? row.IMPORTE,
+        lineSum: match.importeEntregado,
+        resultJson: match.resultJson,
+      });
       return {
         ...safe,
         CANONICAL_STATUS: match.status,
@@ -374,11 +382,9 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
         CANONICAL_IMPORTE_PENDIENTE_COBRO: match.importePendienteCobro,
         CANONICAL_FORMA_PAGO_COBRO: match.formaPagoCobro,
         CANONICAL_COBRO_PARCIAL: match.cobroParcial,
-        CANONICAL_IMPORTE_ENTREGADO: match.importeEntregado,
-        ...(match.importeEntregado != null ? {
-          IMPORTETOTAL: match.importeEntregado,
-          IMPORTE: match.importeEntregado,
-        } : {}),
+        CANONICAL_IMPORTE_ENTREGADO: canonicalImporte,
+        IMPORTETOTAL: canonicalImporte,
+        IMPORTE: canonicalImporte,
       };
     });
   } catch (error) {

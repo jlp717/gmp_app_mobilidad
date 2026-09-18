@@ -44,14 +44,14 @@ bool canRegisterRuteroStandaloneCobro(AlbaranEntrega albaran) {
   if (albaran.isPendingPrice) return false;
   if (!albaran.tieneSaldoCobrable) return false;
   switch (albaran.estado) {
-    case EstadoEntrega.noEntregado:
-    case EstadoEntrega.rechazado:
-      return false;
-    case EstadoEntrega.pendiente:
-    case EstadoEntrega.enRuta:
     case EstadoEntrega.entregado:
     case EstadoEntrega.parcial:
       break;
+    case EstadoEntrega.pendiente:
+    case EstadoEntrega.enRuta:
+    case EstadoEntrega.noEntregado:
+    case EstadoEntrega.rechazado:
+      return false;
   }
   return albaran.codigoCliente.trim().isNotEmpty &&
       albaran.numeroAlbaran > 0 &&
@@ -183,7 +183,7 @@ Map<String, dynamic> buildRuteroStandaloneCobroPayload({
     'formaPago': formaPago.trim().toUpperCase(),
     'pantallaOrigen': 'RUTERO',
     'idempotencyToken': idempotencyToken,
-    if (trimmedNotes.isNotEmpty) 'notas': trimmedNotes,
+    'notas': trimmedNotes,
     if ((numeroTalon ?? '').trim().isNotEmpty)
       'numeroTalon': numeroTalon!.trim(),
     if ((fechaVencimientoTalon ?? '').trim().isNotEmpty)

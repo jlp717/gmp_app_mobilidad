@@ -78,6 +78,55 @@ test.each([
   })).rejects.toMatchObject({ code: 'REPARTO_RECEIPT_PAYMENT_UNAVAILABLE' });
 });
 
+test('uses persisted delivered header when quantities were not changed', async () => {
+  const proof = JSON.stringify({
+    receiptProof: {
+      plannedImporteTotal: 31,
+      deliveredImporteTotal: 31,
+      quantitiesChanged: false,
+      plannedLineCount: 1,
+      actualLineCount: 1,
+      prepaidZeroWithoutLines: false,
+    },
+  });
+  const data = stored({
+    confirmation: { ...stored().confirmation, RESULT_JSON: proof },
+    lines: [{
+      LINEA_ID: '1', CANTIDAD_PEDIDA: 1, CANTIDAD_ENTREGADA: 1,
+      CANTIDAD_RECHAZADA: 0, CANTIDAD_PENDIENTE: 0, PRECIO_UNITARIO: 15.4,
+    }],
+    payments: [],
+  });
+  const result = await service(data).getReceipt({
+    confirmationId: '7', actor: { repartidorId: 'R1' },
+  });
+  expect(result.importeTotal).toBe(31);
+});
+
+test('falls back to planned CPC, not LAC rounding, when delivered total is omitted', async () => {
+  const proof = JSON.stringify({
+    receiptProof: {
+      plannedImporteTotal: 31,
+      quantitiesChanged: false,
+      plannedLineCount: 1,
+      actualLineCount: 1,
+      prepaidZeroWithoutLines: false,
+    },
+  });
+  const data = stored({
+    confirmation: { ...stored().confirmation, RESULT_JSON: proof },
+    lines: [{
+      LINEA_ID: '1', CANTIDAD_PEDIDA: 1, CANTIDAD_ENTREGADA: 1,
+      CANTIDAD_RECHAZADA: 0, CANTIDAD_PENDIENTE: 0, PRECIO_UNITARIO: 15.4,
+    }],
+    payments: [],
+  });
+  const result = await service(data).getReceipt({
+    confirmationId: '7', actor: { repartidorId: 'R1' },
+  });
+  expect(result.importeTotal).toBe(31);
+});
+
 test('accepts a leap-day payment date', async () => {
   const leap = stored();
   Object.assign(leap.payments[0], { DIACOBRO: 29, MESCOBRO: 2, ANOCOBRO: 2024 });

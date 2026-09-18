@@ -13,6 +13,7 @@ const {
   CARD_METHOD_RE,
   POSTDATED_METHOD_RE,
 } = require('../services/liquidacion-pdf-service');
+const { resolvePersistedDocumentAmount } = require('../services/delivery-amount-resolver');
 
 const MARKER_MAX_LENGTH = 30;
 function isG4Testmovil(env = process.env) {
@@ -1000,14 +1001,14 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         }
         const lockedBalance = await ensureBalanceForUpdate(repartidorId);
         const deliveryRows = await rows(connection,
-          `SELECT C.ID, C.STATUS, `
-            + 'SUM(L.CANTIDAD_ENTREGADA * L.PRECIO_UNITARIO) AS IMPORTE_ENTREGADO, '
-            + 'SUM((L.CANTIDAD_PENDIENTE + L.CANTIDAD_RECHAZADA) * L.PRECIO_UNITARIO) AS IMPORTE_PENDIENTE, '
-            + 'SUM(CASE WHEN L.LINEA_ID IS NOT NULL AND L.PRECIO_UNITARIO IS NULL THEN 1 ELSE 0 END) AS PRECIOS_NULOS, '
-            + 'COUNT(L.LINEA_ID) AS LINEAS '
-            + `FROM ${confirmation.confirmations} C LEFT JOIN ${confirmation.lines} L ON L.CONFIRMACION_ID = C.ID `
+          `SELECT C.ID, C.STATUS, C.RESULT_JSON, `
+            + `(SELECT COALESCE(SUM(L.CANTIDAD_ENTREGADA * L.PRECIO_UNITARIO), 0) FROM ${confirmation.lines} L WHERE L.CONFIRMACION_ID = C.ID) AS IMPORTE_ENTREGADO, `
+            + `(SELECT COALESCE(SUM((L.CANTIDAD_PENDIENTE + L.CANTIDAD_RECHAZADA) * L.PRECIO_UNITARIO), 0) FROM ${confirmation.lines} L WHERE L.CONFIRMACION_ID = C.ID) AS IMPORTE_PENDIENTE, `
+            + `(SELECT COALESCE(SUM(CASE WHEN L.LINEA_ID IS NOT NULL AND L.PRECIO_UNITARIO IS NULL THEN 1 ELSE 0 END), 0) FROM ${confirmation.lines} L WHERE L.CONFIRMACION_ID = C.ID) AS PRECIOS_NULOS, `
+            + `(SELECT COUNT(L.LINEA_ID) FROM ${confirmation.lines} L WHERE L.CONFIRMACION_ID = C.ID) AS LINEAS `
+            + `FROM ${confirmation.confirmations} C `
             + 'WHERE C.REPARTIDOR_ID = ? AND DATE(C.CONFIRMED_AT) = ? '
-            + 'GROUP BY C.ID, C.STATUS ORDER BY C.ID WITH RS', [repartidorId, date]);
+            + 'ORDER BY C.ID WITH RS', [repartidorId, date]);
         const paymentRows = await rows(connection,
           `SELECT ID, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, CREATED_AT, `
             + 'CODIGOCLIENTEALBARAN, TIPODOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO '
@@ -1039,7 +1040,11 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
           }
           return {
             id: rowValue(row, 'ID'), status: statusMap[String(rowValue(row, 'STATUS')).trim()],
-            amount: money(rowValue(row, 'IMPORTE_ENTREGADO')),
+            amount: resolvePersistedDocumentAmount({
+              plannedAmount: 0,
+              lineSum: money(rowValue(row, 'IMPORTE_ENTREGADO')),
+              resultJson: rowValue(row, 'RESULT_JSON'),
+            }),
             pendingAmount: money(rowValue(row, 'IMPORTE_PENDIENTE')),
           };
         });

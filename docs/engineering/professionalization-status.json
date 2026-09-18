@@ -3,7 +3,7 @@
   "updated": "2026-09-18",
   "branch": "codex/professionalization-implementation-20260918",
   "base": "test@710fede",
-  "scope": "Seguimiento del plan completo; un slice verificado no marca automáticamente su tarea completa. Integración y producción pendientes.",
+  "scope": "Seguimiento del plan completo; un slice verificado no marca automáticamente su tarea completa. Unión local con test@be466bba verificada; merge a test y producción pendientes.",
   "production_ready": false,
   "tasks": [
     {
@@ -50,7 +50,7 @@
       "id": "FND-05",
       "status": "partial",
       "acceptance_complete": false,
-      "note": "Inventario AST y composición real bajo dobles revisados por dos agentes; ocho pruebas AST y siete de composición. Las rutas internas y la autorización por objeto requieren contratos adicionales.",
+      "note": "Inventario AST (ocho pruebas) y composición real bajo dobles (nueve) revisados por dos agentes. Corregida resolución de paquetes físicos en integración. Rutas internas y autorización por objeto requieren contratos adicionales.",
       "artifacts": [
         "docs/architecture/runtime-matrix.md",
         "docs/adr/backend-runtime-ownership.md"
@@ -464,9 +464,10 @@
       "id": "QA-01",
       "status": "partial",
       "acceptance_complete": false,
-      "note": "Carril explícito aislado de E/S: snapshot CHAT/QA-F1 de 34 suites y 675 pruebas pasa con dependencias nuevas. Tres pruebas del ciclo de vida del guard. No representa todas las suites heredadas.",
+      "note": "Carril explícito aislado de E/S: árbol integrado con test@be466bba, 35 suites y 691 pruebas pasan con dependencias nuevas. Tres pruebas del ciclo de vida del guard. No representa todas las suites heredadas.",
       "artifacts": [
-        "docs/engineering/testing.md"
+        "docs/engineering/testing.md",
+        "docs/engineering/integration-validation.md"
       ],
       "pending_dependencies": [
         "FND-02",
@@ -741,5 +742,6 @@
       ]
     }
   ],
-  "cost_and_latency": "Coste por agente y latencia integral no medidos; no se estima un porcentaje de avance por número de tareas."
+  "cost_and_latency": "Coste por agente y latencia integral no medidos; no se estima un porcentaje de avance por número de tareas.",
+  "integrated_upstream": "be466bba8c010e25d0ee40b5ee45cc690ec06b44"
 }

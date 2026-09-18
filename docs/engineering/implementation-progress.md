@@ -8,19 +8,19 @@ Este documento diferencia paquetes revisados de aceptación integral. **Las 57 t
 
 | Paquete | Resultado y evidencia | Límite de la evidencia |
 |---|---|---|
-| FND-01: aislamiento | Worktree independiente y baseline de cambios ajenos. | No integra cambios concurrentes del checkout original. |
+| FND-01: aislamiento | Worktree independiente y baseline de cambios ajenos. | Integra exclusivamente commits publicados hasta `be466bba`; conserva el trabajo local ajeno. |
 | FND-02: versiones | Node 24.21.0 y Flutter 3.35.6 centralizados; checker con cinco pruebas Windows/Linux y dos revisiones. | IBM i y CI remoto pendientes. La instalación Linux sin scripts no prueba ODBC nativo. |
 | FND-03A: runner | Commit `34a00e4`; propaga fallos, limita tiempo/salida y no muestra salida potencialmente sensible. 12 pruebas y una omisión por plataforma en Windows y Linux; dos revisiones. | El gate completo sigue bloqueado por el baseline, como se detalla abajo. |
 | FND-04: reloj | Commit `f1b6f55`; reloj UTC inyectable, límite inclusivo y huella/payload conservados. Dos revisiones y pruebas de fronteras temporales. | No valida el flujo en dispositivo. |
-| FND-05A/B: runtime | Inventario AST `88d9931` y composición real de app.js bajo dobles explícitos; ocho y siete pruebas respectivamente, dos revisiones. | No ejecuta handlers internos ni acredita autorización por objeto. |
+| FND-05A/B: runtime | Inventario AST `88d9931` y composición real de app.js bajo dobles explícitos; ocho y nueve pruebas respectivamente, dos revisiones. | No ejecuta handlers internos ni acredita autorización por objeto. |
 | QA-01A: aislamiento de tests | Guard antes de importar producto, sin forceExit ni selección vacía; tres pruebas de restauración de entorno. | Previene E/S accidental; no es un sandbox para código hostil. |
 | CI-I: entradas de workflows | Observador de metadatos de sólo lectura, expresiones fuera de código ejecutable y política YAML. Nueve pruebas y checker; dos revisiones. | No es evidencia de ejecución de GitHub Actions. |
 | SEC-08B: dependencias | Instalación física nueva, auditorías raíz/backend sin avisos conocidos; contratos CSV, body-parser y Morgan con TypeScript 5 pasan; dos revisiones. | No descarta vulnerabilidades desconocidas. Los enlaces de dependencias del checkout no se han sustituido. |
 | SEC-02A: autenticación | Middleware real y handlers bajo aislamiento; tres suites dirigidas, 60 pruebas. Runbook de Redis corregido; dos revisiones. | Auth y DB protegidos permanecen intactos. No se prueba Redis real. |
-| CHAT / QA-F1 | Entrada estricta del chatbot; 17 pruebas nuevas. Ocho suites existentes de finanzas/scope adoptadas sin alterar sus contratos; dos revisiones. Snapshot integrado: 34 suites y 675 pruebas con dependencias nuevas. | Dobles de DB2, transporte y proveedores; no BOLA universal ni transacciones reales. |
+| CHAT / QA-F1 | Entrada estricta del chatbot; 17 pruebas nuevas. Ocho suites existentes de finanzas/scope adoptadas sin alterar sus contratos; dos revisiones. Snapshot de integración con `test@be466bba`: 35 suites y 691 pruebas con dependencias nuevas. | Dobles de DB2, transporte y proveedores; no BOLA universal ni transacciones reales. |
 | ARCH-04A: promociones | Política pura compartida, sin cambio de TTL/scope. 43 pruebas del paquete; dos revisiones. Dos infos nuevos corregidos y análisis focalizado limpio. | No equivale a refactorizar toda la arquitectura Flutter. |
 | OPS-01A: transporte RUM | Cola acotada, lotes de 50, single-flight y mapas inmutables. 13 pruebas Flutter y dos del handler hermético; dos revisiones. | Entrega best-effort: puede perder o duplicar eventos. Privacidad se trata aparte. |
-| CACHE-A1 | Invalidación después de autenticación, preservando el montaje financiero canónico y no-store. 34 pruebas de middleware y siete de composición; dos revisiones. | Los intentos autenticados siguen invalidando de forma conservadora; no prueba commit ni BOLA. |
+| CACHE-A1 | Invalidación después de autenticación, preservando el montaje financiero canónico y no-store. 34 pruebas de middleware y nueve de composición; dos revisiones. | Los intentos autenticados siguen invalidando de forma conservadora; no prueba commit ni BOLA. |
 | SEC09-P: privacidad RUM | Categorías fijas, sin IDs ni strings arbitrarios en dimensiones; UUID por lote. Fixture wire compartida Dart/Node y dos revisiones. Análisis de todo telemetry sin incidencias. | Reduce detalle por operación; no impide canales encubiertos numéricos ni sanea otros logs. |
 | REP-01A: copias de recuperación | Commit `635e448`; tres copias retiradas sólo del índice, hashes/tamaños locales preservados y reglas exactas de ignore. Dos revisiones. | No borra archivos físicos ni historia de Git. |
 
@@ -31,7 +31,7 @@ Los recuentos describen snapshots o paquetes concretos. No se suman como cobertu
 - `flutter build web --no-pub --release`: exit 0, salida JavaScript. El dry-run de Wasm señala dependencias incompatibles; no se declara build Wasm ni móvil.
 - TypeScript acotado de backend: exit 0; no se presenta como tipado de todo el runtime CommonJS.
 - Tres archivos Flutter existentes de liquidación comercial, captura offline y confirmación diferida: 20 pruebas pasan, manteniendo separados los perfiles comercial y reparto.
-- Pruebas Node de toolchain, entradas de workflows, lifecycle y runner en el snapshot integrado: 29 pasan y una omisión específica de POSIX en Windows.
+- Pruebas Node de AST, toolchain, entradas de workflows, lifecycle y runner en el snapshot integrado: 37 pasan y una omisión específica de POSIX en Windows.
 
 ## Gates pendientes y límites reales
 
@@ -46,3 +46,7 @@ La sustitución de enlaces locales de dependencias fue rechazada por el control 
 Quedan pendientes, entre otros, la decisión HTTPS/LAN, la coherencia de políticas de gobernanza, catálogo y transacciones DB2 reales, validación móvil con jefe de ventas en reparto, mediciones de rendimiento en dispositivo, staging y gates de producción. No se han cambiado secretos, DB2, PM2 ni producción. Coste por agente y latencia integral no medidos.
 
 La API del scanner existente también se ejecutó con un límite explícito de 8 MiB por archivo, sin cambiar su CLI ni configuración: exit 1, cero errores de lectura y dos coincidencias en `source` embebido de `backend/tests/setup.js`. La revisión independiente confirmó valores sintéticos de tests, idénticos al setup actual. No se añadieron exclusiones ni se modificó el baseline histórico.
+
+## Integración con los cambios publicados de reparto
+
+La unión con `test@be466bba` conserva notificaciones y reloj local sin cambiar la huella material. Pasan 107 pruebas Flutter de integración y el carril backend de 691 pruebas. Se corrigió un defecto del harness oculto por enlaces de dependencias y dos revisores validaron la reparación en una instalación física. El [informe de integración](integration-validation.md) detalla referencias, comandos, evidencia y límites; este resultado no implica merge a `test` ni despliegue.

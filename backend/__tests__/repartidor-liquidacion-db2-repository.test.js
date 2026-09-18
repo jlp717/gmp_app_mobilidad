@@ -99,6 +99,7 @@ function connection({
   malformedNullDefault = false, omitConstraints = false, malformedSequence = false,
   malformedIdentity = false, malformedIndexOrdering = false, extraColumn = false,
   extraConstraint = null, extraIndex = null, missingConstraintSignature = null,
+  deliveryProofJson = null,
 } = {}) {
   let raced = false;
   const query = jest.fn(async (sql) => {
@@ -169,7 +170,12 @@ function connection({
       MINIMUM_VALUE: '1', MAXIMUM_VALUE: '9223372036854775807', CYCLE_OPTION: 'NO', CACHE: '20',
       ORDER_OPTION: 'NO',
     }];
-    if (sql.includes('SUM(L.CANTIDAD_ENTREGADA')) return [{ ID: 11, STATUS: 'PARCIAL', IMPORTE_ENTREGADO: '25', IMPORTE_PENDIENTE: '2', PRECIOS_NULOS: 0, LINEAS: 1 }];
+    if (sql.includes('SUM(L.CANTIDAD_ENTREGADA')) return [{
+      ID: 11, STATUS: 'PARCIAL',
+      IMPORTE_ENTREGADO: deliveryProofJson ? '30.80' : '25',
+      IMPORTE_PENDIENTE: '2', PRECIOS_NULOS: 0, LINEAS: 1,
+      RESULT_JSON: deliveryProofJson,
+    }];
     if (sql.includes('IMPORTEVENCIMIENTO') && sql.includes('FROM JAVIER.TEST_REPARTIDOR_COBROS')) return [{ ID: 21, IMPORTEVENCIMIENTO: '25', CODIGOFORMAPAGO: 'EF', CREATED_AT: '2026-08-09T10:00:00Z' }];
     if (sql.includes('OBSERVACION') && sql.includes('WHERE IDEMPOTENCY_TOKEN')) return [];
     if (sql.includes('OBSERVACION') && sql.includes('FROM JAVIER.TEST_REPARTIDOR_LIQUIDACION_GASTOS')) return [{ ID: 31, CODIGO_REPARTIDOR: '94', DIA: 9, MES: 8, ANO: 2026, IMPORTE: '3', CATEGORIA: 'PEAJE', STATUS: 'PENDING', CREATED_AT: '2026-08-09T10:00:00Z' }];
@@ -377,6 +383,25 @@ describe('repartidor-liquidacion-db2-repository', () => {
     expect(sql).toContain('TRIM(CODIGOVENDEDOR) = ? AND DIACOBRO = ?');
     expect(sql).not.toMatch(/LOCK TABLE|MAX\s*\(|DSEDAC/i);
     expect(conn.query.mock.calls.filter(([statement]) => statement.includes('ID IN (?)'))).toHaveLength(4);
+  });
+
+  test('untouched delivery in liquidación keeps CPC 31, not LAC 30.80', async () => {
+    const conn = connection({
+      deliveryProofJson: JSON.stringify({
+        receiptProof: {
+          plannedImporteTotal: 31,
+          deliveredImporteTotal: 31,
+          quantitiesChanged: false,
+        },
+      }),
+    });
+    const repository = createRepartidorLiquidacionDb2Repository({
+      runtime: runtime(), connectionFactory: async () => conn,
+    });
+    await repository.withTransaction(async (tx) => {
+      const snapshot = await tx.deriveDaySnapshot({ repartidorId: '94', date: '2026-08-09' });
+      expect(snapshot.deliveries[0].amount).toBe(31);
+    });
   });
 
   test('outbox catalog is conditional', async () => {
