@@ -1,7 +1,10 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
+const vm = require('node:vm');
 const {
   HOST_RUNTIME_KEYS,
   SYNTHETIC_ENV,
@@ -22,6 +25,24 @@ function sameEnvironmentEntries(actual, expected) {
 function assertEnvironmentMatches(actual, expected) {
   if (!sameEnvironmentEntries(actual, expected)) throw new Error('environment lifecycle restoration failed');
 }
+
+test('guard-negative rejects an unguarded VM before resolving any import', () => {
+  const fixturePath = path.resolve(__dirname, '../../../backend/tests/fixtures/hermetic/guard-negative.test.js');
+  const fixture = fs.readFileSync(fixturePath, 'utf8');
+  let requireCalls = 0;
+
+  assert.throws(
+    () => vm.runInNewContext(fixture, {
+      global: Object.create(null),
+      require() {
+        requireCalls += 1;
+        throw new Error('unexpected import');
+      },
+    }, { filename: 'guard-negative.test.js' }),
+    { message: 'HERMETIC_GUARD_REQUIRED' },
+  );
+  assert.equal(requireCalls, 0);
+});
 
 test('environment entry comparison rejects added, missing, and changed synthetic entries without exposing them', () => {
   const expected = [['ALPHA', 'one'], ['BETA', 'two']];

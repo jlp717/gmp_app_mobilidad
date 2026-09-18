@@ -18,6 +18,9 @@ module.exports = {
     testPathIgnorePatterns: [
         '/node_modules/',
         '/dist/',
+        // Hermetic fixtures require the custom environment in
+        // jest.isolated.config.cjs; do not discover them in this legacy lane.
+        '/tests/fixtures/hermetic/',
     ],
     setupFilesAfterEnv: [
         './tests/setup.js',

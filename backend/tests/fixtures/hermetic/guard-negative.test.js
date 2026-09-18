@@ -1,5 +1,9 @@
 'use strict';
 
+if (global.__GMP_HERMETIC_GUARD__?.code !== 'TEST_EXTERNAL_IO_BLOCKED') {
+  throw new Error('HERMETIC_GUARD_REQUIRED');
+}
+
 const net = require('node:net');
 const tls = require('node:tls');
 const dgram = require('node:dgram');
