@@ -2,6 +2,9 @@ openapi: "3.1.0"
 info:
   title: "GMP Movilidad API"
   version: "1.0.0"
+  contact:
+    name: "GMP Flow V7"
+    url: "https://github.com/jlp717/gmp_app_mobilidad"
   description: "Contrato completo de endpoints Express existentes. Datos de ejemplo ficticios; no representan clientes, usuarios ni credenciales reales."
 servers:
   - url: "/api"
@@ -761,7 +764,17 @@ paths:
                 $ref: "#/components/schemas/AuthLoginResponse"
               example:
                 success: true
-                data: []
+                user:
+                  id: "TEST-USER"
+                  code: "R01"
+                  name: "Usuario ficticio"
+                role: "COMERCIAL"
+                availableRoles:
+                  - "COMERCIAL"
+                token: "jwt-ficticio-no-valido"
+                refreshToken: "refresh-ficticio-no-valido"
+                tokenExpiresIn: 900
+                refreshExpiresIn: 604800
         "429":
           description: "Demasiadas solicitudes"
           content:
@@ -15595,7 +15608,6 @@ paths:
                     type: "boolean"
                     example: true
                   suggestion:
-                    nullable: true
                     oneOf:
                       - type: "object"
                         required:
@@ -16536,7 +16548,14 @@ paths:
                 - "targetDate"
                 - "position"
                 - "orden"
+                - "idempotencyKey"
               properties:
+                idempotencyKey:
+                  type: "string"
+                  minLength: 8
+                  maxLength: 128
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+                  example: "move-test-1234"
                 date:
                   type: "string"
                   format: "date"
@@ -16564,6 +16583,7 @@ paths:
                         type: "string"
                         example: "4300000001"
             example:
+              idempotencyKey: "move-test-1234"
               date: "2026-08-26"
               targetDate: "2026-08-27"
               position: 0
@@ -16571,6 +16591,50 @@ paths:
                 - documentId: "2026-P-1-42-4300000001"
                   cliente: "4300000001"
       responses:
+        "200":
+          description: "Movimiento aplicado o replay idempotente. Requiere REPARTIDOR_DAY_MOVE_ENABLED=true y persistencia autorizada disponible; documenta el contrato implementado, no acredita activación en TEST ni producción."
+          content:
+            application/json:
+              schema:
+                type: "object"
+                required: [success, replayed, sourceDate, targetDate, position, affectedDocuments]
+                properties:
+                  success:
+                    type: "boolean"
+                    const: true
+                  replayed:
+                    type: "boolean"
+                  sourceDate:
+                    type: "string"
+                    format: "date"
+                  targetDate:
+                    type: "string"
+                    format: "date"
+                  position:
+                    type: "integer"
+                    minimum: 0
+                    maximum: 499
+                  affectedDocuments:
+                    type: "array"
+                    items:
+                      type: "string"
+              example:
+                success: true
+                replayed: false
+                sourceDate: "2026-08-26"
+                targetDate: "2026-08-27"
+                position: 0
+                affectedDocuments: ["2026-P-1-42-4300000001"]
+        "409":
+          description: "Conflicto de idempotencia o de estado del documento"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "La ruta ha cambiado mientras se aplicaba el traslado"
+                code: "RUTERO_MOVE_IDEMPOTENCY_CONFLICT"
         "401":
           description: "Autenticación requerida"
           content:
@@ -21681,7 +21745,7 @@ paths:
               example:
                 success: false
                 error: "Confirmación directa deshabilitada"
-                code: "HTTP_410"
+                code: "DIRECT_CONFIRM_DISABLED"
         "500":
           description: "Error interno"
           content:

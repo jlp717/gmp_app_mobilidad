@@ -23,12 +23,15 @@ class _MemoryJournalStore implements RepartoConfirmationJournalStore {
 RepartoConfirmationRequest _emptyPrepaidRequest({
   String repartidorId = '08',
   bool allowEmptyLineas = true,
+  DateTime? occurredAt,
+  DateTime Function()? clock,
+  RepartoNotificationPrefs? notifications,
 }) {
   final signatureId = 'ev_${List<String>.filled(64, 'a').join()}';
   return RepartoConfirmationRequest(
     itemId: '2026-A-1-42-C1',
     status: RepartoDeliveryStatus.entregado,
-    occurredAt: DateTime.now().toUtc(),
+    occurredAt: occurredAt ?? DateTime.now().toUtc(),
     lineas: const <RepartoDeliveryLine>[],
     allowEmptyLineas: allowEmptyLineas,
     repartidorId: repartidorId,
@@ -38,8 +41,13 @@ RepartoConfirmationRequest _emptyPrepaidRequest({
       dni: '12345678Z',
     ),
     firma: signatureId,
+    clock: clock,
+    notifications: notifications,
   );
 }
+
+Map<String, dynamic> _delivery(RepartoConfirmationRequest request) =>
+    request.toJson()['delivery']! as Map<String, dynamic>;
 
 void main() {
   test('serializa el prepago vacio autorizado sin exponer el flag local', () {
@@ -56,6 +64,72 @@ void main() {
       () => _emptyPrepaidRequest(allowEmptyLineas: false).toJson(),
       throwsA(isA<RepartoConfirmationValidationException>()),
     );
+  });
+
+  group('reloj de validacion de occurredAt', () {
+    final fixedNow = DateTime.utc(2030, 1, 2, 3, 4, 5);
+
+    test('acepta exactamente cinco minutos futuros con reloj inyectado', () {
+      final request = _emptyPrepaidRequest(
+        occurredAt: fixedNow.add(const Duration(minutes: 5)),
+        clock: () => fixedNow,
+      );
+
+      expect(
+        _delivery(request)['occurredAt'],
+        '2030-01-02T03:09:05.000Z',
+      );
+    });
+
+    test('rechaza un microsegundo posterior a la tolerancia vigente', () {
+      final request = _emptyPrepaidRequest(
+        occurredAt: fixedNow.add(
+          const Duration(minutes: 5, microseconds: 1),
+        ),
+        clock: () => fixedNow,
+      );
+
+      expect(
+        request.toJson,
+        throwsA(isA<RepartoConfirmationValidationException>()),
+      );
+    });
+
+    test('mantiene timestamps offline historicos y no serializa el reloj', () {
+      final historical = DateTime.utc(2020, 2, 29, 23, 59, 59);
+      final request = _emptyPrepaidRequest(
+        occurredAt: historical,
+        clock: () => fixedNow,
+      );
+
+      final delivery = _delivery(request);
+      expect(delivery['occurredAt'], '2020-02-29T23:59:59.000Z');
+      expect(delivery, isNot(contains('clock')));
+    });
+
+    test('normaliza a UTC los instantes de cambio horario sin alterar limite',
+        () {
+      final cases = <({DateTime now, DateTime occurredAt, String wire})>[
+        (
+          now: DateTime.utc(2026, 3, 29, 0, 59, 59),
+          occurredAt: DateTime.utc(2026, 3, 29, 1, 4, 59),
+          wire: '2026-03-29T01:04:59.000Z',
+        ),
+        (
+          now: DateTime.utc(2026, 10, 25, 0, 30),
+          occurredAt: DateTime.utc(2026, 10, 25, 0, 35),
+          wire: '2026-10-25T00:35:00.000Z',
+        ),
+      ];
+
+      for (final item in cases) {
+        final request = _emptyPrepaidRequest(
+          occurredAt: item.occurredAt,
+          clock: () => item.now,
+        );
+        expect(_delivery(request)['occurredAt'], item.wire);
+      }
+    });
   });
 
   test('prepare conserva owner y la huella cambia al cambiar de conductor', () {
@@ -89,6 +163,27 @@ void main() {
 
     expect(delivery['repartidorId'], '08');
     expect(delivery['lineas'], isEmpty);
+  });
+
+  test('prepare persistente conserva su reloj sin cambiar la huella', () async {
+    final fixedNow = DateTime.utc(2030, 1, 2, 3, 4, 5);
+    final request = _emptyPrepaidRequest(
+      occurredAt: fixedNow,
+      clock: () => DateTime.utc(2000),
+    );
+    final fingerprint = RepartoConfirmationOperation.fingerprintFor(request);
+    final operation = RepartoPersistentConfirmationOperation(
+      RepartoConfirmationJournal(_MemoryJournalStore()),
+      keyGenerator: () => 'rep-persistent-clock',
+      clock: () => fixedNow,
+    );
+
+    final prepared = await operation.prepare(request);
+    final delivery = prepared.toJson()['delivery']! as Map<String, dynamic>;
+
+    expect(delivery['occurredAt'], '2030-01-02T03:04:05.000Z');
+    expect(delivery, isNot(contains('clock')));
+    expect(prepared.fingerprint, fingerprint);
   });
 
   test('serializa cobro+notificaciones al Finalizar, no un cobro suelto', () {
@@ -143,5 +238,52 @@ void main() {
     );
     expect(payment.toJson()['notas'], '');
     expect(payment.toJson().containsKey('notas'), isTrue);
+  });
+
+  test('integra reloj local y preferencias materiales de notificacion',
+      () async {
+    final fixedNow = DateTime.utc(2030, 1, 2, 3, 4, 5);
+    const notifications = RepartoNotificationPrefs(
+      sendClientEmail: true,
+      clientEmail: 'cliente@example.test',
+    );
+    final request = _emptyPrepaidRequest(
+      occurredAt: fixedNow,
+      clock: () => fixedNow,
+      notifications: notifications,
+    );
+    final otherClock = _emptyPrepaidRequest(
+      occurredAt: fixedNow,
+      clock: () => DateTime.utc(2040),
+      notifications: notifications,
+    );
+    final otherNotifications = _emptyPrepaidRequest(
+      occurredAt: fixedNow,
+      clock: () => fixedNow,
+      notifications: const RepartoNotificationPrefs(sendWhatsApp: true),
+    );
+    final fingerprint = RepartoConfirmationOperation.fingerprintFor(request);
+
+    expect(
+      RepartoConfirmationOperation.fingerprintFor(otherClock),
+      fingerprint,
+    );
+    expect(
+      RepartoConfirmationOperation.fingerprintFor(otherNotifications),
+      isNot(fingerprint),
+    );
+
+    final operation = RepartoPersistentConfirmationOperation(
+      RepartoConfirmationJournal(_MemoryJournalStore()),
+      keyGenerator: () => 'rep-clock-notifications',
+      clock: () => fixedNow,
+    );
+    final prepared = await operation.prepare(request);
+    final wire = prepared.toJson();
+
+    expect(wire['notifications'], notifications.toJson());
+    expect(wire, isNot(contains('clock')));
+    expect(wire['delivery'], isNot(contains('clock')));
+    expect(prepared.fingerprint, fingerprint);
   });
 }

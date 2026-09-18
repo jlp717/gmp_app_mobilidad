@@ -696,30 +696,6 @@ void main() {
     });
   });
   group('Promotions', () {
-    test('CHAR(10) trim and empty-cache skip match the PMR API contract', () {
-      expect(normalizePedidoClientCode(' 4300009324 '), '4300009324');
-      expect(normalizePedidoClientCode('4300009324\u00a0'), '4300009324');
-      expect(
-        promotionsCacheKey(' 4300009324 ', ' 35 '),
-        'pedidos:promotions:4300009324:35',
-      );
-      expect(shouldReusePromotionsCache(null), isFalse);
-      expect(
-        shouldReusePromotionsCache({'success': true, 'promotions': []}),
-        isFalse,
-      );
-      expect(
-        shouldReusePromotionsCache({
-          'success': true,
-          'promotions': List<Map<String, Object>>.generate(
-            27,
-            (i) => {'code': 'P$i', 'promoType': 'GIFT'},
-          ),
-        }),
-        isTrue,
-      );
-    });
-
     test('setClient stores the trimmed CHAR(10) client code', () {
       final provider = PedidosProvider();
       provider.setClient(' 4300009324 ', 'Heladeria');

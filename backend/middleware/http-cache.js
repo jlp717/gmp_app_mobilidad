@@ -392,6 +392,10 @@ function cacheMiddleware(req, res, next) {
 
 function invalidationMiddleware(req, res, next) {
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+        // app.js mounts this after verifyToken. Keep the guard here too so a
+        // future standalone mount cannot turn anonymous requests into shared
+        // cache churn. Identity comes only from verified authentication.
+        if (!req.user) return next();
         const path = req.path;
 
         if (path.includes('/clients')) {

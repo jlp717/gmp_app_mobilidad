@@ -83,7 +83,7 @@ describe('canonical reparto app mounts', () => {
     expect(source).not.toContain("app.use('/api/rutero', verifyToken, repartoWriteGuard);");
     expect(countOccurrences(source, plannerMount)).toBe(1);
     expect(source.indexOf(plannerMount)).toBeGreaterThan(0);
-    expect(source).toContain("app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);");
+    expect(source).toContain("app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, invalidationMiddleware, canonicalRepartidorFinanzasRoutes);");
     expect(source).toContain("app.use('/api/repartidor', verifyToken, repartoFamilyWriteGuard);");
     expect(source).toContain("app.use('/api/entregas', verifyToken, repartoConfirmationWriteGuard);");
   });
@@ -111,7 +111,7 @@ describe('canonical reparto app mounts', () => {
 
   test('mounts the canonical finance router exactly once before family selection', () => {
     const source = loadAppSource();
-    const financeMount = "app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);";
+    const financeMount = "app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, invalidationMiddleware, canonicalRepartidorFinanzasRoutes);";
     const firstFamilyBranch = source.indexOf('if (USE_TS_ROUTES && global.__TS_APP__)');
 
     expect(countOccurrences(source, financeMount)).toBe(1);

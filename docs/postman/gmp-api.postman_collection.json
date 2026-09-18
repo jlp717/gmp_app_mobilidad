@@ -4004,6 +4004,36 @@
       ]
     },
     {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "GET notifications · snapshot",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/snapshot",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "snapshot"
+              ],
+              "query": []
+            },
+            "description": "GET /api/notifications/snapshot. Reutiliza servicios y cachés existentes. TTL 60 s por usuario. Fallo parcial → campo null."
+          }
+        }
+      ]
+    },
+    {
       "name": "KPI",
       "item": [
         {
@@ -7855,6 +7885,42 @@
           }
         },
         {
+          "name": "GET repartidor · recipient suggestion",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/repartidor/recipient-suggestion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "repartidor",
+                "recipient-suggestion"
+              ],
+              "query": [
+                {
+                  "key": "cliente",
+                  "value": "4300001",
+                  "disabled": false
+                },
+                {
+                  "key": "repartidorId",
+                  "value": "05",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET repartidor · recipient suggestion. Identidad owner-scoped y sin caché."
+          }
+        },
+        {
           "name": "GET repartidor · history · clients · {repartidorId}",
           "request": {
             "method": "GET",
@@ -8293,7 +8359,7 @@
             "description": "POST repartidor · rutero · order · {repartidorId} · move. Valida el movimiento y falla cerrada hasta disponer de persistencia operativa autorizada.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"date\": \"2026-08-26\",\n  \"targetDate\": \"2026-08-27\",\n  \"position\": 0,\n  \"orden\": [\n    {\n      \"documentId\": \"2026-P-1-42-4300000001\",\n      \"cliente\": \"4300000001\"\n    }\n  ]\n}",
+              "raw": "{\n  \"idempotencyKey\": \"move-test-1234\",\n  \"date\": \"2026-08-26\",\n  \"targetDate\": \"2026-08-27\",\n  \"position\": 0,\n  \"orden\": [\n    {\n      \"documentId\": \"2026-P-1-42-4300000001\",\n      \"cliente\": \"4300000001\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"

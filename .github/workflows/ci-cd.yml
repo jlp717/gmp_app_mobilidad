@@ -20,8 +20,6 @@ on:
         default: 'false'
 
 env:
-  FLUTTER_VERSION: '3.35.6'
-  NODE_VERSION: '20'
   JAVA_VERSION: '17'
   # Allow Node 20 actions to run on their native runtime (compat mode after Node 20 deprecation)
   ACTIONS_ALLOW_USE_OF_NODE20: 'true'
@@ -46,8 +44,6 @@ jobs:
     timeout-minutes: 5
     outputs:
       should_skip_tests: ${{ steps.check.outputs.skip_tests }}
-      flutter_version: ${{ steps.version.outputs.flutter }}
-      node_version: ${{ steps.version.outputs.node }}
     steps:
       - name: Checkout with full history
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -58,25 +54,41 @@ jobs:
       - name: Check version info
         id: version
         run: |
-          echo "flutter=${FLUTTER_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "node=${{ env.NODE_VERSION }}" >> "$GITHUB_OUTPUT"
+          echo "flutter=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+          echo "node=$(tr -d '\\r\\n' < .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - name: Determine skip flag
         id: check
+        env:
+          REQUESTED_SKIP_TESTS: ${{ github.event.inputs.skip_tests || 'false' }}
         run: |
-          SKIP="${{ github.event.inputs.skip_tests || 'false' }}"
-          echo "skip_tests=$SKIP" >> "$GITHUB_OUTPUT"
+          SKIP="$REQUESTED_SKIP_TESTS"
+          case "$SKIP" in
+            true|false) ;;
+            *)
+              echo "::error::skip_tests must be true or false"
+              exit 1
+              ;;
+          esac
+          printf 'skip_tests=%s\n' "$SKIP" >> "$GITHUB_OUTPUT"
           echo "::notice::Tests will be skipped: $SKIP"
 
       - name: Detect changed files
         id: changes
         continue-on-error: true
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           CHANGED=""
           BACKEND=""
           LIB=""
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE="${{ github.event.pull_request.base.sha }}"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE="$PULL_REQUEST_BASE_SHA"
+            if [[ ! "$BASE" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "::error::Invalid pull request base SHA"
+              exit 1
+            fi
           else
             # Use FETCH_HEAD or HEAD~1, fallback to empty if not enough history
             BASE="HEAD~1"
@@ -91,8 +103,7 @@ jobs:
           echo "::debug::Changed files: [$CHANGED]"
 
       - name: Politec architecture and quality gate
-        shell: pwsh
-        run: ./scripts/politec-quality-gate.ps1
+        run: node scripts/quality/run-checks.mjs --check politec
 
   # ==========================================================================
   # PHASE 1a: FLUTTER LINT & ANALYZE (Parallel-safe)
@@ -116,7 +127,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version-file: .fvmrc
           channel: 'stable'
           cache: true
           cache-path: ~/.pub-cache
@@ -187,7 +198,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: .nvmrc
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
@@ -252,7 +263,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: .nvmrc
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
@@ -319,7 +330,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version-file: .fvmrc
           channel: 'stable'
           cache: true
           cache-path: ~/.pub-cache
@@ -382,7 +393,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: .nvmrc
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
@@ -462,7 +473,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version-file: .fvmrc
           channel: 'stable'
           cache: true
           cache-path: ~/.pub-cache
@@ -531,12 +542,15 @@ jobs:
           if-no-files-found: ignore
 
       - name: Build summary
+        env:
+          APK_SIZE: ${{ steps.size.outputs.size }}
+          APK_PATH: ${{ steps.build.outputs.apk_path }}
         run: |
           echo "## OK Build Successful" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Android Debug APK" >> $GITHUB_STEP_SUMMARY
-          echo "- Size: ${{ steps.size.outputs.size }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Path: \`${{ steps.build.outputs.apk_path }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Size: $APK_SIZE" >> $GITHUB_STEP_SUMMARY
+          echo "- Path: \`$APK_PATH\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Quality Gates" >> $GITHUB_STEP_SUMMARY
           echo "- OK Lint: Passed" >> $GITHUB_STEP_SUMMARY
@@ -562,7 +576,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version-file: .fvmrc
           channel: 'stable'
           cache: true
           cache-path: ~/.pub-cache
@@ -660,8 +674,10 @@ jobs:
           echo "Current version: $CURRENT"
 
       - name: Create git tag
+        env:
+          CURRENT_VERSION: ${{ steps.version.outputs.current }}
         run: |
-          TAG="v${{ steps.version.outputs.current }}"
+          TAG="v$CURRENT_VERSION"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists locally"
           else
@@ -671,8 +687,10 @@ jobs:
           echo "Created tag: $TAG"
 
       - name: Create release notes
+        env:
+          CURRENT_VERSION: ${{ steps.version.outputs.current }}
         run: |
-          echo "## Release ${{ steps.version.outputs.current }}" >> release-notes.md
+          echo "## Release $CURRENT_VERSION" >> release-notes.md
           echo "" >> release-notes.md
           echo "### Changes" >> release-notes.md
           git log --oneline -20 >> release-notes.md
@@ -726,43 +744,55 @@ jobs:
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
 
       - name: Check Flutter lint
+        env:
+          STATUS: ${{ needs.flutter-lint.result }}
+          ERROR_COUNT: ${{ needs.flutter-lint.outputs.error_count || '?' }}
         run: |
-          STATUS="${{ needs.flutter-lint.result }}"
           echo "| Flutter Lint | $STATUS |" >> $GITHUB_STEP_SUMMARY
           if [ "$STATUS" != "success" ]; then
-            echo "| -> Errors | ${{ needs.flutter-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| -> Errors | $ERROR_COUNT |" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Check Backend lint
+        env:
+          STATUS: ${{ needs.backend-lint.result }}
+          ERROR_COUNT: ${{ needs.backend-lint.outputs.error_count || '?' }}
         run: |
-          STATUS="${{ needs.backend-lint.result }}"
           echo "| Backend Lint | $STATUS |" >> $GITHUB_STEP_SUMMARY
           if [ "$STATUS" != "success" ]; then
-            echo "| -> Errors | ${{ needs.backend-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| -> Errors | $ERROR_COUNT |" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Check Backend tests
+        env:
+          STATUS: ${{ needs.backend-test.result }}
         run: |
-          STATUS="${{ needs.backend-test.result }}"
           echo "| Backend Tests | $STATUS |" >> $GITHUB_STEP_SUMMARY
 
       - name: Check Flutter tests
+        env:
+          STATUS: ${{ needs.flutter-test.result }}
         run: |
-          STATUS="${{ needs.flutter-test.result }}"
           echo "| Flutter Tests | $STATUS |" >> $GITHUB_STEP_SUMMARY
 
       - name: Check Security
+        env:
+          STATUS: ${{ needs.security.result }}
         run: |
-          STATUS="${{ needs.security.result }}"
           echo "| Security Scan | $STATUS |" >> $GITHUB_STEP_SUMMARY
 
       - name: Failure links
+        env:
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "###  Links" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- [View Full Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
-          echo "- [View Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [View Full Logs]($SERVER_URL/$REPOSITORY/actions/runs/$RUN_ID)" >> $GITHUB_STEP_SUMMARY
+          echo "- [View Commit]($SERVER_URL/$REPOSITORY/commit/$COMMIT_SHA)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "###  Quick Fix Commands" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -773,4 +803,4 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "_The [CI Self-Heal](${{ github.server_url }}/${{ github.repository }}/actions/workflows/ci-self-heal.yml) workflow may have automatically analyzed this failure._" >> $GITHUB_STEP_SUMMARY
+          echo "_The [CI Failure Metadata]($SERVER_URL/$REPOSITORY/actions/workflows/ci-self-heal.yml) workflow can inspect this failure without mutations._" >> $GITHUB_STEP_SUMMARY

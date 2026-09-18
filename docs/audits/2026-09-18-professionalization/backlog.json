@@ -1,0 +1,2204 @@
+{
+  "schema_version": 1,
+  "plan_date": "2026-09-18",
+  "baseline_head": "0e3912abda4f27c261449440a4f52752429e96b7",
+  "status": "PROPOSED_NOT_IMPLEMENTED",
+  "effort_scale": {
+    "S": "0.5-2 jornadas netas orientativas",
+    "M": "2-5 jornadas netas orientativas",
+    "L": "5-10 jornadas netas orientativas; partir en slices"
+  },
+  "estimates_warning": "Orden de magnitud no medido; no sumarlo como compromiso de calendario. Reestimar tras FND-05 y baseline.",
+  "common_protocol": "08-executor.md",
+  "tasks": [
+    {
+      "id": "FND-01",
+      "phase": 0,
+      "priority": "P0",
+      "title": "Congelar alcance, baseline y cambios concurrentes",
+      "depends_on": [],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "AGENTS.md",
+        "memory-bank/activeContext.md",
+        "memory-bank/progress.md"
+      ],
+      "proposed_paths": [
+        "docs/engineering/baseline.md"
+      ],
+      "requirement": "Cuando comience una tarea, el ejecutor registrará SHA, rama, estado local, alcance y propietario antes de modificar archivos.",
+      "steps": [
+        "Leer las reglas vigentes y comparar git status con la instantánea del plan; identificar commits y cambios de otros workstreams, sin stash/reset/clean global.",
+        "Crear una rama codex/<ID> desde test en un checkout aislado autorizado; documentar si se incluyen cambios locales y por qué.",
+        "Copiar solo evidencias redactadas; registrar versiones de herramientas, SO, flags de montaje no secretos, entorno y checks realmente ejecutados.",
+        "Marcar como pendiente de reconfirmación cada referencia del plan que haya cambiado desde 0e3912a; las rutas del plan son puntos de entrada, no autorización de edición indiscriminada."
+      ],
+      "acceptance": [
+        "Baseline tiene SHA y lista explícita de paths propios/ajenos.",
+        "Ningún diff de producto ajeno forma parte del commit de esta tarea.",
+        "El alcance de pruebas y exclusiones queda firmado en ledger."
+      ],
+      "rollback": "Revertir únicamente el documento de baseline de esta tarea; conservar todos los cambios preexistentes.",
+      "approval": "Autorización de implementación del paquete; nunca se infiere de la aprobación de este plan.",
+      "effort": "S",
+      "status": "TODO"
+    },
+    {
+      "id": "FND-02",
+      "phase": 0,
+      "priority": "P0",
+      "title": "Alinear Node, Flutter, Dart y dependencias reproducibles",
+      "depends_on": [
+        "FND-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        ".nvmrc",
+        ".fvmrc",
+        "package.json",
+        "backend/package.json",
+        "package-lock.json",
+        "backend/package-lock.json",
+        "pubspec.lock",
+        ".github/workflows"
+      ],
+      "proposed_paths": [
+        "docs/adr/runtime-toolchain.md"
+      ],
+      "requirement": "Cuando se construya el proyecto, desarrollo y CI usarán versiones soportadas y compatibles fijadas en una fuente única.",
+      "steps": [
+        "Registrar node --version y Flutter/Dart efectivos; Node local 20.2.0 está por debajo del mínimo declarado y Node20 está EOL según fuente oficial consultada.",
+        "Ensayar Node24 LTS mantenido como candidato en rama aislada, comprobando ABI nativa de odbc/bcrypt, addon IBM i y Linux/Windows; si falla, evaluar otra LTS soportada con ADR, sin parchear el host productivo.",
+        "Fijar una versión exacta validada; derivar CI y documentación de .nvmrc/.fvmrc y alinear engines sin ampliar rangos a ciegas.",
+        "Regenerar lockfiles solo con herramienta elegida, npm ci en limpio y Flutter pub get controlado; revisar diff de dependencias y licencias; separar actualización de refactor funcional."
+      ],
+      "acceptance": [
+        "Instalación y tests herméticos reproducibles en Windows y runner Linux.",
+        "Ningún workflow usa un Flutter diferente ni un Node sin soporte.",
+        "Compatibilidad ODBC real queda en prueba aislada autorizada; si no se ejecuta, no promover runtime."
+      ],
+      "rollback": "Restaurar conjuntamente pines y lockfiles del commit anterior; nunca degradar producción automáticamente.",
+      "approval": "Javier aprueba cambios de runtime productivo y credenciales; este paquete solo valida local/CI.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "FND-03",
+      "phase": 0,
+      "priority": "P0",
+      "title": "Hacer honestos y portables los gates",
+      "depends_on": [
+        "FND-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        ".github/workflows/quality-gates.yml",
+        ".github/workflows/zero-trust-gates.yml",
+        ".github/workflows/ci-cd.yml",
+        "scripts/politec-quality-gate.ps1"
+      ],
+      "proposed_paths": [
+        "scripts/quality/run-checks.mjs",
+        "docs/engineering/quality-gates.md"
+      ],
+      "requirement": "Si un control obligatorio falla, no se podrá presentar el conjunto como PASS ni publicar una release.",
+      "steps": [
+        "Inventariar check real, comando, scope, exit code y timeout; distinguir checks docs, unitarios, contratos, integración y release.",
+        "Crear wrapper de proyecto que resuelva npm.cmd/flutter.bat en Windows y ejecutables en Linux, preserve códigos de salida y mate solo sus propios hijos si vence timeout; no modificar silenciosamente la skill global.",
+        "Sustituir placeholders y tolerancias de controles obligatorios por resultados explícitos; los controles en transición generan deuda con responsable y vencimiento, sin bandera global que convierta fallo en éxito.",
+        "Consolidar workflows reutilizables y definir required checks en test mediante cambio administrativo autorizado; las tareas docs no simularán certificación de producto.",
+        "Revisar el scanner de Politec antes de ejecutarlo: excluir rutas de secretos antes de leerlas y emitir solo path/categoría redactados; el git grep general actual puede leer archivos prohibidos y divulgar una coincidencia. Probar redacción con fixtures sintéticas."
+      ],
+      "acceptance": [
+        "Una fixture de comando exit1 produce BLOCKED; herramienta ausente produce WARN, nunca PASS.",
+        "Checks de seguridad y pruebas obligatorias no usan || true/continue-on-error.",
+        "Pipeline documenta que la prueba local de este audit falló y el gate de skill quedó WARN por resolución Windows."
+      ],
+      "rollback": "Revertir solo wrapper/workflows; conservar evidencias y required checks previos hasta nueva aprobación.",
+      "approval": "Cambiar protección de ramas requiere permiso administrativo específico; no usar un PUT destructivo sobre protección existente.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "FND-04",
+      "phase": 0,
+      "priority": "P0",
+      "title": "Estabilizar reloj y pruebas de contrato antes de refactorizar",
+      "depends_on": [
+        "FND-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "test/features/repartidor/data/reparto_confirmation_request_contract_test.dart",
+        "lib/features/repartidor/data/reparto_confirmation_request.dart",
+        "test/core/utils/vendor_scope_test.dart",
+        "test/core/cache/fresh_fetch_test.dart"
+      ],
+      "proposed_paths": [
+        "docs/engineering/test-baseline.md"
+      ],
+      "requirement": "Dado un reloj fijo, la serialización de confirmaciones producirá siempre el mismo resultado y rechazará fechas futuras fuera del margen aprobado.",
+      "steps": [
+        "Reproducir la suite que falló en esta auditoría: 'serializa cobro+notificaciones al Finalizar' rechazó occurredAt futuro; inspeccionar fixture, zona Europe/Madrid y comparación UTC actual antes de decidir si falla fixture o lógica.",
+        "Definir Clock inyectable o parámetro now en el punto de validación sin desactivar la defensa contra fechas futuras; los tests no dependerán del día/hora en que corran.",
+        "Añadir límites justo antes/en/después del margen, cambio horario, conversión UTC y dispositivo con reloj desviado; documentar tolerancia aprobada.",
+        "Reejecutar las tres suites identificadas y la suite afectada por request/receipt; publicar comandos/cwd/exit y aislar cambios concurrentes."
+      ],
+      "acceptance": [
+        "La prueba fallida pasa por causa comprendida, no por skip o relajación global.",
+        "Fechas futuras inválidas siguen rechazadas; reloj congelado evita flakiness.",
+        "No cambian importe, firma, notas ni destinatarios en el contrato."
+      ],
+      "rollback": "Revertir el pequeño cambio de reloj/fixture; conservar el fallo reproducido como evidencia, sin tocar validaciones ajenas.",
+      "approval": "Spec EARS aprobada; no autoriza despliegue.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "FND-05",
+      "phase": 0,
+      "priority": "P0",
+      "title": "Inventariar runtime, endpoints y consumidores efectivos",
+      "depends_on": [
+        "FND-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/app.js",
+        "backend/server.js",
+        "backend/src/shared/routes",
+        "lib/core/api/api_client.dart",
+        ".cline/knowledge/api-catalog.md"
+      ],
+      "proposed_paths": [
+        "docs/architecture/runtime-matrix.md",
+        "backend/__tests__/runtime-route-matrix.test.js"
+      ],
+      "requirement": "Para cada combinación soportada de flags, cada método+path tendrá exactamente un propietario y contrato de autorización conocido.",
+      "steps": [
+        "Extraer de app/server y adapters todos los montajes, routers, prefijos y middleware en orden; marcar flags USE_TS_ROUTES/USE_DDD_ROUTES y combinaciones no soportadas explícitamente.",
+        "Trazar para cada dominio consumidor Flutter, permisos, entrada/salida, caché, transacción y side effects; el catálogo antiguo de 255 endpoints no es el total actual verificado.",
+        "Construir pruebas de montaje sin abrir puerto/DB real; comparar ruta real con OpenAPI y snapshot aprobado.",
+        "Elegir una implementación canónica por dominio con ADR; no activar flags ni retirar rutas todavía."
+      ],
+      "acceptance": [
+        "Matriz incluye auth, reparto, comercial, almacén, reporting, chatbot, health, métricas y jobs.",
+        "No hay rutas duplicadas o sin auth en las combinaciones soportadas.",
+        "Los totales provienen de extracción reproducible; cada excepción tiene owner."
+      ],
+      "rollback": "Revertir solo extractor/tests/docs; flags de runtime intactos.",
+      "approval": "Spec aprobada; lectura de configuración por nombres de variables, nunca valores secretos.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "SEC-01",
+      "phase": 0,
+      "priority": "P0",
+      "title": "Modelo de amenazas y clasificación de datos",
+      "depends_on": [
+        "FND-05"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "docs/spec/gmp-app-mobilidad.md",
+        "backend/app.js",
+        "lib/core/offline"
+      ],
+      "proposed_paths": [
+        "docs/security/threat-model.md",
+        "docs/security/control-matrix.csv"
+      ],
+      "requirement": "Todo activo crítico tendrá actor, frontera de confianza, amenaza, control, prueba y propietario de riesgo.",
+      "steps": [
+        "Dibujar app→edge→API→DB2/Redis/archivos/mensajería/IA/CI con separación lectura ERP y escritura TEST; incluir móvil robado, comercial malicioso y dependencia comprometida.",
+        "Clasificar tokens, DNI, firma, ubicación, importes, PDF, email y telemetría por finalidad, acceso, retención y borrado; datos de prueba sintéticos.",
+        "Usar ASVS5.0.0 L2 como objetivo de backend con selección L3 justificada para dinero/auth; seleccionar controles MASVS/MASTG por amenaza móvil, sin inventar niveles MASVS antiguos.",
+        "Mapear control→ruta→test→evidencia; marcar NA con motivo y riesgos residuales; obtener revisión independiente antes de cambiar políticas."
+      ],
+      "acceptance": [
+        "Toda amenaza alta tiene prevención, detección, recuperación y caso negativo verificable.",
+        "No se promete invulnerabilidad ni cumplimiento legal certificado.",
+        "Existe responsable para riesgo residual, excepción y fecha de revisión."
+      ],
+      "rollback": "Revertir documentos propuestos; no debilitar controles vigentes.",
+      "approval": "Aprobación de política/riesgo por Javier; privacidad legal a revisar por responsable competente.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "SEC-02",
+      "phase": 1,
+      "priority": "P1",
+      "title": "Revisar protocolo de autenticación sin romper sesiones",
+      "depends_on": [
+        "SEC-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/middleware/auth.js",
+        "backend/routes/auth.js",
+        "backend/src/modules/auth/application/auth-claims-session-store.js"
+      ],
+      "proposed_paths": [
+        "docs/adr/authentication-protocol.md",
+        "backend/__tests__/auth-protocol-contract.test.js"
+      ],
+      "requirement": "Tokens inválidos, de otro propósito, revocados, caducados o emitidos en un futuro no permitido serán rechazados sin revelar información sensible.",
+      "steps": [
+        "Caracterizar el formato HMAC actual y sesión revocable; no llamarlo inseguro solo por ser propio. Enumerar claims, tipos, algoritmo fijo, timestamp, scope y transición refresh.",
+        "Preparar ADR de mantener formalmente el formato o migrar a JWS maduro; diseñar issuer/audience, expiración, nbf/iat, jti/sid, rotación y skew; no introducir dos formatos sin ventana de retirada.",
+        "Escribir negativas de firma, tipo, future time, revocación/logout, cambio de rol, replay refresh y alias de login diego/código numérico.",
+        "Entregar diff propuesto para auth.js al propietario humano; ningún agente lo aplica. Probar compatibilidad de clientes antiguos y temporizar retirada del formato anterior."
+      ],
+      "acceptance": [
+        "No se rompe login por alias ni el alcance del líder80/JEFE ALL.",
+        "Revocación y refresh concorrente se mantienen atómicos.",
+        "Revisión criptográfica independiente; cambios intocables ejecutados manualmente por Javier."
+      ],
+      "rollback": "Mantener compatibilidad temporal acotada si se aprueba; rollback de protocolo exige evaluar tokens emitidos/revocados y nunca reactivar claves comprometidas.",
+      "approval": "MANUAL JAVIER: backend/middleware/auth.js es intocable; secretos/rotación requieren autorización separada.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "SEC-03",
+      "phase": 1,
+      "priority": "P0",
+      "title": "Autorización uniforme por objeto y acción",
+      "depends_on": [
+        "FND-05",
+        "SEC-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/routes/entregas.js",
+        "backend/routes/facturas.js",
+        "backend/routes/cobros.js",
+        "backend/routes/pedidos.js",
+        "backend/routes/repartidor-document-routes.js"
+      ],
+      "proposed_paths": [
+        "backend/middleware/resource-authorization.js",
+        "backend/__tests__/resource-authorization-matrix.test.js"
+      ],
+      "requirement": "Una petición sobre un documento ajeno al ámbito efectivo será denegada antes de leer contenido, generar PDF, modificar estado o enviar mensajes.",
+      "steps": [
+        "Construir matriz rol×modo×vendedor×objeto×acción para cada ruta efectiva; extraer scope exclusivamente de identidad verificada y resolución autorizada de recurso.",
+        "Reutilizar helpers existentes de ownership; centralizar policy pura y mantener consulta parametrizada en repositorio; evitar una consulta extra por cada fila.",
+        "Distinguir JEFE ALL literal, comercial80 y equipo, comercial individual, jefe en reparto y repartidor raso; no confiar en un ID enviado en body/query.",
+        "Probar cada variante de detalle/listado/export/PDF/email/WhatsApp y rutas DDD/legacy; normalizar 400/401/403/404 según contrato sin filtración de existencia."
+      ],
+      "acceptance": [
+        "ActorA no lee/manda/modifica objetoB y el servicio de efecto no es llamado.",
+        "Permisos se aplican también a jobs/IA y caché.",
+        "Casos legítimos ALL/equipo/alias siguen pasando; no hay N+1 de autorización."
+      ],
+      "rollback": "Revertir adaptación de un dominio conservando política anterior probada; nunca activar modo permisivo global.",
+      "approval": "Spec aprobada; cambios que dependan de auth.js los aplica Javier, la policy nueva no modifica ese archivo.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "SEC-04",
+      "phase": 1,
+      "priority": "P0",
+      "title": "Validación, límites y errores de API por operación",
+      "depends_on": [
+        "FND-05",
+        "SEC-03"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/routes",
+        "backend/middleware/security.js",
+        "backend/app.js"
+      ],
+      "proposed_paths": [
+        "backend/contracts",
+        "backend/__tests__/api-boundaries.test.js"
+      ],
+      "requirement": "Entradas fuera de schema o presupuesto se rechazarán antes de consumir DB2, memoria o servicios externos.",
+      "steps": [
+        "Catalogar schema de path/query/body/headers para cada endpoint; adoptar librería ya presente, sin sumar Zod/Joi nuevos innecesariamente; strict o compatibilidad documentada para campos extra.",
+        "Definir longitudes, rangos, precisión decimal, enums, tamaños de páginas/archivos, profundidad JSON, límites de historial y timeouts; comprobar límites en proxy y app.",
+        "Unificar error {code,message,requestId,details permitidos}; excluir stack, SQL, datos de sesión y PII de respuestas.",
+        "Añadir límites diferenciados por login, PDF, export, upload, email e IA; probar IP efectiva detrás del proxy sin asumir confiabilidad de headers directos."
+      ],
+      "acceptance": [
+        "Malformados devuelven 400/422; tamaño413/tipo415; abuso429 sin trabajo DB.",
+        "Límites no bloquean carga legítima de jefe con más datos.",
+        "Redis caído sigue la política explícita de endpoints; no fail-open accidental."
+      ],
+      "rollback": "Revertir límites del endpoint afectado a valores medidos anteriores manteniendo validación; no deshabilitar seguridad global.",
+      "approval": "Spec EARS aprobada; no autoriza despliegue.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "SEC-05",
+      "phase": 1,
+      "priority": "P1",
+      "title": "Resolver TLS y pinning con una decisión verificable",
+      "depends_on": [
+        "SEC-01",
+        "FND-02"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "lib/core/api/api_client.dart",
+        "lib/core/security/certificate_pinning.dart",
+        "docs/adr"
+      ],
+      "proposed_paths": [
+        "test/core/security/tls-policy_test.dart",
+        "docs/security/tls-device-test.md"
+      ],
+      "requirement": "El artefacto release respetará exactamente la política TLS aprobada y nunca anunciará pinning que no se ejecuta.",
+      "steps": [
+        "Leer ADR existente de pinning y topología Cloudflare/certificados; elegir PKI de plataforma con documentación precisa o pinning realmente necesario por amenaza y operable.",
+        "Corregir la premisa: badCertificateCallback solo se invoca cuando falla confianza, y puede aceptar un certificado inválido si devuelve true; no es validación adicional en todo handshake.",
+        "Si se elige pinning, validar cadena+hostname+vigencia y pin en todo handshake mediante mecanismo soportado; dos pines/rotación y recuperación por release firmado, sin bypass remoto genérico.",
+        "Probar CA confiable con pin ajeno, certificado caducado/autofirmado, hostname erróneo, pin backup, pins ausentes y rotación en dispositivo; web usa controles navegador/servidor."
+      ],
+      "acceptance": [
+        "Prueba de certificado confiable/pin incorrecto refleja la decisión ADR, no un mock de helper.",
+        "No se acepta certificado inválido solo por hash.",
+        "APK release y plataforma web tienen garantías distintas documentadas; no se bloquea accidentalmente toda flota."
+      ],
+      "rollback": "Revertir a la política PKI segura aprobada mediante release compatible; jamás devolver true globalmente en callback.",
+      "approval": "Javier aprueba política y coordinación de certificados; no leer claves ni cambiar CDN/producción.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "SEC-06",
+      "phase": 1,
+      "priority": "P1",
+      "title": "Mínimo privilegio y privacidad en plataformas móviles",
+      "depends_on": [
+        "SEC-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "android/app/src/main/AndroidManifest.xml",
+        "android/app/src/main/res/xml/network_security_config.xml",
+        "ios/Runner/Info.plist",
+        "lib/core/services"
+      ],
+      "proposed_paths": [
+        "android/app/src/debug/res/xml/network_security_config.xml",
+        "docs/security/mobile-permissions.md"
+      ],
+      "requirement": "Release no permitirá HTTP local ni solicitará permisos no vinculados a una función justificada y activada por el usuario.",
+      "steps": [
+        "Mapear cada permiso a función real: fotos, PDF, impresora Bluetooth, notificaciones, localización; probar denegación, revocación y Android versiones soportadas.",
+        "Mover excepciones LAN/emulador a debug y verificar manifest fusionado release; no basarse solo en el XML fuente.",
+        "Sustituir almacenamiento global por APIs de aplicación/SAF/share; retirar background location si no existe requisito y prueba; revisar Android backup/data extraction e iOS protección de archivos.",
+        "Limpiar temporales sensibles tras impresión/compartición con retención aprobada; revisar previews, clipboard, screenshots y notificaciones según riesgo."
+      ],
+      "acceptance": [
+        "Inspección APK release sin cleartext ni permisos injustificados.",
+        "Fotos, impresión, ubicación requerida y PDF funcionan con permisos mínimos.",
+        "Dispositivo compartido/logout no deja documentos sensibles accesibles al siguiente usuario."
+      ],
+      "rollback": "Revertir solo cambio de permiso que impida función aprobada en release de corrección; no restaurar permisos globales sin evidencia.",
+      "approval": "Cambios de privacidad y requisitos de ubicación requieren decisión de producto; no conceder permisos vía herramientas.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "SEC-07",
+      "phase": 1,
+      "priority": "P0",
+      "title": "Limitar chatbot y herramientas de IA",
+      "depends_on": [
+        "SEC-03",
+        "SEC-04"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/routes/chatbot.js",
+        "backend/src/chatbot/llm-orchestrator.js",
+        "lib/features/chatbot"
+      ],
+      "proposed_paths": [
+        "backend/__tests__/chatbot-boundaries.test.js",
+        "docs/security/ai-tool-policy.md"
+      ],
+      "requirement": "Ni instrucciones del usuario ni contenido recuperado podrán ampliar el ámbito de datos o permisos de herramientas del chatbot.",
+      "steps": [
+        "Seguir ruta→orquestador→herramientas y demostrar cuáles están activas; si el módulo no está expuesto, conservar tarea como gate previo a habilitarlo.",
+        "Validar mensaje, historial, IDs, tamaños y salida; presupuesto por usuario/rol de tokens, peticiones, concurrencia, tiempo y coste.",
+        "Pasar identidad autorizada a repositorios; tratar texto de documentos/modelo como datos sin autoridad. Herramientas permitidas con schemas, permisos propios y prohibición de SQL/comandos arbitrarios.",
+        "Añadir corpus de prompt injection, historial adulterado, objeto ajeno, salida malformada, timeout y proveedor caído; no enviar datos reales a un proveedor sin política aprobada."
+      ],
+      "acceptance": [
+        "Prompts adversarios no revelan datos fuera de scope ni ejecutan efectos no autorizados.",
+        "Cuotas fallan antes del proveedor y liberan recursos.",
+        "Telemetría registra coste/latencia agregados sin prompts ni PII."
+      ],
+      "rollback": "Desactivar feature por configuración autorizada si falla aislamiento; mantener funcionalidad principal sin depender de IA.",
+      "approval": "No autoriza envío de datos a terceros ni contratación; habilitación y datos permitidos los decide Javier.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "SEC-08",
+      "phase": 1,
+      "priority": "P1",
+      "title": "Supply chain y secretos con evidencia redactada",
+      "depends_on": [
+        "FND-02",
+        "FND-03"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        ".github/workflows/security.yml",
+        ".github/workflows/backend-ci.yml",
+        ".gitleaks.toml",
+        ".semgrep",
+        "package-lock.json",
+        "backend/package-lock.json",
+        "pubspec.lock"
+      ],
+      "proposed_paths": [
+        "docs/security/dependency-exceptions.md",
+        "docs/security/sbom-policy.md"
+      ],
+      "requirement": "Un artefacto con secreto detectado o vulnerabilidad bloqueante sin excepción vigente no podrá promocionarse.",
+      "steps": [
+        "Repetir auditorías en la versión exacta del lock y registrar alcance runtime/dev; baseline actual solo npm producción:4moderate+1low, no equivale a cero riesgos.",
+        "Fijar GitHub Actions por SHA y revisar permisos mínimos, fork PR, caches, artefactos y runners; no ejecutar código de PR con secretos productivos.",
+        "Generar SBOM Node/Dart/assets nativos y revisar licencias; tool de escaneo elegida con versión/pin y salida redactada; evaluar cada advisory por reachability y parche.",
+        "Configurar excepciones por hallazgo concreto con owner/fecha/mitigación, y escaneo autorizado del histórico por proceso seguro; no abrir archivos secretos bloqueados ni imprimir coincidencias."
+      ],
+      "acceptance": [
+        "Fixtures de secreto sintético y dependencia bloqueante detienen promoción.",
+        "SBOM ligada al SHA de artefacto; hashes/firmas verificables.",
+        "Avisos moderados/bajos tienen decisión y vencimiento; ningún npm audit fix --force automático."
+      ],
+      "rollback": "Revertir actualización incompatible de forma aislada con aceptación de riesgo temporal; si hay credencial real, parar y activar respuesta humana.",
+      "approval": "Rotación/revocación de secretos y revisión histórica sensible solo Javier/proceso autorizado; publicar solo resultados redactados.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "SEC-09",
+      "phase": 1,
+      "priority": "P1",
+      "title": "Logs y telemetría sin filtración de datos",
+      "depends_on": [
+        "SEC-01",
+        "SEC-04"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/middleware/logger.js",
+        "backend/routes/telemetry.js",
+        "backend/instrument.js",
+        "lib/core/utils/app_logger.dart",
+        "lib/main.dart"
+      ],
+      "proposed_paths": [
+        "backend/__tests__/logging-redaction.test.js",
+        "docs/security/data-retention.md"
+      ],
+      "requirement": "Los logs y errores de producción contendrán solo campos permitidos y nunca token, PIN, DNI, firma ni cuerpos financieros.",
+      "steps": [
+        "Definir allowlist de campos y redactor profundo compartido; normalizar ruta sin query, reemplazar identificadores por correlación no reversible donde proceda.",
+        "Separar audit trail financiero de logs de diagnóstico: acceso, integridad, retención y finalidad distintos; no borrar evidencia necesaria al aplicar minimización.",
+        "Probar objetos anidados, headers, excepciones, SQL params y eventos RUM con datos sintéticos; no enviar eventos reales durante la prueba.",
+        "Configurar muestreo y cardinalidad para no multiplicar costes ni esconder fallos; revisar beforeSend de Sentry y SDK nativo."
+      ],
+      "acceptance": [
+        "Canary sintético de PII nunca aparece en ningún sink de test.",
+        "Cada request se correlaciona por requestId sin contenido sensible.",
+        "Retención/borrado y acceso de audit trail quedan aprobados y ensayados."
+      ],
+      "rollback": "Revertir cambios de formato incompatibles manteniendo redacción; ante fallo cerrar el logging de payload, no abrirlo.",
+      "approval": "Política de conservación financiera/privacidad debe aprobarla responsable de negocio/legal; no se presume cumplimiento normativo.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "SEC-10",
+      "phase": 1,
+      "priority": "P1",
+      "title": "Evidencias, PDFs, ficheros y destinatarios seguros",
+      "depends_on": [
+        "SEC-03",
+        "SEC-04"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/routes/entregas.js",
+        "backend/routes/facturas.js",
+        "backend/routes/repartidor-document-routes.js",
+        "backend/services/reparto-receipt-service.js",
+        "lib/features/repartidor/presentation/widgets"
+      ],
+      "proposed_paths": [
+        "backend/__tests__/document-safety-matrix.test.js"
+      ],
+      "requirement": "Un archivo o envío estará vinculado a un documento autorizado y ningún input controlará rutas de disco o destinatarios fuera de la política.",
+      "steps": [
+        "Validar autorización antes de cargar/generar/compartir; schema para recipients y contacto alternativo aportado por repartidor; construir to/cc completo y separar transporte sink/allowlist TEST.",
+        "Validar tamaño, MIME y firma de formato; normalizar imagen en librería mantenida bajo límites de píxeles/memoria; generar nombre opaco y almacenar fuera del webroot.",
+        "Bloquear traversal, rutas absolutas, symlinks fuera de raíz, CRLF y SSRF de URLs remotas; si no hay descarga remota, prohibir introducirla por conveniencia.",
+        "Revisar PDF/HTML/CSV/impresión frente a texto no confiable, fórmulas CSV, HTML injection y comandos ZPL; preservar serie completa de documento."
+      ],
+      "acceptance": [
+        "Archivo ajeno, sobredimensionado, tipo falso y ruta escapada se rechazan antes de side effects.",
+        "TEST jamás envía correo ERP real y mantiene destinatarios lógicos correctos.",
+        "Evidencia y recibo tienen ciclo de vida, acceso y trazabilidad probados."
+      ],
+      "rollback": "Revertir por canal/handler y mantener deny por defecto ante fallo de validación; no perder evidencias existentes.",
+      "approval": "Spec EARS aprobada; no autoriza despliegue.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "DATA-01",
+      "phase": 1,
+      "priority": "P0",
+      "title": "Garantizar SQL y destinos de escritura",
+      "depends_on": [
+        "FND-05",
+        "SEC-04"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/repositories",
+        "backend/services",
+        "backend/src/core/infrastructure/database/db2-connection-pool.ts",
+        "backend/config/db.js"
+      ],
+      "proposed_paths": [
+        "docs/data/query-catalog.csv",
+        "backend/__tests__/sql-policy.test.js"
+      ],
+      "requirement": "Todos los valores externos serán binds y cualquier escritura fuera del destino TEST autorizado será rechazada.",
+      "steps": [
+        "Inventariar SQL activo por modo/runtime con hash normalizado, tabla/columna observada, binds, identificadores dinámicos y caller; clasificar scripts administrativos aparte.",
+        "Asegurar parámetros para valores y mapping allowlisted para schema/tabla/columna/sort; no sustituir bind por escapar comillas. Revisar todos los accesos, no solo pool principal.",
+        "Verificar existencia/tipos con QSYS2.SYSTABLES/SYSCOLUMNS en sesión autorizada antes de usar nuevas consultas; el inventario estático actual no acredita catálogo vivo.",
+        "Añadir negativas de payload SQL, identificador no permitido y destinos productivos en adaptadores falsos; cuentas/grants reales los gestiona Javier."
+      ],
+      "acceptance": [
+        "Cero interpolación de valores de usuario en sentencias.",
+        "Todo builder dinámico tiene allowlist y prueba de rechazo.",
+        "Guard demuestra DSEDAC read-only y escrituras TEST; ninguna prueba de CI lanza DML/DDL real."
+      ],
+      "rollback": "Revertir una query por commit, conservando binds/guard; nunca volver a concatenación insegura.",
+      "approval": "MANUAL JAVIER si cambia backend/config/db.js, permisos, credenciales o DB2 DDL/DML.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "FIN-01",
+      "phase": 1,
+      "priority": "P0",
+      "title": "Especificar y congelar invariantes de negocio",
+      "depends_on": [
+        "FND-04",
+        "FND-05"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/services/reparto-confirmation-service.js",
+        "backend/services/delivery-amount-resolver.js",
+        "backend/services/repartidor-liquidacion-service.js",
+        "lib/features/repartidor/domain"
+      ],
+      "proposed_paths": [
+        "docs/spec/finance-invariants.md",
+        "backend/__tests__/finance-invariants.test.js"
+      ],
+      "requirement": "Una entrega, su cobro y liquidación mantendrán importes y evidencia coherentes en todos los canales.",
+      "steps": [
+        "Crear tabla EARS requisito→caso→fixtures para saldo CPC/documento, cantidades reales, parciales, reversos, abonos, IVA y cierre del día.",
+        "Separar dominio comercial del reparto: CVC/FPG/CAC/CPC para deuda comercial, no sustituirlo por VISTA_DEUDA_BASE; objetivos R1_T8CDVD y ventas LCCDVD.",
+        "Fijar Finalizar como confirmación conjunta entrega+cobro con nombre/apellidos/DNI/firma; notas obligatorias nunca null y Talón con número/vencimiento/banco ENB.",
+        "Caracterizar lista/ficha/cabecera/PDF/impresión/liq con mismo documento y serie completa; identificar estado actual local antes de modificarlo."
+      ],
+      "acceptance": [
+        "Casos dorados cubren todas las reglas AGENTS sin importes reales publicados.",
+        "Saldo cobrable nunca excede documento ni duplica deuda de cliente.",
+        "Devolución de factura cobrada ajusta caja sin restar de nuevo total LQD; plazo viene de FPG."
+      ],
+      "rollback": "Conservar fixtures caracterizadas; no revertir reglas correctas para acomodar refactor. Ante discrepancia bloquear slice financiero.",
+      "approval": "Validación de reglas por Javier/negocio; pruebas con datos sintéticos. No autoriza escritura ERP.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "FIN-02",
+      "phase": 2,
+      "priority": "P1",
+      "title": "Representación monetaria y redondeo compartidos",
+      "depends_on": [
+        "FIN-01",
+        "ARCH-05"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "lib/core/utils/currency_formatter.dart",
+        "lib/features/liquidacion_comercial/domain/liquidacion_domain.dart",
+        "lib/features/pedidos/data/pedidos_service.dart",
+        "backend/services"
+      ],
+      "proposed_paths": [
+        "lib/core/domain/money.dart",
+        "backend/domain/money.js",
+        "docs/spec/decimal-contract.md"
+      ],
+      "requirement": "Los cálculos económicos usarán precisión y redondeo explícitos, idénticos en backend y cliente.",
+      "steps": [
+        "Inventariar escala real de precio, cantidad, porcentaje, base, impuesto y total DB2/API; no convertir todos los precios a céntimos porque pueden requerir más de dos decimales.",
+        "Definir decimal canónico o enteros escalados por tipo; moneda, rounding mode y punto de redondeo por línea/documento; backend sigue autoridad.",
+        "Migrar parsers y serialización de un flujo con adaptadores compatibles; evitar cambios históricos y acumulación de double; UI formatea, no decide saldo.",
+        "Probar vectores compartidos JSON sintéticos: muchas líneas, cantidades fraccionarias, descuentos, impuestos, negativos/devoluciones y parciales."
+      ],
+      "acceptance": [
+        "Backend/Flutter coinciden exactamente con fixtures aprobadas.",
+        "No hay pérdida de escala ni cambio silencioso del contrato JSON.",
+        "Migración permite clientes previos y documentos históricos; cobertura de overflow/NaN/Infinity."
+      ],
+      "rollback": "Restaurar adaptador de serialización del flujo, sin recalcular documentos persistidos ni alterar sumas históricas.",
+      "approval": "Contrato contable/DB2 aprobado; librería decimal seleccionada tras revisión de mantenimiento/licencia.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "FIN-03",
+      "phase": 2,
+      "priority": "P0",
+      "title": "Idempotencia y concurrencia en todas las mutaciones",
+      "depends_on": [
+        "FIN-01",
+        "SEC-03",
+        "DATA-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/services/reparto-confirmation-service.js",
+        "backend/repositories/reparto-confirmation-db2-repository.js",
+        "backend/services/repartidor-liquidacion-service.js",
+        "backend/routes/pedidos.js"
+      ],
+      "proposed_paths": [
+        "docs/spec/idempotency-protocol.md",
+        "backend/__tests__/financial-concurrency.test.js"
+      ],
+      "requirement": "Repetir un comando confirmado no producirá una segunda mutación; misma clave con payload diferente generará conflicto explícito.",
+      "steps": [
+        "Inventariar los controles existentes de confirmación/liquidación y extender solo huecos a cobro pendiente, pedidos, reversos y cierre; conservar locks y constraints ya presentes.",
+        "Definir clave opaca, scope, canonical payload hash, versión de schema, retención, estado pending/committed y respuesta replay; la clave comercial protege tras expirar cache de respuestas.",
+        "Escribir antes tests simultáneos con misma clave/mismo cuerpo, misma clave/distinto cuerpo, claves distintas/mismo documento, cierre frente a cobro y timeout después del commit.",
+        "Reconciliar resultado ambiguo consultando command status por identidad autorizada; nunca reintentar POST monetario automáticamente sin contrato."
+      ],
+      "acceptance": [
+        "N solicitudes equivalentes producen un único asiento y la misma respuesta canónica.",
+        "Conflicto devuelve código estable y cero escritura adicional.",
+        "Test con driver TEST confirma atomicidad/locks cuando se autorice; unit mocks no certifican DB2."
+      ],
+      "rollback": "Desactivar nueva entrada de comandos si falla integridad; preservar journal/asientos y reconciliar read-only. No rollback destructivo de dinero.",
+      "approval": "DDL/constraints/tablas TEST y ejecución de escrituras requieren aprobación de Javier; no tocar config/db.js.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "FIN-04",
+      "phase": 2,
+      "priority": "P1",
+      "title": "Outbox fiable y entregas externas reconciliables",
+      "depends_on": [
+        "FIN-03",
+        "SEC-10"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/services/repartidor-liquidacion-outbox-service.js",
+        "backend/services/reparto-variance-notification-service.js",
+        "backend/services/reparto-receipt-service.js"
+      ],
+      "proposed_paths": [
+        "docs/spec/outbox-protocol.md",
+        "backend/__tests__/outbox-worker-contract.test.js"
+      ],
+      "requirement": "El efecto confirmado y la intención de envío se conservarán atómicamente; fallos de transporte quedarán visibles y recuperables.",
+      "steps": [
+        "Comparar outboxes existentes y definir claim con lease, owner, vencimiento, intentos, próxima fecha, error redactado y clave del proveedor.",
+        "Mantener intención de recibo/operaciones/repartidor en transacción cuando corresponda; evitar Promise best-effort como única garantía de entrega.",
+        "Worker acotado con backoff+jitter, lease renovable, DLQ y acción manual auditada; soportar reinicio entre claim/envío/ack.",
+        "Declarar transporte al menos una vez; usar deduplicación proveedor o Message-ID cuando garantice efecto. Sin soporte, el envío ambiguo pasa a reconciliación, no se promete exactly-once."
+      ],
+      "acceptance": [
+        "Dos workers no mantienen claim válido simultáneo de la misma fila.",
+        "Crash tras envío antes de ack tiene tratamiento documentado y no reenvío ciego ilimitado.",
+        "TEST utiliza sink y conserva to/cc completo; no pierde recibo ante fallo Redis/correo."
+      ],
+      "rollback": "Parar solo el consumidor nuevo según procedimiento autorizado y preservar pendientes; continuar con lector compatible sin borrar outbox.",
+      "approval": "Cambios DB2/aprovisionamiento workers aprobados; no pm2 start/reload ni correo real durante tests.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "FIN-05",
+      "phase": 2,
+      "priority": "P1",
+      "title": "Comandos offline tipados y recuperación de sesión",
+      "depends_on": [
+        "FIN-03",
+        "FIN-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "lib/core/offline/sync_queue_service.dart",
+        "lib/features/repartidor/data/reparto_confirmation_request.dart",
+        "lib/features/repartidor/data/reparto_confirmation_journal.dart"
+      ],
+      "proposed_paths": [
+        "test/core/offline/command-recovery_test.dart",
+        "docs/spec/offline-commands.md"
+      ],
+      "requirement": "Un comando offline conservará identidad, payload, evidencia y estado hasta confirmar su resultado o solicitar revisión, sin ejecutarse bajo otra sesión.",
+      "steps": [
+        "Inventariar journal/cola existentes y separar borrador, pendiente, enviando, confirmado, conflicto y revisión; persistir versión de comando y clave estable antes de enviar.",
+        "Definir tratamiento de logout/cambio de rol con comandos pendientes: bloquear envío por otro usuario, conservar cifrado según política y pedir resolución al propietario autorizado.",
+        "Probar pérdida de red antes/durante/después de POST, reinicio app, disco lleno, corrupción/migración de store, token expirado y doble toque.",
+        "UI muestra pendiente y saldo no confirmado; validar servidor al cerrar; no borrar operaciones por edad ni permitir forzar éxito con un409 genérico."
+      ],
+      "acceptance": [
+        "Replay válido se reconcilia contra misma operación/payload, no contra cualquier conflicto.",
+        "Cambio de usuario no lee ni transmite cola anterior.",
+        "Cero pérdida silenciosa; acción manual informa consecuencias y no duplica cobros."
+      ],
+      "rollback": "Mantener lector de schema previo por versión; export/recuperación solo autorizada y cifrada. No vaciar Hive/cola como solución.",
+      "approval": "Aprobar política de retención y migración de datos locales; pruebas sintéticas sin DB real.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "FIN-06",
+      "phase": 2,
+      "priority": "P1",
+      "title": "Reconciliación y trazabilidad de cierre",
+      "depends_on": [
+        "FIN-01",
+        "FIN-03",
+        "FIN-04"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/services/repartidor-liquidacion-service.js",
+        "backend/repositories/repartidor-liquidacion-db2-repository.js",
+        "lib/features/repartidor_finanzas"
+      ],
+      "proposed_paths": [
+        "docs/operations/finance-reconciliation.md",
+        "backend/__tests__/reconciliation-invariants.test.js"
+      ],
+      "requirement": "Cada cierre podrá explicar origen, importe, evidencia, actor y estado de todas sus operaciones sin ajustes ocultos.",
+      "steps": [
+        "Construir conciliador read-only por documento/día/actor que compare entregado, cobrado, pendiente, reversado, liquidado y notificado.",
+        "Mostrar diferencias con IDs técnicos y razón, respetando scope; no autocorregir ni reescribir históricos.",
+        "Probar días frontera/zonas horarias, cobro parcial seguido del resto desde Cobros, cambio cantidades y cierre concurrente.",
+        "Definir procedimiento de investigación y corrección compensatoria aprobada, con trazabilidad independiente de logs de diagnóstico."
+      ],
+      "acceptance": [
+        "Suma de fuentes coincide con snapshot/caja según reglas comerciales aprobadas.",
+        "Toda discrepancia tiene estado y owner; no se marca cierre correcto con diferencias ocultas.",
+        "Reporte no exporta DNI/firma/contactos innecesarios."
+      ],
+      "rollback": "Revertir visualización/consulta nueva; conservar evidencia y bloquear correcciones automáticas.",
+      "approval": "Consulta DB2 solo autorizada; ajustes monetarios requieren instrucción humana específica.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "CACHE-01",
+      "phase": 2,
+      "priority": "P0",
+      "title": "Política única de frescura y aislamiento",
+      "depends_on": [
+        "FND-05",
+        "SEC-01",
+        "FIN-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/middleware/http-cache.js",
+        "backend/services/redis-cache.js",
+        "backend/services/query-optimizer.js",
+        "lib/core/cache/cache_service.dart",
+        "lib/core/offline"
+      ],
+      "proposed_paths": [
+        "docs/spec/cache-policy.csv",
+        "backend/config/cache-policy.js",
+        "lib/core/cache/cache_policy.dart"
+      ],
+      "requirement": "Cada lectura tendrá scope, edad máxima y regla de invalidación explícitos; una decisión financiera jamás se confirmará con un valor obsoleto.",
+      "steps": [
+        "Inventariar endpoint/loader y todas sus capas browser/CDN/HTTP/L1/Redis/query/Hive/provider; elegir una política por clase de dato.",
+        "Definir key con entorno/schema lógico, versión API/política, sujeto/rol/modo/scope y parámetros normalizados; no poner token/PII en key ni compartir ALL entre permisos distintos.",
+        "Distinguir caché servidor controlada, snapshot offline cifrado para mostrar y no-store HTTP; datos personales no implican prohibición absoluta de caché cifrada, sí minimización/frescura.",
+        "Aplicar tabla de políticas del capítulo04, con TTL propuestos pendientes de baseline; precio/saldo/evidencia/permiso se revalidan autoritativamente antes de escribir."
+      ],
+      "acceptance": [
+        "Cada uso de cache referencia una política conocida; namespace desconocido se rechaza o bypass según contrato.",
+        "Dos identidades/roles/entornos no comparten respuesta/ETag/cola.",
+        "UI distingue stale/offline; ningún POST de liquidación se cachea."
+      ],
+      "rollback": "Desactivar caché del namespace afectado y medir carga; nunca habilitar stale global para corregir latencia.",
+      "approval": "Cambios de clasificación/retención aprobados; conservar offline requerido por negocio.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "CACHE-02",
+      "phase": 2,
+      "priority": "P1",
+      "title": "Invalidación post-commit y read-your-writes",
+      "depends_on": [
+        "CACHE-01",
+        "FIN-03",
+        "FIN-04"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/middleware/http-cache.js",
+        "backend/services/redis-cache.js",
+        "backend/routes/repartidor-finanzas.js",
+        "lib/features/entregas/providers/entregas_provider.dart"
+      ],
+      "proposed_paths": [
+        "backend/__tests__/cache-invalidation-multiworker.test.js",
+        "test/core/cache/read_your_writes_test.dart"
+      ],
+      "requirement": "Tras confirmar una mutación, el actor verá el estado confirmado y las cachés derivadas convergerán dentro del presupuesto aprobado.",
+      "steps": [
+        "Mapear agregado→lecturas afectadas para entrega/cobro/nota/precio/cierre/cambio de rol; incluir lista/ficha/cabecera/summary/PDF.",
+        "Persistir intención/generación de invalidación junto al commit si requiere fiabilidad; aplicar L1 local y pubsub Redis con recuperación tras mensajes perdidos.",
+        "Usar versionado por agregado o tags acotados; evitar KEYS/barridos globales en Redis y purgar L1 al reconectar si no puede validar generación.",
+        "Cliente integra respuesta canónica del comando e invalida providers y caché persistente correspondiente, sin fabricar totales."
+      ],
+      "acceptance": [
+        "Prueba dos procesos+cliente ve misma versión después de mutación/reconexión.",
+        "Caída Redis entre commit e invalidación no deja stale indefinido.",
+        "Métricas invalidation lag y eventos fallidos son observables."
+      ],
+      "rollback": "Bypass temporal de lecturas afectadas con límites de carga; preservar outbox de invalidación para replay.",
+      "approval": "Cambios DB2 para outbox requieren Javier; no vaciar Redis productivo para probar.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "CACHE-03",
+      "phase": 3,
+      "priority": "P1",
+      "title": "Reducir solapamientos y estampidas de caché",
+      "depends_on": [
+        "CACHE-01",
+        "CACHE-02",
+        "PERF-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/services/redis-cache.js",
+        "backend/services/query-optimizer.js",
+        "backend/middleware/http-cache.js",
+        "backend/services"
+      ],
+      "proposed_paths": [
+        "backend/__tests__/cache-contention.test.js"
+      ],
+      "requirement": "La caída o expiración de una clave no provocará trabajo duplicado ilimitado ni crecimiento sin cota de memoria.",
+      "steps": [
+        "Medir qué capa evita trabajo en cada flujo antes de retirar alguna; mantener caché HTTP solo donde tenga semántica y privacidad verificables.",
+        "Añadir single-flight local y, cuando medición lo justifique, lease distribuido con fencing/timeout; quien pierde espera con deadline o bypass acotado, nunca bloqueo infinito.",
+        "Fijar límites de entries/bytes, admisión de payload grande, jitter TTL, máximos stale y warmup con líder/presupuesto; evitar que warmup sature DB2.",
+        "Probar expiración simultánea, payload corrupto, cardinalidad hostil, Redis lento/caído, pubsub perdido y worker reiniciado."
+      ],
+      "acceptance": [
+        "N clientes sobre una clave generan cargas aguas abajo acotadas.",
+        "Heap retorna a meseta en soak y cache nunca cruza scope.",
+        "Bypass/fallo mantiene resultados correctos y no reintenta escrituras."
+      ],
+      "rollback": "Deshabilitar una optimización por namespace manteniendo límites de concurrencia; revertir por componente.",
+      "approval": "Carga solo TEST/staging autorizado; no FLUSHALL/KEYS en producción.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "PERF-01",
+      "phase": 0,
+      "priority": "P0",
+      "title": "Baseline de rendimiento por flujo y entorno",
+      "depends_on": [
+        "FND-01",
+        "FND-05"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "docs/perf/latency-budgets.md",
+        "backend/routes/telemetry.js",
+        "lib/core"
+      ],
+      "proposed_paths": [
+        "docs/performance/baseline-protocol.md",
+        "docs/performance/baseline-template.csv"
+      ],
+      "requirement": "Una afirmación de rendimiento indicará dispositivo, rol, SHA, red, caché, tamaño de datos, muestra y percentiles.",
+      "steps": [
+        "Preservar evidencias históricas 14/17sept como historia; no presentar 40s/HIT como SQL frío ni wall-time uiautomator como latencia API.",
+        "Definir dataset anonimizado representativo, jefe_ventas móvil con máxima carga, jefe en reparto y repartidor raso; comercial en matriz aparte.",
+        "Medir arranque, login por nombre/código, tabs, filtros, rutero, detalle, cobro/Finalizar, impresión y sync; 30repeticiones por flujo interactivo como mínimo orientativo, separar p50/p95 y muestras de carga suficientes para p99.",
+        "Registrar frame build/raster, memoria/GC, bytes, requests, pool/query/serialization/cache; perfilar en profile/release y teléfono real para [campo]."
+      ],
+      "acceptance": [
+        "Baseline reproducible con frío completo/L2/HIT/40s/offline diferenciados.",
+        "Objetivos son provisionales hasta aceptación de baseline; no publicar porcentajes globales de una muestra caliente.",
+        "Sin teléfono real, estado campo=NO_MEDIDO; continuar otros paquetes sin inventar resultados."
+      ],
+      "rollback": "No cambia producto; retirar únicamente instrumentación que altere medida y conservar datos agregados.",
+      "approval": "Participación autorizada de Javier/dispositivo; no reutilizar PIN ni copiar datos ERP a informes.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "PERF-02",
+      "phase": 3,
+      "priority": "P1",
+      "title": "Optimizar consultas por evidencia y catálogo DB2",
+      "depends_on": [
+        "DATA-01",
+        "PERF-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/repositories",
+        "backend/src/modules",
+        "docs/perf/latency-budgets.md",
+        "backend/sql"
+      ],
+      "proposed_paths": [
+        "docs/data/query-performance.md"
+      ],
+      "requirement": "Toda optimización SQL conservará resultados y demostrará mejora en el workload completo, incluido frío.",
+      "steps": [
+        "Priorizar top por tiempo total×frecuencia y p95, empezando por consultas realmente lentas de la baseline; considerar LACLAE y pendientes solo si sigue siendo cuello actual.",
+        "Capturar plan/estadísticas de acceso con DBA y catálogo QSYS2; separar cardinalidad, sorts, scans, pool queue y transferencia; buscar N+1 y consultas repetidas.",
+        "Aplicar proyección, predicados sargables, batch acotado, paginación estable e índices candidatos; evitar aggregate TEST para mes abierto vivo sin contrato, conservar semántica histórica/mensual.",
+        "Preparar propuesta DDL con impacto espacio/escritura, mantenimiento y reversión DBA; no ejecutar DDL ni copiar ERP por iniciativa del agente."
+      ],
+      "acceptance": [
+        "Resultado idéntico en fixtures y contraste autorizado; ORDEN>=0, CPC ROW_NUMBER y ALL se mantienen.",
+        "p95 frío y carga mejoran sin castigar otras consultas; informe distingue espera pool de SQL.",
+        "Cada índice tiene evidencia/coste y aprobación; sin acceso DB2 queda BLOCKED ese subpaso."
+      ],
+      "rollback": "Revertir query parametrizada por slice; DDL rollback solo DBA autorizado con plan propio.",
+      "approval": "MANUAL JAVIER/DBA: catálogo, planes y DDL/DML; DSEDAC/DSED nunca escritos por agentes.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "PERF-03",
+      "phase": 3,
+      "priority": "P1",
+      "title": "Unificar pool, deadlines y cancelación ODBC",
+      "depends_on": [
+        "FND-05",
+        "DATA-01",
+        "PERF-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/config/db.js",
+        "backend/src/core/infrastructure/database/db2-connection-pool.ts",
+        "backend/ecosystem.config.js"
+      ],
+      "proposed_paths": [
+        "docs/adr/db2-runtime-adapter.md",
+        "backend/tests/db2-cancellation-contract.test.js"
+      ],
+      "requirement": "La expiración de una petición liberará recursos y no dejará una conexión con transacción desconocida disponible para otro actor.",
+      "steps": [
+        "Mapear pools/consumidores actuales y presupuesto total procesos×pool, respetando limite servidor; no aumentar workers sin calcular capacidad DB2.",
+        "Hacer adapters alternativos delegar al canónico después de contratos; BEGIN WORK TS es riesgo condicionado y se retira solo al validar alternativa ODBC.",
+        "Definir deadline extremo a extremo, cancel signal, queue timeout, query timeout, rollback/destrucción y retry solo lecturas idempotentes.",
+        "Ensayar consulta lenta/cancel/lock/caída en TEST aprobado; comprobar jobs/locks del servidor y recuperación de capacidad, no solo Promise rechazada."
+      ],
+      "acceptance": [
+        "Concurrencia/cola tienen cota y respuesta503/504 consistente.",
+        "No se reutiliza conexión de commit ambiguo ni se reintenta dinero.",
+        "Driver real confirma cancelación o se documenta aislamiento/destrucción y límite residual."
+      ],
+      "rollback": "Mantener adaptador previo detrás de selección explícita si seguro; cambios de pool productivo exclusivamente humanos.",
+      "approval": "MANUAL JAVIER: config/db.js intocable, ajustes PM2/DB2 fuera de autonomía.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "PERF-04",
+      "phase": 3,
+      "priority": "P1",
+      "title": "Contratos de payload, paginación y export",
+      "depends_on": [
+        "PERF-01",
+        "ARCH-05"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/routes",
+        "backend/services",
+        "lib/features/clients",
+        "lib/features/warehouse",
+        "lib/features/pedidos"
+      ],
+      "proposed_paths": [
+        "docs/spec/pagination-export.md"
+      ],
+      "requirement": "Las listas y exportaciones tendrán coste acotado sin omitir ni duplicar registros al paginar.",
+      "steps": [
+        "Medir bytes/parse/render y número real de filas por pantalla; no limitar datos solo para aparentar velocidad.",
+        "Diseñar paginación estable con cursor o offset según índices/consistencia medidos, orden total y tie-breaker, filtros normalizados y máximos; conservar totales agregados necesarios.",
+        "Separar summary ligero/detalle bajo demanda/export asincrónico solo si volumen lo exige; aplicar autorización tanto al job como a descarga.",
+        "Migrar endpoint y consumidor juntos con contrato compatible; evitar cargar firma/foto/PII en listas y comprimir donde compense CPU."
+      ],
+      "acceptance": [
+        "Cambio de página no duplica/omite en dataset definido; límites se aplican servidor.",
+        "Totales facturas agregados siguen disponibles con/sin IVA.",
+        "Bytes/parse/render medidos mejoran; export no agota heap ni scope."
+      ],
+      "rollback": "Adaptador temporal conserva versión previa y parámetros; no cambiar silenciosamente page semantics.",
+      "approval": "Spec de contrato aprobada; no crear servicios externos nuevos por defecto.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "PERF-05",
+      "phase": 3,
+      "priority": "P1",
+      "title": "Optimización Flutter guiada por perfiles",
+      "depends_on": [
+        "PERF-01",
+        "ARCH-03",
+        "CACHE-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "lib/features/dashboard/presentation/pages/main_shell.dart",
+        "lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart",
+        "lib/features/warehouse",
+        "lib/core/api/api_client.dart"
+      ],
+      "proposed_paths": [
+        "docs/performance/flutter-profile-results.md"
+      ],
+      "requirement": "Las interacciones críticas cumplirán presupuesto de frames y memoria en el dispositivo acordado sin degradar exactitud ni accesibilidad.",
+      "steps": [
+        "Identificar rebuilds/raster/parse caros en DevTools; separar red/DB de UI antes de optimizar.",
+        "Aplicar select a estado observado, listas lazy, claves estables, paginación, const cuando proceda y caché de imagen dimensionada; RepaintBoundary solo cuando perfil lo justifique.",
+        "Mover parse/cálculo pesado a isolate solo con umbral medido y cancelación; revisar listeners/controllers/timers y ciclo background/resume.",
+        "Validar tema, accesibilidad, offline y feedback de Finalizar con dataset grande; comparar mismos runs baseline."
+      ],
+      "acceptance": [
+        "p95 build/raster dentro del presupuesto de refresco aprobado y jank bajo umbral.",
+        "Memoria llega a meseta después de múltiples navegaciones; listeners liberados.",
+        "No existe precarga que sature red/pool al login/resume."
+      ],
+      "rollback": "Revertir microoptimización que no aporte mejora reproducible; mantener tests de negocio.",
+      "approval": "Campo requiere dispositivo; no declarar latencia percibida con emulador.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "PERF-06",
+      "phase": 3,
+      "priority": "P1",
+      "title": "Carga, saturación y pruebas de larga duración",
+      "depends_on": [
+        "PERF-01",
+        "PERF-03",
+        "CACHE-03",
+        "OPS-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/perf/k6/load-test.js",
+        "backend/ecosystem.config.js"
+      ],
+      "proposed_paths": [
+        "backend/perf/k6/scenarios",
+        "docs/performance/capacity-model.md"
+      ],
+      "requirement": "El sistema rechazará exceso de carga de forma controlada y mantendrá invariantes durante fallos y recuperación.",
+      "steps": [
+        "Sustituir placeholder k6 por lecturas sintéticas con modelo de llegada, rampas y umbrales de error/p95; escritores financieros solo en lane TEST autorizado.",
+        "Definir concurrencia pico a partir de usuarios/dispositivos reales, distribución de roles, think-time y ráfagas; no inventar capacidad comercial.",
+        "Ejecutar smoke→normal→pico→soak, medir queue/pool/event-loop/heap/cache/DB/worker lag; incluir fallos Redis/correo y cancelación cliente.",
+        "Detener ante umbral seguro, conservar resultados agregados y plan de capacidad/coste; no dejar stress jobs en background."
+      ],
+      "acceptance": [
+        "Latencia y errores cumplen objetivos acordados con muestra suficiente.",
+        "No hay crecimiento de memoria/cola ilimitado ni doble efecto financiero.",
+        "Se demuestra recuperación tras retirar carga/fallo, no solo estabilidad en HIT."
+      ],
+      "rollback": "Detener exclusivamente el job de prueba iniciado y volver a configuración de TEST; no kill genérico node/PM2.",
+      "approval": "Aprobación de ventana/entorno de carga; jamás contra producción por defecto.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "ARCH-01",
+      "phase": 2,
+      "priority": "P1",
+      "title": "Arquitectura backend canónica y migración vertical",
+      "depends_on": [
+        "FND-05",
+        "SEC-03",
+        "FIN-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/routes",
+        "backend/services",
+        "backend/repositories",
+        "backend/src/modules",
+        "backend/src/shared/routes"
+      ],
+      "proposed_paths": [
+        "docs/adr/backend-module-boundaries.md"
+      ],
+      "requirement": "Cada dominio expondrá un único contrato público con responsabilidades claras entre ruta, servicio y acceso a datos.",
+      "steps": [
+        "Adoptar monolito modular con capas existentes routes/services/repositories/adapters; preservar módulos canónicos que ya cumplen. No iniciar migración masiva a TS ni microservicios sin necesidad demostrada.",
+        "Definir ownership para auth, clientes, pedidos, comercial, reparto, finanzas, reporting y almacén; impedir SQL en rutas nuevas y dependencias circulares.",
+        "Migrar un vertical de bajo riesgo por vez: caracterización→adapter→contrato→paridad→selección explícita→observación→retirada; trasladar cobros/auth al final con pruebas específicas.",
+        "Publicar calendario de flags/fallbacks con fecha de retirada. Fallo de módulo no debe activar silenciosamente una implementación distinta."
+      ],
+      "acceptance": [
+        "Un propietario por método/path en cada modo soportado.",
+        "Contrato estable para clientes actuales y reglas de negocio intactas.",
+        "No hay imports de UI hacia backend ni DB2 fuera de repositorios/adapters."
+      ],
+      "rollback": "Revertir únicamente vertical no persistente o restaurar adapter aprobado; cambios de datos requieren reconciliación, no rollback ciego.",
+      "approval": "Aprobar ADR antes de mover carpetas canónicas; intocables siguen protegidos.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "ARCH-02",
+      "phase": 3,
+      "priority": "P1",
+      "title": "Descomponer rutas y servicios de alto coste",
+      "depends_on": [
+        "ARCH-01",
+        "QA-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/app.js",
+        "backend/routes/entregas.js",
+        "backend/routes/repartidor-finanzas.js",
+        "backend/routes/facturas.js",
+        "backend/services/query-optimizer.js"
+      ],
+      "proposed_paths": [
+        "docs/engineering/refactor-slices.md"
+      ],
+      "requirement": "Una refactorización mantendrá comportamiento observable y separará validación, autorización, reglas y persistencia.",
+      "steps": [
+        "Elegir hotspot por churn, complejidad y fallos, no solo longitud; definir fachada pública y tests de caracterización antes de extraer.",
+        "Separar composición/app de arranque/listen/jobs; extraer handlers pequeños que validen/deleguen y servicios puros para decisiones.",
+        "Inyectar dependencias en seams existentes para probar reloj/cache/repo/transporte; evitar contenedores DI pesados o wrappers sin responsabilidad.",
+        "Mantener commits mecánicos separados de cambios de negocio; registrar reducción de complejidad, no perseguir un número de líneas a costa de legibilidad."
+      ],
+      "acceptance": [
+        "Mismos códigos HTTP/DTO/side effects y orden transaccional en pruebas.",
+        "Importar app para test no abre red ni arranca jobs.",
+        "Cada extracción tiene un propietario y no introduce dependencias circulares."
+      ],
+      "rollback": "Revertir extracción de un módulo sin cambios de datos; conservar pruebas caracterizadoras.",
+      "approval": "No editar auth.js/db.js; proponer seams externos si hace falta.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "ARCH-03",
+      "phase": 2,
+      "priority": "P1",
+      "title": "Dividir núcleo Flutter y navegación sin cambiar UX",
+      "depends_on": [
+        "FND-04",
+        "FND-05",
+        "QA-04"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "lib/features/dashboard/presentation/pages/main_shell.dart",
+        "lib/core/api/api_client.dart",
+        "lib/core/offline/sync_queue_service.dart",
+        "lib/core/theme"
+      ],
+      "proposed_paths": [
+        "docs/adr/flutter-core-boundaries.md",
+        "test/core/navigation"
+      ],
+      "requirement": "Cada rol mantendrá las mismas rutas/tabs válidas y el núcleo expondrá fachadas testeables de red, sesión, caché y sincronización.",
+      "steps": [
+        "Caracterizar MainShell: _getNavItems y _buildCurrentPage deben derivar de un registro único por rol/modo o mantenerse sincronizados mediante test.",
+        "Extraer navegación, badges, lifecycle y presentación de shell; ApiClient separa política retry/auth/telemetry/cache sin cambiar interceptor order.",
+        "Extraer planificador/ejecutor/reconciliador de cola manteniendo store y migración versionados; tema conserva AppColors como fuente.",
+        "Probar background/resume, logout/role switch, back button, deep links permitidos, cancelación y disposición de recursos."
+      ],
+      "acceptance": [
+        "Cada nav item resuelve una página autorizada y viceversa.",
+        "Solo una recuperación refresh en vuelo; no reintento automático de mutaciones ambiguas.",
+        "Tests fachada antes/después pasan; no editar UI muerta albaran_detail_page para entrega."
+      ],
+      "rollback": "Revertir una extracción por vez conservando APIs; no borrar estado offline para acomodar cambios.",
+      "approval": "Spec aprobada; mantener estructura lib/core+features/{data,domain,providers,presentation}.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "ARCH-04",
+      "phase": 3,
+      "priority": "P1",
+      "title": "Fronteras por feature y tipado gradual",
+      "depends_on": [
+        "ARCH-03",
+        "FND-03"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "lib/features",
+        "analysis_options.yaml",
+        "scripts/check_domain_imports.mjs",
+        "eslint.config.js"
+      ],
+      "proposed_paths": [
+        "docs/engineering/architecture-rules.md",
+        "scripts/quality/check-boundaries.mjs"
+      ],
+      "requirement": "Nuevos cambios respetarán domain puro, contratos explícitos y dependencias dirigidas entre capas.",
+      "steps": [
+        "Definir reglas ejecutables: domain no Flutter/Dio/storage; presentation observa providers; data implementa puertos; core no conoce features; composición es excepción acotada.",
+        "Resolver duplicidad auth/authentication según referencias reales; migrar por feature tocado sin crear carpetas vacías por estética.",
+        "Reemplazar Map/dynamic crítico por DTOs tipados e inmutables en frontera JSON; fallos de parse con mensajes seguros; versionar compatibilidad.",
+        "Eliminar ignores globales por lotes pequeños con ratchet de diagnósticos; probar fixtures positivas y negativas de cada regla."
+      ],
+      "acceptance": [
+        "Ningún nuevo import prohibido o ignore amplio pasa CI.",
+        "Tests de dominio corren sin Flutter/plugins cuando sea viable.",
+        "No cambia schema API por limpiar tipos; codegen reproducible sin diff inesperado."
+      ],
+      "rollback": "Revertir lote de feature, mantener baseline de deuda previa explícita; no volver a silenciar todos los diagnósticos.",
+      "approval": "Cambios de reglas canónicas requieren decisión/confirmación de Javier según AGENTS.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "ARCH-05",
+      "phase": 1,
+      "priority": "P1",
+      "title": "Contrato API versionado y compatibilidad móvil",
+      "depends_on": [
+        "FND-05",
+        "SEC-04"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "docs/openapi/openapi.yaml",
+        "backend/routes/docs.js",
+        "scripts/generate-postman-collection.js",
+        "lib/core/api"
+      ],
+      "proposed_paths": [
+        "docs/spec/api-compatibility.md",
+        "backend/__tests__/openapi-runtime-parity.test.js"
+      ],
+      "requirement": "Todo endpoint soportado tendrá schema, autorización, errores, paginación y versión compatible con clientes desplegados.",
+      "steps": [
+        "Decidir fuente de verdad OpenAPI y comprobar montaje real contra spec; generar ejemplos sintéticos y retirar endpoints documentales inexistentes.",
+        "Precisar campos opcionales/null, dinero/fechas/serie completa, headers cache/idempotency y códigos de negocio; no inferir tipos de una sola respuesta.",
+        "Añadir diff de breaking changes, pruebas consumidor Flutter y servidor; cliente generado es opcional tras prueba de integración, no requisito de reescritura.",
+        "Establecer ventana N/N-1 basada en versiones móviles activas; deprecación observable y kill/forced update solo con política de negocio aprobada."
+      ],
+      "acceptance": [
+        "Contrato cubre endpoints efectivos y variantes de error/auth, no solo200.",
+        "Cambios incompatibles bloquean CI o requieren versión/adapter aprobado.",
+        "Docs/Postman generados son reproducibles y sin credenciales."
+      ],
+      "rollback": "Mantener campos/adapter de compatibilidad hasta retirar clientes antiguos; revertir spec/código juntos.",
+      "approval": "No inventar endpoints/tablas; propuestas nuevas marcadas y aprobadas.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "UX-01",
+      "phase": 3,
+      "priority": "P1",
+      "title": "Tema, accesibilidad y sistema de componentes",
+      "depends_on": [
+        "ARCH-03",
+        "FND-05"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "lib/core/theme",
+        "lib/features",
+        "test/widgets"
+      ],
+      "proposed_paths": [
+        "docs/ux/screen-matrix.md",
+        "test/accessibility"
+      ],
+      "requirement": "Todas las pantallas soportadas serán legibles y operables en claro/oscuro, móvil/tablet y con ayudas de accesibilidad.",
+      "steps": [
+        "Crear matriz ruta×rol×modo×tema×tamaño; incluir filtros, tablas, matrices, modales, charts, PDF preview y estados de dinero.",
+        "Consolidar colores en AppColors y tokens tipográficos/espaciado con componentes reutilizables; conservar contraste y estado además de color.",
+        "Añadir Semantics/nombres/roles/valores, foco y orden lógico; targets48dp como estándar del proyecto; texto grande, TalkBack/VoiceOver y teclado cuando plataforma lo soporte.",
+        "Usar golden tests solo para componentes estables y tests semánticos para comportamiento; revisar con capturas sintéticas, sin exponer clientes."
+      ],
+      "acceptance": [
+        "Checklist de todas las rutas sin huecos críticos de contraste/foco/lectura.",
+        "Claro/oscuro aplica al contenido completo.",
+        "Finalizar/cobro/error son accesibles y no dependen solo de icono o color."
+      ],
+      "rollback": "Revertir componente afectado con prueba visual/semántica; no restaurar hardcodes de colores sin excepción.",
+      "approval": "Criterio WCAG2.2 AA como referencia adaptada a nativo, sin afirmar certificación.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "UX-02",
+      "phase": 3,
+      "priority": "P1",
+      "title": "Estados, errores y protección ante doble acción",
+      "depends_on": [
+        "FIN-05",
+        "ARCH-05",
+        "UX-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "lib/features/repartidor/presentation/widgets/rutero_detail_modal.dart",
+        "lib/features/cobros",
+        "lib/features/repartidor_finanzas",
+        "lib/features/pedidos"
+      ],
+      "proposed_paths": [
+        "docs/ux/state-contract.md",
+        "test/widgets/critical-flow-states_test.dart"
+      ],
+      "requirement": "Cada flujo informará loading/empty/error/offline/stale/pendiente y permitirá recuperación sin perder datos ni duplicar efectos.",
+      "steps": [
+        "Modelar estados explícitos por pantalla y comando; distinguir error técnico, validación y conflicto de negocio con acción concreta.",
+        "Bloquear doble envío a nivel UI y backend idempotente; guardar borradores autorizados, cancelar cargas de pantalla desmontada y no usar spinner infinito.",
+        "Mostrar antigüedad/estado offline donde cambia interpretación del saldo; confirmación monetaria espera resultado canónico y evidencia.",
+        "Probar back/rotate/resume/logout mientras dialog/envío, red lenta y recuperación; mensajes en español claros sin stack o códigos internos como texto principal."
+      ],
+      "acceptance": [
+        "No hay pantalla en blanco ni datos obsoletos presentados como confirmados.",
+        "Formulario mantiene datos recuperables y no pierde firma pendiente por navegación inadvertida.",
+        "Cobro parcial se puede completar desde Cobros y Finalizar mantiene evidencia conjunta."
+      ],
+      "rollback": "Revertir componente visual sin alterar journal/contrato monetario; preservar borradores.",
+      "approval": "Spec UX+negocio aprobada; no cambiar requisitos de evidencia por conveniencia.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "UX-03",
+      "phase": 4,
+      "priority": "P2",
+      "title": "Matriz de plataformas e integraciones nativas",
+      "depends_on": [
+        "SEC-06",
+        "QA-04"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "android",
+        "ios",
+        "linux",
+        "macos",
+        "windows",
+        "web",
+        "assets/load_planner",
+        "assets/rutero_map",
+        "lib/features/warehouse/presentation/widgets/load_canvas.dart"
+      ],
+      "proposed_paths": [
+        "docs/engineering/platform-support.md"
+      ],
+      "requirement": "Solo se declararán soportadas las plataformas y periféricos con build y prueba de funciones críticas.",
+      "steps": [
+        "Definir Android principal y decisión explícita para iOS/web/escritorio; conservar scaffolds no soportados etiquetados, no borrarlos por defecto.",
+        "Revisar identificadores plantilla, firma, iconos, privacidad, permisos, SDK mínimo y dependencias nativas por plataforma.",
+        "Probar Bluetooth/ZPL/PDF/cámara/share/ubicación/WebView con dispositivos soportados y fallback accesible; validar JSON bridges, navegación allowlisted y assets locales sin cargas remotas no previstas.",
+        "Inventariar licencias y hashes de Three.js/mapas/fuentes; actualizar con smoke visual/carga, no copiar vendor opaco."
+      ],
+      "acceptance": [
+        "Cada plataforma tiene supported/experimental/not-supported y evidencia fechada.",
+        "Release principal funciona sin permisos globales ni red en WebViews locales previstos.",
+        "Mensajes JS malformados/navegación externa no invocan acciones privilegiadas."
+      ],
+      "rollback": "Revertir paquete nativo con lock y configuración correspondientes; conservar compatibilidad de datos.",
+      "approval": "Firma/distribución y dispositivos humanos autorizados; no añadir herramientas de pago sin aprobación.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "QA-01",
+      "phase": 1,
+      "priority": "P0",
+      "title": "Separar suites herméticas y lifecycle Jest",
+      "depends_on": [
+        "FND-02",
+        "FND-03"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/jest.config.js",
+        "backend/package.json",
+        "backend/tests/setup.js",
+        "backend/__tests__",
+        "backend/tests",
+        "backend/src/__tests__"
+      ],
+      "proposed_paths": [
+        "backend/jest.unit.config.js",
+        "backend/jest.contract.config.js",
+        "docs/engineering/test-lanes.md"
+      ],
+      "requirement": "La suite unit/contract no accederá a red, DB2, secretos ni producción y fallará con cero tests o errores de teardown.",
+      "steps": [
+        "Inventariar suites en todas las raíces, no solo backend/tests; clasificar unit/contract/integration/DB2/write/perf y discovery exacto.",
+        "Bloquear egress/driver real en unit tests y usar inyección/fakes; setup no leerá .env ni inicializará pool/jobs. Integración usa lane opt-in con identidad mínima.",
+        "Retirar passWithNoTests de gates; corregir handles abiertos con teardown explícito y retirar forceExit solo después, usando detectOpenHandles como diagnóstico.",
+        "Publicar tiempos por suite y timeout acotado; tres runs estables tras cambiar lifecycle, sin kill general de node."
+      ],
+      "acceptance": [
+        "Test que intente red/DB en unit lane falla de inmediato.",
+        "Suite vacía/fallo de test/handle retenido no produce verde falso.",
+        "JS y TS activos están cubiertos y el runner termina naturalmente."
+      ],
+      "rollback": "Mantener runner anterior solo como comando explícito de diagnóstico sin llamarlo gate; revertir cambio aislado de setup.",
+      "approval": "No ejecutar suites integrales hasta cerrar su aislamiento; escrituras TEST requieren autorización.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "QA-02",
+      "phase": 2,
+      "priority": "P0",
+      "title": "Pruebas de dinero, carreras y fallos de persistencia",
+      "depends_on": [
+        "FIN-01",
+        "FIN-03",
+        "QA-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/__tests__",
+        "test/features/repartidor",
+        "test/models/albaran_entrega_test.dart"
+      ],
+      "proposed_paths": [
+        "backend/tests/contracts/finance",
+        "test/contracts/finance"
+      ],
+      "requirement": "Cada invariante financiera tendrá caso positivo, negativo, concurrencia y fallo entre etapas.",
+      "steps": [
+        "Derivar tabla de pruebas del spec FIN-01, no del código; incluir cantidades, parciales, talón, notas, DNI/firma, serie completa, IVA y plazos.",
+        "Añadir property tests con generadores de cantidades/escala y semillas persistidas; mutaciones dirigidas para saldo/rounding/idempotencia detectan defectos reales.",
+        "Inyectar fallo antes/después de begin/commit/outbox y status response; verificar que no se emite recibo de transacción abortada.",
+        "Separar mocks de driver real; preparar suite transaccional TEST con limpieza acotada aprobada e identificación única de datos."
+      ],
+      "acceptance": [
+        "Invariantes no dependen de orden de tests ni reloj real.",
+        "Cada fallo ambiguo tiene estado recuperable sin duplicar cobro/entrega.",
+        "Revisión independiente comprueba que quitar un control importante rompe la prueba."
+      ],
+      "rollback": "Revertir test incorrecto tras corregir spec con evidencia; no desactivar asserts para obtener verde.",
+      "approval": "Ejecutar DML TEST únicamente con permiso/fixtures de Javier; DSEDAC nunca escritura.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "QA-03",
+      "phase": 3,
+      "priority": "P0",
+      "title": "E2E determinista de reparto y comercial separados",
+      "depends_on": [
+        "FIN-05",
+        "FIN-06",
+        "QA-02",
+        "UX-02"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "integration_test/app_flow_test.dart",
+        "integration_test/repartidor_cierre_flow_test.dart",
+        ".github/workflows/flutter-tests.yml"
+      ],
+      "proposed_paths": [
+        "docs/qa/e2e-matrix.md",
+        "integration_test/fixtures"
+      ],
+      "requirement": "Una release de reparto requerirá evidencia E2E de jefe en modo reparto y repartidor raso, sin sustituirla por el perfil comercial.",
+      "steps": [
+        "Crear dataset sintético aislado y cuentas por rol; preparar/limpiar por runId solo en TEST autorizado y correo sink.",
+        "Evitar condicionales tipo 'si aparece el botón, probar'; usar keys/Semantics estables y asserts de persistencia posterior, no solo navegación.",
+        "Ejecutar entrega+cobro conjunto, cantidades modificadas, talón ENB, cobro parcial/resto desde Cobros, recibo to/cc, cierre e impresión; agregar reinicio/offline/conflicto.",
+        "Mantener suite comercial independiente para pedidos/devoluciones/liquidación y líder80; guardar vídeo/traces/logs redactados con SHA."
+      ],
+      "acceptance": [
+        "Cada escenario crítico tiene aserción UI+API+persistencia TEST cuando autorizada.",
+        "Emulador válido para flujos; rendimiento de campo se mide aparte.",
+        "Tres runs estables al introducir suite, luego frecuencia por riesgo; fallo bloquea release del dominio."
+      ],
+      "rollback": "Revertir fixture/harness defectuoso sin relajar aserciones del negocio; preservar artefactos de fallo.",
+      "approval": "Entorno/cuentas TEST/DML y dispositivos autorizados; sin correo ERP ni WhatsApp real de prueba.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "QA-04",
+      "phase": 1,
+      "priority": "P1",
+      "title": "Builds y análisis reproducibles sin señales silenciadas",
+      "depends_on": [
+        "FND-02",
+        "FND-03"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "analysis_options.yaml",
+        "pubspec.yaml",
+        ".github/workflows/flutter-ci.yml",
+        ".github/workflows/flutter-release.yml",
+        "android/app/build.gradle.kts"
+      ],
+      "proposed_paths": [
+        "docs/engineering/build-matrix.md"
+      ],
+      "requirement": "Un build soportado fallará ante error real de código/generación y conservará artefactos diagnósticos sin secretos.",
+      "steps": [
+        "Capturar baseline de errores/warnings/infos y decidir categorías bloqueantes por deuda, sin ignorar compile errors; separar deuda conocida de regresión.",
+        "Ejecutar analyzer, tests, codegen cuando aplique y build Android release con firma gestionada; una prueba no sustituye compilación nativa.",
+        "Validar que generated sources no cambian al regenerar en limpio; no usar || true ni build_runner destructivo fuera del checkout propio.",
+        "Guardar tamaño/hash/symbols y manifest fusionado; builds iOS/desktop solo en runners disponibles y plataformas declaradas."
+      ],
+      "acceptance": [
+        "Fuente limpia+lock fijo reproduce build validado con versión anotada.",
+        "Errores nativos/de generación bloquean promoción.",
+        "Ausencia de Mac/keystore se registra como bloqueo de esa plataforma, nunca PASS."
+      ],
+      "rollback": "Revertir cambio de configuración/build con pines y archivos generados coherentes; no borrar caches compartidas.",
+      "approval": "Firma/keystore solo por secret references; prohibida lectura directa de claves.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "QA-05",
+      "phase": 4,
+      "priority": "P1",
+      "title": "Cobertura útil, ratchet y contratos de arquitectura",
+      "depends_on": [
+        "QA-01",
+        "QA-02",
+        "ARCH-04"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/jest.config.js",
+        ".github/workflows/quality-gates.yml",
+        "scripts/check_domain_imports.mjs",
+        "test"
+      ],
+      "proposed_paths": [
+        "docs/engineering/coverage-policy.md",
+        "scripts/quality/coverage-ratchet.mjs"
+      ],
+      "requirement": "La cobertura de ramas relevantes no disminuirá y los cambios críticos demostrarán detección de regresiones de comportamiento.",
+      "steps": [
+        "Medir cobertura por dominio y tipo de test, excluir solo generated/vendor justificados; evitar porcentaje inflado por tests que copian implementación.",
+        "Definir pisos iniciales según baseline y ratchet diferencial; objetivo orientativo85% ramas en código nuevo financiero/auth sujeto a riesgo, no100% global artificial.",
+        "Aplicar mutation testing acotado en dinero, scope, idempotencia y cache; cada superviviente se explica o se convierte en caso.",
+        "Unificar gate arquitectura Flutter/backend, validación OpenAPI y generación; publicar tendencia y excepciones temporales con owner."
+      ],
+      "acceptance": [
+        "Fixture de regresión de rama cubierta falla; cobertura vacía nunca cumple umbral.",
+        "No se exige test nuevo a cada cambio documental/reversible sin valor.",
+        "Archivos de producto nuevos no quedan fuera del discovery ni de coverage por patrón."
+      ],
+      "rollback": "Restaurar umbral previo si baseline era errónea mediante revisión, manteniendo bloqueo de regresiones reales.",
+      "approval": "Política aprobada, sin auto-fix de findings ni reducción silenciosa de umbrales.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "OPS-01",
+      "phase": 2,
+      "priority": "P1",
+      "title": "Observabilidad operativa y correlación extremo a extremo",
+      "depends_on": [
+        "SEC-09",
+        "FND-03"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "observability/prometheus.yml",
+        "observability/loki-config.yaml",
+        "observability/tempo.yaml",
+        "observability/grafana/dashboards/gmp-api-red.json",
+        "backend/instrument.js",
+        "backend/routes/health-probes.js"
+      ],
+      "proposed_paths": [
+        "observability/prometheus-rules.yml",
+        "docs/operations/observability.md"
+      ],
+      "requirement": "Los operadores podrán localizar un fallo de flujo mediante métricas/logs/trazas sin acceder a datos personales innecesarios.",
+      "steps": [
+        "Confirmar plataforma real desplegada; archivos placeholder no acreditan servicios existentes. Elegir conjunto mínimo que pueda mantenerse antes de instalar todo el stack.",
+        "Materializar y validar config/dashboards RED, event-loop/heap/pool/queue/cache/outbox/sync; etiquetas de cardinalidad baja y ruta normalizada.",
+        "Correlacionar requestId/trace/release desde cliente hasta DB/outbox; sampling acotado y medición de overhead.",
+        "Separar liveness de readiness/degradación; endpoints públicos solo estado mínimo, detalle de dependencias restringido. Activar símbolos Sentry con canal secreto gestionado."
+      ],
+      "acceptance": [
+        "Validadores de config/dashboard pasan; panel muestra tráfico sintético.",
+        "Petición de prueba se sigue hasta repositorio/transporte sin PII.",
+        "Alerta sintética se puede ensayar sin mandar mensajes externos hasta autorización."
+      ],
+      "rollback": "Restaurar configuración observabilidad anterior aprobada; mantener logs esenciales con redacción y límites.",
+      "approval": "Despliegue del stack, DSN/secretos y envío de alertas requieren Javier.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "OPS-02",
+      "phase": 3,
+      "priority": "P1",
+      "title": "SLO, alertas y procedimientos de degradación",
+      "depends_on": [
+        "OPS-01",
+        "PERF-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "docs/perf/latency-budgets.md",
+        "observability"
+      ],
+      "proposed_paths": [
+        "docs/operations/slo.md",
+        "docs/operations/runbooks",
+        "observability/prometheus-rules.test.yml"
+      ],
+      "requirement": "Cada flujo crítico tendrá objetivo medible, propietario y acción de recuperación cuando consuma su presupuesto de error.",
+      "steps": [
+        "Elegir SLIs de disponibilidad útil, éxito correcto de confirmación, edad outbox, freshness y crash-free; objetivos provisionales del capítulo04 se calibran con baseline.",
+        "Definir ventanas y alertas multi-burn-rate, severidad y agrupación; evitar alertar por cada excepción sin impacto.",
+        "Redactar runbooks de DB2 lento, pool saturado, Redis/auth-store caído, recibo retrasado, disco lleno, token inválido y fallo de update móvil.",
+        "Ensayar sintéticamente condición y recuperación; documentar escalado, horario y quién puede mutar producción."
+      ],
+      "acceptance": [
+        "Toda alerta tiene síntoma, query, umbral, owner, runbook y prueba.",
+        "Dashboard distingue disponibilidad de /live de disponibilidad funcional de cobro.",
+        "No se promueve release con presupuesto agotado salvo decisión humana registrada."
+      ],
+      "rollback": "Volver a umbral previo si alarma era incorrecta con evidencia; no apagar telemetría para ocultar incumplimiento.",
+      "approval": "Javier decide objetivos de negocio, notificaciones y acciones sobre producción.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "OPS-03",
+      "phase": 4,
+      "priority": "P1",
+      "title": "Release verificable y promoción con gates",
+      "depends_on": [
+        "FND-03",
+        "QA-03",
+        "QA-04",
+        "SEC-08",
+        "OPS-02"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        ".github/workflows/flutter-release.yml",
+        ".github/workflows/backend-ci.yml",
+        ".github/workflows/ci-cd.yml"
+      ],
+      "proposed_paths": [
+        "docs/operations/release-runbook.md",
+        "docs/operations/release-evidence.schema.json"
+      ],
+      "requirement": "Build, firma, distribución y promoción tendrán estados distintos y una release no se declarará distribuida si el canal requerido no recibió el artefacto.",
+      "steps": [
+        "Mapear cadena test→revisión→tag/artefacto→staging→QA/AppSec→promoción; default main de GitHub no sustituye test como referencia GMP.",
+        "Construir una vez artefacto inmutable con SHA/hash/SBOM/provenance/símbolos y verificar firma/versionCode/manifest; no reconstruir contenido distinto tras QA.",
+        "Hacer explícitos canales obligatorios/opcionales: ausencia de Firebase/config debe producir skipped o blocked según política, no éxito ambiguo; Telegram opcional no bloquea producto si así se aprueba.",
+        "Compatibilidad API N/N-1 y rollback móvil/backend probado; producción sigue whitelist y prod_approved TTL≤30min después de staging+QA+AppSec+health."
+      ],
+      "acceptance": [
+        "Release evidence apunta a mismos hashes en QA y distribución.",
+        "No se filtran claves/símbolos sensibles a repositorio público.",
+        "Publicación/deploy no ocurre en PR/fork ni sin gates humanos requeridos."
+      ],
+      "rollback": "Mantener artefacto anterior verificable; si hay migración de datos, usar estrategia compatible/forward fix aprobada, no rollback destructivo.",
+      "approval": "MANUAL JAVIER para prod/secretos; únicos comandos productivos autónomos autorizables: git pull origin test y pm2 restart gmp-api tras gate.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "OPS-04",
+      "phase": 4,
+      "priority": "P1",
+      "title": "Backup, restauración y continuidad de negocio",
+      "depends_on": [
+        "SEC-01",
+        "FIN-06",
+        "OPS-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "docker-compose.yml",
+        "backend/services/reparto-receipt-service.js",
+        "docs"
+      ],
+      "proposed_paths": [
+        "docs/operations/backup-dr.md",
+        "docs/operations/restore-drill-template.md"
+      ],
+      "requirement": "La recuperación conservará operaciones confirmadas/evidencia y demostrará RPO/RTO mediante restauración aislada.",
+      "steps": [
+        "Inventariar sistemas de registro: DB2 ERP, TEST, journal/offline, outbox, evidencias, configuración por referencia, release/símbolos y Redis; distinguir cache regenerable de sesiones/cola persistente.",
+        "Acordar RPO/RTO por activo, retención y propietario; cifrado, acceso mínimo, copia separada y comprobación de integridad.",
+        "DBA define backup IBM i; operador ensaya restauración solo en entorno aislado autorizado con endpoints/sinks incapaces de contactar ERP/correo real.",
+        "Verificar consistencia de documentos/asientos/evidencias/outbox y arranque funcional tras restore; registrar tiempo real y pérdida de datos medida."
+      ],
+      "acceptance": [
+        "Informe de restore demuestra RPO/RTO, no solo que existe un backup.",
+        "Ningún job restaurado envía correo/WhatsApp real ni escribe DSEDAC.",
+        "Retención y borrado cumplen decisión de negocio/legal y recuperación."
+      ],
+      "rollback": "Detener ensayo propio, aislar entorno restaurado y conservar evidencia; no sustituir ni borrar producción.",
+      "approval": "MANUAL JAVIER/DBA para snapshots, copias, restauración y retención; ninguna orden DML/DDL incluida como automática.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "OPS-05",
+      "phase": 1,
+      "priority": "P0",
+      "title": "Separar scripts administrativos y proteger producción",
+      "depends_on": [
+        "FND-01",
+        "FND-05"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/package.json",
+        "backend/scripts/rollback.sh",
+        "Makefile",
+        "scripts",
+        "backend/scripts"
+      ],
+      "proposed_paths": [
+        "docs/operations/command-catalog.csv",
+        "scripts/quality/admin-command-guard.mjs"
+      ],
+      "requirement": "Los comandos ordinarios de desarrollo no activarán mutaciones de DB, secretos, despliegue ni borrado de volúmenes.",
+      "steps": [
+        "Clasificar cada script read-only/local/TEST/admin/prod con entrada, destino, riesgos y reversión; scripts con nombres optimize/cleanup no se ejecutan por inferencia.",
+        "Añadir dry-run por defecto y validación de destino exacto a comandos autorizados de TEST; separar scripts administrativos del arranque/test/build.",
+        "Encapsular rollback legacy que edita configuración/inicia PM2 en runbook humano o retirar comando tras verificar consumidores; no ejecutar el rollback para comprobarlo.",
+        "Probar guards con fakes y payloads/rutas fuera del workspace; en Windows resolver paths antes de cualquier borrado/move recursivo y no cruzar shells."
+      ],
+      "acceptance": [
+        "Un npm test/build/prepare ordinario no toca producción ni DB.",
+        "CI detecta nuevos comandos peligrosos sin clasificación/guard.",
+        "Ningún script de 'auto-heal' autoaprueba seguridad, credenciales o despliegues."
+      ],
+      "rollback": "Restaurar alias solo si apunta a operación previamente segura; no rehabilitar bypass de producción para resolver fallos.",
+      "approval": "Aprobar cambios de política/script administrativo; no usar script heredado como autoridad de producción.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "OPS-06",
+      "phase": 4,
+      "priority": "P2",
+      "title": "Empaquetado backend y servicios auxiliares mínimos",
+      "depends_on": [
+        "FND-02",
+        "SEC-08",
+        "OPS-05"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/Dockerfile",
+        "backend/.dockerignore",
+        "docker-compose.yml",
+        "backend/ecosystem.config.js"
+      ],
+      "proposed_paths": [
+        "docs/operations/runtime-packaging.md"
+      ],
+      "requirement": "El artefacto de runtime contendrá solo dependencias/archivos necesarios y no expondrá herramientas administrativas.",
+      "steps": [
+        "Decidir PM2 como plataforma actual y contenedor como soporte verificado si se usa; no migrar a Kubernetes ni añadir Redis cluster sin necesidad medida.",
+        "Fijar imágenes por digest con actualización mantenida; revisar usuario no root, filesystem writable mínimo, health y límites CPU/memoria.",
+        "Separar perfiles locales de redis-commander/devtools y puertos; verificar bind real y auth/ACL cuando aplique, sin asumir seguridad de loopback tras contenedor.",
+        "Probar contexto Docker/paquete: excluye archivos sensibles, dumps, tmp, uploads, tests no necesarios y runtime agente; verificar ODBC nativo en imagen."
+      ],
+      "acceptance": [
+        "Imagen/config se valida sin expandir secretos productivos.",
+        "Smoke en entorno aislado usa /live y /ready correctamente.",
+        "SBOM runtime refleja binarios/dependencias de verdad y tamaño tiene baseline."
+      ],
+      "rollback": "Volver al artefacto anterior por digest y configuración aprobada; no down -v ni borrar volúmenes.",
+      "approval": "Cambios de host/Docker/Redis/PM2 requieren operador; publicación de imagen solo con autorización.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "OPS-07",
+      "phase": 5,
+      "priority": "P1",
+      "title": "Validación adversarial y respuesta a incidentes",
+      "depends_on": [
+        "SEC-02",
+        "SEC-03",
+        "SEC-05",
+        "SEC-07",
+        "SEC-10",
+        "QA-03",
+        "OPS-02",
+        "OPS-04"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "docs",
+        "backend/__tests__",
+        "integration_test"
+      ],
+      "proposed_paths": [
+        "docs/security/pentest-scope.md",
+        "docs/operations/incident-response.md",
+        "docs/security/assurance-report.md"
+      ],
+      "requirement": "Antes de promoción profesional se evaluarán controles críticos de forma independiente y cualquier riesgo no resuelto tendrá decisión explícita.",
+      "steps": [
+        "Definir alcance/ventana/cuentas sintéticas/acciones permitidas de pentest staging con stop conditions y exclusión de terceros/productivo.",
+        "Ejecutar revisión ASVS/MASVS seleccionada, DAST autenticado, autorización horizontal/vertical, uploads/SSRF, sesión, supply chain, móvil/offline y IA.",
+        "Ensayar tabletop de dispositivo/token comprometido, filtración, pago ambiguo y restauración; quién revoca/rota/notifica/recupera queda escrito.",
+        "Convertir hallazgos reproducidos en casos regresión; clasificar residuales con owner/caducidad. Revisión recurrente tras cambios sensibles, no certificado eterno."
+      ],
+      "acceptance": [
+        "No hay riesgo crítico/alto explotable pendiente sin bloqueo de release; aceptación no sustituye corrección de activos esenciales.",
+        "Informe enlaza prueba/evidencia/versión y limita alcance.",
+        "Runbook reduce tiempo de detección/recuperación medido en ensayo."
+      ],
+      "rollback": "Detener pruebas y aislar staging si hay efectos imprevistos; no limpiar evidencias de incidente.",
+      "approval": "Autorización explícita de pentest/acciones y notificaciones; no se ejecuta como parte de escribir el plan.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "REP-01",
+      "phase": 0,
+      "priority": "P1",
+      "title": "Clasificación completa del árbol y política de limpieza",
+      "depends_on": [
+        "FND-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        ".gitignore",
+        "docs",
+        "scripts",
+        "backend",
+        "lib"
+      ],
+      "proposed_paths": [
+        "docs/engineering/repository-manifest.csv",
+        "docs/engineering/repository-hygiene.md"
+      ],
+      "requirement": "Cada ruta tendrá propósito, propietario, clasificación, fuente de reproducción y decisión de conservación antes de moverla o borrarla.",
+      "steps": [
+        "Usar el inventario de este plan como semilla y recapturar paths/estado actual: código propio, plataforma, vendor, generated, runtime privado, gobernanza y evidencia.",
+        "Crear mapa por archivo candidato actual→destino→referencias→prueba→riesgo→rollback; metadatos no prueban que algo sea basura.",
+        "Separar Git versionado de disco local: 2070 tracked y más de220k físicos son magnitudes distintas; no intentar 'refactorizar' node_modules/venv/build.",
+        "Aprobar lotes pequeños de movimiento; validar root absoluto, no seguir reparse ni tocar secretos, .git, worktrees o trabajo ajeno."
+      ],
+      "acceptance": [
+        "Toda carpeta/subcarpeta censada se resuelve por política + excepciones explícitas.",
+        "Ninguna eliminación sin referencia/caller/artefacto/migración comprobados.",
+        "Sin cambios de reglas ni clean/reset global en este paquete."
+      ],
+      "rollback": "Revertir únicamente manifest/movimiento propio por commit; conservar archivos de trabajo no versionados.",
+      "approval": "Borrados recursivos, worktree deletion y datos requieren autorización específica; este paquete prepara clasificación.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "REP-02",
+      "phase": 4,
+      "priority": "P1",
+      "title": "Retirar residuos versionados y preservar evidencia privada",
+      "depends_on": [
+        "REP-01",
+        "OPS-05",
+        "ARCH-01"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "backend/routes/repartidor-finanzas.js.tmp2",
+        "backend/repositories",
+        "backend/scripts/temp",
+        "backend/kpi",
+        "docs/archive",
+        ".gitignore"
+      ],
+      "proposed_paths": [
+        "docs/engineering/cleanup-decisions.csv"
+      ],
+      "requirement": "El repositorio público contendrá solo archivos aprobados y no resultados operativos/adjuntos privados sin finalidad de producto.",
+      "steps": [
+        "Priorizar .tmp2/.repaired/.fromgit, outputs KPI, backups, adjuntos, estado IDE/vault; revisar contenido solo si permitido y con redacción, sin re-publicar PII al archivarlo en docs.",
+        "Buscar referencias con rg/git grep, imports dinámicos, CI, scripts, assets y runtime; si hay duda conservar en cuarentena privada con owner.",
+        "Retirar del índice o mover a destino acordado sin borrar copia local necesaria; archivo regulatorio/evidencia va a almacenamiento restringido aprobado, no al repositorio público.",
+        "Añadir gate de extensiones/ubicaciones y allowlist para fixtures sintéticas/binarios legítimos; historial con datos sensibles se trata como incidente separado."
+      ],
+      "acceptance": [
+        "Diff contiene solo paths aprobados, no código de negocio mezclado.",
+        "Build/tests/links afectados pasan y no hay referencias activas rotas.",
+        "Eliminar en HEAD no se presenta como borrado del historial ni sustituto de rotación."
+      ],
+      "rollback": "Revertir commit de movimiento si material no sensible; restaurar evidencia privada solo a destino restringido, nunca volver a publicar secreto.",
+      "approval": "Javier aprueba retiro/borrado y cualquier saneamiento histórico; no reescribir Git automáticamente.",
+      "effort": "L",
+      "status": "TODO"
+    },
+    {
+      "id": "REP-03",
+      "phase": 0,
+      "priority": "P1",
+      "title": "Reconciliar gobernanza y portabilidad de agentes",
+      "depends_on": [
+        "REP-01",
+        "FND-03"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "AGENTS.md",
+        ".gitignore",
+        "docs/superpowers/specs/2026-08-27-team-port-design.md",
+        ".clinerules",
+        ".cline",
+        ".claude",
+        ".opencode",
+        "scripts/team/sync-harness.cjs"
+      ],
+      "proposed_paths": [
+        "docs/adr/agent-governance-source.md"
+      ],
+      "requirement": "Un checkout limpio reproducirá los controles que el proyecto declara obligatorios, con runtime y secretos fuera de Git.",
+      "steps": [
+        "Resolver con Javier discrepancia spec agosto/kernel versionado vs decisión release septiembre/árboles locales ignorados; no asumir que designorar todo es correcto.",
+        "Enumerar fuente canónica mínima y derivados por harness; excluir settings de usuario, MCP tokens, estados, backups, adjuntos, conversaciones y permisos implícitos.",
+        "Preparar allowlist de archivos revisados y prueba clean checkout; regenerar cuatro skills faltantes solo después de aprobar política, con generador ya existente.",
+        "Corregir contradicciones de auto-fix/rollback/autonomía entre reglas por cambio separado; no editar reglas permanentes sin confirmación y capturar decisión en ledger."
+      ],
+      "acceptance": [
+        "sync-harness --check exit0 en copia limpia, no solo equipo del autor.",
+        "Fuentes/versiones/hashes de derivados conocidas y sin secretos.",
+        "AGENTS enlaza herramientas realmente disponibles en Git o bootstrap documentado."
+      ],
+      "rollback": "Revertir política/derivados del commit propio preservando copias locales; no desactivar guardrails existentes.",
+      "approval": "CONFIRMACIÓN JAVIER antes de editar reglas canónicas/AGENTS; cambios propuestos en ADR, no autoaprobados.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "REP-04",
+      "phase": 4,
+      "priority": "P1",
+      "title": "Documentación viva y onboarding verificable",
+      "depends_on": [
+        "FND-05",
+        "REP-03",
+        "ARCH-05"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "README.md",
+        "docs/spec",
+        "docs/adr",
+        "docs/audits",
+        "memory-bank/activeContext.md",
+        "memory-bank/progress.md"
+      ],
+      "proposed_paths": [
+        "docs/INDEX.md",
+        "docs/engineering/onboarding.md"
+      ],
+      "requirement": "Una persona nueva podrá identificar la arquitectura vigente, ejecutar checks seguros y encontrar evidencia sin confundirla con planes históricos.",
+      "steps": [
+        "Reescribir README según runtime real npm start/server.js y pines, con comandos seguros por SO y enlace a matriz de modos.",
+        "Taxonomía docs/adr decisiones, docs/spec requisitos, docs/operations runbooks, docs/audits evidencia inmutable, docs/archive material sustituido; metadatos owner/estado/fecha/sucesor.",
+        "Actualizar memory-bank con estado probado separado de pendientes/manual/hipótesis; ningún DONE sustentado solo en chequeo de fuente.",
+        "Crear linter enlaces/rutas/fragmentos y sesión de onboarding desde limpio sin acceso a credenciales productivas; publicar solo información adecuada al repositorio público."
+      ],
+      "acceptance": [
+        "Instrucciones de inicio resuelven binarios/paths reales sin secretos.",
+        "Plan histórico no contradice estado vivo sin marca de sucesión.",
+        "Código de ejemplo/comandos propuestos claramente diferenciados de existentes."
+      ],
+      "rollback": "Revertir documentos movidos conservando enlaces redirect/sucesor; no borrar auditorías históricas.",
+      "approval": "Reglas permanentes o publicación de información operativa sensible requieren revisión humana.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "REP-05",
+      "phase": 4,
+      "priority": "P2",
+      "title": "Dependencias, assets, licencias y tamaño",
+      "depends_on": [
+        "REP-01",
+        "SEC-08",
+        "UX-03"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "pubspec.yaml",
+        "pubspec.lock",
+        "backend/package.json",
+        "package.json",
+        "assets",
+        "skills-lock.json"
+      ],
+      "proposed_paths": [
+        "docs/engineering/dependency-register.csv",
+        "docs/engineering/asset-register.csv"
+      ],
+      "requirement": "Cada dependencia o binario versionado tendrá uso verificado, licencia, responsable y política de actualización.",
+      "steps": [
+        "Comparar imports directos/dinámicos, plugins/codegen y scripts con dependencias declaradas; no quitar librerías por una búsqueda textual negativa aislada.",
+        "Resolver librerías solapadas solo con ahorro y coste medidos; fijar intl y herramientas según compatibilidad SDK real, no versiones inventadas.",
+        "Registrar licencias de charts/fuentes/mapas/Three.js/IA y requerimientos de atribución; validar derechos con responsable competente si hay duda.",
+        "Medir tamaño APK/AAB/backend/Git; LFS solo para binarios necesarios tras comparar costes y distribución. No hacer migración histórica/rewrite por limpieza."
+      ],
+      "acceptance": [
+        "Instalación limpia/build no depende de transitive imports accidentales.",
+        "SBOM/licencias/atribuciones actualizados y tamaño explicado.",
+        "No assets duplicados/inútiles probados; excepciones justificadas."
+      ],
+      "rollback": "Reponer dependencia+lock+asset en el mismo commit si consumidor legítimo aparece; no tocar historial Git.",
+      "approval": "Decisiones comerciales/licencias/LFS y borrado de binarios requieren aprobación de propietario.",
+      "effort": "M",
+      "status": "TODO"
+    },
+    {
+      "id": "CLOSE-01",
+      "phase": 5,
+      "priority": "P0",
+      "title": "Cierre integral desde checkout limpio y entrega",
+      "depends_on": [
+        "FND-01",
+        "FND-02",
+        "FND-03",
+        "FND-04",
+        "FND-05",
+        "SEC-01",
+        "SEC-02",
+        "SEC-03",
+        "SEC-04",
+        "SEC-05",
+        "SEC-06",
+        "SEC-07",
+        "SEC-08",
+        "SEC-09",
+        "SEC-10",
+        "DATA-01",
+        "FIN-01",
+        "FIN-02",
+        "FIN-03",
+        "FIN-04",
+        "FIN-05",
+        "FIN-06",
+        "CACHE-01",
+        "CACHE-02",
+        "CACHE-03",
+        "PERF-01",
+        "PERF-02",
+        "PERF-03",
+        "PERF-04",
+        "PERF-05",
+        "PERF-06",
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05",
+        "UX-01",
+        "UX-02",
+        "UX-03",
+        "QA-01",
+        "QA-02",
+        "QA-03",
+        "QA-04",
+        "QA-05",
+        "OPS-01",
+        "OPS-02",
+        "OPS-03",
+        "OPS-04",
+        "OPS-05",
+        "OPS-06",
+        "OPS-07",
+        "REP-01",
+        "REP-02",
+        "REP-03",
+        "REP-04",
+        "REP-05"
+      ],
+      "owner": "Un maker del área; verificador independiente",
+      "existing_paths": [
+        "AGENTS.md",
+        "docs",
+        "lib",
+        "backend",
+        ".github/workflows"
+      ],
+      "proposed_paths": [
+        "docs/audits/professionalization-execution-report.md"
+      ],
+      "requirement": "El proyecto solo se declarará profesionalizado en el alcance acordado cuando cada requisito obligatorio tenga evidencia independiente vigente.",
+      "steps": [
+        "Recapturar inventario y comparar clasificación por carpeta; revisar que no haya tmp/log/dumps/artefactos privados nuevos y que checkout no dependa de archivos locales ignorados.",
+        "Ejecutar gates aplicables del capítulo06 en commit exacto: análisis/tests/contratos/build/security/arquitectura/DB2 TEST/campo/staging; no sustituir faltantes por estimaciones.",
+        "Revisor independiente comprueba casos financieros, scope, estado de tareas y rollback; Politec documenta propósito, organización, legibilidad, integración, tests, eficiencia/errores y seguridad.",
+        "Entregar índice de archivos modificados, commits/PR autorizados, evidencia y riesgo residual; promoción solo tras gates humanos, publicar plan no equivale a desplegar producto."
+      ],
+      "acceptance": [
+        "Backlog sin TODO obligatorio ni BLOCKED oculto; excepciones opcionales justificadas.",
+        "Ningún PASS basado en test no ejecutado o reporte de otro SHA.",
+        "Repositorio limpio en checkout de entrega; trabajo local ajeno se conserva fuera del alcance."
+      ],
+      "rollback": "Si falla un gate, volver al paquete dueño del fallo hasta3iteraciones y parar tras2sin progreso; no rollback destructivo automático.",
+      "approval": "Commit/push/PR y despliegue requieren autorización vigente; /adelante-production+TTL para producción.",
+      "effort": "M",
+      "status": "TODO"
+    }
+  ]
+}

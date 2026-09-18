@@ -1,0 +1,40 @@
+{
+  "snapshot_utc": "2026-09-18T09:18:54.452706+00:00",
+  "head": "0e3912abda4f27c261449440a4f52752429e96b7",
+  "tracked_files": 2070,
+  "directories": 35371,
+  "physical_files": 220997,
+  "physical_bytes": 12303890473,
+  "owned_files_metadata": 15415,
+  "protected_files_metadata_only": 31,
+  "category_directories": {
+    "configuration-or-agent": 4475,
+    "runtime-or-private": 2158,
+    "generated": 9328,
+    "git-internal": 855,
+    "installed-dependency": 17920,
+    "product-or-platform": 383,
+    "documentation": 35,
+    "test": 50,
+    "tooling-or-operations": 167
+  },
+  "category_files": {
+    "configuration-or-agent": 13100,
+    "documentation": 201,
+    "generated": 19220,
+    "git-internal": 45641,
+    "installed-dependency": 134086,
+    "product-or-platform": 1733,
+    "runtime-or-private": 6635,
+    "test": 126,
+    "tooling-or-operations": 255
+  },
+  "errors": [],
+  "preexisting_dirty_files": 35,
+  "coverage": "Metadata of all accessible physical directories, reparse targets not followed; semantic content audit is risk based, not every source line. Secret file contents excluded. Plan output directory excluded from snapshot.",
+  "public_directory_rows": 569,
+  "public_file_rows": 2008,
+  "omitted_directory_rows": 34802,
+  "reparse_points_count": 29,
+  "publication": "Public repository: full local inventories remain under ignored graph-run state. Published paths restricted to tracked ancestors/non-sensitive tracked files; excluded trees retained as aggregate counts, not omitted from physical census."
+}

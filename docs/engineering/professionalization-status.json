@@ -1,0 +1,747 @@
+{
+  "schema_version": 1,
+  "updated": "2026-09-18",
+  "branch": "codex/professionalization-implementation-20260918",
+  "base": "test@710fede",
+  "scope": "Seguimiento del plan completo; un slice verificado no marca automáticamente su tarea completa. Unión local con test@be466bba verificada; merge a test y producción pendientes.",
+  "production_ready": false,
+  "tasks": [
+    {
+      "id": "FND-01",
+      "status": "verified",
+      "acceptance_complete": true,
+      "note": "Checkout aislado y baseline de cambios ajenos; integración en test no realizada.",
+      "artifacts": [
+        "docs/engineering/baseline.md"
+      ],
+      "pending_dependencies": []
+    },
+    {
+      "id": "FND-02",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Pines/checker revisados; falta CI remoto y compatibilidad ODBC/IBM i completa.",
+      "artifacts": [
+        "docs/adr/runtime-toolchain.md"
+      ],
+      "pending_dependencies": []
+    },
+    {
+      "id": "FND-03",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Runner y CI revisados; scanner completo BLOCKED por cuatro fuentes grandes. Politec directo exit1 (scanner y contrato readiness pendiente de reconciliar); políticas/protecciones pendientes.",
+      "artifacts": [
+        "docs/engineering/quality-gates.md"
+      ],
+      "pending_dependencies": []
+    },
+    {
+      "id": "FND-04",
+      "status": "verified",
+      "acceptance_complete": true,
+      "note": "Reloj inyectable preservando JSON y huella; pruebas y dos revisiones. Commit f1b6f55.",
+      "artifacts": [
+        "docs/engineering/test-baseline.md"
+      ],
+      "pending_dependencies": []
+    },
+    {
+      "id": "FND-05",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Inventario AST (ocho pruebas) y composición real bajo dobles (nueve) revisados por dos agentes. Corregida resolución de paquetes físicos en integración. Rutas internas y autorización por objeto requieren contratos adicionales.",
+      "artifacts": [
+        "docs/architecture/runtime-matrix.md",
+        "docs/adr/backend-runtime-ownership.md"
+      ],
+      "pending_dependencies": []
+    },
+    {
+      "id": "SEC-01",
+      "status": "draft",
+      "acceptance_complete": false,
+      "note": "Modelo de amenazas inicial; matriz por endpoint y clasificación de retención pendientes.",
+      "artifacts": [
+        "docs/security/threat-model.md"
+      ],
+      "pending_dependencies": [
+        "FND-05"
+      ]
+    },
+    {
+      "id": "SEC-02",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Contratos reales de autenticación y runbook de Redis revisados por dos agentes: tres suites y 60 pruebas. No se modifica el middleware protegido ni se valida Redis en producción.",
+      "artifacts": [
+        "docs/security/authentication-evidence.md",
+        "docs/runbooks/health-ready-fail.md"
+      ],
+      "pending_dependencies": [
+        "SEC-01"
+      ]
+    },
+    {
+      "id": "SEC-03",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Contratos de privilegio y scope de reparto/chatbot incorporados al carril aislado: 31 pruebas existentes. Falta matriz completa por endpoint, método, objeto y rol.",
+      "artifacts": [
+        "docs/security/authorization-evidence.md"
+      ],
+      "pending_dependencies": [
+        "FND-05",
+        "SEC-01"
+      ]
+    },
+    {
+      "id": "SEC-04",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Entrada chatbot estricta, acotada y compatible con el cliente observado; 17 pruebas y dos revisiones. Pendientes otros endpoints y límites de recursos.",
+      "artifacts": [
+        "docs/security/chatbot-input-contract.md"
+      ],
+      "pending_dependencies": [
+        "FND-05",
+        "SEC-03"
+      ]
+    },
+    {
+      "id": "SEC-05",
+      "status": "decision_pending",
+      "acceptance_complete": false,
+      "note": "Pregunta de HTTPS release frente a HTTP LAN pendiente; no se aplica un cambio incompatible sin respuesta.",
+      "artifacts": [
+        "docs/adr/security-policy-decisions.md"
+      ],
+      "pending_dependencies": [
+        "SEC-01",
+        "FND-02"
+      ]
+    },
+    {
+      "id": "SEC-06",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "SEC-01"
+      ]
+    },
+    {
+      "id": "SEC-07",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "SEC-03",
+        "SEC-04"
+      ]
+    },
+    {
+      "id": "SEC-08",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Actualizaciones dirigidas de dependencias: auditorías raíz/backend sin avisos conocidos; contratos CSV, body-parser y Morgan pasan. Entradas de CI revisadas. Escaneo global y CI remoto siguen pendientes.",
+      "artifacts": [
+        "docs/security/dependency-remediation.md",
+        "docs/engineering/ci-input-safety.md"
+      ],
+      "pending_dependencies": [
+        "FND-02",
+        "FND-03"
+      ]
+    },
+    {
+      "id": "SEC-09",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Dimensiones RUM acotadas antes de retención y log, sin IDs del cliente; UUID por lote y contrato wire compartido. Dos revisiones tras reparación; otros canales de logs y retención siguen pendientes.",
+      "artifacts": [
+        "docs/engineering/telemetry-privacy.md",
+        "docs/engineering/telemetry-contract.md"
+      ],
+      "pending_dependencies": [
+        "SEC-01",
+        "SEC-04"
+      ]
+    },
+    {
+      "id": "SEC-10",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "SEC-03",
+        "SEC-04"
+      ]
+    },
+    {
+      "id": "DATA-01",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FND-05",
+        "SEC-04"
+      ]
+    },
+    {
+      "id": "FIN-01",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Caracterización de invariantes incorporada mediante cinco suites existentes y 151 pruebas con dobles. No acredita catálogo, locks ni transacciones DB2 reales.",
+      "artifacts": [
+        "docs/engineering/financial-contracts.md"
+      ],
+      "pending_dependencies": [
+        "FND-05"
+      ]
+    },
+    {
+      "id": "FIN-02",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FIN-01",
+        "ARCH-05"
+      ]
+    },
+    {
+      "id": "FIN-03",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FIN-01",
+        "SEC-03",
+        "DATA-01"
+      ]
+    },
+    {
+      "id": "FIN-04",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FIN-03",
+        "SEC-10"
+      ]
+    },
+    {
+      "id": "FIN-05",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FIN-03",
+        "FIN-01"
+      ]
+    },
+    {
+      "id": "FIN-06",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FIN-01",
+        "FIN-03",
+        "FIN-04"
+      ]
+    },
+    {
+      "id": "CACHE-01",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Invalidación HTTP ahora exige identidad verificada; montaje legacy/DDD y canónico financiero revisado. 34 tests de middleware y siete de composición. No completa toda la política de caché.",
+      "artifacts": [
+        "docs/engineering/cache-invalidation.md"
+      ],
+      "pending_dependencies": [
+        "FND-05",
+        "SEC-01",
+        "FIN-01"
+      ]
+    },
+    {
+      "id": "CACHE-02",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "CACHE-01",
+        "FIN-03",
+        "FIN-04"
+      ]
+    },
+    {
+      "id": "CACHE-03",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "CACHE-01",
+        "CACHE-02",
+        "PERF-01"
+      ]
+    },
+    {
+      "id": "PERF-01",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FND-05"
+      ]
+    },
+    {
+      "id": "PERF-02",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "DATA-01",
+        "PERF-01"
+      ]
+    },
+    {
+      "id": "PERF-03",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FND-05",
+        "DATA-01",
+        "PERF-01"
+      ]
+    },
+    {
+      "id": "PERF-04",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "PERF-01",
+        "ARCH-05"
+      ]
+    },
+    {
+      "id": "PERF-05",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "PERF-01",
+        "ARCH-03",
+        "CACHE-01"
+      ]
+    },
+    {
+      "id": "PERF-06",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "PERF-01",
+        "PERF-03",
+        "CACHE-03",
+        "OPS-01"
+      ]
+    },
+    {
+      "id": "ARCH-01",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FND-05",
+        "SEC-03",
+        "FIN-01"
+      ]
+    },
+    {
+      "id": "ARCH-02",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "ARCH-01",
+        "QA-01"
+      ]
+    },
+    {
+      "id": "ARCH-03",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FND-05",
+        "QA-04"
+      ]
+    },
+    {
+      "id": "ARCH-04",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Política pura de promociones extraída y revisada, preservando CHAR(10), claves y caché vacía. Dos incidencias nuevas de estilo corregidas; análisis focalizado sin incidencias.",
+      "artifacts": [
+        "lib/features/pedidos/domain/promotions_cache_policy.dart"
+      ],
+      "pending_dependencies": [
+        "ARCH-03",
+        "FND-03"
+      ]
+    },
+    {
+      "id": "ARCH-05",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FND-05",
+        "SEC-04"
+      ]
+    },
+    {
+      "id": "UX-01",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "ARCH-03",
+        "FND-05"
+      ]
+    },
+    {
+      "id": "UX-02",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FIN-05",
+        "ARCH-05",
+        "UX-01"
+      ]
+    },
+    {
+      "id": "UX-03",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "SEC-06",
+        "QA-04"
+      ]
+    },
+    {
+      "id": "QA-01",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Carril explícito aislado de E/S: árbol integrado con test@be466bba, 35 suites y 691 pruebas pasan con dependencias nuevas. Tres pruebas del ciclo de vida del guard. No representa todas las suites heredadas.",
+      "artifacts": [
+        "docs/engineering/testing.md",
+        "docs/engineering/integration-validation.md"
+      ],
+      "pending_dependencies": [
+        "FND-02",
+        "FND-03"
+      ]
+    },
+    {
+      "id": "QA-02",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Contratos financieros y de autorización ejecutados bajo dobles; falta integración transaccional y concurrencia real DB2.",
+      "artifacts": [
+        "docs/engineering/financial-contracts.md",
+        "docs/security/authorization-evidence.md"
+      ],
+      "pending_dependencies": [
+        "FIN-01",
+        "FIN-03",
+        "QA-01"
+      ]
+    },
+    {
+      "id": "QA-03",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FIN-05",
+        "FIN-06",
+        "QA-02",
+        "UX-02"
+      ]
+    },
+    {
+      "id": "QA-04",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Build web JavaScript y TypeScript acotado pasan. Pruebas de promociones, reloj, captura offline y RUM verificadas; análisis de lib sin errores ni warnings en el snapshot previo a privacidad RUM. Validación móvil pendiente.",
+      "artifacts": [
+        "docs/engineering/baseline.md",
+        "docs/engineering/test-baseline.md"
+      ],
+      "pending_dependencies": [
+        "FND-02",
+        "FND-03"
+      ]
+    },
+    {
+      "id": "QA-05",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "QA-01",
+        "QA-02",
+        "ARCH-04"
+      ]
+    },
+    {
+      "id": "OPS-01",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Transporte RUM acotado y verificado: lotes, single-flight, snapshots y semántica best-effort. No acredita observabilidad operativa ni SLO en producción.",
+      "artifacts": [
+        "docs/engineering/telemetry-contract.md"
+      ],
+      "pending_dependencies": [
+        "SEC-09",
+        "FND-03"
+      ]
+    },
+    {
+      "id": "OPS-02",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "OPS-01",
+        "PERF-01"
+      ]
+    },
+    {
+      "id": "OPS-03",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FND-03",
+        "QA-03",
+        "QA-04",
+        "SEC-08",
+        "OPS-02"
+      ]
+    },
+    {
+      "id": "OPS-04",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "SEC-01",
+        "FIN-06",
+        "OPS-01"
+      ]
+    },
+    {
+      "id": "OPS-05",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FND-05"
+      ]
+    },
+    {
+      "id": "OPS-06",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FND-02",
+        "SEC-08",
+        "OPS-05"
+      ]
+    },
+    {
+      "id": "OPS-07",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "SEC-02",
+        "SEC-03",
+        "SEC-05",
+        "SEC-07",
+        "SEC-10",
+        "QA-03",
+        "OPS-02",
+        "OPS-04"
+      ]
+    },
+    {
+      "id": "REP-01",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "Censo de auditoría conservado. Tres copias de recuperación sin consumidores retiradas sólo del índice y preservadas localmente, commit 635e448. Resto de la clasificación pendiente.",
+      "artifacts": [
+        "docs/engineering/repository-cleanup.md"
+      ],
+      "pending_dependencies": []
+    },
+    {
+      "id": "REP-02",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "REP-01",
+        "OPS-05",
+        "ARCH-01"
+      ]
+    },
+    {
+      "id": "REP-03",
+      "status": "decision_pending",
+      "acceptance_complete": false,
+      "note": "Conflicto entre reglas y exclusión de herramientas de gobernanza; propuesta mínima pendiente.",
+      "artifacts": [
+        "docs/adr/security-policy-decisions.md"
+      ],
+      "pending_dependencies": [
+        "REP-01",
+        "FND-03"
+      ]
+    },
+    {
+      "id": "REP-04",
+      "status": "partial",
+      "acceptance_complete": false,
+      "note": "README factual actualizado; documentos y contratos del resto del sistema pendientes.",
+      "artifacts": [
+        "README.md"
+      ],
+      "pending_dependencies": [
+        "FND-05",
+        "REP-03",
+        "ARCH-05"
+      ]
+    },
+    {
+      "id": "REP-05",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "REP-01",
+        "SEC-08",
+        "UX-03"
+      ]
+    },
+    {
+      "id": "CLOSE-01",
+      "status": "pending",
+      "acceptance_complete": false,
+      "note": "No implementado en esta ejecución; conservar requisitos y dependencias del plan.",
+      "artifacts": [],
+      "pending_dependencies": [
+        "FND-02",
+        "FND-03",
+        "FND-05",
+        "SEC-01",
+        "SEC-02",
+        "SEC-03",
+        "SEC-04",
+        "SEC-05",
+        "SEC-06",
+        "SEC-07",
+        "SEC-08",
+        "SEC-09",
+        "SEC-10",
+        "DATA-01",
+        "FIN-01",
+        "FIN-02",
+        "FIN-03",
+        "FIN-04",
+        "FIN-05",
+        "FIN-06",
+        "CACHE-01",
+        "CACHE-02",
+        "CACHE-03",
+        "PERF-01",
+        "PERF-02",
+        "PERF-03",
+        "PERF-04",
+        "PERF-05",
+        "PERF-06",
+        "ARCH-01",
+        "ARCH-02",
+        "ARCH-03",
+        "ARCH-04",
+        "ARCH-05",
+        "UX-01",
+        "UX-02",
+        "UX-03",
+        "QA-01",
+        "QA-02",
+        "QA-03",
+        "QA-04",
+        "QA-05",
+        "OPS-01",
+        "OPS-02",
+        "OPS-03",
+        "OPS-04",
+        "OPS-05",
+        "OPS-06",
+        "OPS-07",
+        "REP-01",
+        "REP-02",
+        "REP-03",
+        "REP-04",
+        "REP-05"
+      ]
+    }
+  ],
+  "cost_and_latency": "Coste por agente y latencia integral no medidos; no se estima un porcentaje de avance por número de tareas.",
+  "integrated_upstream": "be466bba8c010e25d0ee40b5ee45cc690ec06b44"
+}

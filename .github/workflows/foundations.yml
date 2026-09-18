@@ -1,0 +1,73 @@
+name: Foundations
+
+on:
+  pull_request:
+    paths:
+      - '.nvmrc'
+      - '.fvmrc'
+      - 'package*.json'
+      - 'backend/package*.json'
+      - 'backend/**'
+      - 'scripts/quality/**'
+      - '.github/workflows/**'
+  push:
+    branches: [test]
+    paths:
+      - '.nvmrc'
+      - '.fvmrc'
+      - 'package*.json'
+      - 'backend/package*.json'
+      - 'backend/**'
+      - 'scripts/quality/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  toolchain:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install Linux ODBC build headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes unixodbc-dev
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+      - name: Check declared toolchain
+        run: node scripts/quality/toolchain.cjs
+      - name: Run toolchain unit tests
+        run: node --test scripts/quality/tests/toolchain.test.cjs
+      - name: Run workflow input safety tests
+        run: node --test scripts/quality/tests/workflow-inputs.test.cjs
+      - name: Check workflow input safety
+        run: node scripts/quality/workflow-inputs.cjs
+      - name: Verify hermetic environment lifecycle
+        run: node --test scripts/quality/tests/hermetic-environment.test.cjs
+      - name: Run isolated backend unit lane
+        working-directory: backend
+        run: npm run test:unit:isolated
+      - name: Run runtime inventory tests
+        run: node --test backend/scripts/tests/runtime-route-matrix.test.cjs
+      - name: Run isolated runtime composition tests
+        run: node --test backend/scripts/tests/runtime-app-composition.test.cjs
+      - name: Verify Morgan type canary
+        working-directory: backend
+        run: node node_modules/typescript/bin/tsc --noEmit --strict --esModuleInterop --skipLibCheck --module commonjs --target ES2022 tests/fixtures/types/morgan-compatibility.ts
+      - name: Run portable quality runner tests
+        run: node --test scripts/quality/tests/run-checks.test.mjs
+      - name: Probe native modules without DB2 connection
+        working-directory: backend
+        run: node -e "require('bcrypt'); require('odbc'); console.log('native-modules-loaded')"

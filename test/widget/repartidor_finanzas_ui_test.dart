@@ -31,15 +31,31 @@ void main() {
     bankDepositsTotal: 0,
   );
 
+  Override summaryFixture(
+    String expectedId,
+    List<DailySummaryArgs> calls,
+    RepartidorDailySummary summary,
+  ) {
+    return repartidorDailySummaryProvider.overrideWith((ref, args) async {
+      expect(args.repartidorId, expectedId);
+      expect(
+          args.date, DateTime(args.date.year, args.date.month, args.date.day));
+      if (calls.isNotEmpty) expect(args.date, calls.first.date);
+      calls.add(args);
+      return summary;
+    });
+  }
+
+  Override ledgerFixture(String expectedId) {
+    return repartidorLiquidacionLedgerProvider.overrideWith((ref, args) async {
+      expect(args.repartidorId, expectedId);
+      return openLedger;
+    });
+  }
+
   testWidgets('liquidacion diaria renders executive ERP layout',
       (tester) async {
-    final now = DateTime.now();
-    final date = DateTime(now.year, now.month, now.day);
-    final args = (
-      repartidorId: '94',
-      date: date,
-      forceRefresh: true,
-    );
+    final calls = <DailySummaryArgs>[];
 
     await tester.pumpWidget(
       wrap(
@@ -48,8 +64,10 @@ void main() {
           showMonthlySummary: false,
         ),
         overrides: [
-          repartidorDailySummaryProvider(args).overrideWith(
-            (ref) async => RepartidorDailySummary(
+          summaryFixture(
+            '94',
+            calls,
+            RepartidorDailySummary(
               repartidorId: '94',
               date: '2026-04-24',
               totalEfectivo: 222.79,
@@ -76,12 +94,7 @@ void main() {
               ],
             ),
           ),
-          repartidorLiquidacionLedgerProvider(
-            (
-              repartidorId: '94',
-              date: date,
-            ),
-          ).overrideWith((ref) async => openLedger),
+          ledgerFixture('94'),
         ],
       ),
     );
@@ -97,6 +110,13 @@ void main() {
     expect(find.text('TOTAL'), findsOneWidget);
     expect(find.text('Cerrar día y grabar liquidación'), findsOneWidget);
     expect(find.text('Cliente'), findsWidgets);
+    expect(calls.map((args) => args.forceRefresh), [false]);
+    await tester.pump(const Duration(seconds: 11));
+    expect(calls.map((args) => args.forceRefresh), [false]);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(calls.map((args) => args.forceRefresh), [false, true, false]);
+    expect(find.text('Liquidación Diaria'), findsOneWidget);
   });
 
   testWidgets('liquidacion diaria validates required money fields',
@@ -106,13 +126,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final now = DateTime.now();
-    final date = DateTime(now.year, now.month, now.day);
-    final args = (
-      repartidorId: '94',
-      date: date,
-      forceRefresh: true,
-    );
+    final calls = <DailySummaryArgs>[];
 
     await tester.pumpWidget(
       wrap(
@@ -121,8 +135,10 @@ void main() {
           showMonthlySummary: false,
         ),
         overrides: [
-          repartidorDailySummaryProvider(args).overrideWith(
-            (ref) async => RepartidorDailySummary(
+          summaryFixture(
+            '94',
+            calls,
+            RepartidorDailySummary(
               repartidorId: '94',
               date: '2026-04-24',
               totalEfectivo: 0,
@@ -136,12 +152,7 @@ void main() {
               cobrosCount: 0,
             ),
           ),
-          repartidorLiquidacionLedgerProvider(
-            (
-              repartidorId: '94',
-              date: date,
-            ),
-          ).overrideWith((ref) async => openLedger),
+          ledgerFixture('94'),
         ],
       ),
     );
@@ -155,24 +166,24 @@ void main() {
 
     expect(find.textContaining('importe positivo'), findsOneWidget);
     expect(find.text('Este campo es obligatorio.'), findsOneWidget);
+    expect(calls.map((args) => args.forceRefresh), [false]);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 12));
+    expect(calls.map((args) => args.forceRefresh), [false]);
   });
 
   testWidgets('liquidacion diaria renders aggregate readonly totals',
       (tester) async {
-    final now = DateTime.now();
-    final date = DateTime(now.year, now.month, now.day);
-    final args = (
-      repartidorId: '94,95',
-      date: date,
-      forceRefresh: true,
-    );
+    final calls = <DailySummaryArgs>[];
 
     await tester.pumpWidget(
       wrap(
         const RepartidorLiquidacionDiariaPage(repartidorId: '94,95'),
         overrides: [
-          repartidorDailySummaryProvider(args).overrideWith(
-            (ref) async => RepartidorDailySummary(
+          summaryFixture(
+            '94,95',
+            calls,
+            RepartidorDailySummary(
               repartidorId: '94,95',
               date: '2026-04-24',
               totalEfectivo: 300,
@@ -194,6 +205,9 @@ void main() {
     expect(find.text('Selecciona un repartidor para liquidar'), findsNothing);
     expect(find.text('Liquidación Diaria'), findsOneWidget);
     expect(find.text('Cerrar día y grabar liquidación'), findsNothing);
+    await tester.pump(const Duration(seconds: 12));
+    await tester.pumpAndSettle();
+    expect(calls.map((args) => args.forceRefresh), [false]);
   });
 
   testWidgets('vencimientos can be filtered by group', (tester) async {

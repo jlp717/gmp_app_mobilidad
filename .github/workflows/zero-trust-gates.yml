@@ -15,8 +15,6 @@ permissions:
   checks: write
 
 env:
-  FLUTTER_VERSION: '3.24.0'
-  NODE_VERSION: '20'
   COVERAGE_THRESHOLD: 80
 
 jobs:
@@ -29,15 +27,23 @@ jobs:
           fetch-depth: 0
 
       - name: Check PR Description
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          if [ -z "${{ github.event.pull_request.body }}" ]; then
+          if [ -z "$PR_BODY" ]; then
             echo "::warning::PR description is empty - spec compliance cannot be fully verified"
           fi
 
       - name: Scope Validation
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           echo "Checking scope..."
-          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)
+          if [[ ! "$BASE_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::Invalid base ref"
+            exit 1
+          fi
+          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF...HEAD" | wc -l)
           echo "Changed files: $CHANGED_FILES"
           if [ "$CHANGED_FILES" -gt 20 ]; then
             echo "::warning::Large change set ($CHANGED_FILES files) - consider splitting"
@@ -49,12 +55,12 @@ jobs:
     needs: spec-gate
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-      - uses: actions/setup-node@v4
+          flutter-version-file: .fvmrc
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: .nvmrc
 
       - name: Flutter Analyze
         run: dart analyze --fatal-infos lib/ test/
@@ -79,12 +85,12 @@ jobs:
     needs: static-gate
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-      - uses: actions/setup-node@v4
+          flutter-version-file: .fvmrc
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: .nvmrc
 
       - name: Flutter Tests
         run: flutter test --coverage --no-pub
@@ -107,9 +113,9 @@ jobs:
     if: github.base_ref == 'main'
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version-file: .fvmrc
 
       - name: Build APK
         run: flutter build apk --release
@@ -132,9 +138,15 @@ jobs:
           fetch-depth: 0
 
       - name: Module Impact Analysis
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           echo "Analyzing cross-module impact..."
-          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          if [[ ! "$BASE_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::Invalid base ref"
+            exit 1
+          fi
+          CHANGED=$(git diff --name-only "origin/$BASE_REF...HEAD")
           echo "$CHANGED" | grep -q "lib/features/" && echo "Frontend modules affected"
           echo "$CHANGED" | grep -q "backend/" && echo "Backend modules affected"
           echo "$CHANGED" | grep -q "test/" && echo "Tests affected"
@@ -146,16 +158,22 @@ jobs:
     if: always()
     steps:
       - name: Generate Report
+        env:
+          SPEC_STATUS: ${{ needs.spec-gate.result == 'success' && '✅' || '❌' }}
+          STATIC_STATUS: ${{ needs.static-gate.result == 'success' && '✅' || '❌' }}
+          BEHAVIOR_STATUS: ${{ needs.behavior-gate.result == 'success' && '✅' || '❌' }}
+          RUNTIME_STATUS: ${{ needs.runtime-gate.result == 'success' && '✅' || '⏭️ skipped' }}
+          CROSS_DOMAIN_STATUS: ${{ needs.cross-domain.result == 'success' && '✅' || '❌' }}
         run: |
           echo "## 🛡️ Zero-Trust Delivery Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Gate | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Spec Compliance | ${{ needs.spec-gate.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Static Analysis | ${{ needs.static-gate.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Behavioral Verification | ${{ needs.behavior-gate.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Runtime Verification | ${{ needs.runtime-gate.result == 'success' && '✅' || '⏭️ skipped' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Cross-Domain | ${{ needs.cross-domain.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Spec Compliance | $SPEC_STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Static Analysis | $STATIC_STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Behavioral Verification | $BEHAVIOR_STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runtime Verification | $RUNTIME_STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cross-Domain | $CROSS_DOMAIN_STATUS |" >> $GITHUB_STEP_SUMMARY
 
       - name: Fail on Block
         if: |

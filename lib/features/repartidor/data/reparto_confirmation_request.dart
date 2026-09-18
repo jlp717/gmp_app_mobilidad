@@ -252,6 +252,7 @@ class RepartoConfirmationRequest {
     this.notifications,
     this.deferEvidence = false,
     this.pendingEvidence = const <RepartoPendingEvidenceRef>[],
+    this.clock,
   });
 
   final String itemId;
@@ -279,6 +280,10 @@ class RepartoConfirmationRequest {
   /// drain resolves slots to ids before the canonical POST.
   final bool deferEvidence;
   final List<RepartoPendingEvidenceRef> pendingEvidence;
+
+  /// Optional UTC clock for deterministic validation. It is deliberately
+  /// local-only: neither wire payloads nor material fingerprints contain it.
+  final DateTime Function()? clock;
 
   Map<String, dynamic> toJson() {
     _validate();
@@ -347,8 +352,8 @@ class RepartoConfirmationRequest {
     if ((lineas.isEmpty && !allowEmptyLineas) || lineas.length > 250) {
       _invalid('Debe existir entre una y 250 lineas');
     }
-    if (occurredAt
-        .isAfter(DateTime.now().toUtc().add(const Duration(minutes: 5)))) {
+    final nowUtc = (clock?.call() ?? DateTime.now().toUtc()).toUtc();
+    if (occurredAt.isAfter(nowUtc.add(const Duration(minutes: 5)))) {
       _invalid('occurredAt no puede estar en el futuro');
     }
     final lineIds = <String>{};
@@ -717,6 +722,7 @@ class RepartoPersistentConfirmationOperation {
         notifications: request.notifications,
         deferEvidence: request.deferEvidence,
         pendingEvidence: request.pendingEvidence,
+        clock: _clock,
       ),
       idempotencyKey: idempotencyKey,
       isRetry: storedFingerprint == fingerprint,

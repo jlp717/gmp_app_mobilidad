@@ -11,12 +11,13 @@
    - `timeout after ...ms` → DB2 lento o pool agotado → mira `odbc_pool_utilization`; si > 95% ve a `odbc-pool-saturation.md`.
    - Error de conexión → verifica AS400 (192.168.1.22) accesible y estado de circuit breakers en `/api/health/circuit-breakers`.
 3. `checks.redis.status == "error"`:
-   - Redis caído → el backend tiene fallback L1; la app sigue sirviendo pero las sesiones compartidas entre workers se degradan. Reiniciar Redis solo con aprobación de Javier.
+   - Redis caído → en producción, el almacén de sesiones exige Redis y no utiliza un fallback local. La autenticación rechaza la petición con `503 AUTH_SESSION_STORE_UNAVAILABLE`; no permite continuar con una sesión sin verificar. Un posible fallback L1 de caché de lecturas no sustituye este control de sesiones. Reiniciar Redis solo con aprobación de Javier.
 4. Logs: `pm2 logs gmp-api --lines 100 --nostream` filtrando `unhealthy`.
 
 ## Mitigación
 - Transitorio (un check falla y el siguiente pasa) → observa 5 min; cada check tiene timeout propio de 2 s (HEALTH_CHECK_TIMEOUT_MS).
 - Persistente en DB2 → escala a Javier antes de tocar PM2/pool.
+- Persistente en el almacén de sesiones → escala a Javier para recuperar Redis y comprobar su readiness. No activar sesiones en memoria, omitir la autenticación ni rotar credenciales como atajo; volver a iniciar sesión no resuelve la indisponibilidad del almacén.
 
 ## Nota importante
 PM2 considera viva la instancia mientras `/health/live` responda: NO reinicies gmp-api por un ready 503 salvo orden expresa.

@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
@@ -35,9 +35,10 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
+      - run: npm ci --ignore-scripts
       - run: npm ci
         working-directory: backend
       - run: npm run lint --if-present
@@ -89,4 +90,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Expose digest for rollback
-        run: echo "digest=${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: echo "digest=$IMAGE_DIGEST" >> "$GITHUB_STEP_SUMMARY"

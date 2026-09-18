@@ -81,7 +81,15 @@ function parseCSV(filePath, fileName) {
         const cleaned = {};
         for (const [key, value] of Object.entries(record)) {
           const cleanKey = key.replace(/[^\x20-\x7E\u00C0-\u024F]/g, '').trim();
-          cleaned[cleanKey] = value;
+          // CSV headers are untrusted input. Assignment to __proto__ on a plain
+          // object invokes the inherited setter; define an own data property so
+          // normal bracket access is preserved without changing the prototype.
+          Object.defineProperty(cleaned, cleanKey, {
+            value,
+            enumerable: true,
+            writable: true,
+            configurable: true,
+          });
         }
         return cleaned;
       },

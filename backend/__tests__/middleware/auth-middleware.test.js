@@ -294,6 +294,73 @@ describe('Auth Middleware - verifyToken', () => {
         }));
         expect(next).not.toHaveBeenCalled();
     });
+
+    test('rejects an expired canonical token without calling next', async () => {
+        const token = await canonicalAccessToken({
+            id: 'V001', user: '001', name: 'Expired', role: 'COMERCIAL',
+        }, 'expired');
+        const req = createMockReq({ headers: { authorization: `Bearer ${token}` } });
+        const issuedAt = Date.now();
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(issuedAt + ACCESS_TTL_MS + 1);
+        try {
+            await verifyToken(req, res, next);
+        } finally {
+            clock.mockRestore();
+        }
+
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOKEN_EXPIRED' }));
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('rejects a revoked canonical session without calling next', async () => {
+        const token = await canonicalAccessToken({
+            id: 'V001', user: '001', name: 'Revoked', role: 'COMERCIAL',
+        }, 'revoked');
+        await invalidateAllSessions('V001');
+        const req = createMockReq({ headers: { authorization: `Bearer ${token}` } });
+
+        await verifyToken(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'SESSION_REVOKED' }));
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('rejects an identity whose signed subject differs from the registered session', async () => {
+        const sessionToken = await canonicalAccessToken({
+            id: 'V001', user: '001', name: 'Canonical', role: 'COMERCIAL',
+        }, 'identity');
+        const payload = verifyAccessToken(sessionToken);
+        const token = signAccessToken({ ...payload, sub: 'V002' });
+        const req = createMockReq({ headers: { authorization: `Bearer ${token}` } });
+
+        await verifyToken(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'SESSION_REVOKED' }));
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('maps a typed unavailable auth dependency to 503 without calling next', async () => {
+        const unavailable = Object.assign(new Error('synthetic unavailable'), {
+            code: 'AUTH_SESSION_STORE_UNAVAILABLE',
+        });
+        const verify = jest.spyOn(require('../../middleware/auth'), 'verifyAccessToken')
+            .mockImplementation(() => { throw unavailable; });
+        const req = createMockReq({ headers: { authorization: 'Bearer synthetic' } });
+        try {
+            await verifyToken(req, res, next);
+        } finally {
+            verify.mockRestore();
+        }
+
+        expect(res.status).toHaveBeenCalledWith(503);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+            code: 'AUTH_SESSION_STORE_UNAVAILABLE',
+        }));
+        expect(next).not.toHaveBeenCalled();
+    });
 });
 
 describe('Auth Middleware - optionalAuth', () => {
@@ -660,5 +727,19 @@ describe('Token Payload Preservation', () => {
         await verifyToken(req, res, next);
 
         expect(req.user.isJefeVentas).toBe(true);
+    });
+
+    test('normalizes a signed mixed-case role before route authorization', async () => {
+        const token = await canonicalAccessToken({
+            id: 'V001', user: '001', name: 'Role', role: 'comercial',
+        }, 'normalized-role');
+        const req = createMockReq({ headers: { authorization: `Bearer ${token}` } });
+        const res = createMockRes();
+        const next = jest.fn();
+
+        await verifyToken(req, res, next);
+
+        expect(next).toHaveBeenCalled();
+        expect(req.user.role).toBe('COMERCIAL');
     });
 });

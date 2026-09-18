@@ -72,14 +72,21 @@ describe('telemetry rum + request JSON line + audit requestId', () => {
     });
 
     test('db-timing wrapper accumulates ms on the ALS stats object', async () => {
-        db.query.mockImplementation(async () => {
-            await new Promise((r) => setTimeout(r, 5));
-            return [{ OK: 1 }];
-        });
-        const stats = { ms: 0, n: 0, requestId: 'rid-1' };
-        await dbTiming.runWithStats(stats, () => dbTiming.query('SELECT 1', false));
-        expect(stats.n).toBe(1);
-        expect(stats.ms).toBeGreaterThanOrEqual(5);
+        const now = jest.spyOn(Date, 'now')
+            .mockReturnValueOnce(1000)
+            .mockReturnValueOnce(1037);
+        try {
+            const rows = [{ OK: 1 }];
+            db.query.mockResolvedValue(rows);
+            const stats = { ms: 11, n: 2, requestId: 'rid-1' };
+            await expect(
+                dbTiming.runWithStats(stats, () => dbTiming.query('SELECT 1', false)),
+            ).resolves.toEqual(rows);
+            expect(now).toHaveBeenCalledTimes(2);
+            expect(stats).toMatchObject({ ms: 48, n: 3, requestId: 'rid-1' });
+        } finally {
+            now.mockRestore();
+        }
     });
 
     test('POST /rum accepts up to 50 events and logs t=rum', async () => {
@@ -120,7 +127,26 @@ describe('telemetry rum + request JSON line + audit requestId', () => {
         expect(body.status).toBe(200);
         const rumLines = logger.info.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('"t":"rum"'));
         expect(rumLines.length).toBe(1);
-        expect(JSON.parse(rumLines[0]).id).toBe('corr-1');
+        const logged = JSON.parse(rumLines[0]);
+        expect(logged).toMatchObject({
+            t: 'rum',
+            u: null,
+            screen: 'unknown',
+            endpoint: '/dashboard',
+            method: 'GET',
+            status: null,
+            t_req: 1,
+            t_resp: 2,
+            bytes: null,
+            net: 'unknown',
+        });
+        expect(logged.id).toMatch(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        );
+        expect(logged.id).not.toBe('corr-1');
+        expect(logged).not.toHaveProperty('rid');
+        expect(logged).not.toHaveProperty('actor');
+        expect(logged).not.toHaveProperty('requestId');
     });
 
     test('POST /rum rejects more than 50 events', async () => {
