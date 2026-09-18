@@ -197,18 +197,18 @@ if ($trackedEnv) {
   Add-Failure "Environment secret file is tracked by git: $trackedEnv"
 }
 
-$secretScan = & git -C $RootDir grep -n -I -E "(JWT_ACCESS_SECRET|JWT_REFRESH_SECRET|ODBC_PWD|SSH_GMP_PASSWORD)\s*=\s*['`"]?[A-Za-z0-9_./+=-]{12,}" -- . 2>$null
-if ($LASTEXITCODE -eq 0 -and $secretScan) {
-  $filtered = $secretScan | Where-Object {
-    $_ -notmatch "\.env\.example" -and
-    $_ -notmatch "security-setup" -and
-    $_ -notmatch "validate_production_config" -and
-    $_ -notmatch "politec-quality-gate" -and
-    $_ -notmatch "[\\/]__tests__[\\/]" -and
-    $_ -notmatch "[\\/]tests[\\/]"
-  }
-  if ($filtered) {
-    Add-Failure "Possible hardcoded secret detected. Review: $($filtered[0])"
+$safeScanner = Join-RepoPath "scripts\quality\run-checks.mjs"
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  Add-Failure "Safe secret scanner unavailable: node is not on PATH."
+} elseif (-not (Test-Path -LiteralPath $safeScanner)) {
+  Add-Failure "Safe secret scanner missing: scripts/quality/run-checks.mjs"
+} else {
+  # The runner excludes protected names and links before opening candidates.
+  # Its structured output is deliberately discarded here to prevent log leaks.
+  $null = & node $safeScanner --check secrets --root $RootDir 2>&1
+  $scannerExit = $LASTEXITCODE
+  if ($scannerExit -ne 0) {
+    Add-Failure "Safe secret scanner reported blocked or unavailable (exit $scannerExit); inspect its redacted report locally."
   }
 }
 
