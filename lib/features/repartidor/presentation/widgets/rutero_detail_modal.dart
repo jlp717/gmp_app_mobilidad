@@ -1077,27 +1077,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             },
             onOpenFicha: _openFichaTecnica,
             onShowFullscreenImage: _showFullscreenImage,
+            onNoDelivery:
+                _isCompleted || _isSubmitting ? null : _activateNoEntregaMode,
             scrollController: _productsScrollController,
           ),
-        ),
-        SafeArea(
-          top: false,
-          child: _isCompleted
-              ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  child: OutlinedButton.icon(
-                    onPressed: _isSubmitting ? null : _activateNoEntregaMode,
-                    icon: const Icon(Icons.storefront_outlined),
-                    label: const Text('No entrega (cerrado o no disponible)'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.warning,
-                      side: const BorderSide(color: AppTheme.warning),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      minimumSize: const Size.fromHeight(48),
-                    ),
-                  ),
-                ),
         ),
       ],
     );
@@ -1378,7 +1361,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ),
         if (gapsMessage != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
             child: Text(
               gapsMessage,
               style: const TextStyle(
@@ -1388,9 +1371,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               ),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-          child: _buildSubmitButton(),
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            child: _buildSubmitButton(),
+          ),
         ),
       ],
     );

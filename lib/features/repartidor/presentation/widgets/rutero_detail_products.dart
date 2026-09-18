@@ -140,6 +140,7 @@ class RuteroDetailProducts extends StatelessWidget {
     required this.onContinueToPayment,
     required this.onOpenFicha,
     required this.onShowFullscreenImage,
+    this.onNoDelivery,
     this.scrollController,
     this.readOnly = false,
     this.canonicalDocumentTotal,
@@ -160,6 +161,7 @@ class RuteroDetailProducts extends StatelessWidget {
   final VoidCallback onRetryItems;
   final VoidCallback onConfirmAll;
   final VoidCallback onContinueToPayment;
+  final VoidCallback? onNoDelivery;
   final void Function(EntregaItem linea) onOpenFicha;
   final void Function(String imageUrl, String name) onShowFullscreenImage;
   final ScrollController? scrollController;
@@ -192,7 +194,7 @@ class RuteroDetailProducts extends StatelessWidget {
         Expanded(
           child: ListView.builder(
             controller: scrollController,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
             itemCount: items.length,
             itemBuilder: (context, index) {
               final linea = items[index];
@@ -326,6 +328,7 @@ class RuteroDetailProducts extends StatelessWidget {
         .where((item) => productChecked[ruteroLineKey(item)] ?? false)
         .length;
     final total = items.length;
+    final allChecked = total > 0 && checked == total;
     final liveLineSum = items.fold<double>(0, (sum, item) {
       final qty = productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida;
       return sum +
@@ -335,39 +338,51 @@ class RuteroDetailProducts extends StatelessWidget {
     final amountLabel = quantitiesChanged || canonicalDocumentTotal == null
         ? 'Importe según unidades'
         : 'Importe';
+    final landscape = Responsive.isLandscapeCompact(context);
+    final metaParts = <String>[
+      if (ordenPreparacion != null) 'Orden prep. $ordenPreparacion',
+      if (liveTotal > 0.004)
+        '$amountLabel: ${liveTotal.toStringAsFixed(2).replaceAll('.', ',')} €',
+    ];
 
     return RepartidorExecutivePanel(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      accentColor: checked == total ? AppTheme.success : AppTheme.warning,
+      margin: EdgeInsets.fromLTRB(12, landscape ? 4 : 8, 12, 4),
+      padding: EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: landscape ? 6 : 8,
+      ),
+      accentColor: allChecked ? AppTheme.success : AppTheme.warning,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.checklist, color: AppTheme.info, size: 20),
-              const SizedBox(width: 12),
-              Text(
-                '$checked de $total productos verificados',
-                style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w500,
+              const Icon(Icons.checklist, color: AppTheme.info, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '$checked de $total verificados',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Spacer(),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: checked == total
+                  color: allChecked
                       ? AppTheme.success.withValues(alpha: 0.2)
                       : AppTheme.warning.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  checked == total ? 'Completo' : 'Pendiente',
+                  allChecked ? 'Completo' : 'Pendiente',
                   style: TextStyle(
-                    color:
-                        checked == total ? AppTheme.success : AppTheme.warning,
+                    color: allChecked ? AppTheme.success : AppTheme.warning,
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                   ),
@@ -375,36 +390,39 @@ class RuteroDetailProducts extends StatelessWidget {
               ),
             ],
           ),
-          if (ordenPreparacion != null) ...[
-            const SizedBox(height: 8),
+          if (metaParts.isNotEmpty || !readOnly) ...[
+            const SizedBox(height: 2),
             Row(
               children: [
-                const Icon(
-                  Icons.assignment,
-                  color: AppTheme.accentIndigo,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Orden de Preparación: $ordenPreparacion',
-                  style: const TextStyle(
-                    color: AppTheme.accentIndigo,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
+                Expanded(
+                  child: Text(
+                    metaParts.isEmpty ? '' : metaParts.join(' · '),
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (!readOnly)
+                  Semantics(
+                    button: true,
+                    label: allChecked ? 'Desmarcar todo' : 'Marcar todo',
+                    child: TextButton(
+                      onPressed: onConfirmAll,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.info,
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(allChecked ? 'Desmarcar' : 'Marcar todo'),
+                    ),
+                  ),
               ],
-            ),
-          ],
-          if (liveTotal > 0.004) ...[
-            const SizedBox(height: 8),
-            Text(
-              '${amountLabel}: ${liveTotal.toStringAsFixed(2).replaceAll('.', ',')} €',
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-              ),
             ),
           ],
         ],
@@ -414,89 +432,59 @@ class RuteroDetailProducts extends StatelessWidget {
 
   Widget _buildConfirmButton(BuildContext context) {
     if (readOnly) return const SizedBox.shrink();
-    final allChecked = items.isNotEmpty &&
-        items.every((item) => productChecked[ruteroLineKey(item)] ?? false);
-    final compact = Responsive.isSmall(context);
+    final landscape = Responsive.isLandscapeCompact(context);
+    final gap = landscape ? 4.0 : 6.0;
 
     return SafeArea(
       top: false,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppTheme.raisedSurface,
-          border: Border(top: BorderSide(color: AppTheme.borderColor)),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          12,
+          landscape ? 4 : 6,
+          12,
+          landscape ? 6 : 8,
         ),
-        child: compact
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: onConfirmAll,
-                    icon: Icon(
-                      allChecked
-                          ? Icons.check_box
-                          : Icons.check_box_outline_blank,
-                    ),
-                    label: Text(allChecked ? 'Desmarcar todo' : 'Marcar todo'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.info,
-                      side: BorderSide(
-                        color: AppTheme.info.withValues(alpha: 0.5),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      minimumSize: const Size.fromHeight(48),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ElevatedButton.icon(
-                    onPressed: onContinueToPayment,
-                    icon: const Icon(Icons.arrow_forward),
-                    label: const Text('Continuar al cobro'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.info,
-                      foregroundColor: AppColors.themedWhite,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      minimumSize: const Size.fromHeight(48),
-                    ),
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: onConfirmAll,
-                      icon: Icon(
-                        allChecked
-                            ? Icons.check_box
-                            : Icons.check_box_outline_blank,
-                      ),
-                      label:
-                          Text(allChecked ? 'Desmarcar todo' : 'Marcar todo'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.info,
-                        side: BorderSide(
-                          color: AppTheme.info.withValues(alpha: 0.5),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: onContinueToPayment,
-                      icon: const Icon(Icons.arrow_forward),
-                      label: const Text('Continuar'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.info,
-                        foregroundColor: AppColors.themedWhite,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              button: true,
+              label: 'Continuar al cobro',
+              child: ElevatedButton.icon(
+                onPressed: onContinueToPayment,
+                icon: const Icon(Icons.arrow_forward, size: 18),
+                label: const Text('Continuar al cobro'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.info,
+                  foregroundColor: AppColors.themedWhite,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  minimumSize: const Size.fromHeight(44),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ),
+            ),
+            if (onNoDelivery != null) ...[
+              SizedBox(height: gap),
+              Semantics(
+                button: true,
+                label: 'No entrega, cerrado o no disponible',
+                child: OutlinedButton.icon(
+                  onPressed: onNoDelivery,
+                  icon: const Icon(Icons.storefront_outlined, size: 18),
+                  label: const Text('No entrega (cerrado o no disponible)'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.warning,
+                    side: const BorderSide(color: AppTheme.warning),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    minimumSize: const Size.fromHeight(40),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -530,7 +518,7 @@ class _ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return RepartidorExecutivePanel(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8),
       accentColor: isChecked ? AppTheme.success : AppTheme.warning,
       selected: isChecked,
       padding: EdgeInsets.zero,
@@ -541,7 +529,7 @@ class _ProductCard extends StatelessWidget {
               onCheckedChanged(!isChecked);
             },
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         child: Row(
           children: [
             _buildCheckbox(),
@@ -612,8 +600,8 @@ class _ProductCard extends StatelessWidget {
           linea.descripcion,
           style: TextStyle(
             color: AppTheme.textPrimary,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
             decoration: isChecked ? null : TextDecoration.lineThrough,
           ),
           maxLines: 4,

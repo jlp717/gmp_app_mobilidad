@@ -84,15 +84,15 @@ class RuteroDetailCompleted extends StatelessWidget {
         child: Column(
           children: [
             _buildSuccessBanner(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
             _buildSummaryInfo(context),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
             _buildDocumentsSection(),
             if (!_isNoDelivery) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 6),
               buildPrinterConfigSection(),
               if (tieneImpresora && items.isNotEmpty) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 _ShareButton(
                   icon: Icons.print,
                   label: 'Imprimir ticket térmico',
@@ -101,7 +101,7 @@ class RuteroDetailCompleted extends StatelessWidget {
                 ),
               ],
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -308,21 +308,21 @@ class RuteroDetailCompleted extends StatelessWidget {
           'Comprobante de la entrega con firma y líneas confirmadas.',
           style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         _ShareButton(
           icon: Icons.receipt_long,
           label: 'Ver nota de entrega',
           color: AppTheme.accentIndigo,
           onTap: onPreviewDeliveryNotePdf,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         _ShareButton(
           icon: Icons.share,
           label: 'Compartir nota de entrega',
           color: AppTheme.success,
           onTap: onShareDeliveryNotePdf,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         _ShareButton(
           icon: Icons.chat,
           label: 'Nota por WhatsApp',
@@ -330,7 +330,7 @@ class RuteroDetailCompleted extends StatelessWidget {
           onTap: onShareDeliveryNoteWhatsApp,
         ),
         if (emailAction != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _ShareButton(
             icon: Icons.email_outlined,
             label: 'Email nota de entrega',
@@ -339,7 +339,7 @@ class RuteroDetailCompleted extends StatelessWidget {
           ),
         ],
         if (printNote != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _ShareButton(
             icon: Icons.print_outlined,
             label: 'Imprimir nota (PDF)',
@@ -359,21 +359,21 @@ class RuteroDetailCompleted extends StatelessWidget {
             'Documento comercial ERP. Incluye la firma cuando está disponible.',
             style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _ShareButton(
             icon: Icons.picture_as_pdf,
             label: 'Ver $_commercialLabel',
             color: AppTheme.info,
             onTap: onPreviewCommercialPdf,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _ShareButton(
             icon: Icons.ios_share,
             label: 'Compartir $_commercialLabel',
             color: AppTheme.success,
             onTap: onShareCommercialPdf,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           _ShareButton(
             icon: Icons.chat,
             label: '$_commercialLabel por WhatsApp',
@@ -445,7 +445,7 @@ class _ShareButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       onTap: enabled ? onTap : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
           children: [
             Icon(icon, color: effectiveColor, size: 24),

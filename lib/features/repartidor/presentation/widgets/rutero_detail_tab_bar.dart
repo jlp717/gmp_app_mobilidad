@@ -23,7 +23,7 @@ class RuteroDetailTabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 430;
     return Container(
-      padding: EdgeInsets.fromLTRB(compact ? 8 : 12, 6, compact ? 8 : 12, 8),
+      padding: EdgeInsets.fromLTRB(compact ? 8 : 12, 4, compact ? 8 : 12, 6),
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         border: Border(
@@ -44,30 +44,54 @@ class RuteroDetailTabBar extends StatelessWidget {
         unselectedLabelColor: AppTheme.textSecondary,
         labelStyle: TextStyle(
           fontWeight: FontWeight.bold,
-          fontSize: compact ? 11 : 12,
+          fontSize: compact ? 12 : 13,
         ),
         tabs: [
-          Tab(
-            icon: _TabIcon(
-              icon: Icons.inventory_2_outlined,
-              errorCount: productErrorCount,
-            ),
-            text: 'Productos',
+          _compactTab(
+            icon: Icons.inventory_2_outlined,
+            label: 'Productos',
+            errorCount: productErrorCount,
           ),
-          Tab(
-            icon: _TabIcon(
-              icon: Icons.payment,
-              errorCount: paymentErrorCount,
-              color: isUrgent ? AppTheme.obligatorio : null,
-            ),
-            text: 'Cobro',
+          _compactTab(
+            icon: Icons.payment,
+            label: 'Cobro',
+            errorCount: paymentErrorCount,
+            color: isUrgent ? AppTheme.obligatorio : null,
           ),
-          Tab(
-            icon: _TabIcon(
-              icon: Icons.check_circle_outline,
-              errorCount: finalizeErrorCount,
+          _compactTab(
+            icon: Icons.check_circle_outline,
+            label: 'Finalizar',
+            errorCount: finalizeErrorCount,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _compactTab({
+    required IconData icon,
+    required String label,
+    required int errorCount,
+    Color? color,
+  }) {
+    return Tab(
+      height: 44,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _TabIcon(
+            icon: icon,
+            errorCount: errorCount,
+            color: color,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            text: 'Finalizar',
           ),
         ],
       ),

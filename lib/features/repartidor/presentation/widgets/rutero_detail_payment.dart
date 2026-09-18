@@ -207,7 +207,7 @@ class RuteroDetailPayment extends StatelessWidget {
                 _buildWhatsAppToggle(),
               ],
               if (onRegisterCobro != null) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
                 _buildRegisterButton(),
               ],
             ],
@@ -216,7 +216,7 @@ class RuteroDetailPayment extends StatelessWidget {
               _buildMarkAsPaid(),
             ],
             if (showContinueToFinalize) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 10),
               _buildContinueButton(),
             ],
           ],
