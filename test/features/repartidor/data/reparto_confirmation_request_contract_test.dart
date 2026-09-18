@@ -90,4 +90,58 @@ void main() {
     expect(delivery['repartidorId'], '08');
     expect(delivery['lineas'], isEmpty);
   });
+
+  test('serializa cobro+notificaciones al Finalizar, no un cobro suelto', () {
+    final json = RepartoConfirmationRequest(
+      itemId: '2026-P-15-2296-C1',
+      status: RepartoDeliveryStatus.entregado,
+      occurredAt: DateTime.now().toUtc().subtract(const Duration(minutes: 5)),
+      lineas: const <RepartoDeliveryLine>[
+        RepartoDeliveryLine(
+          lineaId: '1',
+          codigoArticulo: 'POLLO',
+          cantidadPedida: 5.75,
+          cantidadEntregada: 5.75,
+          cantidadRechazada: 0,
+          cantidadPendiente: 0,
+        ),
+      ],
+      repartidorId: '08',
+      receiver: const RepartoReceiver(
+        nombre: 'Ana',
+        apellidos: 'Prueba',
+        dni: '12345678Z',
+      ),
+      firma: 'ev_${List<String>.filled(64, 'a').join()}',
+      cobro: const RepartoPayment(
+        entregaId: '2026-P-15-2296-C1',
+        importeCobrado: 161.58,
+        formaPago: 'EFECTIVO',
+        notas: 'Cobro en ruta',
+      ),
+      notifications: const RepartoNotificationPrefs(
+        sendClientEmail: true,
+        sendWhatsApp: true,
+        clientEmail: 'bar@cliente.test',
+      ),
+    ).toJson();
+
+    expect(json['cobro'], isA<Map<String, dynamic>>());
+    expect(json['cobro']['notas'], 'Cobro en ruta');
+    expect(json['cobro']['notas'], isNot(isNull));
+    expect(json['notifications'], {
+      'sendClientEmail': true,
+      'sendWhatsApp': true,
+      'clientEmail': 'bar@cliente.test',
+    });
+  });
+
+  test('cobro sin texto envía notas vacías, nunca null', () {
+    const payment = RepartoPayment(
+      importeCobrado: 10,
+      formaPago: 'EFECTIVO',
+    );
+    expect(payment.toJson()['notas'], '');
+    expect(payment.toJson().containsKey('notas'), isTrue);
+  });
 }

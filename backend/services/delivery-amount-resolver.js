@@ -155,6 +155,78 @@ function documentAmountKey({ ejercicio, serie, terminal, numero, cliente }) {
   ].join('|');
 }
 
+function deliveryQuantitiesChanged(lines = []) {
+  return (Array.isArray(lines) ? lines : []).some((line) => {
+    const ordered = Number(line.cantidadPedida);
+    const delivered = Number(line.cantidadEntregada);
+    return Number.isFinite(ordered)
+      && Number.isFinite(delivered)
+      && Math.abs(delivered - ordered) > 0.0001;
+  });
+}
+
+function deliveredLineSum(lines = []) {
+  return sanitizeErpAmount((Array.isArray(lines) ? lines : []).reduce((sum, line) => {
+    const qty = Number(line.cantidadEntregada);
+    const price = Number(line.precioUnitario);
+    if (!Number.isFinite(qty) || !Number.isFinite(price)) return sum;
+    return sum + (qty * price);
+  }, 0));
+}
+
+/**
+ * Same identity the rutero list already shows (CPC/CAC header) until the
+ * driver changes quantities. After a qty change, persist the delivered
+ * line amount instead of the original CPC.
+ */
+function resolveConfirmedDocumentAmount({ plannedAmount = 0, lines = [] } = {}) {
+  const header = sanitizeErpAmount(plannedAmount);
+  const live = deliveredLineSum(lines);
+  if (!deliveryQuantitiesChanged(lines) && hasMoney(header)) return header;
+  return hasMoney(live) ? live : header;
+}
+
+function parseReceiptProofJson(raw) {
+  if (raw == null || raw === '') return null;
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (parsed.receiptProof && typeof parsed.receiptProof === 'object') {
+      return parsed.receiptProof;
+    }
+    return parsed;
+  } catch (_error) {
+    return null;
+  }
+}
+
+/**
+ * Amount identity after confirmation: prefer the persisted receiptProof
+ * (CPC header when qty untouched, live delivered total after qty edits).
+ * Never overwrite a known CPC header with LAC qty×price rounding.
+ */
+function resolvePersistedDocumentAmount({
+  plannedAmount = 0,
+  lineSum = 0,
+  resultJson,
+} = {}) {
+  const proof = parseReceiptProofJson(resultJson);
+  if (proof && proof.deliveredImporteTotal != null
+      && Number.isFinite(Number(proof.deliveredImporteTotal))) {
+    return sanitizeErpAmount(proof.deliveredImporteTotal);
+  }
+  const planned = sanitizeErpAmount(
+    plannedAmount != null && plannedAmount !== ''
+      ? plannedAmount
+      : proof?.plannedImporteTotal,
+  );
+  if (proof?.quantitiesChanged === true) {
+    const live = sanitizeErpAmount(lineSum);
+    return hasMoney(live) ? live : planned;
+  }
+  return hasMoney(planned) ? planned : sanitizeErpAmount(lineSum);
+}
+
 module.exports = {
   MONEY_EPS,
   SENTINEL_ABS,
@@ -165,4 +237,9 @@ module.exports = {
   resolveDeliveryAmount,
   allowsEmptyPlannedLines,
   documentAmountKey,
+  deliveryQuantitiesChanged,
+  deliveredLineSum,
+  resolveConfirmedDocumentAmount,
+  parseReceiptProofJson,
+  resolvePersistedDocumentAmount,
 };

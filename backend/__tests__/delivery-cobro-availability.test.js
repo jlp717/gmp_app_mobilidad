@@ -108,6 +108,15 @@ describe('delivery cobro availability', () => {
       capped: true,
     });
     expect(resolveDocumentCollectable({
+      cvcState: 'AVAILABLE', cvcPending: 174.78, documentAmount: 161.58,
+    })).toEqual({
+      state: 'AVAILABLE',
+      importeDisponibleCobro: 161.58,
+      importeDocumento: 161.58,
+      importeCvcPendiente: 174.78,
+      capped: true,
+    });
+    expect(resolveDocumentCollectable({
       cvcState: 'AVAILABLE', cvcPending: 12.35, documentAmount: 100,
     }).importeDisponibleCobro).toBe(12.35);
     expect(resolveDocumentCollectable({

@@ -88,7 +88,10 @@ class RuteroDetailPayment extends StatelessWidget {
     this.canRegisterCobro = false,
     this.isRegisteringCobro = false,
     this.sendEmail = false,
+    this.sendWhatsApp = false,
     this.onSendEmailChanged,
+    this.onSendWhatsAppChanged,
+    this.emailController,
     this.onRegisterCobro,
     this.showDeliveryPrepToggle = true,
     this.showContinueToFinalize = true,
@@ -121,7 +124,10 @@ class RuteroDetailPayment extends StatelessWidget {
   final bool canRegisterCobro;
   final bool isRegisteringCobro;
   final bool sendEmail;
+  final bool sendWhatsApp;
   final ValueChanged<bool>? onSendEmailChanged;
+  final ValueChanged<bool>? onSendWhatsAppChanged;
+  final TextEditingController? emailController;
   final VoidCallback? onRegisterCobro;
   final bool showDeliveryPrepToggle;
   final bool showContinueToFinalize;
@@ -196,6 +202,10 @@ class RuteroDetailPayment extends StatelessWidget {
                 const SizedBox(height: 12),
                 _buildEmailToggle(),
               ],
+              if (onSendWhatsAppChanged != null) ...[
+                const SizedBox(height: 8),
+                _buildWhatsAppToggle(),
+              ],
               if (onRegisterCobro != null) ...[
                 const SizedBox(height: 16),
                 _buildRegisterButton(),
@@ -218,8 +228,11 @@ class RuteroDetailPayment extends StatelessWidget {
   Widget _buildAmountCard(BuildContext context) {
     final compact = Responsive.isSmall(context);
     final paymentType = getPaymentTypeLabel();
-    final collectable = effectiveDocumentCollectable(albaran);
     final documentTotal = liveDocumentTotal ?? albaran.importeTotal;
+    final collectable = capSaldoCobrableAlDocumento(
+      documentAmount: documentTotal,
+      collectableAmount: effectiveDocumentCollectable(albaran),
+    );
     final scopePhrase = ruteroDocumentScopePhrase(albaran);
     final scopeTitle = ruteroDocumentScopeTitle(albaran);
     final showsDocumentTotal = _hasCollectibleBalance &&
@@ -691,7 +704,7 @@ class RuteroDetailPayment extends StatelessWidget {
       maxLength: 60,
       style: TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
-        labelText: 'Anotación (opcional)',
+        labelText: 'Observaciones de cobro *',
         counterStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 11),
         labelStyle: TextStyle(color: AppTheme.textSecondary),
         enabledBorder: OutlineInputBorder(
@@ -707,18 +720,76 @@ class RuteroDetailPayment extends StatelessWidget {
   }
 
   Widget _buildEmailToggle() {
-    final email = albaran.emailCliente.trim();
-    final hasEmail = email.isNotEmpty;
+    final stored = albaran.emailCliente.trim();
+    final hasStored = stored.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          toggled: sendEmail,
+          label: 'Enviar documento por email',
+          child: SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            value: sendEmail,
+            onChanged: isRegisteringCobro ? null : onSendEmailChanged,
+            activeColor: AppTheme.info,
+            title: Text(
+              'Enviar documento por email',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+            subtitle: Text(
+              hasStored
+                  ? stored
+                  : (sendEmail
+                      ? 'Escribe el email de destino'
+                      : 'Este cliente no tiene email en ficha'),
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        if (sendEmail && emailController != null && !hasStored) ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: emailController,
+            enabled: !isRegisteringCobro,
+            keyboardType: TextInputType.emailAddress,
+            style: TextStyle(color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'Email de destino',
+              hintText: 'cliente@empresa.com',
+              labelStyle: TextStyle(color: AppTheme.textSecondary),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppTheme.borderColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppTheme.info),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildWhatsAppToggle() {
     return Semantics(
-      toggled: sendEmail,
-      label: 'Enviar documento por email',
+      toggled: sendWhatsApp,
+      label: 'Enviar documento por WhatsApp',
       child: SwitchListTile.adaptive(
         contentPadding: EdgeInsets.zero,
-        value: sendEmail && hasEmail,
-        onChanged: !hasEmail || isRegisteringCobro ? null : onSendEmailChanged,
+        value: sendWhatsApp,
+        onChanged: isRegisteringCobro ? null : onSendWhatsAppChanged,
         activeColor: AppTheme.info,
         title: Text(
-          'Enviar documento por email',
+          'Enviar documento por WhatsApp',
           style: TextStyle(
             color: AppTheme.textPrimary,
             fontWeight: FontWeight.w600,
@@ -726,10 +797,8 @@ class RuteroDetailPayment extends StatelessWidget {
           ),
         ),
         subtitle: Text(
-          hasEmail ? email : 'Este cliente no tiene email en ficha',
+          'Tras finalizar se abrirá el envío con el PDF del cobro',
           style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
         ),
       ),
     );

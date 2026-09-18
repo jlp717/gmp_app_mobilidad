@@ -11,7 +11,37 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repar
 
 String _deliveryQuantityText(num value) {
   final fixed = value.toDouble().toStringAsFixed(3);
-  return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
+  return fixed.replaceFirst(RegExp(r'\.?0+$'), '').replaceAll('.', ',');
+}
+
+/// Driver-facing unit: kg for weight (pollo 5,75), cajas for boxes.
+String ruteroQuantityUnitLabel(String? unit, {num? quantity}) {
+  final raw = (unit ?? '').trim();
+  final u = raw.toUpperCase();
+  if (u.contains('KG') ||
+      u.contains('KILO') ||
+      u == 'G' ||
+      u == 'GR' ||
+      u.contains('GRAM')) {
+    return 'kg';
+  }
+  if (u.contains('LITR') || u == 'LT' || u == 'L') {
+    return 'l';
+  }
+  if (u.contains('CAJ') ||
+      u == 'CJ' ||
+      u.contains('BOX') ||
+      u.contains('ENVASE')) {
+    return 'cajas';
+  }
+  if (u.contains('UNIDAD') || u == 'UN' || u == 'UD' || u == 'UDS') {
+    return 'uds';
+  }
+  if (raw.isEmpty && quantity != null) {
+    final ordered = quantity.toDouble();
+    if ((ordered - ordered.roundToDouble()).abs() > 0.0001) return 'kg';
+  }
+  return raw.toLowerCase();
 }
 
 /// Step for +/- controls: weight units use 0.1, piece units use 1.
@@ -112,6 +142,8 @@ class RuteroDetailProducts extends StatelessWidget {
     required this.onShowFullscreenImage,
     this.scrollController,
     this.readOnly = false,
+    this.canonicalDocumentTotal,
+    this.quantitiesChanged = false,
     super.key,
   });
 
@@ -132,6 +164,8 @@ class RuteroDetailProducts extends StatelessWidget {
   final void Function(String imageUrl, String name) onShowFullscreenImage;
   final ScrollController? scrollController;
   final bool readOnly;
+  final double? canonicalDocumentTotal;
+  final bool quantitiesChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -292,11 +326,15 @@ class RuteroDetailProducts extends StatelessWidget {
         .where((item) => productChecked[ruteroLineKey(item)] ?? false)
         .length;
     final total = items.length;
-    final liveTotal = items.fold<double>(0, (sum, item) {
+    final liveLineSum = items.fold<double>(0, (sum, item) {
       final qty = productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida;
       return sum +
           ruteroLineDeliveredAmount(item: item, deliveredQty: qty.toDouble());
     });
+    final liveTotal = canonicalDocumentTotal ?? liveLineSum;
+    final amountLabel = quantitiesChanged || canonicalDocumentTotal == null
+        ? 'Importe según unidades'
+        : 'Importe';
 
     return RepartidorExecutivePanel(
       margin: const EdgeInsets.all(16),
@@ -361,7 +399,7 @@ class RuteroDetailProducts extends StatelessWidget {
           if (liveTotal > 0.004) ...[
             const SizedBox(height: 8),
             Text(
-              'Importe según unidades: ${liveTotal.toStringAsFixed(2).replaceAll('.', ',')} €',
+              '${amountLabel}: ${liveTotal.toStringAsFixed(2).replaceAll('.', ',')} €',
               style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w700,
@@ -666,7 +704,10 @@ class _ProductCard extends StatelessWidget {
       unit: linea.unit,
       cantidadPedida: linea.cantidadPedida,
     );
-    final unitLabel = (linea.unit ?? '').trim();
+    final unitLabel = ruteroQuantityUnitLabel(
+      linea.unit,
+      quantity: linea.cantidadPedida,
+    );
     final lineAmount = ruteroLineDeliveredAmount(
       item: linea,
       deliveredQty: quantity,
@@ -700,17 +741,23 @@ class _ProductCard extends StatelessWidget {
                   constraints: const BoxConstraints(minWidth: 64),
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   alignment: Alignment.center,
-                  child: Text(
-                    unitLabel.isEmpty
-                        ? _deliveryQuantityText(quantity)
-                        : '${_deliveryQuantityText(quantity)} $unitLabel',
-                    style: TextStyle(
-                      color:
-                          isModified ? AppTheme.warning : AppTheme.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      decoration: readOnly ? null : TextDecoration.underline,
-                      decorationStyle: TextDecorationStyle.dotted,
+                  child: Semantics(
+                    label: unitLabel.isEmpty
+                        ? 'Cantidad ${_deliveryQuantityText(quantity)}'
+                        : 'Cantidad ${_deliveryQuantityText(quantity)} $unitLabel',
+                    child: Text(
+                      unitLabel.isEmpty
+                          ? _deliveryQuantityText(quantity)
+                          : '${_deliveryQuantityText(quantity)} $unitLabel',
+                      style: TextStyle(
+                        color: isModified
+                            ? AppTheme.warning
+                            : AppTheme.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        decoration: readOnly ? null : TextDecoration.underline,
+                        decorationStyle: TextDecorationStyle.dotted,
+                      ),
                     ),
                   ),
                 ),

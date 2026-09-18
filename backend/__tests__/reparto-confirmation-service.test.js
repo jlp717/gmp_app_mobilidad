@@ -280,6 +280,48 @@ describe('transactional reparto confirmation service', () => {
     expect(repository.snapshot().events).toEqual([]);
   });
 
+  test('untouched confirmation persists CPC 31, not LAC 30.80 rounding', async () => {
+    const lineas = [
+      {
+        lineaId: '1', codigoArticulo: 'ART-1', descripcion: 'A',
+        cantidadPedida: 1, precioUnitario: 15.4,
+      },
+      {
+        lineaId: '2', codigoArticulo: 'ART-2', descripcion: 'B',
+        cantidadPedida: 1, precioUnitario: 15.4,
+      },
+    ];
+    const repository = createFakeRepository({
+      planned: plannedDelivery({
+        importeTotal: 31,
+        importePendiente: 31,
+        lineas,
+      }),
+    });
+    const service = createRepartoConfirmationService({ repository, now: fixedNow });
+    const input = command({
+      delivery: {
+        lineas: lineas.map((line) => ({
+          lineaId: line.lineaId,
+          codigoArticulo: line.codigoArticulo,
+          cantidadPedida: line.cantidadPedida,
+          cantidadEntregada: line.cantidadPedida,
+          cantidadRechazada: 0,
+          cantidadPendiente: 0,
+          motivoDiferencia: null,
+        })),
+      },
+    });
+
+    await service.confirm(input);
+    expect(repository.snapshot().idempotency.get(input.idempotencyKey).result.receiptProof)
+      .toMatchObject({
+        plannedImporteTotal: 31,
+        deliveredImporteTotal: 31,
+        quantitiesChanged: false,
+      });
+  });
+
   test('confirms a prepaid zero-importe delivery with no planned lines', async () => {
     const repository = createFakeRepository({
       planned: plannedDelivery({
@@ -296,7 +338,11 @@ describe('transactional reparto confirmation service', () => {
     expect(result).toMatchObject({ created: true, deliveryStatus: 'ENTREGADO' });
     expect(result).not.toHaveProperty('receiptProof');
     expect(repository.snapshot().idempotency.get(command().idempotencyKey).result.receiptProof).toEqual({
-      plannedImporteTotal: 0, plannedLineCount: 0, actualLineCount: 0,
+      plannedImporteTotal: 0,
+      deliveredImporteTotal: 0,
+      quantitiesChanged: false,
+      plannedLineCount: 0,
+      actualLineCount: 0,
       prepaidZeroWithoutLines: true,
     });
     expect(repository.snapshot().lines.get('1')).toEqual([]);

@@ -56,7 +56,7 @@ const validCobro = () => ({
   codigoCliente: '4300009479', codigoRepartidor: '94', tipoDocumento: 'ALB',
   ejercicioDocumento: 2026, serieDocumento: 'S', terminalDocumento: 10,
   numeroDocumento: 404, importeCobrado: 10, formaPago: 'EFECTIVO',
-  idempotencyToken: 'cobro-gap-0001',
+  idempotencyToken: 'cobro-gap-0001', notas: 'Resto de cobro en Cobros',
 });
 const validClose = () => ({ repartidorId: '94', date: '2026-08-10', idempotencyToken: 'close-gap-0001' });
 const validTiers = () => ({ tiers: [{ thresholdPct: 30, commissionPct: 1 }] });
@@ -145,6 +145,32 @@ describe('repartidor finance HTTP guard coverage', () => {
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ codigoRepartidor: '94', operador: '94' }));
     expect(notifySpy).toHaveBeenCalledWith(expect.objectContaining({ result: expect.objectContaining({ created: true }) }));
     expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  test('leftover cobros POST from Cobros tab forwards notas and origin', async () => {
+    const spy = jest.spyOn(financeService, 'registerCobro').mockResolvedValue({ created: true, cobro: { id: '2' } });
+    jest.spyOn(repartoVarianceNotificationService, 'notifyAfterCobro').mockResolvedValue({ skipped: true });
+    const response = await request(server).post('/finanzas/cobros').send({
+      ...validCobro(),
+      pantallaOrigen: 'VENCIMIENTOS',
+      notas: 'Resto tras entrega',
+    });
+    expect(response.status).toBe(201);
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+      pantallaOrigen: 'VENCIMIENTOS',
+      notas: 'Resto tras entrega',
+    }));
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  test('leftover cobros POST never forwards notas null', async () => {
+    const spy = jest.spyOn(financeService, 'registerCobro').mockResolvedValue({ created: true, cobro: { id: '3' } });
+    jest.spyOn(repartoVarianceNotificationService, 'notifyAfterCobro').mockResolvedValue({ skipped: true });
+    const body = { ...validCobro(), pantallaOrigen: 'VENCIMIENTOS' };
+    delete body.notas;
+    const response = await request(server).post('/finanzas/cobros').send(body);
+    expect(response.status).toBe(201);
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ notas: '' }));
   });
 
   test('reverse cobro enforces ownership, validates input, and preserves fail-closed 503', async () => {

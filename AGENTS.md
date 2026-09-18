@@ -125,6 +125,9 @@ Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero":
 - El perfil comercial es un workstream aparte del de reparto (pedidos, devoluciones y liquidación diaria); no mezclar su validación con la de REPARTIDOR.
 - Identificadores de albarán/factura en UI y PDF deben mostrar la serie completa (p.ej. P-15-2296, no P-2296).
 - En cartera y deuda comercial, consultar tablas DSEDAC (CVC, FPG, CAC, CPC), no VISTA_DEUDA_BASE.
+- Las observaciones de cobro son obligatorias; nunca enviar `notas:null`.
+- En el sheet del rutero en curso, cobro y entrega se confirman juntos al Finalizar (nombre, apellidos, DNI y firma); no persistir el cobro con «Registrar cobro» antes de esa evidencia.
+- El documento de cobro se envía al finalizar (email del cliente en BBDD o uno indicado por el repartidor, o WhatsApp) y debe llegar a operaciones y al repartidor.
 
 ## Learned Workspace Facts
 
@@ -134,10 +137,9 @@ Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero":
 - En cobro del rutero hay 4 métodos (Efectivo, Tarjeta, Bizum, Talón): Transferencia se sustituye por Talón (el usuario nunca ve Transferencia). Talón exige número, vencimiento y banco del catálogo ENB.
 - Si las unidades entregadas difieren de las previstas, el albarán recalcula precio unitario/totales y la liquidación diaria debe cuadrar con esos importes.
 - Devoluciones sobre facturas ya cobradas (PG = FPG/pagaré, no es tipo de documento) ajustan la liquidación del vendedor (ya cobrados / caja); no restar otra vez el total LQD. Los días de plazo salen de FPG; 30 es un ejemplo, no un hardcode.
-- El saldo cobrable de una entrega se limita al importe del documento (CPC), no a la deuda CVC del cliente; la UI distingue este albarán vs deuda del cliente.
+- El saldo cobrable de una entrega se limita al importe del documento (CPC / total vivo del albarán), no a la deuda CVC del cliente; lista, ficha, cabecera y cobro deben coincidir si no se tocan cantidades.
 - En facturas, la lista debe mostrar totales agregados (importe, recuento, base con/sin IVA).
-- Las escrituras a base de datos van solo a TEST (isolated_test / JAVIER.TEST_*); DSEDAC es lectura o copia hacia test, nunca escritura.
-- En isolated_test, el correo usa sink/allowlist y no debe enviarse a bandejas reales de clientes ERP; la lista to/cc de producto debe construirse completa igual (operaciones + repartidor de la acción).
+- Las escrituras van solo a TEST (isolated_test / JAVIER.TEST_*); DSEDAC es lectura o copia hacia test, nunca escritura. En isolated_test el correo usa sink/allowlist (no bandejas ERP reales) pero construye to/cc completo (operaciones + repartidor).
 - El login acepta nombre de vendedor (p.ej. diego) y código numérico; el match exacto de SEC-01 no debe romper el alias de nombre.
 - jefe_ventas con catálogo de vendedores ≥20 debe enviar ALL; no expandir el JWT a un IN de ~80–94 códigos.
 - El cuello SQL restante en frío es DSED.LACLAE (GROUP BY); bajarlo exige índice/DDL de Javier, no más parches de aplicación.

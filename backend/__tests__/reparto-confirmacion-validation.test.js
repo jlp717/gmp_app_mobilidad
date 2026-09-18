@@ -72,11 +72,13 @@ function delivery(overrides = {}) {
   };
 }
 
-function payment() {
+function payment(overrides = {}) {
   return {
     entregaId: '2026-S-10-404-4300009479',
     importeCobrado: 84.5,
     formaPago: 'EFECTIVO',
+    notas: 'Cobro en ruta',
+    ...overrides,
   };
 }
 
@@ -305,6 +307,56 @@ describe('structured reparto confirmation validation', () => {
     expect(res.status).toBe(201);
     expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({
       cobro: expect.objectContaining({ importeCobrado: 84.5 }),
+    }), { signal: expect.any(AbortSignal) });
+  });
+
+  test('rejects client email send without destination', async () => {
+    const res = await request(makeApp())
+      .post('/api/repartidor-finanzas/rutero/confirm-delivery-cobro')
+      .set('Idempotency-Key', 'delivery-notify-missing-email')
+      .send({
+        delivery: delivery(),
+        notifications: { sendClientEmail: true, sendWhatsApp: false },
+      });
+
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 'INVALID_DELIVERY_PAYLOAD',
+    });
+    expect(mockConfirm).not.toHaveBeenCalled();
+  });
+
+  test('accepts email and WhatsApp flags on finalize', async () => {
+    const res = await request(makeApp())
+      .post('/api/repartidor-finanzas/rutero/confirm-delivery-cobro')
+      .set('Idempotency-Key', 'delivery-notify-wired')
+      .send({
+        delivery: delivery(),
+        notifications: {
+          sendClientEmail: true,
+          sendWhatsApp: true,
+          clientEmail: 'bar@cliente.test',
+        },
+      });
+
+    expect(res.status).toBe(201);
+    expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({
+      notifications: expect.objectContaining({
+        sendClientEmail: true,
+        sendWhatsApp: true,
+        clientEmail: 'bar@cliente.test',
+      }),
+    }), { signal: expect.any(AbortSignal) });
+  });
+
+  test('finalize cobro never forwards notas null', async () => {
+    const cobro = payment();
+    delete cobro.notas;
+    const res = await post(delivery(), { cobro, key: 'delivery-notas-never-null' });
+    expect(res.status).toBe(201);
+    expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({
+      cobro: expect.objectContaining({ notas: '' }),
     }), { signal: expect.any(AbortSignal) });
   });
 });

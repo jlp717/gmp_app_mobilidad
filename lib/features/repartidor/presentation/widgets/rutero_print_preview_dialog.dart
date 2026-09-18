@@ -3,6 +3,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_delivery_validation.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_products.dart';
 import 'package:signature/signature.dart';
@@ -140,7 +141,15 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
       0,
       (sum, item) => sum + _lineAmount(item),
     );
-    return live > 0.004 ? live : widget.albaran.importeTotal;
+    final qtyChanged = widget.items.any((item) {
+      final delivered = _deliveredQty(item);
+      return (delivered - item.cantidadPedida.toDouble()).abs() > 0.0001;
+    });
+    return canonicalRuteroDocumentAmount(
+      headerAmount: widget.albaran.importeTotal,
+      deliveredLineSum: live,
+      quantitiesChanged: qtyChanged,
+    );
   }
 
   Future<void> _print() async {

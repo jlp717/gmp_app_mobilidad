@@ -325,4 +325,149 @@ void main() {
     await tester.pump();
     expect(taps, 1);
   });
+
+  testWidgets(
+      'in-progress cobro tab does not register; completed remaining cobro can',
+      (tester) async {
+    final controller = TextEditingController(text: '120,50');
+    await tester.pumpWidget(
+      _wrap(
+        RuteroDetailPayment(
+          albaran: _collectableAlbaran(),
+          selectedPaymentMethod: 'EFECTIVO',
+          isPaid: true,
+          pagoError: null,
+          importeCobradoController: controller,
+          importeCobradoError: null,
+          showContinueToFinalize: true,
+          onPaymentMethodChanged: (_) {},
+          onPaidChanged: () {},
+          onContinueToFinalize: () {},
+          getPaymentTypeLabel: () => 'Contado',
+        ),
+      ),
+    );
+    expect(find.text('Registrar cobro'), findsNothing);
+    expect(find.text('Continuar a finalizar'), findsOneWidget);
+
+    var registered = false;
+    await tester.pumpWidget(
+      _wrap(
+        RuteroDetailPayment(
+          albaran: _collectableAlbaran(),
+          selectedPaymentMethod: 'EFECTIVO',
+          isPaid: true,
+          pagoError: null,
+          importeCobradoController: controller,
+          importeCobradoError: null,
+          showContinueToFinalize: false,
+          canRegisterCobro: true,
+          onRegisterCobro: () => registered = true,
+          onPaymentMethodChanged: (_) {},
+          onPaidChanged: () {},
+          onContinueToFinalize: () {},
+          getPaymentTypeLabel: () => 'Contado',
+        ),
+      ),
+    );
+    expect(find.text('Registrar cobro'), findsOneWidget);
+    await tester.tap(find.text('Registrar cobro'));
+    await tester.pump();
+    expect(registered, isTrue);
+  });
+
+  testWidgets(
+      'email toggle works without stored client email and offers WhatsApp',
+      (tester) async {
+    final controller = TextEditingController(text: '40,00');
+    final email = TextEditingController();
+    var sendEmail = false;
+    var sendWhatsApp = false;
+    await tester.pumpWidget(
+      _wrap(
+        StatefulBuilder(
+          builder: (context, setState) {
+            return RuteroDetailPayment(
+              albaran: _collectableAlbaran(
+                  saldo: 40, deudaCliente: 40, capped: false),
+              selectedPaymentMethod: 'EFECTIVO',
+              isPaid: true,
+              pagoError: null,
+              importeCobradoController: controller,
+              importeCobradoError: null,
+              sendEmail: sendEmail,
+              sendWhatsApp: sendWhatsApp,
+              emailController: email,
+              onSendEmailChanged: (value) => setState(() => sendEmail = value),
+              onSendWhatsAppChanged: (value) =>
+                  setState(() => sendWhatsApp = value),
+              onPaymentMethodChanged: (_) {},
+              onPaidChanged: () {},
+              onContinueToFinalize: () {},
+              getPaymentTypeLabel: () => 'Contado',
+            );
+          },
+        ),
+      ),
+    );
+
+    expect(find.text('Enviar documento por email'), findsOneWidget);
+    expect(find.text('Enviar documento por WhatsApp'), findsOneWidget);
+    expect(find.textContaining('Este cliente no tiene email en ficha'),
+        findsOneWidget);
+
+    await tester.tap(find.byType(SwitchListTile).first);
+    await tester.pump();
+    expect(find.text('Email de destino'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).last, 'bar@cliente.test');
+    await tester.pump();
+    expect(email.text, 'bar@cliente.test');
+  });
+
+  testWidgets('cobro 174.78 vs header 161.58 muestra solo el documento',
+      (tester) async {
+    final controller = TextEditingController(text: '161,58');
+    final albaran = AlbaranEntrega(
+      id: '2026-P-15-2296-C1',
+      numeroAlbaran: 2296,
+      ejercicio: 2026,
+      serie: 'P',
+      terminal: 15,
+      codigoCliente: 'C1',
+      nombreCliente: 'Bar La Esquina',
+      fecha: '2026-09-18',
+      importeTotal: 161.58,
+      codigoRepartidor: '08',
+      estado: EstadoEntrega.enRuta,
+      importeDisponibleCobro: 174.78,
+      importeCvcPendiente: 174.78,
+      cobroSaldoCapped: true,
+      esCTR: true,
+    );
+
+    await tester.pumpWidget(
+      _wrap(
+        RuteroDetailPayment(
+          albaran: albaran,
+          selectedPaymentMethod: 'EFECTIVO',
+          isPaid: false,
+          pagoError: null,
+          importeCobradoController: controller,
+          importeCobradoError: null,
+          liveDocumentTotal: 161.58,
+          onPaymentMethodChanged: (_) {},
+          onPaidChanged: () {},
+          onContinueToFinalize: () {},
+          getPaymentTypeLabel: () => 'Contado',
+        ),
+      ),
+    );
+
+    expect(find.textContaining('161,58'), findsWidgets);
+    expect(find.textContaining('174,78'), findsOneWidget);
+    expect(find.textContaining('Deuda total del cliente'), findsOneWidget);
+    expect(find.textContaining('Solo puedes cobrar el saldo de este albarán'),
+        findsOneWidget);
+  });
 }

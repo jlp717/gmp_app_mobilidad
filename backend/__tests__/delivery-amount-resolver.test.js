@@ -4,6 +4,8 @@ const {
   resolveDeliveryAmount,
   allowsEmptyPlannedLines,
   sanitizeErpAmount,
+  resolveConfirmedDocumentAmount,
+  resolvePersistedDocumentAmount,
   PRICING_STATE,
   AMOUNT_SOURCE,
 } = require('../services/delivery-amount-resolver');
@@ -190,5 +192,58 @@ describe('delivery-line-amount-stats', () => {
     expect(calls).toHaveLength(3);
     expect(calls.every(({ params }) => params.length <= 80 * 5)).toBe(true);
     expect(peakActive).toBe(3);
+  });
+
+  test('untouched confirmation keeps CPC header instead of LAC line sum', () => {
+    expect(resolveConfirmedDocumentAmount({
+      plannedAmount: 31,
+      lines: [
+        { cantidadPedida: 1, cantidadEntregada: 1, precioUnitario: 15.40 },
+        { cantidadPedida: 1, cantidadEntregada: 1, precioUnitario: 15.40 },
+      ],
+    })).toBe(31);
+  });
+
+  test('qty change persists the delivered line amount, not original CPC', () => {
+    expect(resolveConfirmedDocumentAmount({
+      plannedAmount: 31,
+      lines: [
+        { cantidadPedida: 1, cantidadEntregada: 0.5, precioUnitario: 15.40 },
+        { cantidadPedida: 1, cantidadEntregada: 1, precioUnitario: 15.40 },
+      ],
+    })).toBe(23.1);
+  });
+
+  test('list 31 vs LAC 30.80/29.80 stays CPC when qty untouched', () => {
+    const proof = JSON.stringify({
+      receiptProof: {
+        plannedImporteTotal: 31,
+        deliveredImporteTotal: 31,
+        quantitiesChanged: false,
+      },
+    });
+    expect(resolvePersistedDocumentAmount({
+      plannedAmount: 31,
+      lineSum: 30.80,
+      resultJson: proof,
+    })).toBe(31);
+    expect(resolvePersistedDocumentAmount({
+      plannedAmount: 31,
+      lineSum: 29.80,
+    })).toBe(31);
+  });
+
+  test('qty-changed overlay uses persisted delivered total, not original CPC', () => {
+    expect(resolvePersistedDocumentAmount({
+      plannedAmount: 31,
+      lineSum: 23.10,
+      resultJson: JSON.stringify({
+        receiptProof: {
+          plannedImporteTotal: 31,
+          deliveredImporteTotal: 23.10,
+          quantitiesChanged: true,
+        },
+      }),
+    })).toBe(23.1);
   });
 });

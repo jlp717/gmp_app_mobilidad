@@ -96,7 +96,10 @@ const cobroSchema = z.object({
   formaPago: z.string().trim().min(1).max(20),
   pantallaOrigen: z.enum(['RUTERO', 'VENCIMIENTOS']).default('RUTERO'),
   idempotencyToken: idempotencyTokenSchema,
-  notas: z.string().trim().max(60).optional(),
+  notas: z.preprocess(
+    (value) => value == null ? '' : value,
+    z.string().trim().max(60),
+  ),
   numeroTalon: z.string().trim().min(1).max(10).optional(),
   fechaVencimientoTalon: z.string().trim().min(8).max(12).optional(),
   codigoEntidadBancaria: z.string().trim().min(4).max(4).optional(),

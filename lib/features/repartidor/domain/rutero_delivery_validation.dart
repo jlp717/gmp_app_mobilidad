@@ -68,6 +68,7 @@ class RuteroDeliveryValidationInput {
     this.fechaVencimientoTalon = '',
     this.nombreBanco = '',
     this.codigoEntidadBancaria = '',
+    this.cobroNotas = '',
   });
 
   final bool isLoadingItems;
@@ -92,6 +93,7 @@ class RuteroDeliveryValidationInput {
   final String fechaVencimientoTalon;
   final String nombreBanco;
   final String codigoEntidadBancaria;
+  final String cobroNotas;
   final double? importeDisponibleCobro;
 
   /// Server-enforced ceiling for the payment amount. On a complete delivery
@@ -164,6 +166,52 @@ double capSaldoCobrableAlDocumento({
   return collectableAmount < documentAmount
       ? double.parse(collectableAmount.toStringAsFixed(2))
       : double.parse(documentAmount.toStringAsFixed(2));
+}
+
+/// One money identity for an albarán across list, sheet, cobro and PDFs.
+///
+/// Untouched document → ERP header already shown on the list
+/// (`CPC.IMPORTETOTAL` via `resolveDeliveryAmount`). Do NOT substitute the
+/// LAC qty×price sum: that is net of VAT and per-line rounded.
+/// After the driver changes delivered qty (or unchecks a line) → live
+/// delivered line sum, which is what liquidación and histórico must persist.
+double canonicalRuteroDocumentAmount({
+  required double headerAmount,
+  required double deliveredLineSum,
+  required bool quantitiesChanged,
+}) {
+  final header = double.parse(headerAmount.toStringAsFixed(2));
+  if (!quantitiesChanged) return header;
+  final live = double.parse(deliveredLineSum.toStringAsFixed(2));
+  return live.abs() >= 0.005 ? live : header;
+}
+
+/// Yellow footer on the Finalizar tab. Empty after a completed delivery so
+/// the driver never sees "Falta: Nombre…" on a stop that already has PDFs.
+List<String> ruteroFinalizeGaps({
+  required bool isCompleted,
+  required RepartoDeliveryStatus status,
+  required String nombre,
+  required String apellidos,
+  required String dni,
+  required bool signatureEmpty,
+  required bool hasPersistedSignature,
+}) {
+  if (isCompleted) return const <String>[];
+  if (status == RepartoDeliveryStatus.noEntregado) {
+    return const <String>[];
+  }
+  final gaps = <String>[];
+  if (nombre.trim().isEmpty) gaps.add('Nombre');
+  if (apellidos.trim().isEmpty) gaps.add('Apellidos');
+  if (dni.trim().isEmpty) gaps.add('DNI');
+  if (signatureEmpty && !hasPersistedSignature) gaps.add('Firma');
+  return gaps;
+}
+
+String? ruteroFinalizeGapsMessage(List<String> gaps) {
+  if (gaps.isEmpty) return null;
+  return 'Falta: ${gaps.join(', ')}. Está justo encima del botón.';
 }
 
 const kRuteroTalonRequiredMessage =
@@ -322,6 +370,16 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
       ),
     );
   } else if (input.isPaid) {
+    final cobroNotes = input.cobroNotas.trim();
+    if (cobroNotes.isEmpty) {
+      issues.add(
+        const RuteroFieldIssue(
+          tab: RuteroDeliveryTab.payment,
+          field: 'pago',
+          message: 'Las observaciones de cobro son obligatorias.',
+        ),
+      );
+    }
     final importe = parseRuteroMoney(input.importeCobradoText);
     if (importe == null || importe <= 0) {
       issues.add(

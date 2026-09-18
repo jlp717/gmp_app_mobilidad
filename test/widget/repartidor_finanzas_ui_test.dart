@@ -336,6 +336,40 @@ void main() {
     );
   });
 
+  test('cobro de vencimiento nunca envía notas null', () async {
+    Map<String, dynamic>? sentPayload;
+    final service = RepartidorFinanzasService(
+      pendingOperations: () => const [],
+      offlinePost: (endpoint, data, {syncType, cacheKey}) async {
+        sentPayload = data;
+        return <String, dynamic>{'queued': true, 'syncId': 'sync-empty-notes'};
+      },
+    );
+
+    await service.registerVencimientoCobro(
+      repartidorId: '94',
+      codigoCliente: '4300001119',
+      nombreCliente: 'CARNICERIA MECA',
+      tipoDocumento: 'CAC',
+      documento: 'I-10-2730',
+      keys: const {
+        'tipoDocumento': 'CAC',
+        'ejercicioDocumento': 2026,
+        'serieDocumento': 'I',
+        'terminalDocumento': 10,
+        'numeroDocumento': 2730,
+      },
+      importeCobrado: 10,
+      importePendiente: 30,
+      formaPago: 'EFECTIVO',
+      idempotencyToken: 'cobro-notas-never-null',
+    );
+
+    expect(sentPayload?.containsKey('notas'), isTrue);
+    expect(sentPayload?['notas'], '');
+    expect(sentPayload?['notas'], isNot(isNull));
+  });
+
   test('cobro de vencimiento envía los 3 campos de talón', () async {
     Map<String, dynamic>? sentPayload;
     final service = RepartidorFinanzasService(
@@ -394,7 +428,7 @@ void main() {
       estado: null as String?,
       tipoDocumento: null as String?,
       cursor: null as String?,
-      limit: 100,
+      limit: 40,
       forceRefresh: false,
     );
 
@@ -450,9 +484,16 @@ void main() {
     await tester.tap(find.text('Cobrar'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Observaciones (opcional)'), findsOneWidget);
+    expect(find.text('Observaciones de cobro *'), findsOneWidget);
     expect(find.text('Efectivo'), findsOneWidget);
     expect(find.text('Transferencia'), findsNothing);
+
+    await tester.tap(find.bySemanticsLabel('Registrar cobro'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Las observaciones de cobro son obligatorias.'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const ValueKey('cobros-forma-pago')));
     await tester.pumpAndSettle();

@@ -231,7 +231,10 @@ const paymentSchema = z.object({
   entregaId: z.union([z.string(), z.number()]).optional().nullable(),
   importeCobrado: z.number().finite().positive().max(99999999),
   formaPago: strictText(20),
-  notas: z.string().trim().max(500).optional(),
+  notas: z.preprocess(
+    (value) => value == null ? '' : value,
+    z.string().trim().max(500),
+  ),
   numeroTalon: z.string().trim().min(1).max(10).optional(),
   fechaVencimientoTalon: z.string().trim().min(8).max(12).optional(),
   codigoEntidadBancaria: z.string().trim().min(4).max(4).optional(),
@@ -248,9 +251,36 @@ const paymentSchema = z.object({
     }
   }
 });
+const notificationsSchema = z.object({
+  sendClientEmail: z.boolean().optional().default(false),
+  sendWhatsApp: z.boolean().optional().default(false),
+  clientEmail: z.string().trim().max(180).optional(),
+}).strict().superRefine((value, ctx) => {
+  if (!value.sendClientEmail) return;
+  const email = String(value.clientEmail || '').trim();
+  if (!email) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['clientEmail'],
+      message: 'Indica un email de destino para enviar el documento',
+    });
+    return;
+  }
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    || /^[^\s@]+@localhost$/i.test(email);
+  if (!valid) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['clientEmail'],
+      message: 'Email de destino invalido',
+    });
+  }
+});
+
 const confirmationSchema = z.object({
   delivery: deliverySchema,
   cobro: paymentSchema.optional(),
+  notifications: notificationsSchema.optional(),
 }).strict().superRefine((value, ctx) => {
   if (value.cobro && !['ENTREGADO', 'PARCIAL'].includes(value.delivery.status)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cobro'], message: 'El estado no admite cobro' });
@@ -383,6 +413,7 @@ function buildConfirmationCommand({ user, headers, body }) {
     cobro: parsed.cobro ? {
       ...parsed.cobro,
     } : undefined,
+    notifications: parsed.notifications,
   };
 }
 

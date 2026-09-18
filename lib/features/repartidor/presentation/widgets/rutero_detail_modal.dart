@@ -278,6 +278,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       TextEditingController();
   final TextEditingController _bancoCodigoController = TextEditingController();
   final TextEditingController _bancoNombreController = TextEditingController();
+  final TextEditingController _cobroEmailController = TextEditingController();
   final FocusNode _nombreFocusNode = FocusNode();
   final FocusNode _apellidosFocusNode = FocusNode();
   final FocusNode _dniFocusNode = FocusNode();
@@ -312,6 +313,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   bool _isSubmitting = false;
   bool _isRegisteringCobro = false;
   bool _sendCobroEmail = false;
+  bool _sendCobroWhatsApp = false;
   String? _pendingStandaloneCobroToken;
   bool _allowProgrammaticDismiss = false;
   late final RepartoConfirmationJournal _confirmationJournal;
@@ -381,20 +383,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
 
     _observacionesController.text = _albaran.observaciones ?? '';
-    final importeDisponibleCobro = _albaran.importeDisponibleCobro;
-    _importeCobradoController.text =
-        importeDisponibleCobro != null && importeDisponibleCobro > 0.004
-            ? importeDisponibleCobro.toStringAsFixed(2).replaceAll('.', ',')
-            : '';
-    _lastSuggestedImporteCobrado = importeDisponibleCobro;
-    _isPaid = widget.albaran.esCTR &&
-        importeDisponibleCobro != null &&
-        importeDisponibleCobro > 0.004;
+    final collectable = capSaldoCobrableAlDocumento(
+      documentAmount: widget.albaran.importeTotal,
+      collectableAmount: widget.albaran.importeDisponibleCobro ?? 0,
+    );
+    _importeCobradoController.text = collectable > 0.004
+        ? collectable.toStringAsFixed(2).replaceAll('.', ',')
+        : '';
+    _lastSuggestedImporteCobrado = collectable > 0.004 ? collectable : null;
+    _isPaid = widget.albaran.esCTR && collectable > 0.004;
 
     if (widget.albaran.esCTR) {
       _selectedPaymentMethod = 'EFECTIVO';
     }
     _sendCobroEmail = widget.albaran.emailCliente.trim().isNotEmpty;
+    _cobroEmailController.text = widget.albaran.emailCliente.trim();
 
     _loadItems();
     _loadPrinterConfig();
@@ -644,7 +647,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (mounted) {
         setState(() {
           _albaran = widget.albaran.copyWith(
-            importeTotal: albaranDetalle.importeTotal,
+            importeTotal: widget.albaran.importeTotal > 0.004
+                ? widget.albaran.importeTotal
+                : albaranDetalle.importeTotal,
+            emailCliente: albaranDetalle.emailCliente.trim().isNotEmpty
+                ? albaranDetalle.emailCliente
+                : widget.albaran.emailCliente,
             importeBruto: albaranDetalle.importeBruto,
             importeNeto: albaranDetalle.importeNeto,
             importeIva: albaranDetalle.importeIva,
@@ -666,13 +674,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             cobroSaldoCapped: albaranDetalle.cobroSaldoCapped,
             items: filtered,
           );
+          final email = _albaran.emailCliente.trim();
+          if (email.isNotEmpty && _cobroEmailController.text.trim().isEmpty) {
+            _cobroEmailController.text = email;
+            if (!_isCompleted) _sendCobroEmail = true;
+          }
           if (!_isPaid) {
-            final importeDisponibleCobro = _albaran.importeDisponibleCobro;
-            _importeCobradoController.text = importeDisponibleCobro != null &&
-                    importeDisponibleCobro > 0.004
+            final importeDisponibleCobro = capSaldoCobrableAlDocumento(
+              documentAmount: _liveAlbaranTotal,
+              collectableAmount: _albaran.importeDisponibleCobro ?? 0,
+            );
+            _importeCobradoController.text = importeDisponibleCobro > 0.004
                 ? importeDisponibleCobro.toStringAsFixed(2).replaceAll('.', ',')
                 : '';
-            _lastSuggestedImporteCobrado = importeDisponibleCobro;
+            _lastSuggestedImporteCobrado =
+                importeDisponibleCobro > 0.004 ? importeDisponibleCobro : null;
           }
           _itemsError = identityError;
           _items = filtered;
@@ -716,6 +732,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _fechaVencimientoTalonController.dispose();
     _bancoCodigoController.dispose();
     _bancoNombreController.dispose();
+    _cobroEmailController.dispose();
     _nombreFocusNode.dispose();
     _apellidosFocusNode.dispose();
     _dniFocusNode.dispose();
@@ -741,7 +758,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
   static String _formatQuantity(num value) {
     final fixed = _normalizeQuantity(value).toStringAsFixed(3);
-    return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
+    return fixed.replaceFirst(RegExp(r'\.?0+$'), '').replaceAll('.', ',');
   }
 
   double _boundedQuantity(String lineId, num value) {
@@ -767,23 +784,56 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         _ => false,
       };
 
-  bool get _canStandaloneCobro => canRegisterRuteroStandaloneCobro(_albaran);
+  bool get _canStandaloneCobro =>
+      _isCompleted && canRegisterRuteroStandaloneCobro(_albaran);
 
   bool get _productsReadOnly => _isCompleted;
 
-  double get _liveAlbaranTotal {
-    if (_items.isEmpty) return _albaran.importeTotal;
-    final live = _items.fold<double>(0, (sum, item) {
-      final qty =
-          _productQuantities[ruteroLineKey(item)] ?? item.cantidadPedida;
+  bool get _quantitiesChangedForCanonical {
+    if (_items.isEmpty) return false;
+    return _items.any((item) {
+      final lineId = ruteroLineKey(item);
+      final ordered = item.cantidadPedida;
+      final checked = _productChecked[lineId] ?? false;
+      final selected = _productQuantities[lineId] ?? ordered;
+      final delivered = switch (_deliveryStatus) {
+        RepartoDeliveryStatus.noEntregado ||
+        RepartoDeliveryStatus.rechazado =>
+          0.0,
+        RepartoDeliveryStatus.entregado => selected,
+        RepartoDeliveryStatus.parcial => checked ? selected : 0.0,
+      };
+      return _quantityDiffers(delivered, ordered);
+    });
+  }
+
+  double get _deliveredLineSum {
+    if (_items.isEmpty) return 0;
+    return _items.fold<double>(0, (sum, item) {
+      final lineId = ruteroLineKey(item);
+      final ordered = item.cantidadPedida;
+      final checked = _productChecked[lineId] ?? false;
+      final selected = _productQuantities[lineId] ?? ordered;
+      final delivered = switch (_deliveryStatus) {
+        RepartoDeliveryStatus.noEntregado ||
+        RepartoDeliveryStatus.rechazado =>
+          0.0,
+        RepartoDeliveryStatus.entregado => selected.toDouble(),
+        RepartoDeliveryStatus.parcial => checked ? selected.toDouble() : 0.0,
+      };
       return sum +
           ruteroLineDeliveredAmount(
             item: item,
-            deliveredQty: qty.toDouble(),
+            deliveredQty: delivered,
           );
     });
-    return live > 0.004 ? live : _albaran.importeTotal;
   }
+
+  double get _liveAlbaranTotal => canonicalRuteroDocumentAmount(
+        headerAmount: _albaran.importeTotal,
+        deliveredLineSum: _deliveredLineSum,
+        quantitiesChanged: _quantitiesChangedForCanonical,
+      );
 
   Color get _terminalAccentColor => switch (widget.albaran.estado) {
         EstadoEntrega.entregado => AppTheme.success,
@@ -841,12 +891,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     RuteroDetailTabBar(
                       tabController: _tabController,
                       isUrgent: _isUrgent,
-                      productErrorCount: productErrorCount,
-                      paymentErrorCount: paymentErrorCount,
-                      finalizeErrorCount: finalizeErrorCount,
+                      productErrorCount: _isCompleted ? 0 : productErrorCount,
+                      paymentErrorCount: _isCompleted ? 0 : paymentErrorCount,
+                      finalizeErrorCount: _isCompleted ? 0 : finalizeErrorCount,
                     ),
                     RuteroValidationBanner(
-                      issues: _validationIssues,
+                      issues: _isCompleted
+                          ? const <RuteroFieldIssue>[]
+                          : _validationIssues,
                       onIssueTap: _focusValidationIssue,
                     ),
                     Expanded(
@@ -962,6 +1014,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             productQuantities: _productQuantities,
             ordenPreparacion: widget.albaran.ordenPreparacion?.toString(),
             readOnly: _productsReadOnly,
+            canonicalDocumentTotal: _liveAlbaranTotal,
+            quantitiesChanged: _quantitiesChangedForCanonical,
             onProductCheckedChanged: (lineId, value) {
               setState(() {
                 _productChecked[lineId] = value;
@@ -1088,6 +1142,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       canRegisterCobro: _canStandaloneCobro && !_isRegisteringCobro,
       isRegisteringCobro: _isRegisteringCobro,
       sendEmail: _sendCobroEmail,
+      sendWhatsApp: _sendCobroWhatsApp,
+      emailController: _cobroEmailController,
       paymentLocked: _isUrgent && _albaran.tieneSaldoCobrable,
       readOnly: _isCompleted && !_canStandaloneCobro,
       numeroTalonController: _numeroTalonController,
@@ -1098,7 +1154,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       onSendEmailChanged: (value) {
         setState(() => _sendCobroEmail = value);
       },
-      onRegisterCobro: _registerStandaloneCobro,
+      onSendWhatsAppChanged: (value) {
+        setState(() => _sendCobroWhatsApp = value);
+      },
+      onRegisterCobro: _isCompleted ? _registerStandaloneCobro : null,
       showDeliveryPrepToggle: !_isCompleted,
       showContinueToFinalize: !_isCompleted,
       onPaymentMethodChanged: (method) {
@@ -1125,39 +1184,97 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             _removeIssue('pago');
             _removeIssue('importe');
             if (_importeCobradoController.text.trim().isEmpty) {
-              _importeCobradoController.text = _albaran.importeDisponibleCobro!
-                  .toStringAsFixed(2)
-                  .replaceAll('.', ',');
-              _lastSuggestedImporteCobrado = _albaran.importeDisponibleCobro;
+              final suggested = capSaldoCobrableAlDocumento(
+                documentAmount: _liveAlbaranTotal,
+                collectableAmount: _albaran.importeDisponibleCobro ?? 0,
+              );
+              _importeCobradoController.text = suggested > 0.004
+                  ? suggested.toStringAsFixed(2).replaceAll('.', ',')
+                  : '';
+              _lastSuggestedImporteCobrado =
+                  suggested > 0.004 ? suggested : null;
             }
           }
         });
       },
-      onContinueToFinalize: () {
-        HapticFeedback.mediumImpact();
-        _tabController.animateTo(2);
-      },
+      onContinueToFinalize: _prepareCobroAndContinue,
       getPaymentTypeLabel: _getPaymentTypeLabel,
     );
   }
 
-  List<String> get _finalizeGaps {
-    if (_deliveryStatus == RepartoDeliveryStatus.noEntregado) {
-      return const <String>[];
+  String get _cobroDestinationEmail => _cobroEmailController.text.trim().isEmpty
+      ? _albaran.emailCliente.trim()
+      : _cobroEmailController.text.trim();
+
+  bool _validatePreparedCobroNotifications() {
+    if (!_sendCobroEmail) return true;
+    if (!isValidRepartoReceiptEmailAddress(_cobroDestinationEmail)) {
+      setState(() {
+        _pagoError =
+            'Indica un email de destino o desactiva el envío por correo.';
+        _spotlightField = 'pago';
+      });
+      _tabController.animateTo(1);
+      return false;
     }
-    final gaps = <String>[];
-    if (_nombreController.text.trim().isEmpty) gaps.add('Nombre');
-    if (_apellidosController.text.trim().isEmpty) gaps.add('Apellidos');
-    if (_dniController.text.trim().isEmpty) gaps.add('DNI');
-    if (_signatureController.isEmpty && !_hasPersistedSignature) {
-      gaps.add('Firma');
-    }
-    return gaps;
+    return true;
   }
 
+  void _prepareCobroAndContinue() {
+    HapticFeedback.mediumImpact();
+    if (_isPaid) {
+      final amount = parseRuteroMoney(_importeCobradoController.text);
+      final amountError = validateRuteroStandaloneCobroAmount(
+        amount: amount,
+        maxCollectable: capSaldoCobrableAlDocumento(
+          documentAmount: _liveAlbaranTotal,
+          collectableAmount: effectiveDocumentCollectable(_albaran),
+        ),
+      );
+      if (amountError != null) {
+        setState(() {
+          _importeCobradoError = amountError;
+          _spotlightField = 'importe';
+        });
+        return;
+      }
+      final talonError = _talonFieldsError();
+      if (talonError != null) {
+        setState(() {
+          _pagoError = talonError;
+          _spotlightField = 'pago';
+        });
+        return;
+      }
+      if (_cobroNotasController.text.trim().isEmpty) {
+        setState(() {
+          _pagoError = 'Las observaciones de cobro son obligatorias.';
+          _spotlightField = 'pago';
+        });
+        return;
+      }
+    }
+    if (!_validatePreparedCobroNotifications()) return;
+    _tabController.animateTo(2);
+  }
+
+  List<String> get _finalizeGaps => ruteroFinalizeGaps(
+        isCompleted: _isCompleted,
+        status: _deliveryStatus,
+        nombre: _nombreController.text,
+        apellidos: _apellidosController.text,
+        dni: _dniController.text,
+        signatureEmpty: _signatureController.isEmpty,
+        hasPersistedSignature: _hasPersistedSignature,
+      );
+
   Widget _buildFinalizeTab() {
+    if (_isCompleted) {
+      return _buildCompletedView();
+    }
     final noEntrega = _deliveryStatus == RepartoDeliveryStatus.noEntregado;
     final gaps = _finalizeGaps;
+    final gapsMessage = ruteroFinalizeGapsMessage(gaps);
     return Column(
       children: [
         Expanded(
@@ -1259,11 +1376,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             },
           ),
         ),
-        if (gaps.isNotEmpty)
+        if (gapsMessage != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
             child: Text(
-              'Falta: ${gaps.join(', ')}. Está justo encima del botón.',
+              gapsMessage,
               style: const TextStyle(
                 color: AppTheme.warning,
                 fontSize: 12,
@@ -1273,7 +1390,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-          child: _isCompleted ? _buildCompletedView() : _buildSubmitButton(),
+          child: _buildSubmitButton(),
         ),
       ],
     );
@@ -1833,6 +1950,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       return _normalizeQuantity(parsed);
     }
 
+    final unitLabel = ruteroQuantityUnitLabel(
+      linea.unit,
+      quantity: linea.cantidadPedida,
+    );
     final result = await showDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1867,7 +1988,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           children: [
             Text(
               'Cantidad original: ${_formatQuantity(linea.cantidadPedida)}'
-              '${(linea.unit ?? '').trim().isEmpty ? '' : ' ${linea.unit}'}',
+              '${unitLabel.isEmpty ? '' : ' $unitLabel'}',
               style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 12,
@@ -1886,9 +2007,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 fontWeight: FontWeight.bold,
               ),
               decoration: InputDecoration(
-                labelText: (linea.unit ?? '').trim().isEmpty
+                labelText: unitLabel.isEmpty
                     ? 'Nueva cantidad'
-                    : 'Nueva cantidad (${linea.unit})',
+                    : 'Nueva cantidad ($unitLabel)',
                 hintText: 'Ej: 2,30',
                 filled: true,
                 fillColor: AppTheme.softPanel,
@@ -2135,6 +2256,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     required String? firmaId,
     required List<String> evidenceIds,
     required String observaciones,
+    RepartoNotificationPrefs? notifications,
     List<RepartoPendingEvidenceRef> pendingEvidenceRefs = const [],
   }) async {
     final deferEvidence = pendingEvidenceRefs.isNotEmpty;
@@ -2151,6 +2273,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       observaciones: observaciones,
       incidencia: incidencia,
       cobro: cobro,
+      notifications: notifications,
       deferEvidence: deferEvidence,
       pendingEvidence: pendingEvidenceRefs,
     );
@@ -2250,6 +2373,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           response: response,
           acceptedPaymentAmount: cobro?.importeCobrado.toDouble(),
           acceptedPaymentMethod: cobro?.formaPago,
+          deliveredAmount: _liveAlbaranTotal,
         );
     _refreshAfterAcknowledgedDelivery();
     return true;
@@ -2325,9 +2449,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         importeCobrado: _parseMoney(_importeCobradoController.text)!,
         formaPago: _canonicalPaymentMethod,
         entregaId: widget.albaran.id,
-        notas: _cobroNotasController.text.trim().isEmpty
-            ? null
-            : _cobroNotasController.text.trim(),
+        notas: _cobroNotasController.text.trim(),
         numeroTalon:
             _isTalonPayment ? _numeroTalonController.text.trim() : null,
         fechaVencimientoTalon: _isTalonPayment
@@ -2369,6 +2491,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       });
       return;
     }
+    if (_cobroNotasController.text.trim().isEmpty) {
+      setState(() {
+        _pagoError = 'Las observaciones de cobro son obligatorias.';
+        _spotlightField = 'pago';
+      });
+      return;
+    }
     // Dart 3 does not promote amount through the later async/closures.
     final cobroAmount = amount!;
     final repartidorIds = _repartidorIdsParaInvalidar();
@@ -2382,52 +2511,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       return;
     }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.raisedSurface,
-        title: Text(
-          'Confirmar cobro',
-          style: TextStyle(color: AppTheme.textPrimary),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _albaran.nombreCliente,
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${cobroAmount.toStringAsFixed(2).replaceAll('.', ',')} € · '
-              '${ruteroPaymentMethodLabel(_selectedPaymentMethod)}',
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancelar',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.success,
-              foregroundColor: AppColors.themedWhite,
-            ),
-            child: const Text('Cobrar'),
-          ),
-        ],
-      ),
+    final confirmed = await confirmRepartidorAction(
+      context,
+      title: 'Confirmar cobro',
+      message: '${_albaran.nombreCliente}\n'
+          '${cobroAmount.toStringAsFixed(2).replaceAll('.', ',')} € · '
+          '${ruteroPaymentMethodLabel(_selectedPaymentMethod)}',
+      confirmLabel: 'Cobrar',
     );
     if (confirmed != true || !mounted) return;
 
@@ -2512,8 +2602,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           backgroundColor: AppTheme.success,
         ),
       );
-      if (_sendCobroEmail && _albaran.emailCliente.trim().isNotEmpty) {
-        await _emailCommercialFallback(_albaran.emailCliente);
+      if (_sendCobroEmail &&
+          isValidRepartoReceiptEmailAddress(_cobroDestinationEmail)) {
+        await _emailReceiptTo(_cobroDestinationEmail, confirmFirst: false);
+      }
+      if (_sendCobroWhatsApp && mounted) {
+        await _shareDeliveryNoteViaWhatsApp();
       }
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -2550,7 +2644,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final saldo = _albaran.importeDisponibleCobro;
     if (saldo == null || saldo <= 0.004) return saldo;
     final documentCapped = capSaldoCobrableAlDocumento(
-      documentAmount: _albaran.importeTotal,
+      documentAmount: _liveAlbaranTotal,
       collectableAmount: saldo,
     );
     if (_deliveryStatus != RepartoDeliveryStatus.parcial) return documentCapped;
@@ -2814,7 +2908,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         signatureEmpty: _signatureController.isEmpty,
         hasPersistedSignature: _hasPersistedSignature,
         importeCobradoText: _importeCobradoController.text,
-        importeTotal: _albaran.importeTotal,
+        cobroNotas: _cobroNotasController.text,
+        importeTotal: _liveAlbaranTotal,
       ),
     );
 
@@ -2911,6 +3006,24 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.euro,
+                        size: 16,
+                        color: AppTheme.textTertiary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_liveAlbaranTotal.toStringAsFixed(2).replaceAll('.', ',')} €',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
@@ -3043,6 +3156,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       }
     }
     if (!_validateFields()) return;
+    if (!_validatePreparedCobroNotifications()) return;
     if (_isPaid) {
       final talonError = _talonFieldsError();
       if (talonError != null) {
@@ -3087,6 +3201,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 )
               : null;
       final frozenPayment = _isPaid ? _buildCanonicalPayment() : null;
+      final frozenNotifications = RepartoNotificationPrefs(
+        sendClientEmail: _sendCobroEmail,
+        sendWhatsApp: _sendCobroWhatsApp,
+        clientEmail: _sendCobroEmail ? _cobroDestinationEmail : null,
+      );
+      final frozenLiveTotal = _liveAlbaranTotal;
       final frozenAllowEmptyLineas = _albaran.isZeroEmpty && _items.isEmpty;
       final frozenOccurredAt = DateTime.now().toUtc();
       var finalObs = _observacionesController.text.trim();
@@ -3142,6 +3262,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           firmaId: evidence.signatureId,
           evidenceIds: evidence.photoIds,
           observaciones: finalObs,
+          notifications: frozenNotifications,
           pendingEvidenceRefs: evidence.pendingRefs,
         ),
       );
@@ -3158,10 +3279,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       // a loading state.
       if (!_lastConfirmWasQueued && mounted) {
         _albaran.estado = _localDeliveryStatus();
+        _albaran = _albaran.copyWith(
+          estado: _localDeliveryStatus(),
+          importeTotal: frozenLiveTotal,
+        );
         setState(() {
           _isSubmitting = false;
           _allowProgrammaticDismiss = true;
         });
+        unawaited(_dispatchFinalizeNotifications());
       }
 
       // Queued writes are deliberately not presented as completed work. The
@@ -3451,7 +3577,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (!mounted) return;
     await showRuteroPrintPreviewDialog(
       context: context,
-      albaran: widget.albaran,
+      albaran: _albaran.copyWith(importeTotal: _liveAlbaranTotal),
       items: _items,
       deliveredQuantities: Map<String, double>.from(_productQuantities),
       observaciones: _observacionesController.text.trim(),
@@ -4099,6 +4225,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
+  Future<void> _dispatchFinalizeNotifications() async {
+    if (!mounted) return;
+    if (_sendCobroEmail &&
+        isValidRepartoReceiptEmailAddress(_cobroDestinationEmail)) {
+      await _emailReceiptTo(_cobroDestinationEmail, confirmFirst: false);
+    }
+    if (!mounted) return;
+    if (_sendCobroWhatsApp) {
+      await _shareDeliveryNoteViaWhatsApp();
+    }
+  }
+
   Future<void> _emailReceipt() async {
     if (!mounted) return;
     final ok = await confirmRepartidorAction(
@@ -4109,7 +4247,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       confirmLabel: 'Sí, enviar',
     );
     if (!ok || !mounted) return;
-    final controller = TextEditingController(text: widget.albaran.emailCliente);
+    final controller = TextEditingController(
+      text: _cobroDestinationEmail.isNotEmpty
+          ? _cobroDestinationEmail
+          : widget.albaran.emailCliente,
+    );
     final email = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -4130,6 +4272,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
     controller.dispose();
     if (!mounted || email == null) return;
+    await _emailReceiptTo(email, confirmFirst: false);
+  }
+
+  Future<void> _emailReceiptTo(
+    String email, {
+    bool confirmFirst = true,
+  }) async {
+    if (confirmFirst) {
+      final ok = await confirmRepartidorAction(
+        context,
+        title: '¿Estás seguro de enviar el email?',
+        message:
+            'Se enviará el recibo a Carlos, Javier y al repartidor, además del destinatario.',
+        confirmLabel: 'Sí, enviar',
+      );
+      if (!ok || !mounted) return;
+    }
     final owner = widget.albaran.codigoRepartidor.trim();
     if (!isValidRepartoReceiptEmailAddress(email) ||
         !isValidRepartoOwnerId(owner)) {
@@ -4146,7 +4305,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Receipt sent to ${email.trim()}')),
+          SnackBar(
+            content: Text('Recibo enviado a ${email.trim()}'),
+          ),
         );
       }
     } catch (error) {

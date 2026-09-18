@@ -1,7 +1,12 @@
 'use strict';
 
 const crypto = require('crypto');
-const { allowsEmptyPlannedLines, PRICING_STATE } = require('./delivery-amount-resolver');
+const {
+  allowsEmptyPlannedLines,
+  deliveryQuantitiesChanged,
+  resolveConfirmedDocumentAmount,
+  PRICING_STATE,
+} = require('./delivery-amount-resolver');
 const { resolveDocumentCollectable } = require('./delivery-cobro-availability');
 const { invalidateCachePattern } = require('./redis-cache');
 const logger = require('../middleware/logger');
@@ -119,6 +124,11 @@ function confirmationFingerprint(command) {
       longitud: delivery.longitud ?? null,
     },
     cobro,
+    notifications: command.notifications ? {
+      sendClientEmail: Boolean(command.notifications.sendClientEmail),
+      sendWhatsApp: Boolean(command.notifications.sendWhatsApp),
+      clientEmail: command.notifications.clientEmail || null,
+    } : null,
   });
   return crypto.createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
@@ -271,7 +281,10 @@ function assertPayment(planned, command, actualLines, document) {
     : amountPending;
   const isCompleteDelivery = command.delivery.status === 'ENTREGADO'
     && actualLines.every((line) => line.cantidadRechazada === 0 && line.cantidadPendiente === 0);
-  const maxCollectable = isCompleteDelivery
+  const qtyChanged = deliveryQuantitiesChanged(actualLines);
+  // Untouched ENTREGADO keeps the CPC header ceiling (never LAC net).
+  // After a qty change, cap cobro to the delivered amount without exceeding CVC.
+  const maxCollectable = isCompleteDelivery && !qtyChanged
     ? amountPending
     : Math.min(amountPending, amountByDeliveredLines);
   const amount = roundMoney(input.importeCobrado);
@@ -302,7 +315,7 @@ function assertPayment(planned, command, actualLines, document) {
     formaPago: normalizeText(input.formaPago).toUpperCase(),
     pantallaOrigen: 'RUTERO',
     operador: normalizeText(command.actor.userId),
-    notas: input.notas || null,
+    notas: input.notas == null ? '' : String(input.notas),
     numeroTalon: input.numeroTalon || null,
     fechaVencimientoTalon: input.fechaVencimientoTalon || null,
     codigoEntidadBancaria: input.codigoEntidadBancaria || null,
@@ -337,9 +350,16 @@ function buildReceiptProof(planned, actualLines, payment, status) {
   const plannedImporteTotal = Number(planned.importeTotal);
   const plannedLineCount = Array.isArray(planned.lineas) ? planned.lineas.length : null;
   const actualLineCount = actualLines.length;
+  const quantitiesChanged = deliveryQuantitiesChanged(actualLines);
+  const deliveredImporteTotal = resolveConfirmedDocumentAmount({
+    plannedAmount: plannedImporteTotal,
+    lines: actualLines,
+  });
   return Object.freeze({
     plannedImporteTotal: Number.isFinite(plannedImporteTotal) && plannedImporteTotal >= 0
       ? roundMoney(plannedImporteTotal) : null,
+    deliveredImporteTotal,
+    quantitiesChanged,
     plannedLineCount,
     actualLineCount,
     prepaidZeroWithoutLines: status === 'ENTREGADO'

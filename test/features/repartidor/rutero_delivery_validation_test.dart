@@ -28,6 +28,7 @@ RuteroDeliveryValidationInput _base({
   String fechaVencimientoTalon = '',
   String nombreBanco = '',
   String codigoEntidadBancaria = '',
+  String cobroNotas = 'ok',
 }) {
   return RuteroDeliveryValidationInput(
     isLoadingItems: isLoadingItems,
@@ -54,6 +55,7 @@ RuteroDeliveryValidationInput _base({
     fechaVencimientoTalon: fechaVencimientoTalon,
     nombreBanco: nombreBanco,
     codigoEntidadBancaria: codigoEntidadBancaria,
+    cobroNotas: cobroNotas,
   );
 }
 
@@ -142,6 +144,68 @@ void main() {
       ),
     );
     expect(exact.messageFor('importe'), isNull);
+  });
+
+  test('cobro 174.78 vs header 161.58 is capped to the document', () {
+    expect(
+      capSaldoCobrableAlDocumento(
+        documentAmount: 161.58,
+        collectableAmount: 174.78,
+      ),
+      161.58,
+    );
+    final over = validateRuteroDeliveryForm(
+      _base(
+        importeTotal: 161.58,
+        importeDisponibleCobro: 174.78,
+        isPaid: true,
+        importeCobradoText: '174,78',
+      ),
+    );
+    expect(over.messageFor('importe'), contains('saldo cobrable'));
+    final exact = validateRuteroDeliveryForm(
+      _base(
+        importeTotal: 161.58,
+        importeDisponibleCobro: 174.78,
+        isPaid: true,
+        importeCobradoText: '161,58',
+      ),
+    );
+    expect(exact.messageFor('importe'), isNull);
+  });
+
+  test('paid cobro without observaciones is blocked', () {
+    final result = validateRuteroDeliveryForm(
+      _base(
+        isPaid: true,
+        importeCobradoText: '10,00',
+        importeDisponibleCobro: 10,
+        cobroNotas: '',
+      ),
+    );
+    expect(result.messageFor('pago'), contains('observaciones de cobro'));
+  });
+
+  test('untouched albarán keeps list/CPC header, not LAC line sum', () {
+    expect(
+      canonicalRuteroDocumentAmount(
+        headerAmount: 31,
+        deliveredLineSum: 30.80,
+        quantitiesChanged: false,
+      ),
+      31,
+    );
+  });
+
+  test('qty change persists the delivered live total', () {
+    expect(
+      canonicalRuteroDocumentAmount(
+        headerAmount: 31,
+        deliveredLineSum: 23.10,
+        quantitiesChanged: true,
+      ),
+      23.10,
+    );
   });
 
   test('empty CVC does not hide a delivery that still has lines', () {
@@ -381,5 +445,40 @@ void main() {
       ),
     );
     expect(ok.messageFor('pago'), isNull);
+  });
+
+  test('completed finalize has no yellow Falta Nombre gaps', () {
+    expect(
+      ruteroFinalizeGaps(
+        isCompleted: true,
+        status: RepartoDeliveryStatus.entregado,
+        nombre: '',
+        apellidos: '',
+        dni: '',
+        signatureEmpty: true,
+        hasPersistedSignature: false,
+      ),
+      isEmpty,
+    );
+    expect(
+      ruteroFinalizeGapsMessage(const ['Nombre', 'Apellidos', 'DNI']),
+      'Falta: Nombre, Apellidos, DNI. Está justo encima del botón.',
+    );
+    expect(ruteroFinalizeGapsMessage(const []), isNull);
+  });
+
+  test('in-progress finalize still lists missing receiver fields', () {
+    expect(
+      ruteroFinalizeGaps(
+        isCompleted: false,
+        status: RepartoDeliveryStatus.entregado,
+        nombre: '',
+        apellidos: 'Lopez',
+        dni: '12345678Z',
+        signatureEmpty: false,
+        hasPersistedSignature: true,
+      ),
+      ['Nombre'],
+    );
   });
 }

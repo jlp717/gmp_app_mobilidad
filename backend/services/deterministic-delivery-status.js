@@ -51,6 +51,7 @@ function candidateFromRow(row) {
     importePendienteCobro: value(row, 'IMPORTE_PENDIENTE_COBRO', 'importe_pendiente_cobro') ?? null,
     formaPagoCobro: value(row, 'FORMA_PAGO_COBRO', 'forma_pago_cobro') ?? null,
     importeEntregado: value(row, 'IMPORTE_ENTREGADO', 'importe_entregado') ?? null,
+    resultJson: value(row, 'RESULT_JSON', 'result_json') ?? null,
   };
 }
 
