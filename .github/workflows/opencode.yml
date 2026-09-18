@@ -53,6 +53,11 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          JOB_STATUS: ${{ job.status }}
+          REF_NAME: ${{ github.ref_name }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
             echo "Telegram secrets not configured; skipping notification"
@@ -60,7 +65,7 @@ jobs:
           fi
           curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
-            --data-urlencode text="OpenCode /oc finished with status ${{ job.status }}. Ref: ${{ github.ref_name }}. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >/dev/null
+            --data-urlencode text="OpenCode /oc finished with status $JOB_STATUS. Ref: $REF_NAME. Run: $SERVER_URL/$REPOSITORY/actions/runs/$RUN_ID" >/dev/null
 
   lint:
     if: github.event_name == 'push'
@@ -74,7 +79,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
-          flutter-version: '3.35.6'
+          flutter-version-file: .fvmrc
           channel: 'stable'
           cache: true
 
@@ -97,14 +102,14 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
-          flutter-version: '3.35.6'
+          flutter-version-file: .fvmrc
           channel: 'stable'
           cache: true
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
@@ -125,15 +130,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Write summary
+        env:
+          REF: ${{ github.ref }}
+          COMMIT_SHA: ${{ github.sha }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
-          echo "Quality gates failed on ${{ github.ref }}"
-          echo "Commit: ${{ github.sha }}"
-          echo "Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Quality gates failed on $REF"
+          echo "Commit: $COMMIT_SHA"
+          echo "Workflow: $SERVER_URL/$REPOSITORY/actions/runs/$RUN_ID"
 
       - name: Notify Telegram
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
             echo "Telegram secrets not configured; skipping notification"
@@ -141,7 +157,7 @@ jobs:
           fi
           curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
-            --data-urlencode text="GMP CI failed on ${{ github.ref_name }}. Commit ${{ github.sha }}. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >/dev/null
+            --data-urlencode text="GMP CI failed on $REF_NAME. Commit $COMMIT_SHA. Run: $SERVER_URL/$REPOSITORY/actions/runs/$RUN_ID" >/dev/null
 
       - name: Fail notify job
         run: exit 1

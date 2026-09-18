@@ -55,6 +55,10 @@ jest.mock(
         createAuthClaimsResolver: jest.fn(() => jest.fn()),
     })
 );
+
+const { AUTH_CLAIMS_VERSION } = jest.requireActual(
+    '../../src/modules/auth/application/auth-claims-resolver'
+);
 jest.mock(
     '../../src/modules/auth/application/auth-claims-login-handler',
     () => ({
@@ -87,7 +91,7 @@ describe('GET /auth/validate (cold-start session probe)', () => {
             valid: true,
             role: 'JEFE_VENTAS',
             activeMode: 'REPARTIDOR',
-            claimsVersion: 3,
+                claimsVersion: AUTH_CLAIMS_VERSION,
         });
     });
 

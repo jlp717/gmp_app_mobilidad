@@ -417,7 +417,6 @@ app.use(validateContentType);
 app.use(prometheusMetrics);  // Prometheus metrics collection (must be before other middleware)
 app.use(networkOptimizer);  // HTTP/2 hints, ETag, cache headers
 app.use(responseCoalescing); // Combine identical concurrent requests
-app.use(invalidationMiddleware); // Cache invalidation on mutations
 
 // ==================== AUDIT MIDDLEWARE (logs IP, user, action) ====================
 app.use(auditMiddleware);
@@ -769,7 +768,7 @@ app.get('/api/app/version', (req, res) => {
 // Reparto has exactly one canonical write contract, independent of the
 // selected application route family. Keep the guard before every reparto
 // family mount so an invalid runtime can never fall through to legacy writes.
-app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);
+app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, invalidationMiddleware, canonicalRepartidorFinanzasRoutes);
 app.use('/api/repartidor', verifyToken, repartoFamilyWriteGuard);
 app.use('/api/entregas', verifyToken, repartoConfirmationWriteGuard);
 
@@ -781,6 +780,7 @@ if (USE_TS_ROUTES && global.__TS_APP__) {
 } else {
   // Legacy JavaScript routes
   app.use('/api', verifyToken);
+  app.use('/api', invalidationMiddleware); // Authenticated mutations invalidate conservatively before handlers.
   app.use('/api', cacheMiddleware); // Authenticated HTTP cache; requires req.user from verifyToken
   app.use('/api/telemetry', telemetryRoutes);
   app.use('/api/notifications', notificationsRoutes);

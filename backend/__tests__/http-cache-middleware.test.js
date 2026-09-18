@@ -336,7 +336,6 @@ describe('HTTP cache auth safety', () => {
   });
 
   test.each([
-    ['/api/cobros/pending-summary/01', 'cobros'],
     ['/api/pedidos', 'pedidos'],
     ['/api/facturas', 'facturas'],
   ])('caches short-ttl commercial GETs for %s', (originalUrl) => {
@@ -359,6 +358,35 @@ describe('HTTP cache auth safety', () => {
 
     expect(secondNext).not.toHaveBeenCalled();
     expect(secondRes.setHeader).toHaveBeenCalledWith('X-Cache-Status', 'HIT');
+  });
+
+  test('never caches a commercial cobros pending summary', () => {
+    const req = {
+      method: 'GET',
+      path: '/api/cobros/pending-summary/01',
+      originalUrl: '/api/cobros/pending-summary/01',
+      baseUrl: '/api',
+      query: {},
+      headers: {},
+      user: { id: '01', code: '01', role: 'COMERCIAL' },
+    };
+
+    const firstRes = makeRes();
+    const firstNext = jest.fn();
+    cacheMiddleware(req, firstRes, firstNext);
+    firstRes.json({ success: true, rows: [] });
+
+    const secondRes = makeRes();
+    const secondNext = jest.fn();
+    cacheMiddleware(req, secondRes, secondNext);
+
+    expect(firstNext).toHaveBeenCalledTimes(1);
+    expect(secondNext).toHaveBeenCalledTimes(1);
+    expect(firstRes.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+    expect(secondRes.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+    expect(secondRes.setHeader).not.toHaveBeenCalledWith('X-Cache-Status', 'HIT');
+    expect(secondRes.setHeader).not.toHaveBeenCalledWith('ETag', expect.any(String));
+    expect(invalidateCache).not.toHaveBeenCalled();
   });
 });
 
@@ -532,8 +560,53 @@ describe('BE-13 money no-store and cluster invalidation', () => {
       method: 'POST',
       path: '/api/cobros',
       originalUrl: '/api/cobros',
+      user: { id: '01', role: 'COMERCIAL' },
     };
     invalidationMiddleware(req, makeRes(), jest.fn());
     expect(invalidateCache).toHaveBeenCalled();
+  });
+
+  test.each([
+    { body: { user: { id: 'body-user' } } },
+    { headers: { authorization: 'Bearer unverified-token' } },
+  ])('does not let unverified request data invalidate shared cache: %j', (overrides) => {
+    const next = jest.fn();
+    invalidationMiddleware({
+      method: 'POST',
+      path: '/api/cobros',
+      originalUrl: '/api/cobros',
+      ...overrides,
+    }, makeRes(), next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(invalidateCache).not.toHaveBeenCalled();
+  });
+
+  test('keeps conservative pre-handler invalidation for authenticated mutations', () => {
+    const next = jest.fn();
+    invalidationMiddleware({
+      method: 'PATCH',
+      path: '/api/dashboard/preferences',
+      originalUrl: '/api/dashboard/preferences',
+      user: { id: '01', role: 'COMERCIAL' },
+    }, makeRes(), next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(invalidateCache).toHaveBeenCalledWith('metrics:*');
+    expect(invalidateCache).toHaveBeenCalledWith('evolution:*');
+    expect(invalidateCache).toHaveBeenCalledWith('matrix:*');
+  });
+
+  test('does not invalidate cache for authenticated GET requests', () => {
+    const next = jest.fn();
+    invalidationMiddleware({
+      method: 'GET',
+      path: '/api/dashboard/metrics',
+      originalUrl: '/api/dashboard/metrics',
+      user: { id: '01', role: 'COMERCIAL' },
+    }, makeRes(), next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(invalidateCache).not.toHaveBeenCalled();
   });
 });

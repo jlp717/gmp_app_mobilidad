@@ -3,13 +3,16 @@ import 'package:dio/dio.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/telemetry/rum_buffer.dart';
 
-/// Dio interceptor that records t_req / t_resp / bytes / request id.
+/// Dio interceptor that records bounded RUM request dimensions.
 class RumInterceptor extends Interceptor {
+  /// Creates an interceptor that uses the shared, sanitizing RUM buffer.
   RumInterceptor();
 
+  /// Request option used to exclude telemetry and avoid recursive recording.
   static const extraSkip = 'skipRum';
   static const _extraTReq = 'rum_t_req';
 
+  /// Maps platform connectivity to a bounded network category.
   static String netLabel(ConnectivityResult result) {
     return switch (result) {
       ConnectivityResult.wifi => 'wifi',
@@ -33,8 +36,15 @@ class RumInterceptor extends Interceptor {
   }
 
   @override
-  void onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
-    _record(response.requestOptions, response.statusCode, response.data, response);
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
+    _record(
+      response.requestOptions,
+      response.statusCode,
+      response.data,
+    );
     handler.next(response);
   }
 
@@ -44,7 +54,6 @@ class RumInterceptor extends Interceptor {
       err.requestOptions,
       err.response?.statusCode,
       err.response?.data,
-      err.response,
     );
     handler.next(err);
   }
@@ -53,7 +62,6 @@ class RumInterceptor extends Interceptor {
     RequestOptions options,
     int? status,
     Object? data,
-    Response<dynamic>? response,
   ) {
     if (options.extra[extraSkip] == true || !RumBuffer.enabled) return;
     final tReq = options.extra[_extraTReq];
@@ -69,7 +77,6 @@ class RumInterceptor extends Interceptor {
       't_parsed': tResp,
       'bytes': _byteLength(data),
       'net': options.headers['X-GMP-Net'],
-      'rid': response?.headers.value('x-request-id'),
     });
   }
 

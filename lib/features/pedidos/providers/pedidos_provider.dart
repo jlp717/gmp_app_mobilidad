@@ -18,30 +18,10 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_servic
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/domain/promotions_cache_policy.dart';
 
 void _debugLog(String message) {
   if (kDebugMode) debugPrint(message);
-}
-
-/// CHAR(10) client codes come padded from DB2; the PMR lookup casts to CHAR(10).
-@visibleForTesting
-String normalizePedidoClientCode(String? raw) {
-  final trimmed = (raw ?? '').trim();
-  if (trimmed.isEmpty) return '';
-  return trimmed.length <= 10 ? trimmed : trimmed.substring(0, 10);
-}
-
-@visibleForTesting
-String promotionsCacheKey(String clientCode, String vendedorCodes) {
-  return 'pedidos:promotions:${normalizePedidoClientCode(clientCode)}:${vendedorCodes.trim()}';
-}
-
-/// Mirror of GET /pedidos/promotions: never reuse a cached empty list.
-@visibleForTesting
-bool shouldReusePromotionsCache(Object? cached) {
-  if (cached is! Map) return false;
-  final list = cached['promotions'];
-  return list is List && list.isNotEmpty;
 }
 
 /// Chooses the provider-facing result from create + confirm API responses.

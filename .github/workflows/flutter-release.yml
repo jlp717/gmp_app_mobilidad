@@ -25,8 +25,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
+          flutter-version-file: .fvmrc
           channel: stable
           cache: true
       - name: Get dependencies
@@ -51,8 +52,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
+          flutter-version-file: .fvmrc
           channel: stable
           cache: true
       - name: Get dependencies
@@ -92,19 +94,21 @@ jobs:
       - name: Build signed app bundle
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: >
           flutter build appbundle --release --obfuscate
           --split-debug-info=build/symbols
-          --build-number=${{ github.run_number }}
+          --build-number=$RUN_NUMBER
           --dart-define=SENTRY_DSN=${SENTRY_DSN}
           --dart-define=API_BASE_URL=https://api.mari-pepa.com/api
       - name: Build signed APK
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: >
           flutter build apk --release --obfuscate
           --split-debug-info=build/symbols
-          --build-number=${{ github.run_number }}
+          --build-number=$RUN_NUMBER
           --dart-define=SENTRY_DSN=${SENTRY_DSN}
           --dart-define=API_BASE_URL=https://api.mari-pepa.com/api
       - name: Generate tag-based changelog
@@ -179,6 +183,7 @@ jobs:
           SHORT_SHA: ${{ steps.release_meta.outputs.short_sha }}
           COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
           FIREBASE_DISTRIBUTED: ${{ steps.firebase_distribution.outputs.distributed }}
+          RUN_NUMBER: ${{ github.run_number }}
         shell: bash
         run: |
           if [[ "$FIREBASE_DISTRIBUTED" == 'true' ]]; then
@@ -187,7 +192,7 @@ jobs:
             channel='artifacts disponibles en GitHub Actions (sin distribución)'
           fi
           text="$(printf 'Version: %s\nBuild: %s\nCommit: %s (%s)\nCanal: %s\n\nCambios:\n%s' \
-            "$APP_VERSION" "${{ github.run_number }}" "$SHORT_SHA" "$COMMIT_URL" "$channel" "$RELEASE_NOTES")"
+            "$APP_VERSION" "$RUN_NUMBER" "$SHORT_SHA" "$COMMIT_URL" "$channel" "$RELEASE_NOTES")"
           if [[ -z "$TELEGRAM_BOT_TOKEN" || -z "$TELEGRAM_CHAT_ID" ]]; then
             echo 'Telegram no configurado; se omite la notificacion.'
             exit 0

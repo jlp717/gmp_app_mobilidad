@@ -18,6 +18,7 @@
     "explore": "node db_explorer.js",
     "lint": "eslint src/**/*.ts --quiet",
     "test": "jest --passWithNoTests --forceExit",
+    "test:unit:isolated": "jest --config jest.isolated.config.cjs --runInBand",
     "test:targeted": "jest --runInBand --forceExit",
     "test:ci": "jest --ci --runInBand --forceExit",
     "test:coverage": "jest --coverage --passWithNoTests --forceExit",
@@ -53,15 +54,16 @@
     "bcrypt": "^6.0.0",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
-    "csv-parse": "^6.1.0",
+    "csv-parse": "^7.0.2",
     "dotenv": "^16.3.1",
-    "express": "^4.18.2",
+    "express": "^4.22.3",
     "express-rate-limit": "^7.1.5",
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
-    "joi": "^17.13.4",
+    "joi": "^17.13.6",
     "js-yaml": "^4.3.2",
     "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.12.1",
     "multer": "^2.4.0",
     "node-schedule": "^2.1.1",
     "nodemailer": "^9.1.1",
@@ -86,6 +88,7 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.10.5",
     "@types/node-schedule": "^2.1.8",
+    "@types/morgan": "^1.9.10",
     "@types/supertest": "^6.0.3",
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
@@ -98,12 +101,18 @@
     "typescript": "^5.3.3"
   },
   "overrides": {
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "3.15.2"
+    },
+    "body-parser": {
+      "qs": "6.16.0"
+    },
     "form-data": "^4.0.6",
     "minimatch@^9.0.0": "9.0.9",
     "tar": "^7.5.19"
   },
   "engines": {
-    "node": ">=20.6.0"
+    "node": ">=24.21.0 <25"
   },
   "author": "Granja Mari Pepa",
   "license": "UNLICENSED"

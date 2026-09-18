@@ -1,0 +1,71 @@
+/** QA-01A: explicit, hermetic Jest lane. It does not replace jest.config.js. */
+// Resolve from this config file so an invocation at repository root cannot
+// accidentally load the root toolchain's TypeScript.
+const hermeticTypeScript = require.resolve('typescript');
+
+module.exports = {
+  testEnvironment: '<rootDir>/tests/hermetic/environment.cjs',
+  rootDir: __dirname,
+  // This list is the source of truth. Do not widen it with a glob until each
+  // candidate has passed under the hermetic guard.
+  testMatch: [
+    '<rootDir>/__tests__/reparto-runtime-config.test.js',
+    '<rootDir>/__tests__/reparto-runtime-production.test.js',
+    '<rootDir>/__tests__/reparto-route-mode.test.js',
+    '<rootDir>/__tests__/vendor-scope-all.test.js',
+    '<rootDir>/__tests__/http-cache-middleware.test.js',
+    '<rootDir>/__tests__/cache-pattern-helper.test.js',
+    '<rootDir>/__tests__/security-middleware.test.js',
+    '<rootDir>/__tests__/delivery-amount-resolver.test.js',
+    '<rootDir>/__tests__/deterministic-delivery-status.test.js',
+    '<rootDir>/__tests__/delivery-cobro-availability.test.js',
+    '<rootDir>/__tests__/planner-role-policy.test.js',
+    '<rootDir>/__tests__/sargable-document-date.test.js',
+    '<rootDir>/__tests__/error-handler-idempotency.test.js',
+    '<rootDir>/tests/security/bola-commissions.test.js',
+    '<rootDir>/__tests__/auth-claims-resolver.test.js',
+    '<rootDir>/__tests__/auth-claims-session-store.test.js',
+    '<rootDir>/__tests__/auth-claims-login-handler.test.js',
+    '<rootDir>/__tests__/middleware/auth-middleware.test.js',
+    '<rootDir>/__tests__/performance-cache.test.js',
+    '<rootDir>/src/__tests__/validators.test.ts',
+    '<rootDir>/src/__tests__/query-cache.test.ts',
+    '<rootDir>/tests/fixtures/hermetic/guard-negative.test.js',
+    '<rootDir>/tests/fixtures/hermetic/csv-parser-compatibility.test.js',
+    '<rootDir>/tests/fixtures/hermetic/dependency-compatibility.test.js',
+    '<rootDir>/tests/fixtures/hermetic/auth-validate-handler.test.js',
+    '<rootDir>/tests/fixtures/hermetic/telemetry-handler.test.js',
+    '<rootDir>/tests/fixtures/hermetic/chatbot-input-handler.test.js',
+    '<rootDir>/__tests__/reparto-confirmation-service.test.js',
+    '<rootDir>/__tests__/repartidor-liquidacion-service.test.js',
+    '<rootDir>/__tests__/repartidor-liquidacion-entry-service.test.js',
+    '<rootDir>/__tests__/repartidor-liquidacion-outbox-service.test.js',
+    '<rootDir>/__tests__/reparto-confirmation-db2-repository.test.js',
+    '<rootDir>/__tests__/reparto-confirmation-actor-privilege.test.js',
+    '<rootDir>/__tests__/chatbot_authorization.test.js',
+    '<rootDir>/__tests__/chatbot_reparto_scope.test.js',
+  ],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  moduleFileExtensions: ['js', 'ts', 'json'],
+  moduleNameMapper: {
+    '^([./]*routes/dashboard\\.routes)$': '$1.ts',
+    '^([./]*controllers/dashboard\\.controller)$': '$1.ts',
+    '^([./]*services/dashboard\\.service)$': '$1.ts',
+    '^(node:)?(odbc|redis|nodemailer|dotenv)(?:/.*)?$': '<rootDir>/tests/hermetic/doubles/blocked-driver.cjs',
+    '^(?:\\.{1,2}/)+config/db$': '<rootDir>/tests/hermetic/doubles/blocked-db.cjs',
+    '^\\./load-env$': '<rootDir>/tests/hermetic/doubles/blocked-env-loader.cjs',
+  },
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', {
+      isolatedModules: true,
+      compiler: hermeticTypeScript,
+      tsconfig: '<rootDir>/tsconfig.json',
+    }],
+    '^.+\\.[jt]sx?$': 'babel-jest',
+  },
+  passWithNoTests: false,
+  forceExit: false,
+  detectOpenHandles: true,
+  testTimeout: 10_000,
+  verbose: true,
+};

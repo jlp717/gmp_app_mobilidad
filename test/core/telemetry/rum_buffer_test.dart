@@ -5,6 +5,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 void main() {
   setUp(RumBuffer.resetForTest);
+  tearDown(RumBuffer.resetForTest);
 
   test('enqueue caps at 200 events without client codes', () {
     for (var i = 0; i < 205; i++) {
@@ -21,6 +22,28 @@ void main() {
     RumBuffer.markRendered('dashboard');
     expect(RumBuffer.lastScreen, 'dashboard');
     expect(RumBuffer.pendingCount, 1);
+  });
+
+  test('markRendered normalizes untrusted screen names', () {
+    RumBuffer.markRendered('Javier 12345678Z');
+    expect(RumBuffer.lastScreen, 'unknown');
+  });
+
+  test('stop preserves the queue and start reactivates periodic flushing', () {
+    RumBuffer.enqueue({
+      'endpoint': '/dashboard/metrics',
+      'method': 'GET',
+      't_req': 1,
+    });
+    RumBuffer.start();
+    expect(RumBuffer.isRunningForTest, isTrue);
+
+    RumBuffer.stop();
+    expect(RumBuffer.isRunningForTest, isFalse);
+    expect(RumBuffer.pendingCount, 1);
+
+    RumBuffer.start();
+    expect(RumBuffer.isRunningForTest, isTrue);
   });
 
   test('netLabel maps connectivity to wifi|mobile|none', () {
