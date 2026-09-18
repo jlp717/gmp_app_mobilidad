@@ -8,6 +8,8 @@ on:
       - 'test/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
+      - 'tool/**'
+      - '.github/workflows/flutter-ci.yml'
   pull_request:
     branches: [main, test]
     paths:
@@ -15,6 +17,8 @@ on:
       - 'test/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
+      - 'tool/**'
+      - '.github/workflows/flutter-ci.yml'
 
 jobs:
   analyze:
@@ -28,6 +32,9 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Install custom lint package dependencies
+        working-directory: tool/gmp_custom_lints
+        run: dart pub get --enforce-lockfile
       - run: flutter analyze --no-fatal-infos
       - run: dart format --output=none --set-exit-if-changed lib test
 

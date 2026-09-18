@@ -1,4 +1,4 @@
-import 'package:analyzer/error/error.dart' hide LintCode;
+import 'package:analyzer/error/error.dart' show ErrorSeverity;
 import 'package:analyzer/error/listener.dart';
 import 'package:custom_lint_builder/custom_lint_builder.dart';
 
@@ -36,7 +36,7 @@ class NoFlutterInDomain extends DartLintRule {
     context.registry.addImportDirective((node) {
       final uri = node.uri.stringValue;
       if (uri != null && uri.startsWith('package:flutter/')) {
-        reporter.atNode(node, code);
+        reporter.reportErrorForNode(code, node);
       }
     });
   }

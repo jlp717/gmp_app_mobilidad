@@ -36,6 +36,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
     required this.closedResult,
     required this.onBack,
     required this.onSave,
+    this.onRecoverClosedReceipt,
     required this.onExpense,
     required this.onBankDeposit,
     required this.onAdjustment,
@@ -60,6 +61,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
   final RepartidorLiquidacionResult? closedResult;
   final VoidCallback? onBack;
   final VoidCallback onSave;
+  final VoidCallback? onRecoverClosedReceipt;
   final VoidCallback onExpense;
   final VoidCallback onBankDeposit;
   final VoidCallback onAdjustment;
@@ -170,6 +172,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
             isSaving: isSaving,
             isClosed: isClosed,
             onPressed: onSave,
+            onRecoverClosedReceipt: onRecoverClosedReceipt,
           ),
       ],
     );
@@ -963,11 +966,13 @@ class _LiquidacionCloseBar extends StatelessWidget {
     required this.isSaving,
     required this.isClosed,
     required this.onPressed,
+    this.onRecoverClosedReceipt,
   });
 
   final bool isSaving;
   final bool isClosed;
   final VoidCallback onPressed;
+  final VoidCallback? onRecoverClosedReceipt;
 
   @override
   Widget build(BuildContext context) {
@@ -986,7 +991,9 @@ class _LiquidacionCloseBar extends StatelessWidget {
         width: double.infinity,
         height: 52,
         child: ElevatedButton.icon(
-          onPressed: isSaving || isClosed ? null : onPressed,
+          onPressed: isSaving
+              ? null
+              : onRecoverClosedReceipt ?? (isClosed ? null : onPressed),
           style: ElevatedButton.styleFrom(
             backgroundColor: LiquidacionBrand.greenDark,
             foregroundColor: AppColors.themedWhite,
@@ -1005,11 +1012,19 @@ class _LiquidacionCloseBar extends StatelessWidget {
                     color: AppColors.themedWhite,
                   ),
                 )
-              : Icon(isClosed ? Icons.lock_rounded : Icons.lock_open_rounded),
+              : Icon(
+                  onRecoverClosedReceipt != null
+                      ? Icons.picture_as_pdf_outlined
+                      : isClosed
+                          ? Icons.lock_rounded
+                          : Icons.lock_open_rounded,
+                ),
           label: Text(
-            isClosed
-                ? 'Liquidación cerrada'
-                : 'Cerrar día y grabar liquidación',
+            onRecoverClosedReceipt != null
+                ? 'Recuperar comprobante'
+                : isClosed
+                    ? 'Liquidación cerrada'
+                    : 'Cerrar día y grabar liquidación',
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
           ),
         ),

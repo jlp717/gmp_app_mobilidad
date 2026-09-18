@@ -214,6 +214,8 @@ class _RepartidorLiquidacionDiariaPageState
     _rememberLedgerClosed(ledgerClosed);
     final closed =
         _closedResult != null || ledgerClosed || _knownClosedFromLedger;
+    final canRecoverClosedReceipt =
+        ledgerClosed && _closedResult == null && !isAggregate;
     final closedCard =
         _closedResult ?? (closed ? _placeholderClosedResult(summary) : null);
     if (!_seededClassicFields) {
@@ -240,6 +242,9 @@ class _RepartidorLiquidacionDiariaPageState
           ? () => Navigator.of(context).pop()
           : null,
       onSave: () => _save(summary, asyncLedger?.valueOrNull),
+      onRecoverClosedReceipt: canRecoverClosedReceipt
+          ? () => _save(summary, asyncLedger?.valueOrNull)
+          : null,
       onExpense: () => unawaited(_showEntryDialog(_EntryKind.expense)),
       onBankDeposit: () => unawaited(_showEntryDialog(_EntryKind.bankDeposit)),
       onAdjustment: () => unawaited(_showEntryDialog(_EntryKind.adjustment)),
@@ -554,17 +559,23 @@ class _RepartidorLiquidacionDiariaPageState
     }
     final confirmed = await confirmRepartidorAction(
       context,
-      title: '¿Estás seguro de enviar la liquidación diaria?',
-      message:
-          'Se grabará el cierre del día y se enviará el correo de liquidación.',
-      confirmLabel: 'Sí, grabar',
+      title: recoveringClose
+          ? '¿Recuperar el comprobante de liquidación?'
+          : '¿Estás seguro de enviar la liquidación diaria?',
+      message: recoveringClose
+          ? 'Se consultará el cierre existente para recuperar su comprobante. '
+              'No se registrarán ingresos ni se reenviará el correo.'
+          : 'Se grabará el cierre del día y se enviará el correo de liquidación.',
+      confirmLabel: recoveringClose ? 'Recuperar comprobante' : 'Sí, grabar',
     );
     if (!confirmed || !mounted) return;
     setState(() => _saving = true);
 
     final modal = AsyncOperationModal.show(
       context,
-      text: 'Grabando liquidacion...',
+      text: recoveringClose
+          ? 'Recuperando comprobante...'
+          : 'Grabando liquidacion...',
     );
 
     try {
@@ -593,7 +604,7 @@ class _RepartidorLiquidacionDiariaPageState
             repartidorId: widget.repartidorId,
             date: _sessionDate,
             idempotencyToken: _idempotencyToken,
-            sendEmails: true,
+            sendEmails: !recoveringClose,
           );
 
       if (!mounted) return;
@@ -610,9 +621,11 @@ class _RepartidorLiquidacionDiariaPageState
       modal.error(
         financeErrorMessage(
           error,
-          'No se pudo cerrar la liquidacion. Puedes reintentar.',
+          recoveringClose
+              ? 'No se pudo recuperar el comprobante. Puedes reintentar.'
+              : 'No se pudo cerrar la liquidacion. Puedes reintentar.',
         ),
-        onRetry: () => _save(summary, ledger),
+        onRetry: recoveringClose ? null : () => _save(summary, ledger),
       );
     } finally {
       if (mounted) setState(() => _saving = false);

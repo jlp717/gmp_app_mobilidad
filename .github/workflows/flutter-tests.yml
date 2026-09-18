@@ -18,6 +18,9 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Verify custom lint package dependencies
+        working-directory: tool/gmp_custom_lints
+        run: dart pub get --enforce-lockfile
       - run: flutter analyze --no-fatal-infos lib/features/liquidacion_comercial test/features/liquidacion_comercial test/features/repartidor_finanzas/presentation/vencimientos_page_states_test.dart test/features/commissions/presentation test/goldens
       - name: Tests con cobertura (baseline domain>=50% global>=35%; objetivo 85/60)
         run: flutter test --coverage

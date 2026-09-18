@@ -48,6 +48,7 @@ void main() {
       expect(find.text('Grabando liquidacion...'), findsNothing);
       expect(actions.closeTokens, isEmpty);
       expect(actions.depositCalls, 0);
+      await _disposeAndDrain(tester);
     });
   }
 
@@ -55,7 +56,7 @@ void main() {
     testWidgets('card cobros can close without cash; detail $hasDetail',
         (tester) async {
       final actions = _RecordingLiquidacionActions();
-      await _pumpPage(
+      final date = await _pumpPage(
         tester,
         actions,
         count: hasDetail ? 0 : 1,
@@ -63,15 +64,20 @@ void main() {
       );
       await tester.tap(find.text('Cerrar día y grabar liquidación'));
       await tester.pumpAndSettle();
+      expect(actions.closeTokens, isEmpty);
+      await tester.tap(find.text('Sí, grabar'));
+      await tester.pumpAndSettle();
 
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
       expect(actions.closeTokens, hasLength(1));
-      expect(actions.closeTokens.single, isNotEmpty);
+      expect(actions.closeTokens.single, _expectedToken(date));
+      expect(actions.closeSendEmails, [true]);
       expect(find.text(_noCobrosMessage), findsNothing);
       expect(actions.depositCalls, 0);
       expect(find.text('Cerrar día y grabar liquidación'), findsNothing);
       expect(find.byTooltip('Ver PDF'), findsOneWidget);
+      await _disposeAndDrain(tester);
     });
   }
 
@@ -79,15 +85,85 @@ void main() {
       'closed ledger retrieves replay without cobros or another deposit',
       (tester) async {
     final actions = _RecordingLiquidacionActions(isReplay: true);
-    await _pumpPage(tester, actions, closedLedger: true, ingresoBanco: 20);
-    await tester.tap(find.text('Cerrar día y grabar liquidación'));
+    final date = await _pumpPage(
+      tester,
+      actions,
+      closedLedger: true,
+      ingresoBanco: 20,
+    );
+    _expectClosedReadonly(tester);
+    await tester.tap(find.text('Recuperar comprobante'));
+    await tester.pumpAndSettle();
+    expect(actions.closeTokens, isEmpty);
+    await tester.tap(find.text('Recuperar comprobante').last);
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
     expect(actions.closeTokens, hasLength(1));
+    expect(actions.closeTokens.single, _expectedToken(date));
+    expect(actions.closeSendEmails, [false]);
     expect(actions.depositCalls, 0);
     expect(find.text(_noCobrosMessage), findsNothing);
     expect(find.byTooltip('Ver PDF'), findsOneWidget);
+    expect(find.text('Recuperar comprobante'), findsNothing);
+    _expectClosedReadonly(tester);
+    await _disposeAndDrain(tester);
+  });
+
+  testWidgets('closed ledger recovery can be cancelled without writes',
+      (tester) async {
+    final actions = _RecordingLiquidacionActions(isReplay: true);
+    await _pumpPage(tester, actions, closedLedger: true, ingresoBanco: 20);
+    _expectClosedReadonly(tester);
+    await tester.tap(find.text('Recuperar comprobante'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    expect(actions.closeTokens, isEmpty);
+    expect(actions.closeSendEmails, isEmpty);
+    expect(actions.depositCalls, 0);
+    expect(find.text('Recuperar comprobante'), findsOneWidget);
+    _expectClosedReadonly(tester);
+    await _disposeAndDrain(tester);
+  });
+
+  testWidgets('closed ledger recovery failure remains retryable and readonly',
+      (tester) async {
+    final actions = _RecordingLiquidacionActions(
+      isReplay: true,
+      throwOnClose: true,
+    );
+    final date = await _pumpPage(
+      tester,
+      actions,
+      closedLedger: true,
+      ingresoBanco: 20,
+    );
+    _expectClosedReadonly(tester);
+    await tester.tap(find.text('Recuperar comprobante'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Recuperar comprobante').last);
+    await tester.pumpAndSettle();
+
+    expect(actions.closeTokens, hasLength(1));
+    expect(actions.closeSendEmails, [false]);
+    expect(actions.depositCalls, 0);
+    await tester.tap(find.text('Cerrar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recuperar comprobante'), findsOneWidget);
+    _expectClosedReadonly(tester);
+    await tester.tap(find.text('Recuperar comprobante'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Recuperar comprobante').last);
+    await tester.pumpAndSettle();
+    expect(actions.closeTokens, [_expectedToken(date), _expectedToken(date)]);
+    expect(actions.closeSendEmails, [false, false]);
+    expect(actions.depositCalls, 0);
+    await tester.tap(find.text('Cerrar'));
+    await tester.pumpAndSettle();
+    _expectClosedReadonly(tester);
+    await _disposeAndDrain(tester);
   });
 }
 
@@ -103,7 +179,7 @@ const _cardCobro = RepartidorCobroDia(
   pendiente: 0,
 );
 
-Future<void> _pumpPage(
+Future<DateTime> _pumpPage(
   WidgetTester tester,
   _RecordingLiquidacionActions actions, {
   double openingBalance = 0,
@@ -119,6 +195,29 @@ Future<void> _pumpPage(
   final now = DateTime.now();
   final date = DateTime(now.year, now.month, now.day);
   final hasCobros = count > 0 || cobros.isNotEmpty;
+  final summary = RepartidorDailySummary(
+    repartidorId: '94',
+    date: date.toIso8601String().substring(0, 10),
+    totalEfectivo: 0,
+    totalCheques: 0,
+    totalTarjeta: hasCobros ? 25 : 0,
+    totalPostdatados: 0,
+    saldoActual: openingBalance,
+    totalCobrosDia: hasCobros ? 25 : 0,
+    gastos: 0,
+    totalAIngresar: openingBalance,
+    ingresoBanco: ingresoBanco,
+    cobrosCount: count,
+    cobros: cobros,
+  );
+
+  Future<RepartidorDailySummary> summaryFixture(bool forceRefresh) async {
+    expect(summary.repartidorId, '94');
+    expect(summary.date, date.toIso8601String().substring(0, 10));
+    expect(forceRefresh, isA<bool>());
+    return summary;
+  }
+
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -126,25 +225,16 @@ Future<void> _pumpPage(
           (
             repartidorId: '94',
             date: date,
+            forceRefresh: false,
+          ),
+        ).overrideWith((ref) => summaryFixture(false)),
+        repartidorDailySummaryProvider(
+          (
+            repartidorId: '94',
+            date: date,
             forceRefresh: true,
           ),
-        ).overrideWith(
-          (ref) async => RepartidorDailySummary(
-            repartidorId: '94',
-            date: date.toIso8601String().substring(0, 10),
-            totalEfectivo: 0,
-            totalCheques: 0,
-            totalTarjeta: hasCobros ? 25 : 0,
-            totalPostdatados: 0,
-            saldoActual: openingBalance,
-            totalCobrosDia: hasCobros ? 25 : 0,
-            gastos: 0,
-            totalAIngresar: openingBalance,
-            ingresoBanco: ingresoBanco,
-            cobrosCount: count,
-            cobros: cobros,
-          ),
-        ),
+        ).overrideWith((ref) => summaryFixture(true)),
         repartidorLiquidacionLedgerProvider((repartidorId: '94', date: date))
             .overrideWith(
           (ref) async => RepartidorLiquidacionLedger(
@@ -168,15 +258,44 @@ Future<void> _pumpPage(
     ),
   );
   await tester.pumpAndSettle();
-  await tester.ensureVisible(find.text('Cerrar día y grabar liquidación'));
+  await tester.ensureVisible(
+    find.text(
+      closedLedger
+          ? 'Recuperar comprobante'
+          : 'Cerrar día y grabar liquidación',
+    ),
+  );
+  return date;
+}
+
+String _expectedToken(DateTime date) =>
+    'liq_94_${date.toIso8601String().substring(0, 10).replaceAll('-', '')}';
+
+void _expectClosedReadonly(WidgetTester tester) {
+  final fields = find.byType(TextField);
+  expect(fields, findsOneWidget);
+  expect(tester.widget<TextField>(fields).enabled, isFalse);
+  for (final action in ['Gasto', 'Ingreso banco', 'Ajuste']) {
+    expect(find.text(action), findsNothing);
+  }
+}
+
+Future<void> _disposeAndDrain(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox());
+  await tester.pump(const Duration(seconds: 12));
 }
 
 class _RecordingLiquidacionActions extends Fake
     implements RepartidorLiquidacionActions {
-  _RecordingLiquidacionActions({this.isReplay = false});
+  _RecordingLiquidacionActions({
+    this.isReplay = false,
+    this.throwOnClose = false,
+  });
 
   final bool isReplay;
+  final bool throwOnClose;
   final closeTokens = <String>[];
+  final closeSendEmails = <bool>[];
   int depositCalls = 0;
 
   @override
@@ -189,6 +308,10 @@ class _RecordingLiquidacionActions extends Fake
     bool sendEmails = true,
   }) async {
     closeTokens.add(idempotencyToken);
+    closeSendEmails.add(sendEmails);
+    if (throwOnClose) {
+      throw ApiException('Replay unavailable in this fixture', statusCode: 503);
+    }
     return RepartidorLiquidacionResult(
       created: !isReplay,
       id: '701',
