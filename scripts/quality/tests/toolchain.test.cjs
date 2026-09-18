@@ -49,7 +49,7 @@ test('rejects invalid workflow YAML', () => {
 });
 
 test('rejects non-mapping env at workflow, job and step levels without echoing values', () => {
-  for (const value of ['null', '[]', 'false', '0', 'synthetic-sensitive-marker']) {
+  for (const value of ['null', '[]', 'false', '0', '2026-09-18', '!!binary SGVsbG8=', 'synthetic-sensitive-marker']) {
     const sources = [
       `env: ${value}\njobs: {}`,
       `jobs:\n  checks:\n    env: ${value}\n    steps: []`,

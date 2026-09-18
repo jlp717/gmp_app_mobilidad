@@ -35,8 +35,11 @@ function checkWorkflow(file, source) {
   }
   if (!document || typeof document !== 'object') return [`${file}: yaml-root-must-be-object`];
   function checkEnvironment(owner, location) {
-    if (Object.hasOwn(owner, 'env')
-      && (!owner.env || typeof owner.env !== 'object' || Array.isArray(owner.env))) {
+    if (!Object.hasOwn(owner, 'env')) return;
+    const environment = owner.env;
+    const mapping = environment !== null && typeof environment === 'object'
+      && [Object.prototype, null].includes(Object.getPrototypeOf(environment));
+    if (!mapping) {
       findings.push(`${location}: env-must-be-mapping`);
     }
   }
