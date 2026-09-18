@@ -761,7 +761,17 @@ paths:
                 $ref: "#/components/schemas/AuthLoginResponse"
               example:
                 success: true
-                data: []
+                user:
+                  id: "TEST-USER"
+                  code: "R01"
+                  name: "Usuario ficticio"
+                role: "COMERCIAL"
+                availableRoles:
+                  - "COMERCIAL"
+                token: "jwt-ficticio-no-valido"
+                refreshToken: "refresh-ficticio-no-valido"
+                tokenExpiresIn: 900
+                refreshExpiresIn: 604800
         "429":
           description: "Demasiadas solicitudes"
           content:
@@ -15595,7 +15605,6 @@ paths:
                     type: "boolean"
                     example: true
                   suggestion:
-                    nullable: true
                     oneOf:
                       - type: "object"
                         required:

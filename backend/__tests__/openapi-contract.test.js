@@ -25,6 +25,7 @@ const routeSources = [
   { file: "backend/routes/export.js", prefix: "/api/export" },
   { file: "backend/routes/chatbot.js", prefix: "/api/chatbot" },
   { file: "backend/routes/filters.js", prefix: "/api/filters" },
+  { file: "backend/routes/notifications.js", prefix: "/api/notifications" },
   { file: "backend/routes/user-actions.js", prefix: "/api/logs" },
   { file: "backend/routes/facturas.js", prefix: "/api/facturas" },
   { file: "backend/routes/warehouse.js", prefix: "/api/warehouse" },
