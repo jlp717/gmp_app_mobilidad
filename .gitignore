@@ -291,6 +291,11 @@ docs/opencode-agent-governance/evals/canary-markers/
 .semgrep/
 backend/.eslintrc-complexity.cjs
 
+# REP-01A: local recovery copies retained outside Git history
+/backend/repositories/reparto-finance-db2-repository.js.fromgit
+/backend/repositories/reparto-finance-db2-repository.js.repaired
+/backend/routes/repartidor-finanzas.js.tmp2
+
 
 # Agent/browser and local state artifacts (never versioned)
 .playwright-mcp/
