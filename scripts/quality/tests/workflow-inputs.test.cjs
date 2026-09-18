@@ -26,6 +26,12 @@ function observerFixture(source) {
   return root;
 }
 
+function replaceRequired(source, search, replacement) {
+  const changed = source.replace(search, replacement);
+  assert.notEqual(changed, source, 'negative fixture must actually mutate its source');
+  return changed;
+}
+
 function ciCdFixture(source) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gmp-workflow-ci-cd-'));
   const directory = path.join(root, '.github', 'workflows');
@@ -91,17 +97,21 @@ test('rejects every github-script interpolation', () => {
 });
 
 test('observer rejects root or job permissions outside its exact read-only allowlist and unexpected REST APIs', () => {
-  const original = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci-self-heal.yml'), 'utf8');
-  const rootPermissions = observerFixture(original.replace('  contents: read', '  contents: read\n  issues: write'));
-  assert.match(checkReadOnlyObserver(rootPermissions).join('\n'), /root permissions/);
-  const jobPermissions = observerFixture(original.replace('    runs-on: ubuntu-latest', '    permissions:\n      issues: write\n    runs-on: ubuntu-latest'));
-  assert.match(checkReadOnlyObserver(jobPermissions).join('\n'), /job inspect permissions/);
-  const inheritedSecondJob = observerFixture(original.replace('  inspect:\n', '  shadow:\n    runs-on: ubuntu-latest\n    steps: []\n  inspect:\n'));
-  assert.match(checkReadOnlyObserver(inheritedSecondJob).join('\n'), /exactly one inspect job/);
-  const unexpectedApi = observerFixture(`${original}\n# github.rest.issues.create({})\n`);
-  assert.match(checkReadOnlyObserver(unexpectedApi).join('\n'), /approved read-only Actions metadata APIs/);
-  const unpinnedAction = observerFixture(original.replace('actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b', 'actions/github-script@v8'));
-  assert.match(checkReadOnlyObserver(unpinnedAction).join('\n'), /exactly one pinned github-script metadata step/);
+  const source = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci-self-heal.yml'), 'utf8').replace(/\r\n/g, '\n');
+  for (const newline of ['\n', '\r\n']) {
+    const original = source.replace(/\n/g, newline);
+    assert.deepEqual(checkReadOnlyObserver(observerFixture(original)), []);
+    const rootPermissions = observerFixture(replaceRequired(original, '  contents: read', `  contents: read${newline}  issues: write`));
+    assert.match(checkReadOnlyObserver(rootPermissions).join('\n'), /root permissions/);
+    const jobPermissions = observerFixture(replaceRequired(original, '    runs-on: ubuntu-latest', `    permissions:${newline}      issues: write${newline}    runs-on: ubuntu-latest`));
+    assert.match(checkReadOnlyObserver(jobPermissions).join('\n'), /job inspect permissions/);
+    const inheritedSecondJob = observerFixture(replaceRequired(original, `  inspect:${newline}`, `  shadow:${newline}    runs-on: ubuntu-latest${newline}    steps: []${newline}  inspect:${newline}`));
+    assert.match(checkReadOnlyObserver(inheritedSecondJob).join('\n'), /exactly one inspect job/);
+    const unexpectedApi = observerFixture(`${original}${newline}# github.rest.issues.create({})${newline}`);
+    assert.match(checkReadOnlyObserver(unexpectedApi).join('\n'), /approved read-only Actions metadata APIs/);
+    const unpinnedAction = observerFixture(replaceRequired(original, 'actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b', 'actions/github-script@v8'));
+    assert.match(checkReadOnlyObserver(unpinnedAction).join('\n'), /exactly one pinned github-script metadata step/);
+  }
 });
 
 test('ci-cd skip flag has a strict shell allowlist and bounded output write', () => {

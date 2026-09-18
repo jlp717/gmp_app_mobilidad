@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { checkToolchain, FLUTTER_ACTION } = require('../toolchain.cjs');
+const { checkToolchain, checkWorkflow, FLUTTER_ACTION } = require('../toolchain.cjs');
 
 function fixture({ node = '24.21.0', flutter = '3.35.6', engine = '>=24.21.0 <25', workflow } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gmp-toolchain-'));
@@ -46,6 +46,28 @@ test('rejects invalid workflow YAML', () => {
   const root = fixture({ workflow: 'jobs: [not-valid-yaml' });
   const findings = checkToolchain(root, { runtimeVersion: '24.21.0' });
   assert.equal(findings.some((finding) => finding.includes('invalid-yaml')), true);
+});
+
+test('rejects non-mapping env at workflow, job and step levels without echoing values', () => {
+  for (const value of ['null', '[]', 'false', '0', 'synthetic-sensitive-marker']) {
+    const sources = [
+      `env: ${value}\njobs: {}`,
+      `jobs:\n  checks:\n    env: ${value}\n    steps: []`,
+      `jobs:\n  checks:\n    steps:\n      - env: ${value}\n        run: echo ok`,
+    ];
+    const locations = ['fixture.yml', 'fixture.yml:checks', 'fixture.yml:checks:steps[0]'];
+    for (const [index, source] of sources.entries()) {
+      const findings = checkWorkflow('fixture.yml', source);
+      assert.deepEqual(findings, [`${locations[index]}: env-must-be-mapping`]);
+    }
+  }
+  assert.deepEqual(checkWorkflow('fixture.yml', 'env:\njobs: {}'), ['fixture.yml: env-must-be-mapping']);
+});
+
+test('accepts omitted and explicit mapping env at workflow, job and step levels', () => {
+  assert.deepEqual(checkWorkflow('fixture.yml', 'jobs: {}'), []);
+  const source = 'env: {}\njobs:\n  checks:\n    env: {MODE: test}\n    steps:\n      - run: echo ok\n        env: {}';
+  assert.deepEqual(checkWorkflow('fixture.yml', source), []);
 });
 
 test('rejects empty source of truth, moving action tags and duplicate version values', () => {

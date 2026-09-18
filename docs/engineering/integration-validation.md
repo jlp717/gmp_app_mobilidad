@@ -41,3 +41,11 @@ La comprobación adicional de `test/models/albaran_entrega_test.dart` y `test/wi
 ## Límites de entrega
 
 Politec completo sigue sin PASS por el contrato textual de readiness y el scanner de fuentes grandes; véase [quality-gates.md](quality-gates.md). El gate de loop no sustituye los comandos explícitos anteriores. No se modifican los archivos protegidos de auth/DB, secretos, DB2, servicios, PM2 o producción. Faltan compatibilidad IBM i real, campo móvil, métricas de rendimiento, staging, CI remoto y decisiones registradas en [security-policy-decisions.md](../adr/security-policy-decisions.md).
+
+## Publicación y primera ejecución remota
+
+La rama se publicó con hooks normales y SHA remoto comprobado `01f22117bddab1d54fe54b2c539ad25e6522510f`. El [PR 42](https://github.com/jlp717/gmp_app_mobilidad/pull/42) está en borrador contra `test`; no hay merge ni despliegue.
+
+En [Foundations 35348409972](https://github.com/jlp717/gmp_app_mobilidad/actions/runs/35348409972), el job Linux pasó completo, incluidos instalación, pruebas aisladas, composición y carga nativa sin conexión DB2. Windows falló en una fixture que intentaba insertar un segundo job buscando LF sobre fuente CRLF. La reparación ejecuta las cinco negativas en ambos formatos y exige mutación efectiva. La suite local sigue con nueve casos, ahora cubriendo ambas terminaciones.
+
+El workflow `quality-gates.yml` quedó con `env:` raíz nulo tras centralizar versiones. Se retira ese bloque y el checker pasa a rechazar `env` no mapping en raíz, job y step, sin mostrar sus valores. La [referencia oficial de GitHub](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#env) define ese campo como mapa. Siete pruebas del checker pasan; esto no pretende validar todo el esquema de Actions. Ambas reparaciones tienen dos revisiones independientes. La nueva ejecución remota se evalúa por su SHA, sin reutilizar un PASS anterior para cambios posteriores.

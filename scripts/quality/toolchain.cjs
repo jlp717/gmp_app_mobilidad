@@ -34,13 +34,23 @@ function checkWorkflow(file, source) {
     return [`${file}: invalid-yaml:${error.reason || error.message}`];
   }
   if (!document || typeof document !== 'object') return [`${file}: yaml-root-must-be-object`];
+  function checkEnvironment(owner, location) {
+    if (Object.hasOwn(owner, 'env')
+      && (!owner.env || typeof owner.env !== 'object' || Array.isArray(owner.env))) {
+      findings.push(`${location}: env-must-be-mapping`);
+    }
+  }
+  checkEnvironment(document, file);
   const jobs = document.jobs;
   if (!jobs || typeof jobs !== 'object') return findings;
   for (const [jobName, job] of Object.entries(jobs)) {
-    if (!job || typeof job !== 'object' || !Array.isArray(job.steps)) continue;
+    if (!job || typeof job !== 'object') continue;
+    checkEnvironment(job, `${file}:${jobName}`);
+    if (!Array.isArray(job.steps)) continue;
     job.steps.forEach((step, index) => {
       if (!step || typeof step !== 'object') return;
       const location = `${file}:${jobName}:steps[${index}]`;
+      checkEnvironment(step, location);
       if (typeof step.uses === 'string' && step.uses.startsWith('actions/setup-node@')) {
         if (step.uses !== NODE_ACTION) findings.push(`${location}: setup-node must be pinned to ${NODE_ACTION}`);
         if (step.with?.['node-version-file'] !== '.nvmrc') findings.push(`${location}: setup-node must use node-version-file .nvmrc`);
