@@ -764,6 +764,9 @@ async function getBSales(vendorCode, year) {
     return bSalesRepository.getSingle(vendorCode, year);
 }
 
+/** ALL / sin rutero: lunes a sábado. Domingo y festivos nacionales fuera. */
+const DEFAULT_ALL_WEEK_DAYS = ['VIS_L', 'VIS_M', 'VIS_X', 'VIS_J', 'VIS_V', 'VIS_S'];
+
 module.exports = {
     getCurrentDate,
     getCurrentYear,
@@ -807,13 +810,13 @@ module.exports = {
     sanitizeCodeListForParams,
     chunkedVendorQuery,
     chunkedInQuery,
+    DEFAULT_ALL_WEEK_DAYS,
 
-    // Helper to calculate working days (Mon-Fri + Sat/Sun if active)
+    // Working days: vendor route if provided, otherwise lun–sáb (JEFE ALL).
     calculateWorkingDays: (year, month, activeWeekDays = []) => {
-        // If no active days specified, assume standard Mon-Fri
         const effectiveDays = (activeWeekDays && activeWeekDays.length > 0)
             ? activeWeekDays
-            : ['VIS_M', 'VIS_X', 'VIS_J', 'VIS_V', 'VIS_S']; // martes-sabado
+            : DEFAULT_ALL_WEEK_DAYS;
 
         const start = new Date(year, month - 1, 1);
         const end = new Date(year, month, 0);
@@ -853,7 +856,7 @@ module.exports = {
         // Current month: count up to today
         const effectiveDays = (activeWeekDays && activeWeekDays.length > 0)
             ? activeWeekDays
-            : ['VIS_M', 'VIS_X', 'VIS_J', 'VIS_V', 'VIS_S']; // martes-sabado
+            : DEFAULT_ALL_WEEK_DAYS;
 
 
         const start = new Date(year, month - 1, 1);

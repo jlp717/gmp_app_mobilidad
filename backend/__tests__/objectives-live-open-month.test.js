@@ -35,6 +35,6 @@ describe('objectives ALL live open-month overlay', () => {
   });
 
   test('cache version busts stale monthly ALL payloads', () => {
-    expect(source).toContain("OBJECTIVES_CACHE_VERSION = 'v20260918-live-open-month'");
+    expect(source).toContain("OBJECTIVES_CACHE_VERSION = 'v20260918-mon-sat-all'");
   });
 });

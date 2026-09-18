@@ -13,6 +13,7 @@ import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/features/objectives/data/objectives_service.dart';
+import 'package:gmp_app_mobilidad/features/objectives/domain/working_days_calendar.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -361,39 +362,22 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             final isCurrentMonth = year == now.year && monthNum == now.month;
             final isSelectedMonth = _selectedMonths.contains(monthNum);
 
-            // SPECIAL FIX FOR 'All Agents' (Jefe de Ventas view)
-            // If viewing all agents (no specific filter), calculate standard Mon-Sat working days
-            // This avoids issues where aggregated data might have incorrect average days (e.g. 20 vs 24)
-            final isAllAgentsView = widget.isJefeVentas &&
-                widget.includeAllVendorOption &&
-                ((ref.read(selectedVendorProvider) ?? '').isEmpty);
+            // JEFE ALL: lun–sáb (GMP vende sábados). El selector guarda 'ALL',
+            // no vacío; si no se trata como ALL, el backend viejo mar–sáb
+            // inflaba Necesitas/día (60.487 en vez de 51.182 en sept 2026).
+            final isAllAgentsView = isAllAgentsObjectivesView(
+              isJefeVentas: widget.isJefeVentas,
+              includeAllVendorOption: widget.includeAllVendorOption,
+              selectedVendor: ref.read(selectedVendorProvider),
+            );
 
             if (isAllAgentsView) {
-              // Calculate strict Mon-Sat days for this month
-              final totalDaysInMonth = DateTime(year, monthNum + 1, 0).day;
-              var monSatDays = 0;
-              for (var day = 1; day <= totalDaysInMonth; day++) {
-                final d = DateTime(year, monthNum, day);
-                if (d.weekday != DateTime.sunday) {
-                  monSatDays++;
-                }
-              }
-              workingDays = monSatDays;
-
-              // Calculate days passed based on Mon-Sat logic
+              workingDays = countMonSatWorkingDays(year, monthNum);
               if (year < now.year ||
                   (year == now.year && monthNum < now.month)) {
                 daysPassed = workingDays;
               } else if (isCurrentMonth && isSelectedMonth) {
-                // Count Mon-Sat days up to today
-                var passedCount = 0;
-                for (var day = 1; day <= now.day; day++) {
-                  final d = DateTime(year, monthNum, day);
-                  if (d.weekday != DateTime.sunday) {
-                    passedCount++;
-                  }
-                }
-                daysPassed = passedCount;
+                daysPassed = countMonSatDaysPassed(year, monthNum, now);
               }
             } else {
               // Standard logic for individual agents (trust backend data)

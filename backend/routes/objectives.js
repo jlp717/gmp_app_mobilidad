@@ -52,7 +52,7 @@ const {
     resolveObjectiveSalesTarget,
 } = require('../utils/objectives-source');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260918-live-open-month';
+const OBJECTIVES_CACHE_VERSION = 'v20260918-mon-sat-all';
 const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
 const { buildMonthFilterParameterized } = require('../src/utils/dashboardFilters');
 
