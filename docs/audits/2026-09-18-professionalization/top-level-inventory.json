@@ -1,0 +1,297 @@
+{
+  ".": {
+    "directories": 1,
+    "files": 33,
+    "bytes": 757966
+  },
+  ".agent": {
+    "directories": 2,
+    "files": 2,
+    "bytes": 358
+  },
+  ".agents": {
+    "directories": 16,
+    "files": 22,
+    "bytes": 90668
+  },
+  ".beads": {
+    "directories": 10,
+    "files": 202,
+    "bytes": 15660890
+  },
+  ".claude": {
+    "directories": 48,
+    "files": 77,
+    "bytes": 154667
+  },
+  ".cline": {
+    "directories": 40,
+    "files": 70,
+    "bytes": 345851
+  },
+  ".clinerules": {
+    "directories": 1,
+    "files": 12,
+    "bytes": 19065
+  },
+  ".codex": {
+    "directories": 43,
+    "files": 522,
+    "bytes": 3079570
+  },
+  ".codex-remote-attachments": {
+    "directories": 5,
+    "files": 4,
+    "bytes": 303136
+  },
+  ".continue": {
+    "directories": 13,
+    "files": 22,
+    "bytes": 88836
+  },
+  ".cursor": {
+    "directories": 4,
+    "files": 7,
+    "bytes": 314490
+  },
+  ".dart_tool": {
+    "directories": 20,
+    "files": 120,
+    "bytes": 750445398
+  },
+  ".git": {
+    "directories": 837,
+    "files": 45612,
+    "bytes": 1014288933
+  },
+  ".github": {
+    "directories": 4,
+    "files": 21,
+    "bytes": 139719
+  },
+  ".husky": {
+    "directories": 2,
+    "files": 20,
+    "bytes": 2808
+  },
+  ".idea": {
+    "directories": 3,
+    "files": 5,
+    "bytes": 3802
+  },
+  ".obsidian": {
+    "directories": 5,
+    "files": 16,
+    "bytes": 2530784
+  },
+  ".omo": {
+    "directories": 2,
+    "files": 3,
+    "bytes": 669
+  },
+  ".openclaw": {
+    "directories": 2,
+    "files": 2,
+    "bytes": 189
+  },
+  ".opencode": {
+    "directories": 354,
+    "files": 4073,
+    "bytes": 86522018
+  },
+  ".opencode-legacy": {
+    "directories": 4336,
+    "files": 17180,
+    "bytes": 336908336
+  },
+  ".opencode-runtime": {
+    "directories": 3935,
+    "files": 17551,
+    "bytes": 5735447951
+  },
+  ".qoder": {
+    "directories": 14,
+    "files": 22,
+    "bytes": 89026
+  },
+  ".qwen": {
+    "directories": 13,
+    "files": 23,
+    "bytes": 88920
+  },
+  ".remember": {
+    "directories": 5,
+    "files": 361,
+    "bytes": 2303302
+  },
+  ".semgrep": {
+    "directories": 1,
+    "files": 1,
+    "bytes": 3410
+  },
+  ".swarm": {
+    "directories": 32,
+    "files": 61,
+    "bytes": 2638821
+  },
+  ".trae": {
+    "directories": 12,
+    "files": 18,
+    "bytes": 68247
+  },
+  ".venv": {
+    "directories": 355,
+    "files": 2956,
+    "bytes": 73708501
+  },
+  ".vscode": {
+    "directories": 1,
+    "files": 1,
+    "bytes": 197
+  },
+  ".windsurf": {
+    "directories": 13,
+    "files": 22,
+    "bytes": 89036
+  },
+  "android": {
+    "directories": 46,
+    "files": 58,
+    "bytes": 30673007
+  },
+  "assets": {
+    "directories": 6,
+    "files": 12,
+    "bytes": 3445187
+  },
+  "backend": {
+    "directories": 3477,
+    "files": 26453,
+    "bytes": 368110109
+  },
+  "build": {
+    "directories": 9208,
+    "files": 17365,
+    "bytes": 1475240133
+  },
+  "coverage": {
+    "directories": 1,
+    "files": 1,
+    "bytes": 261795
+  },
+  "db": {
+    "directories": 2,
+    "files": 2,
+    "bytes": 1567
+  },
+  "docs": {
+    "directories": 33,
+    "files": 193,
+    "bytes": 15548879
+  },
+  "handoffs": {
+    "directories": 1,
+    "files": 2,
+    "bytes": 1908
+  },
+  "integration_test": {
+    "directories": 2,
+    "files": 3,
+    "bytes": 18887
+  },
+  "ios": {
+    "directories": 16,
+    "files": 51,
+    "bytes": 326570
+  },
+  "ipex_ollama": {
+    "directories": 2485,
+    "files": 7732,
+    "bytes": 184891788
+  },
+  "lib": {
+    "directories": 144,
+    "files": 316,
+    "bytes": 5936640
+  },
+  "linux": {
+    "directories": 5,
+    "files": 10,
+    "bytes": 17630
+  },
+  "logs": {
+    "directories": 2,
+    "files": 26,
+    "bytes": 198349
+  },
+  "macos": {
+    "directories": 16,
+    "files": 30,
+    "bytes": 227295
+  },
+  "memory-bank": {
+    "directories": 1,
+    "files": 6,
+    "bytes": 5091
+  },
+  "node_modules": {
+    "directories": 596,
+    "files": 4181,
+    "bytes": 62502818
+  },
+  "observability": {
+    "directories": 6,
+    "files": 8,
+    "bytes": 12144
+  },
+  "pixel-agents": {
+    "directories": 1527,
+    "files": 14778,
+    "bytes": 174732282
+  },
+  "scripts": {
+    "directories": 28,
+    "files": 111,
+    "bytes": 750721
+  },
+  "skills": {
+    "directories": 7,
+    "files": 14,
+    "bytes": 43932
+  },
+  "test": {
+    "directories": 48,
+    "files": 123,
+    "bytes": 689345
+  },
+  "tool": {
+    "directories": 5,
+    "files": 5,
+    "bytes": 17860
+  },
+  "uploads": {
+    "directories": 2,
+    "files": 0,
+    "bytes": 0
+  },
+  "vault": {
+    "directories": 11,
+    "files": 27,
+    "bytes": 24599
+  },
+  "venv": {
+    "directories": 7559,
+    "files": 60423,
+    "bytes": 1953999100
+  },
+  "web": {
+    "directories": 2,
+    "files": 8,
+    "bytes": 46357
+  },
+  "windows": {
+    "directories": 6,
+    "files": 18,
+    "bytes": 70916
+  }
+}

@@ -1,0 +1,570 @@
+directory,category,direct_files,direct_bytes,direct_tracked,protected_files,disposition
+.,configuration-or-agent,33,757966,27,1,review source versus generated and local; no bulk add
+.agent,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.agent/nhallucinate,configuration-or-agent,2,358,2,0,review source versus generated and local; no bulk add
+.agents,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.agents/skills,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.agents/skills/caveman,configuration-or-agent,1,3719,1,0,review source versus generated and local; no bulk add
+.agents/skills/caveman-commit,configuration-or-agent,1,2545,1,0,review source versus generated and local; no bulk add
+.agents/skills/caveman-compress,configuration-or-agent,3,11571,3,0,review source versus generated and local; no bulk add
+.agents/skills/caveman-compress/scripts,configuration-or-agent,7,21200,7,0,review source versus generated and local; no bulk add
+.agents/skills/caveman-help,configuration-or-agent,1,2104,1,0,review source versus generated and local; no bulk add
+.agents/skills/caveman-review,configuration-or-agent,1,2793,1,0,review source versus generated and local; no bulk add
+.agents/skills/openspec-apply-change,configuration-or-agent,1,4930,1,0,review source versus generated and local; no bulk add
+.agents/skills/openspec-archive-change,configuration-or-agent,1,4271,1,0,review source versus generated and local; no bulk add
+.agents/skills/openspec-explore,configuration-or-agent,1,11026,1,0,review source versus generated and local; no bulk add
+.agents/skills/openspec-propose,configuration-or-agent,1,4756,1,0,review source versus generated and local; no bulk add
+.agents/skills/source-command-opsx-apply,configuration-or-agent,1,4841,1,0,review source versus generated and local; no bulk add
+.agents/skills/source-command-opsx-archive,configuration-or-agent,1,5271,1,0,review source versus generated and local; no bulk add
+.agents/skills/source-command-opsx-explore,configuration-or-agent,1,7020,1,0,review source versus generated and local; no bulk add
+.agents/skills/source-command-opsx-propose,configuration-or-agent,1,4621,1,0,review source versus generated and local; no bulk add
+.beads,configuration-or-agent,9,111952,6,0,review source versus generated and local; no bulk add
+.beads/hooks,configuration-or-agent,5,9347,5,0,review source versus generated and local; no bulk add
+.continue,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.continue/prompts,configuration-or-agent,4,20589,4,0,review source versus generated and local; no bulk add
+.continue/skills,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.continue/skills/caveman,configuration-or-agent,1,3719,1,0,review source versus generated and local; no bulk add
+.continue/skills/caveman-commit,configuration-or-agent,1,2545,1,0,review source versus generated and local; no bulk add
+.continue/skills/caveman-compress,configuration-or-agent,3,11571,3,0,review source versus generated and local; no bulk add
+.continue/skills/caveman-compress/scripts,configuration-or-agent,7,21200,7,0,review source versus generated and local; no bulk add
+.continue/skills/caveman-help,configuration-or-agent,1,2104,1,0,review source versus generated and local; no bulk add
+.continue/skills/caveman-review,configuration-or-agent,1,2793,1,0,review source versus generated and local; no bulk add
+.continue/skills/openspec-apply-change,configuration-or-agent,1,4774,1,0,review source versus generated and local; no bulk add
+.continue/skills/openspec-archive-change,configuration-or-agent,1,4157,1,0,review source versus generated and local; no bulk add
+.continue/skills/openspec-explore,configuration-or-agent,1,10738,1,0,review source versus generated and local; no bulk add
+.continue/skills/openspec-propose,configuration-or-agent,1,4646,1,0,review source versus generated and local; no bulk add
+.github,configuration-or-agent,1,183,1,0,review source versus generated and local; no bulk add
+.github/ISSUE_TEMPLATE,configuration-or-agent,1,1255,1,0,review source versus generated and local; no bulk add
+.github/scripts,configuration-or-agent,5,40514,5,0,review source versus generated and local; no bulk add
+.github/workflows,configuration-or-agent,14,97767,14,0,review source versus generated and local; no bulk add
+.husky,configuration-or-agent,3,1550,3,0,review source versus generated and local; no bulk add
+.omo,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.omo/run-continuation,configuration-or-agent,3,669,3,0,review source versus generated and local; no bulk add
+.qoder,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.qoder/commands,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.qoder/commands/opsx,configuration-or-agent,4,20779,4,0,review source versus generated and local; no bulk add
+.qoder/skills,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.qoder/skills/caveman,configuration-or-agent,1,3719,1,0,review source versus generated and local; no bulk add
+.qoder/skills/caveman-commit,configuration-or-agent,1,2545,1,0,review source versus generated and local; no bulk add
+.qoder/skills/caveman-compress,configuration-or-agent,3,11571,3,0,review source versus generated and local; no bulk add
+.qoder/skills/caveman-compress/scripts,configuration-or-agent,7,21200,7,0,review source versus generated and local; no bulk add
+.qoder/skills/caveman-help,configuration-or-agent,1,2104,1,0,review source versus generated and local; no bulk add
+.qoder/skills/caveman-review,configuration-or-agent,1,2793,1,0,review source versus generated and local; no bulk add
+.qoder/skills/openspec-apply-change,configuration-or-agent,1,4774,1,0,review source versus generated and local; no bulk add
+.qoder/skills/openspec-archive-change,configuration-or-agent,1,4157,1,0,review source versus generated and local; no bulk add
+.qoder/skills/openspec-explore,configuration-or-agent,1,10738,1,0,review source versus generated and local; no bulk add
+.qoder/skills/openspec-propose,configuration-or-agent,1,4646,1,0,review source versus generated and local; no bulk add
+.qwen,configuration-or-agent,1,174,1,0,review source versus generated and local; no bulk add
+.qwen/commands,configuration-or-agent,4,20499,4,0,review source versus generated and local; no bulk add
+.qwen/skills,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.qwen/skills/caveman,configuration-or-agent,1,3719,1,0,review source versus generated and local; no bulk add
+.qwen/skills/caveman-commit,configuration-or-agent,1,2545,1,0,review source versus generated and local; no bulk add
+.qwen/skills/caveman-compress,configuration-or-agent,3,11571,3,0,review source versus generated and local; no bulk add
+.qwen/skills/caveman-compress/scripts,configuration-or-agent,7,21200,7,0,review source versus generated and local; no bulk add
+.qwen/skills/caveman-help,configuration-or-agent,1,2104,1,0,review source versus generated and local; no bulk add
+.qwen/skills/caveman-review,configuration-or-agent,1,2793,1,0,review source versus generated and local; no bulk add
+.qwen/skills/openspec-apply-change,configuration-or-agent,1,4774,1,0,review source versus generated and local; no bulk add
+.qwen/skills/openspec-archive-change,configuration-or-agent,1,4157,1,0,review source versus generated and local; no bulk add
+.qwen/skills/openspec-explore,configuration-or-agent,1,10738,1,0,review source versus generated and local; no bulk add
+.qwen/skills/openspec-propose,configuration-or-agent,1,4646,1,0,review source versus generated and local; no bulk add
+.semgrep,configuration-or-agent,1,3410,1,0,review source versus generated and local; no bulk add
+.trae,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.trae/skills,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.trae/skills/caveman,configuration-or-agent,1,3719,1,0,review source versus generated and local; no bulk add
+.trae/skills/caveman-commit,configuration-or-agent,1,2545,1,0,review source versus generated and local; no bulk add
+.trae/skills/caveman-compress,configuration-or-agent,3,11571,3,0,review source versus generated and local; no bulk add
+.trae/skills/caveman-compress/scripts,configuration-or-agent,7,21200,7,0,review source versus generated and local; no bulk add
+.trae/skills/caveman-help,configuration-or-agent,1,2104,1,0,review source versus generated and local; no bulk add
+.trae/skills/caveman-review,configuration-or-agent,1,2793,1,0,review source versus generated and local; no bulk add
+.trae/skills/openspec-apply-change,configuration-or-agent,1,4774,1,0,review source versus generated and local; no bulk add
+.trae/skills/openspec-archive-change,configuration-or-agent,1,4157,1,0,review source versus generated and local; no bulk add
+.trae/skills/openspec-explore,configuration-or-agent,1,10738,1,0,review source versus generated and local; no bulk add
+.trae/skills/openspec-propose,configuration-or-agent,1,4646,1,0,review source versus generated and local; no bulk add
+.vscode,configuration-or-agent,1,197,1,0,review source versus generated and local; no bulk add
+.windsurf,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.windsurf/skills,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+.windsurf/skills/caveman,configuration-or-agent,1,3719,1,0,review source versus generated and local; no bulk add
+.windsurf/skills/caveman-commit,configuration-or-agent,1,2545,1,0,review source versus generated and local; no bulk add
+.windsurf/skills/caveman-compress,configuration-or-agent,3,11571,3,0,review source versus generated and local; no bulk add
+.windsurf/skills/caveman-compress/scripts,configuration-or-agent,7,21200,7,0,review source versus generated and local; no bulk add
+.windsurf/skills/caveman-help,configuration-or-agent,1,2104,1,0,review source versus generated and local; no bulk add
+.windsurf/skills/caveman-review,configuration-or-agent,1,2793,1,0,review source versus generated and local; no bulk add
+.windsurf/skills/openspec-apply-change,configuration-or-agent,1,4774,1,0,review source versus generated and local; no bulk add
+.windsurf/skills/openspec-archive-change,configuration-or-agent,1,4157,1,0,review source versus generated and local; no bulk add
+.windsurf/skills/openspec-explore,configuration-or-agent,1,10738,1,0,review source versus generated and local; no bulk add
+.windsurf/skills/openspec-propose,configuration-or-agent,1,4646,1,0,review source versus generated and local; no bulk add
+.windsurf/workflows,configuration-or-agent,4,20789,4,0,review source versus generated and local; no bulk add
+android,product-or-platform,13,30702,7,1,retain; refactor by domain after tests
+android/.settings,product-or-platform,1,1278,1,0,retain; refactor by domain after tests
+android/app,product-or-platform,4,6735,4,0,retain; refactor by domain after tests
+android/app/.settings,product-or-platform,1,58,1,0,retain; refactor by domain after tests
+android/app/src,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+android/app/src/debug,product-or-platform,1,385,1,0,retain; refactor by domain after tests
+android/app/src/main,product-or-platform,1,6083,1,0,retain; refactor by domain after tests
+android/app/src/main/kotlin,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+android/app/src/main/kotlin/com,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+android/app/src/main/kotlin/com/maripepa,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+android/app/src/main/kotlin/com/maripepa/gmp_mobilidad,product-or-platform,1,133,1,0,retain; refactor by domain after tests
+android/app/src/main/play,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+android/app/src/main/play/release-notes,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+android/app/src/main/play/release-notes/es-ES,product-or-platform,1,356,1,0,retain; refactor by domain after tests
+android/app/src/main/res,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+android/app/src/main/res/drawable,product-or-platform,1,446,1,0,retain; refactor by domain after tests
+android/app/src/main/res/drawable-v21,product-or-platform,1,450,1,0,retain; refactor by domain after tests
+android/app/src/main/res/mipmap-hdpi,product-or-platform,2,3564,2,0,retain; refactor by domain after tests
+android/app/src/main/res/mipmap-mdpi,product-or-platform,2,2160,2,0,retain; refactor by domain after tests
+android/app/src/main/res/mipmap-xhdpi,product-or-platform,2,5205,2,0,retain; refactor by domain after tests
+android/app/src/main/res/mipmap-xxhdpi,product-or-platform,2,9041,2,0,retain; refactor by domain after tests
+android/app/src/main/res/mipmap-xxxhdpi,product-or-platform,2,13574,2,0,retain; refactor by domain after tests
+android/app/src/main/res/values,product-or-platform,1,1014,1,0,retain; refactor by domain after tests
+android/app/src/main/res/values-night,product-or-platform,1,1013,1,0,retain; refactor by domain after tests
+android/app/src/main/res/xml,product-or-platform,1,508,1,0,retain; refactor by domain after tests
+android/app/src/profile,product-or-platform,1,385,1,0,retain; refactor by domain after tests
+android/fastlane,product-or-platform,2,1475,2,0,retain; refactor by domain after tests
+android/gradle,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+android/gradle/wrapper,product-or-platform,2,53844,1,0,retain; refactor by domain after tests
+assets,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+assets/branding,product-or-platform,1,409777,1,0,retain; refactor by domain after tests
+assets/icon,product-or-platform,1,228032,1,0,retain; refactor by domain after tests
+assets/load_planner,product-or-platform,3,46179,3,0,retain; refactor by domain after tests
+assets/load_planner/lib,product-or-platform,6,2753690,6,0,retain; refactor by domain after tests
+assets/rutero_map,product-or-platform,1,7509,1,0,retain; refactor by domain after tests
+backend,product-or-platform,41,81003455,18,3,retain; refactor by domain after tests
+backend/app,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+backend/app/services,product-or-platform,3,64229,3,0,retain; refactor by domain after tests
+backend/assets,product-or-platform,1,409777,1,0,retain; refactor by domain after tests
+backend/assets/branding,product-or-platform,1,409777,1,0,retain; refactor by domain after tests
+backend/audit,product-or-platform,4,12933,4,0,retain; refactor by domain after tests
+backend/audit/scripts,product-or-platform,4,67844,4,0,retain; refactor by domain after tests
+backend/config,product-or-platform,9,82105,9,0,retain; refactor by domain after tests
+backend/docs,product-or-platform,3,33538,3,0,retain; refactor by domain after tests
+backend/kpi,product-or-platform,8,50969,8,0,retain; refactor by domain after tests
+backend/kpi/config,product-or-platform,1,6731,1,0,retain; refactor by domain after tests
+backend/kpi/csv_samples,product-or-platform,7,9428,7,0,retain; refactor by domain after tests
+backend/kpi/migrations,product-or-platform,2,3579,2,0,retain; refactor by domain after tests
+backend/kpi/services,product-or-platform,9,85357,9,0,retain; refactor by domain after tests
+backend/kpi/__tests__,product-or-platform,2,11904,2,0,retain; refactor by domain after tests
+backend/lib,product-or-platform,1,2759,1,0,retain; refactor by domain after tests
+backend/middleware,product-or-platform,14,184079,14,0,retain; refactor by domain after tests
+backend/migrations,product-or-platform,9,42251,9,0,retain; refactor by domain after tests
+backend/optional,product-or-platform,1,16172,1,0,retain; refactor by domain after tests
+backend/perf,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+backend/perf/k6,product-or-platform,2,6423,2,0,retain; refactor by domain after tests
+backend/repositories,product-or-platform,13,502805,13,0,retain; refactor by domain after tests
+backend/routes,product-or-platform,35,1306242,35,0,retain; refactor by domain after tests
+backend/scripts,product-or-platform,260,1890718,180,0,retain; refactor by domain after tests
+backend/scripts/sql,product-or-platform,30,266461,30,0,retain; refactor by domain after tests
+backend/scripts/sql/migrations,product-or-platform,20,140805,20,0,retain; refactor by domain after tests
+backend/scripts/validation,product-or-platform,1,16238,1,0,retain; refactor by domain after tests
+backend/services,product-or-platform,64,1020463,64,0,retain; refactor by domain after tests
+backend/services/ml,product-or-platform,1,13491,1,0,retain; refactor by domain after tests
+backend/services/pedidos,product-or-platform,7,323635,7,0,retain; refactor by domain after tests
+backend/sql,product-or-platform,2,5299,2,0,retain; refactor by domain after tests
+backend/src,product-or-platform,3,21175,3,0,retain; refactor by domain after tests
+backend/src/chatbot,product-or-platform,9,316014,9,0,retain; refactor by domain after tests
+backend/src/config,product-or-platform,4,25068,4,0,retain; refactor by domain after tests
+backend/src/controllers,product-or-platform,8,31542,8,0,retain; refactor by domain after tests
+backend/src/core,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+backend/src/core/application,product-or-platform,1,245,1,0,retain; refactor by domain after tests
+backend/src/core/domain,product-or-platform,3,1825,3,0,retain; refactor by domain after tests
+backend/src/core/infrastructure,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+backend/src/core/infrastructure/cache,product-or-platform,5,35739,5,0,retain; refactor by domain after tests
+backend/src/core/infrastructure/database,product-or-platform,2,5875,2,0,retain; refactor by domain after tests
+backend/src/core/infrastructure/security,product-or-platform,6,36727,6,0,retain; refactor by domain after tests
+backend/src/cron,product-or-platform,2,11815,2,0,retain; refactor by domain after tests
+backend/src/errors,product-or-platform,1,2185,1,0,retain; refactor by domain after tests
+backend/src/middleware,product-or-platform,6,34807,6,0,retain; refactor by domain after tests
+backend/src/middlewares,product-or-platform,1,4815,1,0,retain; refactor by domain after tests
+backend/src/models,product-or-platform,1,1003,1,0,retain; refactor by domain after tests
+backend/src/modules,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+backend/src/modules/analytics,product-or-platform,1,787,1,0,retain; refactor by domain after tests
+backend/src/modules/analytics/application,product-or-platform,3,6998,3,0,retain; refactor by domain after tests
+backend/src/modules/analytics/domain,product-or-platform,2,5315,2,0,retain; refactor by domain after tests
+backend/src/modules/analytics/infrastructure,product-or-platform,1,15470,1,0,retain; refactor by domain after tests
+backend/src/modules/auth,product-or-platform,1,674,1,0,retain; refactor by domain after tests
+backend/src/modules/auth/application,product-or-platform,4,38698,4,0,retain; refactor by domain after tests
+backend/src/modules/auth/domain,product-or-platform,3,4031,3,0,retain; refactor by domain after tests
+backend/src/modules/auth/infrastructure,product-or-platform,2,15032,2,0,retain; refactor by domain after tests
+backend/src/modules/chatbot,product-or-platform,1,456,1,0,retain; refactor by domain after tests
+backend/src/modules/chatbot/application,product-or-platform,1,3875,1,0,retain; refactor by domain after tests
+backend/src/modules/chatbot/domain,product-or-platform,2,2210,2,0,retain; refactor by domain after tests
+backend/src/modules/chatbot/infrastructure,product-or-platform,1,4651,1,0,retain; refactor by domain after tests
+backend/src/modules/clients,product-or-platform,1,685,1,0,retain; refactor by domain after tests
+backend/src/modules/clients/application,product-or-platform,3,2668,3,0,retain; refactor by domain after tests
+backend/src/modules/clients/domain,product-or-platform,2,3293,2,0,retain; refactor by domain after tests
+backend/src/modules/clients/infrastructure,product-or-platform,1,11237,1,0,retain; refactor by domain after tests
+backend/src/modules/cobros,product-or-platform,1,578,1,0,retain; refactor by domain after tests
+backend/src/modules/cobros/application,product-or-platform,2,2225,2,0,retain; refactor by domain after tests
+backend/src/modules/cobros/domain,product-or-platform,2,3045,2,0,retain; refactor by domain after tests
+backend/src/modules/cobros/infrastructure,product-or-platform,1,77582,1,0,retain; refactor by domain after tests
+backend/src/modules/commissions,product-or-platform,1,610,1,0,retain; refactor by domain after tests
+backend/src/modules/commissions/application,product-or-platform,2,2045,2,0,retain; refactor by domain after tests
+backend/src/modules/commissions/domain,product-or-platform,2,2039,2,0,retain; refactor by domain after tests
+backend/src/modules/commissions/infrastructure,product-or-platform,1,4015,1,0,retain; refactor by domain after tests
+backend/src/modules/dashboard,product-or-platform,1,1393,1,0,retain; refactor by domain after tests
+backend/src/modules/dashboard/application,product-or-platform,8,6857,8,0,retain; refactor by domain after tests
+backend/src/modules/dashboard/domain,product-or-platform,2,4136,2,0,retain; refactor by domain after tests
+backend/src/modules/dashboard/infrastructure,product-or-platform,1,10048,1,0,retain; refactor by domain after tests
+backend/src/modules/entregas,product-or-platform,1,721,1,0,retain; refactor by domain after tests
+backend/src/modules/entregas/application,product-or-platform,3,3046,3,0,retain; refactor by domain after tests
+backend/src/modules/entregas/domain,product-or-platform,2,3389,2,0,retain; refactor by domain after tests
+backend/src/modules/entregas/infrastructure,product-or-platform,1,4994,1,0,retain; refactor by domain after tests
+backend/src/modules/export,product-or-platform,1,552,1,0,retain; refactor by domain after tests
+backend/src/modules/export/application,product-or-platform,2,1715,2,0,retain; refactor by domain after tests
+backend/src/modules/export/domain,product-or-platform,2,2596,2,0,retain; refactor by domain after tests
+backend/src/modules/export/infrastructure,product-or-platform,1,4575,1,0,retain; refactor by domain after tests
+backend/src/modules/facturas,product-or-platform,1,686,1,0,retain; refactor by domain after tests
+backend/src/modules/facturas/application,product-or-platform,3,4892,3,0,retain; refactor by domain after tests
+backend/src/modules/facturas/domain,product-or-platform,2,2639,2,0,retain; refactor by domain after tests
+backend/src/modules/facturas/infrastructure,product-or-platform,1,10571,1,0,retain; refactor by domain after tests
+backend/src/modules/filters,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+backend/src/modules/filters/application,product-or-platform,1,1612,1,0,retain; refactor by domain after tests
+backend/src/modules/filters/domain,product-or-platform,2,1546,2,0,retain; refactor by domain after tests
+backend/src/modules/filters/infrastructure,product-or-platform,1,3419,1,0,retain; refactor by domain after tests
+backend/src/modules/kpi-alerts,product-or-platform,1,580,1,0,retain; refactor by domain after tests
+backend/src/modules/kpi-alerts/application,product-or-platform,2,2267,2,0,retain; refactor by domain after tests
+backend/src/modules/kpi-alerts/domain,product-or-platform,2,2018,2,0,retain; refactor by domain after tests
+backend/src/modules/kpi-alerts/infrastructure,product-or-platform,1,7142,1,0,retain; refactor by domain after tests
+backend/src/modules/master,product-or-platform,1,450,1,0,retain; refactor by domain after tests
+backend/src/modules/master/application,product-or-platform,1,1416,1,0,retain; refactor by domain after tests
+backend/src/modules/master/domain,product-or-platform,2,1909,2,0,retain; refactor by domain after tests
+backend/src/modules/master/infrastructure,product-or-platform,1,4401,1,0,retain; refactor by domain after tests
+backend/src/modules/objectives,product-or-platform,1,753,1,0,retain; refactor by domain after tests
+backend/src/modules/objectives/application,product-or-platform,3,2535,3,0,retain; refactor by domain after tests
+backend/src/modules/objectives/domain,product-or-platform,2,2721,2,0,retain; refactor by domain after tests
+backend/src/modules/objectives/infrastructure,product-or-platform,1,5950,1,0,retain; refactor by domain after tests
+backend/src/modules/pedidos,product-or-platform,1,1085,1,0,retain; refactor by domain after tests
+backend/src/modules/pedidos/application,product-or-platform,6,6251,6,0,retain; refactor by domain after tests
+backend/src/modules/pedidos/domain,product-or-platform,2,4122,2,0,retain; refactor by domain after tests
+backend/src/modules/pedidos/infrastructure,product-or-platform,1,6264,1,0,retain; refactor by domain after tests
+backend/src/modules/planner,product-or-platform,1,535,1,0,retain; refactor by domain after tests
+backend/src/modules/planner/application,product-or-platform,2,2391,2,0,retain; refactor by domain after tests
+backend/src/modules/planner/domain,product-or-platform,3,4503,3,0,retain; refactor by domain after tests
+backend/src/modules/planner/infrastructure,product-or-platform,1,5337,1,0,retain; refactor by domain after tests
+backend/src/modules/repartidor,product-or-platform,1,991,1,0,retain; refactor by domain after tests
+backend/src/modules/repartidor/application,product-or-platform,5,4739,5,0,retain; refactor by domain after tests
+backend/src/modules/repartidor/domain,product-or-platform,2,2972,2,0,retain; refactor by domain after tests
+backend/src/modules/repartidor/infrastructure,product-or-platform,1,9409,1,0,retain; refactor by domain after tests
+backend/src/modules/rutero,product-or-platform,1,700,1,0,retain; refactor by domain after tests
+backend/src/modules/rutero/application,product-or-platform,3,2830,3,0,retain; refactor by domain after tests
+backend/src/modules/rutero/domain,product-or-platform,2,2257,2,0,retain; refactor by domain after tests
+backend/src/modules/rutero/infrastructure,product-or-platform,1,4723,1,0,retain; refactor by domain after tests
+backend/src/modules/warehouse,product-or-platform,1,827,1,0,retain; refactor by domain after tests
+backend/src/modules/warehouse/application,product-or-platform,4,3151,4,0,retain; refactor by domain after tests
+backend/src/modules/warehouse/domain,product-or-platform,2,2909,2,0,retain; refactor by domain after tests
+backend/src/modules/warehouse/infrastructure,product-or-platform,1,5056,1,0,retain; refactor by domain after tests
+backend/src/repositories,product-or-platform,3,10837,3,0,retain; refactor by domain after tests
+backend/src/routes,product-or-platform,22,52537,22,0,retain; refactor by domain after tests
+backend/src/scripts,product-or-platform,1,4514,1,0,retain; refactor by domain after tests
+backend/src/services,product-or-platform,18,295852,18,0,retain; refactor by domain after tests
+backend/src/shared,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+backend/src/shared/middleware,product-or-platform,1,1473,1,0,retain; refactor by domain after tests
+backend/src/shared/routes,product-or-platform,1,147134,1,0,retain; refactor by domain after tests
+backend/src/types,product-or-platform,4,12431,4,0,retain; refactor by domain after tests
+backend/src/utils,product-or-platform,8,57433,8,0,retain; refactor by domain after tests
+backend/src/validators,product-or-platform,2,12374,2,0,retain; refactor by domain after tests
+backend/src/__tests__,product-or-platform,10,128552,10,0,retain; refactor by domain after tests
+backend/src/__tests__/integration,product-or-platform,1,9728,1,0,retain; refactor by domain after tests
+backend/src/__tests__/performance,product-or-platform,1,7431,1,0,retain; refactor by domain after tests
+backend/src/__tests__/resilience,product-or-platform,1,7878,1,0,retain; refactor by domain after tests
+backend/src/__tests__/security,product-or-platform,1,10110,1,0,retain; refactor by domain after tests
+backend/telemetry,product-or-platform,2,6759,2,0,retain; refactor by domain after tests
+backend/tests,product-or-platform,12,38907,12,0,retain; refactor by domain after tests
+backend/tests/controllers,product-or-platform,1,5278,1,0,retain; refactor by domain after tests
+backend/tests/middlewares,product-or-platform,1,6279,1,0,retain; refactor by domain after tests
+backend/tests/repositories,product-or-platform,3,19495,3,0,retain; refactor by domain after tests
+backend/tests/routes,product-or-platform,2,12827,2,0,retain; refactor by domain after tests
+backend/tests/security,product-or-platform,2,7172,2,0,retain; refactor by domain after tests
+backend/tests/services,product-or-platform,4,21133,4,0,retain; refactor by domain after tests
+backend/utils,product-or-platform,12,87863,12,0,retain; refactor by domain after tests
+backend/__tests__,product-or-platform,224,2008880,224,0,retain; refactor by domain after tests
+backend/__tests__/middleware,product-or-platform,2,33097,2,0,retain; refactor by domain after tests
+db,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+db/migrations,product-or-platform,2,1567,2,0,retain; refactor by domain after tests
+docs,documentation,30,239263,29,0,classify current versus historical; preserve evidence
+docs/adr,documentation,14,32280,14,0,classify current versus historical; preserve evidence
+docs/archive,documentation,1,4099,1,0,classify current versus historical; preserve evidence
+docs/archive/architecture,documentation,9,160800,3,0,classify current versus historical; preserve evidence
+docs/archive/audits,documentation,6,31225,6,0,classify current versus historical; preserve evidence
+docs/archive/audits/db2-discovery,documentation,10,920338,10,0,classify current versus historical; preserve evidence
+docs/archive/audits/scripts,documentation,2,38536,2,0,classify current versus historical; preserve evidence
+docs/archive/changelogs,documentation,3,118601,3,0,classify current versus historical; preserve evidence
+docs/artifacts,documentation,1,3547,1,0,classify current versus historical; preserve evidence
+docs/audit,documentation,1,6105,1,0,classify current versus historical; preserve evidence
+docs/audits,documentation,3,14144,3,0,classify current versus historical; preserve evidence
+docs/audits/2026-09-14-optimization-audit,documentation,5,31559,5,0,classify current versus historical; preserve evidence
+docs/audits/2026-09-17-reparto-almacen-opt,documentation,5,27906,5,0,classify current versus historical; preserve evidence
+docs/audits/preprod-2026-06-11,documentation,7,421872,7,0,classify current versus historical; preserve evidence
+docs/ci,documentation,1,4866,1,0,classify current versus historical; preserve evidence
+docs/crm,documentation,3,862,3,0,classify current versus historical; preserve evidence
+docs/design,documentation,1,374,1,0,classify current versus historical; preserve evidence
+docs/equipo-agentico,documentation,20,39592,20,0,classify current versus historical; preserve evidence
+docs/openapi,documentation,1,701311,1,0,classify current versus historical; preserve evidence
+docs/opencode-agent-governance,documentation,7,14233,7,0,classify current versus historical; preserve evidence
+docs/opencode-agent-governance/canon,documentation,5,8208,5,0,classify current versus historical; preserve evidence
+docs/opencode-agent-governance/evals,documentation,4,7290,3,0,classify current versus historical; preserve evidence
+docs/perf,documentation,14,17684,14,0,classify current versus historical; preserve evidence
+docs/postman,documentation,1,293317,1,0,classify current versus historical; preserve evidence
+docs/quality-baseline,documentation,15,12245762,15,0,classify current versus historical; preserve evidence
+docs/releases,documentation,3,70471,3,0,classify current versus historical; preserve evidence
+docs/runbooks,documentation,8,10038,8,0,classify current versus historical; preserve evidence
+docs/spec,documentation,6,10133,6,0,classify current versus historical; preserve evidence
+docs/superpowers,documentation,0,0,0,0,classify current versus historical; preserve evidence
+docs/superpowers/specs,documentation,2,21006,2,0,classify current versus historical; preserve evidence
+handoffs,documentation,2,1908,2,0,classify current versus historical; preserve evidence
+integration_test,test,2,12322,2,0,retain; classify test level
+integration_test/helpers,test,1,6565,1,0,retain; classify test level
+ios,product-or-platform,1,603,1,0,retain; refactor by domain after tests
+ios/Flutter,product-or-platform,5,1912,3,0,retain; refactor by domain after tests
+ios/Runner,product-or-platform,5,9776,3,0,retain; refactor by domain after tests
+ios/Runner/Assets.xcassets,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+ios/Runner/Assets.xcassets/AppIcon.appiconset,product-or-platform,22,278080,22,0,retain; refactor by domain after tests
+ios/Runner/Assets.xcassets/LaunchImage.imageset,product-or-platform,5,958,5,0,retain; refactor by domain after tests
+ios/Runner/Base.lproj,product-or-platform,2,4045,2,0,retain; refactor by domain after tests
+ios/Runner.xcodeproj,product-or-platform,1,24320,1,0,retain; refactor by domain after tests
+ios/Runner.xcodeproj/project.xcworkspace,product-or-platform,1,142,1,0,retain; refactor by domain after tests
+ios/Runner.xcodeproj/project.xcworkspace/xcshareddata,product-or-platform,2,480,2,0,retain; refactor by domain after tests
+ios/Runner.xcodeproj/xcshareddata,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+ios/Runner.xcodeproj/xcshareddata/xcschemes,product-or-platform,1,3934,1,0,retain; refactor by domain after tests
+ios/Runner.xcworkspace,product-or-platform,1,159,1,0,retain; refactor by domain after tests
+ios/Runner.xcworkspace/xcshareddata,product-or-platform,2,480,2,0,retain; refactor by domain after tests
+ios/RunnerTests,product-or-platform,1,297,1,0,retain; refactor by domain after tests
+lib,product-or-platform,1,15080,1,0,retain; refactor by domain after tests
+lib/core,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/core/api,product-or-platform,4,62204,4,0,retain; refactor by domain after tests
+lib/core/cache,product-or-platform,3,15987,3,0,retain; refactor by domain after tests
+lib/core/config,product-or-platform,2,562,2,0,retain; refactor by domain after tests
+lib/core/di,product-or-platform,1,1303,1,0,retain; refactor by domain after tests
+lib/core/errors,product-or-platform,1,2179,1,0,retain; refactor by domain after tests
+lib/core/memory,product-or-platform,6,78017,6,0,retain; refactor by domain after tests
+lib/core/models,product-or-platform,3,19222,3,0,retain; refactor by domain after tests
+lib/core/navigation,product-or-platform,2,9852,2,0,retain; refactor by domain after tests
+lib/core/notifications,product-or-platform,7,107764,7,0,retain; refactor by domain after tests
+lib/core/offline,product-or-platform,8,83177,8,0,retain; refactor by domain after tests
+lib/core/providers,product-or-platform,4,61110,4,0,retain; refactor by domain after tests
+lib/core/router,product-or-platform,1,744,1,0,retain; refactor by domain after tests
+lib/core/security,product-or-platform,1,2042,1,0,retain; refactor by domain after tests
+lib/core/services,product-or-platform,10,72133,10,0,retain; refactor by domain after tests
+lib/core/storage,product-or-platform,1,2933,1,0,retain; refactor by domain after tests
+lib/core/telemetry,product-or-platform,2,4595,2,0,retain; refactor by domain after tests
+lib/core/theme,product-or-platform,3,67642,3,0,retain; refactor by domain after tests
+lib/core/utils,product-or-platform,11,39773,11,0,retain; refactor by domain after tests
+lib/core/widgets,product-or-platform,22,165113,22,0,retain; refactor by domain after tests
+lib/features,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/analytics,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/analytics/data,product-or-platform,1,1379,1,0,retain; refactor by domain after tests
+lib/features/auth,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/auth/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/auth/presentation/pages,product-or-platform,1,26336,1,0,retain; refactor by domain after tests
+lib/features/auth/presentation/widgets,product-or-platform,1,11234,1,0,retain; refactor by domain after tests
+lib/features/authentication,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/authentication/domain,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/authentication/domain/entities,product-or-platform,1,722,1,0,retain; refactor by domain after tests
+lib/features/bolsa,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/bolsa/data,product-or-platform,2,18511,2,0,retain; refactor by domain after tests
+lib/features/bolsa/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/bolsa/presentation/pages,product-or-platform,1,52817,1,0,retain; refactor by domain after tests
+lib/features/bolsa/presentation/widgets,product-or-platform,1,9221,1,0,retain; refactor by domain after tests
+lib/features/bolsa/providers,product-or-platform,1,10556,1,0,retain; refactor by domain after tests
+lib/features/chatbot,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/chatbot/data,product-or-platform,3,18860,3,0,retain; refactor by domain after tests
+lib/features/chatbot/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/chatbot/presentation/pages,product-or-platform,1,67645,1,0,retain; refactor by domain after tests
+lib/features/chatbot/presentation/widgets,product-or-platform,6,66858,6,0,retain; refactor by domain after tests
+lib/features/chatbot/providers,product-or-platform,2,17089,2,0,retain; refactor by domain after tests
+lib/features/clients,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/clients/data,product-or-platform,1,5926,1,0,retain; refactor by domain after tests
+lib/features/clients/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/clients/presentation/pages,product-or-platform,2,89777,2,0,retain; refactor by domain after tests
+lib/features/clients/presentation/widgets,product-or-platform,1,11327,1,0,retain; refactor by domain after tests
+lib/features/cobros,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/cobros/data,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/cobros/data/models,product-or-platform,1,16994,1,0,retain; refactor by domain after tests
+lib/features/cobros/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/cobros/presentation/pages,product-or-platform,2,86905,2,0,retain; refactor by domain after tests
+lib/features/cobros/presentation/widgets,product-or-platform,4,49445,4,0,retain; refactor by domain after tests
+lib/features/cobros/providers,product-or-platform,1,26467,1,0,retain; refactor by domain after tests
+lib/features/commissions,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/commissions/data,product-or-platform,3,13769,3,0,retain; refactor by domain after tests
+lib/features/commissions/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/commissions/presentation/pages,product-or-platform,1,170301,1,0,retain; refactor by domain after tests
+lib/features/commissions/presentation/widgets,product-or-platform,1,21992,1,0,retain; refactor by domain after tests
+lib/features/dashboard,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/dashboard/domain,product-or-platform,1,1384,1,0,retain; refactor by domain after tests
+lib/features/dashboard/domain/entities,product-or-platform,1,3942,1,0,retain; refactor by domain after tests
+lib/features/dashboard/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/dashboard/presentation/pages,product-or-platform,2,177361,2,0,retain; refactor by domain after tests
+lib/features/dashboard/presentation/widgets,product-or-platform,16,122915,16,0,retain; refactor by domain after tests
+lib/features/entregas,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/entregas/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/entregas/presentation/pages,product-or-platform,1,39712,1,0,retain; refactor by domain after tests
+lib/features/entregas/presentation/widgets,product-or-platform,3,26233,3,0,retain; refactor by domain after tests
+lib/features/entregas/providers,product-or-platform,1,49590,1,0,retain; refactor by domain after tests
+lib/features/facturas,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/facturas/data,product-or-platform,1,28102,1,0,retain; refactor by domain after tests
+lib/features/facturas/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/facturas/presentation/pages,product-or-platform,1,67709,1,0,retain; refactor by domain after tests
+lib/features/kpi_alerts,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/kpi_alerts/data,product-or-platform,1,9211,1,0,retain; refactor by domain after tests
+lib/features/kpi_alerts/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/kpi_alerts/presentation/pages,product-or-platform,1,25559,1,0,retain; refactor by domain after tests
+lib/features/kpi_alerts/presentation/widgets,product-or-platform,1,34752,1,0,retain; refactor by domain after tests
+lib/features/liquidacion_comercial,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/liquidacion_comercial/data,product-or-platform,1,8622,1,0,retain; refactor by domain after tests
+lib/features/liquidacion_comercial/domain,product-or-platform,1,5784,1,0,retain; refactor by domain after tests
+lib/features/liquidacion_comercial/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/liquidacion_comercial/presentation/pages,product-or-platform,1,56983,1,0,retain; refactor by domain after tests
+lib/features/objectives,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/objectives/data,product-or-platform,1,3325,1,0,retain; refactor by domain after tests
+lib/features/objectives/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/objectives/presentation/pages,product-or-platform,3,313161,3,0,retain; refactor by domain after tests
+lib/features/pedidos,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/pedidos/data,product-or-platform,4,113604,4,0,retain; refactor by domain after tests
+lib/features/pedidos/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/pedidos/presentation/dialogs,product-or-platform,3,18213,3,0,retain; refactor by domain after tests
+lib/features/pedidos/presentation/pages,product-or-platform,3,160101,3,0,retain; refactor by domain after tests
+lib/features/pedidos/presentation/utils,product-or-platform,1,1171,1,0,retain; refactor by domain after tests
+lib/features/pedidos/presentation/widgets,product-or-platform,29,638285,29,0,retain; refactor by domain after tests
+lib/features/pedidos/providers,product-or-platform,1,73170,1,0,retain; refactor by domain after tests
+lib/features/products_history,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/products_history/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/products_history/presentation/pages,product-or-platform,1,34961,1,0,retain; refactor by domain after tests
+lib/features/products_history/presentation/widgets,product-or-platform,1,39927,1,0,retain; refactor by domain after tests
+lib/features/real_dashboard,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/real_dashboard/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/real_dashboard/presentation/pages,product-or-platform,1,448,1,0,retain; refactor by domain after tests
+lib/features/repartidor,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/repartidor/application,product-or-platform,1,17769,1,0,retain; refactor by domain after tests
+lib/features/repartidor/data,product-or-platform,13,219624,13,0,retain; refactor by domain after tests
+lib/features/repartidor/domain,product-or-platform,4,30972,4,0,retain; refactor by domain after tests
+lib/features/repartidor/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/repartidor/presentation/pages,product-or-platform,4,258070,4,0,retain; refactor by domain after tests
+lib/features/repartidor/presentation/widgets,product-or-platform,26,483432,26,0,retain; refactor by domain after tests
+lib/features/repartidor_finanzas,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/repartidor_finanzas/data,product-or-platform,3,70603,3,0,retain; refactor by domain after tests
+lib/features/repartidor_finanzas/data/repositories,product-or-platform,1,2759,1,0,retain; refactor by domain after tests
+lib/features/repartidor_finanzas/domain,product-or-platform,1,69971,1,0,retain; refactor by domain after tests
+lib/features/repartidor_finanzas/domain/repositories,product-or-platform,1,651,1,0,retain; refactor by domain after tests
+lib/features/repartidor_finanzas/domain/usecases,product-or-platform,2,1663,2,0,retain; refactor by domain after tests
+lib/features/repartidor_finanzas/presentation,product-or-platform,2,4283,2,0,retain; refactor by domain after tests
+lib/features/repartidor_finanzas/presentation/pages,product-or-platform,4,169728,4,0,retain; refactor by domain after tests
+lib/features/repartidor_finanzas/presentation/providers,product-or-platform,1,29341,1,0,retain; refactor by domain after tests
+lib/features/repartidor_finanzas/presentation/widgets,product-or-platform,2,40425,2,0,retain; refactor by domain after tests
+lib/features/rutero,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/rutero/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/rutero/presentation/pages,product-or-platform,2,102319,2,0,retain; refactor by domain after tests
+lib/features/rutero/presentation/widgets,product-or-platform,6,82180,6,0,retain; refactor by domain after tests
+lib/features/sales_history,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/sales_history/data,product-or-platform,1,3936,1,0,retain; refactor by domain after tests
+lib/features/sales_history/domain,product-or-platform,1,2487,1,0,retain; refactor by domain after tests
+lib/features/sales_history/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/sales_history/presentation/pages,product-or-platform,1,29242,1,0,retain; refactor by domain after tests
+lib/features/sales_history/presentation/widgets,product-or-platform,1,34996,1,0,retain; refactor by domain after tests
+lib/features/sales_history/providers,product-or-platform,1,6218,1,0,retain; refactor by domain after tests
+lib/features/settings,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/settings/presentation,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/settings/presentation/pages,product-or-platform,2,37026,2,0,retain; refactor by domain after tests
+lib/features/warehouse,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/warehouse/application,product-or-platform,2,48390,2,0,retain; refactor by domain after tests
+lib/features/warehouse/data,product-or-platform,1,34074,1,0,retain; refactor by domain after tests
+lib/features/warehouse/domain,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+lib/features/warehouse/domain/models,product-or-platform,1,13272,1,0,retain; refactor by domain after tests
+lib/features/warehouse/presentation,product-or-platform,1,3809,1,0,retain; refactor by domain after tests
+lib/features/warehouse/presentation/pages,product-or-platform,8,242344,8,0,retain; refactor by domain after tests
+lib/features/warehouse/presentation/painters,product-or-platform,4,106310,4,0,retain; refactor by domain after tests
+lib/features/warehouse/presentation/widgets,product-or-platform,7,130958,7,0,retain; refactor by domain after tests
+linux,product-or-platform,2,4920,2,0,retain; refactor by domain after tests
+linux/flutter,product-or-platform,4,5608,4,0,retain; refactor by domain after tests
+linux/runner,product-or-platform,4,7102,4,0,retain; refactor by domain after tests
+macos,product-or-platform,1,96,1,0,retain; refactor by domain after tests
+macos/Flutter,product-or-platform,3,2070,3,0,retain; refactor by domain after tests
+macos/Runner,product-or-platform,5,2427,5,0,retain; refactor by domain after tests
+macos/Runner/Assets.xcassets,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+macos/Runner/Assets.xcassets/AppIcon.appiconset,product-or-platform,8,164385,8,0,retain; refactor by domain after tests
+macos/Runner/Base.lproj,product-or-platform,1,24072,1,0,retain; refactor by domain after tests
+macos/Runner/Configs,product-or-platform,4,1386,4,0,retain; refactor by domain after tests
+macos/Runner.xcodeproj,product-or-platform,1,27175,1,0,retain; refactor by domain after tests
+macos/Runner.xcodeproj/project.xcworkspace,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+macos/Runner.xcodeproj/project.xcworkspace/xcshareddata,product-or-platform,1,246,1,0,retain; refactor by domain after tests
+macos/Runner.xcodeproj/xcshareddata,product-or-platform,0,0,0,0,retain; refactor by domain after tests
+macos/Runner.xcodeproj/xcshareddata/xcschemes,product-or-platform,1,3826,1,0,retain; refactor by domain after tests
+macos/Runner.xcworkspace,product-or-platform,1,159,1,0,retain; refactor by domain after tests
+macos/Runner.xcworkspace/xcshareddata,product-or-platform,1,246,1,0,retain; refactor by domain after tests
+macos/RunnerTests,product-or-platform,1,302,1,0,retain; refactor by domain after tests
+memory-bank,documentation,6,5091,2,0,classify current versus historical; preserve evidence
+observability,tooling-or-operations,5,6024,5,0,classify read-only/test/admin; guard mutative scripts
+observability/grafana,tooling-or-operations,0,0,0,0,classify read-only/test/admin; guard mutative scripts
+observability/grafana/dashboards,tooling-or-operations,1,5415,1,0,classify read-only/test/admin; guard mutative scripts
+observability/grafana/provisioning,tooling-or-operations,0,0,0,0,classify read-only/test/admin; guard mutative scripts
+observability/grafana/provisioning/dashboards,tooling-or-operations,1,230,1,0,classify read-only/test/admin; guard mutative scripts
+observability/grafana/provisioning/datasources,tooling-or-operations,1,475,1,0,classify read-only/test/admin; guard mutative scripts
+scripts,tooling-or-operations,12,82232,12,0,classify read-only/test/admin; guard mutative scripts
+scripts/load,tooling-or-operations,1,1020,1,0,classify read-only/test/admin; guard mutative scripts
+scripts/opencode-governance,tooling-or-operations,5,28360,5,0,classify read-only/test/admin; guard mutative scripts
+scripts/security,tooling-or-operations,1,1320,1,0,classify read-only/test/admin; guard mutative scripts
+scripts/sweep,tooling-or-operations,2,7804,2,0,classify read-only/test/admin; guard mutative scripts
+scripts/theme,tooling-or-operations,3,16977,3,0,classify read-only/test/admin; guard mutative scripts
+skills,configuration-or-agent,0,0,0,0,review source versus generated and local; no bulk add
+skills/caveman,configuration-or-agent,1,3719,1,0,review source versus generated and local; no bulk add
+skills/caveman-commit,configuration-or-agent,1,2545,1,0,review source versus generated and local; no bulk add
+skills/caveman-compress,configuration-or-agent,3,11571,3,0,review source versus generated and local; no bulk add
+skills/caveman-compress/scripts,configuration-or-agent,7,21200,7,0,review source versus generated and local; no bulk add
+skills/caveman-help,configuration-or-agent,1,2104,1,0,review source versus generated and local; no bulk add
+skills/caveman-review,configuration-or-agent,1,2793,1,0,review source versus generated and local; no bulk add
+test,test,2,6665,2,0,retain; classify test level
+test/api,test,3,21602,3,0,retain; classify test level
+test/core,test,4,17075,4,0,retain; classify test level
+test/core/api,test,2,5614,2,0,retain; classify test level
+test/core/cache,test,1,536,1,0,retain; classify test level
+test/core/memory,test,2,17433,2,0,retain; classify test level
+test/core/notifications,test,2,8181,2,0,retain; classify test level
+test/core/offline,test,2,10182,2,0,retain; classify test level
+test/core/security,test,1,2777,1,0,retain; classify test level
+test/core/services,test,1,4828,1,0,retain; classify test level
+test/core/telemetry,test,1,1079,1,0,retain; classify test level
+test/core/utils,test,3,8688,3,0,retain; classify test level
+test/core/widgets,test,1,5806,1,0,retain; classify test level
+test/features,test,1,3960,1,0,retain; classify test level
+test/features/bolsa,test,1,5738,1,0,retain; classify test level
+test/features/chatbot,test,4,17442,4,0,retain; classify test level
+test/features/cobros,test,1,15662,1,0,retain; classify test level
+test/features/commissions,test,1,1155,1,0,retain; classify test level
+test/features/commissions/presentation,test,1,3095,1,0,retain; classify test level
+test/features/dashboard,test,1,4668,1,0,retain; classify test level
+test/features/dashboard/domain,test,1,2461,1,0,retain; classify test level
+test/features/facturas,test,1,2983,1,0,retain; classify test level
+test/features/liquidacion_comercial,test,0,0,0,0,retain; classify test level
+test/features/liquidacion_comercial/data,test,1,2970,1,0,retain; classify test level
+test/features/liquidacion_comercial/domain,test,1,3844,1,0,retain; classify test level
+test/features/liquidacion_comercial/presentation,test,1,11981,1,0,retain; classify test level
+test/features/pedidos,test,1,38540,1,0,retain; classify test level
+test/features/pedidos/presentation,test,0,0,0,0,retain; classify test level
+test/features/pedidos/presentation/widgets,test,1,4497,1,0,retain; classify test level
+test/features/repartidor,test,4,28749,4,0,retain; classify test level
+test/features/repartidor/data,test,10,81561,10,0,retain; classify test level
+test/features/repartidor/domain,test,2,8286,2,0,retain; classify test level
+test/features/repartidor/presentation,test,5,19412,5,0,retain; classify test level
+test/features/repartidor_finanzas,test,5,21450,5,0,retain; classify test level
+test/features/repartidor_finanzas/presentation,test,1,3689,1,0,retain; classify test level
+test/features/sales_history,test,1,8893,1,0,retain; classify test level
+test/goldens,test,1,2679,1,0,retain; classify test level
+test/goldens/goldens,test,4,14988,4,0,retain; classify test level
+test/helpers,test,3,5956,3,0,retain; classify test level
+test/integration,test,2,10175,2,0,retain; classify test level
+test/models,test,3,21360,3,0,retain; classify test level
+test/providers,test,3,6410,3,0,retain; classify test level
+test/services,test,2,7338,2,0,retain; classify test level
+test/theme,test,3,8064,3,0,retain; classify test level
+test/utils,test,2,5118,2,0,retain; classify test level
+test/warehouse,test,2,24769,2,0,retain; classify test level
+test/widget,test,3,37106,3,0,retain; classify test level
+test/widgets,test,25,143880,24,0,retain; classify test level
+tool,tooling-or-operations,0,0,0,0,classify read-only/test/admin; guard mutative scripts
+tool/gmp_custom_lints,tooling-or-operations,1,231,1,0,classify read-only/test/admin; guard mutative scripts
+tool/gmp_custom_lints/lib,tooling-or-operations,1,1351,1,0,classify read-only/test/admin; guard mutative scripts
+web,product-or-platform,4,6221,4,0,retain; refactor by domain after tests
+web/icons,product-or-platform,4,40136,4,0,retain; refactor by domain after tests
+windows,product-or-platform,2,4586,2,0,retain; refactor by domain after tests
+windows/flutter,product-or-platform,4,7006,4,0,retain; refactor by domain after tests
+windows/runner,product-or-platform,11,25552,11,0,retain; refactor by domain after tests
+windows/runner/resources,product-or-platform,1,33772,1,0,retain; refactor by domain after tests
