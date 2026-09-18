@@ -1,6 +1,6 @@
 /**
  * Clients Repository Implementation - DB2
- * isolated_test reads JAVIER.TEST_* via comercialErpTable; production stays DSEDAC/DSED.
+ * Sales/clients via comercialErpTable (live DSEDAC/DSED SELECT-only).
  */
 const { ClientRepository } = require('../domain/client-repository');
 const { Client, ClientDetail } = require('../domain/client');

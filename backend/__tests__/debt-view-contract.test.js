@@ -34,8 +34,9 @@ describe('debt-view-contract', () => {
     expect(DEBT_VIEW).not.toMatch(/VISTA_DEUDA_BASE/i);
   });
 
-  test('isolated_test debt reads JAVIER.TEST_CVC/FPG copies', () => {
+  test('isolated_test debt reads live DSEDAC CVC/FPG not TEST copies', () => {
     process.env.REPARTO_TABLE_SET = 'isolated_test';
+    delete process.env.COMERCIAL_ERP_READ_TEST;
     jest.resetModules();
     const {
       getDebtView,
@@ -43,12 +44,13 @@ describe('debt-view-contract', () => {
       cvcDocumentJoins,
       cvcCliJoin,
     } = require('../services/debt-view-contract');
-    expect(getDebtView()).toBe('JAVIER.TEST_CVC');
-    expect(cvcPendientesJoins('C')).toMatch(/LEFT JOIN JAVIER\.TEST_FPG FPG/i);
-    expect(cvcDocumentJoins('C')).toMatch(/LEFT JOIN JAVIER\.TEST_CAC CAC/i);
-    expect(cvcDocumentJoins('C')).toMatch(/LEFT JOIN JAVIER\.TEST_CPC CPC/i);
+    expect(getDebtView()).toBe('DSEDAC.CVC');
+    expect(cvcPendientesJoins('C')).toMatch(/LEFT JOIN DSEDAC\.FPG FPG/i);
+    expect(cvcDocumentJoins('C')).toMatch(/LEFT JOIN DSEDAC\.CAC CAC/i);
+    expect(cvcDocumentJoins('C')).toMatch(/LEFT JOIN DSEDAC\.CPC CPC/i);
     expect(cvcDocumentJoins('C')).not.toMatch(/VISTA_DEUDA_BASE/i);
-    expect(cvcCliJoin('CVC')).toMatch(/LEFT JOIN JAVIER\.TEST_CLI CLI/i);
+    expect(cvcCliJoin('CVC')).toMatch(/LEFT JOIN DSEDAC\.CLI CLI/i);
+    expect(getDebtView()).not.toMatch(/TEST_CVC/i);
   });
 
   test('caps FETCH FIRST at 500', () => {

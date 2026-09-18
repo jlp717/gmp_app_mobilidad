@@ -280,9 +280,11 @@ describe('Planner rutero/day route', () => {
   expect(params.slice(11, 13)).toEqual(['4300000001', '4300000002']);
 });
 
-  test('GET /rutero/day/:day isolated_test sales uses TEST_LACLAE not DSED.LACLAE', async () => {
+  test('GET /rutero/day/:day isolated_test sales uses live DSED.LACLAE not TEST snapshot', async () => {
     const previous = process.env.REPARTO_TABLE_SET;
+    const previousSnap = process.env.COMERCIAL_ERP_READ_TEST;
     process.env.REPARTO_TABLE_SET = 'isolated_test';
+    delete process.env.COMERCIAL_ERP_READ_TEST;
     try {
       const res = await request(app)
         .get('/rutero/day/martes')
@@ -297,17 +299,19 @@ describe('Planner rutero/day route', () => {
       expect(res.status).toBe(200);
       const salesCall = mockQueryWithParams.mock.calls.find(([sql]) => sql.includes('AS PREV_TOTAL'));
       expect(salesCall).toBeDefined();
-      expect(salesCall[0]).toContain('FROM JAVIER.TEST_LACLAE L');
-      expect(salesCall[0]).not.toContain('FROM DSED.LACLAE');
+      expect(salesCall[0]).toContain('FROM DSED.LACLAE L');
+      expect(salesCall[0]).not.toContain('FROM JAVIER.TEST_LACLAE');
       const cliSql = mockQueryWithParams.mock.calls.map(([sql]) => sql).find((sql) => sql.includes('TELEFONO1 as PHONE'));
-      expect(cliSql).toContain('FROM JAVIER.TEST_CLI');
-      expect(cliSql).not.toContain('FROM DSEDAC.CLI');
+      expect(cliSql).toContain('FROM DSEDAC.CLI');
+      expect(cliSql).not.toContain('FROM JAVIER.TEST_CLI');
       const cpcSql = mockQueryWithParams.mock.calls.map(([sql]) => sql).find((sql) => sql.includes('CODIGOCLIENTEALBARAN'));
-      expect(cpcSql).toContain('FROM JAVIER.TEST_CPC');
-      expect(cpcSql).not.toContain('FROM DSEDAC.CPC');
+      expect(cpcSql).toContain('FROM DSEDAC.CPC');
+      expect(cpcSql).not.toContain('FROM JAVIER.TEST_CPC');
     } finally {
       if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
       else process.env.REPARTO_TABLE_SET = previous;
+      if (previousSnap === undefined) delete process.env.COMERCIAL_ERP_READ_TEST;
+      else process.env.COMERCIAL_ERP_READ_TEST = previousSnap;
     }
   });
 });

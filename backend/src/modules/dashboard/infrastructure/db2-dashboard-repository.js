@@ -1,6 +1,6 @@
 /**
  * Dashboard Repository Implementation - DB2
- * Sales/clients via comercialErpTable (TEST_* in isolated_test).
+ * Sales/clients via comercialErpTable (live DSED/DSEDAC SELECT-only).
  */
 const { DashboardRepository } = require('../domain/dashboard-repository');
 const { DashboardMetrics, SalesEvolutionPoint, TopClient, TopProduct } = require('../domain/dashboard-metrics');

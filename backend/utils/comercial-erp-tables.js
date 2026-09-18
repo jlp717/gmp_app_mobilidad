@@ -1,10 +1,16 @@
 'use strict';
 
 /**
- * Commercial ERP table resolution for isolated_test.
- * Writes never go here (CVC/FPG/LQD stay read-only copies).
- * isolated_test reads JAVIER.TEST_* unless COMERCIAL_ERP_READ_TEST=false.
- * Production / missing mapping → DSEDAC (or DSED.LACLAE).
+ * Commercial ERP table resolution.
+ *
+ * Product READS (ventas/rutero/facturas/objetivos/panel/cartera):
+ *   always DSEDAC/DSED SELECT-only. Isolated_test must see live ERP sales;
+ *   JAVIER.TEST_* copies go stale the next delivery day.
+ *
+ * Snapshot reads (copy/lab only): COMERCIAL_ERP_READ_TEST=true → JAVIER.TEST_*.
+ *
+ * App WRITES never go through this helper. Pedidos/cobros/liquidacion/devoluciones
+ * overlay stay on db2AppTable / TABLE_MAPPINGS → JAVIER.TEST_* (dsedacWrite=false).
  */
 
 const ERP_PROD = Object.freeze({
@@ -102,19 +108,33 @@ function isIsolatedCommercialTest(env = process.env) {
 }
 
 function comercialErpReadTestEnabled(env = process.env) {
-  return String(env.COMERCIAL_ERP_READ_TEST || 'true').trim().toLowerCase() !== 'false';
+  return String(env.COMERCIAL_ERP_READ_TEST || '').trim().toLowerCase() === 'true';
+}
+
+function comercialErpLiveTable(name) {
+  const key = String(name || '').trim().toUpperCase();
+  const live = ERP_PROD[key];
+  if (!live) {
+    throw new Error(`Unknown commercial ERP table: ${name}`);
+  }
+  return live;
+}
+
+function comercialErpSnapshotTable(name) {
+  const key = String(name || '').trim().toUpperCase();
+  const snap = ERP_TEST[key];
+  if (!snap) {
+    throw new Error(`Unknown commercial ERP table: ${name}`);
+  }
+  return snap;
 }
 
 function comercialErpTable(name, env = process.env) {
-  const key = String(name || '').trim().toUpperCase();
-  const prod = ERP_PROD[key];
-  if (!prod) {
-    throw new Error(`Unknown commercial ERP table: ${name}`);
-  }
+  const live = comercialErpLiveTable(name);
   if (isIsolatedCommercialTest(env) && comercialErpReadTestEnabled(env)) {
-    return ERP_TEST[key];
+    return comercialErpSnapshotTable(name);
   }
-  return prod;
+  return live;
 }
 
 function comercialErpSchemaAndName(name, env = process.env) {
@@ -166,6 +186,8 @@ module.exports = {
   ERP_TEST,
   isIsolatedCommercialTest,
   comercialErpReadTestEnabled,
+  comercialErpLiveTable,
+  comercialErpSnapshotTable,
   comercialErpTable,
   comercialErpSchemaAndName,
   comercialErpReadMap,

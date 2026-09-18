@@ -128,23 +128,27 @@ describe('facturas service fiscal totals', () => {
     expect(headerSql).not.toMatch(/SUM\(CAC\.IMPORTETOTAL\)/i);
   });
 
-  test('getFacturaDetail isolated_test reads TEST_CFC not DSEDAC.CFC', async () => {
+  test('getFacturaDetail isolated_test reads live DSEDAC.CFC not TEST snapshot', async () => {
     const previous = process.env.REPARTO_TABLE_SET;
+    const previousSnap = process.env.COMERCIAL_ERP_READ_TEST;
     process.env.REPARTO_TABLE_SET = 'isolated_test';
+    delete process.env.COMERCIAL_ERP_READ_TEST;
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (/FROM\s+JAVIER\.TEST_CFC\s+CFC/i.test(sql)) return [f4306Header];
-      if (/FROM\s+JAVIER\.TEST_LAC\s+LAC/i.test(sql)) return [];
+      if (/FROM\s+DSEDAC\.CFC\s+CFC/i.test(sql)) return [f4306Header];
+      if (/FROM\s+DSEDAC\.LAC\s+LAC/i.test(sql)) return [];
       throw new Error(`Unexpected SQL: ${sql}`);
     });
     try {
       const factura = await facturasService.getFacturaDetail('F', 4306, 2026);
       expect(factura.header.total).toBe(3618.44);
       const headerSql = mockQueryWithParams.mock.calls[0][0];
-      expect(headerSql).toMatch(/FROM\s+JAVIER\.TEST_CFC\s+CFC/i);
-      expect(headerSql).not.toMatch(/FROM\s+DSEDAC\.CFC/i);
+      expect(headerSql).toMatch(/FROM\s+DSEDAC\.CFC\s+CFC/i);
+      expect(headerSql).not.toMatch(/FROM\s+JAVIER\.TEST_CFC/i);
     } finally {
       if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
       else process.env.REPARTO_TABLE_SET = previous;
+      if (previousSnap === undefined) delete process.env.COMERCIAL_ERP_READ_TEST;
+      else process.env.COMERCIAL_ERP_READ_TEST = previousSnap;
     }
   });
 
@@ -604,25 +608,29 @@ describe('facturas service fiscal totals', () => {
     });
   });
 
-  test('isolated_test factura detail reads TEST_LAC/TEST_CAC not DSEDAC.LAC', async () => {
+  test('isolated_test factura detail reads live DSEDAC.LAC/CAC not TEST snapshot', async () => {
     const previous = process.env.REPARTO_TABLE_SET;
+    const previousSnap = process.env.COMERCIAL_ERP_READ_TEST;
     process.env.REPARTO_TABLE_SET = 'isolated_test';
+    delete process.env.COMERCIAL_ERP_READ_TEST;
     try {
       mockQueryWithParams.mockImplementation(async (sql) => {
-        if (/FROM\s+JAVIER\.TEST_CFC\s+CFC/i.test(sql)) return [f4306Header];
-        if (/FROM\s+JAVIER\.TEST_LAC\s+LAC/i.test(sql) && /JAVIER\.TEST_CAC/i.test(sql)) return [];
+        if (/FROM\s+DSEDAC\.CFC\s+CFC/i.test(sql)) return [f4306Header];
+        if (/FROM\s+DSEDAC\.LAC\s+LAC/i.test(sql) && /DSEDAC\.CAC/i.test(sql)) return [];
         throw new Error(`Unexpected SQL: ${sql}`);
       });
 
       const factura = await facturasService.getFacturaDetail('F', 4306, 2026);
       expect(factura.header.total).toBe(3618.44);
-      const linesSql = mockQueryWithParams.mock.calls.find(([sql]) => /TEST_LAC/i.test(sql))?.[0];
-      expect(linesSql).toContain('FROM JAVIER.TEST_LAC LAC');
-      expect(linesSql).toContain('INNER JOIN JAVIER.TEST_CAC CAC');
-      expect(linesSql).not.toMatch(/FROM\s+DSEDAC\.LAC/i);
+      const linesSql = mockQueryWithParams.mock.calls.find(([sql]) => /DSEDAC\.LAC/i.test(sql))?.[0];
+      expect(linesSql).toContain('FROM DSEDAC.LAC LAC');
+      expect(linesSql).toContain('INNER JOIN DSEDAC.CAC CAC');
+      expect(linesSql).not.toMatch(/FROM\s+JAVIER\.TEST_LAC/i);
     } finally {
       if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
       else process.env.REPARTO_TABLE_SET = previous;
+      if (previousSnap === undefined) delete process.env.COMERCIAL_ERP_READ_TEST;
+      else process.env.COMERCIAL_ERP_READ_TEST = previousSnap;
     }
   });
 });

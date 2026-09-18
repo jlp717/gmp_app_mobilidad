@@ -1,6 +1,11 @@
 'use strict';
 
-const { comercialErpTable, isIsolatedCommercialTest } = require('../utils/comercial-erp-tables');
+const {
+  comercialErpTable,
+  comercialErpLiveTable,
+  comercialErpSnapshotTable,
+  isIsolatedCommercialTest,
+} = require('../utils/comercial-erp-tables');
 
 describe('comercial ERP table mapping', () => {
   const previous = {};
@@ -29,29 +34,33 @@ describe('comercial ERP table mapping', () => {
     expect(comercialErpTable('CDVI')).toBe('DSEDAC.CDVI');
   });
 
-  test('isolated_test reads JAVIER.TEST_* copies', () => {
+  test('isolated_test operational reads stay on live DSEDAC/DSED', () => {
     process.env.REPARTO_TABLE_SET = 'isolated_test';
-    expect(comercialErpTable('CVC')).toBe('JAVIER.TEST_CVC');
-    expect(comercialErpTable('FPG')).toBe('JAVIER.TEST_FPG');
-    expect(comercialErpTable('CAC')).toBe('JAVIER.TEST_CAC');
-    expect(comercialErpTable('CPC')).toBe('JAVIER.TEST_CPC');
-    expect(comercialErpTable('LQD')).toBe('JAVIER.TEST_LQD');
-    expect(comercialErpTable('CLX')).toBe('JAVIER.TEST_CLX');
-    expect(comercialErpTable('VDDX')).toBe('JAVIER.TEST_VDDX');
-    expect(comercialErpTable('LACLAE')).toBe('JAVIER.TEST_LACLAE');
-    expect(comercialErpTable('PMR')).toBe('JAVIER.TEST_PMR');
-    expect(comercialErpTable('ART')).toBe('JAVIER.TEST_ART');
-    expect(comercialErpTable('CLI')).toBe('JAVIER.TEST_CLI');
-    expect(comercialErpTable('ARA')).toBe('JAVIER.TEST_ARA');
-    expect(comercialErpTable('LAC')).toBe('JAVIER.TEST_LAC');
-    expect(comercialErpTable('LPC')).toBe('JAVIER.TEST_LPC');
-    expect(comercialErpTable('CFC')).toBe('JAVIER.TEST_CFC');
-    expect(comercialErpTable('OPP')).toBe('JAVIER.TEST_OPP');
-    expect(comercialErpTable('CLP')).toBe('JAVIER.TEST_CLP');
-    expect(comercialErpTable('LINDTO')).toBe('JAVIER.TEST_LINDTO');
-    expect(comercialErpTable('CDVI')).toBe('JAVIER.TEST_CDVI');
-    expect(comercialErpTable('VDD')).toBe('JAVIER.TEST_VDD');
-    expect(comercialErpTable('PES')).toBe('JAVIER.TEST_PES');
+    delete process.env.COMERCIAL_ERP_READ_TEST;
+    expect(comercialErpTable('CVC')).toBe('DSEDAC.CVC');
+    expect(comercialErpTable('FPG')).toBe('DSEDAC.FPG');
+    expect(comercialErpTable('CAC')).toBe('DSEDAC.CAC');
+    expect(comercialErpTable('CPC')).toBe('DSEDAC.CPC');
+    expect(comercialErpTable('LQD')).toBe('DSEDAC.LQD');
+    expect(comercialErpTable('CLX')).toBe('DSEDAC.CLX');
+    expect(comercialErpTable('VDDX')).toBe('DSEDAC.VDDX');
+    expect(comercialErpTable('LACLAE')).toBe('DSED.LACLAE');
+    expect(comercialErpTable('PMR')).toBe('DSEDAC.PMR');
+    expect(comercialErpTable('ART')).toBe('DSEDAC.ART');
+    expect(comercialErpTable('CLI')).toBe('DSEDAC.CLI');
+    expect(comercialErpTable('ARA')).toBe('DSEDAC.ARA');
+    expect(comercialErpTable('LAC')).toBe('DSEDAC.LAC');
+    expect(comercialErpTable('LPC')).toBe('DSEDAC.LPC');
+    expect(comercialErpTable('CFC')).toBe('DSEDAC.CFC');
+    expect(comercialErpTable('OPP')).toBe('DSEDAC.OPP');
+    expect(comercialErpTable('CLP')).toBe('DSEDAC.CLP');
+    expect(comercialErpTable('LINDTO')).toBe('DSEDAC.LINDTO');
+    expect(comercialErpTable('CDVI')).toBe('DSEDAC.CDVI');
+    expect(comercialErpTable('VDD')).toBe('DSEDAC.VDD');
+    expect(comercialErpTable('PES')).toBe('DSEDAC.PES');
+    expect(comercialErpLiveTable('LACLAE')).toBe('DSED.LACLAE');
+    expect(comercialErpSnapshotTable('LACLAE')).toBe('JAVIER.TEST_LACLAE');
+    expect(comercialErpSnapshotTable('LAC')).toBe('JAVIER.TEST_LAC');
     const fs = require('fs');
     const path = require('path');
     const facturas = fs.readFileSync(
@@ -185,7 +194,16 @@ describe('comercial ERP table mapping', () => {
     expect(commissionRepo).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
   });
 
-  test('COMERCIAL_ERP_READ_TEST=false falls back to DSEDAC SELECT', () => {
+  test('COMERCIAL_ERP_READ_TEST=true opts into JAVIER.TEST_* snapshot reads', () => {
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    process.env.COMERCIAL_ERP_READ_TEST = 'true';
+    expect(comercialErpTable('CVC')).toBe('JAVIER.TEST_CVC');
+    expect(comercialErpTable('LACLAE')).toBe('JAVIER.TEST_LACLAE');
+    expect(comercialErpTable('LAC')).toBe('JAVIER.TEST_LAC');
+    expect(comercialErpTable('CFC')).toBe('JAVIER.TEST_CFC');
+  });
+
+  test('COMERCIAL_ERP_READ_TEST=false stays on live DSEDAC SELECT', () => {
     process.env.REPARTO_TABLE_SET = 'isolated_test';
     process.env.COMERCIAL_ERP_READ_TEST = 'false';
     expect(comercialErpTable('CVC')).toBe('DSEDAC.CVC');

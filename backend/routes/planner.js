@@ -1905,7 +1905,7 @@ router.get('/diagnose/client/:code', requirePlannerPrivilege, async (req, res) =
             results.analysis.push(`✗ Error consultando CLI: ${e.message}`);
         }
 
-        // 2. Get sales history from LACLAE (TEST_* in isolated_test) to see which vendors have sold to this client
+        // 2. Get sales history from live LACLAE (DSED SELECT-only) to see which vendors have sold to this client
         try {
             const laclaeData = await queryWithParams(`
                 SELECT DISTINCT

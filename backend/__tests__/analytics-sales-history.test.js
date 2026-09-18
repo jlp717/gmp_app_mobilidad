@@ -122,20 +122,24 @@ describe('GET /sales-history', () => {
     expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 
-  test('isolated_test sales-history reads TEST_LAC not DSEDAC.LAC', async () => {
+  test('isolated_test sales-history reads live DSEDAC.LAC not TEST snapshot', async () => {
     const previous = process.env.REPARTO_TABLE_SET;
+    const previousSnap = process.env.COMERCIAL_ERP_READ_TEST;
     process.env.REPARTO_TABLE_SET = 'isolated_test';
+    delete process.env.COMERCIAL_ERP_READ_TEST;
     try {
       const res = await request(makeApp())
         .get('/sales-history')
         .query({ vendedorCodes: '15', startDate: '2026-03-01', endDate: '2026-03-31' });
       expect(res.status).toBe(200);
       const [sql] = mockQueryWithParams.mock.calls[0];
-      expect(sql).toMatch(/FROM JAVIER\.TEST_LAC L/i);
-      expect(sql).not.toMatch(/FROM DSEDAC\.LAC L/i);
+      expect(sql).toMatch(/FROM DSEDAC\.LAC L/i);
+      expect(sql).not.toMatch(/FROM JAVIER\.TEST_LAC L/i);
     } finally {
       if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
       else process.env.REPARTO_TABLE_SET = previous;
+      if (previousSnap === undefined) delete process.env.COMERCIAL_ERP_READ_TEST;
+      else process.env.COMERCIAL_ERP_READ_TEST = previousSnap;
     }
   });
 });
