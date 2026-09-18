@@ -58,4 +58,13 @@ describe('objectives by-client route contracts', () => {
     expect(source).toContain('monthlyTable()');
     expect(source).not.toMatch(/WHERE VENDEDOR='ALL'/);
   });
+
+  test('ALL evolution overlays the open month from live LACLAE and honors forceRefresh', () => {
+    expect(source).toContain('overlayOpenMonthFromLiveLaclae');
+    expect(source).toContain('isCacheBypassRequest');
+    expect(source).toContain("FROM ${comercialErpTable('LACLAE')} L");
+    expect(source).toContain('AND L.LCMMDC = ?');
+    expect(source).toMatch(/if \(!forceRefresh\) \{[\s\S]*cachedResult = await redisCache\.get/);
+    expect(source).not.toMatch(/FROM JAVIER\.TEST_LACLAE/);
+  });
 });

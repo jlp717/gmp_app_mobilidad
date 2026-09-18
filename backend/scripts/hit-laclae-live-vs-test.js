@@ -124,6 +124,72 @@ async function maxDate(table, yearCol, monthCol, dayCol) {
   return n(rows?.[0], 'YMD');
 }
 
+async function laclaeMonth(table, year, month, vendorColSql) {
+  const rows = await queryWithParams(
+    `SELECT COALESCE(SUM(L.LCIMVT), 0) AS SALES
+       FROM ${table} L
+      WHERE L.LCAADC = ?
+        AND L.LCMMDC = ?
+        AND L.TPDC = 'LAC'
+        AND L.LCTPVT IN ('CC', 'VC')
+        AND L.LCCLLN IN ('AB', 'VT')
+        AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
+        AND TRIM(${vendorColSql}) = CAST(? AS VARCHAR(2))`,
+    [year, month, VENDOR],
+  );
+  return { sales: n(rows?.[0], 'SALES') };
+}
+
+async function laclaeMonthAll(table, year, month) {
+  const rows = await queryWithParams(
+    `SELECT COALESCE(SUM(L.LCIMVT), 0) AS SALES
+       FROM ${table} L
+      WHERE L.LCAADC = ?
+        AND L.LCMMDC = ?
+        AND L.TPDC = 'LAC'
+        AND L.LCTPVT IN ('CC', 'VC')
+        AND L.LCCLLN IN ('AB', 'VT')
+        AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')`,
+    [year, month],
+  );
+  return { sales: n(rows?.[0], 'SALES') };
+}
+
+async function monthlyMonthAll(year, month) {
+  try {
+    const rows = await queryWithParams(
+      `SELECT COALESCE(SUM(SALES), 0) AS SALES
+         FROM JAVIER.LACLAE_MONTHLY
+        WHERE ANO = ?
+          AND MES = ?`,
+      [year, month],
+    );
+    return { sales: n(rows?.[0], 'SALES'), present: true };
+  } catch (err) {
+    return { sales: 0, present: false, error: String(err.message || err).slice(0, 120) };
+  }
+}
+
+async function commercialTargetSept(year, month) {
+  const rows = await queryWithParams(
+    `SELECT COALESCE(SUM(IMPORTE_OBJETIVO), 0) AS TOTAL,
+            COUNT(DISTINCT TRIM(CODIGOVENDEDOR)) AS VENDORS
+       FROM JAVIER.COMMERCIAL_TARGETS
+      WHERE ANIO = ?
+        AND MES = ?
+        AND ACTIVO = 1`,
+    [year, month],
+  );
+  const total = n(rows?.[0], 'TOTAL');
+  const vendors = n(rows?.[0], 'VENDORS');
+  return {
+    total,
+    vendors,
+    daily22: vendors > 1 && total > 0 ? Math.round((total / 22) * 100) / 100 : 0,
+    daily26: vendors > 1 && total > 0 ? Math.round((total / 26) * 100) / 100 : 0,
+  };
+}
+
 async function main() {
   await initDb();
   try {
@@ -161,11 +227,28 @@ async function main() {
       test_lac: await maxDate('JAVIER.TEST_LAC', 'ANODOCUMENTO', 'MESDOCUMENTO', 'DIADOCUMENTO'),
     };
 
-    const cause = vd35_17.dsed_r1.sales > 0 && vd35_17.test_r1.sales === 0
-      ? 'CONFIRMED_SNAPSHOT_STALE'
-      : (vd35_17.dsed_lcc.sales > 0 && vd35_17.test_lcc.sales === 0
-        ? 'CONFIRMED_SNAPSHOT_STALE_LCCDVD'
-        : 'NEED_REVIEW');
+    const septAll = {
+      dsed: await laclaeMonthAll('DSED.LACLAE', YEAR, MONTH),
+      test: await laclaeMonthAll('JAVIER.TEST_LACLAE', YEAR, MONTH),
+      monthly: await monthlyMonthAll(YEAR, MONTH),
+    };
+    const sept35 = {
+      dsed_r1: await laclaeMonth('DSED.LACLAE', YEAR, MONTH, 'L.R1_T8CDVD'),
+      dsed_lcc: await laclaeMonth('DSED.LACLAE', YEAR, MONTH, 'L.LCCDVD'),
+      test_r1: await laclaeMonth('JAVIER.TEST_LACLAE', YEAR, MONTH, 'L.R1_T8CDVD'),
+      test_lcc: await laclaeMonth('JAVIER.TEST_LACLAE', YEAR, MONTH, 'L.LCCDVD'),
+    };
+    const septPin = await commercialTargetSept(YEAR, MONTH);
+
+    const cause = septAll.test.sales > 0
+      && Math.abs(septAll.test.sales - 805018) < 2500
+      && septAll.dsed.sales - septAll.test.sales > 20000
+      ? 'CONFIRMED_OBJECTIVES_STALE_TEST_OR_MONTHLY'
+      : (vd35_17.dsed_r1.sales > 0 && vd35_17.test_r1.sales === 0
+        ? 'CONFIRMED_SNAPSHOT_STALE'
+        : (vd35_17.dsed_lcc.sales > 0 && vd35_17.test_lcc.sales === 0
+          ? 'CONFIRMED_SNAPSHOT_STALE_LCCDVD'
+          : 'NEED_REVIEW'));
 
     console.log(JSON.stringify({
       dsedacWrite: false,
@@ -175,6 +258,9 @@ async function main() {
       vd35_2026_09_17: vd35_17,
       jefe_all_2026_09_18: jefeToday,
       jefe_all_2026_09_17: jefe17,
+      sept_2026_all: septAll,
+      sept_2026_vd35: sept35,
+      sept_2026_pin_all: septPin,
       maxYmd2026: maxYmd,
       cause,
     }, null, 2));

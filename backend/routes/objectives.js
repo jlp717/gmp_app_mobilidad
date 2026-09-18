@@ -22,6 +22,7 @@ const { getClientCodesFromCache } = require('../services/laclae');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { isLaclaeMonthlyReady, monthlyTable } = require('../services/laclae-monthly');
 const { redisCache, TTL } = require('../services/redis-cache');
+const { isCacheBypassRequest } = require('../middleware/http-cache');
 const { beginRouteFill, endRouteFill, sendFillBusy } = require('../services/route-cache-stampede');
 const {
     isCommercial80User,
@@ -51,7 +52,7 @@ const {
     resolveObjectiveSalesTarget,
 } = require('../utils/objectives-source');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260914-hist-ttl';
+const OBJECTIVES_CACHE_VERSION = 'v20260918-live-open-month';
 const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
 const { buildMonthFilterParameterized } = require('../src/utils/dashboardFilters');
 
@@ -729,7 +730,56 @@ function mergeVendorObjectiveTargets(targetSets, yearsArray) {
     return { monthlyObjectiveByYear, annualObjectiveByYear };
 }
 
-async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArray, uniqueYears) {
+function evolutionRowYear(row) {
+    return parseInt(row?.YEAR ?? row?.year, 10);
+}
+
+function evolutionRowMonth(row) {
+    return parseInt(row?.MONTH ?? row?.month, 10);
+}
+
+/**
+ * LACLAE_MONTHLY is a rollup (often filled from TEST_LACLAE). Closed months stay
+ * on the rollup; the open month must match Panel: live DSED.LACLAE SELECT.
+ */
+async function overlayOpenMonthFromLiveLaclae(rows, now = getCurrentDate()) {
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const live = await queryWithParams(`
+        SELECT
+            L.LCAADC as YEAR,
+            L.LCMMDC as MONTH,
+            SUM(L.LCIMVT) as SALES,
+            SUM(L.LCIMCT) as COST,
+            COUNT(DISTINCT L.LCCDCL) as CLIENTS
+        FROM ${comercialErpTable('LACLAE')} L
+        WHERE L.LCAADC = ?
+          AND L.LCMMDC = ?
+          AND ${LACLAE_SALES_FILTER}
+        GROUP BY L.LCAADC, L.LCMMDC
+    `, [year, month]);
+    const liveRow = live?.[0];
+    if (!liveRow) return rows || [];
+
+    const patched = {
+        YEAR: year,
+        MONTH: month,
+        SALES: parseFloat(liveRow.SALES ?? liveRow.sales) || 0,
+        COST: parseFloat(liveRow.COST ?? liveRow.cost) || 0,
+        CLIENTS: parseInt(liveRow.CLIENTS ?? liveRow.clients, 10) || 0,
+    };
+    const next = Array.isArray(rows) ? rows.slice() : [];
+    const idx = next.findIndex((row) => evolutionRowYear(row) === year && evolutionRowMonth(row) === month);
+    if (idx >= 0) {
+        next[idx] = { ...next[idx], ...patched };
+    } else {
+        next.push(patched);
+    }
+    return next;
+}
+
+async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArray, uniqueYears, options = {}) {
+    const forceRefresh = options.forceRefresh === true;
     const yearPlaceholders = uniqueYears.map(() => '?').join(',');
     const safeVendorCodes = [...new Set((vendorCodesArray || [])
         .map(code => sanitizeForSQL(code).trim().toUpperCase())
@@ -738,10 +788,12 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
 
     if (!effectiveVendorCodes || effectiveVendorCodes === 'ALL') {
         const rowsKey = `obj:evolution:rows:${OBJECTIVES_CACHE_VERSION}:ALL:${uniqueYears.join(',')}`;
-        const cachedRows = await redisCache.get('route', rowsKey);
-        if (cachedRows) return cachedRows;
+        if (!forceRefresh) {
+            const cachedRows = await redisCache.get('route', rowsKey);
+            if (cachedRows) return cachedRows;
+        }
         const useMonthly = await isLaclaeMonthlyReady(queryWithParams);
-        const rows = useMonthly
+        let rows = useMonthly
             ? await queryWithParams(`
                 SELECT
                     M.ANO as YEAR,
@@ -767,6 +819,9 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
             GROUP BY L.LCAADC, L.LCMMDC
             ORDER BY YEAR, MONTH
         `, uniqueYears);
+        if (useMonthly) {
+            rows = await overlayOpenMonthFromLiveLaclae(rows, options.now || getCurrentDate());
+        }
         await redisCache.set('route', rowsKey, rows, 600).catch(() => {});
         return rows;
     }
@@ -1006,17 +1061,20 @@ router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) 
         const cacheKey = evolutionCache.key;
         const evolutionMeta = { bucket: evolutionCache.bucket, ttl: evolutionCache.ttl };
         const yearsArrayPreview = evolutionCache.yearsArray;
-        const cachedResult = await redisCache.get('route', cacheKey);
-        if (cachedResult) {
-            logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution (${cacheKey})`);
-            return res.json(cachedResult);
+        const forceRefresh = isCacheBypassRequest(req);
+        if (!forceRefresh) {
+            const cachedResult = await redisCache.get('route', cacheKey);
+            if (cachedResult) {
+                logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution (${cacheKey})`);
+                return res.json(cachedResult);
+            }
         }
         const stampede = await beginRouteFill(cacheKey);
-        if (stampede.hit) {
+        if (!forceRefresh && stampede.hit) {
             logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution after wait (${cacheKey})`);
             return res.json(stampede.hit);
         }
-        if (stampede.busy) {
+        if (!forceRefresh && stampede.busy) {
             return sendFillBusy(res);
         }
         try {
@@ -1048,7 +1106,12 @@ router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) 
 
         // Single optimized query - get monthly totals per year
         // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT (matches 15,220,182.87€ for 2025)
-        const rows = await fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArray, uniqueYears);
+        const rows = await fetchObjectiveEvolutionRows(
+            effectiveVendorCodes,
+            vendorCodesArray,
+            uniqueYears,
+            { forceRefresh, now },
+        );
 
         // =====================================================================
         // B-SALES: Add secondary channel sales from JAVIER.VENTAS_B
@@ -3157,3 +3220,4 @@ module.exports = router;
 module.exports.buildEvolutionRouteCacheKey = buildEvolutionRouteCacheKey;
 module.exports.fillEvolutionRouteCacheForAll = fillEvolutionRouteCacheForAll;
 module.exports.OBJECTIVES_CACHE_VERSION = OBJECTIVES_CACHE_VERSION;
+module.exports.overlayOpenMonthFromLiveLaclae = overlayOpenMonthFromLiveLaclae;

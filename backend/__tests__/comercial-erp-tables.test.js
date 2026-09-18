@@ -112,8 +112,12 @@ describe('comercial ERP table mapping', () => {
     expect(ruteroRepo).not.toMatch(/FROM DSED\.LACLAE/);
     const objectives = fs.readFileSync(path.join(__dirname, '../routes/objectives.js'), 'utf8');
     expect(objectives).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(objectives).toMatch(/comercialErpTable\('LACLAE'\)/);
+    expect(objectives).toMatch(/overlayOpenMonthFromLiveLaclae/);
+    expect(objectives).toMatch(/isCacheBypassRequest/);
     expect(objectives).not.toMatch(/FROM DSEDAC\.CLI/);
     expect(objectives).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
+    expect(objectives).not.toMatch(/FROM JAVIER\.TEST_LACLAE/);
     const dddAdapters = fs.readFileSync(path.join(__dirname, '../src/shared/routes/ddd-adapters.js'), 'utf8');
     expect(dddAdapters).toMatch(/comercialErpTable\('CLI'\)/);
     expect(dddAdapters).not.toMatch(/FROM DSEDAC\.CLI/);
