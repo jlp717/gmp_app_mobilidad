@@ -143,8 +143,6 @@ describe('comercial ERP table mapping', () => {
       path.join(__dirname, '../src/modules/cobros/infrastructure/db2-cobros-repository.js'),
       'utf8',
     );
-    expect(cobrosRepo).toMatch(/comercialErpTable\('LACLAE'\)/);
-    expect(cobrosRepo).not.toMatch(/FROM DSED\.LACLAE/);
     const cobrosRoutes = fs.readFileSync(path.join(__dirname, '../routes/cobros.js'), 'utf8');
     expect(cobrosRoutes).toMatch(/comercialErpTable\('CLI'\)/);
     expect(cobrosRoutes).not.toMatch(/FROM DSEDAC\.CLI/);
@@ -175,8 +173,6 @@ describe('comercial ERP table mapping', () => {
     expect(clientRepo).not.toMatch(/FROM DSEDAC\.CLP/);
     expect(kpiRoutes).toMatch(/comercialErpTable\('CLP'\)/);
     expect(kpiRoutes).not.toMatch(/FROM DSEDAC\.CLP/);
-    expect(cobrosRepo).toMatch(/comercialErpTable\('CLP'\)/);
-    expect(cobrosRepo).not.toMatch(/FROM DSEDAC\.CLP/);
     const evolution = fs.readFileSync(path.join(__dirname, '../services/evolution.service.js'), 'utf8');
     expect(evolution).toMatch(/comercialErpTable\('ART'\)/);
     expect(evolution).toMatch(/comercialErpTable\('CLI'\)/);

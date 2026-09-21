@@ -511,7 +511,7 @@ describe('legacy cobros vendor-scope fallback without clientCodes', () => {
       fechaHasta: '2026-06-30',
     });
 
-    expect(cvcParams.slice(0, 4)).toEqual(['C001', 'COB', 20260601, 20260630]);
+    expect(cvcParams.slice(0, 6)).toEqual(['C001', 'C001', 'C001', 'COB', 20260601, 20260630]);
     expect(cvcSql).toMatch(/TRIM\(C\.TIPODOCUMENTO\)\s+IN\s+\(\?\)/i);
     expect(cvcSql).toMatch(/C\.ANOVENCIMIENTO\s*\*\s*10000\s*\+\s*C\.MESVENCIMIENTO\s*\*\s*100\s*\+\s*C\.DIAVENCIMIENTO\)\s*>=\s*\?/i);
     expect(cvcSql).toMatch(/C\.ANOVENCIMIENTO\s*\*\s*10000\s*\+\s*C\.MESVENCIMIENTO\s*\*\s*100\s*\+\s*C\.DIAVENCIMIENTO\)\s*<=\s*\?/i);

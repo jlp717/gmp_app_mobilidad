@@ -260,9 +260,10 @@ describe('Repartidor route parameter binding', () => {
       .query({ date: '2026-04-21' });
 
     expect(res.status).toBe(200);
-    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(2);
 
     const [, params] = mockQueryWithParams.mock.calls[0];
     expect(params).toEqual(['02', 21, 4, 2026, 0, 501]);
+    expect(mockQueryWithParams.mock.calls[1][0]).toMatch(/JAVIER\.PEDIDOS_CAB/i);
   });
 });

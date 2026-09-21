@@ -203,7 +203,9 @@ const getClientsHandler = async (req, res) => {
       const { getClientCodesFromCache } = require('../services/laclae');
       const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
 
-      if (cachedClientCodes && cachedClientCodes.length > 0) {
+      // The list occurs twice in this query. Keep the bound set small enough
+      // for the IBM i driver; larger portfolios use the vendor semi-join.
+      if (cachedClientCodes && cachedClientCodes.length > 0 && cachedClientCodes.length <= 40) {
         const built = buildChunkedClientCodeFilter('C.CODIGOCLIENTE', cachedClientCodes);
         clientCodesFilter = built.clause;
         clientCodeParams = built.params;
@@ -211,16 +213,18 @@ const getClientsHandler = async (req, res) => {
       }
     }
 
+    const scopedCliParams = [];
+    const boundedLacParams = [];
     const vendorScopedCliFilter = clientCodesFilter
         ? ''
-        : buildClientListVendorSqlFilter(vendedorCodes, 'C');
+        : buildClientListVendorSqlFilter(vendedorCodes, 'C', scopedCliParams);
     const laclaeBoundedFilter = clientCodesFilter
         ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL')
-        : buildLaclaeBoundedClientCodesSql(vendedorCodes);
+        : buildLaclaeBoundedClientCodesSql(vendedorCodes, boundedLacParams);
     // Cached-code placeholders occur once in LACLAE_SCOPED and once in the outer CLI filter.
     const queryParams = clientCodesFilter
       ? [...clientCodeParams, ...clientCodeParams, ...searchClause.params]
-      : [...searchClause.params];
+      : [...boundedLacParams, ...scopedCliParams, ...searchClause.params];
 
     // Generate Cache Key (v5 = optimized with pre-filtered client codes)
     const cacheKey = `clients:list:v8:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${safeLimit}:${safeOffset}`;
@@ -548,7 +552,8 @@ router.get('/:code', verifyToken, async (req, res) => {
     const scoped = resolveClientsVendedorCodes(req, vendedorCodes);
     if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
     vendedorCodes = scoped.vendedorCodes;
-    const vendedorFilter = buildVendedorFilter(vendedorCodes);
+    const vendedorFilter = buildVendedorParamFilter(vendedorCodes, 'CODIGOVENDEDOR');
+    const productVendorFilter = buildVendedorParamFilter(vendedorCodes, 'L.CODIGOVENDEDOR');
     const clientCode = code.trim();
     const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
 
@@ -617,8 +622,8 @@ router.get('/:code', verifyToken, async (req, res) => {
           AND TIPOVENTA IN ('CC', 'VC')
           AND TIPOLINEA IN ('AB', 'VT')
           AND SERIEALBARAN NOT IN ('N', 'Z')
-          ${vendedorFilter}
-      `, [safeClientCode, MIN_YEAR]),
+          ${vendedorFilter.clause}
+      `, [safeClientCode, MIN_YEAR, ...vendedorFilter.params]),
       // Query 3: Monthly trend
       queryWithParams(`
         SELECT ANODOCUMENTO as year, MESDOCUMENTO as month,
@@ -629,11 +634,11 @@ router.get('/:code', verifyToken, async (req, res) => {
           AND TIPOVENTA IN ('CC', 'VC')
           AND TIPOLINEA IN ('AB', 'VT')
           AND SERIEALBARAN NOT IN ('N', 'Z')
-          ${vendedorFilter}
+          ${vendedorFilter.clause}
         GROUP BY ANODOCUMENTO, MESDOCUMENTO
         ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
         FETCH FIRST 12 ROWS ONLY
-      `, [safeClientCode, MIN_YEAR]),
+      `, [safeClientCode, MIN_YEAR, ...vendedorFilter.params]),
       // Query 4: Top products
       queryWithParams(`
         SELECT L.CODIGOARTICULO as code,
@@ -643,11 +648,11 @@ router.get('/:code', verifyToken, async (req, res) => {
   COUNT(*) as timesOrdered
         FROM ${comercialErpTable('LINDTO')} L
         LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-        WHERE L.CODIGOCLIENTEALBARAN = ? AND L.ANODOCUMENTO >= ? ${vendedorFilter}
+        WHERE L.CODIGOCLIENTEALBARAN = ? AND L.ANODOCUMENTO >= ? ${productVendorFilter.clause}
         GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
         ORDER BY totalSales DESC
         FETCH FIRST 10 ROWS ONLY
-      `, [safeClientCode, MIN_YEAR]),
+      `, [safeClientCode, MIN_YEAR, ...vendedorFilter.params]),
       // Query 5: Payment status (CVC)
       queryWithParams(`
         SELECT
@@ -870,7 +875,7 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
 
     // Historial del cliente (R1/CLP). DSED.LACLAE es el ledger comercial; LINDTO no tiene lineas de este cliente.
     const whereParts = [
-      'TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10))',
+      'L.LCCDCL = CAST(? AS CHAR(10))',
       'L.LCAADC >= ?',
       LACLAE_SALES_FILTER,
     ];
@@ -961,7 +966,7 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
     TRIM(L.LCCDVD) as vendedor
         FROM ${comercialErpTable('LACLAE')} L
         LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
-        WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
+        WHERE L.LCCDCL = CAST(? AS CHAR(10)) AND L.LCAADC >= ?
           AND ${LACLAE_SALES_FILTER}
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
         ${db2OffsetFetch(page)}
@@ -1016,7 +1021,7 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
           COUNT(DISTINCT L.LCCDRF) as productCount
         FROM ${comercialErpTable('LACLAE')} L
         LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
-        WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
+        WHERE L.LCCDCL = CAST(? AS CHAR(10)) AND L.LCAADC >= ?
           AND ${LACLAE_SALES_FILTER}
         GROUP BY ${groupByClause}
         ORDER BY amount DESC

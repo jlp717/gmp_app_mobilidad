@@ -56,14 +56,15 @@ async function timed(conn, sql, params) {
   return { rows, ms: Date.now() - start };
 }
 
-function clientsListSql(vendorCode) {
+function clientsListSql(vendorCode, params = []) {
   const MIN_YEAR = new Date().getFullYear() - 2;
-  const laclaeBoundedFilter = buildLaclaeBoundedClientCodesSql(vendorCode);
+  const laclaeBoundedFilter = buildLaclaeBoundedClientCodesSql(vendorCode, params);
   const vendorScopedCliFilter = `AND EXISTS (
     SELECT 1 FROM DSEDAC.CLP CLP
     WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(C.CODIGOCLIENTE)
-      AND TRIM(CLP.VENDEDORCOMERCIAL) = '${vendorCode}'
+      AND TRIM(CLP.VENDEDORCOMERCIAL) = ?
   )`;
+  params.push(vendorCode);
   return `
     SELECT C.CODIGOCLIENTE as code
     FROM DSEDAC.CLI C
@@ -96,11 +97,12 @@ async function main() {
 
   try {
     // 1. Client list — must complete < 5s, no LATERAL
-    const clientSql = clientsListSql(DEMO_VENDOR);
+    const clientParams = [];
+    const clientSql = clientsListSql(DEMO_VENDOR, clientParams);
     if (/\bLATERAL\b/i.test(clientSql)) {
       record('clients_list_query_shape', false, 0, 'SQL still contains LATERAL');
     } else {
-      const { rows, ms } = await timed(conn, clientSql);
+      const { rows, ms } = await timed(conn, clientSql, clientParams);
       record('clients_list_query', ms < CLIENT_LIST_LIMIT_MS, ms, `${rows.length} rows`);
     }
 

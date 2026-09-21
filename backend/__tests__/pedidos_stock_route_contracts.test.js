@@ -320,7 +320,7 @@ describe('pedidos client evolution route contract', () => {
     const clientScopeCall = mockQueryWithParams.mock.calls[0];
     expect(clientScopeCall[0]).toContain(comercialErpTable('CLI'));
     expect(clientScopeCall[0]).not.toMatch(/FROM \$\{comercialErpTable\('CLI'\)\}/);
-    expect(clientScopeCall[1]).toEqual(['C001', '01', '01']);
+    expect(clientScopeCall[1]).toEqual(['C001', '01', '01', '01']);
 
     const monthlyCall = mockQueryWithParams.mock.calls[1];
     expect(monthlyCall[0]).toContain(comercialErpTable('LACLAE'));

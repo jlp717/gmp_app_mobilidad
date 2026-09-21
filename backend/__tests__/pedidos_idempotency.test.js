@@ -93,6 +93,8 @@ function setupCreateMocks({ existingIdempotency = null, clientDefaults = null } 
       }];
     }
 
+    if (/FROM\s+DSEDAC\.CLC\s+CLC\s+JOIN\s+DSEDAC\.ARA/i.test(normalized)) return [{ CODIGOARTICULO: 'ART001', PRECIOTARIFA: 10 }];
+
     if (/FROM\s+JAVIER\.PEDIDO_IDEMPOTENCY/i.test(normalized)) {
       if (!existingIdempotency) return [];
       return [{
@@ -338,7 +340,9 @@ describe('pedidos create idempotency', () => {
   test('createOrder fails closed when idempotency lookup is unavailable', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       const normalized = String(sql).replace(/\s+/g, ' ').trim();
-      if (/FROM\s+JAVIER\.PEDIDO_IDEMPOTENCY/i.test(normalized)) {
+      if (/FROM\s+DSEDAC\.CLC\s+CLC\s+JOIN\s+DSEDAC\.ARA/i.test(normalized)) return [{ CODIGOARTICULO: 'ART001', PRECIOTARIFA: 10 }];
+
+    if (/FROM\s+JAVIER\.PEDIDO_IDEMPOTENCY/i.test(normalized)) {
         const error = new Error('SQL0204 PEDIDO_IDEMPOTENCY not found');
         error.odbcErrors = [{ code: -204, state: '42704' }];
         throw error;

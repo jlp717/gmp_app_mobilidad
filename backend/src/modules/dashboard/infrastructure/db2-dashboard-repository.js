@@ -256,7 +256,8 @@ class Db2DashboardRepository extends DashboardRepository {
   async getClientConditions(vendedorCodes, { limit = 500, offset = 0 } = {}) {
     const safeLimit = clampInt(limit, 500, 1, 500);
     const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
-    const vendorFilter = buildClientListVendorSqlFilter(vendedorCodes, 'CLI');
+    const vendorParams = [];
+    const vendorFilter = buildClientListVendorSqlFilter(vendedorCodes, 'CLI', vendorParams);
 
     const sql = `
       SELECT 
@@ -275,7 +276,7 @@ class Db2DashboardRepository extends DashboardRepository {
       OFFSET ? ROWS FETCH FIRST ? ROWS ONLY
     `;
 
-    return await this._db.executeParams(sql, [safeOffset, safeLimit]);
+    return await this._db.executeParams(sql, [...vendorParams, safeOffset, safeLimit]);
   }
 }
 

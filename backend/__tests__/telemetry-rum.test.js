@@ -9,6 +9,7 @@ jest.mock('../middleware/logger', () => ({
 
 jest.mock('../middleware/security', () => ({
     createRateLimiter: () => (req, res, next) => next(),
+    clientIp: (req) => req.socket?.remoteAddress || 'unknown',
 }));
 
 jest.mock('../config/db', () => ({

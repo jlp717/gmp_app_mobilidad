@@ -1,6 +1,15 @@
 'use strict';
 
 describe('vendor column transition filter', () => {
+    test('bound vendor filters preserve assignment transition and ALL semantics', () => {
+        const { buildBoundVendorFilter, buildBoundLaclaeVendorFilter } = require('../utils/common');
+        const filter = buildBoundLaclaeVendorFilter('35,80', 'L');
+        expect(filter.params).toEqual(['35', '80']);
+        expect(filter.clause).toContain('L.R1_T8CDVD');
+        expect(filter.clause).toContain('L.LCCDVD');
+        expect(filter.clause).not.toMatch(/'35'|'80'/);
+        expect(buildBoundVendorFilter('ALL', 'L.CODIGOVENDEDOR')).toEqual({ clause: '', params: [] });
+    });
     afterEach(() => {
         delete process.env.VENDOR_COLUMN;
         jest.resetModules();
@@ -52,7 +61,7 @@ describe('vendor column transition filter', () => {
         expect(clause).toMatch(/LAC\.R1_T8CDVD\s+IN/);
         expect(clause).not.toMatch(/CLI\.CODIGOVENDEDOR/);
         expect(clause).not.toMatch(/CODIGOVENDEDOR/);
-        expect(params).toEqual(['02', '02']);
+        expect(params).toEqual(['02', '02', '02']);
     });
 
     test('buildLaclaeBoundedClientCodesSql scopes LACLAE via CLP without full scan', () => {

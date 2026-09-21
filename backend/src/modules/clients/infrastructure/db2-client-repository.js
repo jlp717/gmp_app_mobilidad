@@ -78,9 +78,10 @@ class Db2ClientRepository extends ClientRepository {
   }
 
   async findAll({ vendedorCodes, search = '', limit = 100, offset = 0 }) {
-    const vendorFilter = buildClientListVendorSqlFilter(vendedorCodes, 'CLI');
+    const vendorParams = [];
+    const vendorFilter = buildClientListVendorSqlFilter(vendedorCodes, 'CLI', vendorParams);
     const searchFilter = buildClientSearchFilter(search);
-    const params = [...searchFilter.params];
+    const params = [...vendorParams, ...searchFilter.params];
     params.push(offset, limit);
 
     const sql = `

@@ -7,7 +7,7 @@ const { cachedQuery, patternFor } = require('../services/query-optimizer');
 const { TTL, deleteCachePattern, redisCache } = require('../services/redis-cache');
 const {
     getCurrentDate,
-    buildVendedorFilter,
+    buildBoundVendorFilter,
     formatCurrency,
     LACLAE_SALES_FILTER,
     sanitizeForSQL,
@@ -545,7 +545,7 @@ router.get('/router/calendar', requirePlannerVendorScope({ location: 'query', fi
         const now = getCurrentDate();
         const year = parseInt(req.query.year) || now.getFullYear();
         const month = parseInt(req.query.month) || (now.getMonth() + 1);
-        const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
+        const vendedorFilter = buildBoundVendorFilter(vendedorCodes, 'L.CODIGOVENDEDOR');
 
         const sql = `
 SELECT
@@ -563,7 +563,7 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
         AND L.TIPOVENTA IN ('CC', 'VC')
         AND L.TIPOLINEA IN ('AB', 'VT')
         AND L.SERIEALBARAN NOT IN ('N', 'Z')
-        ${vendedorFilter}
+        ${vendedorFilter.clause}
       GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO,
   L.CODIGOCLIENTEALBARAN, C.NOMBRECLIENTE, C.DIRECCION, C.POBLACION,
   C.TELEFONO1, L.CODIGOVENDEDOR
@@ -572,7 +572,7 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
 
         // Cache calendar for 15 minutes
         const cacheKey = `calendar:${year}:${month}:${vendedorCodes}`;
-        const activities = await cachedQuery(queryWithParams, sql, cacheKey, TTL.MEDIUM, [year, month]);
+        const activities = await cachedQuery(queryWithParams, sql, cacheKey, TTL.MEDIUM, [year, month, ...vendedorFilter.params]);
 
         // Group by day
         const dayMap = {};

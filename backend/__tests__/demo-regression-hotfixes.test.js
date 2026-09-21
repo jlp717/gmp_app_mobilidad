@@ -90,7 +90,7 @@ describe('demo regression: products 403 user 98 + client 4300001091', () => {
     expect(scopeSql).toMatch(/DSED\.LACLAE/);
     expect(scopeSql).not.toMatch(/CLI\.CODIGOVENDEDOR/);
     expect(scopeSql).not.toMatch(/CODIGOVENDEDOR/);
-    expect(db.queryWithParams.mock.calls[0][1]).toEqual(['4300001091', '98', '98']);
+    expect(db.queryWithParams.mock.calls[0][1]).toEqual(['4300001091', '98', '98', '98']);
   });
 
   test('JEFE_VENTAS retries with assigned client vendor 02 when login vendor 98 mismatches', async () => {
@@ -208,7 +208,7 @@ describe('demo regression: getProducts ODBC 22001 client binds', () => {
 
     expect(mockQueryWithParamsProducts).toHaveBeenCalled();
     const [sql, params] = mockQueryWithParamsProducts.mock.calls[0];
-    expect(sql).toMatch(/TRIM\(L\.LCCDCL\)\s*=\s*CAST\(\?\s+AS\s+VARCHAR\(10\)\)/i);
+    expect(sql).toMatch(/L\.LCCDCL\s*=\s*CAST\(\?\s+AS\s+CHAR\(10\)\)/i);
     expect(sql).toMatch(/TRIM\(CLC\.CODIGOCLIENTE\)\s*=\s*CAST\(\?\s+AS\s+VARCHAR\(10\)\)/i);
     const clientBinds = params.filter((p) => p === '4300001091');
     expect(clientBinds.length).toBeGreaterThan(0);

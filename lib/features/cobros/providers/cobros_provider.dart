@@ -504,7 +504,7 @@ class CobrosProvider extends ChangeNotifier {
   /// Solo documentos cobrables por el comercial (excluye responsabilidad repartidor).
   List<CobroPendiente> cobrosPendientesComercial() {
     return _cobrosPendientes.where((c) {
-      if (c.cobradoPorRepartidor) return false;
+      if (c.cobradoPorRepartidor || c.documentoNoDisponible) return false;
       return c.estado != EstadoCobro.alDia && c.importePendiente > 0.0001;
     }).toList(growable: false);
   }

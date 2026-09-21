@@ -33,6 +33,7 @@ const {
     getVendorColumnExpr,
 } = require('../../utils/common');
 const { comercialErpTable } = require('../../utils/comercial-erp-tables');
+const { db2AppTable } = require('../../utils/db2-schemas');
 
 // ── Safe Query Helper (Parameterized) ────────────────────────────────────────
 
@@ -925,34 +926,24 @@ const objectivesTools = {
     async getObjectives(conn, userCode, isJefeVentas, month, year, vendorScope) {
         const currentYear = year || new Date().getFullYear();
         const currentMonth = month || new Date().getMonth() + 1;
-        const vendorFilter = _buildVendorFilter(vendorScope, userCode);
-
-        const configRows = await safeQuery(conn, `
-            SELECT TARGET_PERCENTAGE
-            FROM JAVIER.OBJ_CONFIG
-            WHERE TRIM(CODIGOVENDEDOR) = ? AND CODIGOCLIENTE = '*'
-            FETCH FIRST 1 ROWS ONLY
-        `, [userCode]);
-
-        const targetPercent = configRows.length > 0 ? parseFloat(configRows[0].TARGET_PERCENTAGE) || 10 : 10;
-
-        const salesRows = await safeQuery(conn, `
-            SELECT SUM(IMPORTEVENTA) as VENTAS
-            FROM ${comercialErpTable('LAC')}
-            WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
-              ${vendorFilter.sql}
-        `, [currentYear, currentMonth, ...vendorFilter.params]);
-
-        const achieved = parseFloat(salesRows[0]?.VENTAS) || 0;
-        const prevSalesRows = await safeQuery(conn, `
-            SELECT SUM(IMPORTEVENTA) as VENTAS
-            FROM ${comercialErpTable('LAC')}
-            WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
-              ${vendorFilter.sql}
-        `, [currentYear - 1, currentMonth, ...vendorFilter.params]);
-
-        const prevSales = parseFloat(prevSalesRows[0]?.VENTAS) || 0;
-        const target = prevSales > 0 ? prevSales * (1 + targetPercent / 100) : achieved * 1.1;
+        // A team leader's personal objective is not the sum of the signed team scope.
+        // Global scope is accepted only for the already-authorized jefe context.
+        const scope = isJefeVentas
+            ? (Array.isArray(vendorScope) && vendorScope.length && !vendorScope.includes('ALL')
+                ? vendorScope.join(',') : 'ALL')
+            : String(userCode || '').trim();
+        if (!scope) throw new Error('OBJECTIVE_SCOPE_REQUIRED');
+        const { getObjectivesEvolutionCached } = require('../../routes/objectives');
+        const result = await getObjectivesEvolutionCached({ effectiveVendorCodes: scope, years: String(currentYear) });
+        if (result.kind !== 'data') {
+            const error = new Error('Los objetivos se están actualizando. Inténtalo de nuevo en unos segundos.');
+            error.code = 'ROUTE_FILL_BUSY';
+            throw error;
+        }
+        const row = result.data.yearlyData?.[String(currentYear)]?.find(item => Number(item.month) === Number(currentMonth));
+        if (!row) throw new Error('OBJECTIVES_MONTH_UNAVAILABLE');
+        const achieved = Number(row.sales) || 0;
+        const target = Number(row.objective) || 0;
         const achievementPct = target > 0 ? Math.round((achieved / target) * 1000) / 10 : 0;
 
         return {
@@ -1656,7 +1647,7 @@ const bolsaTools = {
 
         const rows = await safeQuery(conn, `
             SELECT LIMITE_PCT, LIMITE_IMPORTE, SALDO_DISPONIBLE, CONSUMIDO, ACUMULADO
-            FROM JAVIER.BOLSA_COMERCIAL
+            FROM ${db2AppTable('BOLSA_COMERCIAL')}
             WHERE TRIM(CODIGOVENDEDOR) = ? AND EJERCICIO = ? AND MES = ?
         `, [userCode, currentYear, currentMonth]);
 
@@ -1689,7 +1680,7 @@ const bolsaTools = {
 
         // Need bolsa ID for movements
         const bolsaRows = await safeQuery(conn, `
-            SELECT ID FROM JAVIER.BOLSA_COMERCIAL
+            SELECT ID FROM ${db2AppTable('BOLSA_COMERCIAL')}
             WHERE TRIM(CODIGOVENDEDOR) = ? AND EJERCICIO = ? AND MES = ?
         `, [userCode, bolsa.year, bolsa.month]);
 
@@ -1701,7 +1692,7 @@ const bolsaTools = {
         const rows = await safeQuery(conn, `
             SELECT TIPO, IMPORTE, SALDO_ANTERIOR, SALDO_POSTERIOR,
                    DESCRIPCION, CODIGO_ARTICULO, CREATED_AT
-            FROM JAVIER.MOVIMIENTOS_BOLSA
+            FROM ${db2AppTable('MOVIMIENTOS_BOLSA')}
             WHERE BOLSA_ID = ?
             ORDER BY CREATED_AT DESC
             FETCH FIRST ? ROWS ONLY
@@ -1734,7 +1725,7 @@ const bolsaTools = {
         const rows = await safeQuery(conn, `
             SELECT EJERCICIO, MES, SALDO_DISPONIBLE, CONSUMIDO, ACUMULADO,
                    LIMITE_PCT, LIMITE_IMPORTE
-            FROM JAVIER.BOLSA_COMERCIAL
+            FROM ${db2AppTable('BOLSA_COMERCIAL')}
             WHERE TRIM(CODIGOVENDEDOR) = ?
               AND (EJERCICIO > ? OR (EJERCICIO = ? AND MES >= ?))
             ORDER BY EJERCICIO ASC, MES ASC

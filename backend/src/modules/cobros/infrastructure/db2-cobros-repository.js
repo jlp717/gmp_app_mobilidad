@@ -20,6 +20,8 @@ const {
   getDebtView,
   boundDebtFetchFirst,
   cvcPendientesJoins,
+  cvcDocumentAmountJoins,
+  cvcDocumentAmountSql,
   cvcLiveTypeSql,
   cvcPendingPredicate,
   formaPagoLabel,
@@ -434,7 +436,9 @@ function groupCvcRowsByDocument(rows) {
     legacySet.add(cvcLegacyDocKey(row));
     current._legacyKeys = legacySet;
 
-    current.IMPORTE_TOTAL = fromCents(toCents(current.IMPORTE_TOTAL) + toCents(row.IMPORTE_TOTAL));
+    current.IMPORTE_TOTAL = Number(row.IMPORTE_DOCUMENTO) > 0
+      ? Number(row.IMPORTE_DOCUMENTO)
+      : fromCents(toCents(current.IMPORTE_TOTAL) + toCents(row.IMPORTE_TOTAL));
     current.IMPORTE_COBRADO = fromCents(toCents(current.IMPORTE_COBRADO) + toCents(row.IMPORTE_COBRADO));
     current.IMPORTE_PENDIENTE = fromCents(toCents(current.IMPORTE_PENDIENTE) + toCents(row.IMPORTE_PENDIENTE));
 
@@ -477,7 +481,8 @@ function computeClientPendingTotalGrouped(rows, clientCode, portfolioAdjustments
   let totalCents = 0;
   for (const [docKey, rawTotal] of rawByDoc) {
     const appPaid = resolveDocAppPaid(clientCode, rowByDoc.get(docKey) || docKey, portfolioAdjustments, appCobrosByDoc, repartidorByDoc);
-    const net = Math.max(0, rawTotal - appPaid);
+    const document = rowByDoc.get(docKey);
+    const net = Math.max(0, capPendingToDocument(rawTotal, document?.IMPORTE_DOCUMENTO ?? document?.IMPORTE_TOTAL) - appPaid);
     if (toCents(net) > 0) totalCents += toCents(net);
   }
   return fromCents(totalCents);
@@ -656,17 +661,14 @@ function buildAppOrderVendorAccessClause(context = {}, alias = 'PC') {
   const vendorCodes = !manager && userCode
     ? [userCode]
     : (manager && visibleCodes.length > 0 ? visibleCodes : []);
-  const safeCodes = expandVendorCodesForQuery(vendorCodes);
-  if (safeCodes.length === 0) return { clause: '', params: [] };
-  const canBindSafely = safeCodes.length <= 90 && safeCodes.every((code) => String(code).length <= 2);
-  if (canBindSafely) {
-    return {
-      clause: ` AND TRIM(${alias}.CODIGOVENDEDOR) IN (${safeCodes.map(() => '?').join(',')})`,
-      params: safeCodes,
-    };
-  }
-  const literalCodes = safeCodes.map((v) => `'${v.replace(/'/g, "''")}'`).join(',');
-  return { clause: ` AND TRIM(${alias}.CODIGOVENDEDOR) IN (${literalCodes})`, params: [] };
+  const expanded = expandVendorCodesForQuery(vendorCodes);
+  if (expanded.length === 0) return { clause: '', params: [] };
+  const safeCodes = expanded.filter(code => String(code).length <= 2);
+  if (safeCodes.length === 0) return { clause: ' AND 1=0', params: [] };
+  return {
+    clause: ` AND TRIM(${alias}.CODIGOVENDEDOR) IN (${safeCodes.map(() => '?').join(',')})`,
+    params: safeCodes,
+  };
 }
 
 function buildAppOrderGeneratedDocumentFilter(optionalColumns, alias = 'PC') {
@@ -689,6 +691,8 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
   const stableReference = cvcFullDocKey(row) || `CVC:${docKey}`;
   const fecha = toIsoDate(row.ANO_DOCUMENTO, row.MES_DOCUMENTO, row.DIA_DOCUMENTO);
   const fechaVencimiento = toIsoDate(row.ANO_VENCIMIENTO, row.MES_VENCIMIENTO, row.DIA_VENCIMIENTO);
+  const documentoNoDisponible = Object.prototype.hasOwnProperty.call(row, 'IMPORTE_DOCUMENTO')
+    && !(Number(row.IMPORTE_DOCUMENTO) > 0);
   const erpPendienteCents = toCents(capPendingToDocument(row.IMPORTE_PENDIENTE, row.IMPORTE_TOTAL));
   const appPaidCents = toCents(appPaid);
   const pendingCents = Math.max(0, erpPendienteCents - appPaidCents);
@@ -716,6 +720,9 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
     fechaVencimiento,
     importeTotal,
     importePendiente: fromCents(pendingCents),
+    importeCobrable: documentoNoDisponible ? 0 : fromCents(pendingCents),
+    cobrable: !documentoNoDisponible,
+    documentoNoDisponible,
     importeCobrado,
     porcentajeCobrado,
     estado,
@@ -770,7 +777,8 @@ class Db2CobrosRepository extends CobrosRepository {
             C.TERMINALDOCUMENTO AS TERMINAL_DOCUMENTO,
             TRIM(C.ORIGENDOCUMENTO) AS ORIGEN_DOCUMENTO,
             TRIM(C.CODIGOCLIENTEALBARAN) AS CODIGO_CLIENTE,
-            C.IMPORTEVENCIMIENTO AS IMPORTE_TOTAL,
+            COALESCE(${cvcDocumentAmountSql('C')}, C.IMPORTEVENCIMIENTO) AS IMPORTE_TOTAL,
+            ${cvcDocumentAmountSql('C')} AS IMPORTE_DOCUMENTO,
             C.IMPORTECANCELADO AS IMPORTE_COBRADO,
             C.IMPORTEPENDIENTE AS IMPORTE_PENDIENTE,
             C.ANOEMISION AS ANO_DOCUMENTO,
@@ -785,6 +793,7 @@ class Db2CobrosRepository extends CobrosRepository {
             TRIM(FPG.DESCRIPCIONFORMAPAGO) AS FORMA_PAGO_DESC
         FROM ${getDebtView()} C
         ${cvcPendientesJoins('C')}
+        ${cvcDocumentAmountJoins('C', { clientScoped: true })}
         WHERE C.CODIGOCLIENTEALBARAN = CAST(? AS CHAR(10))
           AND ${cvcPendingPredicate('C')}
           ${docFilters.clause}
@@ -792,7 +801,7 @@ class Db2CobrosRepository extends CobrosRepository {
         FETCH FIRST ${boundDebtFetchFirst(context.limit || 200)} ROWS ONLY`;
 
       const [rows, appCobrosByDoc, repartidorByDoc, cobroMinimo, appOrders] = await Promise.all([
-        queryWithParams(cvcSql, [clientParam, ...docFilters.params], []),
+        queryWithParams(cvcSql, [clientParam, clientParam, clientParam, ...docFilters.params], []),
         this.getAppSideCobrosByDoc(clientCode),
         this.getAppSideRepartidorByDoc(clientCode),
         this.getClientCobroRiguroso(clientCode, context),
@@ -841,6 +850,8 @@ class Db2CobrosRepository extends CobrosRepository {
           totalPendiente,
           total: totalPendiente,
           totalVencido,
+          totalCobrable: fromCents(mergedCobros.reduce((sum, doc) => sum + (doc.cobrable === false ? 0 : toCents(doc.importePendiente)), 0)),
+          documentosNoDisponibles: mergedCobros.filter(doc => doc.documentoNoDisponible).length,
           numDocumentos: mergedCobros.length,
           numVencidos: mergedCobros.filter((c) => c.estado === 'VENCIDO').length,
           documentos: { cantidad: mergedCobros.length, total: totalPendiente },
@@ -1147,24 +1158,39 @@ class Db2CobrosRepository extends CobrosRepository {
     // CLI names on the grouped clients. Joining CLI before GROUP BY made raso
     // 35 cold ~1s while COUNT stayed ~44ms. Overlay stays off CVC (app tables).
     const summarySql = `
-      WITH CVC_AGG AS (
-        SELECT CVC.CODIGOCLIENTEALBARAN AS CLIENTE_RAW,
-               COUNT(*) AS DOC_COUNT,
-               SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
-               SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
-                   <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
-                    THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
-         FROM ${getDebtView()} CVC
+      WITH CVC_SCOPE AS (
+        SELECT CVC.* FROM ${getDebtView()} CVC
          WHERE ${cvcPendingPredicate('CVC')}
            ${docFilters.clause}
            ${emptyClientFilter}
            ${vendorClause}
-         GROUP BY CVC.CODIGOCLIENTEALBARAN
+      ), CVC_DOC_PENDING AS (
+        SELECT CVC.CODIGOCLIENTEALBARAN AS CLIENTE_RAW,
+               SUM(CVC.IMPORTEPENDIENTE) AS PENDIENTE,
+               MAX(${cvcDocumentAmountSql('CVC')}) AS DOCUMENT_TOTAL,
+               SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
+                   <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
+                    THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS VENCIDO
+         FROM CVC_SCOPE CVC
+         ${cvcDocumentAmountJoins('CVC', { scopeCte: true })}
+         GROUP BY CVC.CODIGOCLIENTEALBARAN, CVC.TIPODOCUMENTO, CVC.ORIGENDOCUMENTO,
+                  CVC.SUBEMPRESADOCUMENTO, CVC.EJERCICIODOCUMENTO, CVC.SERIEDOCUMENTO,
+                  CVC.TERMINALDOCUMENTO, CVC.NUMERODOCUMENTO, CVC.XDEDOCUMENTO, CVC.DEXDOCUMENTO
+      ), CVC_DOC_CAPPED AS (
+        SELECT CLIENTE_RAW,
+               CASE WHEN DOCUMENT_TOTAL > 0 THEN LEAST(PENDIENTE, DOCUMENT_TOTAL) ELSE 0 END AS COBRABLE,
+               CASE WHEN DOCUMENT_TOTAL > 0 THEN LEAST(PENDIENTE, DOCUMENT_TOTAL) ELSE PENDIENTE END AS PENDIENTE,
+               CASE WHEN DOCUMENT_TOTAL > 0 THEN LEAST(VENCIDO, DOCUMENT_TOTAL) ELSE VENCIDO END AS VENCIDO
+          FROM CVC_DOC_PENDING
+      ), CVC_AGG AS (
+        SELECT CLIENTE_RAW, COUNT(*) AS DOC_COUNT, SUM(PENDIENTE) AS TOTAL_PENDIENTE,
+               SUM(LEAST(VENCIDO, PENDIENTE)) AS TOTAL_VENCIDO, SUM(COBRABLE) AS TOTAL_COBRABLE
+          FROM CVC_DOC_CAPPED GROUP BY CLIENTE_RAW
       ), CVC_CLIENTS AS (
         SELECT TRIM(A.CLIENTE_RAW) AS CLIENTE,
                A.DOC_COUNT,
                A.TOTAL_PENDIENTE,
-               A.TOTAL_VENCIDO
+               A.TOTAL_VENCIDO, A.TOTAL_COBRABLE
           FROM CVC_AGG A
       )
       SELECT T.CLIENTE,
@@ -1175,7 +1201,7 @@ class Db2CobrosRepository extends CobrosRepository {
              ) AS NOMBRE,
              T.DOC_COUNT,
              T.TOTAL_PENDIENTE,
-             T.TOTAL_VENCIDO
+             T.TOTAL_VENCIDO, T.TOTAL_COBRABLE
         FROM CVC_CLIENTS T
         LEFT JOIN ${comercialErpTable('CLI')} CLI
           ON TRIM(CLI.CODIGOCLIENTE) = T.CLIENTE
@@ -1216,6 +1242,7 @@ class Db2CobrosRepository extends CobrosRepository {
         count: parseInt(r.DOC_COUNT, 10) || 0,
         cvcTotal: fromCents(cvcTotalCents),
         cvcVencido: fromCents(cvcVencidoCents),
+        totalCobrable: fromCents(Math.max(0, toCents(r.TOTAL_COBRABLE ?? r.TOTAL_PENDIENTE) - paid)),
         total: fromCents(netTotalCents),
         vencido: fromCents(netVencidoCents),
       };
@@ -1232,6 +1259,7 @@ class Db2CobrosRepository extends CobrosRepository {
       const { code, total, vencido } = entry;
       summary[code] = {
         nombre: entry.nombre,
+        totalCobrable: entry.totalCobrable,
         total,
         vencido,
         count: entry.count,
@@ -1250,6 +1278,7 @@ class Db2CobrosRepository extends CobrosRepository {
           source: 'PEDIDOS_CAB',
         };
       }
+      summary[code].totalCobrable = fromCents(toCents(summary[code].totalCobrable || 0) + toCents(appEntry.total));
       summary[code].total = fromCents(toCents(summary[code].total) + toCents(appEntry.total));
       summary[code].vencido = fromCents(toCents(summary[code].vencido) + toCents(appEntry.vencido || 0));
       summary[code].count += parseInt(appEntry.count, 10) || 0;
@@ -1379,34 +1408,25 @@ class Db2CobrosRepository extends CobrosRepository {
         .filter((code) => /^[a-zA-Z0-9]+$/.test(code)),
     )];
     if (safeCodes.length === 0) return adjustments;
-    const inList = safeCodes.map((code) => `'${code.replace(/'/g, "''")}'`).join(',');
-
-    // Overlay only the clients already aggregated from CVC. No second CVC scan:
-    // correlated EXISTS ~1s on raso 35; full COBROS / CVC IN-list slowed JEFE 98.
-    try {
-      const comercialSql = `
+    // Batch by portfolio, never one query per customer. This also bounds the
+    // number of ODBC parameters when a jefe requests a large page.
+    for (let offset = 0; offset < safeCodes.length; offset += 50) {
+      const codes = safeCodes.slice(offset, offset + 50);
+      const inList = codes.map(() => 'CAST(? AS CHAR(10))').join(',');
+      const comercialRows = await queryWithParams(`
         SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,
                COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
           FROM ${COBROS_TABLE} C
-         WHERE TRIM(C.CODIGO_CLIENTE) IN (${inList})
-         GROUP BY TRIM(C.CODIGO_CLIENTE)`;
-      const rows = await query(comercialSql, false);
-      for (const row of rows || []) add(row.CLIENTE, row.TOTAL_APP);
-    } catch (error) {
-      logger.warn(`[COBROS_REPO] App-side COBROS summary subtract skipped: ${error.message}`);
-    }
-
-    try {
-      const repartidorSql = `
+         WHERE C.CODIGO_CLIENTE IN (${inList})
+         GROUP BY C.CODIGO_CLIENTE`, codes, []);
+      for (const row of comercialRows || []) add(row.CLIENTE, row.TOTAL_APP);
+      const repartidorRows = await queryWithParams(`
         SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS CLIENTE,
                COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_APP
           FROM ${REPARTIDOR_COBROS_TABLE} R
-         WHERE TRIM(R.CODIGOCLIENTEALBARAN) IN (${inList})
-         GROUP BY TRIM(R.CODIGOCLIENTEALBARAN)`;
-      const rows = await query(repartidorSql, false);
-      for (const row of rows || []) add(row.CLIENTE, row.TOTAL_APP);
-    } catch (error) {
-      logger.warn(`[COBROS_REPO] App-side REPARTIDOR_COBROS summary subtract skipped: ${error.message}`);
+         WHERE R.CODIGOCLIENTEALBARAN IN (${inList})
+         GROUP BY R.CODIGOCLIENTEALBARAN`, codes, []);
+      for (const row of repartidorRows || []) add(row.CLIENTE, row.TOTAL_APP);
     }
 
     return adjustments;
@@ -1509,6 +1529,10 @@ class Db2CobrosRepository extends CobrosRepository {
     const isCvcOrder = trim(order.SOURCE).toUpperCase() === 'CVC';
     const cvcStableReference = parseCvcStableReference(stableReference);
     const cvcLegacyIsSafe = !isCvcOrder || !cvcStableReference || ((parseInt(order.LEGACY_COLLISION_COUNT, 10) || 1) <= 1);
+    const cobroMinimo = await this.getClientCobroRiguroso(normalizedClient, {
+      userId: normalizedUserId,
+      vendorCodes: [normalizedUserId],
+    });
     // The document lookup and authorization above do not mutate financial state.
     // Serialise the mutable ledger checks and insert on one DB2 job: a process-local
     // mutex or a Redis lease cannot protect the reparto/comercial boundary.
@@ -1637,6 +1661,10 @@ class Db2CobrosRepository extends CobrosRepository {
     }
 
     const totalAlreadyPaidCents = paidComercialCents + paidRepartidorCents;
+    if (order.SOURCE === 'CVC' && !(Number(order.IMPORTE_DOCUMENTO) > 0)) {
+      throw new CommercialCobrosError('DOCUMENT_TOTAL_UNAVAILABLE',
+        'No se puede verificar el importe del documento ERP. El cobro no se ha registrado.', 409);
+    }
     const cvcCents = toCents(order.IMPORTETOTAL);
     const documentCents = toCents(order.IMPORTE_DOCUMENTO || order.IMPORTETOTAL);
     const capCents = toCents(capPendingToDocument(fromCents(cvcCents), fromCents(documentCents)));
@@ -1652,10 +1680,6 @@ class Db2CobrosRepository extends CobrosRepository {
       );
     }
     const pendingAfterCents = pendingBeforeCents - amountCents;
-    const cobroMinimo = await this.getClientCobroRiguroso(normalizedClient, {
-      userId: normalizedUserId,
-      vendorCodes: [normalizedUserId],
-    });
     if (isBelowMinCobro({
       cobroRiguroso: cobroMinimo.cobroRiguroso,
       porcentajeMinimoCobro: cobroMinimo.porcentajeMinimoCobro,
@@ -1728,18 +1752,6 @@ class Db2CobrosRepository extends CobrosRepository {
       throw insertErr;
     }
 
-    try {
-      const dsedacExports = require('../../../../services/dsedac-exports.service');
-      await dsedacExports.exportCobroToSystem({
-        IDEMPOTENCY_TOKEN: normalizedIdempotencyToken,
-        CODIGO_CLIENTE: normalizedClient,
-        CODIGOVENDEDOR: order.CODIGOVENDEDOR || normalizedUserId,
-        IMPORTE: fromCents(amountCents),
-        CODIGO_USUARIO: normalizedUserId,
-      });
-    } catch (exportErr) {
-      logger.warn(`[COBROS] dsedac export best-effort fail: ${exportErr.message}`);
-    }
     const result = {
       id,
       clientCode: normalizedClient,
@@ -1753,6 +1765,18 @@ class Db2CobrosRepository extends CobrosRepository {
     };
     await connection.query('COMMIT');
     transactionStarted = false;
+    try {
+      const dsedacExports = require('../../../../services/dsedac-exports.service');
+      await dsedacExports.exportCobroToSystem({
+        IDEMPOTENCY_TOKEN: normalizedIdempotencyToken,
+        CODIGO_CLIENTE: normalizedClient,
+        CODIGOVENDEDOR: order.CODIGOVENDEDOR || normalizedUserId,
+        IMPORTE: fromCents(amountCents),
+        CODIGO_USUARIO: normalizedUserId,
+      });
+    } catch (exportErr) {
+      logger.warn(`[COBROS] dsedac export best-effort fail: ${exportErr.message}`);
+    }
     return result;
     } catch (error) {
       if (transactionStarted) {
@@ -1962,8 +1986,10 @@ class Db2CobrosRepository extends CobrosRepository {
         C.NUMERODOCUMENTO AS NUMEROPEDIDO,
         C.XDEDOCUMENTO AS XDE,
         C.DEXDOCUMENTO AS DEX,
-        C.IMPORTEPENDIENTE AS IMPORTETOTAL,
-        C.IMPORTEVENCIMIENTO AS IMPORTE_DOCUMENTO,
+        SUM(C.IMPORTEPENDIENTE) OVER (PARTITION BY C.CODIGOCLIENTEALBARAN,
+          C.TIPODOCUMENTO, C.ORIGENDOCUMENTO, C.SUBEMPRESADOCUMENTO, C.EJERCICIODOCUMENTO,
+          C.SERIEDOCUMENTO, C.TERMINALDOCUMENTO, C.NUMERODOCUMENTO, C.XDEDOCUMENTO, C.DEXDOCUMENTO) AS IMPORTETOTAL,
+        ${cvcDocumentAmountSql('C')} AS IMPORTE_DOCUMENTO,
         'PENDIENTE' AS ESTADO,
         (
           SELECT COUNT(DISTINCT ${cvcReferenceSql('C2')})
@@ -1973,11 +1999,12 @@ class Db2CobrosRepository extends CobrosRepository {
              AND ${cvcPendingPredicate('C2')}
         ) AS LEGACY_COLLISION_COUNT
       FROM ${getDebtView()} C
+      ${cvcDocumentAmountJoins('C', { clientScoped: true })}
       WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
         AND ${cvcPendingPredicate('C')}
         AND ${cvcRefWhere}
       FETCH FIRST 1 ROW ONLY
-    `, [clientCode, ...cvcRefParams], []);
+    `, [padCvcClient(clientCode), padCvcClient(clientCode), clientCode, ...cvcRefParams], []);
     return cvcRows?.[0] || null;
   }
 

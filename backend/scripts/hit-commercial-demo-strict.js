@@ -16,6 +16,7 @@ const results = [];
 const tokens = new Set();
 const orderIds = new Set();
 const fixtures = {};
+const baseline = { sequence: null, bolsas: new Map() };
 let safe = false;
 const q = (sql, params = []) => db.queryWithParams(sql, params, false, false);
 const cents = (n) => Math.round(Number(n || 0) * 100);
@@ -72,17 +73,27 @@ async function guard() {
     && live.productionErpWritesApproved === false && runtime.valid && runtime.tableSet === 'isolated_test'
     && db2AppTable('COBROS') === 'JAVIER.TEST_COBROS'
     && db2AppTable('REPARTIDOR_COBROS') === 'JAVIER.TEST_REPARTIDOR_COBROS'
-    && !exportGate().enabled && comercialErpTable('LACLAE') === 'DSED.LACLAE',
+    && ['PEDIDOS_SEQ', 'PEDIDO_IDEMPOTENCY', 'PEDIDOS_STOCK_RESERVE', 'BOLSA_COMERCIAL', 'MOVIMIENTOS_BOLSA']
+      .every((table) => db2AppTable(table) === `JAVIER.TEST_${table}`)
+    && !exportGate().enabled && comercialErpTable('LACLAE') === 'DSED.LACLAE'
+    && comercialErpTable('CVC') === 'DSEDAC.CVC',
   { status: ready.status, ms: ready.ms, tableSet: live.tableSet, exportEnabled: exportGate().enabled, sales: comercialErpTable('LACLAE') });
   for (const table of ['DSEDAC.VDPL1', 'DSEDAC.CVC', 'DSEDAC.CPC', 'DSEDAC.OPP', 'DSEDAC.FPG', 'DSEDAC.CLX', 'DSEDAC.CLP',
     'JAVIER.TEST_COBROS', 'JAVIER.TEST_REPARTIDOR_COBROS', 'JAVIER.TEST_PEDIDOS_CAB', 'JAVIER.TEST_PEDIDOS_LIN',
-    'JAVIER.TEST_LIQUIDACION_COMERCIAL', 'JAVIER.TEST_DEVOLUCIONES_COMERCIAL']) await catalog(table);
+    'JAVIER.TEST_LIQUIDACION_COMERCIAL', 'JAVIER.TEST_DEVOLUCIONES_COMERCIAL',
+    'JAVIER.TEST_PEDIDOS_SEQ', 'JAVIER.TEST_PEDIDO_IDEMPOTENCY', 'JAVIER.TEST_PEDIDOS_STOCK_RESERVE',
+    'JAVIER.TEST_BOLSA_COMERCIAL', 'JAVIER.TEST_MOVIMIENTOS_BOLSA']) await catalog(table);
+  baseline.year = Number(TODAY.slice(0, 4));
+  baseline.month = Number(TODAY.slice(5, 7));
+  baseline.sequence = (await q('SELECT ULTIMO_NUMERO FROM JAVIER.TEST_PEDIDOS_SEQ WHERE EJERCICIO=?', [baseline.year]))[0] || null;
+  baseline.bolsas = new Map((await q('SELECT ID, CODIGOVENDEDOR, SALDO_DISPONIBLE, CONSUMIDO, ACUMULADO, UPDATED_AT FROM JAVIER.TEST_BOLSA_COMERCIAL WHERE EJERCICIO=? AND MES=?',
+    [baseline.year, baseline.month])).map(row => [Number(row.ID), row]));
   safe = true;
 }
 async function cleanup() {
   if (!safe) return;
   // Recover orders even if the HTTP response never arrived.
-  const discovered = await q('SELECT ID FROM JAVIER.TEST_PEDIDOS_CAB WHERE OBSERVACIONES LIKE ?', [`${SESSION}%`]);
+  const discovered = await q('SELECT ID, NUMEROPEDIDO FROM JAVIER.TEST_PEDIDOS_CAB WHERE OBSERVACIONES LIKE ?', [`${SESSION}%`]);
   for (const row of discovered) orderIds.add(row.ID);
   for (const token of tokens) {
     for (const table of ['TEST_COBROS', 'TEST_REPARTIDOR_COBROS', 'TEST_DEVOLUCIONES_COMERCIAL', 'TEST_LIQUIDACION_COMERCIAL']) {
@@ -91,10 +102,69 @@ async function cleanup() {
       if (Number(rows[0]?.N) !== 0) throw new Error(`CLEANUP_FAILED:${table}`);
     }
   }
+  const conn = await db.getPool().connect();
+  try {
+    await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+    await conn.query('LOCK TABLE JAVIER.TEST_BOLSA_COMERCIAL IN EXCLUSIVE MODE');
+    await conn.query('LOCK TABLE JAVIER.TEST_MOVIMIENTOS_BOLSA IN EXCLUSIVE MODE');
+    await conn.query('LOCK TABLE JAVIER.TEST_PEDIDOS_SEQ IN EXCLUSIVE MODE');
+    for (const id of orderIds) {
+      const owned = await conn.query('SELECT ID FROM JAVIER.TEST_PEDIDOS_CAB WHERE ID=? AND OBSERVACIONES LIKE ?', [id, `${SESSION}%`]);
+      if (owned.length !== 1) throw new Error('CLEANUP_ORDER_OWNERSHIP_MISMATCH');
+      const movements = await conn.query('SELECT ID, BOLSA_ID, TIPO, IMPORTE FROM JAVIER.TEST_MOVIMIENTOS_BOLSA WHERE PEDIDO_ID=?', [id]);
+      for (const movement of movements) {
+        const amount = Number(movement.IMPORTE);
+        const consumed = String(movement.TIPO).trim() === 'CONSUMO' ? amount : 0;
+        const accrued = String(movement.TIPO).trim() === 'ACUMULACION' ? amount : 0;
+        if (!consumed && !accrued && amount) throw new Error('UNEXPECTED_SESSION_BOLSA_MOVEMENT');
+        await conn.query('UPDATE JAVIER.TEST_BOLSA_COMERCIAL SET SALDO_DISPONIBLE=SALDO_DISPONIBLE-?, CONSUMIDO=CONSUMIDO-?, ACUMULADO=ACUMULADO-? WHERE ID=?',
+          [accrued - consumed, consumed, accrued, movement.BOLSA_ID]);
+        await conn.query('DELETE FROM JAVIER.TEST_MOVIMIENTOS_BOLSA WHERE ID=? AND PEDIDO_ID=?', [movement.ID, id]);
+      }
+      await conn.query('DELETE FROM JAVIER.TEST_PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID=?', [id]);
+      await conn.query('DELETE FROM JAVIER.TEST_PEDIDO_IDEMPOTENCY WHERE PEDIDO_ID=? AND IDEMPOTENCY_KEY LIKE ?', [id, `${SESSION}%`]);
+      await conn.query('DELETE FROM JAVIER.TEST_PEDIDOS_LIN WHERE PEDIDO_ID=?', [id]);
+      await conn.query('DELETE FROM JAVIER.TEST_PEDIDOS_CAB WHERE ID=? AND OBSERVACIONES LIKE ?', [id, `${SESSION}%`]);
+    }
+    // Only the session's vendor/month can have been created by this runner.
+    const bolsas = await conn.query('SELECT ID FROM JAVIER.TEST_BOLSA_COMERCIAL WHERE CODIGOVENDEDOR=? AND EJERCICIO=? AND MES=?', ['35', baseline.year, baseline.month]);
+    for (const bolsa of bolsas) {
+      if (!baseline.bolsas.has(Number(bolsa.ID))) {
+        const other = await conn.query('SELECT COUNT(*) AS N FROM JAVIER.TEST_MOVIMIENTOS_BOLSA WHERE BOLSA_ID=?', [bolsa.ID]);
+        if (Number(other[0]?.N)) throw new Error('CONCURRENT_BOLSA_USE_REQUIRES_REVIEW');
+        await conn.query('DELETE FROM JAVIER.TEST_BOLSA_COMERCIAL WHERE ID=?', [bolsa.ID]);
+      } else {
+        const before = baseline.bolsas.get(Number(bolsa.ID));
+        const current = (await conn.query('SELECT SALDO_DISPONIBLE, CONSUMIDO, ACUMULADO FROM JAVIER.TEST_BOLSA_COMERCIAL WHERE ID=?', [bolsa.ID]))[0];
+        for (const column of ['SALDO_DISPONIBLE', 'CONSUMIDO', 'ACUMULADO']) {
+          if (cents(current[column]) !== cents(before[column])) throw new Error('CONCURRENT_BOLSA_USE_REQUIRES_REVIEW');
+        }
+        await conn.query('UPDATE JAVIER.TEST_BOLSA_COMERCIAL SET UPDATED_AT=? WHERE ID=?', [before.UPDATED_AT, bolsa.ID]);
+      }
+    }
+    const allocated = discovered.map(row => Number(row.NUMEROPEDIDO)).sort((a, b) => a - b);
+    if (allocated.length) {
+      const initial = Number(baseline.sequence?.ULTIMO_NUMERO || 0);
+      const expected = initial + allocated.length;
+      if (allocated.some((number, index) => number !== initial + index + 1)) throw new Error('CONCURRENT_SEQUENCE_ALLOCATION');
+      const current = await conn.query('SELECT ULTIMO_NUMERO FROM JAVIER.TEST_PEDIDOS_SEQ WHERE EJERCICIO=?', [baseline.year]);
+      if (Number(current[0]?.ULTIMO_NUMERO) !== expected) throw new Error('CONCURRENT_SEQUENCE_ALLOCATION');
+      if (baseline.sequence) await conn.query('UPDATE JAVIER.TEST_PEDIDOS_SEQ SET ULTIMO_NUMERO=? WHERE EJERCICIO=? AND ULTIMO_NUMERO=?', [initial, baseline.year, expected]);
+      else await conn.query('DELETE FROM JAVIER.TEST_PEDIDOS_SEQ WHERE EJERCICIO=? AND ULTIMO_NUMERO=?', [baseline.year, expected]);
+    }
+    await conn.query('COMMIT');
+  } catch (error) {
+    await conn.query('ROLLBACK');
+    throw error;
+  } finally { await conn.close(); }
   for (const id of orderIds) {
-    await q('DELETE FROM JAVIER.TEST_PEDIDOS_LIN WHERE PEDIDO_ID=?', [id]);
-    await q('DELETE FROM JAVIER.TEST_PEDIDOS_CAB WHERE ID=? AND OBSERVACIONES LIKE ?', [id, `${SESSION}%`]);
+    for (const table of ['TEST_PEDIDOS_LIN', 'TEST_PEDIDOS_STOCK_RESERVE', 'TEST_PEDIDO_IDEMPOTENCY', 'TEST_MOVIMIENTOS_BOLSA']) {
+      const count = await q(`SELECT COUNT(*) AS N FROM JAVIER.${table} WHERE PEDIDO_ID=?`, [id]);
+      must(`cleanup_${table}_${id}`, Number(count[0]?.N) === 0, { remaining: Number(count[0]?.N) });
+    }
   }
+  const sequenceAfter = (await q('SELECT ULTIMO_NUMERO FROM JAVIER.TEST_PEDIDOS_SEQ WHERE EJERCICIO=?', [baseline.year]))[0] || null;
+  must('cleanup_sequence_restored', JSON.stringify(sequenceAfter) === JSON.stringify(baseline.sequence));
   const left = await q('SELECT COUNT(*) AS N FROM JAVIER.TEST_PEDIDOS_CAB WHERE OBSERVACIONES LIKE ?', [`${SESSION}%`]);
   must('cleanup_zero_rows', Number(left[0]?.N) === 0, { session: SESSION, orders: orderIds.size, tokens: tokens.size, remaining: Number(left[0]?.N) });
 }
@@ -126,7 +196,14 @@ async function orderFlow(auth, repAuth) {
     must(`A_create_${suffix}`, [200, 201].includes(response.status) && !!id, detail(response));
     const stored = await q('SELECT * FROM JAVIER.TEST_PEDIDOS_LIN WHERE PEDIDO_ID=?', [id]);
     const headers = await q('SELECT IMPORTETOTAL,IMPORTEBASE,IMPORTEIVA FROM JAVIER.TEST_PEDIDOS_CAB WHERE ID=?', [id]);
-    check(`A_promo_engine_${suffix}`, stored.length > 1 && stored.some(r => Number(r.PRECIOVENTA ?? r.PRECIO) === 0),
+    const gifts = stored.filter(r => String(r.TIPOLINEA).trim() === 'G');
+    const giftQuantity = gifts.reduce((sum, r) => sum + Number(r.CANTIDADENVASES || 0), 0);
+    const base = stored.reduce((sum, r) => sum + Number(r.IMPORTEVENTA || 0), 0);
+    check(`A_promo_engine_${suffix}`, giftQuantity === Number(promo.giftQty)
+      && gifts.every(r => Number(r.PRECIOVENTA) === 0 && Number(r.IMPORTEVENTA) === 0)
+      && cents(headers[0].IMPORTEBASE) === cents(base)
+      && cents(headers[0].IMPORTETOTAL) === cents(base + Number(headers[0].IMPORTEIVA))
+      && gifts.some(r => Number(r.PRECIOTARIFA) > 0),
       { requestPaidLines: 1, storedLines: stored.map(r => Object.fromEntries(Object.entries(r).filter(([k]) => k === k.toUpperCase()))), totals: headers });
     const confirmed = await api('PUT', `/pedidos/${id}/confirm`, auth, { saleType: 'CC', deliveryDate,
       vehicleCode: options.vehicleCode, driverCode: driver, routeCode: options.routeCode, cobroEnMano: cash });
@@ -141,7 +218,7 @@ async function orderFlow(auth, repAuth) {
   const assignedDriver = String(assigned.cab.CODIGOREPARTIDOR || '').trim();
   must('A_driver_assignment', !!assignedDriver && !String(cash.cab.CODIGOREPARTIDOR || '').trim(), { assignedDriver });
   const overlay = await api('GET', `/entregas/pendientes/${assignedDriver}?date=${deliveryDate}&limit=500`, repAuth);
-  const rows = overlay.body.entregas || overlay.body.data || [];
+  const rows = overlay.body.albaranes || overlay.body.entregas || overlay.body.data || [];
   const contains = (id) => rows.some(r => r.documentoTipo === 'PEDIDO' && (String(r.pedidoId || r.id).includes(String(id))));
   check('A_assigned_overlay_only', overlay.status === 200 && contains(assigned.id) && !contains(cash.id),
     { status: overlay.status, ms: overlay.ms, date: deliveryDate, assigned: assigned.id, cash: cash.id, pedidos: rows.filter(r => r.documentoTipo === 'PEDIDO') });
@@ -152,6 +229,9 @@ async function orderFlow(auth, repAuth) {
     formaPago: 'CONTADO', observaciones: `${SESSION} entrega futura`, idempotencyToken: marker('futurepay') });
   check('F_pay_today_deliver_future', deliveryDate > TODAY && payment.status === 200 && payment.body.payment?.pendingAfter === 0,
     { date: deliveryDate, today: TODAY, ...detail(payment) });
+  const overlayPaid = await api('GET', `/entregas/pendientes/${assignedDriver}?date=${deliveryDate}&limit=500`, repAuth);
+  const paidRows = overlayPaid.body.albaranes || [];
+  check('F_paid_order_still_pending_delivery', overlayPaid.status === 200 && paidRows.some(row => row.documentoTipo === 'PEDIDO' && Number(row.pedidoId) === Number(assigned.id)), { status: overlayPaid.status, ms: overlayPaid.ms, id: assigned.id });
 }
 async function paymentFlow(auth, repAuth) {
   const client = '4300032729';
@@ -182,6 +262,12 @@ async function paymentFlow(auth, repAuth) {
   const payload = commercial(first, marker('partial'), amount);
   const paid = await api('POST', `/cobros/${client}/registrar`, auth, payload);
   must('B_partial', paid.status === 200 && paid.body.payment?.pendingAfter > 0, detail(paid));
+  const history = await api('GET', `/cobros/${client}/historico?limit=100&offset=0`, auth);
+  const historyPayment = history.body.historico?.find(row => row.id === paid.body.payment.id);
+  check('B_history_after_payment', history.status === 200 && !!historyPayment
+    && historyPayment.codigoCliente === client && cents(historyPayment.importe) === cents(amount)
+    && historyPayment.referencia === first.docKey.reference && historyPayment.observaciones === SESSION,
+  { status: history.status, ms: history.ms, payment: historyPayment });
   const replay = await api('POST', `/cobros/${client}/registrar`, auth, payload);
   check('B_idempotency_replay', replay.status === 200 && replay.body.payment?.idempotent === true, detail(replay));
   const conflict = await api('POST', `/cobros/${client}/registrar`, auth, { ...payload, importe: amount + 0.01 });
@@ -194,6 +280,8 @@ async function paymentFlow(auth, repAuth) {
     { status: after.status, ms: after.ms, before: first.importePendiente, amount, after: rest?.importePendiente });
   const cross = await api('POST', '/repartidor-finanzas/cobros', repAuth, repPayload(first, marker('cross1')));
   check('C_commercial_then_driver_409', cross.status === 409 && /COMMERCIAL_CONFLICT|COLLECTED_BY_COMERCIAL/.test(cross.body.code || ''), detail(cross));
+  // Driver success automatically sends SMTP in this runtime. Require an explicit opt-in.
+  if (process.env.GMP_HIT_ALLOW_NOTIFICATIONS === 'true') {
   const driverPayment = await api('POST', '/repartidor-finanzas/cobros', repAuth, repPayload(second, marker('driverfirst')));
   must('C_driver_payment', [200, 201].includes(driverPayment.status) && driverPayment.body.success !== false, detail(driverPayment));
   const reverse = await api('POST', `/cobros/${client}/registrar`, auth, commercial(second, marker('cross2'), 1));
@@ -203,14 +291,19 @@ async function paymentFlow(auth, repAuth) {
     api('POST', '/repartidor-finanzas/cobros', repAuth, repPayload(third, marker('racer'))),
   ]);
   check('C_concurrent_one_winner', concurrent.filter(r => [200, 201].includes(r.status)).length === 1 && concurrent.filter(r => r.status === 409).length === 1, { responses: concurrent });
+  } else {
+    console.log(JSON.stringify({ skipped: ['C_driver_then_commercial_409', 'C_concurrent_one_winner'], reason: 'Driver success triggers SMTP; prior session evidence is strict-payments-fourth.jsonl' }));
+  }
   await liquidationFlow(auth, amount);
 }
 async function liquidationFlow(auth, amount) {
   const existing = await q('SELECT ID FROM JAVIER.TEST_LIQUIDACION_COMERCIAL WHERE CODIGO_VENDEDOR=CAST(? AS CHAR(2)) AND FECHA=?', ['35', TODAY]);
   must('D_day_not_preexisting', existing.length === 0, { date: TODAY });
   const before = await api('GET', `/comercial-liquidacion/resumen-diario?vendedor=35&fecha=${TODAY}`, auth);
-  const saved = await api('POST', '/comercial-liquidacion/guardar', auth, { vendedor: '35', fecha: TODAY, ingresoBanco: amount, entregado: 0,
-    expectedTotal: amount, idempotencyToken: marker('liquidation') });
+  const expectedAmount = Number(before.body.summary?.totalAIngresar);
+  must('D_total_after_all_payments', before.status === 200 && Number.isFinite(expectedAmount) && expectedAmount >= amount, { expectedAmount, partial: amount });
+  const saved = await api('POST', '/comercial-liquidacion/guardar', auth, { vendedor: '35', fecha: TODAY, ingresoBanco: expectedAmount, entregado: 0,
+    expectedTotal: expectedAmount, idempotencyToken: marker('liquidation') });
   must('D_save_after_payment', saved.status === 201 && saved.body.saved?.source === 'JAVIER.TEST_LIQUIDACION_COMERCIAL', detail(saved));
   const pg = await api('GET', '/comercial-liquidacion/ya-cobrados-pg?vendedor=35', auth);
   const document = pg.body.documents?.find(d => d.yaCobrada === true && Number(d.formaPagoDias) > 0);

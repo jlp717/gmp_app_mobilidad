@@ -7,7 +7,7 @@ describe('buildCvcVendorScopeFilter', () => {
     const scoped = buildCvcVendorScopeFilter('35');
     expect(scoped.clause).toMatch(/AND CVC\.CODIGOVENDEDOR IN \(/);
     expect(scoped.clause).not.toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)/);
-    expect(scoped.clause).toContain("'35'");
+    expect(scoped.params).toEqual(['35']);
   });
 
   test('never emits WHERE VENDEDOR=ALL', () => {

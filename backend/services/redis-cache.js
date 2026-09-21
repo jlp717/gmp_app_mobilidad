@@ -102,7 +102,6 @@ class RedisCacheService {
             invalidations: 0,
             byNamespace: {},
         };
-        this._ensureReconnectWatchdog();
     }
 
     _ensureReconnectWatchdog() {

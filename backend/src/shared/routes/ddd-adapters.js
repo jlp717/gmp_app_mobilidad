@@ -172,7 +172,7 @@ function buildClientSearchFilter(safeSearch, alias = 'C') {
   };
 }
 
-function buildChunkedClientCodeFilter(column, codes) {
+function buildChunkedClientCodeFilter(column, codes, params = []) {
   const cleanCodes = (Array.isArray(codes) ? codes : [])
     .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, ''))
     .filter(Boolean);
@@ -181,7 +181,9 @@ function buildChunkedClientCodeFilter(column, codes) {
   const CHUNK_SIZE = 1000;
   const chunks = [];
   for (let i = 0; i < cleanCodes.length; i += CHUNK_SIZE) {
-    const chunk = cleanCodes.slice(i, i + CHUNK_SIZE).map(code => `'${code}'`).join(',');
+    const values = cleanCodes.slice(i, i + CHUNK_SIZE);
+    params.push(...values);
+    const chunk = values.map(() => 'CAST(? AS CHAR(10))').join(',');
     chunks.push(`${column} IN (${chunk})`);
   }
   return `AND (${chunks.join(' OR ')})`;
@@ -1135,7 +1137,7 @@ function createPedidosRoutes() {
       const where = [`TRIM(L.LCCDRF) = ?`, `L.LCTPVT IN ('CC','VC')`,
                      `L.LCCLLN IN ('VT','AB')`, `L.LCSRAB NOT IN ('N','Z','G','D')`];
       const params = [productCode];
-      if (clientCode) { where.push('TRIM(L.LCCDCL) = ?'); params.push(clientCode); }
+      if (clientCode) { where.push('L.LCCDCL = CAST(? AS CHAR(10))'); params.push(clientCode); }
       if (scopedVendorCodes.length > 0) {
         where.push(`TRIM(L.LCCDVD) IN (${scopedVendorCodes.map(() => '?').join(',')})`);
         params.push(...scopedVendorCodes);
@@ -1346,9 +1348,9 @@ function createPedidosRoutes() {
           COALESCE(SUM(L.LCIMVT), 0) AS SALES,
           COALESCE(SUM(L.LCIMCT), 0) AS COST,
           COALESCE(SUM(L.LCCTUD), 0) AS UNITS
-        FROM ${comercialErpTable('LAC')} L
-        WHERE TRIM(L.LCCDCL) = ?
-          AND TRIM(L.CODIGOARTICULO) = ?
+        FROM ${comercialErpTable('LACLAE')} L
+        WHERE L.LCCDCL = CAST(? AS CHAR(10))
+          AND TRIM(L.LCCDRF) = ?
           AND L.LCAADC >= ?
           AND L.LCTPVT IN ('CC', 'VC')
           AND L.LCCLLN IN ('AB', 'VT')
@@ -1532,18 +1534,12 @@ function createPedidosRoutes() {
 
       if (!isAllVendor) {
         const vendors = vendor.split(',').map(v => v.trim()).filter(Boolean);
-        if (vendors.length > 0 && vendors.length <= 50) {
+        if (vendors.length > 0) {
           filters.push(`TRIM(L.LCCDVD) IN (${vendors.map(() => '?').join(',')})`);
           filterParams.push(...vendors);
-        } else if (vendors.length > 50) {
-          const safe = vendors
-            .filter(v => /^[A-Za-z0-9]{1,10}$/.test(v))
-            .map(v => `'${v.replace(/'/g, "''")}'`)
-            .join(',');
-          if (safe) filters.push(`TRIM(L.LCCDVD) IN (${safe})`);
         }
       }
-      if (clientCode) { filters.push(`TRIM(L.LCCDCL) = ?`); filterParams.push(clientCode); }
+      if (clientCode) { filters.push(`L.LCCDCL = CAST(? AS CHAR(10))`); filterParams.push(clientCode); }
       if (productCode) { filters.push(`TRIM(L.LCCDRF) = ?`); filterParams.push(productCode); }
       if (familia) { filters.push(`TRIM(L.LCCDRF) IN (SELECT TRIM(CODIGOARTICULO) FROM ${comercialErpTable('ART')} WHERE TRIM(CODIGOFAMILIA) = ?)`); filterParams.push(familia); }
       if (marca) { filters.push(`TRIM(L.LCCDRF) IN (SELECT TRIM(CODIGOARTICULO) FROM ${comercialErpTable('ART')} WHERE TRIM(CODIGOMARCA) = ?)`); filterParams.push(marca); }
@@ -1803,9 +1799,9 @@ function createPedidosRoutes() {
       const cacheSecurityScope = buildCacheSecurityScope(req, { includeMargin: false });
       const cacheKey = `ddd:client-evolution:${cacheSecurityScope}:${clientCode}:${vendorScope.codes.join(',') || 'ALL'}:${startYear}:${currentYear}`;
       await withCache(cache, cacheKey, TTL_MS.CLIENT_EVOLUTION, async () => {
-        const monthlyDataSql = [`SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS FROM ${comercialErpTable('LACLAE')} L WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)`, laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC ASC, L.LCMMDC ASC'].join(' ');
-        const topProductsDataSql = [`SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME, SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS FROM ${comercialErpTable('LACLAE')} L LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)`, laclaeVendorFilter.clause, 'GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY TOTAL_SALES DESC FETCH FIRST 20 ROWS ONLY'].join(' ');
-        const returnsDataSql = [`SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME, SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT FROM ${comercialErpTable('LACLAE')} L LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND (L.LCSRAB = ? OR L.LCTPVT = ?)`, laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC FETCH FIRST 50 ROWS ONLY'].join(' ');
+        const monthlyDataSql = [`SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS FROM ${comercialErpTable('LACLAE')} L WHERE L.LCCDCL = CAST(? AS CHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)`, laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC ASC, L.LCMMDC ASC'].join(' ');
+        const topProductsDataSql = [`SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME, SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS FROM ${comercialErpTable('LACLAE')} L LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO WHERE L.LCCDCL = CAST(? AS CHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)`, laclaeVendorFilter.clause, 'GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY TOTAL_SALES DESC FETCH FIRST 20 ROWS ONLY'].join(' ');
+        const returnsDataSql = [`SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME, SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT FROM ${comercialErpTable('LACLAE')} L LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO WHERE L.LCCDCL = CAST(? AS CHAR(10)) AND L.LCAADC >= ? AND (L.LCSRAB = ? OR L.LCTPVT = ?)`, laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC FETCH FIRST 50 ROWS ONLY'].join(' ');
         const [monthlyData, topProductsData, returnsData] = await Promise.all([
           queryWithParams(monthlyDataSql, [clientCode, startYear, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]),
           queryWithParams(topProductsDataSql, [clientCode, currentYear - 1, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]),
@@ -1940,6 +1936,12 @@ function createPedidosRoutes() {
         });
       }
       logger.error(`[DDD-PEDIDOS] Error in POST /create: ${error.message}`);
+      if (error.code === 'MIN_COBRO_ORDER_BLOCKED') {
+        return res.status(403).json({ success: false, code: error.code, error: error.message, details: error.details });
+      }
+      if (error.code === 'INVALID_PROMOTION_GIFT' || error.code === 'GIFT_SELECTION_REQUIRED') {
+        return res.status(409).json({ success: false, code: error.code, error: error.message });
+      }
       sendInternalServerError(res);
     }
   });
@@ -2776,17 +2778,18 @@ function createClientsRoutes() {
       const fetchClients = async () => {
         const vendorFilter = buildVendedorFilterLACLAE(vendedorCodes);
         let clientCodesFilter = '';
+        const clientCodeParams = [];
         if (vendedorCodes && !safeSearch && vendedorCodes !== 'ALL') {
           const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
-          if (cachedClientCodes && cachedClientCodes.length > 0) {
-            clientCodesFilter = buildChunkedClientCodeFilter('C.CODIGOCLIENTE', cachedClientCodes);
+          if (cachedClientCodes && cachedClientCodes.length > 0 && cachedClientCodes.length <= 40) {
+            clientCodesFilter = buildChunkedClientCodeFilter('C.CODIGOCLIENTE', cachedClientCodes, clientCodeParams);
           }
         }
 
         const searchClause = buildClientSearchFilter(safeSearch, 'C');
-        const queryParams = searchClause.params;
+        let queryParams = searchClause.params;
 
-        if (!safeSearch) {
+        {
           if (!isCacheReady()) {
             const notReady = new Error('LACLAE cache not ready');
             notReady.code = 'ROUTE_FILL_BUSY';
@@ -2794,17 +2797,32 @@ function createClientsRoutes() {
           }
           const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
           if (Array.isArray(cachedClientCodes) && cachedClientCodes.length > 0) {
-            const pageCodes = [...new Set(cachedClientCodes.map(c => sanitizeForSQL(c)).filter(Boolean))]
-              .sort()
-              .slice(safeOffset, safeOffset + safeLimit);
+            let scopedCodes = [...new Set(cachedClientCodes.map(c => sanitizeForSQL(c)).filter(Boolean))].sort();
+            const matchingClients = await queryWithParams(`
+              SELECT C.CODIGOCLIENTE AS CODE FROM ${comercialErpTable('CLI')} C
+               WHERE C.ANOBAJA = 0 ${searchClause.clause}
+            `, searchClause.params, false);
+            const matchingCodes = new Set(matchingClients.map(row => String(row.CODE ?? row.code ?? '').trim()));
+            scopedCodes = scopedCodes.filter(code => matchingCodes.has(code));
+            const pageCodes = scopedCodes.slice(safeOffset, safeOffset + safeLimit);
 
             if (pageCodes.length === 0) {
-              return { success: true, clients: [], count: cachedClientCodes.length, isAllQuery };
+              return { success: true, clients: [], count: scopedCodes.length, isAllQuery };
             }
 
-            const placeholders = pageCodes.map(() => '?').join(',');
+            const placeholders = '__CLIENT_PAGE_BINDS__';
+            const queryClientPage = async (sql, prefix = []) => {
+              const rows = [];
+              for (let offset = 0; offset < pageCodes.length; offset += 50) {
+                const codes = pageCodes.slice(offset, offset + 50);
+                rows.push(...await queryWithParams(
+                  sql.replace(placeholders, codes.map(() => 'CAST(? AS CHAR(10))').join(',')),
+                  [...prefix, ...codes], false));
+              }
+              return rows;
+            };
             const [detailRows, statRows, lastRows] = await Promise.all([
-              queryWithParams(`
+              queryClientPage(`
                 SELECT
                   C.CODIGOCLIENTE as code,
                   COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) as name,
@@ -2821,8 +2839,8 @@ function createClientsRoutes() {
                 FROM ${comercialErpTable('CLI')} C
                 WHERE C.ANOBAJA = 0
                   AND C.CODIGOCLIENTE IN (${placeholders})
-              `, pageCodes, false),
-              queryWithParams(`
+              `),
+              queryClientPage(`
                 SELECT
                   L.LCCDCL AS CLIENT_CODE,
                   SUM(L.LCIMVT) AS TOTAL_PURCHASES,
@@ -2837,8 +2855,8 @@ function createClientsRoutes() {
                   AND L.LCSRAB NOT IN ('N', 'Z')
                   AND L.LCCDCL IN (${placeholders})
                 GROUP BY L.LCCDCL
-              `, [MIN_YEAR, ...pageCodes], false),
-              queryWithParams(`
+              `, [MIN_YEAR]),
+              queryClientPage(`
                 SELECT CLIENT_CODE, LAST_VENDOR FROM (
                   SELECT
                     L.LCCDCL AS CLIENT_CODE,
@@ -2855,7 +2873,7 @@ function createClientsRoutes() {
                     AND L.LCSRAB NOT IN ('N', 'Z')
                     AND L.LCCDCL IN (${placeholders})
                 ) X WHERE RN = 1
-              `, [MIN_YEAR, ...pageCodes], false),
+              `, [MIN_YEAR]),
             ]);
 
             const vendorCodesForNames = [...new Set(lastRows
@@ -2919,17 +2937,22 @@ function createClientsRoutes() {
               })
               .filter(Boolean);
 
-            return { success: true, clients: fastClients, count: cachedClientCodes.length, isAllQuery, fastPath: true };
+            return { success: true, clients: fastClients, count: scopedCodes.length, isAllQuery, fastPath: true };
           }
         }
 
+        const scopedCliParams = [];
+        const boundedLacParams = [];
         const vendorScopedCliFilter = clientCodesFilter
           ? ''
-          : buildClientListVendorSqlFilter(vendedorCodes, 'C');
+          : buildClientListVendorSqlFilter(vendedorCodes, 'C', scopedCliParams);
         const laclaeBoundedFilter = clientCodesFilter
           ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL')
-          : buildLaclaeBoundedClientCodesSql(vendedorCodes);
+          : buildLaclaeBoundedClientCodesSql(vendedorCodes, boundedLacParams);
         const laclaeScopeFilter = laclaeBoundedFilter || vendorFilter.replace(/L\./g, '');
+        queryParams = clientCodesFilter
+          ? [...clientCodeParams, ...clientCodeParams, ...searchClause.params]
+          : [...boundedLacParams, ...scopedCliParams, ...searchClause.params];
 
         const clients = await cachedQuery((sql, params = []) => queryWithParams(sql, params, false), `
           WITH LACLAE_SCOPED AS (

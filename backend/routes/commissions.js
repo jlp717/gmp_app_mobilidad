@@ -1225,10 +1225,10 @@ async function batchFetchVendorDataChunked(vendorCodes, year) {
  * Holidays are excluded.
  */
 function calculateWorkingDays(year, month, activeWeekDays) {
-    // If no active days specified (e.g. ALL view), assume Tue-Sat (most vendors work these days)
+    // The company calendar defaults to Monday through Saturday.
     const effectiveDays = (activeWeekDays && activeWeekDays.length > 0)
         ? activeWeekDays
-        : ['VIS_L', 'VIS_M', 'VIS_X', 'VIS_J', 'VIS_V']; // Lunes-Viernes as company standard
+        : ['VIS_L', 'VIS_M', 'VIS_X', 'VIS_J', 'VIS_V', 'VIS_S']; // Lunes-Sabado as company standard
 
 
     const start = new Date(year, month - 1, 1);
@@ -1367,7 +1367,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         'jueves': 'VIS_J', 'viernes': 'VIS_V', 'sabado': 'VIS_S', 'domingo': 'VIS_D'
     };
     const rawDays = getVendorActiveDaysFromCache(vendedorCode);
-    let activeDays = ['VIS_L', 'VIS_M', 'VIS_X', 'VIS_J', 'VIS_V']; // Default to company calendar
+    let activeDays = ['VIS_L', 'VIS_M', 'VIS_X', 'VIS_J', 'VIS_V', 'VIS_S']; // Default to company calendar
     if (rawDays && rawDays.length > 0) {
         activeDays = rawDays.map(d => dayMap[d]).filter(d => d);
         logger.debug(`📅 Vendor ${vendedorCode} using ${activeDays.length} days from LACLAE cache`);
@@ -3393,6 +3393,7 @@ module.exports = {
     initCommissionTables,
     _private: {
         calculateVendorData,
+        calculateWorkingDays,
         getCurrentPaymentSnapshot,
         getCachedPaymentSnapshot,
         getMonthPaymentSnapshotFromDb,

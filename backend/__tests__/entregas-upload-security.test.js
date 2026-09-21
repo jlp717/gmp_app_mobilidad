@@ -247,7 +247,7 @@ describe('delivery detail identity and ownership', () => {
     const [sql, params] = mockQueryWithParams.mock.calls[0];
     expect(sql).toMatch(/OPP\.SUBEMPRESA\s*=\s*CPC\.SUBEMPRESAPEDIDO/i);
     expect(sql).not.toMatch(/FETCH FIRST 1 ROWS ONLY/i);
-    expect(params).toEqual(['404', '2026', '4300009479', 'S', '10']);
+    expect(params).toEqual([404, 2026, '4300009479', 'S', 10]);
   });
 
   test('enforces the resolved delivery owner after the complete identity lookup', async () => {

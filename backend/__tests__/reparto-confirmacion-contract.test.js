@@ -231,7 +231,7 @@ describe('canonical reparto confirmation contract', () => {
     expect(mockConfirmRuteroDelivery).not.toHaveBeenCalled();
   });
 
-  test('fails closed with 403 when a repartidor token lacks signed reparto claims', async () => {
+  test('accepts a repartidor own delivery when identity is signed but fleet list is omitted', async () => {
     mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
 
     const res = await request(makeApp())
@@ -239,12 +239,11 @@ describe('canonical reparto confirmation contract', () => {
       .set('Idempotency-Key', 'delivery-2026-S-10-404-missing-fleet')
       .send({ delivery: deliveryPayload(), cobro: paymentPayload() });
 
-    expect(res.status).toBe(403);
-    expect(res.body).toMatchObject({
-      success: false,
-      code: 'DELIVERY_OWNERSHIP_REQUIRED',
-    });
-    expect(mockConfirmRuteroDelivery).not.toHaveBeenCalled();
+    expect(res.status).toBe(201);
+    expect(mockConfirmRuteroDelivery).toHaveBeenCalledWith(expect.objectContaining({
+      actor: expect.objectContaining({ repartidorId: '94' }),
+      delivery: expect.objectContaining({ repartidorId: '94' }),
+    }), { signal: expect.any(AbortSignal) });
   });
   test('blocks an authenticated repartidor from confirming for another repartidor', async () => {
     mockConfirmRuteroDelivery.mockRejectedValueOnce(Object.assign(

@@ -6,8 +6,8 @@ const logger = require('../middleware/logger');
 const { query, queryWithParams } = require('../middleware/db-timing');
 const {
     getCurrentDate,
-    buildVendedorFilter,
-    buildColumnaVendedorFilter,
+    buildBoundVendorFilter,
+    buildBoundLaclaeVendorFilter,
     getVendorColumn,
     MIN_YEAR,
     LAC_SALES_FILTER,
@@ -152,7 +152,7 @@ async function getClientsMonthlySales(clientCodes, year) {
     const safeCodes = clientCodes.map(c => sanitizeForSQL(c));
 
     const rows = await queryWithParams(`
-        SELECT 
+        SELECT
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES,
             SUM(L.LCIMCT) as COST,
@@ -612,7 +612,7 @@ async function applyConfiguredObjectiveRebalances(year, monthlyTargets, vendorCo
 async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
     const currentYear = Math.max(...yearsArray);
     const uniqueYears = [...new Set([...yearsArray, ...yearsArray.map(y => y - 1)])];
-    const vendedorFilter = buildColumnaVendedorFilter(vendorCode, uniqueYears, 'L');
+    const vendedorFilter = buildBoundLaclaeVendorFilter(vendorCode, 'L');
 
     const rows = await queryWithParams(`
         SELECT
@@ -624,9 +624,9 @@ async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
         FROM ${comercialErpTable('LACLAE')} L
         WHERE L.LCAADC IN (${uniqueYears.map(() => '?').join(',')})
           AND ${LACLAE_SALES_FILTER}
-          ${vendedorFilter}
+          ${vendedorFilter.clause}
         GROUP BY L.LCAADC, L.LCMMDC
-    `, uniqueYears, false);
+    `, [...uniqueYears, ...vendedorFilter.params], false);
 
     await addBSalesToRows(rows, [vendorCode], uniqueYears);
 
@@ -793,7 +793,7 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
             if (cachedRows) return cachedRows;
         }
         const rows = await queryWithParams(`
-            SELECT 
+            SELECT
                 L.LCAADC as YEAR,
                 L.LCMMDC as MONTH,
                 SUM(L.LCIMVT) as SALES,
@@ -852,7 +852,7 @@ router.get('/', verifyToken, requireVendorQueryScope, async (req, res) => {
         const now = getCurrentDate();
         const targetYear = parseInt(year) || now.getFullYear();
         const targetMonth = parseInt(month) || (now.getMonth() + 1);
-        const vendedorFilter = buildVendedorFilter(vendedorCodes);
+        const vendedorFilter = buildBoundVendorFilter(vendedorCodes, 'CODIGOVENDEDOR');
 
         // 1. Get Target Configuration (Global % increase)
         const targetPct = await getVendorTargetConfig(vendedorCodes);
@@ -891,7 +891,7 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
                 const cmvResult = await queryWithParams(`
                     SELECT COALESCE(IMPORTEOBJETIVO, 0) as objetivo,
                            COALESCE(PORCENTAJEOBJETIVO, 0) as porcentaje
-                    FROM ${comercialErpTable('CMV')} 
+                    FROM ${comercialErpTable('CMV')}
                     WHERE CODIGOVENDEDOR = ?
                 `, [code], false);
 
@@ -902,8 +902,8 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
                         salesObjective = cmvObjective;
                         objectiveSource = 'database';
                     }
-                    // Note: We ignore cmvPercentage here and use our new JAVIER.OBJ_CONFIG logic 
-                    // unless you strictly want to fallback to CMV percentage. 
+                    // Note: We ignore cmvPercentage here and use our new JAVIER.OBJ_CONFIG logic
+                    // unless you strictly want to fallback to CMV percentage.
                     // User requested "dynamic" from their new table, so we prioritize that flow below.
                 }
             } catch (e) {
@@ -918,16 +918,16 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
                     COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
                     COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
                 FROM ${comercialErpTable('LAC')} L
-                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter}
-            `, [targetYear, targetMonth]),
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter.clause}
+            `, [targetYear, targetMonth, ...vendedorFilter.params]),
             queryWithParams(`
                 SELECT
                     COALESCE(SUM(IMPORTEVENTA), 0) as sales,
                     COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
                     COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
                 FROM ${comercialErpTable('LAC')}
-                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter}
-            `, [targetYear - 1, targetMonth]),
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter.clause}
+            `, [targetYear - 1, targetMonth, ...vendedorFilter.params]),
         ]);
 
         const curr = currentMetrics[0] || {};
@@ -1015,38 +1015,10 @@ function buildEvolutionRouteCacheKey(effectiveVendorCodes, years, now = getCurre
 // =============================================================================
 // OBJECTIVES EVOLUTION
 // =============================================================================
-router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) => {
-    try {
-        const { vendedorCodes, years } = req.query;
-        const effectiveVendorCodes = scopeVendorCodesForUser(req.user?.code, vendedorCodes);
-        const now = getCurrentDate();
-        const { calculateWorkingDays, calculateDaysPassed } = require('../utils/common');
-        const { getVendorActiveDaysFromCache } = require('../services/laclae');
+async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArray, forceRefresh, now }) {
+    const { calculateWorkingDays, calculateDaysPassed } = require('../utils/common');
+    const { getVendorActiveDaysFromCache } = require('../services/laclae');
 
-        // PERF: Route-level cache for evolution data
-        const evolutionCache = buildEvolutionRouteCacheKey(effectiveVendorCodes, years, now);
-        const cacheKey = evolutionCache.key;
-        const evolutionMeta = { bucket: evolutionCache.bucket, ttl: evolutionCache.ttl };
-        const yearsArrayPreview = evolutionCache.yearsArray;
-        const forceRefresh = isCacheBypassRequest(req);
-        if (!forceRefresh) {
-            const cachedResult = await redisCache.get('route', cacheKey);
-            if (cachedResult) {
-                logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution (${cacheKey})`);
-                return res.json(cachedResult);
-            }
-        }
-        const stampede = await beginRouteFill(cacheKey);
-        if (!forceRefresh && stampede.hit) {
-            logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution after wait (${cacheKey})`);
-            return res.json(stampede.hit);
-        }
-        if (!forceRefresh && stampede.busy) {
-            return sendFillBusy(res);
-        }
-        try {
-
-        const yearsArray = yearsArrayPreview;
 
         // Include previous years for dynamic objective calculation
         const allYears = [...yearsArray, ...yearsArray.map(y => y - 1)];
@@ -1054,9 +1026,9 @@ router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) 
         const yearsFilter = uniqueYears.join(',');
         const vendorCodesArray = parseVendorCodes(effectiveVendorCodes);
 
-        // Get Active Days for calculating pace 
-        // Logic: if multiple vendors selected, we might average or select first? 
-        // User is usually viewing ONE vendor or ALL. 
+        // Get Active Days for calculating pace
+        // Logic: if multiple vendors selected, we might average or select first?
+        // User is usually viewing ONE vendor or ALL.
         // If ALL, standard days. If specific, specific days.
         let activeWeekDays = [];
         if (vendorCodesArray.length === 1) {
@@ -1113,7 +1085,7 @@ router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) 
 
             if (missingMonths.length > 0) {
                 // Vendor is "new" or has incomplete history - load inherited sales
-                logger.info(`[OBJECTIVES] Vendor ${vendedorCodes} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
+                logger.info(`[OBJECTIVES] Vendor ${effectiveVendorCodes} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
 
                 const firstCode = vendorCodesArray[0];
                 const currentClients = await getVendorCurrentClients(firstCode, currentYear);
@@ -1338,15 +1310,38 @@ router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) 
             monthNames: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
         };
 
-        // PERF: Cache the result (5 min for specific vendor, 10 min for ALL)
-        await redisCache.set('route', cacheKey, responseData, evolutionMeta.ttl);
-        logger.info(`[OBJECTIVES] 💾 Cached evolution (${cacheKey})`);
+    return responseData;
+}
 
-        res.json(responseData);
-        } finally {
-            await endRouteFill(cacheKey, stampede.lock);
-        }
+async function getObjectivesEvolutionCached({ effectiveVendorCodes, years, forceRefresh = false, now = getCurrentDate() }) {
+    const cache = buildEvolutionRouteCacheKey(effectiveVendorCodes, years, now);
+    if (!forceRefresh) {
+        const cached = await redisCache.get('route', cache.key);
+        if (cached) return { kind: 'data', data: cached };
+    }
+    const stampede = await beginRouteFill(cache.key);
+    if (!forceRefresh && stampede.hit) return { kind: 'data', data: stampede.hit };
+    if (!forceRefresh && stampede.busy) return { kind: 'busy' };
+    try {
+        const data = await buildObjectivesEvolutionResponse({
+            effectiveVendorCodes, yearsArray: cache.yearsArray, forceRefresh, now,
+        });
+        await redisCache.set('route', cache.key, data, cache.ttl);
+        return { kind: 'data', data };
+    } finally {
+        await endRouteFill(cache.key, stampede.lock);
+    }
+}
 
+router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) => {
+    try {
+        const result = await getObjectivesEvolutionCached({
+            effectiveVendorCodes: scopeVendorCodesForUser(req.user?.code, req.query.vendedorCodes),
+            years: req.query.years,
+            forceRefresh: isCacheBypassRequest(req),
+        });
+        if (result.kind === 'busy') return sendFillBusy(res);
+        return res.json(result.data);
     } catch (error) {
         handleRouteError(error, res, 'Error obteniendo evolución de objetivos', 500);
     }
@@ -1404,11 +1399,11 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
 
         const [contactRows, notesRows] = await Promise.all([
             queryWithParams(`
-                SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2 
+                SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2
                 FROM ${comercialErpTable('CLI')} WHERE CODIGOCLIENTE = ? FETCH FIRST 1 ROWS ONLY
             `, [clientCode]).catch(e => { logger.warn(`Could not load contact info: ${e.message}`); return []; }),
             queryWithParams(`
-                SELECT OBSERVACIONES, MODIFIED_BY FROM JAVIER.CLIENT_NOTES 
+                SELECT OBSERVACIONES, MODIFIED_BY FROM JAVIER.CLIENT_NOTES
                 WHERE CLIENT_CODE = ? FETCH FIRST 1 ROWS ONLY
             `, [clientCode], false).catch(e => { logger.debug(`Notes table not available: ${e.message}`); return []; })
         ]);
@@ -1486,7 +1481,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         // Get product purchases for this client - USING DSED.LACLAE (which has data for all clients including PUA)
         const clientParams = [clientCode, ...filterParams];
         const rows = await queryWithParams(`
-            SELECT 
+            SELECT
                 L.LCCDRF as PRODUCT_CODE,
                 COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.LCDESC)) as PRODUCT_NAME,
                 COALESCE(A.CODIGOFAMILIA, 'SIN_FAM') as FAMILY_CODE,
@@ -1497,7 +1492,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
                 SUM(L.LCIMVT) as SALES,
                 SUM(L.LCIMCT) as COST,
                 SUM(L.LCCTUD) as UNITS,
-                SUM(CASE WHEN L.LCPRTC <> 0 AND L.LCPRT1 <> 0 
+                SUM(CASE WHEN L.LCPRTC <> 0 AND L.LCPRT1 <> 0
                     AND L.LCPRTC <> L.LCPRT1 THEN 1 ELSE 0 END) as HAS_SPECIAL_PRICE,
                 SUM(CASE WHEN L.LCPJDT <> 0 THEN 1 ELSE 0 END) as HAS_DISCOUNT,
                 AVG(CASE WHEN L.LCPJDT <> 0 THEN L.LCPJDT ELSE NULL END) as AVG_DISCOUNT_PCT,
@@ -2551,9 +2546,9 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
 router.get('/populations', verifyToken, async (req, res) => {
     try {
         const rows = await query(`
-            SELECT DISTINCT TRIM(POBLACION) as CITY 
-            FROM ${comercialErpTable('CLI')} 
-            WHERE ANOBAJA = 0 
+            SELECT DISTINCT TRIM(POBLACION) as CITY
+            FROM ${comercialErpTable('CLI')}
+            WHERE ANOBAJA = 0
             AND TRIM(POBLACION) <> ''
             ORDER BY 1
         `);
@@ -2771,7 +2766,7 @@ async function handleByClientRequest(req, res) {
             } else {
                 // Filtered path keeps the CLI predicates in SQL.
                 currentRows = await queryWithParams(`
-                    SELECT 
+                    SELECT
                         C.CODIGOCLIENTE as CODE,
                         COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
                         C.DIRECCION as ADDRESS,
@@ -2797,7 +2792,7 @@ async function handleByClientRequest(req, res) {
             }
         } else {
             // Fallback: Use original query with vendedor filter if cache not available
-            const vendedorFilterSales = buildColumnaVendedorFilter(effectiveVendorCodes, yearsArray, 'L');
+            const vendedorFilterSales = buildBoundLaclaeVendorFilter(effectiveVendorCodes, 'L');
 
             if (!extraFilters) {
                 const salesRows = await queryWithParams(`
@@ -2809,11 +2804,11 @@ async function handleByClientRequest(req, res) {
                     WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
                       ${monthPred.filter}
                       AND ${LACLAE_SALES_FILTER}
-                      ${vendedorFilterSales}
+                      ${vendedorFilterSales.clause}
                     GROUP BY L.LCCDCL
                     ORDER BY SALES DESC
                     FETCH FIRST ? ROWS ONLY
-                `, [...yearsArray, ...monthPred.params, rowsLimit], false);
+                `, [...yearsArray, ...monthPred.params, ...vendedorFilterSales.params, rowsLimit], false);
 
                 const topCodes = salesRows
                     .map(r => (r.CODE || '').toString().trim())
@@ -2853,7 +2848,7 @@ async function handleByClientRequest(req, res) {
                 }
             } else {
                 currentRows = await queryWithParams(`
-                    SELECT 
+                    SELECT
                         L.LCCDCL as CODE,
                         COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
                         MIN(C.DIRECCION) as ADDRESS,
@@ -2866,12 +2861,12 @@ async function handleByClientRequest(req, res) {
                     WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
                       ${monthPred.filter}
                       AND ${LACLAE_SALES_FILTER}
-                      ${vendedorFilterSales}
+                      ${vendedorFilterSales.clause}
                       ${extraFilters}
                     GROUP BY L.LCCDCL
                     ORDER BY SALES DESC
                     FETCH FIRST ? ROWS ONLY
-                `, [...yearsArray, ...monthPred.params, ...extraFilterParams, rowsLimit]);
+                `, [...yearsArray, ...monthPred.params, ...vendedorFilterSales.params, ...extraFilterParams, rowsLimit]);
             }
             totalClientsCount = cachedClientCodeCount && !extraFilters
                 ? cachedClientCodeCount
@@ -2993,7 +2988,7 @@ async function handleByClientRequest(req, res) {
             const margin = sales - cost;
             const prevSales = prevSalesMap.get(code) || 0;
 
-            // Objective Logic: 
+            // Objective Logic:
             // 1. Check COMMERCIAL_TARGETS for vendor-level fixed target (for summary only)
             // 2. For per-client breakdown, ALWAYS use percentage-based (OBJ_CONFIG or default 10%)
             // 3. Fixed targets apply only to vendor totals, not individual clients
@@ -3148,3 +3143,5 @@ module.exports.buildEvolutionRouteCacheKey = buildEvolutionRouteCacheKey;
 module.exports.fillEvolutionRouteCacheForAll = fillEvolutionRouteCacheForAll;
 module.exports.OBJECTIVES_CACHE_VERSION = OBJECTIVES_CACHE_VERSION;
 module.exports.overlayOpenMonthFromLiveLaclae = overlayOpenMonthFromLiveLaclae;
+
+module.exports.getObjectivesEvolutionCached = getObjectivesEvolutionCached;

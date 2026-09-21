@@ -136,6 +136,7 @@ class CobroPendiente {
     this.tipoDocumento = '',
     this.cobroRiguroso = false,
     this.porcentajeMinimoCobro = 0,
+    this.documentoNoDisponible = false,
   });
 
   factory CobroPendiente.fromJson(Map<String, dynamic> json) {
@@ -189,6 +190,8 @@ class CobroPendiente {
           json['cobradoRepartidor'] == true ||
           json['responsabilidad']?.toString().toUpperCase() == 'REPARTIDOR',
       provisional: json['provisional'] == true,
+      documentoNoDisponible:
+          json['documentoNoDisponible'] == true || json['cobrable'] == false,
       tipoDocumento: (json['tipoDocumento'] ?? json['TIPO_DOCUMENTO'] ?? '')
           .toString()
           .trim(),
@@ -221,6 +224,7 @@ class CobroPendiente {
   /// True cuando el cobro pendiente es responsabilidad del repartidor, no del comercial.
   final bool cobradoPorRepartidor;
   final bool provisional;
+  final bool documentoNoDisponible;
   final String tipoDocumento;
   final bool cobroRiguroso;
   final double porcentajeMinimoCobro;

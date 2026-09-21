@@ -1143,7 +1143,7 @@ router.get('/product-comparative/:productCode', async (req, res) => {
         const where = [`TRIM(L.LCCDRF) = ?`, `L.LCTPVT IN ('CC','VC')`,
                        `L.LCCLLN IN ('VT','AB')`, `L.LCSRAB NOT IN ('N','Z','G','D')`];
         const params = [productCode];
-        if (clientCode) { where.push('TRIM(L.LCCDCL) = ?'); params.push(clientCode); }
+        if (clientCode) { where.push('L.LCCDCL = CAST(? AS CHAR(10))'); params.push(clientCode); }
         if (effectiveVendorCodes.length === 1) {
             where.push('TRIM(L.LCCDVD) = ?');
             params.push(effectiveVendorCodes[0]);
@@ -1271,7 +1271,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
                    SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS
             FROM ${comercialErpTable('LACLAE')} L
-            WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
+            WHERE L.LCCDCL = CAST(? AS CHAR(10)) AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
               ${laclaeVendorFilter.clause}
             GROUP BY L.LCAADC, L.LCMMDC
@@ -1285,7 +1285,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
                    SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS
             FROM ${comercialErpTable('LACLAE')} L
             LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
-            WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
+            WHERE L.LCCDCL = CAST(? AS CHAR(10)) AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
               ${laclaeVendorFilter.clause}
             GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
@@ -1300,7 +1300,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
                    SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT
             FROM ${comercialErpTable('LACLAE')} L
             LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
-            WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
+            WHERE L.LCCDCL = CAST(? AS CHAR(10)) AND L.LCAADC >= ?
               AND (L.LCSRAB = 'D' OR L.LCTPVT = 'DV')
               ${laclaeVendorFilter.clause}
             GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
@@ -2096,20 +2096,13 @@ router.get('/purchase-history-global', async (req, res) => {
         if (!isAllVendor) {
             // Soporta lista separada por comas
             const vendors = vendor.split(',').map(v => v.trim()).filter(Boolean);
-            if (vendors.length > 0 && vendors.length <= 50) {
+            if (vendors.length > 0) {
                 where.push(`TRIM(L.LCCDVD) IN (${vendors.map(() => '?').join(',')})`);
                 params.push(...vendors);
-            } else if (vendors.length > 50) {
-                // Embed sanitizado para evitar limite ODBC
-                const safe = vendors
-                    .filter(v => /^[A-Za-z0-9]{1,10}$/.test(v))
-                    .map(v => `'${v.replace(/'/g, "''")}'`)
-                    .join(',');
-                if (safe) where.push(`TRIM(L.LCCDVD) IN (${safe})`);
             }
         }
         if (clientCode) {
-            where.push(`TRIM(L.LCCDCL) = ?`);
+            where.push(`L.LCCDCL = CAST(? AS CHAR(10))`);
             params.push(clientCode);
         }
         if (productCode) {

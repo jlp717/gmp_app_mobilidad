@@ -336,7 +336,6 @@ describe('HTTP cache auth safety', () => {
   });
 
   test.each([
-    ['/api/cobros/pending-summary/01', 'cobros'],
     ['/api/pedidos', 'pedidos'],
     ['/api/facturas', 'facturas'],
   ])('caches short-ttl commercial GETs for %s', (originalUrl) => {
@@ -359,6 +358,18 @@ describe('HTTP cache auth safety', () => {
 
     expect(secondNext).not.toHaveBeenCalled();
     expect(secondRes.setHeader).toHaveBeenCalledWith('X-Cache-Status', 'HIT');
+  });
+
+  test('does not cache commercial money reads for /api/cobros/pending-summary/01', () => {
+    const req = {
+      method: 'GET', path: '/api/cobros/pending-summary/01', originalUrl: '/api/cobros/pending-summary/01',
+      baseUrl: '/api', query: {}, headers: {}, user: { id: '01', code: '01', role: 'COMERCIAL' },
+    };
+    const res = makeRes();
+    const next = jest.fn();
+    cacheMiddleware(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
   });
 });
 

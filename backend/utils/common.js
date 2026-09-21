@@ -273,14 +273,13 @@ function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
         return { clause: '', params: [] };
     }
     const placeholders = safeCodes.map(() => 'CAST(? AS CHAR(2))').join(',');
-    const safeLiteralInList = safeCodes.map((code) => `'${code.replace(/'/g, "''")}'`).join(',');
     const laclaeVendorPredicate = VENDOR_COLUMN === 'LCCDVD'
         ? `LAC.LCCDVD IN (${placeholders})`
         : `(
               (LAC.LCMMDC < ${TRANSITION_MONTH} AND LAC.LCCDVD IN (${placeholders}))
-              OR (LAC.LCMMDC >= ${TRANSITION_MONTH} AND LAC.${VENDOR_COLUMN} IN (${safeLiteralInList}))
+              OR (LAC.LCMMDC >= ${TRANSITION_MONTH} AND LAC.${VENDOR_COLUMN} IN (${placeholders}))
             )`;
-    const laclaeVendorParams = safeCodes;
+    const laclaeVendorParams = VENDOR_COLUMN === 'LCCDVD' ? safeCodes : [...safeCodes, ...safeCodes];
     return {
         clause: `
       AND (
@@ -323,17 +322,6 @@ function expandVendorCodesForSql(vendorCodes) {
     return Array.from(set);
 }
 
-function buildSafeAlnumInList(codes) {
-    // IBM i/ODBC produced very slow plans for CVC vendor scopes when the
-    // CLP+LACLAE IN lists were bound as parameters, even for a single vendor.
-    // Values arrive from expandVendorCodesForSql(), which only keeps
-    // alphanumeric codes, so literals are safe here and match the fast plan.
-    return {
-        inList: codes.map((code) => `'${String(code).replace(/'/g, "''")}'`).join(','),
-        params: [],
-    };
-}
-
 /**
  * Vendor scope for CVC debt queries — aligned with clients list (CLP + LACLAE).
  * Fixes summary=0 when CLP.VENDEDORCOMERCIAL is empty but LACLAE has sales history.
@@ -364,17 +352,19 @@ function normalizeCvcTipoDocumentoFilter(value) {
 }
 
 function buildCvcVendorScopeFilter(vendorCodes) {
+    if (String(vendorCodes || '').trim().toUpperCase() === 'ALL') return { clause: '', params: [] };
     const codes = expandVendorCodesForSql(vendorCodes);
     if (codes.length === 0) {
         return { clause: '', params: [] };
     }
 
-    // CVC.CODIGOVENDEDOR is CHAR(2). TRIM() disables the index and sent
-    // vendor 35 pending-summary to ~1s. Literal IN matches CHAR(2) codes.
-    const scoped = buildSafeAlnumInList(codes);
+    // Bind against the verified CHAR(2) column without applying TRIM to it.
+    // Unknown sentinels cannot match a vendor and must not broaden the scope.
+    const scoped = codes.filter(code => String(code).length <= 2);
+    if (!scoped.length) return { clause: 'AND 1=0', params: [] };
     return {
-        clause: `AND CVC.CODIGOVENDEDOR IN (${scoped.inList})`,
-        params: [...scoped.params],
+        clause: `AND CVC.CODIGOVENDEDOR IN (${scoped.map(() => 'CAST(? AS CHAR(2))').join(',')})`,
+        params: scoped,
     };
 }
 
@@ -382,7 +372,7 @@ function buildCvcVendorScopeFilter(vendorCodes) {
  * Query-side client discovery for vendor-scoped lists (no LACLAE full scan).
  * Uses CLP.VENDEDORCOMERCIAL; LACLAE only as EXISTS with FETCH FIRST 1.
  */
-function buildClientListVendorSqlFilter(vendorCodes, clientAlias = 'C') {
+function buildClientListVendorSqlFilter(vendorCodes, clientAlias = 'C', params = []) {
     if (!vendorCodes || vendorCodes === 'ALL' || String(vendorCodes).trim() === '') {
         return '';
     }
@@ -390,7 +380,8 @@ function buildClientListVendorSqlFilter(vendorCodes, clientAlias = 'C') {
         .map((code) => code.trim())
         .filter((code) => /^[a-zA-Z0-9]+$/.test(code));
     if (codes.length === 0) return 'AND 1=0';
-    const inList = codes.map((code) => `'${code}'`).join(',');
+    const inList = codes.map(() => 'CAST(? AS CHAR(2))').join(',');
+    params.push(...codes, ...codes);
     const laclaeVendorCol = getVendorColumnExpr('LAC');
     return `AND (
         EXISTS (
@@ -415,9 +406,10 @@ function buildClientListVendorSqlFilter(vendorCodes, clientAlias = 'C') {
 }
 
 /**
- * Bound LACLAE scans to vendor client codes from CLP (no index on LACLAE required).
+ * Bound sales to assigned clients from either CLP or the live sales assignment.
+ * Some real vendors have no CLP rows, so CLP alone must never empty their sales.
  */
-function buildLaclaeBoundedClientCodesSql(vendorCodes) {
+function buildLaclaeBoundedClientCodesSql(vendorCodes, params = []) {
     if (!vendorCodes || vendorCodes === 'ALL' || String(vendorCodes).trim() === '') {
         return '';
     }
@@ -425,11 +417,18 @@ function buildLaclaeBoundedClientCodesSql(vendorCodes) {
         .map((code) => code.trim())
         .filter((code) => /^[a-zA-Z0-9]+$/.test(code));
     if (codes.length === 0) return 'AND 1=0';
-    const inList = codes.map((code) => `'${code}'`).join(',');
-    const laclaeVendorCol = getVendorColumnExpr('');
+    const inList = codes.map(() => 'CAST(? AS CHAR(2))').join(',');
+    params.push(...codes, ...codes);
+    const laclaeVendorCol = getVendorColumnExpr('ASSIGNED');
     return `AND LCCDCL IN (
-        SELECT TRIM(CLP.CODIGOCLIENTE) FROM ${comercialErpTable('CLP')} CLP WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${inList})
-    ) AND TRIM(${laclaeVendorCol}) IN (${inList})`;
+        SELECT CLP.CODIGOCLIENTE FROM ${comercialErpTable('CLP')} CLP WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${inList})
+        UNION
+        SELECT ASSIGNED.LCCDCL FROM ${comercialErpTable('LACLAE')} ASSIGNED
+         WHERE ASSIGNED.LCAADC >= ${MIN_YEAR} AND ASSIGNED.TPDC = 'LAC'
+           AND ASSIGNED.LCTPVT IN ('CC', 'VC') AND ASSIGNED.LCCLLN IN ('AB', 'VT')
+           AND ASSIGNED.LCSRAB NOT IN ('N', 'Z')
+           AND TRIM(${laclaeVendorCol}) IN (${inList})
+    )`;
 }
 
 const _clientAssignedVendorCache = new Map();
@@ -595,6 +594,21 @@ function buildVendedorFilter(vendedorCodes, tableAlias = '') {
     if (conditions.length === 0) return 'AND 1=0'; // No valid selection
 
     return `AND (${conditions.join(' OR ')})`;
+}
+
+// columnExpr is a source-owned SQL identifier/expression, never request input.
+function buildBoundVendorFilter(vendedorCodes, columnExpr) {
+    if (!vendedorCodes || vendedorCodes === 'ALL') return { clause: '', params: [] };
+    const codes = String(vendedorCodes).split(',').map(code => code.trim());
+    const params = codes.filter(code => code !== 'UNK' && /^[a-zA-Z0-9]+$/.test(code));
+    const conditions = [];
+    if (params.length) conditions.push(`${columnExpr} IN (${params.map(() => 'CAST(? AS CHAR(2))').join(',')})`);
+    if (codes.includes('UNK')) conditions.push(`(${columnExpr} IS NULL OR ${columnExpr} = '')`);
+    return { clause: conditions.length ? `AND (${conditions.join(' OR ')})` : 'AND 1=0', params };
+}
+
+function buildBoundLaclaeVendorFilter(vendedorCodes, tableAlias = 'L') {
+    return buildBoundVendorFilter(vendedorCodes, getVendorColumnExpr(tableAlias));
 }
 
 function buildDateFilter(yearParam, monthParam, tableAlias = '') {
@@ -787,6 +801,8 @@ module.exports = {
     LAC_SERIEALBARAN_FILTER,
     formatCurrency,
     buildVendedorFilter,
+    buildBoundVendorFilter,
+    buildBoundLaclaeVendorFilter,
     buildVendedorFilterLACLAE,
     buildColumnaVendedorFilter,
     buildDateFilter,

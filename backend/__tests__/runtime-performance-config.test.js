@@ -244,7 +244,7 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/require\('\.\.\/\.\.\/utils\/dashboardFilters'\)/);
     expect(purchaseHistoryBlock).toMatch(/buildLaclaeDateRangeFilter\('L', from, to\)/);
     expect(purchaseHistoryBlock).toMatch(/TRIM\(L\.LCCDVD\) IN/);
-    expect(purchaseHistoryBlock).toMatch(/TRIM\(L\.LCCDCL\) = \?/);
+    expect(purchaseHistoryBlock).toMatch(/L\.LCCDCL = CAST\(\? AS CHAR\(10\)\)/);
     expect(purchaseHistoryBlock).toMatch(/TRIM\(L\.LCCDRF\) = \?/);
     expect(purchaseHistoryBlock).toMatch(/C\.CODIGOCLIENTE = L\.LCCDCL/);
     expect(purchaseHistoryBlock).not.toMatch(/LCAADC \* 10000/);

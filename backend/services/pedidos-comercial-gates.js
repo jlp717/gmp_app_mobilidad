@@ -42,69 +42,135 @@ function selectedPromoCodes(lines) {
   );
 }
 
-function applyGiftPromotionsToLines(lines, promotions) {
-  const next = Array.isArray(lines) ? [...lines] : [];
-  const selected = selectedPromoCodes(next);
-  const gifts = (promotions || []).filter((promo) => {
-    const type = trim(promo.promoType).toUpperCase();
-    return type === 'GIFT' && toNumber(promo.minQty) > 0 && toNumber(promo.giftQty) > 0;
-  });
+function giftError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = 409;
+  error.statusCode = 409;
+  return error;
+}
 
-  for (const promo of gifts) {
-    const promoCode = trim(promo.promoCode || promo.code);
-    const productCode = trim(promo.productCode);
-    const giftSkus = Array.isArray(promo.giftSkus) ? promo.giftSkus.map(trim).filter(Boolean) : [];
-    const matchArticle = (article) => {
-      if (productCode && article === productCode) return true;
-      if (giftSkus.includes(article)) return true;
-      if (!productCode && giftSkus.length === 0 && selected.has(promoCode)) return true;
-      return false;
+function giftPromoGroups(promotions) {
+  const groups = new Map();
+  for (const promo of promotions || []) {
+    if (trim(promo?.promoType).toUpperCase() !== 'GIFT') continue;
+    const code = trim(promo.promoCode || promo.code);
+    if (!code || toNumber(promo.minQty) <= 0 || toNumber(promo.giftQty) <= 0) continue;
+    const group = groups.get(code) || {
+      code, minQty: toNumber(promo.minQty), giftQty: toNumber(promo.giftQty),
+      cumulative: promo.cumulative === true, noGiftBought: promo.noGiftBought === true,
+      giftSkus: new Set(), rows: [], promoDesc: trim(promo.promoDesc),
     };
+    group.minQty = Math.max(group.minQty, toNumber(promo.minQty));
+    group.giftQty = Math.max(group.giftQty, toNumber(promo.giftQty));
+    group.cumulative = group.cumulative || promo.cumulative === true;
+    group.noGiftBought = group.noGiftBought || promo.noGiftBought === true;
+    const productCode = trim(promo.productCode);
+    if (productCode) group.giftSkus.add(productCode);
+    for (const sku of Array.isArray(promo.giftSkus) ? promo.giftSkus : []) {
+      const normalized = trim(sku);
+      if (normalized) group.giftSkus.add(normalized);
+    }
+    group.rows.push(promo);
+    groups.set(code, group);
+  }
+  return groups;
+}
 
-    const already = next.some((line) => (
-      isGiftLine(line)
-      && (
-        (promoCode && trim(line.promotionCode || line.promoCode) === promoCode)
-        || (productCode && lineArticle(line) === productCode)
-      )
-    ));
-    if (already) continue;
+function validatedGiftQuantity(line) {
+  const unit = trim(line.unidadMedida || line.UNIDADMEDIDA || 'CAJAS').toUpperCase();
+  if (!['CAJAS', 'UNIDADES'].includes(unit)) {
+    throw giftError('INVALID_PROMOTION_GIFT', 'La unidad del regalo no es válida');
+  }
+  const raw = unit === 'CAJAS'
+    ? (line.cantidadEnvases ?? line.CANTIDADENVASES)
+    : (line.cantidadUnidades ?? line.cantidad ?? line.CANTIDADUNIDADES);
+  const quantity = Number(raw);
+  if (!Number.isFinite(quantity) || !Number.isInteger(quantity) || quantity <= 0) {
+    throw giftError('INVALID_PROMOTION_GIFT', 'La cantidad del regalo debe ser un entero positivo');
+  }
+  const price = Number(line.precioVenta ?? line.precio ?? line.PRECIOVENTA ?? 0);
+  if (!Number.isFinite(price) || price !== 0) {
+    throw giftError('INVALID_PROMOTION_GIFT', 'El regalo debe tener precio cero');
+  }
+  return { unit, quantity };
+}
 
-    const saleQty = next
-      .filter((line) => !isGiftLine(line) && matchArticle(lineArticle(line)))
-      .reduce((sum, line) => sum + lineBillingQty(line), 0);
-    if (saleQty + 1e-9 < toNumber(promo.minQty)) continue;
+// Server owns promotion entitlement and SKU selection.  A client may select an
+// eligible gift, but never invent a promotion, SKU, or quantity.
+function applyGiftPromotionsToLines(lines, promotions) {
+  const submitted = Array.isArray(lines) ? [...lines] : [];
+  const paidLines = submitted.filter((line) => !isGiftLine(line));
+  const submittedGifts = submitted.filter(isGiftLine);
+  const groups = giftPromoGroups(promotions);
+  const giftsByPromo = new Map();
 
-    const multiplier = promo.cumulative === true ? Math.floor(saleQty / toNumber(promo.minQty)) : 1;
-    const giftCount = Math.floor(multiplier * toNumber(promo.giftQty));
-    if (giftCount <= 0) continue;
+  for (const gift of submittedGifts) {
+    const promoCode = trim(gift.promotionCode || gift.promoCode || gift.CODIGOPROMOCION);
+    const group = groups.get(promoCode);
+    if (!group) throw giftError('INVALID_PROMOTION_GIFT', 'El regalo no pertenece a una promoción activa');
+    const sku = lineArticle(gift);
+    if (!sku || group.giftSkus.size === 0 || !group.giftSkus.has(sku)) {
+      throw giftError('INVALID_PROMOTION_GIFT', 'El artículo regalo no está permitido por la promoción');
+    }
+    const normalized = validatedGiftQuantity(gift);
+    const current = giftsByPromo.get(promoCode) || [];
+    current.push({ ...gift, _giftUnit: normalized.unit, _giftQuantity: normalized.quantity });
+    giftsByPromo.set(promoCode, current);
+  }
 
-    const sourceLine = next.find((line) => !isGiftLine(line) && matchArticle(lineArticle(line)))
-      || next.find((line) => !isGiftLine(line));
+  const rebuilt = [...paidLines];
+  for (const group of groups.values()) {
+    const paidForPromo = paidLines.filter((line) => trim(line.promotionCode || line.promoCode || line.CODIGOPROMOCION) === group.code);
+    // Older clients only mark the paid line with the promotion code.  When a
+    // PMP set exists, do not let unrelated paid products grant entitlement.
+    const selected = giftsByPromo.get(group.code) || [];
+    const explicitlySelectedPromo = selected.length > 0;
+    const eligiblePaid = paidLines.filter((line) => group.giftSkus.has(lineArticle(line)));
+    const qualifying = group.giftSkus.size === 0
+      ? paidForPromo
+      : (explicitlySelectedPromo ? eligiblePaid : paidForPromo.filter((line) => group.giftSkus.has(lineArticle(line))));
+    const paidQty = qualifying.reduce((sum, line) => sum + lineBillingQty(line), 0);
+    const entitlement = paidQty + 1e-9 < group.minQty
+      ? 0
+      : Math.floor((group.cumulative ? Math.floor(paidQty / group.minQty) : 1) * group.giftQty);
+    const selectedQty = selected.reduce((sum, line) => sum + line._giftQuantity, 0);
+    if (selectedQty > entitlement + 1e-9) {
+      throw giftError('INVALID_PROMOTION_GIFT', 'La cantidad de regalo supera el derecho de la promoción');
+    }
+    const boughtSkus = new Set(qualifying.map(lineArticle));
+    if (group.noGiftBought && selected.some((line) => boughtSkus.has(lineArticle(line)))) {
+      throw giftError('INVALID_PROMOTION_GIFT', 'La promoción no permite regalar un artículo ya comprado');
+    }
+    if (selected.length) {
+      const sourceLine = qualifying[0];
+      rebuilt.push(...selected.map((line) => ({ ...sourceLine, codigoArticulo: lineArticle(line),
+        cantidadEnvases: line._giftUnit === 'CAJAS' ? line._giftQuantity : 0,
+        cantidadUnidades: line._giftUnit === 'UNIDADES' ? line._giftQuantity : 0,
+        unidadMedida: line._giftUnit, precio: 0, precioVenta: 0, descuentoLinea: 0, lineDiscountPct: 0,
+        tipoLinea: 'G', claseLinea: 'SC', isAutoGift: true, promotionCode: group.code })));
+      continue;
+    }
+    if (entitlement <= 0) continue;
+    const candidates = group.giftSkus.size ? [...group.giftSkus] : qualifying.map(lineArticle);
+    const giftArticle = group.noGiftBought
+      ? candidates.find((sku) => !boughtSkus.has(sku))
+      : qualifying.map(lineArticle).find((sku) => candidates.includes(sku)) || candidates[0];
+    if (!giftArticle) {
+      throw giftError('GIFT_SELECTION_REQUIRED', 'La promoción requiere seleccionar un artículo regalo válido');
+    }
+    const sourceLine = qualifying.find((line) => lineArticle(line) === giftArticle) || qualifying[0];
     if (!sourceLine) continue;
-    const giftArticle = productCode || lineArticle(sourceLine);
     const unit = trim(sourceLine.unidadMedida || 'CAJAS').toUpperCase() || 'CAJAS';
-    const desc = `${String(sourceLine.descripcion || promo.promoDesc || 'Regalo').slice(0, 28)} (Regalo)`;
-    for (let i = 0; i < giftCount; i += 1) {
-      next.push({
-        ...sourceLine,
-        codigoArticulo: giftArticle,
-        descripcion: desc,
-        cantidadEnvases: unit === 'CAJAS' ? 1 : 0,
-        cantidadUnidades: unit === 'CAJAS' ? 0 : 1,
-        unidadMedida: unit,
-        precio: 0,
-        precioVenta: 0,
-        descuentoLinea: 0,
-        lineDiscountPct: 0,
-        tipoLinea: 'G',
-        claseLinea: 'SC',
-        isAutoGift: true,
-        promotionCode: promoCode,
-      });
+    for (let i = 0; i < entitlement; i += 1) {
+      rebuilt.push({ ...sourceLine, codigoArticulo: giftArticle,
+        descripcion: `${String(sourceLine.descripcion || group.promoDesc || 'Regalo').slice(0, 28)} (Regalo)`,
+        cantidadEnvases: unit === 'CAJAS' ? 1 : 0, cantidadUnidades: unit === 'CAJAS' ? 0 : 1,
+        unidadMedida: unit, precio: 0, precioVenta: 0, descuentoLinea: 0, lineDiscountPct: 0,
+        tipoLinea: 'G', claseLinea: 'SC', isAutoGift: true, promotionCode: group.code });
     }
   }
-  return next;
+  return rebuilt;
 }
 
 function minCobroOrderError({ minPct, actualPct, source, clientCode, vendorCode }) {

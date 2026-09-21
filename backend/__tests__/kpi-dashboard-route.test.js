@@ -4,6 +4,7 @@ const request = require('supertest');
 const express = require('express');
 
 const mockKpiQuery = jest.fn();
+let mockAuthUser;
 
 jest.mock('../kpi/config/db', () => ({
   kpiQuery: (...args) => mockKpiQuery(...args),
@@ -48,7 +49,7 @@ jest.mock('../middleware/logger', () => ({
 
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => {
-    req.user = { code: '98', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: [] };
+    req.user = { ...mockAuthUser };
     next();
   },
   requireJefeVentas: (_req, _res, next) => next(),
@@ -115,11 +116,13 @@ function mockDashboardDb({ laclaeRows = [], clpRows = [] } = {}) {
 describe('kpi dashboard route performance contract', () => {
   beforeEach(() => {
     mockKpiQuery.mockReset();
+    mockAuthUser = { code: '98', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: [] };
   });
 
   test('skips LACLAE vendor lookup for manager-sized vendor lists', async () => {
     mockDashboardDb();
     const vendorCodes = Array.from({ length: 20 }, (_, i) => String(i + 1).padStart(2, '0')).join(',');
+    mockAuthUser.vendorCodes = vendorCodes.split(',');
 
     const res = await request(makeApp()).get(`/dashboard?vendorCode=${vendorCodes}`);
 
@@ -133,6 +136,7 @@ describe('kpi dashboard route performance contract', () => {
 
   test('normalizes short vendor filter binds for DB2 fixed-width columns', async () => {
     mockDashboardDb({ laclaeRows: [{ CLIENT_CODE: '4300000001' }] });
+    mockAuthUser.vendorCodes = ['0199'];
 
     const res = await request(makeApp()).get('/dashboard?vendorCode=0199');
 
@@ -151,6 +155,7 @@ describe('kpi dashboard route performance contract', () => {
       laclaeRows: [],
       clpRows: [{ CLIENT_CODE: '4300000001' }],
     });
+    mockAuthUser.vendorCodes = ['02'];
 
     const res = await request(makeApp()).get('/dashboard?vendorCode=02');
 
@@ -162,6 +167,7 @@ describe('kpi dashboard route performance contract', () => {
 
   test('matches Glacius short client codes against GMP 4300 cartera', async () => {
     mockDashboardDb({ clpRows: [{ CLIENT_CODE: '1' }] });
+    mockAuthUser.vendorCodes = ['03'];
 
     const res = await request(makeApp()).get('/dashboard?vendorCode=03');
 

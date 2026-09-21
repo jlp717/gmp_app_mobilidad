@@ -30,8 +30,8 @@ describe('objectives ALL live ERP reads', () => {
   test('evolution Redis cache is skipped on forceRefresh / X-Force-Refresh', () => {
     expect(source).toContain("require('../middleware/http-cache')");
     expect(source).toContain('isCacheBypassRequest');
-    expect(source).toMatch(/const forceRefresh = isCacheBypassRequest\(req\)/);
-    expect(source).toMatch(/if \(!forceRefresh\) \{[\s\S]*redisCache\.get\('route', cacheKey\)/);
+    expect(source).toMatch(/forceRefresh: isCacheBypassRequest\(req\)/);
+    expect(source).toMatch(/if \(!forceRefresh\) \{[\s\S]*redisCache\.get\('route', cache.key\)/);
     expect(source).toMatch(/\{ forceRefresh, now \}/);
   });
 

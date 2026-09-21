@@ -251,6 +251,30 @@ describe('DDD pedidos route contracts', () => {
     expect(res.body.lines).toEqual([{ id: 1 }]);
   });
 
+  test('POST /create exposes the minimum collection gate as 403', async () => {
+    mockPedidosService.createOrder.mockRejectedValue(Object.assign(new Error('Cobro por debajo del minimo'), {
+      code: 'MIN_COBRO_ORDER_BLOCKED', status: 403, statusCode: 403,
+      details: { minPct: 100, actualPct: 97.47 },
+    }));
+    const res = await request(makeApp(createPedidosRoutes())).post('/create').send({
+      clientCode: 'C001', vendedorCode: '01', lines: [{ codigoArticulo: 'P001', cantidadEnvases: 1 }],
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('MIN_COBRO_ORDER_BLOCKED');
+    expect(res.body.details).toEqual({ minPct: 100, actualPct: 97.47 });
+  });
+
+  test('POST /create returns a typed promotion gift conflict instead of a 500', async () => {
+    mockPedidosService.createOrder.mockRejectedValue(Object.assign(new Error('Regalo no válido'), {
+      code: 'INVALID_PROMOTION_GIFT', status: 409,
+    }));
+    const res = await request(makeApp(createPedidosRoutes())).post('/create').send({
+      clientCode: 'C001', vendedorCode: '01', lines: [{ codigoArticulo: 'P001', cantidadEnvases: 1 }],
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('INVALID_PROMOTION_GIFT');
+  });
+
   test('POST /create masks generic service errors from SQL and ODBC details', async () => {
     const sqlError = new Error('SQL0204 Tabla interna no encontrada');
     sqlError.odbcErrors = [{ state: '42S02', code: -204, message: 'ODBC driver raw detail' }];
@@ -342,7 +366,7 @@ describe('DDD pedidos route contracts', () => {
     expect(scopeSql).toMatch(/DSED\.LACLAE/);
     expect(scopeSql).not.toMatch(/CLI\.CODIGOVENDEDOR/);
     expect(scopeSql).not.toMatch(/CODIGOVENDEDOR/);
-    expect(db.queryWithParams.mock.calls[0][1]).toEqual(['4300001091', '98', '98']);
+    expect(db.queryWithParams.mock.calls[0][1]).toEqual(['4300001091', '98', '98', '98']);
   });
 
   test('GET /products allows JEFE_VENTAS when login vendor mismatches assigned client vendor', async () => {
@@ -851,7 +875,7 @@ describe('DDD pedidos route contracts', () => {
     const lastYearCall = db.queryWithParams.mock.calls.find(([sql]) => /TOTAL_LAST_YEAR/i.test(sql));
     expect(lastYearCall).toBeDefined();
     expect(lastYearCall[0]).toMatch(/TRIM\(L\.LCCDVD\) IN \(\?\)/);
-    expect(lastYearCall[0]).toMatch(/TRIM\(L\.LCCDCL\) = \?/);
+    expect(lastYearCall[0]).toMatch(/L\.LCCDCL = CAST\(\? AS CHAR\(10\)\)/);
     expect(lastYearCall[0]).toMatch(/TRIM\(L\.LCCDRF\) = \?/);
     expect(lastYearCall[0]).toMatch(/TRIM\(CODIGOFAMILIA\) = \?/);
     expect(lastYearCall[0]).toMatch(/TRIM\(CODIGOMARCA\) = \?/);
@@ -1377,7 +1401,7 @@ describe('DDD cobros route contracts', () => {
       resumen: { totalPendiente: 99 },
     });
     db.queryWithParams.mockImplementation(async (sql) => {
-      if (/DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+      if (/DSEDAC\.CVC/i.test(sql) || /DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
         return [];
       }
       return [{ OK: 1 }];
@@ -1394,7 +1418,7 @@ describe('DDD cobros route contracts', () => {
   test('POST /register rejects COMERCIAL outside vendor client scope before registerPayment', async () => {
     const db = require('../config/db');
     db.queryWithParams.mockImplementation(async (sql) => {
-      if (/DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+      if (/DSEDAC\.CVC/i.test(sql) || /DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
         return [];
       }
       return [{ OK: 1 }];
@@ -1418,7 +1442,7 @@ describe('DDD cobros route contracts', () => {
   test('POST /:codigoCliente/registrar rejects COMERCIAL outside vendor client scope when clientCodes absent', async () => {
     const db = require('../config/db');
     db.queryWithParams.mockImplementation(async (sql) => {
-      if (/DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+      if (/DSEDAC\.CVC/i.test(sql) || /DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
         return [];
       }
       return [{ OK: 1 }];
@@ -1445,7 +1469,7 @@ describe('DDD cobros route contracts', () => {
       resumen: { totalPendiente: 50 },
     });
     db.queryWithParams.mockImplementation(async (sql) => {
-      if (/DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+      if (/DSEDAC\.CVC/i.test(sql) || /DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
         return [];
       }
       return [{ OK: 1 }];
@@ -1505,6 +1529,32 @@ describe('DDD entregas document route contracts', () => {
 });
 
 describe('DDD clients list cache-ready contract', () => {
+  test.each([false, true])('large portfolio uses bounded page queries with search=%s', async (search) => {
+    const laclae = require('../services/laclae');
+    const db = require('../config/db');
+    const codes = Array.from({ length: 123 }, (_, index) => String(4300000000 + index));
+    laclae.isCacheReady.mockReturnValue(true);
+    laclae.getClientCodesFromCache.mockReturnValue(codes);
+    db.queryWithParams.mockImplementation(async (sql, params) => {
+      if (/SELECT C.CODIGOCLIENTE AS CODE FROM/.test(sql)) return search
+        ? [{ CODE: codes[7] }, { CODE: '9999999999' }]
+        : codes.map(CODE => ({ CODE }));
+      if (/VENDOR_NAME/.test(sql)) return [{ VENDOR_CODE: '35', VENDOR_NAME: 'Vendedor' }];
+      const clients = params.filter(value => /^4300/.test(String(value)));
+      if (/C.CODIGOCLIENTE as code/.test(sql)) return clients.map(code => ({ CODE: code, NAME: 'Cliente' }));
+      if (/TOTAL_PURCHASES/.test(sql)) return clients.map(code => ({ CLIENT_CODE: code, TOTAL_PURCHASES: 25 }));
+      return clients.map(code => ({ CLIENT_CODE: code, LAST_VENDOR: '35' }));
+    });
+    const res = await request(makeApp(createClientsRoutes(), { id: '35', code: '35', role: 'COMERCIAL' }))
+      .get('/list').query({ vendedorCodes: '35', limit: 100, ...(search ? { search: 'Cliente' } : {}) });
+    expect(res.status).toBe(200);
+    expect(res.body.clients).toHaveLength(search ? 1 : 100);
+    expect(res.body.clients.every(client => codes.includes(client.code) && client.totalPurchases === 25)).toBe(true);
+    expect(db.queryWithParams.mock.calls.every(([, params]) => params.length <= 51)).toBe(true);
+    expect(db.queryWithParams.mock.calls.some(([sql]) => /WITH LACLAE_SCOPED/.test(sql))).toBe(false);
+    laclae.getClientCodesFromCache.mockReturnValue(undefined);
+  });
+
   test('GET /list returns 503 when LACLAE memory is not ready', async () => {
     const laclae = require('../services/laclae');
     laclae.isCacheReady.mockReturnValue(false);

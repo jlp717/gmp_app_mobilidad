@@ -50,12 +50,12 @@ test('warm hit preserves response and binds, using the real stampede helper', as
     expect(warm.json.mock.calls[0][0]).toEqual(cold.json.mock.calls[0][0]);
     expect(mockQuery).toHaveBeenCalledTimes(1);
     const [sql, params] = mockQuery.mock.calls[0];
-    expect(params).toEqual(['C001', '%MILK%', '%MILK%', '%MILK%', 20260101, 20260131]);
+    expect(params).toEqual(['01', 'C001', '%MILK%', '%MILK%', '%MILK%', 2026, 2026, 1, 1, 1, 2026, 2026, 1, 1, 31]);
     expect((sql.match(/\?/g) || []).length).toBe(params.length);
     expect(sql).toContain('FROM DSEDAC.LAC');
     expect(sql).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|MERGE|ALTER|DROP)\b/i);
     expect(mockSet).toHaveBeenCalledWith('query', expect.any(String), expect.any(Array), 300);
-    expect(mockGet.mock.calls[0][1]).toMatch(/^query:analytics:sales-history:v1:[a-f0-9]{64}:vendor:ALL$/);
+    expect(mockGet.mock.calls[0][1]).toMatch(/^query:analytics:sales-history:v2:[a-f0-9]{64}:vendor:ALL$/);
     expect(cold.json.mock.calls[0][0]).toMatchObject({ count: 1, limit: 10, offset: 0 });
 });
 
@@ -64,9 +64,14 @@ test.each([
     ['startDate', '2026-01-02'], ['endDate', '2026-01-30'], ['limit', '20'], ['offset', '10'],
 ])('cache separates %s', async (field, value) => {
     await call();
-    await call({ ...filters, [field]: value });
-    expect(mockQuery).toHaveBeenCalledTimes(2);
-    expect(new Set(mockGet.mock.calls.map(args => args[1])).size).toBe(2);
+    const changed = await call({ ...filters, [field]: value });
+    if (field === 'vendedorCodes') {
+        expect(changed.status).toHaveBeenCalledWith(403);
+        expect(mockQuery).toHaveBeenCalledTimes(1);
+    } else {
+        expect(mockQuery).toHaveBeenCalledTimes(2);
+        expect(new Set(mockGet.mock.calls.map(args => args[1])).size).toBe(2);
+    }
 });
 
 test.each([

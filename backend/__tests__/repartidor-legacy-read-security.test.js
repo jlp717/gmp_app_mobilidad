@@ -589,7 +589,7 @@ describe('document ownership and side-effect contracts', () => {
       expect(mockSendEmailWithPdf).toHaveBeenCalledTimes(1);
       expect(mockSendEmailWithPdf.mock.calls[0][0]).toMatchObject({
         to: 'reparto-test@localhost',
-        pdfFilename: expect.stringMatching(/Albaran_A-1\.pdf/i),
+        pdfFilename: expect.stringMatching(/Albaran_A-0-1\.pdf/i),
       });
       const ledgerCall = mockQueryWithParams.mock.calls.find(([sql]) =>
         /INSERT INTO JAVIER\.TEST_REPARTIDOR_COBROS_AUDIT/i.test(sql));

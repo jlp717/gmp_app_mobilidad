@@ -1073,7 +1073,14 @@ async function registerReturn({
   );
   const serieCode = String(serie || RETURN_SERIE).trim().substring(0, 4) || RETURN_SERIE;
   const fpCode = String(formaPago || '').trim().substring(0, 2).toUpperCase();
-  const alb = String(albaranOrigen || '').trim().substring(0, 40);
+  // The legacy overlay has 40 characters. Keep complete document identities;
+  // never turn the last series-terminal-number into a misleading partial ID.
+  let alb = '';
+  for (const reference of String(albaranOrigen || '').split(',').map(value => value.trim()).filter(Boolean)) {
+    const candidate = alb ? `${alb}, ${reference}` : reference;
+    if (candidate.length > 40) break;
+    alb = candidate;
+  }
   const vto = parseIsoDate(vencimiento);
   const collected = yaCobrada !== false || isPagareFormaPago(fpCode);
   const impacto = String(impactoLqd || (collected ? 'YA_COBRADOS' : 'NO_COBRADA'))

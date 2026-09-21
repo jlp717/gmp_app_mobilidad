@@ -33,6 +33,7 @@ const routeSources = [
   { file: "backend/routes/pedidos.js", prefix: "/api/pedidos" },
   { file: "backend/routes/cobros.js", prefix: "/api/cobros" },
   { file: "backend/routes/clients.js", prefix: "/api/clients" },
+  { file: "backend/routes/notifications.js", prefix: "/api/notifications" },
   { file: "backend/routes/commissions.js", prefix: "/api/commissions" },
   { file: "backend/routes/products.js", prefix: "/api/products" },
   { file: "backend/kpi/routes.js", prefix: "/api/kpi" },

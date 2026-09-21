@@ -156,7 +156,7 @@ describe('repositories: parametrizacion SQL y seams', () => {
         const repo = new RuteroRepository({ queryWithParams: q });
         await repo.fetchWeeklyVisitCounts(['X9']);
         const [sql, params] = q.mock.calls[0];
-        expect(sql).toMatch(/TRIM\(CODIGOVENDEDOR\) IN \(\?\)/);
+        expect(sql).toMatch(/CODIGOVENDEDOR IN \(\?\)/);
         expect(params).toEqual(['X9']);
     });
 
@@ -212,9 +212,9 @@ describe('repositories: parametrizacion SQL y seams', () => {
     test.each([
         [
             { clientCode: 'C001', productSearch: 'abc', startDate: '2026-01-01', endDate: '2026-01-31' },
-            ['C001', '%ABC%', '%ABC%', '%ABC%', 20260101, 20260131],
+            ['C001', '%ABC%', '%ABC%', '%ABC%', 2026, 2026, 1, 1, 1, 2026, 2026, 1, 1, 31],
         ],
-        [{}, []],
+        [{}, [2024]],
     ])('analytics optional filters keep placeholder and bind order aligned %#', async (query, expectedParams) => {
         jest.resetModules();
         const queryWithParams = jest.fn(async () => []);

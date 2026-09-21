@@ -8,6 +8,24 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/client_b
 
 void main() {
   group('Cobros models', () {
+    test('keeps unverified ERP debt visible but never actionable', () {
+      final cobro = CobroPendiente.fromJson({
+        'id': 'CVC:CAC:B:GMP:2026:P:35:1:1:1',
+        'referencia': 'P-35-1',
+        'tipo': 'albaran',
+        'importePendiente': 125,
+        'importeCobrable': 0,
+        'cobrable': false,
+        'documentoNoDisponible': true,
+        'estado': 'VENCIDO',
+      });
+      expect(cobro.importePendiente, 125);
+      expect(cobro.documentoNoDisponible, isTrue);
+      expect(isCobroPayable(cobro), isFalse);
+      expect(cobrosNonPayableItems([cobro]), [cobro]);
+      expect(cobrosPayableItems([cobro]), isEmpty);
+    });
+
     test('parses cobro riguroso and vendor minimum percentages', () {
       final resumen = ResumenCobros.fromJson({
         'totalPendiente': 80,

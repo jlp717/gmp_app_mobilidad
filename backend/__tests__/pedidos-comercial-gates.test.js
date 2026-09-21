@@ -66,6 +66,64 @@ describe('pedidos comercial gates', () => {
     expect(lines[1].promotionCode).toBe('PMR31');
   });
 
+  test('rejects arbitrary, unknown and over-entitled submitted gifts', () => {
+    const promotion = [{ promoType: 'GIFT', promoCode: 'PMR31', productCode: '4773', giftSkus: ['4773'], minQty: 3, giftQty: 1 }];
+    const paid = { codigoArticulo: '4773', cantidadEnvases: 3, unidadMedida: 'CAJAS', promotionCode: 'PMR31' };
+    const gift = { codigoArticulo: '9999', cantidadEnvases: 1, unidadMedida: 'CAJAS', tipoLinea: 'G', promotionCode: 'PMR31' };
+    expect(() => applyGiftPromotionsToLines([paid, gift], promotion)).toThrow(expect.objectContaining({ code: 'INVALID_PROMOTION_GIFT' }));
+    expect(() => applyGiftPromotionsToLines([paid, { ...gift, codigoArticulo: '4773', promotionCode: 'UNKNOWN' }], promotion)).toThrow(expect.objectContaining({ code: 'INVALID_PROMOTION_GIFT' }));
+    expect(() => applyGiftPromotionsToLines([paid, { ...gift, codigoArticulo: '4773', cantidadEnvases: 2 }], promotion)).toThrow(expect.objectContaining({ code: 'INVALID_PROMOTION_GIFT' }));
+  });
+
+  test('uses the submitted eligible SKU and deduplicates PMP rows by promo code', () => {
+    const promotions = [
+      { promoType: 'GIFT', promoCode: 'NST', productCode: '3568', giftSkus: ['3568', '4773'], minQty: 3, giftQty: 2, noGiftBought: false },
+      { promoType: 'GIFT', promoCode: 'NST', productCode: '4773', giftSkus: ['3568', '4773'], minQty: 3, giftQty: 2, noGiftBought: false },
+    ];
+    const lines = applyGiftPromotionsToLines([
+      { codigoArticulo: '4773', cantidadEnvases: 3, unidadMedida: 'CAJAS', promotionCode: 'NST' },
+      { codigoArticulo: '4773', cantidadEnvases: 2, unidadMedida: 'CAJAS', tipoLinea: 'G', promotionCode: 'NST' },
+    ], promotions);
+    expect(lines.filter(isGiftLine)).toHaveLength(1);
+    expect(lines.filter(isGiftLine)[0].codigoArticulo).toBe('4773');
+  });
+
+  test('requires a different explicit selection when noGiftBought leaves no eligible SKU', () => {
+    expect(() => applyGiftPromotionsToLines([
+      { codigoArticulo: '4773', cantidadEnvases: 3, unidadMedida: 'CAJAS', promotionCode: 'NST' },
+    ], [{ promoType: 'GIFT', promoCode: 'NST', productCode: '4773', giftSkus: ['4773'], minQty: 3, giftQty: 1, noGiftBought: true }]))
+      .toThrow(expect.objectContaining({ code: 'GIFT_SELECTION_REQUIRED' }));
+  });
+
+  test('uses the UI paid-plus-explicit-gift shape without trusting a paid promo marker', () => {
+    const lines = applyGiftPromotionsToLines([
+      { codigoArticulo: '4773', cantidadEnvases: 3, unidadMedida: 'CAJAS', precioVenta: 8 },
+      { codigoArticulo: '4773', cantidadEnvases: 2, unidadMedida: 'CAJAS', precioVenta: 0, tipoLinea: 'G', promotionCode: 'NST' },
+    ], [{ promoType: 'GIFT', promoCode: 'NST', productCode: '3568', giftSkus: ['3568', '4773'], minQty: 3, giftQty: 2, noGiftBought: false }]);
+    expect(lines.filter(isGiftLine)).toEqual([expect.objectContaining({ codigoArticulo: '4773', cantidadEnvases: 2, precioVenta: 0 })]);
+  });
+
+  test('rejects gifts without entitlement, noGiftBought reuse, and invalid zero or negative quantities', () => {
+    const promotion = [{ promoType: 'GIFT', promoCode: 'NST', productCode: '4773', giftSkus: ['4773', '3568'], minQty: 3, giftQty: 1, noGiftBought: true }];
+    const gift = { codigoArticulo: '4773', cantidadEnvases: 1, unidadMedida: 'CAJAS', precioVenta: 0, tipoLinea: 'G', promotionCode: 'NST' };
+    expect(() => applyGiftPromotionsToLines([{ codigoArticulo: '4773', cantidadEnvases: 2, unidadMedida: 'CAJAS' }, gift], promotion))
+      .toThrow(expect.objectContaining({ code: 'INVALID_PROMOTION_GIFT' }));
+    expect(() => applyGiftPromotionsToLines([{ codigoArticulo: '4773', cantidadEnvases: 3, unidadMedida: 'CAJAS' }, gift], promotion))
+      .toThrow(expect.objectContaining({ code: 'INVALID_PROMOTION_GIFT' }));
+    expect(() => applyGiftPromotionsToLines([{ codigoArticulo: '4773', cantidadEnvases: 3, unidadMedida: 'CAJAS' }, { ...gift, codigoArticulo: '3568', cantidadEnvases: 0 }], promotion))
+      .toThrow(expect.objectContaining({ code: 'INVALID_PROMOTION_GIFT' }));
+  });
+
+  test('auto gift prefers the purchased eligible SKU over the first PMP row', () => {
+    const lines = applyGiftPromotionsToLines([
+      { codigoArticulo: '4773', cantidadEnvases: 3, unidadMedida: 'CAJAS', promotionCode: 'NST' },
+    ], [
+      { promoType: 'GIFT', promoCode: 'NST', productCode: '3568', giftSkus: ['3568', '4773'], minQty: 3, giftQty: 1, noGiftBought: false },
+      { promoType: 'GIFT', promoCode: 'NST', productCode: '4773', giftSkus: ['3568', '4773'], minQty: 3, giftQty: 1, noGiftBought: false },
+    ]);
+    expect(lines.filter(isGiftLine)[0].codigoArticulo).toBe('4773');
+  });
+
   test('capPendingToDocument uses min(CVC, documento)', () => {
     expect(capPendingToDocument(200, 100)).toBe(100);
     expect(capPendingToDocument(40, 100)).toBe(40);

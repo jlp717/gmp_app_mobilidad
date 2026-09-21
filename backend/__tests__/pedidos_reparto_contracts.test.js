@@ -185,6 +185,44 @@ beforeEach(() => {
 });
 
 describe('pedidos reparto confirmation contract', () => {
+  test.each(['envases', 'unidades'])('aggregates paid and gift %s before confirming stock', async (unit) => {
+    mockGetClientDays.mockReturnValue({ deliveryDays: ['martes'], deliveryDaysShort: 'M' });
+    mockSuccessfulConfirmationQueries({ includeLine: true });
+    const original = mockQueryWithParams.getMockImplementation();
+    mockQueryWithParams.mockImplementation(async (sql, ...args) => {
+      if (/FROM\s+DSEDAC\.ARO/i.test(sql)) return [{ CODE: 'ART001', ENVASES: 4, UNIDADES: 4 }];
+      const rows = await original(sql, ...args);
+      if (/FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) {
+        return [3, 2].map((quantity, index) => ({ ...rows[0], ID: 7 + index,
+          TIPOLINEA: index ? 'G' : 'R',
+          CANTIDADENVASES: unit === 'envases' ? quantity : 0,
+          CANTIDADUNIDADES: unit === 'unidades' ? quantity : 0,
+        }));
+      }
+      return rows;
+    });
+    const result = await pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' });
+    expect(result).toMatchObject({ blocked: true, reason: 'STOCK_INSUFICIENTE' });
+    expect(result.stockWarnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ product: 'ART001', requested: 5, available: 4, unit }),
+    ]));
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql))).toBe(false);
+  });
+
+  test('stock query failure returns the order to draft and does not confirm', async () => {
+    mockGetClientDays.mockReturnValue({ deliveryDays: ['martes'], deliveryDaysShort: 'M' });
+    mockSuccessfulConfirmationQueries({ includeLine: true });
+    const original = mockQueryWithParams.getMockImplementation();
+    mockQueryWithParams.mockImplementation(async (sql, ...args) => {
+      if (/FROM\s+DSEDAC\.ARO/i.test(sql)) throw new Error('stock unavailable');
+      return original(sql, ...args);
+    });
+    await expect(pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' }))
+      .rejects.toMatchObject({ code: 'STOCK_VALIDATION_FAILED', status: 503 });
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /SET\s+ESTADO\s*=\s*'BORRADOR'/i.test(sql))).toBe(true);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql))).toBe(false);
+  });
+
   test('rejects delivery date outside client delivery days', async () => {
     mockGetClientDays.mockReturnValue({
       visitDays: ['lunes'],
@@ -581,5 +619,20 @@ describe('pedidos reparto confirmation contract', () => {
       numeroFactura: 4984,
       facturaPdfAvailable: true,
     });
+  });
+});
+
+
+describe('gift SKU metadata', () => {
+  test('hydrates the gift from its own article instead of the paid line', async () => {
+    mockQueryWithParams.mockResolvedValue([{ CODE: 'GIFT', NAME: 'Actual gift', UNIDADESCAJA: 6, CODIGOIVA: '3', PRECIOCOSTO: 4.25 }]);
+    const line = { codigoArticulo: 'GIFT', tipoLinea: 'G', esRegalo: true, precioVenta: 0, unidadesCaja: 12, codigoIva: '1', precioCosto: 99, descripcion: 'Wrong paid product' };
+    const result = await pedidosService._private.hydrateGiftArticles([line]);
+    expect(result[0]).toMatchObject({ descripcion: 'Actual gift (Regalo)', unidadesCaja: 6, codigoIva: '3', precioCosto: 4.25, precioVenta: 0 });
+    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['GIFT']);
+  });
+  test('fails closed if the gift article cannot be verified', async () => {
+    mockQueryWithParams.mockResolvedValue([]);
+    await expect(pedidosService._private.hydrateGiftArticles([{ codigoArticulo: 'GIFT', tipoLinea: 'G', esRegalo: true }])).rejects.toMatchObject({ code: 'GIFT_PRODUCT_UNAVAILABLE', status: 409 });
   });
 });

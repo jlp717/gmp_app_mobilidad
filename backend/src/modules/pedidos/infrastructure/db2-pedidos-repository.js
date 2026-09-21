@@ -7,6 +7,7 @@ const { Product } = require('../domain/product');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { getCurrentDate, VENDOR_COLUMN, LACLAE_SALES_FILTER, sanitizeCodeList } = require('../../../../utils/common');
 const { randomUUID } = require('crypto');
+const { db2AppTable } = require('../../../../utils/db2-schemas');
 
 class Db2PedidosRepository extends PedidosRepository {
   constructor(dbPool) {
@@ -67,7 +68,7 @@ class Db2PedidosRepository extends PedidosRepository {
 
     return this._db.transaction(async (conn) => {
       const cabSql = `
-        INSERT INTO JAVIER.PEDIDOS_CAB (
+        INSERT INTO ${db2AppTable('PEDIDOS_CAB')} (
           ID, EJERCICIO, NUMEROPEDIDO, SERIEPEDIDO, CODIGOCLIENTE,
           FECHAPEDIDO, ESTADO, OBSERVACIONES, CODIGO_USUARIO, ORIGEN
         ) VALUES (?, ?, 1, 'M', ?, CURRENT_TIMESTAMP, 'CONFIRMADO', ?, ?, 'APP')
@@ -78,7 +79,7 @@ class Db2PedidosRepository extends PedidosRepository {
       for (const line of lines) {
         const lineId = randomUUID();
         const linSql = `
-          INSERT INTO JAVIER.PEDIDOS_LIN (
+          INSERT INTO ${db2AppTable('PEDIDOS_LIN')} (
             ID, PEDIDO_ID, CODIGOARTICULO, CANTIDAD, UNIDAD, PRECIO
           ) VALUES (?, ?, ?, ?, ?, ?)
         `;
@@ -108,7 +109,7 @@ class Db2PedidosRepository extends PedidosRepository {
         COUNT(*) as TOTAL,
         SUM(CASE WHEN TRIM(ESTADO) IN ('BORRADOR', 'CONFIRMANDO', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION') THEN 1 ELSE 0 END) as BORRADORES,
         SUM(CASE WHEN TRIM(ESTADO) IN ('CONFIRMADO', 'ENVIADO', 'ENTREGADO', 'FACTURADO') THEN 1 ELSE 0 END) as CONFIRMADOS
-      FROM JAVIER.PEDIDOS_CAB
+      FROM ${db2AppTable('PEDIDOS_CAB')}
       WHERE CODIGOVENDEDOR = ?
     `;
 

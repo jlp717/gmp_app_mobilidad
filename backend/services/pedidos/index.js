@@ -35,6 +35,9 @@ const {
 const ERP_SCHEMA = getDb2WriteSchema();
 const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
 const PEDIDOS_LIN_TABLE = db2AppTable('PEDIDOS_LIN');
+const PEDIDOS_SEQ_TABLE = db2AppTable('PEDIDOS_SEQ');
+const PEDIDO_IDEMPOTENCY_TABLE = db2AppTable('PEDIDO_IDEMPOTENCY');
+const PEDIDOS_STOCK_RESERVE_TABLE = db2AppTable('PEDIDOS_STOCK_RESERVE');
 const PRICING_CONFIG_SCHEMA = 'JAVIER';
 const BOLSA_PRODUCT_PRICE_TABLE = `${PRICING_CONFIG_SCHEMA}.BOLSA_PRODUCTO_PRECIO`;
 const { comercialErpTable } = require('../../utils/comercial-erp-tables');
@@ -49,7 +52,7 @@ const PROMOTIONS_SCHEMA = db2Schema('DSEDAC', 'PROMOTIONS_SCHEMA');
 const PROMOTION_SOURCE_TABLES = new Set(['PRD', 'PMR', 'PMRC', 'PMP', 'CPES']);
 // App stock reserves are JAVIER-only (G2: no DSEDAC DML literals in deployable services).
 const DELETE_STOCK_RESERVE_BY_PEDIDO_SQL =
-    'DELETE FROM JAVIER.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?';
+    `DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`;
 const DRAFT_STOCK_RESERVATION_HOURS = 24;
 const DRAFT_STOCK_RESERVATION_STATES_SQL = "'BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION', 'CONFIRMANDO'";
 const ACTIVE_STOCK_RESERVATION_CONDITION = `
@@ -536,7 +539,7 @@ async function lookupPedidoIdempotency(idempotencyKey) {
     try {
         const rows = await queryWithParams(
             `SELECT PEDIDO_ID, PAYLOAD_HASH
-               FROM ${ERP_SCHEMA}.PEDIDO_IDEMPOTENCY
+               FROM ${PEDIDO_IDEMPOTENCY_TABLE}
               WHERE IDEMPOTENCY_KEY = ?`,
             [idempotencyKey],
             false,
@@ -567,7 +570,7 @@ async function storePedidoIdempotency({
     const storedClientCode = truncate(clientCode, 10);
     const storedVendedorCode = resolvePedidoActorCodes({ CODIGOVENDEDOR: vendedorCode }).vendedor;
     await queryWithParams(
-        `INSERT INTO ${ERP_SCHEMA}.PEDIDO_IDEMPOTENCY
+        `INSERT INTO ${PEDIDO_IDEMPOTENCY_TABLE}
             (IDEMPOTENCY_KEY, PEDIDO_ID, PAYLOAD_HASH, CLIENT_CODE, VENDEDOR_CODE)
          VALUES (?, ?, ?, ?, ?)`,
         [
@@ -1995,7 +1998,7 @@ async function reserveStockLines(executor, lines, orderId) {
 
     const columns = ['PEDIDO_ID', 'CODIGOARTICULO', 'CANTIDADENVASES', 'CANTIDADUNIDADES'];
     const specs = [...byCode.entries()].map(([code, qty]) => ({
-        table: `${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE`,
+        table: PEDIDOS_STOCK_RESERVE_TABLE,
         columns,
         params: [orderId, code, qty.envases, qty.unidades],
     }));
@@ -2007,7 +2010,7 @@ async function reserveStockLines(executor, lines, orderId) {
 
 async function replaceStockReservationLines(executor, lines, orderId) {
     await executor(
-        `DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`,
+        `DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`,
         [orderId]
     );
     await reserveStockLines(executor, lines, orderId);
@@ -2043,6 +2046,11 @@ async function refreshDraftStockReservation(orderId, executor = (sql, params) =>
 // ============================================================================
 
 async function initPedidosTables() {
+    if (String(process.env.REPARTO_TABLE_SET || '').toLowerCase() === 'isolated_test') {
+        // TEST auxiliary tables are provisioned only by the approved DDL plan.
+        // Never bootstrap or alter shared tables from an isolated runtime.
+        return;
+    }
     const pool = getPool();
     if (!pool) { logger.warn('[PEDIDOS] No DB pool available for init'); return; }
 
@@ -2203,7 +2211,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
                 SUM(CASE WHEN L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)) THEN L.LCIMVT ELSE 0 END) AS SALES_PREV_YEAR,
                 COUNT(*) AS PURCHASE_COUNT
             FROM ${comercialErpTable('LACLAE')} L
-            WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10))
+            WHERE L.LCCDCL = CAST(? AS CHAR(10))
               AND L.LCAADC IN (?, ?)
               AND ((L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)))
                 OR (L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)))
@@ -2261,7 +2269,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
             SELECT SR.CODIGOARTICULO,
                 SUM(SR.CANTIDADENVASES) AS RES_ENV,
                 SUM(SR.CANTIDADUNIDADES) AS RES_UNI
-            FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
+            FROM ${PEDIDOS_STOCK_RESERVE_TABLE} SR
             JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
             JOIN ART_PAGE P ON SR.CODIGOARTICULO = P.CODIGOARTICULO
             GROUP BY SR.CODIGOARTICULO
@@ -2653,7 +2661,7 @@ async function getStock(code, almacen = 1, options = {}) {
         (
             SELECT COALESCE(SUM(SR.CANTIDADENVASES), 0) AS RES_ENVASES,
                    COALESCE(SUM(SR.CANTIDADUNIDADES), 0) AS RES_UNIDADES
-            FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
+            FROM ${PEDIDOS_STOCK_RESERVE_TABLE} SR
             JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID
             WHERE TRIM(SR.CODIGOARTICULO) = ?
               AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
@@ -2716,7 +2724,7 @@ async function getStockBatch(codes, almacen = 1, options = {}) {
                     SELECT TRIM(SR.CODIGOARTICULO) AS CODE,
                            COALESCE(SUM(SR.CANTIDADENVASES), 0) AS RES_ENVASES,
                            COALESCE(SUM(SR.CANTIDADUNIDADES), 0) AS RES_UNIDADES
-                     FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
+                     FROM ${PEDIDOS_STOCK_RESERVE_TABLE} SR
                       JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID
                      WHERE ${ACTIVE_STOCK_RESERVATION_CONDITION}
                        AND TRIM(SR.CODIGOARTICULO) IN (${placeholders})
@@ -2750,7 +2758,7 @@ async function tryAtomicNextOrderNumber(ejercicio) {
     try {
         const rows = await queryWithParams(
             `SELECT ULTIMO_NUMERO FROM FINAL TABLE (
-                UPDATE ${ERP_SCHEMA}.PEDIDOS_SEQ
+                UPDATE ${PEDIDOS_SEQ_TABLE}
                    SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1
                  WHERE EJERCICIO = ?
             )`,
@@ -2768,11 +2776,11 @@ async function tryAtomicNextOrderNumber(ejercicio) {
 
 async function updateAndReadNextOrderNumber(ejercicio) {
     await queryWithParams(
-        `UPDATE ${ERP_SCHEMA}.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
+        `UPDATE ${PEDIDOS_SEQ_TABLE} SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
         [ejercicio], false
     );
     const rows = await queryWithParams(
-        `SELECT ULTIMO_NUMERO FROM ${ERP_SCHEMA}.PEDIDOS_SEQ WHERE EJERCICIO = ?`,
+        `SELECT ULTIMO_NUMERO FROM ${PEDIDOS_SEQ_TABLE} WHERE EJERCICIO = ?`,
         [ejercicio], false
     );
     return rows?.[0]?.ULTIMO_NUMERO ? integerValue(rows[0].ULTIMO_NUMERO) : null;
@@ -2788,7 +2796,7 @@ async function getNextOrderNumber(ejercicio) {
 
         try {
             await queryWithParams(
-                `INSERT INTO ${ERP_SCHEMA}.PEDIDOS_SEQ (EJERCICIO, ULTIMO_NUMERO) VALUES (?, 1)`,
+                `INSERT INTO ${PEDIDOS_SEQ_TABLE} (EJERCICIO, ULTIMO_NUMERO) VALUES (?, 1)`,
                 [ejercicio], false
             );
             return 1;
@@ -3105,6 +3113,41 @@ async function getArticleIvaCodesForLines(lines) {
     return ivaByCode;
 }
 
+async function hydrateGiftArticles(lines) {
+    const codes = [...new Set(lines.filter(isGiftLine).map(line => truncate(line.codigoArticulo, 10)))];
+    if (!codes.length) return lines;
+    const slots = codes.map(() => '?').join(',');
+    const rows = await queryWithParams(`
+      WITH GIFT_ARTICLES AS (
+        SELECT CODIGOARTICULO, DESCRIPCIONARTICULO, UNIDADESCAJA, CODIGOIVA
+          FROM ${comercialErpTable('ART')} WHERE CODIGOARTICULO IN (${slots})
+      ), LAST_COST AS (
+        SELECT L.CODIGOARTICULO, L.PRECIOCOSTO,
+          ROW_NUMBER() OVER (PARTITION BY L.CODIGOARTICULO
+            ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC) AS RN
+          FROM ${comercialErpTable('LAC')} L
+          JOIN GIFT_ARTICLES A ON A.CODIGOARTICULO=L.CODIGOARTICULO
+         WHERE L.PRECIOCOSTO > 0
+      )
+      SELECT TRIM(A.CODIGOARTICULO) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
+             A.UNIDADESCAJA, A.CODIGOIVA, COALESCE(C.PRECIOCOSTO, 0) AS PRECIOCOSTO
+        FROM GIFT_ARTICLES A LEFT JOIN LAST_COST C ON C.CODIGOARTICULO=A.CODIGOARTICULO AND C.RN=1`, codes, false, false);
+    const byCode = new Map(rows.map(row => [trimString(row.CODE), row]));
+    return lines.map(line => {
+        if (!isGiftLine(line)) return line;
+        const article = byCode.get(trimString(line.codigoArticulo));
+        if (!article) {
+            const error = new Error('No se puede verificar el artículo regalo.');
+            error.code = 'GIFT_PRODUCT_UNAVAILABLE'; error.status = 409;
+            throw error;
+        }
+        return { ...line, descripcion: `${trimString(article.NAME).slice(0, 31)} (Regalo)`,
+            unidadesCaja: Number(article.UNIDADESCAJA) || 1, codigoIva: trimString(article.CODIGOIVA),
+            precioCosto: Number(article.PRECIOCOSTO) || 0,
+            precioTarifa: undefined, precioTarifaCliente: undefined, precioMinimo: undefined };
+    });
+}
+
 async function createOrder({
     clientCode,
     clientName,
@@ -3136,6 +3179,7 @@ async function createOrder({
         vendorCode: vendedorCode,
     });
     lines = applyGiftPromotionsToLines(lines, await getActivePromotionsV2(truncate(clientCode, 10)));
+    lines = await hydrateGiftArticles(lines);
     if (lines.length > MAX_ORDER_LINES) {
         throw new Error(`Un pedido no puede tener mas de ${MAX_ORDER_LINES} lineas`);
     }
@@ -3438,7 +3482,7 @@ async function createOrder({
     } catch (reserveErr) {
         logger.error(`[PEDIDOS] Failed to reserve stock for draft ${pedidoId}, rolling back draft: ${reserveErr.message}`);
         try {
-            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [pedidoId], false);
+            await queryWithParams(`DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
             await queryWithParams(`DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
             await queryWithParams(`DELETE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`, [pedidoId], false);
             logger.info(`[PEDIDOS] Successfully rolled back draft ID=${pedidoId} after stock reservation failure`);
@@ -3479,7 +3523,7 @@ async function createOrder({
             }
             logger.error(`[PEDIDOS] Failed to persist dedupe key for draft ${pedidoId}, rolling back draft: ${storeErr.message}`);
             try {
-                await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [pedidoId], false);
+                await queryWithParams(`DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
                 await queryWithParams(`DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
                 await queryWithParams(`DELETE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`, [pedidoId], false);
                 logger.info(`[PEDIDOS] Successfully rolled back draft ID=${pedidoId} after idempotency store failure`);
@@ -3561,7 +3605,7 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             SELECT PEDIDO_ID,
                    COUNT(*) AS BOLSA_MOV_COUNT,
                    COALESCE(SUM(IMPORTE), 0) AS BOLSA_NETO
-              FROM JAVIER.MOVIMIENTOS_BOLSA
+              FROM ${db2AppTable('MOVIMIENTOS_BOLSA')}
              WHERE PEDIDO_ID IS NOT NULL
              GROUP BY PEDIDO_ID
         ) BM ON C.ID = BM.PEDIDO_ID
@@ -3794,7 +3838,7 @@ async function getBolsaMovementsForOrder(orderId) {
                     CODIGO_ARTICULO, DESCRIPCION, PEDIDO_ID, LINEA_ID,
                     PRECIO_MINIMO_CONGELADO, PRECIO_VENTA, CANTIDAD,
                     UNIDAD_MEDIDA, IDEMPOTENCY_KEY, CREATED_AT
-               FROM JAVIER.MOVIMIENTOS_BOLSA
+               FROM ${db2AppTable('MOVIMIENTOS_BOLSA')}
               WHERE PEDIDO_ID = ?
               ORDER BY CREATED_AT ASC, ID ASC`,
             [orderId],
@@ -4491,18 +4535,36 @@ async function confirmOrder(orderId, saleType, options = {}) {
         throw err;
     }
 
-    const stockByCode = await getStockBatch(lines.map(line => line.CODIGOARTICULO), 1, { excludePedidoId: id });
+    let stockByCode;
+    try {
+        stockByCode = await getStockBatch(lines.map(line => line.CODIGOARTICULO), 1, { excludePedidoId: id });
+    } catch (cause) {
+        await revertConfirming('STOCK_VALIDATION_FAILED');
+        const error = new Error('No se pudo comprobar el stock. El pedido permanece en borrador.');
+        error.code = 'STOCK_VALIDATION_FAILED';
+        error.status = 503;
+        error.cause = cause;
+        throw error;
+    }
+    const requestedByCode = new Map();
     for (const line of lines) {
         const code = (line.CODIGOARTICULO || '').trim();
         if (!code) continue;
-        try {
+        const current = requestedByCode.get(code) || { envases: 0, unidades: 0, description: '' };
+        current.envases += parseFloat(line.CANTIDADENVASES) || 0;
+        current.unidades += parseFloat(line.CANTIDADUNIDADES) || 0;
+        current.description ||= (line.DESCRIPCION || '').trim();
+        requestedByCode.set(code, current);
+    }
+    for (const [code, requested] of requestedByCode) {
+        if (!code) continue;
             const stock = stockByCode.get(code) || { envases: 0, unidades: 0 };
-            const reqEnvases = parseFloat(line.CANTIDADENVASES) || 0;
-            const reqUnidades = parseFloat(line.CANTIDADUNIDADES) || 0;
+            const reqEnvases = requested.envases;
+            const reqUnidades = requested.unidades;
             if (reqEnvases > 0 && reqEnvases > stock.envases) {
                 const warning = {
                     product: code,
-                    description: (line.DESCRIPCION || '').trim(),
+                    description: requested.description,
                     requested: reqEnvases,
                     available: stock.envases,
                     unit: 'envases'
@@ -4513,7 +4575,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             if (reqUnidades > 0 && reqUnidades > stock.unidades) {
                 const warning = {
                     product: code,
-                    description: (line.DESCRIPCION || '').trim(),
+                    description: requested.description,
                     requested: reqUnidades,
                     available: stock.unidades,
                     unit: 'unidades'
@@ -4521,9 +4583,6 @@ async function confirmOrder(orderId, saleType, options = {}) {
                 stockWarnings.push(warning);
                 if (stock.unidades <= 0 && reqEnvases <= 0) outOfStockProducts.push(code);
             }
-        } catch (e) {
-            logger.warn(`[PEDIDOS] Stock check failed for ${code}: ${e.message}`);
-        }
     }
 
     // P0-C: BLOCK confirmation if stock would go negative (unless force-approved)
@@ -4617,7 +4676,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
                 `UPDATE ${PEDIDOS_CAB_TABLE} SET ESTADO = 'BORRADOR', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
                 [id], false
             );
-            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id], false);
+            await queryWithParams(`DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`, [id], false);
         } catch (rollbackErr) {
             logger.error(`[PEDIDOS] CRITICAL: Rollback also failed for order #${id}: ${rollbackErr.message}`);
         }
@@ -4757,7 +4816,7 @@ async function cancelOrder(orderId, options = {}) {
             )`;
 
     await queryWithParams(
-        `DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ? AND ${draftStateExists}`,
+        `DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ? AND ${draftStateExists}`,
         [id, id],
         false,
     )
@@ -6670,7 +6729,7 @@ async function getSimilarProducts(productCode) {
                 SELECT SR.CODIGOARTICULO,
                     SUM(SR.CANTIDADENVASES) AS RES_ENV,
                     SUM(SR.CANTIDADUNIDADES) AS RES_UNI
-                FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
+                FROM ${PEDIDOS_STOCK_RESERVE_TABLE} SR
                 JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
@@ -6713,7 +6772,7 @@ async function getSimilarProducts(productCode) {
                 SELECT SR.CODIGOARTICULO,
                     SUM(SR.CANTIDADENVASES) AS RES_ENV,
                     SUM(SR.CANTIDADUNIDADES) AS RES_UNI
-                FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
+                FROM ${PEDIDOS_STOCK_RESERVE_TABLE} SR
                 JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON B.CODIGOARTICULO = RES.CODIGOARTICULO
@@ -7006,7 +7065,7 @@ async function searchProductsWithStock(searchTerm, limit = 20) {
                 SELECT SR.CODIGOARTICULO,
                     SUM(SR.CANTIDADENVASES) AS RES_ENV,
                     SUM(SR.CANTIDADUNIDADES) AS RES_UNI
-                FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE SR
+                FROM ${PEDIDOS_STOCK_RESERVE_TABLE} SR
                 JOIN ${PEDIDOS_CAB_TABLE} C ON SR.PEDIDO_ID = C.ID AND ${ACTIVE_STOCK_RESERVATION_CONDITION}
                 GROUP BY SR.CODIGOARTICULO
             ) RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
@@ -7119,6 +7178,7 @@ module.exports = {
     _private: {
         getNextOrderNumber,
         getClientOrderDefaults,
+        hydrateGiftArticles,
         getDefaultTruckAssignment,
         resolvePedidoTerminal,
         exportCommercialOrderToSystem,

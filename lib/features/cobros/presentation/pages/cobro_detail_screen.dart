@@ -21,7 +21,8 @@ double minimumCobroAmount(CobroPendiente cobro) {
 
 /// Returns true when a document may still be charged.
 bool isCobroPayable(CobroPendiente cobro) {
-  return cobro.estado != EstadoCobro.alDia &&
+  return !cobro.documentoNoDisponible &&
+      cobro.estado != EstadoCobro.alDia &&
       cobro.importePendiente > cobroPayableEpsilon;
 }
 
@@ -528,7 +529,11 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     final payableCobros = cobrosPayableItems(
       pendientes.where((c) => !c.cobradoPorRepartidor),
     );
-    final settledCobros = cobrosNonPayableItems(pendientes);
+    final unverifiedCobros =
+        pendientes.where((c) => c.documentoNoDisponible).toList();
+    final settledCobros = cobrosNonPayableItems(pendientes)
+        .where((c) => !c.documentoNoDisponible)
+        .toList();
     final historico = cobros.historicoCobros;
     final totalAbonar = _calcularTotalACobrar();
     final summaryPending = cobros.pendingForClient(widget.codigoCliente);
@@ -545,7 +550,12 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
     final summaryMismatch = summaryPending > 0 &&
         cobros.hasPendingSummaryForClient(widget.codigoCliente) &&
-        (summaryPending - totalPendiente).abs() > 0.05;
+        (summaryPending -
+                    totalPendiente -
+                    unverifiedCobros.fold<double>(
+                        0, (sum, c) => sum + c.importePendiente))
+                .abs() >
+            0.05;
 
     // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si los documentos crecen mucho.
     final detailRows = <Widget>[
@@ -588,6 +598,17 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         ),
         const SizedBox(height: 8),
         ...payableCobros.map(_buildCobroCard),
+      ],
+      if (unverifiedCobros.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        _buildSectionHeader(
+          'Deuda pendiente de revisión',
+          'Documento ERP no verificable. Cobro no disponible.',
+          Icons.warning_amber_outlined,
+          AppColors.warning,
+        ),
+        const SizedBox(height: 8),
+        ...unverifiedCobros.map(_buildSettledCobroTile),
       ],
       if (settledCobros.isNotEmpty) ...[
         const SizedBox(height: 8),
@@ -952,18 +973,32 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   }
 
   Widget _buildSettledCobroTile(CobroPendiente cobro) {
-    final settledLabel =
-        cobro.isSettledByRepartidor ? 'Cobrado por repartidor' : 'No cobrable';
+    final settledLabel = cobro.documentoNoDisponible
+        ? 'Documento pendiente de revisar'
+        : cobro.isSettledByRepartidor
+            ? 'Cobrado por repartidor'
+            : 'No cobrable';
+    final statusColor =
+        cobro.documentoNoDisponible ? AppColors.warning : AppColors.success;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       color: AppTheme.raisedSurface.withValues(alpha: 0.55),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: AppTheme.success.withValues(alpha: 0.22)),
+        side: BorderSide(color: statusColor.withValues(alpha: 0.22)),
       ),
       child: ListTile(
-        leading:
-            const Icon(Icons.check_circle_outline, color: AppTheme.success),
+        leading: Icon(
+          cobro.documentoNoDisponible
+              ? Icons.info_outline
+              : Icons.check_circle_outline,
+          color: cobro.documentoNoDisponible
+              ? AppColors.warning
+              : AppColors.success,
+          semanticLabel: cobro.documentoNoDisponible
+              ? 'Cobro no disponible: documento ERP pendiente de verificar'
+              : 'Documento no cobrable',
+        ),
         title: Text(
           cobro.conceptoVisible,
           maxLines: 1,
@@ -983,8 +1018,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           children: [
             Text(
               _currencyFormat.format(cobro.importePendiente),
-              style: const TextStyle(
-                color: AppTheme.success,
+              style: TextStyle(
+                color: statusColor,
                 fontWeight: FontWeight.bold,
               ),
             ),

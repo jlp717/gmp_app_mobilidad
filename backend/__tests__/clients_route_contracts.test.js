@@ -174,7 +174,7 @@ describe('clients route regression contracts', () => {
     expect(familySql).toMatch(/FROM\s+DSED\.LACLAE\s+L/i);
     expect(familySql).toMatch(/DESCRIPCIONARTICULO|L\.LCCDRF/i);
     expect(familySql).not.toMatch(/\bA\.DESCRIPCION\b/i);
-    expect(familySql).toMatch(/CAST\(\?\s+AS\s+VARCHAR\(10\)\)/i);
+    expect(familySql).toMatch(/CAST\(\?\s+AS\s+CHAR\(10\)\)/i);
     expect(familySql).not.toMatch(/LCCDVD\s*=/i);
     expect(familyParams[0]).toBe('C001');
     expect(familyParams[1]).toEqual(expect.any(Number));
@@ -209,10 +209,10 @@ describe('clients route regression contracts', () => {
     expect(scopeParams[0]).toBe('4300030056');
     expect(scopeParams).toEqual(expect.arrayContaining(['80']));
     const historyCall = mockQueryWithParams.mock.calls.find((call) => (
-      /FROM\s+DSED\.LACLAE/i.test(call[0]) && /TRIM\(L\.LCCDCL\)/i.test(call[0])
+      /FROM\s+DSED\.LACLAE/i.test(call[0]) && /L\.LCCDCL\s*=\s*CAST\(\?\s+AS\s+CHAR\(10\)\)/i.test(call[0])
     ));
     expect(historyCall).toBeTruthy();
-    expect(historyCall[0]).toMatch(/CAST\(\?\s+AS\s+VARCHAR\(10\)\)/i);
+    expect(historyCall[0]).toMatch(/CAST\(\?\s+AS\s+CHAR\(10\)\)/i);
     expect(historyCall[0]).not.toMatch(/LCCDVD\s*=/i);
     expect(historyCall[1][0]).toBe('4300030056');
     expect(historyCall[1]).not.toEqual(expect.arrayContaining(['80']));

@@ -414,9 +414,27 @@ describe('pedidos create order persistence contract', () => {
     };
   }
 
-  function mockCreateOrderFlow({ failTotalsUpdate = false } = {}) {
+  function mockCreateOrderFlow({ failTotalsUpdate = false, giftPromo = false } = {}) {
     const rows = mockCreatedOrderReads();
-    mockQueryWithParams.mockImplementation(async (sql) => {
+    mockQueryWithParams.mockImplementation(async (sql, params = []) => {
+      if (/FROM\s+QSYS2\.SYSCOLUMNS/i.test(sql)) {
+        const table = String(params[1] || '').trim();
+        return ['PMR', 'PMRC', 'PMP'].includes(table) ? [{ COLUMN_NAME: 'CODIGOPROMOCIONREGALO' }] : [];
+      }
+      if (giftPromo && /FROM\s+DSEDAC\.PMRC\s+C/i.test(sql)) {
+        return [{
+          PROMO_CODE: '3+1', PROMO_NAME: '3+1',
+          CANTIDADMINIMAPROMOCION: 3, CANTIDADMAXIMAREGALO: 1,
+          CANTIDADMINIMAREGALO: 1, PROMOCIONACUMULATIVASN: 'N',
+          NOREGALARPRODUCTOSCOMPRADOSSN: 'N', PRODUCT_CODE: 'ART001',
+          PRODUCT_NAME: 'Producto', PRODUCT_MIN_ENVASES: 1,
+          PRODUCT_MAX_ENVASES: 1, STOCK_ENVASES: 10, STOCK_UNIDADES: 0,
+          PRODUCT_ORDER: 1, ASSIGNMENT_SOURCE: 'PMRC',
+        }];
+      }
+      if (giftPromo && /WITH\s+GIFT_ARTICLES/i.test(sql)) {
+        return [{ CODE: 'ART001', NAME: 'Producto', UNIDADESCAJA: 1, CODIGOIVA: '2', PRECIOCOSTO: 4 }];
+      }
       if (/DSEDAC\.CLC/i.test(sql) && /DSEDAC\.ARA/i.test(sql)) {
         return [
           { CODIGOARTICULO: 'ART001', PRECIOTARIFA: 10 },
@@ -541,8 +559,8 @@ describe('pedidos create order persistence contract', () => {
     expect(lineCall[0]).toMatch(/PORCENTAJEDESCUENTO/i);
   });
 
-  test('createOrder keeps gift REGALO lines at price 0 instead of client tariff', async () => {
-    mockCreateOrderFlow();
+  test('createOrder keeps a verified PMR/PMP gift at price 0 instead of client tariff', async () => {
+    mockCreateOrderFlow({ giftPromo: true });
 
     await pedidosService.createOrder({
       clientCode: 'C001',
@@ -1358,7 +1376,7 @@ describe('pedidos mutation route ownership contract', function() {
     expect(scopeSql).toMatch(/VENDEDORCOMERCIAL/);
     expect(scopeSql).not.toMatch(/CLI\.CODIGOVENDEDOR/);
     expect(scopeSql).not.toMatch(/CODIGOVENDEDOR/);
-    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['C999', '01', '01']);
+    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['C999', '01', '01', '01']);
   });
   test('COMERCIAL cannot read another vendor order detail', async function() {
     const { request, app, mockService } = makeMutationApp({ user: { code: '01', role: 'COMERCIAL' }, orderVendor: '02' });

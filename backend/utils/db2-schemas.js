@@ -124,6 +124,29 @@ function resolveCommercialRuntimeTable(kind) {
  */
 function db2AppTable(table) {
   const name = String(table || '').trim().toUpperCase();
+  // Never fall back to shared buffers when isolated mode is requested, even
+  // when an unrelated runtime validation or import fails.
+  const isolatedTables = new Set([
+    'COBROS', 'REPARTIDOR_COBROS', 'PEDIDOS_CAB', 'PEDIDOS_LIN',
+    'PEDIDOS_SEQ', 'PEDIDO_IDEMPOTENCY', 'PEDIDOS_STOCK_RESERVE',
+    'BOLSA_COMERCIAL', 'MOVIMIENTOS_BOLSA',
+  ]);
+  if (String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test'
+      && isolatedTables.has(name)) return db2QualifiedTable('JAVIER', `TEST_${name}`);
+  try {
+    const { resolveRepartoRuntime } = require('../config/reparto-runtime');
+    const runtime = resolveRepartoRuntime(process.env);
+    if (runtime?.tableSet === 'isolated_test') {
+      const isolated = {
+        PEDIDOS_SEQ: 'JAVIER.TEST_PEDIDOS_SEQ',
+        PEDIDO_IDEMPOTENCY: 'JAVIER.TEST_PEDIDO_IDEMPOTENCY',
+        PEDIDOS_STOCK_RESERVE: 'JAVIER.TEST_PEDIDOS_STOCK_RESERVE',
+        BOLSA_COMERCIAL: 'JAVIER.TEST_BOLSA_COMERCIAL',
+        MOVIMIENTOS_BOLSA: 'JAVIER.TEST_MOVIMIENTOS_BOLSA',
+      };
+      if (isolated[name]) return isolated[name];
+    }
+  } catch (_) { /* preserve safe default */ }
   if (name === 'COBROS') {
     return resolveCommercialRuntimeTable('cobros') || db2WriteTable('COBROS');
   }

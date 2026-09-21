@@ -33,7 +33,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = false;
   configureDependencies();
-  if (kDebugMode) {
+  if (kDebugMode && !bool.hasEnvironment('API_BASE_URL')) {
     ApiConfig.setDevelopment();
   }
 

@@ -64,7 +64,7 @@ test('CVC payment ownership uses the same vendor as the pending document, not MI
   const [sql, params] = mockQueryWithParams.mock.calls.find(([value]) => /FROM DSEDAC\.CVC C\b/i.test(value));
   expect(sql).toContain('TRIM(C.CODIGOVENDEDOR) AS CODIGOVENDEDOR');
   expect(sql).not.toContain('MIN(CLP.VENDEDORCOMERCIAL)');
-  expect(params).toEqual(['4300032729', 'CVC:CAC:B:GMP:2026:E:35:22:1:1']);
+  expect(params).toEqual(['4300032729', '4300032729', '4300032729', 'CVC:CAC:B:GMP:2026:E:35:22:1:1']);
 });
 
 function paymentIdForTest(value) {
@@ -189,10 +189,10 @@ describe('commercial cobros hardening', () => {
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
     expect(sql).not.toMatch(/\bJOIN\s+DSEDAC\.CLP/i);
     expect(sql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
-    expect(mockQueryWithParams.mock.calls.every(([sqlText]) => /QSYS2\.SYSCOLUMNS2/i.test(sqlText))).toBe(true);
+    expect(mockQueryWithParams.mock.calls.every(([sqlText]) => /QSYS2\.SYSCOLUMNS2|FROM JAVIER\.(?:COBROS|REPARTIDOR_COBROS)/i.test(sqlText))).toBe(true);
     expect(result).toEqual({
       summary: {
-        C001: { nombre: 'Cliente Uno', total: 125.5, vencido: 25.5, count: 2, estado: 'VENCIDO' },
+        C001: { nombre: 'Cliente Uno', totalCobrable: 125.5, total: 125.5, vencido: 25.5, count: 2, estado: 'VENCIDO' },
       },
       grandTotal: 125.5,
       grandTotalVencido: 25.5,
@@ -234,7 +234,7 @@ describe('commercial cobros hardening', () => {
     const fetchLimit = Number(summarySql.match(/FETCH FIRST (\d+) ROWS ONLY/i)[1]);
     expect(fetchLimit).toBeGreaterThan(0);
     expect(fetchLimit).toBeLessThanOrEqual(500);
-    expect(summarySql).not.toMatch(/ROW_NUMBER\(\)|CLIENT_RANKED|SCOPE_TOTALS/i);
+    expect(summarySql).not.toMatch(/CLIENT_RANKED|SCOPE_TOTALS/i);
   });
 
   test('getPendingSummary applies document date filters to CVC summary', async () => {
@@ -288,7 +288,7 @@ describe('commercial cobros hardening', () => {
 
     expect(result.pagination).toEqual({ limit: 25, page: 3, offset: 50, returnedDocuments: 1 });
     expect(Object.keys(result.summary)).toEqual(['C051']);
-    expect(result.summary.C051).toEqual({ nombre: 'Cliente 51', total: 100, vencido: 0, count: 1, estado: 'PENDIENTE' });
+    expect(result.summary.C051).toEqual({ nombre: 'Cliente 51', total: 100, totalCobrable: 100, vencido: 0, count: 1, estado: 'PENDIENTE' });
     expect(result.grandTotal).toBe(5100);
     expect(result.grandTotalVencido).toBe(0);
     const summarySql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
@@ -328,7 +328,7 @@ describe('commercial cobros hardening', () => {
 
     expect(result).toEqual({
       summary: {
-        C001: { nombre: 'Cliente Uno', total: 100, vencido: 50, count: 2, estado: 'VENCIDO' },
+        C001: { nombre: 'Cliente Uno', total: 100, totalCobrable: 100, vencido: 50, count: 2, estado: 'VENCIDO' },
       },
       grandTotal: 100,
       grandTotalVencido: 50,
@@ -361,7 +361,7 @@ describe('commercial cobros hardening', () => {
     });
 
     expect(result.summary).toEqual({
-      C002: { nombre: 'Cliente Dos', total: 200, vencido: 50, count: 1, estado: 'VENCIDO' },
+      C002: { nombre: 'Cliente Dos', total: 200, totalCobrable: 200, vencido: 50, count: 1, estado: 'VENCIDO' },
     });
     expect(result.grandTotal).toBe(300);
     expect(result.grandTotalVencido).toBe(50);
@@ -413,8 +413,8 @@ describe('commercial cobros hardening', () => {
       isJefeVentas: false,
     });
 
-    const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_AGG/i.test(candidate));
-    expect(sql).toMatch(/WITH\s+CVC_AGG\s+AS/i);
+    const sql = findRepoSqlCall((candidate) => /WITH\s+CVC_SCOPE/i.test(candidate));
+    expect(sql).toMatch(/WITH\s+CVC_SCOPE\s+AS/i);
     expect(sql).toMatch(/GROUP BY CVC\.CODIGOCLIENTEALBARAN/i);
     const aggBlock = sql.split(/,\s*CVC_CLIENTS/i)[0];
     expect(aggBlock).not.toMatch(/DSEDAC\.CLI/i);
@@ -444,7 +444,8 @@ describe('commercial cobros hardening', () => {
     expect(overlaySql.length).toBeGreaterThan(0);
     expect(overlaySql.every((sql) => !/EXISTS/i.test(sql))).toBe(true);
     expect(overlaySql.every((sql) => !/DSEDAC\.CVC/i.test(sql))).toBe(true);
-    expect(overlaySql.every((sql) => /IN\s*\('C001'\)/i.test(sql))).toBe(true);
+    expect(overlaySql.every((sql) => /IN \(CAST\(\? AS CHAR\(10\)\)/.test(sql))).toBe(true);
+    expect(mockQueryWithParams.mock.calls.filter(([sql]) => overlaySql.includes(sql)).every(([, binds]) => binds[0] === 'C001')).toBe(true);
     expect(result.summary.C001.total).toBe(90);
   });
 
@@ -476,7 +477,8 @@ describe('commercial cobros hardening', () => {
     const sql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
     expect(sql).toMatch(/CVC\.CODIGOVENDEDOR\s+IN\s*\(/i);
     expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)/i);
-    expect(sql).toMatch(/IN\s*\('01','1','02','2'\)/i);
+    expect(sql).toMatch(/CVC\.CODIGOVENDEDOR IN \(CAST\(\? AS CHAR\(2\)\)/);
+    expect(mockQueryWithParams.mock.calls.find(([text]) => /CVC_CLIENTS/.test(text))[1]).toEqual(['01','1','02','2']);
     expect(sql).not.toMatch(/DSEDAC\.CLP/i);
     expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
   });
@@ -517,11 +519,12 @@ describe('commercial cobros hardening', () => {
     expect(sql).not.toMatch(/UNION\s+SELECT\s+DISTINCT\s+TRIM\(LAC\.LCCDCL\)/i);
     expect(sql).not.toMatch(/FROM\s+DSED\.LACLAE/i);
     expect(sql).not.toMatch(/DSEDAC\.CLP/i);
-    expect(sql).toMatch(/IN\s*\('01','1','02','2'\)/i);
+    expect(sql).toMatch(/CVC\.CODIGOVENDEDOR IN \(CAST\(\? AS CHAR\(2\)\)/);
+    expect(mockQueryWithParams.mock.calls.find(([text]) => /CVC_CLIENTS/.test(text))[1]).toEqual(['01','1','02','2']);
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
   });
 
-  test('getPendingSummary for large manager scope avoids ODBC bind limit', async () => {
+  test('getPendingSummary binds a large manager scope without truncating sentinels', async () => {
     mockRepoPendingSummaryDb();
     const repo = new Db2CobrosRepository();
     const vendorCodes = [
@@ -545,15 +548,16 @@ describe('commercial cobros hardening', () => {
     });
 
     const sql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
-    expect(sql).toMatch(/CVC\.CODIGOVENDEDOR\s+IN\s*\('[^']+'/i);
-    expect(sql).toMatch(/'UNK'/);
-    expect(sql).not.toMatch(/CVC\.CODIGOVENDEDOR\s+IN\s*\([^)]*\?/i);
-    expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)/i);
+    expect(sql).toMatch(/CVC\.CODIGOVENDEDOR IN \(CAST\(\? AS CHAR\(2\)\)/);
+    const binds = mockQueryWithParams.mock.calls.find(([text]) => /CVC_CLIENTS/.test(text))[1];
+    expect(binds).toContain('95');
+    expect(binds).not.toContain('UNK');
+    expect(binds.every(code => code.length <= 2)).toBe(true);
+    expect(sql).not.toContain("'95'");
     expect(sql).not.toMatch(/DSEDAC\.CLP/i);
-    expect(mockQueryWithParams.mock.calls.every(([sqlText]) => /QSYS2\.SYSCOLUMNS2/i.test(sqlText))).toBe(true);
   });
 
-  test('getPendingSummary embeds three-character vendor sentinels to avoid DB2 truncation', async () => {
+  test('getPendingSummary rejects unmatched three-character sentinels without truncation', async () => {
     mockRepoPendingSummaryDb();
     const repo = new Db2CobrosRepository();
 
@@ -564,11 +568,9 @@ describe('commercial cobros hardening', () => {
     });
 
     const sql = findRepoSqlCall((candidate) => /CVC_CLIENTS/i.test(candidate));
-    expect(sql).toMatch(/CVC\.CODIGOVENDEDOR\s+IN\s*\('UNK'\)/i);
-    expect(sql).not.toMatch(/CVC\.CODIGOVENDEDOR\s+IN\s*\([^)]*\?/i);
-    expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOVENDEDOR\)/i);
-    expect(sql).not.toMatch(/DSEDAC\.CLP/i);
-    expect(mockQueryWithParams.mock.calls.every(([sqlText]) => /QSYS2\.SYSCOLUMNS2/i.test(sqlText))).toBe(true);
+    expect(sql).toMatch(/AND 1\s*=\s*0/);
+    expect(sql).not.toContain("'UNK'");
+    expect(sql).not.toMatch(/CVC\.CODIGOVENDEDOR\s+IN/i);
   });
 
   test('getPendingSummary forbids COMERCIAL from ALL and another vendor', async () => {
@@ -673,13 +675,13 @@ describe('commercial cobros hardening', () => {
       /FROM\s+DSEDAC\.CVC\s+C/i.test(sql),
     );
     expect(cvcSql).toMatch(/CODIGOCLIENTEALBARAN = CAST\(\? AS CHAR\(10\)\)/);
-    expect(cvcSql).not.toMatch(/DSEDAC\.CAC/);
-    expect(cvcSql).not.toMatch(/DSEDAC\.CPC/);
+    expect(cvcSql).toMatch(/DSEDAC\.CAC/);
+    expect(cvcSql).toMatch(/DSEDAC\.CPC/);
     expect(cvcSql).toMatch(/DSEDAC\.FPG/);
     expect(cvcSql).not.toMatch(/VISTA_DEUDA_BASE/i);
     expect(cvcSql).not.toMatch(/DSED\.LACLAE/);
     expect(cvcSql).toMatch(/FETCH FIRST \d+ ROWS ONLY/i);
-    expect(params).toEqual(['C001']);
+    expect(params).toEqual(['C001', 'C001', 'C001']);
   });
 
   test('getPendientes groups duplicate CVC rows by document reference', async () => {
@@ -1173,6 +1175,7 @@ describe('commercial cobros hardening', () => {
           SERIEPEDIDO: 'M',
           NUMEROPEDIDO: 123,
           IMPORTETOTAL: '80.00',
+          IMPORTE_DOCUMENTO: '80.00',
           ESTADO: 'PENDIENTE',
         }];
       }
@@ -1229,6 +1232,7 @@ describe('commercial cobros hardening', () => {
           SERIEPEDIDO: 'M',
           NUMEROPEDIDO: 123,
           IMPORTETOTAL: '80.00',
+          IMPORTE_DOCUMENTO: '80.00',
           ESTADO: 'PENDIENTE',
         }];
       }
@@ -1286,6 +1290,7 @@ describe('commercial cobros hardening', () => {
           SERIEPEDIDO: 'M',
           NUMEROPEDIDO: 123,
           IMPORTETOTAL: '100.00',
+          IMPORTE_DOCUMENTO: '100.00',
           ESTADO: 'PENDIENTE',
         }];
       }
@@ -1309,4 +1314,83 @@ describe('commercial cobros hardening', () => {
       idempotencyToken: 'cobro-token-min-001',
     })).rejects.toMatchObject({ code: 'BELOW_MIN_COBRO', status: 409 });
   });
+});
+
+
+describe('real document amount protection', () => {
+  test.each([[233, 232.74, 'PAYMENT_EXCEEDS'], [10, null, 'DOCUMENT_TOTAL_UNAVAILABLE']])(
+    'rejects payment %s when the verified document total is %s', async (amount, documentTotal, code) => {
+      const repo = setupRepository({ order: orderRow({ SOURCE: 'CVC', ID: 'CVC:M-1', IMPORTETOTAL: 960.40, IMPORTE_DOCUMENTO: documentTotal }) });
+      await expect(repo.registerPayment({ clientCode: 'C001', amount, paymentMethod: 'CONTADO', reference: 'M-1', observations: 'cap regression', userId: '01', idempotencyToken: 'cap-check-token' })).rejects.toMatchObject({ code, status: 409 });
+      expect(mockConnQuery.mock.calls.some(([sql]) => /INSERT INTO/.test(sql))).toBe(false);
+    });
+  test('partial collection uses CPC total instead of the larger CVC amount and loads the rule before locking', async () => {
+    const repo = setupRepository({ order: orderRow({ SOURCE: 'CVC', ID: 'CVC:M-1', IMPORTETOTAL: 960.40, IMPORTE_DOCUMENTO: 232.74 }) });
+    const rule = jest.spyOn(repo, 'getClientCobroRiguroso').mockResolvedValue({ cobroRiguroso: false, porcentajeMinimoCobro: 0 });
+    const payment = await repo.registerPayment({ clientCode: 'C001', amount: 116.37, paymentMethod: 'CONTADO', reference: 'M-1', observations: 'cap regression', userId: '01', idempotencyToken: 'cap-partial-token' });
+    expect(payment.pendingBefore).toBe(232.74);
+    expect(payment.pendingAfter).toBe(116.37);
+    expect(rule.mock.invocationCallOrder[0]).toBeLessThan(mockAcquireConfiguredConnection.mock.invocationCallOrder[0]);
+  });
+});
+
+
+test('duplicate CVC installments preserve one verified document total', async () => {
+  mockQuery.mockResolvedValue([]);
+  mockQueryWithParams.mockImplementation(async sql => /FROM\s+DSEDAC\.CVC\s+C\b/.test(sql) ? [1, 2].map(() => ({
+    SERIE_DOCUMENTO: 'P', NUMERO_DOCUMENTO: 3637, TERMINAL_DOCUMENTO: 35,
+    EJERCICIO_DOCUMENTO: 2026, TIPO_DOCUMENTO: 'CAC', ORIGEN_DOCUMENTO: 'B', SUBEMPRESA: 'GMP', XDE: 1, DEX: 1,
+    CODIGO_CLIENTE: 'C001', IMPORTE_TOTAL: 100, IMPORTE_DOCUMENTO: 100, IMPORTE_PENDIENTE: 80,
+    ANO_DOCUMENTO: 2026, MES_DOCUMENTO: 9, DIA_DOCUMENTO: 1, ANO_VENCIMIENTO: 2026, MES_VENCIMIENTO: 9, DIA_VENCIMIENTO: 1,
+  })) : []);
+  const result = await new Db2CobrosRepository().getPendientes('C001', { userId: '35', userRole: 'COMERCIAL' });
+  expect(result.cobros).toHaveLength(1);
+  expect(result.cobros[0].importeTotal).toBe(100);
+  expect(result.cobros[0].importePendiente).toBe(100);
+  expect(result.resumen.totalPendiente).toBe(100);
+});
+
+
+test('unverified document debt stays visible but is explicitly non-payable', async () => {
+  mockQuery.mockResolvedValue([]);
+  mockQueryWithParams.mockImplementation(async sql => /FROM\s+DSEDAC\.CVC\s+C\b/.test(sql) ? [{
+    SERIE_DOCUMENTO: 'P', NUMERO_DOCUMENTO: 1, TERMINAL_DOCUMENTO: 35,
+    EJERCICIO_DOCUMENTO: 2026, TIPO_DOCUMENTO: 'CAC', ORIGEN_DOCUMENTO: 'B', SUBEMPRESA: 'GMP', XDE: 1, DEX: 1,
+    CODIGO_CLIENTE: 'C001', IMPORTE_TOTAL: 125, IMPORTE_DOCUMENTO: null, IMPORTE_PENDIENTE: 125,
+    ANO_DOCUMENTO: 2026, MES_DOCUMENTO: 9, DIA_DOCUMENTO: 1, ANO_VENCIMIENTO: 2026, MES_VENCIMIENTO: 9, DIA_VENCIMIENTO: 1,
+  }] : []);
+  const result = await new Db2CobrosRepository().getPendientes('C001', { userId: '35', userRole: 'COMERCIAL' });
+  expect(result.cobros[0]).toMatchObject({ importePendiente: 125, importeCobrable: 0, cobrable: false, documentoNoDisponible: true, estado: 'VENCIDO' });
+  expect(result.resumen.totalPendiente).toBe(125);
+  expect(result.resumen.totalCobrable).toBe(0);
+  expect(result.resumen.documentosNoDisponibles).toBe(1);
+});
+
+
+test('app-side summary batches large portfolios and propagates ledger errors', async () => {
+  mockQueryWithParams.mockClear();
+  const codes = Array.from({ length: 123 }, (_, index) => String(4300000000 + index));
+  mockQueryWithParams.mockImplementation(async (sql, params) => params.map(CLIENTE => ({ CLIENTE, TOTAL_APP: 1 })));
+  const repo = new Db2CobrosRepository();
+  const adjustments = await repo.getAppSideCobrosByClientCodes(codes);
+  expect(adjustments.size).toBe(123);
+  expect([...adjustments.values()]).toEqual(Array(123).fill(2));
+  expect(mockQueryWithParams.mock.calls).toHaveLength(6);
+  expect(mockQueryWithParams.mock.calls.every(([, params]) => params.length <= 50)).toBe(true);
+  mockQueryWithParams.mockRejectedValueOnce(new Error('ledger unavailable'));
+  await expect(repo.getAppSideCobrosByClientCodes(codes)).rejects.toThrow('ledger unavailable');
+});
+
+test('PGC/F effect uses its own CVC face value and remains payable', async () => {
+  const { cvcDocumentAmountSql } = require('../services/debt-view-contract');
+  expect(cvcDocumentAmountSql('C')).toMatch(/C\.TIPODOCUMENTO = 'PGC' AND C\.ORIGENDOCUMENTO = 'F' THEN C\.IMPORTEVENCIMIENTO/);
+  mockQuery.mockResolvedValue([]);
+  mockQueryWithParams.mockImplementation(async sql => /FROM\s+DSEDAC\.CVC\s+C\b/.test(sql) ? [{
+    SERIE_DOCUMENTO: 'C', NUMERO_DOCUMENTO: 1, TERMINAL_DOCUMENTO: 35,
+    EJERCICIO_DOCUMENTO: 2026, TIPO_DOCUMENTO: 'PGC', ORIGEN_DOCUMENTO: 'F', SUBEMPRESA: 'GMP', XDE: 1, DEX: 1,
+    CODIGO_CLIENTE: 'C001', IMPORTE_TOTAL: 1059.32, IMPORTE_DOCUMENTO: 1059.32, IMPORTE_PENDIENTE: 1059.32,
+    ANO_DOCUMENTO: 2026, MES_DOCUMENTO: 9, DIA_DOCUMENTO: 1, ANO_VENCIMIENTO: 2026, MES_VENCIMIENTO: 9, DIA_VENCIMIENTO: 1,
+  }] : []);
+  const result = await new Db2CobrosRepository().getPendientes('C001', { userId: '35', userRole: 'COMERCIAL' });
+  expect(result.cobros[0]).toMatchObject({ importePendiente: 1059.32, importeCobrable: 1059.32, cobrable: true, documentoNoDisponible: false });
 });
