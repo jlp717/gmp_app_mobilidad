@@ -23,4 +23,12 @@ describe('Politec quality gate canonical auth contract', () => {
     expect(source).toContain('git -C $RootDir ls-files -- $file.Name');
     expect(source).not.toContain('Local log file must live under logs/ and remain untracked');
   });
+
+  test('checks public readiness sanitization and keeps internal metrics protected', () => {
+    expect(source).toContain('publicReadyPayload');
+    expect(source).toContain('canSeeInternalDetails');
+    expect(source).toContain("app\\.get\\('/api/metrics', requireInternalMetricsAccess");
+    expect(source).not.toContain("app\\.get\\('/api/ready', requireInternalMetricsAccess");
+    expect(source).toContain('Readiness route must be mounted before app-wide /api verifyToken middleware.');
+  });
 });

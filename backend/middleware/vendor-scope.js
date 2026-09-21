@@ -187,9 +187,12 @@ function resolveVendorScope(user, requested, options = {}) {
         ]);
 
     if (!isFinancialRole(user)) {
-        const own = isSalesVendorCode(user.code)
-            ? [String(user.code).trim()]
-            : salesVendorCodesFrom([...(user.vendorCodes || []), ...(user.vendedorCodes || [])]);
+        // El líder conserva el equipo firmado también al resolver el ALL ya expandido.
+        const own = isCommercial80User(user.code)
+            ? salesVendorCodesFrom([...userScopeCodes(user)])
+            : isSalesVendorCode(user.code)
+                ? [String(user.code).trim()]
+                : salesVendorCodesFrom([...(user.vendorCodes || []), ...(user.vendedorCodes || [])]);
         if (own.length === 0) {
             return { ok: false, literalAll: false, codes: [], reason: 'empty_scope' };
         }

@@ -2,6 +2,9 @@ openapi: "3.1.0"
 info:
   title: "GMP Movilidad API"
   version: "1.0.0"
+  contact:
+    name: "Equipo GMP Movilidad"
+    url: "https://github.com/jlp717/gmp_app_mobilidad"
   description: "Contrato completo de endpoints Express existentes. Datos de ejemplo ficticios; no representan clientes, usuarios ni credenciales reales."
 servers:
   - url: "/api"
@@ -761,7 +764,13 @@ paths:
                 $ref: "#/components/schemas/AuthLoginResponse"
               example:
                 success: true
-                data: []
+                user:
+                  id: "TEST-USER"
+                  code: "R01"
+                  name: "Usuario ficticio"
+                role: "COMERCIAL"
+                token: "jwt-ficticio-no-valido"
+                refreshToken: "refresh-ficticio-no-valido"
         "429":
           description: "Demasiadas solicitudes"
           content:
@@ -15595,7 +15604,6 @@ paths:
                     type: "boolean"
                     example: true
                   suggestion:
-                    nullable: true
                     oneOf:
                       - type: "object"
                         required:
@@ -16571,6 +16579,17 @@ paths:
                 - documentId: "2026-P-1-42-4300000001"
                   cliente: "4300000001"
       responses:
+        "200":
+          description: "Movimiento de ruta guardado"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                properties:
+                  success:
+                    type: "boolean"
+              example:
+                success: true
         "401":
           description: "Autenticación requerida"
           content:
@@ -21462,7 +21481,7 @@ paths:
       tags:
         - "Cobros"
       summary: "POST cobros · register"
-      description: "Registra un cobro idempotente para un cliente dentro del alcance autorizado."
+      description: "Registra un cobro idempotente para un cliente dentro del alcance autorizado. Todo importe superior al pendiente devuelve 409 PAYMENT_EXCEEDS, incluido el rol jefe."
       operationId: "post_Cobros_cobros_register"
       parameters: []
       requestBody:
@@ -21484,10 +21503,6 @@ paths:
                   type: "string"
                 idempotencyToken:
                   type: "string"
-                allowOverpay:
-                  type: "boolean"
-                overrideReason:
-                  type: "string"
                 vendedorCode:
                   type: "string"
               required:
@@ -21503,7 +21518,6 @@ paths:
               reference: "REF-DEMO"
               observations: "Cobro de ejemplo"
               idempotencyToken: "demo"
-              allowOverpay: false
               vendedorCode: "R01"
       responses:
         "200":
@@ -21655,6 +21669,7 @@ paths:
                 code: "HTTP_500"
   /pedidos/confirm:
     post:
+      deprecated: true
       tags:
         - "Pedidos"
       summary: "POST pedidos · confirm"

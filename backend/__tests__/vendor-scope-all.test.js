@@ -84,6 +84,16 @@ describe('resolveVendorScope literal ALL', () => {
         expect(scope.codes).toEqual(CATALOG);
     });
 
+    test('commercial leader keeps only his signed team after ALL expansion', () => {
+        const leader = { code: '80', role: 'COMERCIAL', vendorCodes: ['80', '72', '73', '81', '83'] };
+        const team = ['80', '72', '73', '81', '83'];
+        expect(resolveVendorScope(leader, 'ALL')).toEqual({ ok: true, literalAll: false, codes: team });
+        expect(resolveVendorScope(leader, team.join(','))).toEqual({ ok: true, literalAll: false, codes: team });
+        expect(resolveVendorScope(leader, '72')).toEqual({ ok: true, literalAll: false, codes: ['72'] });
+        expect(resolveVendorScope(leader, '01').ok).toBe(false);
+        expect(resolveVendorScope({ code: '35', role: 'COMERCIAL', vendorCodes: ['35', '80'] }, '80').ok).toBe(false);
+    });
+
     test('COMERCIAL cannot authorize ALL via authorizeVendorScope', () => {
         expect(authorizeVendorScope(
             { user: { code: '15', role: 'COMERCIAL' } },

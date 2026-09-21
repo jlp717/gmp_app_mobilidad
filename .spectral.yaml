@@ -8,3 +8,11 @@ rules:
   no-$ref-siblings: off
   operation-tag-defined: warn
   openapi-tags-alphabetical: off
+
+# This removed endpoint deliberately returns 410 and points to /pedidos/:id/confirm.
+# Do not invent a successful response for a route that cannot confirm an order.
+overrides:
+  - files:
+      - "**#/paths/~1pedidos~1confirm/post"
+    rules:
+      operation-success-response: off

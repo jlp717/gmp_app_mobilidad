@@ -157,7 +157,8 @@ Test-Contains "backend\middleware\auth.js" "canonicalSessionStore\.isActive" "Au
 Test-NotContains "backend\middleware\auth.js" "AUTH_ALLOW_STATELESS_REFRESH_FALLBACK" "Auth middleware must not keep a stateless refresh fallback."
 Test-Contains "backend\config\env.js" "JWT_ACCESS_SECRET must be set" "Production config must fail fast when JWT_ACCESS_SECRET is missing."
 Test-Contains "backend\config\env.js" "JWT_REFRESH_SECRET must be set" "Production config must fail fast when JWT_REFRESH_SECRET is missing."
-Test-Contains "backend\app.js" "app\.get\('/api/ready', requireInternalMetricsAccess" "Readiness must be protected by internal access, not app bearer auth."
+Test-Contains "backend\app.js" "publicReadyPayload\(body, canSeeInternalDetails\(req\)\)" "Readiness must sanitize public responses and restrict internal details."
+Test-Contains "backend\app.js" "app\.get\('/api/metrics', requireInternalMetricsAccess" "Metrics must remain protected by internal access."
 
 $serverLines = @(Get-Content -LiteralPath (Join-RepoPath "backend/app.js") -ErrorAction SilentlyContinue)
 $readyLine = Get-LineIndex $serverLines "app\.get\('/api/ready'"

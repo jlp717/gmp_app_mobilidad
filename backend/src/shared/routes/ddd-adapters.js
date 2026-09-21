@@ -2407,7 +2407,7 @@ function createCobrosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { referencia, importe, formaPago, observaciones, idempotencyToken, allowOverpay, overrideReason } = req.body;
+      const { referencia, importe, formaPago, observaciones, idempotencyToken } = req.body;
       if (!codigoCliente || importe == null || !formaPago) {
         return res.status(400).json({ success: false, error: 'codigoCliente, importe, and formaPago required' });
       }
@@ -2429,8 +2429,6 @@ function createCobrosRoutes() {
         userRole: req.user?.role || 'COMERCIAL',
         isJefeVentas: req.user?.isJefeVentas === true,
         idempotencyToken,
-        allowOverpay: allowOverpay === true,
-        overrideReason: overrideReason || '',
       });
 
       cache.invalidatePattern(`ddd:cobros:pendientes:${clientAccess.clientCode}:`);
@@ -2450,7 +2448,7 @@ function createCobrosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { clientCode, amount, paymentMethod, reference, observations, idempotencyToken, allowOverpay, overrideReason } = req.body;
+      const { clientCode, amount, paymentMethod, reference, observations, idempotencyToken } = req.body;
       if (!clientCode || !amount || !paymentMethod) {
         return res.status(400).json({ success: false, error: 'clientCode, amount, and paymentMethod required' });
       }
@@ -2472,8 +2470,6 @@ function createCobrosRoutes() {
         userRole: req.user?.role || 'COMERCIAL',
         isJefeVentas: req.user?.isJefeVentas === true,
         idempotencyToken,
-        allowOverpay: allowOverpay === true,
-        overrideReason: overrideReason || '',
       });
 
       // Invalidate cobros caches

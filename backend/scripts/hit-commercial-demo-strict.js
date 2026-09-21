@@ -11,7 +11,10 @@ const { exportGate } = require('../services/dsedac-exports.service');
 require('../middleware/logger').level = 'error';
 const SESSION = `demo${Date.now()}`;
 const TODAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
-const BASE = 'http://127.0.0.1:3335/api';
+const BASE = process.env.GMP_HIT_API_BASE || 'http://127.0.0.1:3335/api';
+if (!['http://127.0.0.1:3335/api', 'https://api.mari-pepa.com/api'].includes(BASE)) {
+  throw new Error('UNAPPROVED_HIT_ORIGIN');
+}
 const results = [];
 const tokens = new Set();
 const orderIds = new Set();
@@ -36,7 +39,9 @@ async function api(method, path, auth, body) {
   if (auth) headers.Authorization = `Bearer ${auth.token}`;
   if (body) headers['Content-Type'] = 'application/json';
   try {
-    const response = await fetch(`${BASE}${path}`, { method, headers,
+    // Read the internal safety detail locally; exercise business flows through BASE.
+    const origin = path === '/ready' ? 'http://127.0.0.1:3335/api' : BASE;
+    const response = await fetch(`${origin}${path}`, { method, headers,
       body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(60000) });
     const bytes = Buffer.from(await response.arrayBuffer());
     let data; try { data = JSON.parse(bytes.toString()); } catch { data = { magic: bytes.subarray(0, 5).toString(), bytes: bytes.length }; }
@@ -172,7 +177,7 @@ function detail(response) { return { status: response.status, ms: response.ms, b
 async function stage(name, action) {
   try { await action(); } catch (error) { check(`${name}_complete`, false, { error: String(error.message).slice(0, 180) }); }
 }
-async function orderFlow(auth, repAuth) {
+async function orderFlow(auth, repAuth, jefeAuth) {
   const client = '4300009324';
   const promotions = await api('GET', `/pedidos/promotions?clientCode=${client}&vendedorCodes=35`, auth);
   const promo = promotions.body.promotions?.find(p => p.productCode && Number(p.stockEnvases) > 0 && Number(p.minQty) > 0 && Number(p.giftQty) > 0 && p.promoType === 'GIFT');
@@ -225,6 +230,12 @@ async function orderFlow(auth, repAuth) {
   const listed = await api('GET', '/pedidos?vendedorCodes=35&limit=100', auth);
   check('A_mis_pedidos', listed.status === 200 && JSON.stringify(listed.body).includes(String(assigned.id)), { status: listed.status, ms: listed.ms, id: assigned.id });
   const reference = `PEDIDO:${assigned.id}:${String(assigned.cab.SERIEPEDIDO).trim()}-${assigned.cab.NUMEROPEDIDO}`;
+  const managerExcess = await api('POST', `/cobros/${client}/registrar`, jefeAuth, {
+    referencia: reference, importe: Number(assigned.cab.IMPORTETOTAL) + 1,
+    formaPago: 'CONTADO', observaciones: SESSION, vendedorCode: '35',
+    idempotencyToken: marker('managerexcess'), allowOverpay: true, overrideReason: 'Prueba de limite',
+  });
+  check('B_manager_override_still_409', managerExcess.status === 409 && managerExcess.body.code === 'PAYMENT_EXCEEDS', detail(managerExcess));
   const payment = await api('POST', `/cobros/${client}/registrar`, auth, { referencia: reference, importe: Number(assigned.cab.IMPORTETOTAL),
     formaPago: 'CONTADO', observaciones: `${SESSION} entrega futura`, idempotencyToken: marker('futurepay') });
   check('F_pay_today_deliver_future', deliveryDate > TODAY && payment.status === 200 && payment.body.payment?.pendingAfter === 0,
@@ -349,7 +360,7 @@ async function main() {
     await guard();
     const auth = await login('35'); await login('80'); const jefe = await login('98');
     const rep = await login('98', 'REPARTIDOR');
-    await stage('A_F', () => orderFlow(auth, rep));
+    await stage('A_F', () => orderFlow(auth, rep, jefe));
     await stage('B_C_D', () => paymentFlow(auth, rep));
     await stage('E', () => minimumFlow(jefe));
   } finally {

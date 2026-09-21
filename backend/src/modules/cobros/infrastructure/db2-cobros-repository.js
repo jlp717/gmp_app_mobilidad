@@ -1499,8 +1499,6 @@ class Db2CobrosRepository extends CobrosRepository {
     userRole = 'COMERCIAL',
     isJefeVentas = false,
     idempotencyToken,
-    allowOverpay = false,
-    overrideReason = '',
   }) {
     await this.ensureCobrosTable();
     const normalizedIdempotencyToken = normalizeToken(idempotencyToken);
@@ -1693,13 +1691,7 @@ class Db2CobrosRepository extends CobrosRepository {
       );
     }
     if (pendingAfterCents < 0) {
-      if (!manager || allowOverpay !== true) {
-        throw new CommercialCobrosError('PAYMENT_EXCEEDS', 'El importe supera el pendiente', 409);
-      }
-      if (!trim(overrideReason)) {
-        throw new CommercialCobrosError('OVERRIDE_REASON_REQUIRED', 'Motivo obligatorio para sobrecobro', 400);
-      }
-      logger.warn(`[AUDIT] COMMERCIAL_OVERPAY_APPROVED order=${order.ID} user=${normalizedUserId} amount=${fromCents(amountCents)} pending=${fromCents(pendingBeforeCents)}`);
+      throw new CommercialCobrosError('PAYMENT_EXCEEDS', 'El importe supera el pendiente', 409);
     }
 
     const insertPayload = {
@@ -1710,10 +1702,10 @@ class Db2CobrosRepository extends CobrosRepository {
       amount: fromCents(amountCents),
       paymentMethod: normalizedPaymentMethod,
       tipoVenta: 'CC',
-      tipoModo: pendingAfterCents < 0 ? 'SOBRECOBRO' : 'NORMAL',
+      tipoModo: 'NORMAL',
       tipoUsuario: manager ? 'JEFE_VENTAS' : 'COMERCIAL',
       codigoUsuario: normalizedUserId,
-      observations: trim(observations || overrideReason).substring(0, 255),
+      observations: trim(observations).substring(0, 255),
     };
     try {
       await this.insertCobroRow({ ...insertPayload, includeErpColumns: true, execute: transactionQuery });

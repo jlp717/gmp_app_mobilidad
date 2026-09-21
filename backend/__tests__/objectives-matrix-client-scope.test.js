@@ -48,3 +48,11 @@ test('manager without a signed vendor scope fails closed', async () => {
   expect(response.status).toBe(403);
   expect(mockQuery).not.toHaveBeenCalled();
 });
+
+test.each(['ALL', '80,72,73,81,83', '72'])('commercial leader opens an assigned team client with scope %s', async (scope) => {
+  mockUser = { code: '80', role: 'COMERCIAL', vendorCodes: ['80', '72', '73', '81', '83'] };
+  mockAssigned.mockResolvedValue(['72']);
+  const response = await request(app).get('/objectives/matrix').query({ clientCode: 'C-TEAM-72', vendedorCodes: scope });
+  expect(response.status).toBe(200);
+  expect(mockQuery).toHaveBeenCalled();
+});

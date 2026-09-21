@@ -1603,10 +1603,10 @@
               ],
               "query": []
             },
-            "description": "Registra un cobro idempotente para un cliente dentro del alcance autorizado.",
+            "description": "Registra un cobro idempotente para un cliente dentro del alcance autorizado. Todo importe superior al pendiente devuelve 409 PAYMENT_EXCEEDS, incluido el rol jefe.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"clientCode\": \"CLI-DEMO\",\n  \"amount\": 123.45,\n  \"paymentMethod\": \"TRANSFERENCIA\",\n  \"reference\": \"REF-DEMO\",\n  \"observations\": \"Cobro de ejemplo\",\n  \"idempotencyToken\": \"demo\",\n  \"allowOverpay\": false,\n  \"vendedorCode\": \"R01\"\n}",
+              "raw": "{\n  \"clientCode\": \"CLI-DEMO\",\n  \"amount\": 123.45,\n  \"paymentMethod\": \"TRANSFERENCIA\",\n  \"reference\": \"REF-DEMO\",\n  \"observations\": \"Cobro de ejemplo\",\n  \"idempotencyToken\": \"demo\",\n  \"vendedorCode\": \"R01\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3999,6 +3999,36 @@
               "query": []
             },
             "description": "Comprueba disponibilidad de DB2 y Redis con timeout acotado."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "GET notifications · snapshot",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/snapshot",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "snapshot"
+              ],
+              "query": []
+            },
+            "description": "GET /api/notifications/snapshot. Reutiliza servicios y cachés existentes. TTL 60 s por usuario. Fallo parcial → campo null."
           }
         }
       ]
@@ -7852,6 +7882,42 @@
               "query": []
             },
             "description": "POST repartidor · entregas · {entregaId} · lineas. Contrato del handler Express existente."
+          }
+        },
+        {
+          "name": "GET repartidor · recipient suggestion",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearerToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/repartidor/recipient-suggestion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "repartidor",
+                "recipient-suggestion"
+              ],
+              "query": [
+                {
+                  "key": "cliente",
+                  "value": "4300001",
+                  "disabled": false
+                },
+                {
+                  "key": "repartidorId",
+                  "value": "05",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET repartidor · recipient suggestion. Identidad owner-scoped y sin caché."
           }
         },
         {

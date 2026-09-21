@@ -1101,7 +1101,7 @@ describe('commercial cobros hardening', () => {
     })).rejects.toMatchObject({ code: 'PAYMENT_EXCEEDS' });
   });
 
-  test('registerPayment allows manager overpay only with an override reason', async () => {
+  test.each(['', 'Regularizacion autorizada'])('registerPayment rejects manager overpay even with override reason %s', async (overrideReason) => {
     const repo = setupRepository({ paid: '95.00' });
 
     await expect(repo.registerPayment({
@@ -1113,24 +1113,10 @@ describe('commercial cobros hardening', () => {
       userRole: 'JEFE_VENTAS',
       isJefeVentas: true,
       allowOverpay: true,
+      overrideReason,
       idempotencyToken: 'cobro-token-manager-overpay-001',
-    })).rejects.toMatchObject({ code: 'OVERRIDE_REASON_REQUIRED' });
-
-    const allowed = await repo.registerPayment({
-      clientCode: 'C001',
-      amount: 10,
-      paymentMethod: 'CONTADO',
-      reference: 'M-1',
-      userId: '98',
-      userRole: 'JEFE_VENTAS',
-      isJefeVentas: true,
-      allowOverpay: true,
-      overrideReason: 'Regularizacion autorizada',
-      idempotencyToken: 'cobro-token-manager-overpay-002',
-    });
-
-    expect(allowed.status).toBe('SOBRECOBRADO');
-    expect(allowed.pendingAfter).toBe(-5);
+    })).rejects.toMatchObject({ code: 'PAYMENT_EXCEEDS', status: 409 });
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql))).toBe(false);
   });
 
   test('registerPayment blocks commercial access to another vendor order', async () => {
