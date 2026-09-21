@@ -21,7 +21,7 @@
 [API] receiveTimeout: 0:00:30.000000
 [API] receiveDataWhenStatusError: true
 [API] extra: {authEpoch: 0, sessionGeneration: 0, hadAuthToken: false, rum_t_req: 1789992033683}
-[API] 
+[API]
 00:00 +10: Cobros provider params adds server cache buster and vendor scope on forced detail refresh
 [CacheService] Cache INVALIDATED: c9f36ccec0c8
 [API] *** Request ***
@@ -35,7 +35,7 @@
 [API] receiveTimeout: 0:00:30.000000
 [API] receiveDataWhenStatusError: true
 [API] extra: {authEpoch: 0, sessionGeneration: 0, hadAuthToken: false, rum_t_req: 1789992033743}
-[API] 
+[API]
 00:00 +11: Pending summary status resolver returns neutral status when summary entry is missing
 00:00 +12: Pending summary status resolver does not classify explicit SIN_DATOS as al dia
 00:00 +13: Pending summary status resolver returns VENCIDO when pending and overdue amounts are positive
@@ -61,7 +61,7 @@
 [API] receiveTimeout: 0:00:30.000000
 [API] receiveDataWhenStatusError: true
 [API] extra: {idempotent: false, authEpoch: 0, sessionGeneration: 0, hadAuthToken: false, rum_t_req: 1789992033821}
-[API] 
+[API]
 [ApiClient] Request failed: type=DioExceptionType.sendTimeout status=0
 [API] *** Request ***
 [API] uri: https://api.mari-pepa.com/api/cobros/4300010363/registrar
@@ -74,5 +74,5 @@
 [API] receiveTimeout: 0:00:30.000000
 [API] receiveDataWhenStatusError: true
 [API] extra: {idempotent: false, authEpoch: 0, sessionGeneration: 0, hadAuthToken: false, rum_t_req: 1789992033841}
-[API] 
+[API]
 00:00 +25: All tests passed!

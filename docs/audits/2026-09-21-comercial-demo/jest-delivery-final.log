@@ -182,9 +182,9 @@ PASS __tests__/commissions-pdf-service.test.js (12.762 s)
   Commissions PDF timestamp formatting
     √ formatCommissionPdfTimestamp uses Europe/Madrid timezone (2 ms)
 
-ts-jest[config] (WARN) 
+ts-jest[config] (WARN)
     The "ts-jest" config option "isolatedModules" is deprecated and will be removed in v30.0.0. Please use "isolatedModules: true" in C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/tsconfig.json instead, see https://www.typescriptlang.org/tsconfig/#isolatedModules
-  
+
 PASS src/__tests__/security/sql-injection.test.ts (5.517 s)
   Security - SQL Injection Prevention
     SQL injection payloads should be rejected (never 500)
@@ -577,9 +577,9 @@ PASS tests/middlewares/errorHandler.test.js
     √ jerarquia AppError expone statusCode correctos (4 ms)
     √ estilo legacy: AppError 4xx expone mensaje y 5xx permanece opaco (50 ms)
 
-ts-jest[config] (WARN) 
+ts-jest[config] (WARN)
     The "ts-jest" config option "isolatedModules" is deprecated and will be removed in v30.0.0. Please use "isolatedModules: true" in C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/backend/tsconfig.json instead, see https://www.typescriptlang.org/tsconfig/#isolatedModules
-  
+
 PASS __tests__/repartidor-cobro-reverse.test.js
   reverseCobro isolated_test
     √ deletes an open TEST cobro and writes PAYMENT_REVERSED audit (19 ms)
