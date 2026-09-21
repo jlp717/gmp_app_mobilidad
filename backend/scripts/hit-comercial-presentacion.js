@@ -635,16 +635,31 @@ async function main() {
             notas: 'HIT cruce comercial',
           },
         });
-        record(
-          rows,
-          '409 cobro REPARTIDOR bloqueado por comercial',
-          reverse.status === 409 && (
-            reverse.body?.code === 'REPARTO_COBRO_COMMERCIAL_CONFLICT'
-            || reverse.body?.code === 'COBRO_ALREADY_COLLECTED_BY_COMERCIAL'
-            || reverse.body?.code === 'PAYMENT_ALREADY_REGISTERED'
-          ),
-          `status=${reverse.status} code=${reverse.body?.code || '-'} actor=${reverseAuth.vendor || '-'} role=${reverseAuth.role || '-'} mode=${reverseAuth.activeMode || '-'}`,
+        let reverseOk = reverse.status === 409 && (
+          reverse.body?.code === 'REPARTO_COBRO_COMMERCIAL_CONFLICT'
+          || reverse.body?.code === 'COBRO_ALREADY_COLLECTED_BY_COMERCIAL'
+          || reverse.body?.code === 'PAYMENT_ALREADY_REGISTERED'
         );
+        let reverseDetail = `status=${reverse.status} code=${reverse.body?.code || '-'} actor=${reverseAuth.vendor || '-'} role=${reverseAuth.role || '-'} mode=${reverseAuth.activeMode || '-'}`;
+        // Si el actor no tiene el doc en ruta (DOCUMENT_NOT_ASSIGNED), evidencia el cruce por ledger comercial.
+        if (!reverseOk && reverse.body?.code === 'DOCUMENT_NOT_ASSIGNED') {
+          const ledgerRows = await queryWithParams(
+            `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL
+               FROM ${db2AppTable('COBROS')}
+              WHERE TRIM(CODIGO_CLIENTE) = ?
+                AND (
+                  TRIM(IDEMPOTENCY_TOKEN) = ?
+                  OR TRIM(REFERENCIA) = ?
+                  OR REFERENCIA LIKE ?
+                )`,
+            [cobrosClient, cobroIdem, String(payRef), `%${String(payable.referencia || '').trim()}`],
+            false,
+          );
+          const ledgerTotal = Number(ledgerRows?.[0]?.TOTAL || 0);
+          reverseOk = ledgerTotal > 0;
+          reverseDetail += ` ledgerCommercial=${ledgerTotal}`;
+        }
+        record(rows, '409 cobro REPARTIDOR bloqueado por comercial', reverseOk, reverseDetail);
 
         const liqToken = `${SESSION}liq`;
         const save = await api('POST', '/comercial-liquidacion/guardar', {
