@@ -1,0 +1,31 @@
+{
+  "verifiedAt": "2026-09-21T14:45:38.4154473+02:00",
+  "branch": "test",
+  "localAndOriginCommit": "b4206748763678c60078961dc6c7f75c02a24c71",
+  "serverCommit": "b4206748763678c60078961dc6c7f75c02a24c71",
+  "testedBackendCommit": "93fd9f852fb7d8dc4b13af02228f5a9bfbccb23c",
+  "backendUnchangedSinceTestedCommit": true,
+  "serverPullExit": 0,
+  "serverTrackedDiffExit": 0,
+  "readyHttp": 200,
+  "readyTotalMs": 9.816,
+  "dbQueryMs": 2,
+  "onlineWorkers": 8,
+  "tableSet": "isolated_test",
+  "productionWritesEnabled": false,
+  "productionErpWritesApproved": false,
+  "finalLogCheck": {
+    "suppressedSensitiveContextEvents": 1,
+    "unexpectedHttp500Or404InTestMatrix": 0,
+    "errorLevelEvents": 5,
+    "windowUtc": "2026-09-21 12:24:00 to 12:45:10",
+    "knownFinancialGuardEvents": 4
+  },
+  "appbundleSha256": "610c26a5c3c93759ee175c16a3d9e57199a2ab6f139c4442ebb2710dc75b9b82",
+  "demoReady": false,
+  "limitations": [
+    "Critical first requests exceed 3s",
+    "UI flows not validated in stable device",
+    "One log message suppressed instead of copying token-related text"
+  ]
+}

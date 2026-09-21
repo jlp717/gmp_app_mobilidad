@@ -47,11 +47,11 @@ Grafo de trabajo: 15 nodos y27 aristas validados; fanout inicial de cuatro revis
 1. «3+1» → promoción viva seleccionada PMR compra3/regalo2, aunque su texto comercial diga3+1. Se aplicaron los valores reales, no el ejemplo del prompt.
 2. «Viernes» → ruta/vehículo devolvió jueves24/09; se comprobó la separación entre confirmar/cobrar hoy y entregar después con fecha válida.
 3. Hipótesis inicial del runner: cambiar activeMode durante login → login98 conserva modo COMERCIAL; el cambio real exige POST `/auth/switch-role`. Se ejecutó y verificó.
-4. «PG» → condición FPG de pagaré y plazo real75días, no un tipo de documento ni30 fijo. Además CVC PGC/F es un efecto con nominal propio; no es una factura CAC con la misma numeración.
+4. Se confirma la hipótesis PG del prompt: condición FPG de pagaré y plazo real75días, no un tipo de documento ni30 fijo. Además CVC PGC/F es un efecto con nominal propio; no es una factura CAC con la misma numeración.
 5. «Pendiente CVC» → hay albarán P-35-3637 con CVC960,40 y CPC232,74. Se limita a232,74; exceso233 devuelve409. Importes negativos/sin documento no se convierten por ABS en cobros válidos.
 6. Hipótesis del código: clientes por CLP → vendedor35 no tenía esas filas CLP en la comprobación; una intersección CLP obligatoria vaciaba ventas. La ruta activa DDD usa lista autorizada, filtro CLI activo y consultas por páginas/lotes; se verificaron lista, búsqueda y detalle35/80.
 7. «Todo isolated_test» → cabeceras/líneas ya eran TEST, pero cinco auxiliares no. Se añadieron tablas TEST verificadas en QSYS2, siete constraints y cuatro índices. Se corrigió también la calificación JAVIER de constraints; CURRENT_SCHEMA remoto no se asumió.
-8. «80 jefe» →80 es líder. Asistente y Objetivos personales coinciden: vendido118446,91€, objetivo185172,19€; distinto del equipo. Panel sólo JEFE98 es correcto.
+8. El código del Asistente podía agregar el equipo de80 como objetivo personal →80 es líder, como indica el prompt, y su objetivo personal debe permanecer separado. Asistente y Objetivos personales coinciden: vendido118446,91€, objetivo185172,19€; distinto del equipo. Panel sólo JEFE98 es correcto.
 9. Código heredado de historia con LINDTO → la historia comercial se obtiene de DSED.LACLAE viva, como exige el prompt; se verificaron columnas reales y binds CHAR10 para no aplicar TRIM al índice del cliente.
 10. Hipótesis del build: filtro ABI en defaultConfig basta → Flutter configura ABI también en release buildType. Se corrigió ese nivel; ZIP final contiene sólo arm64 y todas sus bibliotecas.
 
