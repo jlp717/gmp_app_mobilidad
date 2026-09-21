@@ -9,16 +9,17 @@ const { db2AppTable } = require('../utils/db2-schemas');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { exportGate } = require('../services/dsedac-exports.service');
 require('../middleware/logger').level = 'error';
-const SESSION = `demo-${Date.now()}`;
+const SESSION = `demo${Date.now()}`;
 const TODAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
 const BASE = 'http://127.0.0.1:3335/api';
 const results = [];
 const tokens = new Set();
 const orderIds = new Set();
+const fixtures = {};
 let safe = false;
 const q = (sql, params = []) => db.queryWithParams(sql, params, false, false);
 const cents = (n) => Math.round(Number(n || 0) * 100);
-const marker = (name) => { const value = `${SESSION}-${name}`; tokens.add(value); return value; };
+const marker = (name) => { const value = `${SESSION}${name}`; tokens.add(value); return value; };
 function check(name, ok, detail = {}) {
   const row = { name, pass: Boolean(ok), ...detail };
   results.push(row); console.log(JSON.stringify(row));
@@ -46,7 +47,15 @@ async function login(vendor, mode) {
   const response = await api('POST', '/auth/login', null, { username: vendor, password: String(rows[0]?.CODIGOPIN || '').trim(), ...(mode ? { activeMode: mode } : {}) });
   must(`login_${vendor}_${mode || 'COMERCIAL'}`, response.status === 200 && !!response.body.token,
     { status: response.status, ms: response.ms, role: response.body.user?.role, mode: response.body.user?.activeMode });
-  return { vendor, token: response.body.token };
+  const auth = { vendor, token: response.body.token };
+  if (mode) {
+    const switched = await api('POST', '/auth/switch-role', auth, { userId: vendor, newRole: mode });
+    must(`switch_${vendor}_${mode}`, switched.status === 200 && !!switched.body.token
+      && (switched.body.activeMode || switched.body.user?.activeMode) === mode,
+    { status: switched.status, ms: switched.ms, mode: switched.body.activeMode || switched.body.user?.activeMode, code: switched.body.code });
+    auth.token = switched.body.token;
+  }
+  return auth;
 }
 async function catalog(table) {
   if (!/^(DSEDAC|DSED|JAVIER)\.[A-Z0-9_]+$/.test(table)) throw new Error('UNSAFE_IDENTIFIER');
@@ -65,7 +74,7 @@ async function guard() {
     && db2AppTable('REPARTIDOR_COBROS') === 'JAVIER.TEST_REPARTIDOR_COBROS'
     && !exportGate().enabled && comercialErpTable('LACLAE') === 'DSED.LACLAE',
   { status: ready.status, ms: ready.ms, tableSet: live.tableSet, exportEnabled: exportGate().enabled, sales: comercialErpTable('LACLAE') });
-  for (const table of ['DSEDAC.VDPL1', 'DSEDAC.CVC', 'DSEDAC.CPC', 'DSEDAC.OPP', 'DSEDAC.FPG', 'DSEDAC.CLX',
+  for (const table of ['DSEDAC.VDPL1', 'DSEDAC.CVC', 'DSEDAC.CPC', 'DSEDAC.OPP', 'DSEDAC.FPG', 'DSEDAC.CLX', 'DSEDAC.CLP',
     'JAVIER.TEST_COBROS', 'JAVIER.TEST_REPARTIDOR_COBROS', 'JAVIER.TEST_PEDIDOS_CAB', 'JAVIER.TEST_PEDIDOS_LIN',
     'JAVIER.TEST_LIQUIDACION_COMERCIAL', 'JAVIER.TEST_DEVOLUCIONES_COMERCIAL']) await catalog(table);
   safe = true;
@@ -96,13 +105,14 @@ async function stage(name, action) {
 async function orderFlow(auth, repAuth) {
   const client = '4300009324';
   const promotions = await api('GET', `/pedidos/promotions?clientCode=${client}&vendedorCodes=35`, auth);
-  const promo = promotions.body.promotions?.find(p => p.productCode && Number(p.minQty) > 0 && Number(p.giftQty) > 0 && p.promoType === 'GIFT');
+  const promo = promotions.body.promotions?.find(p => p.productCode && Number(p.stockEnvases) > 0 && Number(p.minQty) > 0 && Number(p.giftQty) > 0 && p.promoType === 'GIFT');
   must('A_live_promo', promotions.status === 200 && !!promo, { status: promotions.status, ms: promotions.ms, promo });
-  const products = await api('GET', `/pedidos/products?clientCode=${client}&vendedorCodes=35&limit=200`, auth);
-  const product = products.body.products?.find(p => String(p.code).trim() === String(promo.productCode).trim());
+  const products = await api('GET', `/pedidos/products/${promo.productCode}?clientCode=${client}&vendedorCodes=35`, auth);
+  const product = products.body.product;
   must('A_product_exists', products.status === 200 && !!product, { status: products.status, ms: products.ms, code: promo.productCode });
   const line = { codigoArticulo: product.code, descripcion: product.name, cantidadEnvases: Number(promo.minQty), cantidadUnidades: 0,
     unidadesCaja: product.unitsPerBox || 1, precio: Number(product.precioCliente || product.precioTarifa1), promotionCode: promo.promoCode };
+  fixtures.line = line;
   const delivery = await api('GET', `/pedidos/delivery-options?clientCode=${client}&vendedorCode=35`, auth);
   const options = delivery.body.options || delivery.body;
   check('A_delivery_options', delivery.status === 200, detail(delivery));
@@ -127,6 +137,7 @@ async function orderFlow(auth, repAuth) {
   };
   const assigned = await createOne('assigned', false);
   const cash = await createOne('cash', true);
+  fixtures.draftCandidate = cash.id;
   const assignedDriver = String(assigned.cab.CODIGOREPARTIDOR || '').trim();
   must('A_driver_assignment', !!assignedDriver && !String(cash.cab.CODIGOREPARTIDOR || '').trim(), { assignedDriver });
   const overlay = await api('GET', `/entregas/pendientes/${assignedDriver}?date=${deliveryDate}&limit=500`, repAuth);
@@ -146,9 +157,20 @@ async function paymentFlow(auth, repAuth) {
   const client = '4300032729';
   const pending = await api('GET', `/cobros/${client}/pendientes`, auth);
   must('B_pending', pending.status === 200, detail(pending));
-  const documents = (pending.body.cobros || []).filter(r => r.docKey?.serie === 'E' && Number(r.docKey?.terminalDocumento) === 35 && Number(r.importePendiente) > 10);
+  const documents = [];
+  for (const document of pending.body.cobros || []) {
+    if (document.docKey?.tipoDocumento !== 'CAC' || Number(document.importePendiente) <= 10) continue;
+    const key = document.docKey;
+    const assigned = await q(`SELECT MAX(O.CODIGOREPARTIDOR) AS DRIVER FROM DSEDAC.CPC P JOIN DSEDAC.OPP O
+      ON O.NUMEROORDENPREPARACION=P.NUMEROORDENPREPARACION AND O.EJERCICIOORDENPREPARACION=P.EJERCICIOORDENPREPARACION
+      AND O.SUBEMPRESA=P.SUBEMPRESAPEDIDO WHERE P.SUBEMPRESAALBARAN=? AND P.EJERCICIOALBARAN=? AND P.SERIEALBARAN=?
+      AND P.TERMINALALBARAN=? AND P.NUMEROALBARAN=? AND P.CODIGOCLIENTEALBARAN=?`,
+    [key.subempresa, Number(key.ejercicioDocumento), key.serie, Number(key.terminalDocumento), Number(key.numero), client]);
+    const driver = String(assigned[0]?.DRIVER || '').trim();
+    if (driver) documents.push({ ...document, driver });
+  }
   must('C_assigned_documents', documents.length >= 3, { available: documents.length });
-  const repPayload = (doc, token) => ({ codigoCliente: client, codigoRepartidor: '87', tipoDocumento: doc.docKey.tipoDocumento,
+  const repPayload = (doc, token) => ({ codigoCliente: client, codigoRepartidor: doc.driver, tipoDocumento: doc.docKey.tipoDocumento,
     origenDocumento: doc.docKey.origenDocumento, subempresaDocumento: doc.docKey.subempresa, ejercicioDocumento: Number(doc.docKey.ejercicioDocumento),
     serieDocumento: doc.docKey.serie, terminalDocumento: Number(doc.docKey.terminalDocumento), numeroDocumento: Number(doc.docKey.numero),
     xdeDocumento: Number(doc.docKey.xde), dexDocumento: Number(doc.docKey.dex), importeCobrado: 1, importePendiente: Number(doc.importePendiente) - 1,
@@ -205,14 +227,38 @@ async function liquidationFlow(auth, amount) {
     && cents(after.body.summary?.devolucionesYaCobradas) === cents(before.body.summary?.devolucionesYaCobradas) + 100,
   { status: after.status, ms: after.ms, before: before.body, after: after.body });
 }
+async function minimumFlow(auth) {
+  const client = '4300001041';
+  const { lookupClientAssignedVendorCodes } = require('../utils/common');
+  const { evaluateMinCobroOrderGate } = require('../services/pedidos-comercial-gates');
+  const owners = await lookupClientAssignedVendorCodes(client);
+  const vendor = owners[0];
+  const gate = await evaluateMinCobroOrderGate({ clientCode: client, vendorCode: vendor });
+  must('E_live_below_minimum', !!vendor && gate.blocked === true && gate.snapshot === false, { client, vendor, gate });
+  must('E_product_fixture', !!fixtures.line, {});
+  const created = await api('POST', '/pedidos/create', auth, { clientCode: client, vendedorCode: vendor,
+    observaciones: `${SESSION}-minimum`, clientRequestId: marker('minimum'), lines: [fixtures.line] });
+  const unexpectedId = created.body.id || created.body.order?.header?.id || created.body.order?.id;
+  if (unexpectedId) orderIds.add(unexpectedId);
+  check('E_create_403', created.status === 403 && created.body.code === 'MIN_COBRO_ORDER_BLOCKED', detail(created));
+  must('E_draft_fixture_available', !!fixtures.draftCandidate, {});
+  // Model a saved draft whose client's collection ratio has fallen below the
+  // threshold. Only this session's TEST order changes; live CLX/CVC stay intact.
+  await q('UPDATE JAVIER.TEST_PEDIDOS_CAB SET CODIGOCLIENTE=?,CODIGOVENDEDOR=?,ESTADO=? WHERE ID=? AND OBSERVACIONES LIKE ?',
+    [client, vendor, 'BORRADOR', fixtures.draftCandidate, `${SESSION}%`]);
+  const confirmed = await api('PUT', `/pedidos/${fixtures.draftCandidate}/confirm`, auth, { saleType: 'CC', cobroEnMano: true });
+  check('E_confirm_403', confirmed.status === 403 && confirmed.body.code === 'MIN_COBRO_ORDER_BLOCKED',
+    { fixture: 'session TEST draft; live CLX/CVC rule', ...detail(confirmed) });
+}
 async function main() {
   await db.initDb();
   try {
     await guard();
-    const auth = await login('35'); await login('80'); await login('98');
+    const auth = await login('35'); await login('80'); const jefe = await login('98');
     const rep = await login('98', 'REPARTIDOR');
     await stage('A_F', () => orderFlow(auth, rep));
     await stage('B_C_D', () => paymentFlow(auth, rep));
+    await stage('E', () => minimumFlow(jefe));
   } finally {
     try { await cleanup(); } catch (error) { check('cleanup', false, { error: error.message }); }
     await db.closePool();

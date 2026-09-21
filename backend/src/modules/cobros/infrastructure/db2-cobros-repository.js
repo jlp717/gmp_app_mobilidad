@@ -1952,20 +1952,7 @@ class Db2CobrosRepository extends CobrosRepository {
         ${cvcReferenceSql('C')} AS ID,
         'CVC' AS SOURCE,
         TRIM(C.CODIGOCLIENTEALBARAN) AS CODIGOCLIENTE,
-        COALESCE((
-          SELECT TRIM(MIN(CLP.VENDEDORCOMERCIAL))
-            FROM ${comercialErpTable('CLP')} CLP
-           WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(C.CODIGOCLIENTEALBARAN)
-        ), (
-          SELECT TRIM(MIN(${getVendorColumnExpr('LAC')}))
-            FROM ${comercialErpTable('LACLAE')} LAC
-           WHERE TRIM(LAC.LCCDCL) = TRIM(C.CODIGOCLIENTEALBARAN)
-             AND LAC.LCAADC >= ${MIN_YEAR}
-             AND LAC.TPDC = 'LAC'
-             AND LAC.LCTPVT IN ('CC', 'VC')
-             AND LAC.LCCLLN IN ('AB', 'VT')
-             AND LAC.LCSRAB NOT IN ('N', 'Z')
-        ), '') AS CODIGOVENDEDOR,
+        TRIM(C.CODIGOVENDEDOR) AS CODIGOVENDEDOR,
         TRIM(C.TIPODOCUMENTO) AS TIPO_DOCUMENTO,
         TRIM(C.ORIGENDOCUMENTO) AS ORIGEN_DOCUMENTO,
         TRIM(C.SUBEMPRESADOCUMENTO) AS SUBEMPRESA,

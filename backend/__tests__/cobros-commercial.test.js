@@ -56,6 +56,17 @@ function setupRepository({ existingToken = [], paid = '0.00', order = orderRow()
   return new Db2CobrosRepository();
 }
 
+test('CVC payment ownership uses the same vendor as the pending document, not MIN of historical client owners', async () => {
+  mockQueryWithParams.mockImplementation(async sql => /FROM DSEDAC\.CVC C\b/i.test(sql)
+    ? [{ ID: 'CVC:CAC:B:GMP:2026:E:35:22:1:1', CODIGOVENDEDOR: '35', SOURCE: 'CVC' }] : []);
+  const row = await new Db2CobrosRepository().findOrderForPayment('4300032729', 'CVC:CAC:B:GMP:2026:E:35:22:1:1');
+  expect(row.CODIGOVENDEDOR).toBe('35');
+  const [sql, params] = mockQueryWithParams.mock.calls.find(([value]) => /FROM DSEDAC\.CVC C\b/i.test(value));
+  expect(sql).toContain('TRIM(C.CODIGOVENDEDOR) AS CODIGOVENDEDOR');
+  expect(sql).not.toContain('MIN(CLP.VENDEDORCOMERCIAL)');
+  expect(params).toEqual(['4300032729', 'CVC:CAC:B:GMP:2026:E:35:22:1:1']);
+});
+
 function paymentIdForTest(value) {
   return `CBR-${crypto.createHash('sha256').update(value).digest('hex').slice(0, 32)}`;
 }

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
-const { requireVendorQueryScope } = require('../middleware/vendor-scope');
+const { requireVendorQueryScope, resolveVendorScope, normalizeCode } = require('../middleware/vendor-scope');
 const logger = require('../middleware/logger');
 const { query, queryWithParams } = require('../middleware/db-timing');
 const {
@@ -13,6 +13,7 @@ const {
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     getBSalesByVendor,
+    lookupClientAssignedVendorCodes,
     aggregateBSalesByMonth,
     sanitizeForSQL,
     sanitizeCodeList,
@@ -1368,6 +1369,22 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
 
         if (!clientCode) {
             return res.status(400).json({ error: 'clientCode is required' });
+        }
+
+        // Authorize the client before reading contact details, notes or sales.
+        // requireVendorQueryScope has already restricted the requested vendors.
+        const clientScope = scopeVendorCodesForUser(req.user?.code, req.query.vendedorCodes);
+        const resolvedScope = resolveVendorScope(req.user, clientScope);
+        const signedVisible = [...(req.user?.vendorCodes || []), ...(req.user?.vendedorCodes || [])];
+        if (!resolvedScope.ok || (resolvedScope.literalAll && signedVisible.length === 0)) {
+            return res.status(403).json({ success: false, code: 'FORBIDDEN_CLIENT_VENDOR', error: 'Alcance comercial no disponible' });
+        }
+        if (!resolvedScope.literalAll) {
+            const visible = resolvedScope.codes.map(normalizeCode);
+            const assigned = await lookupClientAssignedVendorCodes(clientCode);
+            if (!visible.length || !assigned.some(code => visible.includes(normalizeCode(code)))) {
+                return res.status(403).json({ success: false, code: 'FORBIDDEN_CLIENT_VENDOR', error: 'Cliente fuera del alcance comercial' });
+            }
         }
 
         // Parse years and range
