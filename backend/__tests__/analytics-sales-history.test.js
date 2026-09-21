@@ -111,15 +111,19 @@ describe('GET /sales-history', () => {
     });
   });
 
-  test('rejects COMERCIAL ALL before any sales-history query', async () => {
-    mockUser = { code: '15', role: 'COMERCIAL' };
+  test('COMERCIAL ALL coerces to own vendor before sales-history query', async () => {
+    mockUser = { code: '15', role: 'COMERCIAL', vendorCodes: ['15'] };
+    mockQueryWithParams.mockResolvedValueOnce([]);
+
     const res = await request(makeApp())
       .get('/sales-history')
       .query({ vendedorCodes: 'ALL', startDate: '2026-03-01' });
 
-    expect(res.status).toBe(403);
-    expect(res.body.code).toBe('FORBIDDEN_VENDOR');
-    expect(mockQueryWithParams).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(mockQueryWithParams).toHaveBeenCalled();
+    const [, params] = mockQueryWithParams.mock.calls[0];
+    expect(params).toEqual(expect.arrayContaining(['15']));
+    expect(params).not.toEqual(expect.arrayContaining(['ALL']));
   });
 
   test('isolated_test sales-history reads live DSEDAC.LAC not TEST snapshot', async () => {

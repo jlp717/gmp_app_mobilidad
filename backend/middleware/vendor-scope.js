@@ -250,17 +250,26 @@ function parseRequestedVendorCodes(raw) {
 }
 
 /**
- * COMERCIAL + ALL → 403; JEFE + ALL → ALL; comercial 80 + ALL → alcance de equipo.
+ * COMERCIAL + ALL/vacío → alcance firmado propio (raso: su código; 80: equipo).
+ * Nunca literal ALL. JEFE + ALL → ALL (o catálogo visible vía authorizeVendorScope).
+ * Alineado con resolveVendorScope / dashboardScope: omitir vendedorCodes no es 403.
  */
 function applyAuthorizedVendedorCodes(req, rawVendedorCodes) {
     const requested = parseRequestedVendorCodes(rawVendedorCodes);
-    const userCode = req.user && (req.user.code || req.user.id);
-    if (requested === 'ALL' && isCommercial80User(userCode)) {
-        const codes = [...userScopeCodes(req.user)];
-        if (!codes.length) {
-            return { ok: false, status: 403, body: { error: 'Forbidden', code: 'FORBIDDEN_VENDOR' } };
+    if (requested === 'ALL' && !isFinancialRole(req.user)) {
+        const scope = resolveVendorScope(req.user, 'ALL');
+        if (!scope.ok || !scope.codes.length) {
+            return {
+                ok: false,
+                status: 403,
+                body: {
+                    error: 'Forbidden',
+                    code: 'FORBIDDEN_VENDOR',
+                    reason: scope.reason || 'empty_scope',
+                },
+            };
         }
-        return { ok: true, vendedorCodes: codes.join(',') };
+        return { ok: true, vendedorCodes: scope.codes.join(',') };
     }
     const check = authorizeVendorScope(req, requested);
     if (!check.ok) {

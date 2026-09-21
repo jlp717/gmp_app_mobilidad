@@ -56,13 +56,18 @@ describe('BOLA vendor-scope (ASVS V8)', () => {
 const { applyAuthorizedVendedorCodes } = require('../../middleware/vendor-scope');
 
 describe('SEC-02 applyAuthorizedVendedorCodes', () => {
-    test('COMERCIAL with ALL → 403', () => {
-        const res = applyAuthorizedVendedorCodes(
+    test('COMERCIAL with ALL/empty coerces to own code (never company ALL)', () => {
+        const withAll = applyAuthorizedVendedorCodes(
             { user: { code: '01', role: 'COMERCIAL', vendorCodes: ['01'] } },
             'ALL',
         );
-        expect(res.ok).toBe(false);
-        expect(res.status).toBe(403);
+        expect(withAll).toEqual({ ok: true, vendedorCodes: '01' });
+
+        const withEmpty = applyAuthorizedVendedorCodes(
+            { user: { code: '05', role: 'COMERCIAL', vendorCodes: ['05'] } },
+            undefined,
+        );
+        expect(withEmpty).toEqual({ ok: true, vendedorCodes: '05' });
     });
 
     test('JEFE with ALL → 200 ALL', () => {

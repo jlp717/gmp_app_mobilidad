@@ -1979,11 +1979,17 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       return _buildEvolutionNoClientState();
     }
 
+    // Sin vendedorCodes el backend interpretaba ALL y daba 403 al comercial raso
+    // (requireVendorQueryScope). Objetivos ya pasa el alcance; pedidos debe igual.
+    final vendorScope = _vendedorCodes.trim().isNotEmpty
+        ? _vendedorCodes.trim()
+        : widget.employeeCode.trim();
     return EnhancedClientMatrixPage(
       key: ValueKey('client_purchase_history_$resolvedCode'),
       clientCode: resolvedCode,
       clientName: resolvedName,
       isJefeVentas: widget.isJefeVentas,
+      vendedorCodes: vendorScope.isNotEmpty ? vendorScope : null,
     );
   }
 

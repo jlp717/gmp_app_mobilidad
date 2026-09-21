@@ -140,4 +140,16 @@ describe('resolveVendorScope literal ALL', () => {
         const filter = buildVendedorFilterParameterized(scoped.vendedorCodes);
         expect(filter.params).toEqual(['15']);
     });
+
+    test('applyAuthorizedVendedorCodes coerces COMERCIAL ALL to own code', () => {
+        const { applyAuthorizedVendedorCodes } = require('../middleware/vendor-scope');
+        expect(applyAuthorizedVendedorCodes(
+            { user: { code: '05', role: 'COMERCIAL', vendorCodes: ['05'] } },
+            undefined,
+        )).toEqual({ ok: true, vendedorCodes: '05' });
+        expect(applyAuthorizedVendedorCodes(
+            { user: { code: '05', role: 'COMERCIAL', vendorCodes: ['05'] } },
+            'ALL',
+        )).toEqual({ ok: true, vendedorCodes: '05' });
+    });
 });
