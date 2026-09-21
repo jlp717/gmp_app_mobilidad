@@ -705,19 +705,20 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     bool hasDiscount,
     PedidosProvider provider,
   ) {
-    final effectivePrice = hasDiscount
-        ? line.precioVenta * (1 - provider.globalDiscountPct / 100)
-        : line.precioVenta;
+    // Misma cascada que backend bolsa: dto línea → dto global sobre precio lista.
+    final lineFactor = line.lineDiscountPct > 0 && line.lineDiscountPct <= 100
+        ? (1 - line.lineDiscountPct / 100)
+        : 1.0;
+    final globalFactor =
+        hasDiscount ? (1 - provider.globalDiscountPct / 100) : 1.0;
+    final effectivePrice = line.precioVenta * lineFactor * globalFactor;
     final qty = _formatPreviewQuantity(line);
-    final lineTotal = hasDiscount
-        ? line.importeVenta * (1 - provider.globalDiscountPct / 100)
-        : line.importeVenta;
-    final bolsaDelta = provider.isMarginVisible && line.precioMinimo > 0
-        ? double.parse(
-            ((effectivePrice - line.precioMinimo) * line.billingQuantity)
-                .toStringAsFixed(2),
-          )
-        : 0.0;
+    // importeVenta ya incluye dto de línea; solo escalar por pie.
+    final lineTotal = line.importeVenta * globalFactor;
+    // Bolsa vs tarifa cliente/tarifa (NO vs minimo): apply/remove dto debe recalcular.
+    final lineBolsa = line.estimatedBolsaImpactForFactor(globalFactor);
+    final bolsaDelta =
+        provider.isMarginVisible && lineBolsa.hasImpact ? lineBolsa.neto : 0.0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),

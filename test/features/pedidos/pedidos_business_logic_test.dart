@@ -232,6 +232,33 @@ void main() {
       expect(impact.neto, -6);
     });
 
+    test('estimated bolsa apply then remove global discount recalculates', () {
+      final line = OrderLine(
+        codigoArticulo: 'P-DTO',
+        descripcion: 'Producto tarifa',
+        cantidadEnvases: 2,
+        unidadMedida: 'CAJAS',
+        unidadesCaja: 1,
+        precioVenta: 10,
+        precioTarifa: 10,
+        precioTarifaCliente: 10,
+        precioMinimo: 8,
+      )..recalculate();
+
+      final base = line.estimatedBolsaImpactForFactor(1);
+      expect(base.hasImpact, isFalse);
+      expect(base.neto, 0);
+
+      final withDto = line.estimatedBolsaImpactForFactor(0.9);
+      expect(withDto.hasImpact, isTrue);
+      expect(withDto.consumo, 2);
+      expect(withDto.neto, -2);
+
+      final removed = line.estimatedBolsaImpactForFactor(1);
+      expect(removed.hasImpact, isFalse);
+      expect(removed.consumo, 0);
+    });
+
     test('keeps gift lines at zero sale and negative cost margin', () {
       final line = OrderLine(
         codigoArticulo: 'P004',

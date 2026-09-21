@@ -619,7 +619,8 @@ class PedidosProvider with ChangeNotifier {
   void setGlobalDiscount(double pct) {
     _globalDiscountPct = pct.clamp(0, 100);
     _invalidateCache();
-    _notify();
+    // Immediate: carrito + confirmación deben recalcular bolsa al apply/remove dto.
+    _notify(immediate: true);
   }
 
   void reorderLines(int oldIndex, int newIndex) {
