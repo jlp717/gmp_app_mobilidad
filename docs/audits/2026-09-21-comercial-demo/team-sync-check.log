@@ -1,0 +1,7 @@
+[sync-harness] DRIFT(falta).opencode/skills/db2-query-patterns
+[sync-harness] DRIFT(falta).opencode/skills/flutter-riverpod-gmp
+[sync-harness] DRIFT(falta).opencode/skills/gmp-mobilidad-flutter
+[sync-harness] DRIFT(falta).opencode/skills/jwt-refresh-flow
+[sync-harness] rules : 12 fuentes -> .claude/rules | ok=12 drift=0
+[sync-harness] skills: 28 fuentes -> .claude/skills + .opencode/skills | presentes-ok=52 creados=4 ficheros faltantes=4
+[sync-harness] --check: DRIFT detectado

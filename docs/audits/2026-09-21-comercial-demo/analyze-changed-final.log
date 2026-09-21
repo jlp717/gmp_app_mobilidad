@@ -1,0 +1,279 @@
+Analyzing 4 items...                                            
+
+   info - Sort directive sections alphabetically - lib\features\cobros\data\models\cobros_models.dart:7:1 - directives_ordering
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:16:6 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:17:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:18:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:19:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:20:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:21:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:23:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:38:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:54:6 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:55:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:56:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:58:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:59:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:62:6 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:63:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:64:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:66:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:67:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:76:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:77:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:78:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:94:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:105:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:119:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:142:26 - public_member_api_docs
+   info - The line length exceeds the 80-character limit - lib\features\cobros\data\models\cobros_models.dart:146:81 - lines_longer_than_80_chars
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:207:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:208:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:209:19 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:210:18 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:211:19 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:212:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:213:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:214:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:215:17 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:216:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:217:21 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:218:31 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:219:16 - public_member_api_docs
+   info - The line length exceeds the 80-character limit - lib\features\cobros\data\models\cobros_models.dart:221:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\data\models\cobros_models.dart:224:81 - lines_longer_than_80_chars
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:226:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:227:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:228:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:229:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:230:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:232:12 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:233:12 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:235:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:250:12 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:253:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:255:11 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:278:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:287:26 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:308:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:309:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:310:18 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:311:17 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:312:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:313:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:318:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:327:23 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:338:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:339:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:340:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:341:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:342:7 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:343:17 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:345:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:351:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:367:19 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:387:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:388:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:389:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:390:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:391:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:392:18 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:393:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:394:17 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:395:27 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:396:17 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:397:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:398:11 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:399:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:422:11 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:423:11 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:425:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:427:12 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:432:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:442:25 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:453:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:454:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:455:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:456:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:457:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:458:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:459:17 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:461:12 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:462:12 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:463:12 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:465:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:481:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:493:25 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:521:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:522:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:523:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:524:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:525:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:526:30 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:527:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:528:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\data\models\cobros_models.dart:529:16 - public_member_api_docs
+   info - Sort directive sections alphabetically - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:5:1 - directives_ordering
+   info - Missing documentation for a public member - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:72:7 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:73:9 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:80:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:81:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:82:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:83:17 - public_member_api_docs
+   info - The value of the argument is redundant because it matches the default value - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:225:41 - avoid_redundant_argument_values
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:284:81 - lines_longer_than_80_chars
+   info - Missing a required trailing comma - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:364:12 - require_trailing_commas
+   info - Use an if-null operator to convert a 'null' to a 'bool' - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:373:19 - use_if_null_to_convert_nulls_to_bools
+   info - The value of the argument is redundant because it matches the default value - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:459:41 - avoid_redundant_argument_values
+   info - The value of the argument is redundant because it matches the default value - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:465:61 - avoid_redundant_argument_values
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:499:81 - lines_longer_than_80_chars
+   info - Missing a required trailing comma - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:556:64 - require_trailing_commas
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:579:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:581:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:729:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:751:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:752:81 - lines_longer_than_80_chars
+   info - Missing a required trailing comma - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:835:77 - require_trailing_commas
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:1012:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:1088:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:1090:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:1230:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobro_detail_screen.dart:1265:81 - lines_longer_than_80_chars
+   info - Sort directive sections alphabetically - lib\features\cobros\presentation\pages\cobros_page.dart:5:1 - directives_ordering
+   info - Missing documentation for a public member - lib\features\cobros\presentation\pages\cobros_page.dart:19:7 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\pages\cobros_page.dart:20:9 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\pages\cobros_page.dart:26:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\pages\cobros_page.dart:27:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\pages\cobros_page.dart:28:14 - public_member_api_docs
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobros_page.dart:294:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobros_page.dart:398:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobros_page.dart:410:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobros_page.dart:480:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobros_page.dart:487:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobros_page.dart:510:81 - lines_longer_than_80_chars
+   info - Use 'const' with the constructor to improve performance - lib\features\cobros\presentation\pages\cobros_page.dart:568:7 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\cobros\presentation\pages\cobros_page.dart:574:7 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\cobros\presentation\pages\cobros_page.dart:575:7 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobros_page.dart:825:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobros_page.dart:884:81 - lines_longer_than_80_chars
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\pages\cobros_page.dart:981:81 - lines_longer_than_80_chars
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\albaran_card.dart:12:7 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\albaran_card.dart:13:9 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\albaran_card.dart:19:17 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\albaran_card.dart:20:23 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\albaran_card.dart:21:23 - public_member_api_docs
+   info - Missing a required trailing comma - lib\features\cobros\presentation\widgets\albaran_card.dart:150:67 - require_trailing_commas
+   info - Use 'const' with the constructor to improve performance - lib\features\cobros\presentation\widgets\albaran_card.dart:151:25 - prefer_const_constructors
+   info - The line length exceeds the 80-character limit - lib\features\cobros\presentation\widgets\albaran_card.dart:280:81 - lines_longer_than_80_chars
+   info - Missing a required trailing comma - lib\features\cobros\presentation\widgets\albaran_card.dart:337:73 - require_trailing_commas
+   info - Use 'const' with the constructor to improve performance - lib\features\cobros\presentation\widgets\albaran_card.dart:338:31 - prefer_const_constructors
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\cobros_filters.dart:10:7 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\cobros_filters.dart:11:9 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\cobros_filters.dart:17:26 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\cobros_filters.dart:18:26 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\cobros_filters.dart:19:16 - public_member_api_docs
+   info - Use 'const' with the constructor to improve performance - lib\features\cobros\presentation\widgets\cobros_filters.dart:66:15 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\cobros\presentation\widgets\cobros_filters.dart:71:15 - prefer_const_constructors
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\cobros_summary_card.dart:11:7 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\cobros_summary_card.dart:12:9 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\cobros_summary_card.dart:19:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\cobros_summary_card.dart:20:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\cobros_summary_card.dart:21:13 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\cobros_summary_card.dart:22:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\entrega_detail_sheet.dart:12:7 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\entrega_detail_sheet.dart:13:9 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\entrega_detail_sheet.dart:18:17 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\presentation\widgets\entrega_detail_sheet.dart:19:23 - public_member_api_docs
+   info - Use 'const' with the constructor to improve performance - lib\features\cobros\presentation\widgets\entrega_detail_sheet.dart:29:23 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\cobros\presentation\widgets\entrega_detail_sheet.dart:29:50 - prefer_const_constructors
+   info - Missing a required trailing comma - lib\features\cobros\presentation\widgets\entrega_detail_sheet.dart:122:67 - require_trailing_commas
+   info - Use 'const' with the constructor to improve performance - lib\features\cobros\presentation\widgets\entrega_detail_sheet.dart:123:25 - prefer_const_constructors
+   info - Missing a required trailing comma - lib\features\cobros\presentation\widgets\entrega_detail_sheet.dart:311:73 - require_trailing_commas
+   info - Missing a required trailing comma - lib\features\cobros\presentation\widgets\entrega_detail_sheet.dart:373:61 - require_trailing_commas
+   info - Use 'const' with the constructor to improve performance - lib\features\cobros\presentation\widgets\entrega_detail_sheet.dart:374:29 - prefer_const_constructors
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:35:8 - public_member_api_docs
+   info - The line length exceeds the 80-character limit - lib\features\cobros\providers\cobros_provider.dart:51:81 - lines_longer_than_80_chars
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:84:7 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:85:3 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:89:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:90:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:122:12 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:123:15 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:124:21 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:125:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:126:28 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:127:28 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:129:22 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:130:22 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:131:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:132:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:133:41 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:134:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:135:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:136:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:137:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:138:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:139:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:140:11 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:141:11 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:142:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:154:11 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:157:11 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:160:14 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:163:11 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:167:21 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:187:8 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:192:8 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:197:8 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:204:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:230:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:251:16 - public_member_api_docs
+   info - The line length exceeds the 80-character limit - lib\features\cobros\providers\cobros_provider.dart:260:81 - lines_longer_than_80_chars
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:265:16 - public_member_api_docs
+   info - The line length exceeds the 80-character limit - lib\features\cobros\providers\cobros_provider.dart:267:81 - lines_longer_than_80_chars
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:285:16 - public_member_api_docs
+   info - The line length exceeds the 80-character limit - lib\features\cobros\providers\cobros_provider.dart:290:81 - lines_longer_than_80_chars
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:295:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:379:10 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:384:8 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:400:16 - public_member_api_docs
+   info - The line length exceeds the 80-character limit - lib\features\cobros\providers\cobros_provider.dart:504:81 - lines_longer_than_80_chars
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:512:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:547:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:606:16 - public_member_api_docs
+   info - The value of the argument is redundant because it matches the default value - lib\features\cobros\providers\cobros_provider.dart:673:63 - avoid_redundant_argument_values
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:690:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:708:8 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:754:7 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:762:7 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:763:9 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:764:16 - public_member_api_docs
+   info - Missing documentation for a public member - lib\features\cobros\providers\cobros_provider.dart:765:14 - public_member_api_docs
+   info - The method '==' should not be overridden in classes not annotated with '@immutable' - lib\features\cobros\providers\cobros_provider.dart:768:3 - avoid_equals_and_hash_code_on_mutable_classes
+   info - The method 'hashCode' should not be overridden in classes not annotated with '@immutable' - lib\features\cobros\providers\cobros_provider.dart:776:3 - avoid_equals_and_hash_code_on_mutable_classes
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:36:22 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:54:14 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:56:16 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:57:18 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:59:20 - prefer_const_constructors
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\main.dart:61:25 - prefer_const_literals_to_create_immutables
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:62:17 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:68:17 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:70:26 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:73:17 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:75:26 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:127:17 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:127:38 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:139:12 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:141:13 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:143:15 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\main.dart:144:18 - prefer_const_constructors
+   info - Unnecessary duplication of receiver - lib\main.dart:170:7 - cascade_invocations
+   info - Unnecessary duplication of receiver - lib\main.dart:174:7 - cascade_invocations
+   info - Unnecessary duplication of receiver - lib\main.dart:175:7 - cascade_invocations
+   info - Missing documentation for a public member - lib\main.dart:180:7 - public_member_api_docs
+   info - Missing documentation for a public member - lib\main.dart:181:9 - public_member_api_docs
+   info - Missing a required trailing comma - test\features\cobros\cobros_business_logic_test.dart:421:10 - require_trailing_commas
+   info - Missing a required trailing comma - test\features\cobros\cobros_business_logic_test.dart:422:8 - require_trailing_commas
+
+275 issues found. (ran in 251.4s)

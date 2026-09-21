@@ -1,0 +1,6 @@
+{"label":"scope","ok":true,"codes":152}
+{"label":"old_1","ok":true,"ms":2603,"clients":107,"docs":553,"total":254443.49,"vencido":244389.14,"cobrable":254517.14}
+{"label":"new_1","ok":true,"ms":3230,"clients":107,"docs":553,"total":254443.49,"vencido":244389.14,"cobrable":254517.14}
+{"label":"new_2","ok":true,"ms":62,"clients":107,"docs":553,"total":254443.49,"vencido":244389.14,"cobrable":254517.14}
+{"label":"old_2","ok":true,"ms":607,"clients":107,"docs":553,"total":254443.49,"vencido":244389.14,"cobrable":254517.14}
+{"label":"equal","ok":true}

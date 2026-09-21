@@ -1,0 +1,529 @@
+{
+  "commit": "93fd9f8",
+  "command": "ssh gmp@192.168.1.230 \"cd /opt/gmp-api && node backend/scripts/hit-commercial-demo-strict.js\"",
+  "exit": 0,
+  "passed": 71,
+  "failed": 0,
+  "rawSha256": "2c8308670cdd43ac02ef00aa97ea9c81d5c3eb156546fa0012de8d54f6634908",
+  "checks": [
+    {
+      "name": "isolated_runtime_fail_closed",
+      "pass": true,
+      "status": 200,
+      "ms": 49
+    },
+    {
+      "name": "catalog_DSEDAC.VDPL1",
+      "pass": true
+    },
+    {
+      "name": "catalog_DSEDAC.CVC",
+      "pass": true
+    },
+    {
+      "name": "catalog_DSEDAC.CPC",
+      "pass": true
+    },
+    {
+      "name": "catalog_DSEDAC.OPP",
+      "pass": true
+    },
+    {
+      "name": "catalog_DSEDAC.FPG",
+      "pass": true
+    },
+    {
+      "name": "catalog_DSEDAC.CLX",
+      "pass": true
+    },
+    {
+      "name": "catalog_DSEDAC.CLP",
+      "pass": true
+    },
+    {
+      "name": "catalog_JAVIER.TEST_COBROS",
+      "pass": true
+    },
+    {
+      "name": "catalog_JAVIER.TEST_REPARTIDOR_COBROS",
+      "pass": true
+    },
+    {
+      "name": "catalog_JAVIER.TEST_PEDIDOS_CAB",
+      "pass": true
+    },
+    {
+      "name": "catalog_JAVIER.TEST_PEDIDOS_LIN",
+      "pass": true
+    },
+    {
+      "name": "catalog_JAVIER.TEST_LIQUIDACION_COMERCIAL",
+      "pass": true
+    },
+    {
+      "name": "catalog_JAVIER.TEST_DEVOLUCIONES_COMERCIAL",
+      "pass": true
+    },
+    {
+      "name": "catalog_JAVIER.TEST_PEDIDOS_SEQ",
+      "pass": true
+    },
+    {
+      "name": "catalog_JAVIER.TEST_PEDIDO_IDEMPOTENCY",
+      "pass": true
+    },
+    {
+      "name": "catalog_JAVIER.TEST_PEDIDOS_STOCK_RESERVE",
+      "pass": true
+    },
+    {
+      "name": "catalog_JAVIER.TEST_BOLSA_COMERCIAL",
+      "pass": true
+    },
+    {
+      "name": "catalog_JAVIER.TEST_MOVIMIENTOS_BOLSA",
+      "pass": true
+    },
+    {
+      "name": "login_35_COMERCIAL",
+      "pass": true,
+      "status": 200,
+      "ms": 268
+    },
+    {
+      "name": "login_80_COMERCIAL",
+      "pass": true,
+      "status": 200,
+      "ms": 202
+    },
+    {
+      "name": "login_98_COMERCIAL",
+      "pass": true,
+      "status": 200,
+      "ms": 180
+    },
+    {
+      "name": "login_98_REPARTIDOR",
+      "pass": true,
+      "status": 200,
+      "ms": 182
+    },
+    {
+      "name": "switch_98_REPARTIDOR",
+      "pass": true,
+      "status": 200,
+      "ms": 27
+    },
+    {
+      "name": "A_live_promo",
+      "pass": true,
+      "status": 200,
+      "ms": 3652
+    },
+    {
+      "name": "A_product_exists",
+      "pass": true,
+      "status": 200,
+      "ms": 1777
+    },
+    {
+      "name": "A_delivery_options",
+      "pass": true,
+      "status": 200,
+      "ms": 3094,
+      "bodyEvidence": {
+        "success": true
+      }
+    },
+    {
+      "name": "A_create_assigned",
+      "pass": true,
+      "status": 201,
+      "ms": 3128,
+      "bodyEvidence": {
+        "success": true
+      }
+    },
+    {
+      "name": "A_promo_engine_assigned",
+      "pass": true,
+      "totals": [
+        {
+          "IMPORTETOTAL": 85.15,
+          "IMPORTEBASE": 77.41,
+          "IMPORTEIVA": 7.74
+        }
+      ],
+      "lines": [
+        {
+          "CODIGOARTICULO": "4773      ",
+          "CANTIDADENVASES": 3,
+          "PRECIOVENTA": 25.805,
+          "PRECIOTARIFA": 25.805,
+          "IMPORTEVENTA": 77.41,
+          "TIPOLINEA": "R"
+        },
+        {
+          "CODIGOARTICULO": "4773      ",
+          "CANTIDADENVASES": 1,
+          "PRECIOVENTA": 0,
+          "PRECIOTARIFA": 25.805,
+          "IMPORTEVENTA": 0,
+          "TIPOLINEA": "G"
+        },
+        {
+          "CODIGOARTICULO": "4773      ",
+          "CANTIDADENVASES": 1,
+          "PRECIOVENTA": 0,
+          "PRECIOTARIFA": 25.805,
+          "IMPORTEVENTA": 0,
+          "TIPOLINEA": "G"
+        }
+      ]
+    },
+    {
+      "name": "A_confirm_assigned",
+      "pass": true,
+      "status": 200,
+      "ms": 1179,
+      "bodyEvidence": {
+        "success": true
+      }
+    },
+    {
+      "name": "A_pending_erp_assigned",
+      "pass": true
+    },
+    {
+      "name": "A_create_cash",
+      "pass": true,
+      "status": 201,
+      "ms": 2321,
+      "bodyEvidence": {
+        "success": true
+      }
+    },
+    {
+      "name": "A_promo_engine_cash",
+      "pass": true,
+      "totals": [
+        {
+          "IMPORTETOTAL": 85.15,
+          "IMPORTEBASE": 77.41,
+          "IMPORTEIVA": 7.74
+        }
+      ],
+      "lines": [
+        {
+          "CODIGOARTICULO": "4773      ",
+          "CANTIDADENVASES": 3,
+          "PRECIOVENTA": 25.805,
+          "PRECIOTARIFA": 25.805,
+          "IMPORTEVENTA": 77.41,
+          "TIPOLINEA": "R"
+        },
+        {
+          "CODIGOARTICULO": "4773      ",
+          "CANTIDADENVASES": 1,
+          "PRECIOVENTA": 0,
+          "PRECIOTARIFA": 25.805,
+          "IMPORTEVENTA": 0,
+          "TIPOLINEA": "G"
+        },
+        {
+          "CODIGOARTICULO": "4773      ",
+          "CANTIDADENVASES": 1,
+          "PRECIOVENTA": 0,
+          "PRECIOTARIFA": 25.805,
+          "IMPORTEVENTA": 0,
+          "TIPOLINEA": "G"
+        }
+      ]
+    },
+    {
+      "name": "A_confirm_cash",
+      "pass": true,
+      "status": 200,
+      "ms": 461,
+      "bodyEvidence": {
+        "success": true
+      }
+    },
+    {
+      "name": "A_pending_erp_cash",
+      "pass": true
+    },
+    {
+      "name": "A_driver_assignment",
+      "pass": true
+    },
+    {
+      "name": "A_assigned_overlay_only",
+      "pass": true,
+      "status": 200,
+      "ms": 795,
+      "date": "2026-09-24"
+    },
+    {
+      "name": "A_mis_pedidos",
+      "pass": true,
+      "status": 200,
+      "ms": 194
+    },
+    {
+      "name": "F_pay_today_deliver_future",
+      "pass": true,
+      "status": 200,
+      "ms": 2067,
+      "date": "2026-09-24",
+      "today": "2026-09-21",
+      "bodyEvidence": {
+        "success": true,
+        "payment": {
+          "amount": 85.15,
+          "pendingBefore": 85.15,
+          "pendingAfter": 0,
+          "idempotent": false
+        }
+      }
+    },
+    {
+      "name": "F_paid_order_still_pending_delivery",
+      "pass": true,
+      "status": 200,
+      "ms": 92
+    },
+    {
+      "name": "B_pending",
+      "pass": true,
+      "status": 200,
+      "ms": 1241,
+      "bodyEvidence": {
+        "success": true
+      }
+    },
+    {
+      "name": "C_assigned_documents",
+      "pass": true
+    },
+    {
+      "name": "B_partial",
+      "pass": true,
+      "status": 200,
+      "ms": 1757,
+      "bodyEvidence": {
+        "success": true,
+        "payment": {
+          "amount": 639.36,
+          "pendingBefore": 1278.71,
+          "pendingAfter": 639.35,
+          "idempotent": false
+        }
+      }
+    },
+    {
+      "name": "B_history_after_payment",
+      "pass": true,
+      "status": 200,
+      "ms": 166
+    },
+    {
+      "name": "B_idempotency_replay",
+      "pass": true,
+      "status": 200,
+      "ms": 200,
+      "bodyEvidence": {
+        "success": true,
+        "payment": {
+          "amount": 639.36,
+          "idempotent": true
+        }
+      }
+    },
+    {
+      "name": "B_idempotency_conflict",
+      "pass": true,
+      "status": 409,
+      "ms": 1015,
+      "bodyEvidence": {
+        "success": false,
+        "code": "IDEMPOTENCY_CONFLICT"
+      }
+    },
+    {
+      "name": "B_exceeds",
+      "pass": true,
+      "status": 409,
+      "ms": 170,
+      "bodyEvidence": {
+        "success": false,
+        "code": "PAYMENT_EXCEEDS"
+      }
+    },
+    {
+      "name": "B_visible_rest",
+      "pass": true,
+      "status": 200,
+      "ms": 274,
+      "before": 1278.71,
+      "amount": 639.36,
+      "after": 639.35
+    },
+    {
+      "name": "C_commercial_then_driver_409",
+      "pass": true,
+      "status": 409,
+      "ms": 4784,
+      "bodyEvidence": {
+        "success": false,
+        "code": "REPARTO_COBRO_COMMERCIAL_CONFLICT"
+      }
+    },
+    {
+      "name": "D_day_not_preexisting",
+      "pass": true,
+      "date": "2026-09-21"
+    },
+    {
+      "name": "D_total_after_all_payments",
+      "pass": true,
+      "expectedAmount": 724.51,
+      "partial": 639.36
+    },
+    {
+      "name": "D_save_after_payment",
+      "pass": true,
+      "status": 201,
+      "ms": 44,
+      "bodyEvidence": {
+        "success": true
+      }
+    },
+    {
+      "name": "D_real_pg_document",
+      "pass": true,
+      "status": 200,
+      "ms": 6387
+    },
+    {
+      "name": "D_return_pg",
+      "pass": true,
+      "status": 201,
+      "ms": 65,
+      "bodyEvidence": {
+        "success": true
+      }
+    },
+    {
+      "name": "D_pdf_magic",
+      "pass": true,
+      "status": 200,
+      "ms": 135,
+      "bodyEvidence": {
+        "magic": "%PDF-",
+        "bytes": 411473
+      }
+    },
+    {
+      "name": "D_no_double_LQD_subtract",
+      "pass": true,
+      "status": 200,
+      "ms": 2822
+    },
+    {
+      "name": "E_live_below_minimum",
+      "pass": true,
+      "gate": {
+        "cobroRiguroso": true,
+        "minPct": 100,
+        "vendorPct": 50,
+        "clientPct": 100,
+        "snapshot": false,
+        "source": "DSEDAC.CLX.PORCENTAJECOBRORIGUROSO",
+        "actualPct": 97.47,
+        "total": 1416.37,
+        "pending": 35.85,
+        "blocked": true
+      }
+    },
+    {
+      "name": "E_product_fixture",
+      "pass": true
+    },
+    {
+      "name": "E_create_403",
+      "pass": true,
+      "status": 403,
+      "ms": 2233,
+      "bodyEvidence": {
+        "success": false,
+        "code": "MIN_COBRO_ORDER_BLOCKED"
+      }
+    },
+    {
+      "name": "E_draft_fixture_available",
+      "pass": true
+    },
+    {
+      "name": "E_confirm_403",
+      "pass": true,
+      "status": 403,
+      "ms": 75,
+      "fixture": "session TEST draft; live CLX/CVC rule",
+      "bodyEvidence": {
+        "success": false,
+        "code": "MIN_COBRO_ORDER_BLOCKED"
+      }
+    },
+    {
+      "name": "cleanup_TEST_PEDIDOS_LIN_65",
+      "pass": true,
+      "remaining": 0
+    },
+    {
+      "name": "cleanup_TEST_PEDIDOS_STOCK_RESERVE_65",
+      "pass": true,
+      "remaining": 0
+    },
+    {
+      "name": "cleanup_TEST_PEDIDO_IDEMPOTENCY_65",
+      "pass": true,
+      "remaining": 0
+    },
+    {
+      "name": "cleanup_TEST_MOVIMIENTOS_BOLSA_65",
+      "pass": true,
+      "remaining": 0
+    },
+    {
+      "name": "cleanup_TEST_PEDIDOS_LIN_66",
+      "pass": true,
+      "remaining": 0
+    },
+    {
+      "name": "cleanup_TEST_PEDIDOS_STOCK_RESERVE_66",
+      "pass": true,
+      "remaining": 0
+    },
+    {
+      "name": "cleanup_TEST_PEDIDO_IDEMPOTENCY_66",
+      "pass": true,
+      "remaining": 0
+    },
+    {
+      "name": "cleanup_TEST_MOVIMIENTOS_BOLSA_66",
+      "pass": true,
+      "remaining": 0
+    },
+    {
+      "name": "cleanup_sequence_restored",
+      "pass": true
+    },
+    {
+      "name": "cleanup_zero_rows",
+      "pass": true,
+      "remaining": 0
+    }
+  ],
+  "crossReverseAndRace": "strict-payments-fourth.jsonl from same session; not repeated after final deploy to avoid automatic SMTP"
+}

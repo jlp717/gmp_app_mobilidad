@@ -1,0 +1,78 @@
+00:00 +0: loading C:/Users/Javier/AppData/Local/Temp/gmp-flutter-validation-20260921/test/features/cobros/cobros_business_logic_test.dart
+00:00 +0: Cobros models keeps unverified ERP debt visible but never actionable
+00:00 +1: Cobros models parses cobro riguroso and vendor minimum percentages
+00:00 +2: Cobros models parses pedidos summary separately from facturas and albaranes
+00:00 +3: Cobros models classifies due today as vencido when backend estado is missing
+00:00 +4: Cobros models uses backend descripcion as visible payment concept
+00:00 +5: Cobros models builds stable payment references by document source
+00:00 +6: Cobros models parses cobro riguroso and blocks amounts below the minimum
+00:00 +7: Cobros provider params uses value equality for Riverpod family keys
+00:00 +8: Cobros provider params builds backend-safe idempotency tokens for commercial payments
+00:00 +9: Cobros provider params sends bounded pagination params for pending summary
+[ApiClient] Timeouts: connect=10s, receive=30s (network=ConnectivityResult.wifi)
+[API] *** Request ***
+[API] uri: https://api.mari-pepa.com/api/cobros/pending-summary/ALL?limit=2000&page=1&offset=0&tipoDocumento=COB&fechaDesde=2026-06-01&fechaHasta=2026-06-30
+[API] method: GET
+[API] responseType: ResponseType.json
+[API] followRedirects: true
+[API] persistentConnection: true
+[API] connectTimeout: 0:00:10.000000
+[API] sendTimeout: 0:00:15.000000
+[API] receiveTimeout: 0:00:30.000000
+[API] receiveDataWhenStatusError: true
+[API] extra: {authEpoch: 0, sessionGeneration: 0, hadAuthToken: false, rum_t_req: 1789992033683}
+[API] 
+00:00 +10: Cobros provider params adds server cache buster and vendor scope on forced detail refresh
+[CacheService] Cache INVALIDATED: c9f36ccec0c8
+[API] *** Request ***
+[API] uri: https://api.mari-pepa.com/api/cobros/C001/pendientes?vendedorCodes=01&_ts=1789992033722
+[API] method: GET
+[API] responseType: ResponseType.json
+[API] followRedirects: true
+[API] persistentConnection: true
+[API] connectTimeout: 0:00:10.000000
+[API] sendTimeout: 0:00:15.000000
+[API] receiveTimeout: 0:00:30.000000
+[API] receiveDataWhenStatusError: true
+[API] extra: {authEpoch: 0, sessionGeneration: 0, hadAuthToken: false, rum_t_req: 1789992033743}
+[API] 
+00:00 +11: Pending summary status resolver returns neutral status when summary entry is missing
+00:00 +12: Pending summary status resolver does not classify explicit SIN_DATOS as al dia
+00:00 +13: Pending summary status resolver returns VENCIDO when pending and overdue amounts are positive
+00:00 +14: Pending summary status resolver returns PENDIENTE when pending amount is positive without overdue
+00:00 +15: Pending summary status resolver returns AL_DIA only for explicit zero pending and overdue amounts
+00:00 +16: Client debt status parser keeps missing balance distinct from explicit zero debt
+00:00 +17: Client debt status parser exposes loading and error instead of hiding failed debt loads
+00:00 +18: Client debt status parser classifies overdue debt before generic pending risk
+00:00 +19: Cobros delivery completion mutation contract completarEntrega refuses retired mutation and does not POST
+00:00 +20: Cobros payable UX rules filters zero and epsilon documents out of payable list
+00:00 +21: Cobros payable UX rules rejects overpay, zero and non-payable payment amounts
+00:00 +22: Cobros payable UX rules keeps only failed retryable selections after partial success
+00:00 +23: Cobros online retry idempotency rejects empty observations before sending a payment
+00:00 +24: Cobros online retry idempotency reuses idempotency token after an interrupted register attempt
+[API] *** Request ***
+[API] uri: https://api.mari-pepa.com/api/cobros/4300010363/registrar
+[API] method: POST
+[API] responseType: ResponseType.json
+[API] followRedirects: true
+[API] persistentConnection: true
+[API] connectTimeout: 0:00:10.000000
+[API] sendTimeout: 0:00:15.000000
+[API] receiveTimeout: 0:00:30.000000
+[API] receiveDataWhenStatusError: true
+[API] extra: {idempotent: false, authEpoch: 0, sessionGeneration: 0, hadAuthToken: false, rum_t_req: 1789992033821}
+[API] 
+[ApiClient] Request failed: type=DioExceptionType.sendTimeout status=0
+[API] *** Request ***
+[API] uri: https://api.mari-pepa.com/api/cobros/4300010363/registrar
+[API] method: POST
+[API] responseType: ResponseType.json
+[API] followRedirects: true
+[API] persistentConnection: true
+[API] connectTimeout: 0:00:10.000000
+[API] sendTimeout: 0:00:15.000000
+[API] receiveTimeout: 0:00:30.000000
+[API] receiveDataWhenStatusError: true
+[API] extra: {idempotent: false, authEpoch: 0, sessionGeneration: 0, hadAuthToken: false, rum_t_req: 1789992033841}
+[API] 
+00:00 +25: All tests passed!

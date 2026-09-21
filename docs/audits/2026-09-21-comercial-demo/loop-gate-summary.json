@@ -1,0 +1,55 @@
+{
+  "status": "WARN",
+  "requires_human": false,
+  "checks": [
+    {
+      "id": "dart-analyze",
+      "status": "WARN",
+      "exit_code": null,
+      "limitation": "tool unavailable"
+    },
+    {
+      "id": "dart-test",
+      "status": "WARN",
+      "exit_code": null,
+      "limitation": "tool unavailable"
+    },
+    {
+      "id": "npm-lint",
+      "status": "WARN",
+      "exit_code": null,
+      "limitation": "tool unavailable"
+    },
+    {
+      "id": "npm-test",
+      "status": "WARN",
+      "exit_code": null,
+      "limitation": "tool unavailable"
+    },
+    {
+      "id": "git-diff-check",
+      "status": "PASS",
+      "exit_code": 0,
+      "limitation": null
+    },
+    {
+      "id": "secret-scan",
+      "status": "PASS",
+      "exit_code": 0,
+      "limitation": null
+    },
+    {
+      "id": "quality-policy-present",
+      "status": "PASS",
+      "exit_code": 0,
+      "limitation": null
+    }
+  ],
+  "external_evidence": {
+    "flutter_analyze": "exit0 changed-files; 0errors;275warnings/info",
+    "flutter_test": "25/25PASS exit0",
+    "backend_tests": "npm test -- --maxWorkers=2 exit0;262suitesPASS3198testsPASS;1suite/2tests skipped;283.911s",
+    "team_sync": "exit1;4 preexisting missing .opencode skill mirrors;12 rules synced"
+  },
+  "note": "Gate PATH detection does not find Windows command wrappers; actual checks executed with resolved runtimes. No automatic approval required."
+}

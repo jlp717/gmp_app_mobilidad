@@ -1,0 +1,28 @@
+{
+  "artifact": "C:\\Users\\Javier\\Desktop\\Repositorios\\gmp_app_mobilidad\\build-local-comercial-20260921\\app\\outputs\\bundle\\release\\app-release.aab",
+  "bytes": 27971487,
+  "sha256": "610c26a5c3c93759ee175c16a3d9e57199a2ab6f139c4442ebb2710dc75b9b82",
+  "nativeLibraries": [
+    "base/lib/arm64-v8a/libapp.so",
+    "base/lib/arm64-v8a/libc++_shared.so",
+    "base/lib/arm64-v8a/libdatastore_shared_counter.so",
+    "base/lib/arm64-v8a/libflutter.so",
+    "base/lib/arm64-v8a/libjniPdfium.so",
+    "base/lib/arm64-v8a/libmodft2.so",
+    "base/lib/arm64-v8a/libmodpdfium.so",
+    "base/lib/arm64-v8a/libmodpng.so",
+    "base/lib/arm64-v8a/libsentry-android.so",
+    "base/lib/arm64-v8a/libsentry.so"
+  ],
+  "buildExit": 0,
+  "signatureVerifyExit": 0,
+  "sourceCommit": "27667ec0dc6c96550747b225d35d1dd4d075e579",
+  "apiBaseUrl": "http://192.168.1.230:3335/api",
+  "version": "4.1.34+90",
+  "applicationId": "com.maripepa.gmp_mobilidad",
+  "minSdk": 24,
+  "targetSdk": 36,
+  "abi": "arm64-v8a only",
+  "signatureWarning": "self-signed upload certificate and no timestamp; jarsigner verifies successfully",
+  "temporaryBuildDirectoryOverrideRestored": true
+}
