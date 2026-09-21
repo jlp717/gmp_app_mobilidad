@@ -2295,6 +2295,7 @@ function createCobrosRoutes() {
               error.code === 'FORBIDDEN_CLIENT_VENDOR' ? 403 :
                 error.code === 'ORDER_NOT_FOUND_FOR_PAYMENT' ? 404 :
                   error.code === 'IDEMPOTENCY_CONFLICT' ? 409 :
+                    error.code === 'PAYMENT_EXCEEDS' ? 409 :
                     error.code === 'OVERPAY_NOT_ALLOWED' ? 409 :
                     error.code === 'BELOW_MIN_COBRO' ? 409 :
                       error.code === 'PAYMENT_ALREADY_REGISTERED' ? 409 : 500);

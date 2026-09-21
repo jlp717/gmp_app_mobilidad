@@ -38,6 +38,11 @@ const PEDIDOS_LIN_TABLE = db2AppTable('PEDIDOS_LIN');
 const PRICING_CONFIG_SCHEMA = 'JAVIER';
 const BOLSA_PRODUCT_PRICE_TABLE = `${PRICING_CONFIG_SCHEMA}.BOLSA_PRODUCTO_PRECIO`;
 const { comercialErpTable } = require('../../utils/comercial-erp-tables');
+const {
+    isGiftLine,
+    applyGiftPromotionsToLines,
+    assertMinCobroAllowsOrder,
+} = require('../pedidos-comercial-gates');
 const CLIENT_SPECIAL_PRICE_TABLE = comercialErpTable('PES');
 const CLIENT_UNIT_AMOUNT_PROMO_TABLE = comercialErpTable('PPU');
 const PROMOTIONS_SCHEMA = db2Schema('DSEDAC', 'PROMOTIONS_SCHEMA');
@@ -312,7 +317,9 @@ function resolveServerLineUnitPrice({
     userRole,
     motivo,
     articleCode,
+    isGift = false,
 }) {
+    if (isGift === true) return 0;
     const tariff = roundPrice(clientTariff);
     const min = roundPrice(precioMinimo);
     const requested = roundPrice(requestedPrice);
@@ -3124,6 +3131,11 @@ async function createOrder({
     if (!lines || lines.length === 0) {
         throw new Error('At least one line is required');
     }
+    await assertMinCobroAllowsOrder({
+        clientCode: truncate(clientCode, 10),
+        vendorCode: vendedorCode,
+    });
+    lines = applyGiftPromotionsToLines(lines, await getActivePromotionsV2(truncate(clientCode, 10)));
     if (lines.length > MAX_ORDER_LINES) {
         throw new Error(`Un pedido no puede tener mas de ${MAX_ORDER_LINES} lineas`);
     }
@@ -3198,6 +3210,7 @@ async function createOrder({
             userRole,
             motivo: ln.motivoPrecio || ln.motivo,
             articleCode,
+            isGift: isGiftLine(ln),
         });
     }
     logger.info(`[PEDIDOS] createOrder stage=line_price_validate lineCount=${lineCount} durationMs=${Date.now() - tariffT0}`);
@@ -3302,6 +3315,7 @@ async function createOrder({
             userRole,
             motivo: ln.motivoPrecio || ln.motivo,
             articleCode,
+            isGift: isGiftLine(line),
         });
 
         const importeBruto = calculateLineImporte({
@@ -4404,6 +4418,12 @@ async function confirmOrder(orderId, saleType, options = {}) {
 
     const clientCode = trimString(currentRows[0].CODIGOCLIENTE || options.clientCode);
     const vendedorCode = trimString(currentRows[0].CODIGOVENDEDOR || options.vendedorCode);
+    try {
+        await assertMinCobroAllowsOrder({ clientCode, vendorCode: vendedorCode });
+    } catch (gateErr) {
+        await revertConfirming('MIN_COBRO_ORDER_BLOCKED');
+        throw gateErr;
+    }
     const deliveryPlan = await resolveDeliveryPlan({
         clientCode,
         vendedorCode,
@@ -7083,6 +7103,8 @@ module.exports = {
     calculateLineImporte,
     assertPrecioWithinClientTariff,
     resolveServerLineUnitPrice,
+    isGiftLine,
+    applyGiftPromotionsToLines,
     applyConfiguredPricingToProducts,
     applyConfiguredPricingToProduct,
     effectiveMinPriceFromRow,

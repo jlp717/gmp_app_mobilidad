@@ -1435,6 +1435,20 @@ class PedidosProvider with ChangeNotifier {
       _activeCheckoutClientRequestId = null;
       return result;
     } catch (e, st) {
+      if (e is ApiException &&
+          (e.code == 'MIN_COBRO_ORDER_BLOCKED' ||
+              (e.statusCode == 403 &&
+                  (e.message.contains('minimo') ||
+                      e.message.contains('mínimo') ||
+                      e.message.contains('cartera'))))) {
+        _error = e.message;
+        _debugLog('[confirmOrder] blocked by min cobro: $e');
+        return {
+          'blocked': true,
+          'reason': 'MIN_COBRO_ORDER_BLOCKED',
+          'message': e.message,
+        };
+      }
       if (queuedSyncKey != null && e is ApiException && e.statusCode == 0) {
         _debugLog('[confirmOrder] network error; order kept in offline queue');
         PedidosOfflineService.notifyQueuedOrder(queuedSyncKey);

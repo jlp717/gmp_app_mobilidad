@@ -541,6 +541,47 @@ describe('pedidos create order persistence contract', () => {
     expect(lineCall[0]).toMatch(/PORCENTAJEDESCUENTO/i);
   });
 
+  test('createOrder keeps gift REGALO lines at price 0 instead of client tariff', async () => {
+    mockCreateOrderFlow();
+
+    await pedidosService.createOrder({
+      clientCode: 'C001',
+      clientName: 'Cliente',
+      vendedorCode: '01',
+      lines: [
+        {
+          codigoArticulo: 'ART001',
+          descripcion: 'Producto',
+          cantidadEnvases: 3,
+          precio: 10,
+          precioCosto: 4,
+        },
+        {
+          codigoArticulo: 'ART001',
+          descripcion: 'Producto (Regalo)',
+          cantidadEnvases: 1,
+          precio: 0,
+          precioVenta: 0,
+          precioCosto: 4,
+          tipoLinea: 'G',
+          claseLinea: 'SC',
+          isAutoGift: true,
+          promotionCode: '3+1',
+        },
+      ],
+    });
+
+    const lineCall = mockQueryWithParams.mock.calls.find(([sql]) =>
+      /INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql),
+    );
+    expect(lineCall).toBeDefined();
+    const params = lineCall[1];
+    const tipoIdx = params.findIndex((value, index) => value === 'G' && params[index + 2] === 'SC');
+    expect(tipoIdx).toBeGreaterThan(0);
+    expect(params[tipoIdx - 10]).toBe(0);
+    expect(params[tipoIdx - 5]).toBe(0);
+  });
+
   test('createOrder accepts Flutter lineDiscountPct alias without baking pie into price', async () => {
     mockCreateOrderFlow();
 

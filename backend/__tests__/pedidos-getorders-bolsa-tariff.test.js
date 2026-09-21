@@ -187,6 +187,17 @@ describe('tariff deviation guard', () => {
             articleCode: 'ART1',
         })).toBe(12.5);
     });
+
+    test('resolveServerLineUnitPrice keeps REGALO gift lines at 0', () => {
+        expect(pedidosService.resolveServerLineUnitPrice({
+            clientTariff: 12.5,
+            precioMinimo: 8,
+            requestedPrice: 0,
+            userRole: 'COMERCIAL',
+            articleCode: 'ART1',
+            isGift: true,
+        })).toBe(0);
+    });
 });
 
 

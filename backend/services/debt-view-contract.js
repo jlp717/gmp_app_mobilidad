@@ -86,6 +86,13 @@ function minCobroAmount(pendingAmount, porcentaje) {
   return Math.round(pending * pct) / 100;
 }
 
+function capPendingToDocument(pendingAmount, documentAmount) {
+  const pending = Number(pendingAmount) || 0;
+  const document = Number(documentAmount) || 0;
+  if (document <= 0) return Math.max(0, pending);
+  return Math.max(0, Math.min(pending, document));
+}
+
 function isBelowMinCobro({ cobroRiguroso, porcentajeMinimoCobro, pendingAmount, amount }) {
   if (cobroRiguroso !== true) return false;
   const min = minCobroAmount(pendingAmount, porcentajeMinimoCobro);
@@ -113,5 +120,6 @@ module.exports = {
   formaPagoLabel,
   boundDebtFetchFirst,
   minCobroAmount,
+  capPendingToDocument,
   isBelowMinCobro,
 };

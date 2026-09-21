@@ -1438,6 +1438,20 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     Map<String, dynamic> result,
   ) {
     if (result['blocked'] == true) {
+      if (result['reason'] == 'MIN_COBRO_ORDER_BLOCKED') {
+        final message = result['message']?.toString().trim();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              message != null && message.isNotEmpty
+                  ? message
+                  : 'Pedido bloqueado: no se alcanza el % minimo de cobro de cartera.',
+            ),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+        return true;
+      }
       _showStockAlternatives(context, result);
       return true;
     }

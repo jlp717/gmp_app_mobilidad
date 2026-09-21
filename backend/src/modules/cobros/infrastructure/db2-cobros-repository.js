@@ -24,6 +24,7 @@ const {
   cvcPendingPredicate,
   formaPagoLabel,
   isBelowMinCobro,
+  capPendingToDocument,
 } = require('../../../../services/debt-view-contract');
 const { comercialErpTable, comercialErpSchemaAndName } = require('../../../../utils/comercial-erp-tables');
 
@@ -495,7 +496,8 @@ function mapCvcRowsToPendientes(rows, clientCode, appCobrosByDoc, repartidorByDo
       const docKey = cvcPrimaryDocKey(row);
       const erpPendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
       const remainingPaid = paidRemainingByDoc.get(docKey) || 0;
-      const appPaidThisLine = Math.min(remainingPaid, erpPendiente);
+      const cappedPendiente = capPendingToDocument(erpPendiente, parseFloat(row.IMPORTE_TOTAL) || 0);
+      const appPaidThisLine = Math.min(remainingPaid, cappedPendiente);
       paidRemainingByDoc.set(docKey, Math.max(0, remainingPaid - appPaidThisLine));
       const repartidorPaid = cvcDocKeySet(row, (parseInt(row.LEGACY_COLLISION_COUNT, 10) || 1) <= 1)
         .reduce((sum, key) => sum + (repartidorByDoc.get(key) || 0), 0);
@@ -684,7 +686,7 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
   const stableReference = cvcFullDocKey(row) || `CVC:${docKey}`;
   const fecha = toIsoDate(row.ANO_DOCUMENTO, row.MES_DOCUMENTO, row.DIA_DOCUMENTO);
   const fechaVencimiento = toIsoDate(row.ANO_VENCIMIENTO, row.MES_VENCIMIENTO, row.DIA_VENCIMIENTO);
-  const erpPendienteCents = toCents(row.IMPORTE_PENDIENTE);
+  const erpPendienteCents = toCents(capPendingToDocument(row.IMPORTE_PENDIENTE, row.IMPORTE_TOTAL));
   const appPaidCents = toCents(appPaid);
   const pendingCents = Math.max(0, erpPendienteCents - appPaidCents);
     const vencidoCents = row.IMPORTE_VENCIDO == null
@@ -1577,7 +1579,10 @@ class Db2CobrosRepository extends CobrosRepository {
     }
 
     const totalAlreadyPaidCents = paidComercialCents + paidRepartidorCents;
-    const pendingBeforeCents = toCents(order.IMPORTETOTAL) - totalAlreadyPaidCents;
+    const cvcCents = toCents(order.IMPORTETOTAL);
+    const documentCents = toCents(order.IMPORTE_DOCUMENTO || order.IMPORTETOTAL);
+    const capCents = toCents(capPendingToDocument(fromCents(cvcCents), fromCents(documentCents)));
+    const pendingBeforeCents = capCents - totalAlreadyPaidCents;
     if (pendingBeforeCents <= 0) {
       const source = paidRepartidorCents > 0 ? 'REPARTIDOR' : 'COMERCIAL';
       throw new CommercialCobrosError(
@@ -1607,7 +1612,7 @@ class Db2CobrosRepository extends CobrosRepository {
     }
     if (pendingAfterCents < 0) {
       if (!manager || allowOverpay !== true) {
-        throw new CommercialCobrosError('OVERPAY_NOT_ALLOWED', 'El importe supera el pendiente', 409);
+        throw new CommercialCobrosError('PAYMENT_EXCEEDS', 'El importe supera el pendiente', 409);
       }
       if (!trim(overrideReason)) {
         throw new CommercialCobrosError('OVERRIDE_REASON_REQUIRED', 'Motivo obligatorio para sobrecobro', 400);
@@ -1894,6 +1899,7 @@ class Db2CobrosRepository extends CobrosRepository {
         C.XDEDOCUMENTO AS XDE,
         C.DEXDOCUMENTO AS DEX,
         C.IMPORTEPENDIENTE AS IMPORTETOTAL,
+        C.IMPORTEVENCIMIENTO AS IMPORTE_DOCUMENTO,
         'PENDIENTE' AS ESTADO,
         (
           SELECT COUNT(DISTINCT ${cvcReferenceSql('C2')})

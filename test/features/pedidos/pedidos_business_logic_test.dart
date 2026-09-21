@@ -838,6 +838,21 @@ void main() {
       expect(result['estado'], isNull);
     });
 
+    test('keeps min cobro order block distinct from stock block', () {
+      final result = normalizeConfirmOrderResultForProvider(
+        createResult: {'id': 42, 'estado': 'BORRADOR'},
+        confirmedResult: {
+          'blocked': true,
+          'reason': 'MIN_COBRO_ORDER_BLOCKED',
+          'message':
+              'Pedido bloqueado: el cobro de cartera (10.0%) no alcanza el minimo 50%',
+        },
+      );
+      expect(result['blocked'], isTrue);
+      expect(result['reason'], 'MIN_COBRO_ORDER_BLOCKED');
+      expect(shouldClearCartAfterConfirmation(result), isFalse);
+    });
+
     test('does not clear cart when confirmation is blocked', () {
       expect(
         shouldClearCartAfterConfirmation({'blocked': true}),

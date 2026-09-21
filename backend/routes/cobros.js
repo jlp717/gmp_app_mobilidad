@@ -8,7 +8,7 @@ const rateLimit = require('express-rate-limit');
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, invalidateCache: invalidateCachePattern } = require('../services/redis-cache');
-const { getDebtView, cvcPendientesJoins, cvcCliJoin, cvcLiveTypeSql, cvcPendingPredicate, formaPagoLabel } = require('../services/debt-view-contract');
+const { getDebtView, cvcPendientesJoins, cvcCliJoin, cvcLiveTypeSql, cvcPendingPredicate, formaPagoLabel, capPendingToDocument } = require('../services/debt-view-contract');
 const logger = require('../middleware/logger');
 const { db2InsertSql } = require('../utils/db2-identifiers');
 const { getDb2WriteSchema, db2AppTable } = require('../utils/db2-schemas');
@@ -622,7 +622,10 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 const docKey = sanitizeCode(serie) + '-' + numero;
                 const appPaid = appCobrosByDoc.get(docKey) || 0;
                 const repartidorPaid = appRepartidorByDoc.get(docKey) || 0;
-                const erpPendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
+                const erpPendiente = capPendingToDocument(
+                    parseFloat(row.IMPORTE_PENDIENTE) || 0,
+                    parseFloat(row.IMPORTE_TOTAL) || 0,
+                );
                 const erpCobrado = parseFloat(row.IMPORTE_COBRADO) || 0;
                 const importePendienteAjustado = Math.max(0, erpPendiente - appPaid);
                 const importeCobradoAjustado = erpCobrado + appPaid;

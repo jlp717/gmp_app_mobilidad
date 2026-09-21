@@ -1078,7 +1078,7 @@ describe('commercial cobros hardening', () => {
       userId: '01',
       userRole: 'COMERCIAL',
       idempotencyToken: 'cobro-token-overpay-001',
-    })).rejects.toMatchObject({ code: 'OVERPAY_NOT_ALLOWED' });
+    })).rejects.toMatchObject({ code: 'PAYMENT_EXCEEDS' });
   });
 
   test('registerPayment allows manager overpay only with an override reason', async () => {
