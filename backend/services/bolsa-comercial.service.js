@@ -358,6 +358,27 @@ function getLineQuantity(line) {
     return cantidadUnidades;
 }
 
+/** Precio unitario efectivo tras dto de línea (y opcional global). */
+function resolveEffectiveSalePrice(line, globalDiscountPct = 0) {
+    const precioVenta = Number.parseFloat(line.precioVenta ?? line.PRECIOVENTA) || 0;
+    const lineDiscount = Number.parseFloat(
+        line.descuentoLinea
+        ?? line.DESCUENTO_LINEA
+        ?? line.lineDiscountPct
+        ?? line.PORCENTAJEDESCUENTO
+        ?? line.porcentajeDescuento
+    ) || 0;
+    let effective = precioVenta;
+    if (lineDiscount > 0 && lineDiscount <= 100) {
+        effective = precioVenta * (1 - (lineDiscount / 100));
+    }
+    const globalPct = Number.parseFloat(globalDiscountPct) || 0;
+    if (globalPct > 0 && globalPct <= 100) {
+        effective *= (1 - (globalPct / 100));
+    }
+    return toMoney(effective);
+}
+
 function buildBolsaMovementIdempotencyKey(pedidoId, lineId, tipo) {
     const pedido = String(pedidoId ?? '').trim();
     if (!pedido) return null;
@@ -476,10 +497,13 @@ function buildBolsaLineMovement(line, tipo, importe, referenceTariff) {
     };
 }
 
-async function validateOrderWithBolsa(vendedorCode, lines) {
+async function validateOrderWithBolsa(vendedorCode, lines, options = {}) {
     const now = new Date();
     const bolsa = await getOrCreateBolsa(vendedorCode, now.getFullYear(), now.getMonth() + 1);
     const saldoDisponible = toMoney(bolsa.saldoDisponible);
+    const globalDiscountPct = Number.parseFloat(
+        options.globalDiscountPct ?? options.descuentoGlobal ?? 0
+    ) || 0;
 
     let totalConsumo = 0;
     let totalAcumulacion = 0;
@@ -489,20 +513,21 @@ async function validateOrderWithBolsa(vendedorCode, lines) {
     for (const line of lines || []) {
         const referenceTariff = resolveBolsaReferencePrice(line);
         const configuredMin = resolveConfiguredMinFloor(line);
-        const precioVenta = Number.parseFloat(line.precioVenta ?? line.PRECIOVENTA) || 0;
+        const listPrice = Number.parseFloat(line.precioVenta ?? line.PRECIOVENTA) || 0;
+        const precioVenta = resolveEffectiveSalePrice(line, globalDiscountPct);
         const qty = getLineQuantity(line);
         if (referenceTariff <= 0 || qty <= 0) continue;
 
         const belowClientTariff = referenceTariff > 0 && precioVenta + 0.0001 < referenceTariff;
-        if (configuredMin > 0 && precioVenta + 0.0001 < configuredMin && !belowClientTariff && !isAuthorizedMinFloorException(line)) {
+        if (configuredMin > 0 && listPrice + 0.0001 < configuredMin && !belowClientTariff && !isAuthorizedMinFloorException(line)) {
             return {
                 valid: false,
                 reason: 'PRECIO_DEBAJO_MINIMO',
                 code: line.CODIGOARTICULO || line.codigoArticulo,
-                precioVenta,
+                precioVenta: listPrice,
                 precioMinimo: configuredMin,
                 precioTarifa: referenceTariff,
-                message: `Precio ${precioVenta} por debajo del minimo configurado ${configuredMin}`,
+                message: `Precio ${listPrice} por debajo del minimo configurado ${configuredMin}`,
                 consumo: totalConsumo,
                 acumulacion: totalAcumulacion,
                 saldo: saldoDisponible,
@@ -514,13 +539,23 @@ async function validateOrderWithBolsa(vendedorCode, lines) {
         if (precioVenta + 0.0001 < referenceTariff) {
             const diff = toMoney((referenceTariff - precioVenta) * qty);
             totalConsumo = toMoney(totalConsumo + diff);
-            const movement = buildBolsaLineMovement(line, 'CONSUMO', diff, referenceTariff);
+            const movement = buildBolsaLineMovement(
+                { ...line, precioVenta, PRECIOVENTA: precioVenta },
+                'CONSUMO',
+                diff,
+                referenceTariff,
+            );
             lineMovements.push(movement);
             warnings.push({ code: movement.codigoArticulo, deficit: diff });
         } else if (precioVenta > referenceTariff + 0.0001) {
             const diff = toMoney((precioVenta - referenceTariff) * qty);
             totalAcumulacion = toMoney(totalAcumulacion + diff);
-            lineMovements.push(buildBolsaLineMovement(line, 'ACUMULACION', diff, referenceTariff));
+            lineMovements.push(buildBolsaLineMovement(
+                { ...line, precioVenta, PRECIOVENTA: precioVenta },
+                'ACUMULACION',
+                diff,
+                referenceTariff,
+            ));
         }
     }
 
@@ -956,6 +991,8 @@ module.exports = {
     validateOrderWithBolsa,
     resolveBolsaReferencePrice,
     resolveConfiguredMinFloor,
+    resolveEffectiveSalePrice,
+    getLineQuantity,
     isAuthorizedMinFloorException,
     toDb2Timestamp,
     getMovimientos,

@@ -5,7 +5,7 @@ const { db2AppTable } = require('../utils/db2-schemas');
 const { db2InsertSql } = require('../utils/db2-identifiers');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
-const { comercialErpTable, comercialErpSchemaAndName } = require('../utils/comercial-erp-tables');
+const { comercialErpTable, comercialErpSchemaAndName, isIsolatedCommercialTest, comercialErpSnapshotTable } = require('../utils/comercial-erp-tables');
 const logger = require('../middleware/logger');
 const {
   buildReturnPdfPath,
@@ -727,7 +727,11 @@ async function getLqdForVendorDay({
     return null;
   }
 
-  const lqdTable = comercialErpTable('LQD');
+  // En isolated_test la liquidación comercial se alinea a JAVIER.TEST_LQD
+  // (volcado prod→test), no a DSEDAC.LQD vivo — evita discordancia cobros TEST vs LQD prod.
+  const lqdTable = isIsolatedCommercialTest()
+    ? comercialErpSnapshotTable('LQD')
+    : comercialErpTable('LQD');
   const sql = `
     SELECT COALESCE(SUM(LQD.IMPORTEEFECTIVO), 0) AS TOTAL_EFECTIVO,
            COALESCE(SUM(LQD.IMPORTECHEQUES), 0) AS TOTAL_CHEQUES,

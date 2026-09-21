@@ -1070,6 +1070,24 @@ router.post('/:codigoCliente/registrar', limitRegistrarCobro, async (req, res) =
             logger.warn('[COBROS] DSEDAC export best-effort fail: ' + exportErr.message);
         }
 
+        // PDF cobro → Carlos, Javier y comercial (best-effort, no bloquea respuesta).
+        try {
+            const { notifyCommercialCobro } = require('../services/comercial-cobro-notify-service');
+            notifyCommercialCobro({
+                paymentId,
+                codigoCliente,
+                referencia: referenciaTrim,
+                importe: importeNum,
+                formaPago: formaPagoTrim,
+                codigoUsuario: codigoUsuarioTrim,
+                observaciones: obsTrim,
+            }).catch((notifyErr) => {
+                logger.warn(`[COBROS] comercial cobro PDF notify: ${notifyErr.message}`);
+            });
+        } catch (notifyLoadErr) {
+            logger.warn(`[COBROS] comercial cobro notify load: ${notifyLoadErr.message}`);
+        }
+
         res.json({ success: true, mensaje: 'Cobro registrado correctamente', id: paymentId });
 
     } catch (error) {

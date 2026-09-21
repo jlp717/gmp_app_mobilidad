@@ -76,6 +76,9 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           p.totalConDescuento,
           p.globalDiscountPct,
           p.isMarginVisible,
+          p.estimatedBolsaImpact.neto,
+          p.estimatedBolsaImpact.consumo,
+          p.estimatedBolsaImpact.acumulacion,
         )));
     final provider = ref.read(pedidosProvider);
 
@@ -509,7 +512,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             children: [
               _buildStatItem(
                 context,
-                '${provider.totalEnvases.toStringAsFixed(0)} cajas',
+                _formatPrimaryQtyStat(provider),
                 Icons.all_inbox_outlined,
                 AppTheme.textSecondary,
               ),
@@ -534,6 +537,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 ),
             ],
           ),
+          // Always show bolsa strip when there are lines (más presente al pedir)
+          _buildBolsaImpactPreview(context, provider),
           // C3 – IVA breakdown
           if (provider.ivaBreakdown.isNotEmpty)
             Padding(
@@ -565,8 +570,6 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 ],
               ),
             ),
-          if (provider.estimatedBolsaImpact.hasImpact)
-            _buildBolsaImpactPreview(context, provider),
           const SizedBox(height: 6),
           // Auto-save indicator
           if (provider.lastAutoSaved != null || provider.isDirty)
@@ -680,34 +683,53 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     final impact = provider.estimatedBolsaImpact;
     final isPureConsumption = impact.consumo > 0 && impact.acumulacion == 0;
     final isPureGeneration = impact.acumulacion > 0 && impact.consumo == 0;
-    final netColor = isPureConsumption
-        ? AppTheme.error
-        : isPureGeneration
-            ? AppTheme.success
-            : impact.neto < 0
-                ? AppTheme.error
-                : AppTheme.warning;
-    final title = isPureConsumption
-        ? 'Consume bolsa'
-        : isPureGeneration
-            ? 'Genera bolsa'
-            : 'Bolsa compensada';
-    final icon = isPureConsumption
-        ? Icons.trending_down
-        : isPureGeneration
-            ? Icons.trending_up
-            : Icons.compare_arrows;
+    final netColor = !impact.hasImpact
+        ? AppTheme.info
+        : isPureConsumption
+            ? AppTheme.error
+            : isPureGeneration
+                ? AppTheme.success
+                : impact.neto < 0
+                    ? AppTheme.error
+                    : AppTheme.warning;
+    final title = !impact.hasImpact
+        ? 'Bolsa sin impacto'
+        : isPureConsumption
+            ? 'Consume bolsa'
+            : isPureGeneration
+                ? 'Genera bolsa'
+                : 'Bolsa compensada';
+    final icon = !impact.hasImpact
+        ? Icons.account_balance_wallet_outlined
+        : isPureConsumption
+            ? Icons.trending_down
+            : isPureGeneration
+                ? Icons.trending_up
+                : Icons.compare_arrows;
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: netColor.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(8),
+        gradient: LinearGradient(
+          colors: [
+            netColor.withValues(alpha: 0.14),
+            netColor.withValues(alpha: 0.04),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: netColor.withValues(alpha: 0.42)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: netColor, size: 17),
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: netColor.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: netColor, size: 17),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -733,7 +755,9 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           ],
           const SizedBox(width: 8),
           _buildBolsaMiniStat(
-            '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}',
+            impact.hasImpact
+                ? '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}'
+                : '0,00 €',
             netColor,
           ),
         ],
@@ -763,6 +787,48 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+
+  String _formatPrimaryQtyStat(PedidosProvider provider) {
+    var boxes = 0.0;
+    var units = 0.0;
+    var kg = 0.0;
+    var liters = 0.0;
+    for (final line in provider.lines) {
+      final unit = line.unidadMedida.trim().toUpperCase();
+      if (unit == 'KILOGRAMOS') {
+        kg += line.cantidadUnidades;
+      } else if (unit == 'LITROS') {
+        liters += line.cantidadUnidades;
+      } else if (unit.isEmpty || unit == 'CAJAS') {
+        boxes += line.cantidadEnvases;
+      } else {
+        units += line.cantidadUnidades;
+      }
+    }
+    if (kg > 0 && boxes == 0 && units == 0 && liters == 0) {
+      return '${_trimQty(kg)} kg';
+    }
+    if (liters > 0 && boxes == 0 && units == 0 && kg == 0) {
+      return '${_trimQty(liters)} L';
+    }
+    if (units > 0 && boxes == 0 && kg == 0 && liters == 0) {
+      return '${_trimQty(units)} uds';
+    }
+    if (boxes > 0 && units == 0 && kg == 0 && liters == 0) {
+      return '${_trimQty(boxes)} cajas';
+    }
+    return '${_trimQty(boxes + units + kg + liters)} uds';
+  }
+
+  String _trimQty(double value) {
+    if (value == value.truncateToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+    return value
+        .toStringAsFixed(2)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
   }
 
   String _formatTotalUnits(PedidosProvider provider) {
@@ -831,7 +897,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
 
     final unitLabel = Product.unitLabel(line.unidadMedida);
     final equivText = line.unidadesCaja > 1
-        ? '1 cj = ${formatQty(line.unidadesCaja, line.unidadMedida)} uds'
+        ? '1 cj = ${formatQty(line.unidadesCaja, line.unidadMedida)} $unitLabel'
         : null;
 
     showDialog<void>(

@@ -1118,16 +1118,25 @@ class OrderLine {
     return cantidadUnidades;
   }
 
-  OrderBolsaImpact get estimatedBolsaImpact {
+  OrderBolsaImpact get estimatedBolsaImpact => estimatedBolsaImpactForFactor(1);
+
+  /// Bolsa vs tarifa usando el importe ya descontado de línea, escalado por
+  /// [globalFactor] (1 - dto global / 100). Así alinear/quitar descuentos
+  /// actualiza el preview de bolsa en carrito y confirmación.
+  OrderBolsaImpact estimatedBolsaImpactForFactor(double globalFactor) {
     final referencePrice = precioTarifaCliente > 0
         ? precioTarifaCliente
         : (precioTarifa > 0 ? precioTarifa : precioMinimo);
     if (referencePrice <= 0 || billingQuantity <= 0) {
       return const OrderBolsaImpact();
     }
-    final diff = double.parse(
-      ((precioVenta - referencePrice) * billingQuantity).toStringAsFixed(2),
-    );
+    final factor =
+        (globalFactor.isFinite && globalFactor > 0 && globalFactor <= 1)
+            ? globalFactor
+            : 1.0;
+    final saleTotal = importeVenta * factor;
+    final referenceTotal = referencePrice * billingQuantity;
+    final diff = double.parse((saleTotal - referenceTotal).toStringAsFixed(2));
     if (diff > 0) {
       return OrderBolsaImpact(
         acumulacion: diff,

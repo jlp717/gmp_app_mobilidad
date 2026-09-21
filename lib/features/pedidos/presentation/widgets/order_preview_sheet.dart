@@ -868,8 +868,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           const SizedBox(height: 4),
           _buildTotalRow('IVA', PedidosFormatters.money(provider.totalIva)),
 
-          if (provider.isMarginVisible &&
-              provider.estimatedBolsaImpact.hasImpact) ...[
+          if (provider.isMarginVisible) ...[
             const SizedBox(height: 8),
             Divider(color: AppTheme.borderColor, height: 1),
             const SizedBox(height: 8),

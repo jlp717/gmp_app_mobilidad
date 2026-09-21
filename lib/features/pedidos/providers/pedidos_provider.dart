@@ -522,11 +522,12 @@ class PedidosProvider with ChangeNotifier {
 
   OrderBolsaImpact get estimatedBolsaImpact {
     final lines = _buildLinesForSubmit();
+    final factor = _discountFactor;
     var acumulacion = 0.0;
     var consumo = 0.0;
     var count = 0;
     for (final line in lines) {
-      final impact = line.estimatedBolsaImpact;
+      final impact = line.estimatedBolsaImpactForFactor(factor);
       if (!impact.hasImpact) continue;
       acumulacion += impact.acumulacion;
       consumo += impact.consumo;

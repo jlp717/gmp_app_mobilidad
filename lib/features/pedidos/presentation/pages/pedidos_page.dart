@@ -1638,127 +1638,122 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       lineByProductCode.putIfAbsent(line.codigoArticulo, () => line);
     }
 
-    return ListView.builder(
-      controller: _catalogScrollController,
-      padding: Responsive.contentPadding(context),
-      itemCount: displayList.length + (provider.hasMoreProducts ? 1 : 0),
-      itemBuilder: (ctx, i) {
-        if (i >= displayList.length) {
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(
-              child: CircularProgressIndicator(color: AppTheme.info),
-            ),
-          );
-        }
-        final item = displayList[i];
-        if (item is String) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppTheme.success,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Ya comprados',
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize:
-                        Responsive.fontSize(context, small: 11, large: 12),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'Nuevos',
-                  style: TextStyle(
-                    color: AppTheme.error,
-                    fontSize:
-                        Responsive.fontSize(context, small: 11, large: 12),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppTheme.error,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-        final product = item as Product;
-        final lineInCart = lineByProductCode[product.code];
-        final cartQty = lineInCart == null
-            ? 0.0
-            : (lineInCart.cantidadEnvases > 0
-                ? lineInCart.cantidadEnvases
-                : lineInCart.cantidadUnidades);
-        final cartQtySuffix = lineInCart == null
-            ? 'c'
-            : Product.unitLabel(lineInCart.unidadMedida);
-        return ProductCard(
-          product: product,
-          onTap: () => _onProductTap(product),
-          isFavorite: provider.isFavorite(product.code),
-          promo: provider.getPromo(product.code),
-          extraPromoCount: provider.getPromoCount(product.code) > 1
-              ? provider.getPromoCount(product.code) - 1
-              : 0,
-          cartQty: cartQty,
-          cartQtySuffix: cartQtySuffix,
-          isMarginVisible: provider.isMarginVisible,
-          onQuickAdd: () async {
-            unawaited(HapticFeedback.lightImpact());
-            final messenger = ScaffoldMessenger.of(context);
-            messenger.hideCurrentSnackBar();
-
-            if (!product.hasStock) {
-              await showStockAlternativesSheet(
-                context: context,
-                outOfStockProduct: product,
-                provider: provider,
-              );
-              return;
-            }
-
-            // Simple product (only CAJAS, not dual) – quick add 1 caja
-            // Multi-unit or dual product – open UnitSelectorModal
-            final initialUnit = lineInCart?.unidadMedida ??
-                provider.lastUnitForProduct(product.code) ??
-                product.availableUnits.first;
-            final result = await UnitSelectorModal.show(
-              context,
-              product: product,
-              initialUnit: product.availableUnits.contains(initialUnit)
-                  ? initialUnit
-                  : product.availableUnits.first,
-              initialQuantity: 1,
-              qtyAlreadyInCart: cartQty,
+    Widget buildProductCard(Product product) {
+      final lineInCart = lineByProductCode[product.code];
+      final cartUnit = lineInCart == null
+          ? ''
+          : lineInCart.unidadMedida.trim().toUpperCase();
+      final cartQty = lineInCart == null
+          ? 0.0
+          : (cartUnit.isEmpty || cartUnit == 'CAJAS'
+              ? lineInCart.cantidadEnvases
+              : lineInCart.cantidadUnidades);
+      final cartQtySuffix = lineInCart == null
+          ? 'c'
+          : Product.unitLabel(
+              cartUnit.isEmpty ? 'CAJAS' : lineInCart.unidadMedida,
             );
-            if (!mounted) return;
-            if (result == null || result['cleared'] == true) return;
-            if (result['outOfStock'] == true) {
-              final remainingQty =
-                  (result['remainingQuantity'] as num?)?.toDouble();
-              final snackText = remainingQty != null && remainingQty > 0
-                  ? 'No hay stock suficiente. Faltan '
-                      '${_formatQtyForMessage(remainingQty)} de ${product.name}.'
-                  : 'No hay stock disponible para ${product.name}.';
+      return ProductCard(
+        product: product,
+        onTap: () => _onProductTap(product),
+        isFavorite: provider.isFavorite(product.code),
+        promo: provider.getPromo(product.code),
+        extraPromoCount: provider.getPromoCount(product.code) > 1
+            ? provider.getPromoCount(product.code) - 1
+            : 0,
+        cartQty: cartQty,
+        cartQtySuffix: cartQtySuffix,
+        isMarginVisible: provider.isMarginVisible,
+        onQuickAdd: () async {
+          unawaited(HapticFeedback.lightImpact());
+          final messenger = ScaffoldMessenger.of(context);
+          messenger.hideCurrentSnackBar();
+
+          if (!product.hasStock) {
+            await showStockAlternativesSheet(
+              context: context,
+              outOfStockProduct: product,
+              provider: provider,
+            );
+            return;
+          }
+
+          // Simple product (only CAJAS, not dual) – quick add 1 caja
+          // Multi-unit or dual product – open UnitSelectorModal
+          final initialUnit = lineInCart?.unidadMedida ??
+              provider.lastUnitForProduct(product.code) ??
+              product.availableUnits.first;
+          final result = await UnitSelectorModal.show(
+            context,
+            product: product,
+            initialUnit: product.availableUnits.contains(initialUnit)
+                ? initialUnit
+                : product.availableUnits.first,
+            initialQuantity: 1,
+            qtyAlreadyInCart: cartQty,
+          );
+          if (!mounted) return;
+          if (result == null || result['cleared'] == true) return;
+          if (result['outOfStock'] == true) {
+            final remainingQty =
+                (result['remainingQuantity'] as num?)?.toDouble();
+            final snackText = remainingQty != null && remainingQty > 0
+                ? 'No hay stock suficiente. Faltan '
+                    '${_formatQtyForMessage(remainingQty)} de ${product.name}.'
+                : 'No hay stock disponible para ${product.name}.';
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(snackText),
+                backgroundColor: AppTheme.warning,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+            await showStockAlternativesSheet(
+              context: context,
+              outOfStockProduct: product,
+              provider: provider,
+              remainingQty: remainingQty,
+            );
+            return;
+          }
+          final adjustedToStock = result['adjustedToStock'] == true;
+          final requestedQuantity =
+              (result['requestedQuantity'] as num?)?.toDouble();
+          final unit = result['unit'] as String;
+          final qty = (result['quantity'] as double?) ?? 0;
+          if (qty <= 0) return;
+
+          double envases = 0;
+          double unidades = 0;
+          if (unit == 'CAJAS') {
+            envases = qty;
+            unidades =
+                qty * (product.unitsPerBox > 0 ? product.unitsPerBox : 1);
+          } else if (unit == 'KILOGRAMOS' || unit == 'LITROS') {
+            unidades = qty;
+          } else {
+            unidades = qty;
+          }
+          final price = product.priceForUnit(unit);
+          final err = provider.addLine(
+            product,
+            envases,
+            unidades,
+            unit,
+            price,
+            allowPartial: true,
+          );
+          if (err != null) {
+            if (err.startsWith('PARCIAL:')) {
+              final parts = err.substring(8).split('|');
+              final missingQty = double.tryParse(parts[0]) ?? 0;
+              final productName = parts.length > 1 ? parts[1] : product.name;
+              unawaited(provider.loadComplementaryProducts());
               messenger.showSnackBar(
                 SnackBar(
-                  content: Text(snackText),
+                  content: Text(
+                    'Se ha anadido el stock disponible. Faltan ${_formatQtyForMessage(missingQty)} de $productName',
+                  ),
                   backgroundColor: AppTheme.warning,
                   duration: const Duration(seconds: 3),
                 ),
@@ -1767,108 +1762,169 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 context: context,
                 outOfStockProduct: product,
                 provider: provider,
-                remainingQty: remainingQty,
+                remainingQty: missingQty,
               );
-              return;
-            }
-            final adjustedToStock = result['adjustedToStock'] == true;
-            final requestedQuantity =
-                (result['requestedQuantity'] as num?)?.toDouble();
-            final unit = result['unit'] as String;
-            final qty = (result['quantity'] as double?) ?? 0;
-            if (qty <= 0) return;
-
-            double envases = 0;
-            double unidades = 0;
-            if (unit == 'CAJAS') {
-              envases = qty;
-              unidades =
-                  qty * (product.unitsPerBox > 0 ? product.unitsPerBox : 1);
-            } else if (unit == 'KILOGRAMOS' || unit == 'LITROS') {
-              unidades = qty;
+            } else if (err.contains('Stock insuficiente')) {
+              await showStockAlternativesSheet(
+                context: context,
+                outOfStockProduct: product,
+                provider: provider,
+              );
             } else {
-              unidades = qty;
-            }
-            final price = product.priceForUnit(unit);
-            final err = provider.addLine(
-              product,
-              envases,
-              unidades,
-              unit,
-              price,
-              allowPartial: true,
-            );
-            if (err != null) {
-              if (err.startsWith('PARCIAL:')) {
-                final parts = err.substring(8).split('|');
-                final missingQty = double.tryParse(parts[0]) ?? 0;
-                final productName = parts.length > 1 ? parts[1] : product.name;
-                unawaited(provider.loadComplementaryProducts());
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Se ha anadido el stock disponible. Faltan ${_formatQtyForMessage(missingQty)} de $productName',
-                    ),
-                    backgroundColor: AppTheme.warning,
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-                await showStockAlternativesSheet(
-                  context: context,
-                  outOfStockProduct: product,
-                  provider: provider,
-                  remainingQty: missingQty,
-                );
-              } else if (err.contains('Stock insuficiente')) {
-                await showStockAlternativesSheet(
-                  context: context,
-                  outOfStockProduct: product,
-                  provider: provider,
-                );
-              } else {
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      err,
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    backgroundColor: AppTheme.error,
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              }
-            } else {
-              unawaited(provider.loadComplementaryProducts());
-              final unitLabel = Product.unitLabel(unit);
-              final isWeight = unit == 'KILOGRAMOS' || unit == 'LITROS';
-              final fmtQty = isWeight
-                  ? (qty == qty.truncateToDouble()
-                      ? qty.toStringAsFixed(0)
-                      : qty
-                          .toStringAsFixed(2)
-                          .replaceAll(RegExp(r'0+$'), '')
-                          .replaceAll(RegExp(r'\.$'), ''))
-                  : qty.toStringAsFixed(0);
-              final snackText = adjustedToStock && requestedQuantity != null
-                  ? 'Ajustado al maximo disponible: +$fmtQty $unitLabel '
-                      'de ${product.name}'
-                  : '+$fmtQty $unitLabel de ${product.name}';
               messenger.showSnackBar(
                 SnackBar(
-                  content: Text(snackText),
-                  backgroundColor:
-                      adjustedToStock ? AppTheme.warning : AppTheme.success,
-                  duration: Duration(seconds: adjustedToStock ? 3 : 1),
+                  content: Text(
+                    err,
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  backgroundColor: AppTheme.error,
+                  duration: const Duration(seconds: 2),
                 ),
               );
             }
-          },
-          onToggleFavorite: () {
-            HapticFeedback.selectionClick();
-            provider.toggleFavorite(product.code);
+          } else {
+            unawaited(provider.loadComplementaryProducts());
+            final unitLabel = Product.unitLabel(unit);
+            final isWeight = unit == 'KILOGRAMOS' || unit == 'LITROS';
+            final fmtQty = isWeight
+                ? (qty == qty.truncateToDouble()
+                    ? qty.toStringAsFixed(0)
+                    : qty
+                        .toStringAsFixed(2)
+                        .replaceAll(RegExp(r'0+$'), '')
+                        .replaceAll(RegExp(r'\.$'), ''))
+                : qty.toStringAsFixed(0);
+            final snackText = adjustedToStock && requestedQuantity != null
+                ? 'Ajustado al maximo disponible: +$fmtQty $unitLabel '
+                    'de ${product.name}'
+                : '+$fmtQty $unitLabel de ${product.name}';
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(snackText),
+                backgroundColor:
+                    adjustedToStock ? AppTheme.warning : AppTheme.success,
+                duration: Duration(seconds: adjustedToStock ? 3 : 1),
+              ),
+            );
+          }
+        },
+        onToggleFavorite: () {
+          HapticFeedback.selectionClick();
+          provider.toggleFavorite(product.code);
+        },
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final columns = () {
+          final w = constraints.maxWidth;
+          if (w >= 1400) return 4;
+          if (w >= 1100) return 3;
+          if (w >= 750 || Responsive.isLandscape(context)) return 2;
+          return 1;
+        }();
+
+        if (columns <= 1) {
+          return ListView.builder(
+            controller: _catalogScrollController,
+            padding: Responsive.contentPadding(context),
+            itemCount: displayList.length + (provider.hasMoreProducts ? 1 : 0),
+            itemBuilder: (itemCtx, i) {
+              if (i >= displayList.length) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                    child: CircularProgressIndicator(color: AppTheme.info),
+                  ),
+                );
+              }
+              final item = displayList[i];
+              if (item is String) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppTheme.success,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Ya comprados',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: Responsive.fontSize(
+                            context,
+                            small: 11,
+                            large: 12,
+                          ),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'Nuevos',
+                        style: TextStyle(
+                          color: AppTheme.error,
+                          fontSize: Responsive.fontSize(
+                            context,
+                            small: 11,
+                            large: 12,
+                          ),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppTheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return buildProductCard(item as Product);
+            },
+          );
+        }
+
+        final gridItems = displayList.whereType<Product>().toList();
+        final aspect = Responsive.isLandscapeCompact(context)
+            ? 2.6
+            : (Responsive.isLandscape(context) ? 2.3 : 2.0);
+
+        return GridView.builder(
+          controller: _catalogScrollController,
+          padding: Responsive.contentPadding(context),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: aspect,
+          ),
+          itemCount: gridItems.length + (provider.hasMoreProducts ? 1 : 0),
+          itemBuilder: (itemCtx, i) {
+            if (i >= gridItems.length) {
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(
+                  child: CircularProgressIndicator(color: AppTheme.info),
+                ),
+              );
+            }
+            return buildProductCard(gridItems[i]);
           },
         );
       },

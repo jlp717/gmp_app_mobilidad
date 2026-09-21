@@ -3168,6 +3168,11 @@ async function createOrder({
     const serviceT0 = Date.now();
     const lineCount = Array.isArray(lines) ? lines.length : 0;
 
+    // Best-effort: liberar stock de borradores >24h antes de reservar el nuevo.
+    purgeExpiredDraftReservations({ limit: 25 }).catch((err) => {
+        logger.warn(`[PEDIDOS] draft TTL purge skipped: ${err.message}`);
+    });
+
     if (!clientCode || !vendedorCode) {
         throw new Error('clientCode and vendedorCode are required');
     }
@@ -4499,6 +4504,8 @@ async function confirmOrder(orderId, saleType, options = {}) {
                 TRIM(UNIDADMEDIDA) AS UNIDADMEDIDA, UNIDADESCAJA,
                 PRECIOVENTA, PRECIOCOSTO, PRECIOTARIFA, PRECIOTARIFACLIENTE, PRECIOMINIMO,
                 IMPORTEVENTA, IMPORTECOSTO, IMPORTEMARGEN, PORCENTAJEMARGEN,
+                COALESCE(DESCUENTO_LINEA, 0) AS DESCUENTO_LINEA,
+                COALESCE(PORCENTAJEDESCUENTO, 0) AS PORCENTAJEDESCUENTO,
                 TRIM(TIPOLINEA) AS TIPOLINEA,
                 TRIM(TIPOVENTA) AS TIPOVENTA,
                 TRIM(CLASELINEA) AS CLASELINEA,
@@ -4512,7 +4519,21 @@ async function confirmOrder(orderId, saleType, options = {}) {
     // P0-BOLSA: Validate bolsa comercial before confirming
     try {
         const bolsaService = require('../bolsa-comercial.service');
-        const bolsaResult = await bolsaService.validateOrderWithBolsa(vendedorCode, lines);
+        const headerDiscountRows = await queryWithParams(
+            `SELECT COALESCE(DESCUENTO_GLOBAL, 0) AS DESCUENTO_GLOBAL,
+                    COALESCE(PORCENTAJEDESCUENTO1, 0) AS PORCENTAJEDESCUENTO1
+               FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
+            [id],
+            false,
+        );
+        const header = headerDiscountRows?.[0] || {};
+        const globalDiscountPct = Math.max(
+            Number.parseFloat(header.DESCUENTO_GLOBAL) || 0,
+            Number.parseFloat(header.PORCENTAJEDESCUENTO1) || 0,
+        );
+        const bolsaResult = await bolsaService.validateOrderWithBolsa(vendedorCode, lines, {
+            globalDiscountPct,
+        });
         if (!bolsaResult.valid && !effectiveForceConfirm) {
             await revertConfirming('BOLSA_INSUFICIENTE');
             return {
@@ -4776,6 +4797,74 @@ async function confirmOrder(orderId, saleType, options = {}) {
     }
 
     return { ...order, stockWarnings, cobroPropio };
+}
+
+/**
+ * Libera reservas y borra borradores con más de 24h (TEST / JAVIER.TEST_*).
+ * SQL parametrizado. Best-effort: no falla el flujo llamante.
+ */
+async function purgeExpiredDraftReservations({ limit = 50 } = {}) {
+    const maxRows = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    // Solo escritura en tablas app (TEST_* en isolated_test). Nunca DSEDAC.
+    if (!String(PEDIDOS_CAB_TABLE).startsWith('JAVIER.')) {
+        return { purged: 0, skipped: true, reason: 'non_javier_schema' };
+    }
+
+    let expiredIds = [];
+    try {
+        const rows = await queryWithParams(
+            `SELECT C.ID
+               FROM ${PEDIDOS_CAB_TABLE} C
+              WHERE TRIM(C.ESTADO) IN (${DRAFT_STOCK_RESERVATION_STATES_SQL})
+                AND C.CREATED_AT < CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS
+              ORDER BY C.CREATED_AT ASC
+              FETCH FIRST ${maxRows} ROWS ONLY`,
+            [],
+            false,
+        );
+        expiredIds = (rows || [])
+            .map((r) => parseInt(r.ID, 10))
+            .filter((id) => Number.isInteger(id) && id > 0);
+    } catch (err) {
+        logger.warn(`[PEDIDOS] purgeExpiredDraftReservations list failed: ${err.message}`);
+        return { purged: 0, error: err.message };
+    }
+
+    let purged = 0;
+    for (const id of expiredIds) {
+        try {
+            await queryWithParams(
+                `DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`,
+                [id],
+                false,
+            );
+            await queryWithParams(
+                `DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`,
+                [id],
+                false,
+            );
+            const deleted = await queryWithParams(
+                `DELETE FROM ${PEDIDOS_CAB_TABLE}
+                  WHERE ID = ?
+                    AND TRIM(ESTADO) IN (${DRAFT_STOCK_RESERVATION_STATES_SQL})
+                    AND CREATED_AT < CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS`,
+                [id],
+                false,
+            );
+            const affected = (deleted && typeof deleted.count === 'number')
+                ? deleted.count
+                : (typeof deleted === 'number' ? deleted : 1);
+            if (affected > 0) purged += 1;
+        } catch (err) {
+            logger.warn(`[PEDIDOS] purgeExpiredDraftReservations #${id}: ${err.message}`);
+        }
+    }
+
+    if (purged > 0) {
+        await invalidatePedidosStockCache('draft_ttl_purge').catch(() => undefined);
+        logger.info(`[PEDIDOS] Purged ${purged} expired draft(s) (>${DRAFT_STOCK_RESERVATION_HOURS}h)`);
+    }
+    return { purged, candidates: expiredIds.length };
 }
 
 async function cancelOrder(orderId, options = {}) {
@@ -7142,6 +7231,7 @@ module.exports = {
     deleteOrderLine,
     confirmOrder,
     cancelOrder,
+    purgeExpiredDraftReservations,
     updateOrderStatus,
     getConfirmedPedidosForRutero,
     getRecommendations,

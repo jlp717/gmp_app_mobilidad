@@ -135,6 +135,22 @@ class Responsive {
     return 90;
   }
 
+  /// Columns for product catalog grids. Landscape / wide: more cards visible.
+  static int catalogCrossAxisCount(BuildContext ctx) {
+    final width = MediaQuery.sizeOf(ctx).width;
+    if (width >= 1400) return 4;
+    if (width >= 1100) return 3;
+    if (width >= 750 || isLandscape(ctx)) return 2;
+    return 1;
+  }
+
+  /// Approximate card height for catalog grid tiles.
+  static double catalogTileAspectRatio(BuildContext ctx) {
+    if (isLandscapeCompact(ctx)) return 2.8;
+    if (isLandscape(ctx)) return 2.4;
+    return catalogCrossAxisCount(ctx) > 1 ? 2.1 : 3.2;
+  }
+
   // ---------------------------------------------------------------------------
   // Font size helpers
   // ---------------------------------------------------------------------------
