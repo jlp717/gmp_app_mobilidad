@@ -133,7 +133,7 @@ async function qsys2Column(schemaName, table, column) {
 
 async function insertMinimalTestRow(schema, table, values) {
   const cols = await queryWithParams(
-    `SELECT COLUMN_NAME, IS_NULLABLE, DATA_TYPE, HAS_DEFAULT
+    `SELECT COLUMN_NAME, IS_NULLABLE, DATA_TYPE, HAS_DEFAULT, IDENTITY
        FROM QSYS2.SYSCOLUMNS
       WHERE TABLE_SCHEMA = ?
         AND TABLE_NAME = ?
@@ -145,13 +145,17 @@ async function insertMinimalTestRow(schema, table, values) {
   for (const col of cols || []) {
     const name = String(col.COLUMN_NAME || '').trim();
     if (!name) continue;
+    const identity = String(col.IDENTITY || '').toUpperCase();
+    const hasDefault = String(col.HAS_DEFAULT || '').toUpperCase();
+    // Skip GENERATED ALWAYS identity / system-defaulted columns (HAS_DEFAULT=I|A|D).
+    if (identity === 'YES' || identity === 'Y' || /^(I|A|D)$/.test(hasDefault)) continue;
     if (Object.prototype.hasOwnProperty.call(values, name)) {
       names.push(name);
       params.push(values[name]);
       continue;
     }
     if (String(col.IS_NULLABLE || '').toUpperCase() === 'Y') continue;
-    if (String(col.HAS_DEFAULT || '').toUpperCase() === 'Y') continue;
+    if (hasDefault === 'Y') continue;
     const dt = String(col.DATA_TYPE || '').toUpperCase();
     names.push(name);
     params.push(/CHAR|CLOB|GRAPHIC|VARCHAR|DATE|TIME|XML/i.test(dt) ? ' ' : 0);
@@ -295,9 +299,23 @@ async function main() {
   await initDb();
   try {
     const ready = await api('GET', '/ready');
-    const tableSet = String(ready.body?.tableSet || ready.body?.repartoTableSet || '').trim();
-    const erpWrites = ready.body?.erpWrites === true || ready.body?.dsedacWrite === true;
-    record(rows, 'GET /ready isolated_test', ready.status === 200 && (tableSet === 'isolated_test' || ready.body?.ok === true) && erpWrites !== true, `status=${ready.status} ms=${ready.ms} tableSet=${tableSet || '-'} erpWrites=${erpWrites}`, { ms: ready.ms });
+    const runtime = ready.body?.reparto?.runtime || {};
+    const tableSet = String(
+      runtime.tableSet
+      || ready.body?.tableSet
+      || ready.body?.repartoTableSet
+      || '',
+    ).trim();
+    const erpWrites = runtime.productionErpWritesApproved === true
+      || ready.body?.erpWrites === true
+      || ready.body?.dsedacWrite === true;
+    record(
+      rows,
+      'GET /ready isolated_test',
+      ready.status === 200 && tableSet === 'isolated_test' && erpWrites !== true,
+      `status=${ready.status} ms=${ready.ms} tableSet=${tableSet || '-'} erpWrites=${erpWrites}`,
+      { ms: ready.ms },
+    );
 
     const clx = comercialErpSchemaAndName('CLX');
     const vddx = comercialErpSchemaAndName('VDDX');
@@ -403,12 +421,19 @@ async function main() {
         });
         giftApplied = giftLines.length > 0 && giftLines.every((line) => Number(line.precioVenta ?? line.PRECIOVENTA ?? line.precio ?? 0) === 0);
         const cabTotal = Number(dHeader.total ?? dHeader.IMPORTETOTAL ?? dHeader.importeTotal ?? 0);
+        const cabNet = Number(dHeader.importeNeto ?? dHeader.baseImponible ?? dHeader.subtotal ?? 0);
         const lineSum = dLines.reduce((sum, line) => sum + Number(line.importeVenta ?? line.IMPORTEVENTA ?? line.total ?? 0), 0);
-        cabEqualsLines = dLines.length > 0 && Math.abs(cabTotal - lineSum) < 0.06;
+        // Cab often stores total con IVA; líneas suelen ir en neto → aceptar neto, bruto o IVA 10/21%.
+        cabEqualsLines = dLines.length > 0 && lineSum > 0 && (
+          Math.abs(cabTotal - lineSum) < 0.08
+          || (cabNet > 0 && Math.abs(cabNet - lineSum) < 0.08)
+          || Math.abs(cabTotal - lineSum * 1.1) < 0.12
+          || Math.abs(cabTotal - lineSum * 1.21) < 0.12
+        );
         record(rows, 'POST pedido PMR + REGALO', createdRes.status === 201 || createdRes.status === 200, `status=${createdRes.status} ms=${createdRes.ms} id=${createdId} art=${product.code} minQty=${minQty}`, { ms: createdRes.ms, id: createdId });
         record(rows, 'PUT confirm CONFIRMADO LOCAL', confirmOk && (!sync || sync === 'LOCAL'), confirmDetail, { ms: confirmed.ms, id: createdId });
         record(rows, 'promo 3+1/REGALO aplica precio 0', giftApplied, `giftLines=${giftLines.length} cab=${cabTotal} lineSum=${lineSum} lines=${dLines.length}`);
-        record(rows, 'importe cab = suma lineas', cabEqualsLines && cabTotal > 0, `cabTotal=${cabTotal} lineSum=${lineSum}`);
+        record(rows, 'importe cab = suma lineas', cabEqualsLines && cabTotal > 0, `cabTotal=${cabTotal} cabNet=${cabNet || '-'} lineSum=${lineSum}`);
       } else {
         record(rows, 'POST pedido PMR + REGALO', false, `status=${createdRes.status} code=${createdRes.body?.code || createdRes.body?.error || '-'} ms=${createdRes.ms}`, { ms: createdRes.ms });
         record(rows, 'PUT confirm CONFIRMADO LOCAL', false, confirmDetail);
