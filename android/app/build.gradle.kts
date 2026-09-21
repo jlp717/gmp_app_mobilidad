@@ -64,6 +64,15 @@ android {
 
     buildTypes {
         getByName("release") {
+            // Flutter supplies build-type ABI defaults, which override defaultConfig.
+            // Keep explicit single-ABI releases consistent with their Flutter AOT output.
+            val releaseAbiFilter = (project.findProperty("ABI_FILTER") as String?)?.trim()
+            if (!releaseAbiFilter.isNullOrEmpty()) {
+                ndk {
+                    abiFilters.clear()
+                    abiFilters.add(releaseAbiFilter)
+                }
+            }
             // R8/ProGuard: canonical builder is CI Linux. If Windows NDK strip
             // fails locally, skip local minify and rely on flutter-release.yml.
             isMinifyEnabled = true
