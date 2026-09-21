@@ -393,6 +393,33 @@ void main() {
   });
 
   group('Cobros online retry idempotency', () {
+    test('rejects empty observations before sending a payment', () async {
+      final requestBodies = <dynamic>[];
+      final interceptor = InterceptorsWrapper(onRequest: (options, handler) {
+        requestBodies.add(options.data);
+        handler.resolve(Response<Map<String, dynamic>>(
+          requestOptions: options,
+          data: const {'success': false},
+        ));
+      });
+      ApiClient.dio.interceptors.add(interceptor);
+      addTearDown(() => ApiClient.dio.interceptors.remove(interceptor));
+      final provider = CobrosProvider(employeeCode: '35');
+      final result = await provider.registrarCobro(
+        codigoCliente: 'C001',
+        referencia: 'M-1',
+        importe: 1,
+        formaPago: 'CONTADO',
+        tipoVenta: TipoVenta.contado,
+        tipoModo: TipoModoCobro.normal,
+        observaciones: '   ',
+        reloadAfter: false,
+      );
+      expect(result, isFalse);
+      expect(requestBodies, isEmpty);
+      expect(provider.error, contains('observaciones'));
+    });
+
     test('reuses idempotency token after an interrupted register attempt',
         () async {
       final requestBodies = <Map<String, dynamic>>[];
@@ -435,6 +462,7 @@ void main() {
         formaPago: 'EFECTIVO',
         tipoVenta: TipoVenta.contado,
         tipoModo: TipoModoCobro.normal,
+        observaciones: '  Cobro parcial en visita  ',
         reloadAfter: false,
       );
       final second = await provider.registrarCobro(
@@ -444,12 +472,14 @@ void main() {
         formaPago: 'EFECTIVO',
         tipoVenta: TipoVenta.contado,
         tipoModo: TipoModoCobro.normal,
+        observaciones: '  Cobro parcial en visita  ',
         reloadAfter: false,
       );
 
       expect(first, isFalse);
       expect(second, isTrue);
       expect(requestBodies, hasLength(2));
+      expect(requestBodies.first['observaciones'], 'Cobro parcial en visita');
       expect(
         requestBodies[1]['idempotencyToken'],
         requestBodies[0]['idempotencyToken'],

@@ -5,12 +5,14 @@ const crypto = require('crypto');
 const mockQuery = jest.fn();
 const mockQueryWithParams = jest.fn();
 const mockPoolConnect = jest.fn();
+const mockAcquireConfiguredConnection = jest.fn();
 const mockConnQuery = jest.fn();
 const mockConnClose = jest.fn();
 
 jest.mock('../config/db', () => ({
   query: (...args) => mockQuery(...args),
   queryWithParams: (...args) => mockQueryWithParams(...args),
+  acquireConfiguredConnection: (...args) => mockAcquireConfiguredConnection(...args),
   getPool: () => ({ connect: mockPoolConnect }),
 }));
 
@@ -63,8 +65,11 @@ beforeEach(() => {
   mockQuery.mockReset();
   mockQueryWithParams.mockReset();
   mockPoolConnect.mockReset();
+  mockAcquireConfiguredConnection.mockReset();
   mockConnQuery.mockReset();
   mockConnClose.mockReset();
+  mockConnQuery.mockImplementation((sql, params) => mockQueryWithParams(sql, params));
+  mockAcquireConfiguredConnection.mockResolvedValue({ query: mockConnQuery, close: mockConnClose });
   clearPedidoCabOptionalColumnsCache();
 });
 
@@ -901,7 +906,7 @@ describe('commercial cobros hardening', () => {
     ]));
   });
 
-  test('registerPayment does not use LOCK TABLE or manual pool transaction', async () => {
+  test('registerPayment locks the same reparto ledger as the other channel using IBM i transaction syntax', async () => {
     const repo = setupRepository({ paid: '0.00' });
 
     await repo.registerPayment({
@@ -915,14 +920,16 @@ describe('commercial cobros hardening', () => {
       idempotencyToken: 'cobro-token-no-lock-001',
     });
 
-    expect(mockPoolConnect).not.toHaveBeenCalled();
+    expect(mockAcquireConfiguredConnection).toHaveBeenCalledTimes(1);
     const allSql = [
       ...mockQuery.mock.calls.map(([sql]) => sql),
       ...mockQueryWithParams.mock.calls.map(([sql]) => sql),
     ];
-    expect(allSql.some((sql) => /LOCK TABLE/i.test(sql))).toBe(false);
+    expect(allSql.some((sql) => /LOCK TABLE JAVIER\.REPARTIDOR_COBROS IN EXCLUSIVE MODE/i.test(sql))).toBe(true);
+    expect(allSql.some((sql) => /^SET TRANSACTION ISOLATION LEVEL READ COMMITTED$/i.test(sql))).toBe(true);
     expect(allSql.some((sql) => /^BEGIN WORK$/i.test(sql))).toBe(false);
-    expect(allSql.some((sql) => /^COMMIT$/i.test(sql))).toBe(false);
+    expect(allSql.some((sql) => /^COMMIT$/i.test(sql))).toBe(true);
+    expect(mockConnClose).toHaveBeenCalledTimes(1);
   });
 
   test('registerPayment stores a DB2-safe ID and the idempotency token separately', async () => {
@@ -1236,6 +1243,23 @@ describe('commercial cobros hardening', () => {
       status: 409,
     });
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql))).toBe(false);
+  });
+
+  test('registerPayment fails closed when the repartidor ledger cannot be checked', async () => {
+    const repo = setupRepository();
+    const normalQuery = setupRegisterPaymentMocks();
+    mockQueryWithParams.mockImplementation(async (sql, ...args) => {
+      if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) {
+        throw new Error('SQL0204 ledger unavailable');
+      }
+      return normalQuery(sql, ...args);
+    });
+    await expect(repo.registerPayment({
+      clientCode: 'C001', amount: 20, paymentMethod: 'CONTADO',
+      reference: 'M-1', observations: 'Cobro de prueba', userId: '01',
+      userRole: 'COMERCIAL', idempotencyToken: 'cross-ledger-unavailable',
+    })).rejects.toMatchObject({ code: 'PAYMENT_CROSS_CHECK_UNAVAILABLE', status: 503 });
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO/i.test(sql))).toBe(false);
   });
 
   test('registerPayment blocks amounts below CLX cobro riguroso minimum', async () => {

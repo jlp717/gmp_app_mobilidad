@@ -174,6 +174,8 @@ describe('reparto cobros DB2 transaction-bound port', () => {
     expect(fake.lifecycle.commit).not.toHaveBeenCalled();
     expect(fake.lifecycle.rollback).not.toHaveBeenCalled();
     expect(fake.lifecycle.close).not.toHaveBeenCalled();
+    const lock = fake.calls.find((call) => /^LOCK TABLE /i.test(call.sql));
+    expect(lock.sql).toBe(`LOCK TABLE ${runtime().tables.finance.cobros} IN EXCLUSIVE MODE`);
     const insert = fake.calls.find((call) => call.sql.startsWith('INSERT INTO'));
     expect(insert.sql).toContain(runtime().tables.finance.cobros);
     expect(insert.sql).not.toContain('ENTREGA_APP_ID');

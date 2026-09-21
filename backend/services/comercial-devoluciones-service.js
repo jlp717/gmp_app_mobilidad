@@ -785,7 +785,7 @@ async function getDailySummary({
   ]);
 
   const devolucionesYaCobradas = returns.reduce(
-    (sum, item) => sum + Math.abs(item.amount || 0),
+    (sum, item) => sum + (item.yaCobrada === true ? Math.abs(item.amount || 0) : 0),
     0,
   );
   const summary = buildComercialLiquidacionSummary({

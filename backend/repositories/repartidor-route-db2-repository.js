@@ -302,8 +302,9 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
          FROM ${tables.confirmations} C
          ${paymentJoin}
         WHERE TRIM(C.DOCUMENT_ID) IN (${documentPlaceholders})
+          AND TRIM(C.REPARTIDOR_ID) IN (${driverPlaceholders})
          ORDER BY TRIM(C.DOCUMENT_ID), TRIM(C.STATUS), C.ID`,
-        [...documentIds],
+        [...documentIds, ...drivers],
         false,
       );
       allConfirmRows.push(...(Array.isArray(confirmRows) ? confirmRows : []));

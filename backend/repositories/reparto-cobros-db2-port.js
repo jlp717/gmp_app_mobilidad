@@ -324,6 +324,10 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger = 
     return Object.freeze({
       async insertCobro(input) {
         const payment = normalizePayment(input, now());
+        // The caller owns BEGIN/COMMIT.  Take the same DB2 table lock used by
+        // commercial payments before inspecting either ledger, so two channels
+        // cannot both observe an unpaid document and insert concurrently.
+        await execute(connection, `LOCK TABLE ${runtime.tables.finance.cobros} IN EXCLUSIVE MODE`);
         const replayRows = await rows(connection,
           `SELECT ${LEDGER_COLUMNS.join(', ')} FROM ${runtime.tables.finance.cobros} WHERE IDEMPOTENCY_TOKEN = ? FETCH FIRST 2 ROWS ONLY FOR UPDATE WITH RS`,
           [payment.idempotencyToken]);

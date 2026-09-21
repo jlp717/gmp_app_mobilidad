@@ -8,6 +8,10 @@ const {
 } = require('../utils/comercial-erp-tables');
 
 describe('comercial ERP table mapping', () => {
+  test('sales remain live even when isolated fixture reads are explicitly enabled', () => {
+    expect(comercialErpTable('LACLAE', { REPARTO_TABLE_SET: 'isolated_test', COMERCIAL_ERP_READ_TEST: 'true' })).toBe('DSED.LACLAE');
+    expect(comercialErpTable('CLX', { REPARTO_TABLE_SET: 'isolated_test', COMERCIAL_ERP_READ_TEST: 'true' })).toBe('JAVIER.TEST_CLX');
+  });
   const previous = {};
   const keys = ['REPARTO_TABLE_SET', 'COMERCIAL_ERP_READ_TEST', 'REPARTO_ENVIRONMENT', 'NODE_ENV'];
 
@@ -202,7 +206,7 @@ describe('comercial ERP table mapping', () => {
     process.env.REPARTO_TABLE_SET = 'isolated_test';
     process.env.COMERCIAL_ERP_READ_TEST = 'true';
     expect(comercialErpTable('CVC')).toBe('JAVIER.TEST_CVC');
-    expect(comercialErpTable('LACLAE')).toBe('JAVIER.TEST_LACLAE');
+    expect(comercialErpTable('LACLAE')).toBe('DSED.LACLAE');
     expect(comercialErpTable('LAC')).toBe('JAVIER.TEST_LAC');
     expect(comercialErpTable('CFC')).toBe('JAVIER.TEST_CFC');
   });

@@ -1,0 +1,224 @@
+'use strict';
+
+// Run on the API host over SSH. Credentials remain in process memory.
+// All mutations have a session marker registered BEFORE the request and cleanup
+// runs in finally, including failed assertions and ambiguous HTTP responses.
+const db = require('../config/db');
+const { resolveRepartoRuntime } = require('../config/reparto-runtime');
+const { db2AppTable } = require('../utils/db2-schemas');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
+const { exportGate } = require('../services/dsedac-exports.service');
+require('../middleware/logger').level = 'error';
+const SESSION = `demo-${Date.now()}`;
+const TODAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
+const BASE = 'http://127.0.0.1:3335/api';
+const results = [];
+const tokens = new Set();
+const orderIds = new Set();
+let safe = false;
+const q = (sql, params = []) => db.queryWithParams(sql, params, false, false);
+const cents = (n) => Math.round(Number(n || 0) * 100);
+const marker = (name) => { const value = `${SESSION}-${name}`; tokens.add(value); return value; };
+function check(name, ok, detail = {}) {
+  const row = { name, pass: Boolean(ok), ...detail };
+  results.push(row); console.log(JSON.stringify(row));
+  return Boolean(ok);
+}
+function must(name, ok, detail = {}) {
+  if (!check(name, ok, detail)) throw new Error(`ASSERT:${name}`);
+}
+async function api(method, path, auth, body) {
+  if (method !== 'GET' && !path.startsWith('/auth/') && !safe) throw new Error('UNSAFE_RUNTIME');
+  const started = Date.now();
+  const headers = { 'User-Agent': 'GMP-Commercial-Strict-HIT/2.0' };
+  if (auth) headers.Authorization = `Bearer ${auth.token}`;
+  if (body) headers['Content-Type'] = 'application/json';
+  try {
+    const response = await fetch(`${BASE}${path}`, { method, headers,
+      body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(60000) });
+    const bytes = Buffer.from(await response.arrayBuffer());
+    let data; try { data = JSON.parse(bytes.toString()); } catch { data = { magic: bytes.subarray(0, 5).toString(), bytes: bytes.length }; }
+    return { status: response.status, ms: Date.now() - started, body: data };
+  } catch (error) { return { status: 0, ms: Date.now() - started, body: { code: error.name } }; }
+}
+async function login(vendor, mode) {
+  const rows = await q('SELECT CODIGOPIN FROM DSEDAC.VDPL1 WHERE CODIGOVENDEDOR=CAST(? AS CHAR(2)) FETCH FIRST 1 ROW ONLY', [vendor]);
+  const response = await api('POST', '/auth/login', null, { username: vendor, password: String(rows[0]?.CODIGOPIN || '').trim(), ...(mode ? { activeMode: mode } : {}) });
+  must(`login_${vendor}_${mode || 'COMERCIAL'}`, response.status === 200 && !!response.body.token,
+    { status: response.status, ms: response.ms, role: response.body.user?.role, mode: response.body.user?.activeMode });
+  return { vendor, token: response.body.token };
+}
+async function catalog(table) {
+  if (!/^(DSEDAC|DSED|JAVIER)\.[A-Z0-9_]+$/.test(table)) throw new Error('UNSAFE_IDENTIFIER');
+  const [schema, name] = table.split('.');
+  const cols = await q('SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=?', [schema, name]);
+  must(`catalog_${table}`, cols.length > 0, { columns: cols.map(c => c.COLUMN_NAME) });
+  return new Set(cols.map(c => c.COLUMN_NAME));
+}
+async function guard() {
+  const ready = await api('GET', '/ready');
+  const runtime = resolveRepartoRuntime(process.env);
+  const live = ready.body.reparto?.runtime || {};
+  must('isolated_runtime_fail_closed', ready.status === 200 && live.tableSet === 'isolated_test'
+    && live.productionErpWritesApproved === false && runtime.valid && runtime.tableSet === 'isolated_test'
+    && db2AppTable('COBROS') === 'JAVIER.TEST_COBROS'
+    && db2AppTable('REPARTIDOR_COBROS') === 'JAVIER.TEST_REPARTIDOR_COBROS'
+    && !exportGate().enabled && comercialErpTable('LACLAE') === 'DSED.LACLAE',
+  { status: ready.status, ms: ready.ms, tableSet: live.tableSet, exportEnabled: exportGate().enabled, sales: comercialErpTable('LACLAE') });
+  for (const table of ['DSEDAC.VDPL1', 'DSEDAC.CVC', 'DSEDAC.CPC', 'DSEDAC.OPP', 'DSEDAC.FPG', 'DSEDAC.CLX',
+    'JAVIER.TEST_COBROS', 'JAVIER.TEST_REPARTIDOR_COBROS', 'JAVIER.TEST_PEDIDOS_CAB', 'JAVIER.TEST_PEDIDOS_LIN',
+    'JAVIER.TEST_LIQUIDACION_COMERCIAL', 'JAVIER.TEST_DEVOLUCIONES_COMERCIAL']) await catalog(table);
+  safe = true;
+}
+async function cleanup() {
+  if (!safe) return;
+  // Recover orders even if the HTTP response never arrived.
+  const discovered = await q('SELECT ID FROM JAVIER.TEST_PEDIDOS_CAB WHERE OBSERVACIONES LIKE ?', [`${SESSION}%`]);
+  for (const row of discovered) orderIds.add(row.ID);
+  for (const token of tokens) {
+    for (const table of ['TEST_COBROS', 'TEST_REPARTIDOR_COBROS', 'TEST_DEVOLUCIONES_COMERCIAL', 'TEST_LIQUIDACION_COMERCIAL']) {
+      await q(`DELETE FROM JAVIER.${table} WHERE IDEMPOTENCY_TOKEN=?`, [token]);
+      const rows = await q(`SELECT COUNT(*) AS N FROM JAVIER.${table} WHERE IDEMPOTENCY_TOKEN=?`, [token]);
+      if (Number(rows[0]?.N) !== 0) throw new Error(`CLEANUP_FAILED:${table}`);
+    }
+  }
+  for (const id of orderIds) {
+    await q('DELETE FROM JAVIER.TEST_PEDIDOS_LIN WHERE PEDIDO_ID=?', [id]);
+    await q('DELETE FROM JAVIER.TEST_PEDIDOS_CAB WHERE ID=? AND OBSERVACIONES LIKE ?', [id, `${SESSION}%`]);
+  }
+  const left = await q('SELECT COUNT(*) AS N FROM JAVIER.TEST_PEDIDOS_CAB WHERE OBSERVACIONES LIKE ?', [`${SESSION}%`]);
+  must('cleanup_zero_rows', Number(left[0]?.N) === 0, { session: SESSION, orders: orderIds.size, tokens: tokens.size, remaining: Number(left[0]?.N) });
+}
+function detail(response) { return { status: response.status, ms: response.ms, body: response.body }; }
+async function stage(name, action) {
+  try { await action(); } catch (error) { check(`${name}_complete`, false, { error: String(error.message).slice(0, 180) }); }
+}
+async function orderFlow(auth, repAuth) {
+  const client = '4300009324';
+  const promotions = await api('GET', `/pedidos/promotions?clientCode=${client}&vendedorCodes=35`, auth);
+  const promo = promotions.body.promotions?.find(p => p.productCode && Number(p.minQty) > 0 && Number(p.giftQty) > 0 && p.promoType === 'GIFT');
+  must('A_live_promo', promotions.status === 200 && !!promo, { status: promotions.status, ms: promotions.ms, promo });
+  const products = await api('GET', `/pedidos/products?clientCode=${client}&vendedorCodes=35&limit=200`, auth);
+  const product = products.body.products?.find(p => String(p.code).trim() === String(promo.productCode).trim());
+  must('A_product_exists', products.status === 200 && !!product, { status: products.status, ms: products.ms, code: promo.productCode });
+  const line = { codigoArticulo: product.code, descripcion: product.name, cantidadEnvases: Number(promo.minQty), cantidadUnidades: 0,
+    unidadesCaja: product.unitsPerBox || 1, precio: Number(product.precioCliente || product.precioTarifa1), promotionCode: promo.promoCode };
+  const delivery = await api('GET', `/pedidos/delivery-options?clientCode=${client}&vendedorCode=35`, auth);
+  const options = delivery.body.options || delivery.body;
+  check('A_delivery_options', delivery.status === 200, detail(delivery));
+  const deliveryDate = options.suggestedDeliveryDate || options.selectedDeliveryDate;
+  const driver = options.driverCode || options.codigoRepartidor;
+  const createOne = async (suffix, cash) => {
+    const response = await api('POST', '/pedidos/create', auth, { clientCode: client, clientName: 'Auditoria demo', vendedorCode: '35',
+      observaciones: `${SESSION}-${suffix}`, clientRequestId: marker(suffix), lines: [line] });
+    const id = response.body.id || response.body.order?.header?.id || response.body.order?.id;
+    if (id) orderIds.add(id);
+    must(`A_create_${suffix}`, [200, 201].includes(response.status) && !!id, detail(response));
+    const stored = await q('SELECT * FROM JAVIER.TEST_PEDIDOS_LIN WHERE PEDIDO_ID=?', [id]);
+    const headers = await q('SELECT IMPORTETOTAL,IMPORTEBASE,IMPORTEIVA FROM JAVIER.TEST_PEDIDOS_CAB WHERE ID=?', [id]);
+    check(`A_promo_engine_${suffix}`, stored.length > 1 && stored.some(r => Number(r.PRECIOVENTA ?? r.PRECIO) === 0),
+      { requestPaidLines: 1, storedLines: stored.map(r => Object.fromEntries(Object.entries(r).filter(([k]) => k === k.toUpperCase()))), totals: headers });
+    const confirmed = await api('PUT', `/pedidos/${id}/confirm`, auth, { saleType: 'CC', deliveryDate,
+      vehicleCode: options.vehicleCode, driverCode: driver, routeCode: options.routeCode, cobroEnMano: cash });
+    must(`A_confirm_${suffix}`, confirmed.status === 200, detail(confirmed));
+    const cab = (await q('SELECT ESTADO,SYNC_STATUS,CODIGOREPARTIDOR,FECHAREPARTO,IMPORTETOTAL,SERIEPEDIDO,NUMEROPEDIDO FROM JAVIER.TEST_PEDIDOS_CAB WHERE ID=?', [id]))[0];
+    must(`A_pending_erp_${suffix}`, String(cab.ESTADO).trim() === 'CONFIRMADO' && ['LOCAL', ''].includes(String(cab.SYNC_STATUS || '').trim()), { id, cab });
+    return { id, cab };
+  };
+  const assigned = await createOne('assigned', false);
+  const cash = await createOne('cash', true);
+  const assignedDriver = String(assigned.cab.CODIGOREPARTIDOR || '').trim();
+  must('A_driver_assignment', !!assignedDriver && !String(cash.cab.CODIGOREPARTIDOR || '').trim(), { assignedDriver });
+  const overlay = await api('GET', `/entregas/pendientes/${assignedDriver}?date=${deliveryDate}&limit=500`, repAuth);
+  const rows = overlay.body.entregas || overlay.body.data || [];
+  const contains = (id) => rows.some(r => r.documentoTipo === 'PEDIDO' && (String(r.pedidoId || r.id).includes(String(id))));
+  check('A_assigned_overlay_only', overlay.status === 200 && contains(assigned.id) && !contains(cash.id),
+    { status: overlay.status, ms: overlay.ms, date: deliveryDate, assigned: assigned.id, cash: cash.id, pedidos: rows.filter(r => r.documentoTipo === 'PEDIDO') });
+  const listed = await api('GET', '/pedidos?vendedorCodes=35&limit=100', auth);
+  check('A_mis_pedidos', listed.status === 200 && JSON.stringify(listed.body).includes(String(assigned.id)), { status: listed.status, ms: listed.ms, id: assigned.id });
+  const reference = `PEDIDO:${assigned.id}:${String(assigned.cab.SERIEPEDIDO).trim()}-${assigned.cab.NUMEROPEDIDO}`;
+  const payment = await api('POST', `/cobros/${client}/registrar`, auth, { referencia: reference, importe: Number(assigned.cab.IMPORTETOTAL),
+    formaPago: 'CONTADO', observaciones: `${SESSION} entrega futura`, idempotencyToken: marker('futurepay') });
+  check('F_pay_today_deliver_future', deliveryDate > TODAY && payment.status === 200 && payment.body.payment?.pendingAfter === 0,
+    { date: deliveryDate, today: TODAY, ...detail(payment) });
+}
+async function paymentFlow(auth, repAuth) {
+  const client = '4300032729';
+  const pending = await api('GET', `/cobros/${client}/pendientes`, auth);
+  must('B_pending', pending.status === 200, detail(pending));
+  const documents = (pending.body.cobros || []).filter(r => r.docKey?.serie === 'E' && Number(r.docKey?.terminalDocumento) === 35 && Number(r.importePendiente) > 10);
+  must('C_assigned_documents', documents.length >= 3, { available: documents.length });
+  const repPayload = (doc, token) => ({ codigoCliente: client, codigoRepartidor: '87', tipoDocumento: doc.docKey.tipoDocumento,
+    origenDocumento: doc.docKey.origenDocumento, subempresaDocumento: doc.docKey.subempresa, ejercicioDocumento: Number(doc.docKey.ejercicioDocumento),
+    serieDocumento: doc.docKey.serie, terminalDocumento: Number(doc.docKey.terminalDocumento), numeroDocumento: Number(doc.docKey.numero),
+    xdeDocumento: Number(doc.docKey.xde), dexDocumento: Number(doc.docKey.dex), importeCobrado: 1, importePendiente: Number(doc.importePendiente) - 1,
+    formaPago: 'EFECTIVO', pantallaOrigen: 'VENCIMIENTOS', idempotencyToken: token, notas: SESSION });
+  const commercial = (doc, token, amount) => ({ referencia: doc.docKey.reference, importe: amount,
+    formaPago: 'CONTADO', observaciones: SESSION, idempotencyToken: token });
+  const [first, second, third] = documents;
+  const amount = Math.round(Number(first.importePendiente) * 50) / 100;
+  const payload = commercial(first, marker('partial'), amount);
+  const paid = await api('POST', `/cobros/${client}/registrar`, auth, payload);
+  must('B_partial', paid.status === 200 && paid.body.payment?.pendingAfter > 0, detail(paid));
+  const replay = await api('POST', `/cobros/${client}/registrar`, auth, payload);
+  check('B_idempotency_replay', replay.status === 200 && replay.body.payment?.idempotent === true, detail(replay));
+  const conflict = await api('POST', `/cobros/${client}/registrar`, auth, { ...payload, importe: amount + 0.01 });
+  check('B_idempotency_conflict', conflict.status === 409 && conflict.body.code === 'IDEMPOTENCY_CONFLICT', detail(conflict));
+  const exceeds = await api('POST', `/cobros/${client}/registrar`, auth, commercial(first, marker('exceeds'), Number(first.importePendiente) + 10));
+  check('B_exceeds', exceeds.status === 409 && exceeds.body.code === 'PAYMENT_EXCEEDS', detail(exceeds));
+  const after = await api('GET', `/cobros/${client}/pendientes`, auth);
+  const rest = after.body.cobros?.find(d => d.docKey?.reference === first.docKey.reference);
+  check('B_visible_rest', after.status === 200 && !!rest && cents(rest.importePendiente) === cents(first.importePendiente) - cents(amount),
+    { status: after.status, ms: after.ms, before: first.importePendiente, amount, after: rest?.importePendiente });
+  const cross = await api('POST', '/repartidor-finanzas/cobros', repAuth, repPayload(first, marker('cross1')));
+  check('C_commercial_then_driver_409', cross.status === 409 && /COMMERCIAL_CONFLICT|COLLECTED_BY_COMERCIAL/.test(cross.body.code || ''), detail(cross));
+  const driverPayment = await api('POST', '/repartidor-finanzas/cobros', repAuth, repPayload(second, marker('driverfirst')));
+  must('C_driver_payment', [200, 201].includes(driverPayment.status) && driverPayment.body.success !== false, detail(driverPayment));
+  const reverse = await api('POST', `/cobros/${client}/registrar`, auth, commercial(second, marker('cross2'), 1));
+  check('C_driver_then_commercial_409', reverse.status === 409 && reverse.body.code === 'COBRO_ALREADY_COLLECTED_BY_REPARTIDOR', detail(reverse));
+  const concurrent = await Promise.all([
+    api('POST', `/cobros/${client}/registrar`, auth, commercial(third, marker('racec'), Math.round(Number(third.importePendiente) * 50) / 100)),
+    api('POST', '/repartidor-finanzas/cobros', repAuth, repPayload(third, marker('racer'))),
+  ]);
+  check('C_concurrent_one_winner', concurrent.filter(r => [200, 201].includes(r.status)).length === 1 && concurrent.filter(r => r.status === 409).length === 1, { responses: concurrent });
+  await liquidationFlow(auth, amount);
+}
+async function liquidationFlow(auth, amount) {
+  const existing = await q('SELECT ID FROM JAVIER.TEST_LIQUIDACION_COMERCIAL WHERE CODIGO_VENDEDOR=CAST(? AS CHAR(2)) AND FECHA=?', ['35', TODAY]);
+  must('D_day_not_preexisting', existing.length === 0, { date: TODAY });
+  const before = await api('GET', `/comercial-liquidacion/resumen-diario?vendedor=35&fecha=${TODAY}`, auth);
+  const saved = await api('POST', '/comercial-liquidacion/guardar', auth, { vendedor: '35', fecha: TODAY, ingresoBanco: amount, entregado: 0,
+    expectedTotal: amount, idempotencyToken: marker('liquidation') });
+  must('D_save_after_payment', saved.status === 201 && saved.body.saved?.source === 'JAVIER.TEST_LIQUIDACION_COMERCIAL', detail(saved));
+  const pg = await api('GET', '/comercial-liquidacion/ya-cobrados-pg?vendedor=35', auth);
+  const document = pg.body.documents?.find(d => d.yaCobrada === true && Number(d.formaPagoDias) > 0);
+  must('D_real_pg_document', pg.status === 200 && !!document, { status: pg.status, ms: pg.ms, document });
+  const returned = await api('POST', '/comercial-liquidacion/devoluciones', auth, { vendedor: '35', fecha: TODAY, cliente: document.cliente,
+    importe: 1, yaCobrada: true, formaPago: document.formaPago, impactoLqd: 'YA_COBRADOS', documentoOrigen: document.documento,
+    albaranOrigen: document.albaran, vencimiento: document.vencimiento, idempotencyToken: marker('return') });
+  must('D_return_pg', returned.status === 201 && returned.body.return?.impactoLqd === 'YA_COBRADOS', detail(returned));
+  const ret = returned.body.return;
+  const pdf = await api('GET', `/comercial-liquidacion/devoluciones/pdf?vendedor=35&fecha=${TODAY}&serie=${encodeURIComponent(ret.serie)}&numero=${ret.numero}`, auth);
+  check('D_pdf_magic', pdf.status === 200 && pdf.body.magic === '%PDF-' && pdf.body.bytes > 500, detail(pdf));
+  const after = await api('GET', `/comercial-liquidacion/resumen-diario?vendedor=35&fecha=${TODAY}`, auth);
+  check('D_no_double_LQD_subtract', after.status === 200 && JSON.stringify(before.body.lqd) === JSON.stringify(after.body.lqd)
+    && cents(after.body.summary?.devolucionesYaCobradas) === cents(before.body.summary?.devolucionesYaCobradas) + 100,
+  { status: after.status, ms: after.ms, before: before.body, after: after.body });
+}
+async function main() {
+  await db.initDb();
+  try {
+    await guard();
+    const auth = await login('35'); await login('80'); await login('98');
+    const rep = await login('98', 'REPARTIDOR');
+    await stage('A_F', () => orderFlow(auth, rep));
+    await stage('B_C_D', () => paymentFlow(auth, rep));
+  } finally {
+    try { await cleanup(); } catch (error) { check('cleanup', false, { error: error.message }); }
+    await db.closePool();
+    const failed = results.filter(r => !r.pass).length;
+    console.log(JSON.stringify({ summary: true, session: SESSION, passed: results.length - failed, failed }));
+    if (failed) process.exitCode = 1;
+  }
+}
+main().catch(error => { console.error(JSON.stringify({ fatal: error.message })); process.exitCode = 1; });

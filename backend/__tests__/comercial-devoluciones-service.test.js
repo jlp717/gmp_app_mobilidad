@@ -180,6 +180,7 @@ describe('getDailySummary', () => {
           VENDEDOR: '80',
           AMOUNT: '-1000',
           UNITS: '-1',
+          YA_COBRADA: 1,
         }];
       }
       if (/DSEDAC\.LQD/i.test(sql)) return [];
@@ -204,6 +205,25 @@ describe('getDailySummary', () => {
     expect(cobrosSql).not.toMatch(/VENDEDOR\s*=\s*'ALL'/i);
   });
 
+  test('excludes uncollected returns from YA_COBRADOS without changing the LQD deposit', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/DSED\.LACLAE/i.test(sql)) return [
+        { YEAR: 2026, MONTH: 9, DAY: 21, SERIE: 'D', NUMERO: 1,
+          CLIENTE: 'C1', VENDEDOR: '35', AMOUNT: -40, YA_COBRADA: 1 },
+        { YEAR: 2026, MONTH: 9, DAY: 21, SERIE: 'D', NUMERO: 2,
+          CLIENTE: 'C1', VENDEDOR: '35', AMOUNT: -60, YA_COBRADA: 0 },
+      ];
+      if (/DSEDAC\.LQD/i.test(sql)) return [{
+        TOTAL_EFECTIVO: 100, TOTAL_A_INGRESAR: 100, FILAS: 1,
+      }];
+      return [];
+    });
+    const result = await getDailySummary({ vendorCodes: ['35'], date: '2026-09-21' });
+    expect(result.returns).toHaveLength(2);
+    expect(result.summary.devolucionesYaCobradas).toBe(40);
+    expect(result.summary.totalAIngresar).toBe(100);
+  });
+
   test('uses LQD.IMPORTETOTALAINGRESAR and does not double-count LACLAE returns', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (/JAVIER\.COBROS/i.test(sql)) {
@@ -212,7 +232,7 @@ describe('getDailySummary', () => {
       if (/DSED\.LACLAE/i.test(sql)) {
         return [{
           YEAR: 2026, MONTH: 5, DAY: 31, SERIE: 'D', NUMERO: 1,
-          CLIENTE: 'C1', VENDEDOR: '80', AMOUNT: '-400', UNITS: '-1',
+          CLIENTE: 'C1', VENDEDOR: '80', AMOUNT: '-400', UNITS: '-1', YA_COBRADA: 1,
         }];
       }
       if (/DSEDAC\.LQD/i.test(sql)) {

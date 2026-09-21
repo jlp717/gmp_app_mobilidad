@@ -131,6 +131,8 @@ function comercialErpSnapshotTable(name) {
 
 function comercialErpTable(name, env = process.env) {
   const live = comercialErpLiveTable(name);
+  // Sales and objectives must remain live even when isolated fixtures are enabled.
+  if (String(name || '').trim().toUpperCase() === 'LACLAE') return live;
   if (isIsolatedCommercialTest(env) && comercialErpReadTestEnabled(env)) {
     return comercialErpSnapshotTable(name);
   }

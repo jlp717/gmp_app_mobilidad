@@ -52,10 +52,10 @@ describe('objectives by-client route contracts', () => {
     expect(source).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
   });
 
-  test('ALL evolution and by-client can read JAVIER.LACLAE_MONTHLY', () => {
-    expect(source).toContain("require('../services/laclae-monthly')");
-    expect(source).toContain('isLaclaeMonthlyReady');
-    expect(source).toContain('monthlyTable()');
+  test('ALL evolution and by-client cannot read the snapshot-derived monthly rollup', () => {
+    expect(source).not.toContain("require('../services/laclae-monthly')");
+    expect(source).not.toContain('isLaclaeMonthlyReady');
+    expect(source).not.toContain('monthlyTable()');
     expect(source).not.toMatch(/WHERE VENDEDOR='ALL'/);
   });
 

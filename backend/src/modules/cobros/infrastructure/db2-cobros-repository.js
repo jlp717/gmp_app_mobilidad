@@ -5,7 +5,7 @@
  * The legacy implementation has proper column names and business logic
  */
 const { CobrosRepository } = require('../domain/cobros-repository');
-const { query, queryWithParams } = require('../../../../config/db');
+const { query, queryWithParams, acquireConfiguredConnection } = require('../../../../config/db');
 const logger = require('../../../../middleware/logger');
 const { db2InsertSql } = require('../../../../utils/db2-identifiers');
 const { db2AppTable } = require('../../../../utils/db2-schemas');
@@ -1494,7 +1494,6 @@ class Db2CobrosRepository extends CobrosRepository {
       throw new CommercialCobrosError('INVALID_PAYMENT_PAYLOAD', 'cliente, referencia e importe positivo requeridos', 400);
     }
 
-    // ponytail: no LOCK TABLE / manual tx — legacy route uses queryWithParams; pool tx fails on IBM i ODBC.
     const order = await this.findOrderForPayment(normalizedClient, normalizedReference);
     if (!order) {
       throw new CommercialCobrosError('ORDER_NOT_FOUND_FOR_PAYMENT', 'Pedido pendiente no encontrado para el cobro', 404);
@@ -1510,11 +1509,39 @@ class Db2CobrosRepository extends CobrosRepository {
     const isCvcOrder = trim(order.SOURCE).toUpperCase() === 'CVC';
     const cvcStableReference = parseCvcStableReference(stableReference);
     const cvcLegacyIsSafe = !isCvcOrder || !cvcStableReference || ((parseInt(order.LEGACY_COLLISION_COUNT, 10) || 1) <= 1);
-    const existingRows = await queryWithParams(
+    // The document lookup and authorization above do not mutate financial state.
+    // Serialise the mutable ledger checks and insert on one DB2 job: a process-local
+    // mutex or a Redis lease cannot protect the reparto/comercial boundary.
+    let connection;
+    let transactionStarted = false;
+    try {
+      connection = await acquireConfiguredConnection();
+      if (!connection || typeof connection.query !== 'function') {
+        throw new Error('DB2 transaction connection is unavailable');
+      }
+      // IBM i ODBC starts the unit of work through SET TRANSACTION.
+      await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+      transactionStarted = true;
+      await connection.query(`LOCK TABLE ${REPARTIDOR_COBROS_TABLE} IN EXCLUSIVE MODE`);
+    } catch (error) {
+      if (transactionStarted) {
+        try { await connection.query('ROLLBACK'); } catch (_) { /* preserve acquisition error */ }
+      }
+      if (connection && typeof connection.close === 'function') {
+        try { await connection.close(); } catch (_) { /* best effort */ }
+      }
+      throw new CommercialCobrosError(
+        'PAYMENT_TRANSACTION_UNAVAILABLE',
+        'No se pudo bloquear el ledger de cobros para registrar el pago',
+        503,
+      );
+    }
+    const transactionQuery = (sql, params = []) => connection.query(sql, params);
+    try {
+    const existingRows = await transactionQuery(
       `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
          FROM ${COBROS_TABLE} WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
       [id, normalizedIdempotencyToken],
-      [],
     ) || [];
     if (existingRows.length > 0) {
       const existing = existingRows[0];
@@ -1526,7 +1553,7 @@ class Db2CobrosRepository extends CobrosRepository {
       if (!samePayload) {
         throw new CommercialCobrosError('IDEMPOTENCY_CONFLICT', 'Token de idempotencia reutilizado con otro payload', 409);
       }
-      return {
+      const result = {
         id,
         clientCode: normalizedClient,
         amount: fromCents(amountCents),
@@ -1535,6 +1562,9 @@ class Db2CobrosRepository extends CobrosRepository {
         status: 'REGISTRADO',
         idempotent: true,
       };
+      await connection.query('COMMIT');
+      transactionStarted = false;
+      return result;
     }
 
     const paymentReferences = [stableReference];
@@ -1543,13 +1573,12 @@ class Db2CobrosRepository extends CobrosRepository {
       if (isCvcOrder) paymentReferences.push(`CVC:${legacyReference}`);
     }
     const uniquePaymentReferences = [...new Set(paymentReferences.map(trim).filter(Boolean))];
-    const paidRows = await queryWithParams(
+    const paidRows = await transactionQuery(
       `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_COBRADO
          FROM ${COBROS_TABLE}
          WHERE TRIM(CODIGO_CLIENTE) = ?
            AND TRIM(REFERENCIA) IN (${uniquePaymentReferences.map(() => '?').join(',')})`,
       [normalizedClient, ...uniquePaymentReferences],
-      [],
     );
     const paidComercialCents = toCents(paidRows?.[0]?.TOTAL_COBRADO);
 
@@ -1588,7 +1617,7 @@ class Db2CobrosRepository extends CobrosRepository {
             AND NUMERODOCUMENTO = ?`;
         repartidorParams.push(docRef.serie, docRef.numero);
       }
-      const repartidorRows = await queryWithParams(repartidorSql, repartidorParams, []);
+      const repartidorRows = await transactionQuery(repartidorSql, repartidorParams);
       paidRepartidorCents = toCents(repartidorRows?.[0]?.TOTAL_REP);
       if (paidRepartidorCents > 0) {
         logger.info(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS ya tiene ${paidRepartidorCents}c para ${normalizedClient}/${stableReference}`);
@@ -1600,7 +1629,11 @@ class Db2CobrosRepository extends CobrosRepository {
       }
     } catch (xtableErr) {
       if (xtableErr instanceof CommercialCobrosError) throw xtableErr;
-      logger.warn(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS check fallo (continuando): ${xtableErr.message}`);
+      throw new CommercialCobrosError(
+        'PAYMENT_CROSS_CHECK_UNAVAILABLE',
+        'No se pudo verificar el ledger de cobros del repartidor',
+        503,
+      );
     }
 
     const totalAlreadyPaidCents = paidComercialCents + paidRepartidorCents;
@@ -1659,16 +1692,14 @@ class Db2CobrosRepository extends CobrosRepository {
       observations: trim(observations || overrideReason).substring(0, 255),
     };
     try {
-      await this.insertCobroRow({ ...insertPayload, includeErpColumns: true });
+      await this.insertCobroRow({ ...insertPayload, includeErpColumns: true, execute: transactionQuery });
     } catch (insertErr) {
       const msg = String(insertErr.message || '');
       if (/DUPLICATE|PRIMARY|UNIQUE|SQL0803/i.test(msg)) {
-        const replayRows = await queryWithParams(
+        const replayRows = await transactionQuery(
           `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
              FROM ${COBROS_TABLE} WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
           [id, normalizedIdempotencyToken],
-          false,
-          false,
         ) || [];
         if (replayRows.length > 0) {
           const existing = replayRows[0];
@@ -1680,7 +1711,7 @@ class Db2CobrosRepository extends CobrosRepository {
           if (!samePayload) {
             throw new CommercialCobrosError('IDEMPOTENCY_CONFLICT', 'Token de idempotencia reutilizado con otro payload', 409);
           }
-          return {
+          const result = {
             id,
             clientCode: normalizedClient,
             amount: fromCents(amountCents),
@@ -1689,6 +1720,9 @@ class Db2CobrosRepository extends CobrosRepository {
             status: 'REGISTRADO',
             idempotent: true,
           };
+          await connection.query('COMMIT');
+          transactionStarted = false;
+          return result;
         }
       }
       throw insertErr;
@@ -1706,7 +1740,7 @@ class Db2CobrosRepository extends CobrosRepository {
     } catch (exportErr) {
       logger.warn(`[COBROS] dsedac export best-effort fail: ${exportErr.message}`);
     }
-    return {
+    const result = {
       id,
       clientCode: normalizedClient,
       amount: fromCents(amountCents),
@@ -1717,6 +1751,19 @@ class Db2CobrosRepository extends CobrosRepository {
       pendingAfter: fromCents(pendingAfterCents),
       idempotent: false,
     };
+    await connection.query('COMMIT');
+    transactionStarted = false;
+    return result;
+    } catch (error) {
+      if (transactionStarted) {
+        try { await connection.query('ROLLBACK'); } catch (_) { /* preserve primary error */ }
+      }
+      throw error;
+    } finally {
+      if (connection && typeof connection.close === 'function') {
+        try { await connection.close(); } catch (_) { /* commit already decided result */ }
+      }
+    }
   }
 
   async insertCobroRow({
@@ -1732,6 +1779,7 @@ class Db2CobrosRepository extends CobrosRepository {
     codigoUsuario,
     observations,
     includeErpColumns,
+    execute: executeSql,
   }) {
     let insert = buildCobroInsert({
       id,
@@ -1748,7 +1796,7 @@ class Db2CobrosRepository extends CobrosRepository {
       includeErpColumns,
     });
     try {
-      await queryWithParams(insert.sql, insert.params, false, false);
+      await (executeSql ? executeSql(insert.sql, insert.params) : queryWithParams(insert.sql, insert.params, false, false));
     } catch (erpInsertErr) {
       if (!includeErpColumns || !isColumnNotFound(erpInsertErr)) throw erpInsertErr;
       logger.warn(`[COBROS_REPO] ERP-compatible columns missing in ${COBROS_TABLE}, using legacy insert`);
@@ -1766,7 +1814,7 @@ class Db2CobrosRepository extends CobrosRepository {
         observations,
         includeErpColumns: false,
       });
-      await queryWithParams(insert.sql, insert.params, false, false);
+      await (executeSql ? executeSql(insert.sql, insert.params) : queryWithParams(insert.sql, insert.params, false, false));
     }
   }
 

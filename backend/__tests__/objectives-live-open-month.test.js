@@ -8,7 +8,7 @@ const source = fs.readFileSync(
   'utf8',
 );
 
-describe('objectives ALL live open-month overlay', () => {
+describe('objectives ALL live ERP reads', () => {
   test('mapping uses comercialErpTable LACLAE, never TEST_LACLAE writes or DSEDAC writes', () => {
     expect(source).toMatch(/FROM \$\{comercialErpTable\('LACLAE'\)\} L/);
     expect(source).toContain('overlayOpenMonthFromLiveLaclae');
@@ -23,7 +23,8 @@ describe('objectives ALL live open-month overlay', () => {
     expect(source).toMatch(/L\.LCAADC = \?/);
     expect(source).toMatch(/L\.LCMMDC = \?/);
     expect(source).toMatch(/SUM\(L\.LCIMVT\) as SALES/);
-    expect(source).toMatch(/if \(useMonthly\) \{[\s\S]*overlayOpenMonthFromLiveLaclae/);
+    expect(source).not.toContain('isLaclaeMonthlyReady');
+    expect(source).not.toContain('monthlyTable()');
   });
 
   test('evolution Redis cache is skipped on forceRefresh / X-Force-Refresh', () => {
@@ -35,6 +36,6 @@ describe('objectives ALL live open-month overlay', () => {
   });
 
   test('cache version busts stale monthly ALL payloads', () => {
-    expect(source).toContain("OBJECTIVES_CACHE_VERSION = 'v20260918-mon-sat-all'");
+    expect(source).toContain("OBJECTIVES_CACHE_VERSION = 'v20260921-live-all-months'");
   });
 });

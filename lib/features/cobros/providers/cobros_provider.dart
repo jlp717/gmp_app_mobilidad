@@ -615,6 +615,12 @@ class CobrosProvider extends ChangeNotifier {
     String? vendedorCodes,
     bool reloadAfter = true,
   }) async {
+    final paymentObservations = observaciones?.trim() ?? '';
+    if (paymentObservations.isEmpty) {
+      _error = 'Indica las observaciones del cobro antes de confirmar';
+      notifyListeners();
+      return false;
+    }
     final actorCode = codigoUsuario ?? employeeCode;
     final attemptKey = _cobroAttemptKey(
       codigoCliente: codigoCliente,
@@ -646,7 +652,7 @@ class CobrosProvider extends ChangeNotifier {
         'codigoUsuario': actorCode,
         if (vendedorCodes != null && vendedorCodes.trim().isNotEmpty)
           'vendedorCodes': vendedorCodes.trim(),
-        'observaciones': observaciones,
+        'observaciones': paymentObservations,
         'idempotencyToken': idempotencyToken,
       });
       if (response['success'] == true) {

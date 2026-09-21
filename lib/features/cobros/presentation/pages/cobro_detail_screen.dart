@@ -310,50 +310,80 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       return;
     }
 
-    // Confirmation dialog
-    final confirmed = await showDialog<bool>(
+    final observationsController = TextEditingController();
+    final confirmationForm = GlobalKey<FormState>();
+    final observations = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
         title: const Text('Confirmar cobro'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Cliente: ${widget.nombreCliente}',
-              style: TextStyle(color: AppColors.themedWhite70),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Importe: ${_currencyFormat.format(totalACobrar)}',
-              style: TextStyle(
-                color: AppColors.themedWhite,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+        content: Form(
+          key: confirmationForm,
+          child: SingleChildScrollView(
+              child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Cliente: ${widget.nombreCliente}',
+                style: TextStyle(color: AppColors.themedWhite70),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Forma de pago: $_formaPago',
-              style: TextStyle(color: AppColors.themedWhite70, fontSize: 13),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                'Importe: ${_currencyFormat.format(totalACobrar)}',
+                style: TextStyle(
+                  color: AppColors.themedWhite,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Forma de pago: $_formaPago',
+                style: TextStyle(color: AppColors.themedWhite70, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              Semantics(
+                label: 'Observaciones obligatorias del cobro',
+                child: TextFormField(
+                  controller: observationsController,
+                  minLines: 2,
+                  maxLines: 4,
+                  maxLength: 500,
+                  decoration: const InputDecoration(
+                    labelText: 'Observaciones del cobro',
+                    hintText: 'Indica el motivo o los detalles del cobro',
+                  ),
+                  validator: (value) => (value?.trim().isEmpty ?? true)
+                      ? 'Las observaciones son obligatorias'
+                      : null,
+                ),
+              ),
+            ],
+          )),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
+            onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Cancelar'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
+            onPressed: () {
+              if (confirmationForm.currentState?.validate() == true) {
+                Navigator.of(ctx).pop(observationsController.text.trim());
+              }
+            },
             child: const Text('Confirmar cobro'),
           ),
         ],
       ),
     );
 
-    if (confirmed != true || !mounted) return;
+    // Wait until the closing dialog releases its text field before disposal.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      observationsController.dispose();
+    });
+    if (observations == null || observations.isEmpty || !mounted) return;
 
     var fallos = 0;
     var exitos = 0;
@@ -403,6 +433,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         formaPago: _formaPago,
         tipoVenta: tipoVenta,
         tipoModo: tipoModo,
+        observaciones: observations,
         vendedorCodes: widget.vendedorCodes,
         reloadAfter: false,
       );
