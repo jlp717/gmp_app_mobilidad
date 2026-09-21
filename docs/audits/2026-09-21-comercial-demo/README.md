@@ -1,6 +1,6 @@
 # Auditoría comercial ejecutada — 21/09/2026
 
-**Listo demo: NO.** Los flujos funcionales por API pasan; la UI real y el objetivo de latencia en frío siguen sin aprobar. No se declara 100%.
+**Listo demo: NO.** Los flujos funcionales por API pasan; la UI real, el objetivo de latencia en frío y los gates globales de CI siguen sin aprobar. No se declara 100%.
 
 Código comercial publicado y ejecutado en `test`: `93fd9f8`. Corrección del bundle publicada: `27667ec`. API `192.168.1.230:3335`, PM2 `gmp-api`, ocho workers online, `/api/ready` 200, DB3ms y respuesta11ms después del despliegue. Sólo se usaron `git pull origin test` y `pm2 restart gmp-api` para desplegar API. El commit de documentación posterior no cambia su comportamiento.
 
@@ -38,6 +38,8 @@ Los calentamientos de jefe ya están implementados y aparecen ejecutados con HTT
 
 **P1 / alcance restante:** la búsqueda rápida de Clientes usa el catálogo de clientes con visita; un cliente asignado sin ruta podría quedar fuera (riesgo por lectura, no cliente activo ausente reproducido). No se auditó exhaustivamente toda combinación PMR/PMP, incluidos máximos por SKU. Persisten filtros SQL literales en caminos heredados fuera del diff; no se certifica cumplimiento SQL-bind de todo el repositorio. Las rutas materialmente modificadas usan binds.
 
+**P1 — CI no aprobado:** los cuatro workflows consultados fallan. Gitleaks pasa, pero npm audit bloquea por un HIGH de desarrollo; no hay high/critical de runtime en el audit omit-dev ejecutado. También fallan Politec, resolución de dependencias con Flutter estable3.47.5 y documentación API. [Causas, severidad y enlaces verificables](ci-status.md). La revisión AppSec del diff no sustituye este gate global.
+
 **P2 / herramientas:** cuatro mirrors de skills ausentes en `.opencode` (`team-sync-check.log`, exit1). `loop_gate.py --project . --json` ejecutado: WARN porque no encuentra wrappers Windows de herramientas; las pruebas reales con rutas resueltas están documentadas y pasan. Diff-check, escaneo de secretos y presencia de políticas PASS. No requiere aceptación humana según el gate. Coste/tokens de agentes no medidos.
 
 Grafo de trabajo: 15 nodos y27 aristas validados; fanout inicial de cuatro revisores, un único escritor en cada fase y verificaciones independientes de corrección y seguridad antes de entrega. Máximo tres rondas de descubrimiento y reparación por hallazgo. El gate de demo queda FAIL por los límites de rendimiento y UI; los tests funcionales aprobados no lo sustituyen.
@@ -54,6 +56,7 @@ Grafo de trabajo: 15 nodos y27 aristas validados; fanout inicial de cuatro revis
 8. El código del Asistente podía agregar el equipo de80 como objetivo personal →80 es líder, como indica el prompt, y su objetivo personal debe permanecer separado. Asistente y Objetivos personales coinciden: vendido118446,91€, objetivo185172,19€; distinto del equipo. Panel sólo JEFE98 es correcto.
 9. Código heredado de historia con LINDTO → la historia comercial se obtiene de DSED.LACLAE viva, como exige el prompt; se verificaron columnas reales y binds CHAR10 para no aplicar TRIM al índice del cliente.
 10. Hipótesis del build: filtro ABI en defaultConfig basta → Flutter configura ABI también en release buildType. Se corrigió ese nivel; ZIP final contiene sólo arm64 y todas sus bibliotecas.
+11. Hipótesis de rendimiento «falta un índice en LACLAE» → QSYS2 confirma que **DSED.LACLAE es una vista** sobre12 tablas DSEDAC. LAC ya tiene8 índices SQL, incluido LAC_VENDOR_DATE_IDX(vendedor,ejercicio,mes). La definición de la vista vuelve vacía con este acceso; no se puede atribuir el coste ni recomendar un índice sin el plan y las tablas base. [SELECTs, binds y resultados de catálogo](db2-sales-view-catalog.json).
 
 ## Confirmaciones de aislamiento y honestidad
 

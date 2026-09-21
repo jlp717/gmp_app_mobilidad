@@ -1,0 +1,55 @@
+{
+  "date": "2026-09-21",
+  "transport": "SSH gmp@192.168.1.230; backend/config/db queryWithParams; SELECT only",
+  "exitCode": 0,
+  "individualQueryMs": null,
+  "checks": [
+    {
+      "sql": "SELECT TABLE_SCHEMA,TABLE_NAME,TABLE_TYPE FROM QSYS2.SYSTABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME=?",
+      "binds": ["DSED", "LACLAE"],
+      "rows": 1,
+      "tableType": "V"
+    },
+    {
+      "sql": "SELECT TABLE_SCHEMA,TABLE_NAME FROM QSYS2.SYSTABLES WHERE TABLE_SCHEMA=? AND TABLE_NAME IN (?,?,?,?) ORDER BY TABLE_NAME",
+      "binds": ["QSYS2", "SYSVIEWS", "SYSVIEWDEP", "VIEW_TABLE_USAGE", "SYSDEP"],
+      "rows": 2,
+      "available": ["SYSVIEWS", "SYSVIEWDEP"]
+    },
+    {
+      "sql": "SELECT * FROM QSYS2.SYSVIEWDEP WHERE VIEW_SCHEMA=? AND VIEW_NAME=?",
+      "binds": ["DSED", "LACLAE"],
+      "rows": 12,
+      "objectType": "TABLE",
+      "schema": "DSEDAC",
+      "tables": ["CDVI", "OPP", "CDLO", "TIC", "MED", "TAB", "CLC", "CAC", "CPC", "ARA", "LINDTO", "LAC"]
+    },
+    {
+      "sql": "SELECT VIEW_DEFINITION FROM QSYS2.SYSVIEWS WHERE TABLE_SCHEMA=? AND TABLE_NAME=?",
+      "binds": ["DSED", "LACLAE"],
+      "rows": 1,
+      "definitionReturned": ""
+    },
+    {
+      "sql": "SELECT TABLE_NAME,COUNT(*) AS CNT FROM QSYS2.SYSINDEXES WHERE TABLE_SCHEMA=? AND TABLE_NAME IN (?,?) GROUP BY TABLE_NAME ORDER BY TABLE_NAME",
+      "binds": ["DSEDAC", "LAC", "LINDTO"],
+      "rows": [{"TABLE_NAME": "LAC", "CNT": 8}]
+    },
+    {
+      "sql": "SELECT K.INDEX_NAME,K.COLUMN_NAME,K.ORDINAL_POSITION,K.ORDERING FROM QSYS2.SYSKEYS K JOIN QSYS2.SYSINDEXES I ON I.INDEX_SCHEMA=K.INDEX_SCHEMA AND I.INDEX_NAME=K.INDEX_NAME WHERE I.TABLE_SCHEMA=? AND I.TABLE_NAME=? ORDER BY K.INDEX_NAME,K.ORDINAL_POSITION",
+      "binds": ["DSEDAC", "LAC"],
+      "relevantIndex": {
+        "name": "LAC_VENDOR_DATE_IDX",
+        "columns": ["CODIGOVENDEDOR", "EJERCICIOALBARAN", "MESDOCUMENTO"]
+      }
+    }
+  ],
+  "metadataColumnsVerifiedBeforeQueries": true,
+  "conclusions": [
+    "LACLAE is a live ERP view; SYSINDEXES=0 for this view is not evidence of a missing index.",
+    "LAC already has a vendor/date index, but its usefulness for the view cannot be established without definition or query plan.",
+    "SQL index catalogs alone do not exclude DDS access paths.",
+    "No DDL, DML, cache flush, or business-data aggregate was performed in this investigation."
+  ],
+  "nextAction": "DBA-authorized view definition and access-plan inspection of its base tables; measure query execution and queue time before proposing any index."
+}
