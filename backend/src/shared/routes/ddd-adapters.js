@@ -2298,7 +2298,9 @@ function createCobrosRoutes() {
                     error.code === 'PAYMENT_EXCEEDS' ? 409 :
                     error.code === 'OVERPAY_NOT_ALLOWED' ? 409 :
                     error.code === 'BELOW_MIN_COBRO' ? 409 :
-                      error.code === 'PAYMENT_ALREADY_REGISTERED' ? 409 : 500);
+                      error.code === 'PAYMENT_ALREADY_REGISTERED' ? 409 :
+                      error.code === 'COBRO_ALREADY_COLLECTED_BY_REPARTIDOR' ? 409 :
+                      error.code === 'COBRO_ALREADY_COLLECTED_BY_COMERCIAL' ? 409 : 500);
     return res.status(status).json({
       success: false,
       error: publicErrorMessageForStatus(error, status),

@@ -4,6 +4,7 @@ const { validateFinanceTableMapping } = require('../config/reparto-runtime');
 const { RepartoPersistenceError } = require('../services/reparto-confirmation-service');
 const { madridCalendarParts } = require('../utils/madrid-calendar');
 const { guardedQuery } = require('../utils/dsedac-write-guard');
+const { commercialCobroReferenceCandidates } = require('../utils/erp-document-label');
 
 const LEDGER_COLUMNS = Object.freeze([
   'ID', 'CODIGOCLIENTEALBARAN', 'CODIGOCLIENTEFACTURA', 'CODIGOVENDEDOR',
@@ -219,7 +220,7 @@ function normalizePayment(input, now) {
 }
 
 function commercialReference(payment) {
-  return [
+  return commercialCobroReferenceCandidates(payment)[0] || [
     'CVC', payment.tipoDocumento, payment.origenDocumento, payment.subempresaDocumento,
     payment.ejercicioDocumento, payment.serieDocumento, payment.terminalDocumento,
     payment.numeroDocumento, payment.xdeDocumento, payment.dexDocumento,
@@ -341,10 +342,15 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger = 
           });
         }
 
-        const reference = commercialReference(payment);
+        const references = commercialCobroReferenceCandidates(payment);
+        if (references.length < 1) {
+          throw new RepartoPersistenceError('El cobro no contiene una identidad comercial verificable', {
+            code: 'REPARTO_INVALID_PAYMENT', statusCode: 422,
+          });
+        }
         const commercialRows = await rows(connection,
-          `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_COBRADO FROM ${runtime.tables.finance.commercialCobros} WHERE TRIM(CODIGO_CLIENTE) = ? AND TRIM(REFERENCIA) = ?`,
-          [payment.codigoCliente, reference]);
+          `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_COBRADO FROM ${runtime.tables.finance.commercialCobros} WHERE TRIM(CODIGO_CLIENTE) = ? AND TRIM(REFERENCIA) IN (${references.map(() => '?').join(',')})`,
+          [payment.codigoCliente, ...references]);
         if (commercialRows.length !== 1 || rowValue(commercialRows[0], 'TOTAL_COBRADO') == null) {
           throw new RepartoCobrosCapabilityError('No se pudo verificar la clave del ledger comercial');
         }

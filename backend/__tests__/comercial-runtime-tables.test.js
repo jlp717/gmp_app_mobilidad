@@ -42,6 +42,7 @@ describe('commercial isolated_test table mapping', () => {
     expect(runtime.tables.commercial.pedidosCab).toBe('JAVIER.TEST_PEDIDOS_CAB');
     expect(runtime.tables.commercial.pedidosLin).toBe('JAVIER.TEST_PEDIDOS_LIN');
     expect(db2AppTable('COBROS')).toBe('JAVIER.TEST_COBROS');
+    expect(db2AppTable('REPARTIDOR_COBROS')).toBe('JAVIER.TEST_REPARTIDOR_COBROS');
     expect(db2AppTable('PEDIDOS_CAB')).toBe('JAVIER.TEST_PEDIDOS_CAB');
     expect(db2AppTable('PEDIDOS_LIN')).toBe('JAVIER.TEST_PEDIDOS_LIN');
     const { comercialErpTable, comercialErpSnapshotTable } = require('../utils/comercial-erp-tables');
@@ -60,6 +61,7 @@ describe('commercial isolated_test table mapping', () => {
       'utf8',
     );
     expect(src).toMatch(/db2AppTable\('COBROS'\)/);
+    expect(src).toMatch(/db2AppTable\('REPARTIDOR_COBROS'\)/);
     expect(src).toMatch(/db2AppTable\('PEDIDOS_CAB'\)/);
     expect(src).not.toMatch(/VISTA_DEUDA_BASE/);
     const migration = fs.readFileSync(

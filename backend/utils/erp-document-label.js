@@ -30,7 +30,42 @@ function formatErpDocumentLabelFromHeader(header = {}) {
   });
 }
 
+function commercialCobroReferenceCandidates(input = {}) {
+  const serie = String(input.serieDocumento ?? input.serie ?? '').trim();
+  const numero = String(input.numeroDocumento ?? input.numero ?? '').trim();
+  const terminal = input.terminalDocumento ?? input.terminal;
+  const labeled = formatErpDocumentLabel({ serie, terminal, numero });
+  const legacy = serie && numero ? `${serie}-${numero}` : '';
+  const full = [
+    'CVC',
+    input.tipoDocumento,
+    input.origenDocumento,
+    input.subempresaDocumento ?? input.subempresa,
+    input.ejercicioDocumento,
+    serie,
+    terminal,
+    numero,
+    input.xdeDocumento ?? input.xde ?? 0,
+    input.dexDocumento ?? input.dex ?? 0,
+  ].map((part) => String(part ?? '').trim()).join(':');
+  const hasFull = Boolean(
+    input.tipoDocumento
+    && (input.subempresaDocumento || input.subempresa)
+    && input.ejercicioDocumento
+    && serie
+    && numero,
+  );
+  return [...new Set([
+    hasFull ? full : '',
+    labeled,
+    legacy,
+    legacy ? `CVC:${legacy}` : '',
+    labeled && labeled !== legacy ? `CVC:${labeled}` : '',
+  ].filter(Boolean))];
+}
+
 module.exports = {
   formatErpDocumentLabel,
   formatErpDocumentLabelFromHeader,
+  commercialCobroReferenceCandidates,
 };

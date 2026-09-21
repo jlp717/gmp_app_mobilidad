@@ -1,7 +1,7 @@
 'use strict';
 
 const { queryWithParams } = require('../config/db');
-const { comercialErpTable, comercialErpSchemaAndName } = require('../utils/comercial-erp-tables');
+const { comercialErpTable, comercialErpSchemaAndName, comercialErpSnapshotTable, isIsolatedCommercialTest } = require('../utils/comercial-erp-tables');
 const { getDebtView } = require('./debt-view-contract');
 const logger = require('../middleware/logger');
 
@@ -174,29 +174,43 @@ async function resolveMinCobroRule({ clientCode, vendorCode }) {
     let cobroRiguroso = false;
     let clientPct = 0;
     if (clxColumns.sn && clxColumns.pct && client) {
-      const rows = await queryWithParams(
+      const readClx = (table) => queryWithParams(
         `SELECT TRIM(COBRORIGUROSOSN) AS SN,
                 COALESCE(PORCENTAJECOBRORIGUROSO, 0) AS PCT
-           FROM ${comercialErpTable('CLX')}
+           FROM ${table}
           WHERE CODIGOCLIENTE = CAST(? AS CHAR(10))
           FETCH FIRST 1 ROW ONLY`,
         [client],
         [],
       );
+      let rows = await readClx(comercialErpTable('CLX'));
+      let snapshot = false;
+      if ((!rows || !rows[0]) && isIsolatedCommercialTest()) {
+        rows = await readClx(comercialErpSnapshotTable('CLX'));
+        snapshot = Array.isArray(rows) && rows.length > 0;
+      }
       cobroRiguroso = trim(rows?.[0]?.SN).toUpperCase() === 'S';
       clientPct = toNumber(rows?.[0]?.PCT);
-    }
-
-    if (cobroRiguroso) {
-      const minPct = clientPct > 0 ? clientPct : vendorPct;
+      if (cobroRiguroso) {
+        const minPct = clientPct > 0 ? clientPct : vendorPct;
+        return {
+          cobroRiguroso: true,
+          minPct,
+          vendorPct,
+          clientPct,
+          snapshot,
+          source: clientPct > 0
+            ? `${snapshot ? comercialErpSnapshotTable('CLX') : comercialErpTable('CLX')}.PORCENTAJECOBRORIGUROSO`
+            : `${comercialErpTable('VDDX')}.PORCENTAJEMINIMOCOBRO`,
+        };
+      }
       return {
-        cobroRiguroso: true,
-        minPct,
+        cobroRiguroso: false,
+        minPct: vendorPct,
         vendorPct,
-        clientPct,
-        source: clientPct > 0
-          ? `${comercialErpTable('CLX')}.PORCENTAJECOBRORIGUROSO`
-          : `${comercialErpTable('VDDX')}.PORCENTAJEMINIMOCOBRO`,
+        clientPct: 0,
+        snapshot,
+        source: `${comercialErpTable('VDDX')}.PORCENTAJEMINIMOCOBRO`,
       };
     }
     return {
@@ -204,6 +218,7 @@ async function resolveMinCobroRule({ clientCode, vendorCode }) {
       minPct: vendorPct,
       vendorPct,
       clientPct: 0,
+      snapshot: false,
       source: `${comercialErpTable('VDDX')}.PORCENTAJEMINIMOCOBRO`,
     };
   } catch (error) {
@@ -212,10 +227,12 @@ async function resolveMinCobroRule({ clientCode, vendorCode }) {
   }
 }
 
-async function carteraCollectionPct({ clientCode, vendorCode, clientScoped }) {
+async function carteraCollectionPct({ clientCode, vendorCode, clientScoped, useSnapshot }) {
   const client = trim(clientCode).substring(0, 10);
   const vendor = trim(vendorCode).substring(0, 2);
-  const view = getDebtView();
+  const view = useSnapshot === true
+    ? comercialErpSnapshotTable('CVC')
+    : getDebtView();
   const notCancelled = `(CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')`;
   let sql;
   let params;
@@ -262,6 +279,7 @@ async function evaluateMinCobroOrderGate({ clientCode, vendorCode }) {
     clientCode,
     vendorCode,
     clientScoped: rule.cobroRiguroso === true,
+    useSnapshot: rule.snapshot === true,
   });
   if (cartera.total <= 0) {
     return { ...rule, actualPct: 100, blocked: false, total: 0 };

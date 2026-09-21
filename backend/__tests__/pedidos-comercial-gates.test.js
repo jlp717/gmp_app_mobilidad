@@ -110,4 +110,32 @@ describe('pedidos comercial gates', () => {
     expect(gate.minPct).toBe(30);
     expect(gate.actualPct).toBe(80);
   });
+
+  test('assertMinCobroAllowsOrder uses TEST_CLX/TEST_CVC overlay when live CLX has no row', async () => {
+    const previous = process.env.REPARTO_TABLE_SET;
+    process.env.REPARTO_TABLE_SET = 'isolated_test';
+    resetMinCobroColumnCache();
+    queryWithParams.mockImplementation(async (sql) => {
+      if (/SYSCOLUMNS/i.test(sql)) return [{ COLUMN_NAME: 'X' }];
+      if (/FROM DSEDAC\.VDDX/i.test(sql)) return [{ PCT: 30 }];
+      if (/FROM DSEDAC\.CLX/i.test(sql)) return [];
+      if (/FROM JAVIER\.TEST_CLX/i.test(sql)) return [{ SN: 'S', PCT: 90 }];
+      if (/FROM JAVIER\.TEST_CVC/i.test(sql)) return [{ TOTAL_DOC: 1000, PENDIENTE: 900 }];
+      if (/FROM DSEDAC\.CVC/i.test(sql)) return [{ TOTAL_DOC: 0, PENDIENTE: 0 }];
+      return [];
+    });
+
+    try {
+      await expect(assertMinCobroAllowsOrder({
+        clientCode: 'ZZHITMIN01',
+        vendorCode: '35',
+      })).rejects.toMatchObject({
+        code: 'MIN_COBRO_ORDER_BLOCKED',
+        status: 403,
+      });
+    } finally {
+      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previous;
+    }
+  });
 });

@@ -109,6 +109,7 @@ function resolveCommercialRuntimeTable(kind) {
     const runtime = resolveRepartoRuntime(process.env);
     if (!runtime?.valid) return null;
     if (kind === 'cobros') return runtime.tables?.finance?.commercialCobros || null;
+    if (kind === 'repartidorCobros') return runtime.tables?.finance?.cobros || null;
     if (kind === 'pedidosCab') return runtime.tables?.commercial?.pedidosCab || null;
     if (kind === 'pedidosLin') return runtime.tables?.commercial?.pedidosLin || null;
   } catch (_) {
@@ -125,6 +126,9 @@ function db2AppTable(table) {
   const name = String(table || '').trim().toUpperCase();
   if (name === 'COBROS') {
     return resolveCommercialRuntimeTable('cobros') || db2WriteTable('COBROS');
+  }
+  if (name === 'REPARTIDOR_COBROS') {
+    return resolveCommercialRuntimeTable('repartidorCobros') || db2WriteTable('REPARTIDOR_COBROS');
   }
   if (name === 'PEDIDOS_CAB') {
     return resolveCommercialRuntimeTable('pedidosCab') || db2WriteTable('PEDIDOS_CAB');

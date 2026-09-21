@@ -474,14 +474,21 @@ function createRepartoFinanceDb2Repository(options = {}) {
   `, criteria.params);
     },
 
-    async selectCommercialCobroMatch(conn, { codigoCliente, composedRef, likeRef }) {
+    async selectCommercialCobroMatch(conn, { codigoCliente, composedRef, likeRef, references = [] }) {
+      const refs = [...new Set([composedRef, ...(Array.isArray(references) ? references : [])].filter(Boolean))];
+      const refSql = refs.length
+        ? `TRIM(REFERENCIA) IN (${refs.map(() => '?').join(',')}) OR REFERENCIA LIKE ?`
+        : 'TRIM(REFERENCIA) = ? OR REFERENCIA LIKE ?';
+      const params = refs.length
+        ? [String(codigoCliente || '').trim(), ...refs, likeRef]
+        : [String(codigoCliente || '').trim(), composedRef, likeRef];
       return runOn(conn, `
       SELECT ID
         FROM ${tables.commercialCobros}
        WHERE TRIM(CODIGO_CLIENTE) = ?
-         AND (TRIM(REFERENCIA) = ? OR REFERENCIA LIKE ?)
+         AND (${refSql})
        FETCH FIRST 1 ROW ONLY
-    `, [String(codigoCliente || '').trim(), composedRef, likeRef]);
+    `, params);
     },
 
     async selectLiquidacionByToken(idempotencyToken) {

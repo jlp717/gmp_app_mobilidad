@@ -227,7 +227,14 @@ describe('reparto cobros DB2 transaction-bound port', () => {
       code: 'REPARTO_COBRO_COMMERCIAL_CONFLICT', statusCode: 409,
     });
     const crosscheck = fake.calls.find((call) => call.sql.includes('COALESCE(SUM(IMPORTE)'));
-    expect(crosscheck.params).toEqual(['C1', 'CVC:CAC:B:001:2026:A:1:8:1:1']);
+    expect(crosscheck.params).toEqual([
+      'C1',
+      'CVC:CAC:B:001:2026:A:1:8:1:1',
+      'A-1-8',
+      'A-8',
+      'CVC:A-8',
+      'CVC:A-1-8',
+    ]);
     expect(fake.calls.some((call) => call.sql.startsWith('INSERT INTO'))).toBe(false);
   });
 

@@ -23,6 +23,7 @@ const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2AppTable('COBROS');
+const REPARTIDOR_COBROS_TABLE = db2AppTable('REPARTIDOR_COBROS');
 const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
 
 // CTR / contra-reembolso: cobro en manos del repartidor, no del comercial.
@@ -192,7 +193,7 @@ async function getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams) {
             '       TRIM(R.SERIEDOCUMENTO) AS SERIE,',
             '       TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) AS NUMERO,',
             '       COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP',
-            '  FROM ' + APP_SCHEMA + '.REPARTIDOR_COBROS R',
+            '  FROM ' + REPARTIDOR_COBROS_TABLE + ' R',
             ' WHERE EXISTS (',
             '   SELECT 1',
             '     FROM ' + getDebtView() + ' CVC',
@@ -574,7 +575,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
             const repRows = await queryWithParams(
                 `SELECT TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20))) AS DOC_KEY,
                         COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL
-                   FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
+                   FROM ${REPARTIDOR_COBROS_TABLE}
                   WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
                   GROUP BY TRIM(SERIEDOCUMENTO), TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20)))`,
                 [codigoCliente], false, false
@@ -804,7 +805,7 @@ router.get('/:codigoCliente/estado', async (req, res) => {
             }),
             queryWithParams(`
                 SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
-                  FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
+                  FROM ${REPARTIDOR_COBROS_TABLE}
                  WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
             `, [codigoCliente], false).catch((adjustErr) => {
                 logger.warn('[COBROS] Error leyendo cobros repartidor: ' + adjustErr.message);
@@ -928,13 +929,19 @@ router.post('/:codigoCliente/registrar', limitRegistrarCobro, async (req, res) =
         try {
             const repartidorRows = await queryWithParams(
                 `SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
-                   FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
+                   FROM ${REPARTIDOR_COBROS_TABLE}
                   WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
-                    AND (TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20)))) = ?`,
-                [codigoCliente, referenciaTrim], false, false
+                    AND (
+                      TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20))) = ?
+                      OR TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(TERMINALDOCUMENTO AS VARCHAR(20))) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20))) = ?
+                      OR ? LIKE '%' || TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(TERMINALDOCUMENTO AS VARCHAR(20))) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20))) || '%'
+                      OR ? LIKE '%' || TRIM(SERIEDOCUMENTO) || ':' || TRIM(CAST(TERMINALDOCUMENTO AS VARCHAR(20))) || ':' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20))) || '%'
+                      OR ? LIKE '%' || TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20)))
+                    )`,
+                [codigoCliente, referenciaTrim, referenciaTrim, referenciaTrim, referenciaTrim, referenciaTrim], false, false
             );
             const totalRepartidor = parseFloat(repartidorRows?.[0]?.TOTAL_REP) || 0;
-            if (totalRepartidor >= importeNum && totalRepartidor > 0) {
+            if (totalRepartidor > 0) {
                 return res.status(409).json({
                     success: false,
                     code: 'COBRO_ALREADY_COLLECTED_BY_REPARTIDOR',
@@ -1231,7 +1238,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                     '       P.DOC_KEY AS DOC_KEY,',
                     '       COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP',
                     '  FROM PAGE_DOCS P',
-                    '  JOIN ' + APP_SCHEMA + '.REPARTIDOR_COBROS R',
+                    '  JOIN ' + REPARTIDOR_COBROS_TABLE + ' R',
                     '    ON TRIM(R.CODIGOCLIENTEALBARAN) = P.CLIENTE',
                     '   AND TRIM(R.SERIEDOCUMENTO) = P.SERIE',
                     '   AND TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) = P.NUMERO',

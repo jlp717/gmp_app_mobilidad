@@ -8,7 +8,7 @@ const { CobrosRepository } = require('../domain/cobros-repository');
 const { query, queryWithParams } = require('../../../../config/db');
 const logger = require('../../../../middleware/logger');
 const { db2InsertSql } = require('../../../../utils/db2-identifiers');
-const { getDb2WriteSchema, db2AppTable } = require('../../../../utils/db2-schemas');
+const { db2AppTable } = require('../../../../utils/db2-schemas');
 const {
   buildCvcVendorScopeFilter,
   getVendorColumnExpr,
@@ -26,10 +26,11 @@ const {
   isBelowMinCobro,
   capPendingToDocument,
 } = require('../../../../services/debt-view-contract');
-const { comercialErpTable, comercialErpSchemaAndName } = require('../../../../utils/comercial-erp-tables');
+const { comercialErpTable, comercialErpSchemaAndName, comercialErpSnapshotTable, isIsolatedCommercialTest } = require('../../../../utils/comercial-erp-tables');
+const { formatErpDocumentLabel } = require('../../../../utils/erp-document-label');
 
-const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2AppTable('COBROS');
+const REPARTIDOR_COBROS_TABLE = db2AppTable('REPARTIDOR_COBROS');
 const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
 const COBROS_HEALTHCHECK_SQL = ['SELECT 1 FROM', COBROS_TABLE, 'FETCH FIRST 1 ROW ONLY'].join(' ');
 const pedidoCabOptionalColumnsCache = new Map();
@@ -680,9 +681,11 @@ function buildAppOrderGeneratedDocumentFilter(optionalColumns, alias = 'PC') {
 function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
   const serie = trim(row.SERIE_DOCUMENTO);
   const numero = row.NUMERO_DOCUMENTO || 0;
+  const terminal = row.TERMINAL_DOCUMENTO;
   const xde = row.XDE || 1;
   const tipoDoc = trim(row.TIPO_DOCUMENTO || 'FAC');
   const docKey = cvcLegacyDocKey(row);
+  const visibleReference = formatErpDocumentLabel({ serie, terminal, numero }) || docKey;
   const stableReference = cvcFullDocKey(row) || `CVC:${docKey}`;
   const fecha = toIsoDate(row.ANO_DOCUMENTO, row.MES_DOCUMENTO, row.DIA_DOCUMENTO);
   const fechaVencimiento = toIsoDate(row.ANO_VENCIMIENTO, row.MES_VENCIMIENTO, row.DIA_VENCIMIENTO);
@@ -699,21 +702,30 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
       : (vencidoCents > 0 ? 'VENCIDO' : 'PENDIENTE'));
   const cobroRiguroso = row.COBRO_RIGUROSO === true || trim(row.COBRO_RIGUROSO).toUpperCase() === 'S';
   const porcentajeMinimoCobro = Number(row.PORCENTAJE_MINIMO_COBRO) || 0;
+  const importeTotal = fromCents(toCents(row.IMPORTE_TOTAL));
+  const importeCobrado = fromCents(toCents(row.IMPORTE_COBRADO) + appPaidCents);
+  const porcentajeCobrado = importeTotal > 0
+    ? Math.round((importeCobrado / importeTotal) * 10000) / 100
+    : 0;
   return {
     id: stableReference,
     tipo: tipoDoc === 'CAC' ? 'albaran' : 'factura',
     tipoDocumento: tipoDoc || null,
-    referencia: docKey,
+    referencia: visibleReference,
     fecha,
     fechaVencimiento,
-    importeTotal: fromCents(toCents(row.IMPORTE_TOTAL)),
+    importeTotal,
     importePendiente: fromCents(pendingCents),
-    importeCobrado: fromCents(toCents(row.IMPORTE_COBRADO) + appPaidCents),
+    importeCobrado,
+    porcentajeCobrado,
     estado,
     formaPago: formaPagoLabel(row.FORMA_PAGO, row.FORMA_PAGO_DESC),
     cobroRiguroso,
     porcentajeMinimoCobro: cobroRiguroso ? porcentajeMinimoCobro : 0,
-    descripcion: `${tipoDoc} ${docKey}`,
+    importeMinimoCobro: cobroRiguroso && porcentajeMinimoCobro > 0
+      ? Math.round(fromCents(pendingCents) * porcentajeMinimoCobro) / 100
+      : 0,
+    descripcion: `${tipoDoc} ${visibleReference}`,
     docKey: {
       source: 'CVC',
       reference: stableReference,
@@ -818,6 +830,11 @@ class Db2CobrosRepository extends CobrosRepository {
       const totalVencido = mergedCobros
         .filter((c) => c.estado === 'VENCIDO')
         .reduce((sum, c) => sum + c.importePendiente, 0);
+      const totalDocumento = groupedRows.reduce((sum, row) => sum + fromCents(toCents(row.IMPORTE_TOTAL)), 0);
+      const cobradoCartera = Math.max(0, totalDocumento - cvcTotalPendiente);
+      const porcentajeCarteraCobrada = totalDocumento > 0
+        ? Math.round((cobradoCartera / totalDocumento) * 10000) / 100
+        : 100;
       return {
         cobros: mergedCobros,
         resumen: {
@@ -830,6 +847,8 @@ class Db2CobrosRepository extends CobrosRepository {
           cobroRiguroso: cobroMinimo.cobroRiguroso,
           porcentajeMinimoCobro: cobroMinimo.porcentajeMinimoCobro,
           porcentajeMinimoVendedor: cobroMinimo.porcentajeMinimoVendedor || 0,
+          porcentajeCarteraCobrada,
+          importeCobradoCartera: cobradoCartera,
           cvc: { cantidad: cobros.length, total: cvcTotalPendiente },
           pedidosApp: {
             cantidad: appOrders?.resumen?.pedidos?.cantidad || 0,
@@ -1321,7 +1340,7 @@ class Db2CobrosRepository extends CobrosRepository {
                R.XDEDOCUMENTO AS XDE,
                R.DEXDOCUMENTO AS DEX,
                COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
-          FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
+          FROM ${REPARTIDOR_COBROS_TABLE} R
          WHERE EXISTS (
            SELECT 1
              FROM ${getDebtView()} CVC
@@ -1381,7 +1400,7 @@ class Db2CobrosRepository extends CobrosRepository {
       const repartidorSql = `
         SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS CLIENTE,
                COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_APP
-          FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
+          FROM ${REPARTIDOR_COBROS_TABLE} R
          WHERE TRIM(R.CODIGOCLIENTEALBARAN) IN (${inList})
          GROUP BY TRIM(R.CODIGOCLIENTEALBARAN)`;
       const rows = await query(repartidorSql, false);
@@ -1407,7 +1426,7 @@ class Db2CobrosRepository extends CobrosRepository {
                 XDEDOCUMENTO AS XDE,
                 DEXDOCUMENTO AS DEX,
                 COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL
-           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
+           FROM ${REPARTIDOR_COBROS_TABLE}
           WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
           GROUP BY TIPODOCUMENTO, ORIGENDOCUMENTO, SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO,
                    SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO, XDEDOCUMENTO, DEXDOCUMENTO`,
@@ -1537,7 +1556,7 @@ class Db2CobrosRepository extends CobrosRepository {
     let paidRepartidorCents = 0;
     try {
       let repartidorSql = `SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
-           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
+           FROM ${REPARTIDOR_COBROS_TABLE}
           WHERE TRIM(CODIGOCLIENTEALBARAN) = ?`;
       let repartidorParams = [normalizedClient];
       if (cvcStableReference) {
@@ -1573,8 +1592,14 @@ class Db2CobrosRepository extends CobrosRepository {
       paidRepartidorCents = toCents(repartidorRows?.[0]?.TOTAL_REP);
       if (paidRepartidorCents > 0) {
         logger.info(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS ya tiene ${paidRepartidorCents}c para ${normalizedClient}/${stableReference}`);
+        throw new CommercialCobrosError(
+          'COBRO_ALREADY_COLLECTED_BY_REPARTIDOR',
+          `Documento ya cobrado por el REPARTIDOR (entrega al cliente). Importe cobrado: ${fromCents(paidRepartidorCents)}.`,
+          409,
+        );
       }
     } catch (xtableErr) {
+      if (xtableErr instanceof CommercialCobrosError) throw xtableErr;
       logger.warn(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS check fallo (continuando): ${xtableErr.message}`);
     }
 
@@ -1751,13 +1776,17 @@ class Db2CobrosRepository extends CobrosRepository {
     if (!client) return empty;
     try {
       const vendorPct = await this.getVendorMinimoCobro(context);
-      const clxRows = await queryWithParams(`
+      const readClx = (table) => queryWithParams(`
         SELECT TRIM(COBRORIGUROSOSN) AS SN,
                COALESCE(PORCENTAJECOBRORIGUROSO, 0) AS PCT
-          FROM ${comercialErpTable('CLX')}
+          FROM ${table}
          WHERE CODIGOCLIENTE = CAST(? AS CHAR(10))
          FETCH FIRST 1 ROW ONLY
       `, [client], []);
+      let clxRows = await readClx(comercialErpTable('CLX'));
+      if ((!clxRows || !clxRows[0]) && isIsolatedCommercialTest()) {
+        clxRows = await readClx(comercialErpSnapshotTable('CLX'));
+      }
       const sn = trim(clxRows?.[0]?.SN).toUpperCase() === 'S';
       let pct = Number(clxRows?.[0]?.PCT) || 0;
       if (sn && pct <= 0) {

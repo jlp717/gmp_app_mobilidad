@@ -797,7 +797,7 @@ describe('commercial cobros hardening', () => {
     expect(result.resumen.totalPendiente).toBe(130);
     expect(result.resumen.numDocumentos).toBe(2);
     expect(result.cobros).toHaveLength(2);
-    expect(result.cobros.map((cobro) => cobro.referencia)).toEqual(['C-7', 'C-7']);
+    expect(result.cobros.map((cobro) => cobro.referencia)).toEqual(['C-80-7', 'C-80-7']);
     expect(result.cobros.map((cobro) => cobro.importePendiente)).toEqual([80, 50]);
     expect(result.cobros[0].docKey.reference).toBe('CVC:PGC:C:GMP:2025:C:80:7:1:1');
     expect(result.cobros[1].docKey.reference).toBe('CVC:PGC:C:GMP:2026:C:80:7:1:1');
@@ -1196,6 +1196,46 @@ describe('commercial cobros hardening', () => {
     );
     expect(repartidorCall).toBeDefined();
     expect(repartidorCall[1]).toEqual(['C001', 'M', '123']);
+  });
+
+  test('registerPayment rejects a document already collected by the repartidor', async () => {
+    mockQuery.mockResolvedValue([{ 1: 1 }]);
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return [];
+      if (/FROM DSEDAC\.CVC C/i.test(sql)) {
+        return [{
+          ID: 'CVC:M-123',
+          SOURCE: 'CVC',
+          CODIGOCLIENTE: 'C001',
+          CODIGOVENDEDOR: '01',
+          SERIEPEDIDO: 'M',
+          NUMEROPEDIDO: 123,
+          IMPORTETOTAL: '80.00',
+          ESTADO: 'PENDIENTE',
+        }];
+      }
+      if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) return [];
+      if (/COALESCE\(SUM\(IMPORTE\)/i.test(sql)) return [{ TOTAL_COBRADO: '0.00' }];
+      if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: '15.00' }];
+      if (/INSERT INTO JAVIER\.COBROS/i.test(sql)) return [];
+      return [];
+    });
+    const repo = new Db2CobrosRepository();
+
+    await expect(repo.registerPayment({
+      clientCode: 'C001',
+      amount: 20,
+      paymentMethod: 'CONTADO',
+      reference: 'M-123',
+      observations: 'doble cobro',
+      userId: '01',
+      userRole: 'COMERCIAL',
+      idempotencyToken: 'cobro-token-rep-409-001',
+    })).rejects.toMatchObject({
+      code: 'COBRO_ALREADY_COLLECTED_BY_REPARTIDOR',
+      status: 409,
+    });
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql))).toBe(false);
   });
 
   test('registerPayment blocks amounts below CLX cobro riguroso minimum', async () => {

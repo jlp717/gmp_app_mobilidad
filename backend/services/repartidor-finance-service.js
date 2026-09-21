@@ -963,11 +963,13 @@ async function assertDocumentNotCollectedByCommercial(conn, input) {
   // commercial collection subsystem.
   try {
     const composedRef = `${String(input.serieDocumento || '').trim()}-${input.numeroDocumento}`;
+    const labeledRef = `${String(input.serieDocumento || '').trim()}-${input.terminalDocumento}-${input.numeroDocumento}`;
     const likeRef = `%${composedRef}`;
     const comercialRows = await financeRepo.selectCommercialCobroMatch(conn, {
       codigoCliente: input.codigoCliente,
       composedRef,
       likeRef,
+      references: [composedRef, labeledRef, `CVC:${composedRef}`, `CVC:${labeledRef}`],
     });
     if (Array.isArray(comercialRows) && comercialRows.length > 0) {
       const err = new PaymentAlreadyRegisteredError();
