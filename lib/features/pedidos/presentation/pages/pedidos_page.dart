@@ -991,12 +991,12 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   Widget _buildNuevoPedidoTab() {
     final hasClient = ref.watch(pedidosProvider.select((p) => p.hasClient));
-    final isPhone = Responsive.isSmall(context);
-
-    if (isPhone) {
-      return _buildPhoneLayout(hasClient);
+    // Tablet portrait / mid-width: full-width catalog + cart FAB/sheet (mobile).
+    // Wide screens only: side-by-side catalog + persistent cart.
+    if (Responsive.usePedidosSplitCart(context)) {
+      return _buildTabletLayout();
     }
-    return _buildTabletLayout();
+    return _buildPhoneLayout(hasClient);
   }
 
   Widget _buildTabletLayout() {

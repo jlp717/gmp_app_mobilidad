@@ -41,6 +41,12 @@ class Responsive {
   /// Whether to use bottom navigation (phones) instead of sidebar (tablets).
   static bool useBottomNav(BuildContext ctx) => isSmall(ctx);
 
+  /// Pedidos: catálogo + carrito en paralelo solo con ancho real suficiente.
+  /// En tablet portrait / ~800 px el split aplasta las fichas; ahí se usa
+  /// el layout móvil (lista a ancho completo + FAB de carrito + sheet).
+  static bool usePedidosSplitCart(BuildContext ctx) =>
+      MediaQuery.sizeOf(ctx).width >= 1000;
+
   // ---------------------------------------------------------------------------
   // Landscape scaling multiplier
   // ---------------------------------------------------------------------------
