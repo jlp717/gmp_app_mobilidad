@@ -21,6 +21,7 @@ class OrderCard extends StatelessWidget {
     this.onResend,
     this.onDelete,
     this.isMarginVisible = false,
+    this.compact = false,
   });
   final OrderSummary order;
   final VoidCallback onTap;
@@ -33,15 +34,21 @@ class OrderCard extends StatelessWidget {
   /// COMERCIAL nunca lo vea por accidente si la pagina olvida pasarlo.
   final bool isMarginVisible;
 
+  /// Dense landscape layout: tighter paddings and margins.
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
     final theme = OrderStatusConfig.getTheme(order.estado);
     final marginColor = _marginColor(order.margen);
     final displayEstado =
         OrderStatusConfig.canonicalDisplayStatus(order.estado);
+    final hMargin = compact ? 8.0 : 14.0;
+    final vMargin = compact ? 3.0 : 6.0;
+    final pad = compact ? 10.0 : 14.0;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      margin: EdgeInsets.symmetric(horizontal: hMargin, vertical: vMargin),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -68,7 +75,7 @@ class OrderCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: EdgeInsets.all(pad),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

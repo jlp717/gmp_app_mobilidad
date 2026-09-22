@@ -1380,7 +1380,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             },
           ),
         // Complementary products (based on cart contents)
-        if (provider.hasLines && provider.complementaryProducts.isNotEmpty)
+        if (!Responsive.isLandscape(context) &&
+            provider.hasLines &&
+            provider.complementaryProducts.isNotEmpty)
           ComplementaryProducts(
             products: provider.complementaryProducts,
             onAdd: (code, name) {
@@ -1765,6 +1767,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         cartQty: cartQty,
         cartQtySuffix: cartQtySuffix,
         isMarginVisible: provider.isMarginVisible,
+        compact: Responsive.useCompactTiles(context),
         onQuickAdd: () async {
           unawaited(HapticFeedback.lightImpact());
           final messenger = ScaffoldMessenger.of(context);
@@ -1921,18 +1924,23 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
     return LayoutBuilder(
       builder: (ctx, constraints) {
-        final columns = () {
-          final w = constraints.maxWidth;
-          if (w >= 1400) return 4;
-          if (w >= 1100) return 3;
-          if (w >= 750 || Responsive.isLandscape(context)) return 2;
-          return 1;
-        }();
+        final columns = Responsive.catalogCrossAxisCountForWidth(
+          constraints.maxWidth,
+          landscape: Responsive.isLandscape(context),
+        );
+        final compact = Responsive.useCompactTiles(context);
+        final listPad = compact
+            ? EdgeInsets.symmetric(
+                horizontal: Responsive.padding(context, small: 8, large: 10),
+                vertical: 4,
+              )
+            : Responsive.contentPadding(context);
+        final gridGap = Responsive.denseListSpacing(context);
 
         if (columns <= 1) {
           return ListView.builder(
             controller: _catalogScrollController,
-            padding: Responsive.contentPadding(context),
+            padding: listPad,
             itemCount: displayList.length + (provider.hasMoreProducts ? 1 : 0),
             itemBuilder: (itemCtx, i) {
               if (i >= displayList.length) {
@@ -2002,18 +2010,16 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         }
 
         final gridItems = displayList.whereType<Product>().toList();
-        final aspect = Responsive.isLandscapeCompact(context)
-            ? 2.6
-            : (Responsive.isLandscape(context) ? 2.3 : 2.0);
+        final tileExtent = Responsive.catalogTileExtent(context);
 
         return GridView.builder(
           controller: _catalogScrollController,
-          padding: Responsive.contentPadding(context),
+          padding: listPad,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: aspect,
+            mainAxisExtent: tileExtent,
+            mainAxisSpacing: gridGap,
+            crossAxisSpacing: gridGap,
           ),
           itemCount: gridItems.length + (provider.hasMoreProducts ? 1 : 0),
           itemBuilder: (itemCtx, i) {
@@ -2747,13 +2753,19 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       'domingo',
     ];
     final dayName = weekdays[now.weekday - 1];
-    final week = ((now.day + now.weekday - 2) ~/ 7) + 1;
+    // Misma fórmula que rutero_page (_getCurrentWeekInMonth): offset desde el
+    // 1º del mes. Usar now.weekday aquí desplazaba semana −1 (p.ej. lun 21 → week 3
+    // → fecha 14) y el overlay PEDIDOS_CAB no encontraba el CONFIRMADO del día.
+    final firstWeekday = DateTime(now.year, now.month).weekday;
+    final week = ((now.day + firstWeekday - 2) ~/ 7) + 1;
+    final routeDateIso =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final cacheKey = [
       'pedidos',
       'rutero-client-data',
+      'v2',
       _vendedorCodes,
-      now.year,
-      now.month,
+      routeDateIso,
       week,
       dayName,
     ].join(':');
@@ -2774,6 +2786,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           'year': now.year,
           'month': now.month,
           'week': week,
+          'date': routeDateIso,
         },
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 5),
@@ -2875,26 +2888,52 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         });
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 16),
-      itemCount: sortedOrders.length,
-      itemBuilder: (context, index) {
-        final order = sortedOrders[index];
-        return OrderCard(
-          order: order,
-          isMarginVisible:
-              ref.watch(pedidosProvider.select((p) => p.isMarginVisible)),
-          onTap: () => _showOrderDetail(order),
-          onDuplicate: () => _duplicateOrder(order),
-          onViewAlbaran:
-              OrderStatusConfig.canonicalDisplayStatus(order.estado) ==
-                      'CONFIRMADO'
-                  ? () => _viewAlbaran(order)
-                  : null,
-          onResend:
-              order.estado == 'BORRADOR' ? () => _confirmBorrador(order) : null,
-          onDelete:
-              order.estado == 'BORRADOR' ? () => _deleteBorrador(order) : null,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cols = Responsive.denseListCrossAxisCount(context);
+        final compact = Responsive.useCompactTiles(context);
+        final gap = Responsive.denseListSpacing(context);
+
+        Widget buildCard(OrderSummary order) {
+          return OrderCard(
+            order: order,
+            compact: compact || cols > 1,
+            isMarginVisible:
+                ref.watch(pedidosProvider.select((p) => p.isMarginVisible)),
+            onTap: () => _showOrderDetail(order),
+            onDuplicate: () => _duplicateOrder(order),
+            onViewAlbaran:
+                OrderStatusConfig.canonicalDisplayStatus(order.estado) ==
+                        'CONFIRMADO'
+                    ? () => _viewAlbaran(order)
+                    : null,
+            onResend: order.estado == 'BORRADOR'
+                ? () => _confirmBorrador(order)
+                : null,
+            onDelete: order.estado == 'BORRADOR'
+                ? () => _deleteBorrador(order)
+                : null,
+          );
+        }
+
+        if (cols <= 1) {
+          return ListView.builder(
+            padding: EdgeInsets.only(bottom: compact ? 8 : 16),
+            itemCount: sortedOrders.length,
+            itemBuilder: (context, index) => buildCard(sortedOrders[index]),
+          );
+        }
+
+        return GridView.builder(
+          padding: EdgeInsets.fromLTRB(gap, 4, gap, compact ? 8 : 16),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            mainAxisExtent: compact ? 132 : 160,
+            mainAxisSpacing: gap,
+            crossAxisSpacing: gap,
+          ),
+          itemCount: sortedOrders.length,
+          itemBuilder: (context, index) => buildCard(sortedOrders[index]),
         );
       },
     );

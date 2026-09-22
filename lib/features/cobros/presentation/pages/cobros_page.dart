@@ -337,11 +337,48 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                 Expanded(
                   child: visibleClients.isEmpty && !_isSearchingClients
                       ? _buildNoClientsState(cobros, search)
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: visibleClients.length,
-                          itemBuilder: (context, index) {
-                            return _buildClientCobroCard(visibleClients[index]);
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            final cols =
+                                Responsive.denseListCrossAxisCount(context);
+                            final gap = Responsive.denseListSpacing(context);
+                            final compact = Responsive.useCompactTiles(context);
+
+                            if (cols <= 1) {
+                              return ListView.builder(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: compact ? 10 : 16,
+                                ),
+                                itemCount: visibleClients.length,
+                                itemBuilder: (context, index) {
+                                  return _buildClientCobroCard(
+                                    visibleClients[index],
+                                    compact: compact,
+                                  );
+                                },
+                              );
+                            }
+
+                            return GridView.builder(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: gap + 4,
+                                vertical: 4,
+                              ),
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: cols,
+                                mainAxisExtent: compact ? 88 : 104,
+                                mainAxisSpacing: gap,
+                                crossAxisSpacing: gap,
+                              ),
+                              itemCount: visibleClients.length,
+                              itemBuilder: (context, index) {
+                                return _buildClientCobroCard(
+                                  visibleClients[index],
+                                  compact: true,
+                                );
+                              },
+                            );
                           },
                         ),
                 ),
@@ -869,7 +906,10 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
     );
   }
 
-  Widget _buildClientCobroCard(Map<String, dynamic> client) {
+  Widget _buildClientCobroCard(
+    Map<String, dynamic> client, {
+    bool compact = false,
+  }) {
     final code =
         (client['code'] ?? client['codigoCliente'] ?? client['codigo'] ?? '')
             .toString();
@@ -902,196 +942,207 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
         badgeColor = AppTheme.textSecondary;
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 0,
-      color: AppTheme.softPanel,
-      surfaceTintColor: AppColors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        side: pending > 0
-            ? BorderSide(color: badgeColor.withValues(alpha: 0.45))
-            : BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.32)),
-      ),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => CobroDetailScreen(
-                codigoCliente: code,
-                nombreCliente: name,
-                employeeCode: widget.employeeCode,
-                vendedorCodes: _resolvedVendorCodes(),
-              ),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              // Avatar con inicial
-              CircleAvatar(
-                backgroundColor: fromErpDebt
-                    ? AppTheme.warning.withValues(alpha: 0.1)
-                    : AppTheme.info.withValues(alpha: 0.1),
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : '?',
-                  style: TextStyle(
-                    color: fromErpDebt ? AppTheme.warning : AppTheme.info,
-                    fontSize:
-                        Responsive.fontSize(context, small: 18, large: 24),
-                    fontWeight: FontWeight.bold,
-                  ),
+    return Semantics(
+      button: true,
+      label: 'Cliente $name, pendiente ${_moneyFormat.format(pending)}',
+      child: Card(
+        margin: EdgeInsets.only(bottom: compact ? 0 : 12),
+        elevation: 0,
+        color: AppTheme.softPanel,
+        surfaceTintColor: AppColors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: pending > 0
+              ? BorderSide(color: badgeColor.withValues(alpha: 0.45))
+              : BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.32)),
+        ),
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => CobroDetailScreen(
+                  codigoCliente: code,
+                  nombreCliente: name,
+                  employeeCode: widget.employeeCode,
+                  vendedorCodes: _resolvedVendorCodes(),
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Nombre del cliente (NOMBREALTERNATIVO o fallback)
-                    Text(
-                      name,
-                      style: TextStyle(
-                        fontSize:
-                            Responsive.fontSize(context, small: 14, large: 16),
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.themedWhite,
+            );
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: EdgeInsets.all(compact ? 10 : 16),
+            child: Row(
+              children: [
+                // Avatar con inicial
+                CircleAvatar(
+                  radius: compact ? 18 : 20,
+                  backgroundColor: fromErpDebt
+                      ? AppTheme.warning.withValues(alpha: 0.1)
+                      : AppTheme.info.withValues(alpha: 0.1),
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      color: fromErpDebt ? AppTheme.warning : AppTheme.info,
+                      fontSize: Responsive.fontSize(
+                        context,
+                        small: compact ? 14 : 18,
+                        large: compact ? 16 : 24,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 4),
-                    // Codigo de cliente debajo del nombre
-                    Text(
-                      'Código: $code',
-                      style: TextStyle(
-                        fontSize:
-                            Responsive.fontSize(context, small: 11, large: 13),
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    if (hasSummary) ...[
-                      const SizedBox(height: 2),
+                  ),
+                ),
+                SizedBox(width: compact ? 10 : 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Nombre del cliente (NOMBREALTERNATIVO o fallback)
                       Text(
-                        docCount > 0
-                            ? '$docCount documento${docCount == 1 ? '' : 's'} pendiente${docCount == 1 ? '' : 's'}'
-                            : 'Sin documentos pendientes',
+                        name,
                         style: TextStyle(
                           fontSize: Responsive.fontSize(
                             context,
-                            small: 10,
-                            large: 12,
+                            small: compact ? 13 : 14,
+                            large: compact ? 14 : 16,
                           ),
-                          color: pending > 0
-                              ? badgeColor.withValues(alpha: 0.9)
-                              : AppTheme.success.withValues(alpha: 0.8),
                           fontWeight: FontWeight.w600,
+                          color: AppColors.themedWhite,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      // Codigo de cliente debajo del nombre
+                      Text(
+                        'Código: $code',
+                        style: TextStyle(
+                          fontSize: Responsive.fontSize(context,
+                              small: 11, large: 13),
+                          color: AppTheme.textSecondary,
                         ),
                       ),
-                    ],
-                    // Badge "Deuda ERP" para clientes que no son del comercial
-                    if (fromErpDebt) ...[
-                      const SizedBox(height: 2),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.warning.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'Deuda ERP',
+                      if (hasSummary && !compact) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          docCount > 0
+                              ? '$docCount documento${docCount == 1 ? '' : 's'} pendiente${docCount == 1 ? '' : 's'}'
+                              : 'Sin documentos pendientes',
                           style: TextStyle(
-                            fontSize: 9,
-                            color: AppTheme.warning,
+                            fontSize: Responsive.fontSize(
+                              context,
+                              small: 10,
+                              large: 12,
+                            ),
+                            color: pending > 0
+                                ? badgeColor.withValues(alpha: 0.9)
+                                : AppTheme.success.withValues(alpha: 0.8),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              // Columna derecha: importe pendiente/vencido o tick verde
-              if (pending > 0)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: badgeColor.withValues(alpha: 0.4),
+                      ],
+                      // Badge "Deuda ERP" para clientes que no son del comercial
+                      if (fromErpDebt && !compact) ...[
+                        const SizedBox(height: 2),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.warning.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Deuda ERP',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: AppTheme.warning,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        _moneyFormat.format(pending),
-                        style: TextStyle(
-                          color: badgeColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: Responsive.fontSize(
-                            context,
-                            small: 12,
-                            large: 14,
+                      ],
+                    ],
+                  ),
+                ),
+                // Columna derecha: importe pendiente/vencido o tick verde
+                if (pending > 0)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: badgeColor.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          _moneyFormat.format(pending),
+                          style: TextStyle(
+                            color: badgeColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: Responsive.fontSize(
+                              context,
+                              small: 12,
+                              large: 14,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    if (vencido > 0) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Vencido: ${_moneyFormat.format(vencido)}',
-                        style: const TextStyle(
-                          color: AppTheme.error,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
+                      if (vencido > 0) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Vencido: ${_moneyFormat.format(vencido)}',
+                          style: const TextStyle(
+                            color: AppTheme.error,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                ),
-              // Tick verde: solo si hay summary explicito y no hay deuda.
-              if (hasSummary && pending == 0 && vencido == 0)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.success.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Icon(
-                    Icons.check_circle,
-                    color: AppTheme.success,
-                    size: 20,
+                // Tick verde: solo si hay summary explicito y no hay deuda.
+                if (hasSummary && pending == 0 && vencido == 0)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(
+                      Icons.check_circle,
+                      color: AppTheme.success,
+                      size: 20,
+                    ),
                   ),
-                ),
-              if (!hasSummary)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.textSecondary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
+                if (!hasSummary)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.textSecondary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(
+                      Icons.remove_circle_outline,
+                      color: AppTheme.textSecondary,
+                      size: 20,
+                    ),
                   ),
-                  child: Icon(
-                    Icons.remove_circle_outline,
-                    color: AppTheme.textSecondary,
-                    size: 20,
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

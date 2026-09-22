@@ -33,6 +33,19 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
   bool _isLoading = true;
   bool _hasError = false;
   bool _isExpanded = true;
+  bool _landscapeInitDone = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_landscapeInitDone) {
+      _landscapeInitDone = true;
+      // Landscape: start collapsed so catalog shows ~9–10 products.
+      if (Responsive.isLandscape(context)) {
+        _isExpanded = false;
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -227,7 +240,7 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
         // Promo cards
         if (_isExpanded)
           SizedBox(
-            height: 168,
+            height: Responsive.isLandscape(context) ? 110 : 168,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),

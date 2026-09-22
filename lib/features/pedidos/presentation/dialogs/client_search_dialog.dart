@@ -256,11 +256,39 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
 
     return Stack(
       children: [
-        ListView.builder(
-          controller: widget.scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          itemCount: _clients.length,
-          itemBuilder: (ctx, i) => _buildClientTile(_clients[i]),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final cols = Responsive.denseListCrossAxisCount(context);
+            final compact = Responsive.useCompactTiles(context);
+            final gap = Responsive.denseListSpacing(context);
+
+            if (cols <= 1) {
+              return ListView.builder(
+                controller: widget.scrollController,
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 8 : 12,
+                  vertical: 4,
+                ),
+                itemCount: _clients.length,
+                itemBuilder: (ctx, i) =>
+                    _buildClientTile(_clients[i], compact: compact),
+              );
+            }
+
+            return GridView.builder(
+              controller: widget.scrollController,
+              padding: EdgeInsets.symmetric(horizontal: gap, vertical: 4),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: cols,
+                mainAxisExtent: 64,
+                mainAxisSpacing: gap,
+                crossAxisSpacing: gap,
+              ),
+              itemCount: _clients.length,
+              itemBuilder: (ctx, i) =>
+                  _buildClientTile(_clients[i], compact: true),
+            );
+          },
         ),
         if (_isLoading)
           const Positioned(
@@ -276,7 +304,10 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
     );
   }
 
-  Widget _buildClientTile(Map<String, dynamic> client) {
+  Widget _buildClientTile(
+    Map<String, dynamic> client, {
+    bool compact = false,
+  }) {
     final code =
         (client['CODIGOCLIENTE'] ?? client['code'] ?? '').toString().trim();
     final name =
@@ -284,71 +315,65 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
     final city = (client['CIUDAD'] ?? client['city'] ?? '').toString().trim();
     final nif = (client['NIF'] ?? client['nif'] ?? '').toString().trim();
 
-    return Card(
-      color: AppTheme.raisedSurface,
-      margin: const EdgeInsets.only(bottom: 4),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: AppTheme.borderColor, width: 0.5),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () {
-          Navigator.pop(context, {'code': code, 'name': name});
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppTheme.info.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.storefront_outlined,
-                    color: AppTheme.info,
-                    size: 18,
+    return Semantics(
+      button: true,
+      label: 'Seleccionar cliente $name',
+      child: Card(
+        color: AppTheme.raisedSurface,
+        margin: EdgeInsets.only(bottom: compact ? 0 : 4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: AppTheme.borderColor, width: 0.5),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            Navigator.pop(context, {'code': code, 'name': name});
+          },
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 8 : 12,
+              vertical: compact ? 6 : 10,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: compact ? 28 : 36,
+                  height: compact ? 28 : 36,
+                  decoration: BoxDecoration(
+                    color: AppTheme.info.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.storefront_outlined,
+                      color: AppTheme.info,
+                      size: compact ? 14 : 18,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: TextStyle(
-                        color: AppColors.themedWhite,
-                        fontWeight: FontWeight.w600,
-                        fontSize:
-                            Responsive.fontSize(context, small: 13, large: 15),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Text(
-                          code,
-                          style: TextStyle(
-                            color: AppTheme.info,
-                            fontSize: Responsive.fontSize(
-                              context,
-                              small: 11,
-                              large: 12,
-                            ),
-                          ),
+                SizedBox(width: compact ? 8 : 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: TextStyle(
+                          color: AppColors.themedWhite,
+                          fontWeight: FontWeight.w600,
+                          fontSize: Responsive.fontSize(context,
+                              small: 13, large: 15),
                         ),
-                        if (city.isNotEmpty) ...[
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
                           Text(
-                            ' · ',
+                            code,
                             style: TextStyle(
-                              color: AppColors.themedWhite38,
+                              color: AppTheme.info,
                               fontSize: Responsive.fontSize(
                                 context,
                                 small: 11,
@@ -356,9 +381,47 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                               ),
                             ),
                           ),
-                          Flexible(
-                            child: Text(
-                              city,
+                          if (city.isNotEmpty) ...[
+                            Text(
+                              ' · ',
+                              style: TextStyle(
+                                color: AppColors.themedWhite38,
+                                fontSize: Responsive.fontSize(
+                                  context,
+                                  small: 11,
+                                  large: 12,
+                                ),
+                              ),
+                            ),
+                            Flexible(
+                              child: Text(
+                                city,
+                                style: TextStyle(
+                                  color: AppColors.themedWhite54,
+                                  fontSize: Responsive.fontSize(
+                                    context,
+                                    small: 11,
+                                    large: 12,
+                                  ),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                          if (nif.isNotEmpty) ...[
+                            Text(
+                              ' · ',
+                              style: TextStyle(
+                                color: AppColors.themedWhite38,
+                                fontSize: Responsive.fontSize(
+                                  context,
+                                  small: 11,
+                                  large: 12,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              nif,
                               style: TextStyle(
                                 color: AppColors.themedWhite54,
                                 fontSize: Responsive.fontSize(
@@ -367,44 +430,19 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                                   large: 12,
                                 ),
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
+                          ],
                         ],
-                        if (nif.isNotEmpty) ...[
-                          Text(
-                            ' · ',
-                            style: TextStyle(
-                              color: AppColors.themedWhite38,
-                              fontSize: Responsive.fontSize(
-                                context,
-                                small: 11,
-                                large: 12,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            nif,
-                            style: TextStyle(
-                              color: AppColors.themedWhite54,
-                              fontSize: Responsive.fontSize(
-                                context,
-                                small: 11,
-                                large: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (clientDebtIsVisible(client))
-                      ClientDebtStatusChip(balance: client),
-                  ],
+                      ),
+                      if (clientDebtIsVisible(client))
+                        ClientDebtStatusChip(balance: client),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right,
-                  color: AppColors.themedWhite24, size: 18),
-            ],
+                Icon(Icons.chevron_right,
+                    color: AppColors.themedWhite24, size: 18),
+              ],
+            ),
           ),
         ),
       ),

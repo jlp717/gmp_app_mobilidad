@@ -731,21 +731,55 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage>
         query: _searchQuery,
         forceRefresh: true,
       ),
-      child: ListView.builder(
-        padding: EdgeInsets.symmetric(
-          horizontal: Responsive.padding(context, small: 12, large: 16),
-        ),
-        itemCount: _clients.length,
-        itemBuilder: (context, index) {
-          final client = _clients[index];
-          final code = client['code']?.toString() ?? '';
-          return _ClientCard(
-            client: client,
-            isJefeVentas: widget.isJefeVentas,
-            hasPrefetchedAlerts:
-                _alertsPrefetchLoaded && _clientsWithAlertsCodes.contains(code),
-            onTap: () => _navigateToClientMatrix(client),
-            onWhatsAppTap: () => _openWhatsApp(client),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final cols = Responsive.denseListCrossAxisCount(context);
+          final gap = Responsive.denseListSpacing(context);
+          final padH = Responsive.padding(context, small: 12, large: 16);
+          final compact = Responsive.useCompactTiles(context);
+
+          if (cols <= 1) {
+            return ListView.builder(
+              padding: EdgeInsets.symmetric(horizontal: padH),
+              itemCount: _clients.length,
+              itemBuilder: (context, index) {
+                final client = _clients[index];
+                final code = client['code']?.toString() ?? '';
+                return _ClientCard(
+                  client: client,
+                  isJefeVentas: widget.isJefeVentas,
+                  compact: compact,
+                  hasPrefetchedAlerts: _alertsPrefetchLoaded &&
+                      _clientsWithAlertsCodes.contains(code),
+                  onTap: () => _navigateToClientMatrix(client),
+                  onWhatsAppTap: () => _openWhatsApp(client),
+                );
+              },
+            );
+          }
+
+          return GridView.builder(
+            padding: EdgeInsets.symmetric(horizontal: padH, vertical: 4),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cols,
+              mainAxisExtent: compact ? 118 : 148,
+              mainAxisSpacing: gap,
+              crossAxisSpacing: gap,
+            ),
+            itemCount: _clients.length,
+            itemBuilder: (context, index) {
+              final client = _clients[index];
+              final code = client['code']?.toString() ?? '';
+              return _ClientCard(
+                client: client,
+                isJefeVentas: widget.isJefeVentas,
+                compact: true,
+                hasPrefetchedAlerts: _alertsPrefetchLoaded &&
+                    _clientsWithAlertsCodes.contains(code),
+                onTap: () => _navigateToClientMatrix(client),
+                onWhatsAppTap: () => _openWhatsApp(client),
+              );
+            },
           );
         },
       ),
@@ -973,12 +1007,14 @@ class _ClientCard extends StatelessWidget {
     required this.client,
     this.isJefeVentas = false,
     this.hasPrefetchedAlerts = false,
+    this.compact = false,
     this.onTap,
     this.onWhatsAppTap,
   });
   final Map<String, dynamic> client;
   final bool isJefeVentas;
   final bool hasPrefetchedAlerts;
+  final bool compact;
   final VoidCallback? onTap;
   final VoidCallback? onWhatsAppTap;
 
@@ -988,154 +1024,124 @@ class _ClientCard extends StatelessWidget {
     final code = (client['code'] as String?) ?? '';
     final city = (client['city'] as String?) ?? '';
     final phone = (client['phone'] as String?) ?? '';
-    final route = (client['route'] as String?) ?? '';
     final totalPurchases = (client['totalPurchases'] as num?)?.toDouble() ?? 0;
     final numOrders = (client['numOrders'] as int?) ?? 0;
     final lastPurchase = (client['lastPurchase'] as String?) ?? '';
 
-    final avatarRadius = Responsive.value(context, phone: 20, desktop: 28);
-    final avatarFontSize = Responsive.fontSize(context, small: 15, large: 20);
-    final cardPadding = Responsive.padding(context, small: 12, large: 16);
+    final avatarRadius = Responsive.value(
+      context,
+      phone: compact ? 16 : 20,
+      desktop: compact ? 20 : 28,
+    );
+    final avatarFontSize = Responsive.fontSize(
+      context,
+      small: compact ? 13 : 15,
+      large: compact ? 16 : 20,
+    );
+    final cardPadding = Responsive.padding(
+      context,
+      small: compact ? 8 : 12,
+      large: compact ? 10 : 16,
+    );
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      color: AppTheme.surfaceCommand,
-      elevation: 4,
-      shadowColor: AppTheme.success.withValues(alpha: 0.12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        side: BorderSide(
-          color: (hasPrefetchedAlerts ? AppTheme.warning : AppTheme.success)
-              .withValues(alpha: hasPrefetchedAlerts ? 0.42 : 0.20),
+    return Semantics(
+      button: true,
+      label: 'Cliente $name, código $code',
+      child: Card(
+        margin: EdgeInsets.only(bottom: compact ? 0 : 12),
+        color: AppTheme.surfaceCommand,
+        elevation: compact ? 2 : 4,
+        shadowColor: AppTheme.success.withValues(alpha: 0.12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: BorderSide(
+            color: (hasPrefetchedAlerts ? AppTheme.warning : AppTheme.success)
+                .withValues(alpha: hasPrefetchedAlerts ? 0.42 : 0.20),
+          ),
         ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        child: Padding(
-          padding: EdgeInsets.all(cardPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Avatar
-                  Container(
-                    width: avatarRadius * 2,
-                    height: avatarRadius * 2,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppTheme.success.withValues(alpha: 0.24),
-                          AppTheme.surfaceCommand,
-                          AppTheme.success.withValues(alpha: 0.08),
-                        ],
-                      ),
-                      border: Border.all(
-                        color: AppTheme.success.withValues(alpha: 0.42),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.success.withValues(alpha: 0.10),
-                          blurRadius: 16,
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: avatarFontSize,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-
-                  // Info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.location_on,
-                              size: 14,
-                              color: AppTheme.textSecondary,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                city.isNotEmpty ? city : 'Sin ciudad',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          child: Padding(
+            padding: EdgeInsets.all(cardPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Avatar
+                    Container(
+                      width: avatarRadius * 2,
+                      height: avatarRadius * 2,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppTheme.success.withValues(alpha: 0.24),
+                            AppTheme.surfaceCommand,
+                            AppTheme.success.withValues(alpha: 0.08),
                           ],
                         ),
-                        if (phone.isNotEmpty) ...[
-                          const SizedBox(height: 2),
+                        border: Border.all(
+                          color: AppTheme.success.withValues(alpha: 0.42),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.success.withValues(alpha: 0.10),
+                            blurRadius: 16,
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : 'C',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: avatarFontSize,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: compact ? 10 : 16),
+
+                    // Info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: compact ? 14 : null,
+                                ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          SizedBox(height: compact ? 2 : 4),
                           Row(
                             children: [
                               Icon(
-                                Icons.phone,
-                                size: 14,
+                                Icons.location_on,
+                                size: compact ? 12 : 14,
                                 color: AppTheme.textSecondary,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                phone,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: AppTheme.textSecondary,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        if (isJefeVentas && client['vendorName'] != null) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.person_outline,
-                                size: 14,
-                                color: AppTheme.accentIndigo,
                               ),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  'Rep: ${client['vendorName']}',
+                                  city.isNotEmpty ? city : 'Sin ciudad',
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodySmall
                                       ?.copyWith(
-                                        color: AppTheme.accentIndigo,
-                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.textSecondary,
+                                        fontSize: compact ? 11 : null,
                                       ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -1143,95 +1149,145 @@ class _ClientCard extends StatelessWidget {
                               ),
                             ],
                           ),
-                        ],
-                        if (clientDebtIsVisible(client))
-                          ClientDebtStatusChip(balance: client),
-                      ],
-                    ),
-                  ),
-
-                  // Stats
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        CurrencyFormatter.formatWhole(totalPurchases),
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.success,
-                                ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$numOrders pedidos',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: AppTheme.textSecondary,
-                            ),
-                      ),
-                      if (lastPurchase.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.softPanel,
-                            borderRadius: BorderRadius.circular(
-                              AppTheme.radiusFull,
-                            ),
-                            border: Border.all(
-                              color:
-                                  AppTheme.borderColor.withValues(alpha: 0.9),
-                            ),
-                          ),
-                          child: Text(
-                            'Último pedido: $lastPurchase',
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(
+                          if (!compact && phone.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.phone,
+                                  size: 14,
                                   color: AppTheme.textSecondary,
-                                  fontWeight: FontWeight.w500,
                                 ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-
-                  // WhatsApp button
-                  if (phone.isNotEmpty && onWhatsAppTap != null) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: onWhatsAppTap,
-                      icon: const Icon(
-                        Icons.chat,
-                        color: AppColors.whatsappGreen,
-                        size: 24,
+                                const SizedBox(width: 4),
+                                Text(
+                                  phone,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: AppTheme.textSecondary,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (isJefeVentas && client['vendorName'] != null) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.person_outline,
+                                  size: 14,
+                                  color: AppTheme.accentIndigo,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    'Rep: ${client['vendorName']}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: AppTheme.accentIndigo,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (clientDebtIsVisible(client))
+                            ClientDebtStatusChip(balance: client),
+                        ],
                       ),
-                      tooltip: 'WhatsApp',
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 40, minHeight: 40),
                     ),
-                  ],
-                ],
-              ),
 
-              // KPI alert badges
-              if (code.isNotEmpty)
-                ClientAlertsWidget(
-                  clientId: code,
-                  compact: true,
-                  fetchWhenCompact: false,
-                  hasPrefetchedAlerts: hasPrefetchedAlerts,
+                    // Stats
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          CurrencyFormatter.formatWhole(totalPurchases),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.success,
+                                  ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$numOrders pedidos',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                        ),
+                        if (!compact && lastPurchase.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.softPanel,
+                              borderRadius: BorderRadius.circular(
+                                AppTheme.radiusFull,
+                              ),
+                              border: Border.all(
+                                color:
+                                    AppTheme.borderColor.withValues(alpha: 0.9),
+                              ),
+                            ),
+                            child: Text(
+                              'Último pedido: $lastPurchase',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+
+                    // WhatsApp button
+                    if (phone.isNotEmpty && onWhatsAppTap != null) ...[
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: onWhatsAppTap,
+                        icon: Icon(
+                          Icons.chat,
+                          color: AppColors.whatsappGreen,
+                          size: compact ? 20 : 24,
+                        ),
+                        tooltip: 'WhatsApp',
+                        padding: EdgeInsets.zero,
+                        constraints:
+                            const BoxConstraints(minWidth: 40, minHeight: 40),
+                      ),
+                    ],
+                  ],
                 ),
 
-              // Route & Days Badges
-              _buildRouteDaysRow(),
-            ],
+                // KPI alert badges
+                if (!compact && code.isNotEmpty)
+                  ClientAlertsWidget(
+                    clientId: code,
+                    compact: true,
+                    fetchWhenCompact: false,
+                    hasPrefetchedAlerts: hasPrefetchedAlerts,
+                  ),
+
+                // Route & Days Badges
+                if (!compact) _buildRouteDaysRow(),
+              ],
+            ),
           ),
         ),
       ),

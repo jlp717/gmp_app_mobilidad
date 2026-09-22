@@ -135,21 +135,65 @@ class Responsive {
     return 90;
   }
 
-  /// Columns for product catalog grids. Landscape / wide: more cards visible.
-  static int catalogCrossAxisCount(BuildContext ctx) {
-    final width = MediaQuery.sizeOf(ctx).width;
-    if (width >= 1400) return 4;
-    if (width >= 1100) return 3;
-    if (width >= 750 || isLandscape(ctx)) return 2;
+  /// Columns for product catalog grids from available panel width.
+  /// Landscape targets ~9–10 visible tiles (3–4 cols × 2–3 rows).
+  static int catalogCrossAxisCountForWidth(
+    double width, {
+    required bool landscape,
+  }) {
+    if (landscape) {
+      if (width >= 1100) return 4;
+      if (width >= 720) return 3;
+      if (width >= 420) return 2;
+      return 2;
+    }
+    if (width >= 1200) return 3;
+    if (width >= 700) return 2;
     return 1;
   }
 
-  /// Approximate card height for catalog grid tiles.
-  static double catalogTileAspectRatio(BuildContext ctx) {
-    if (isLandscapeCompact(ctx)) return 2.8;
-    if (isLandscape(ctx)) return 2.4;
-    return catalogCrossAxisCount(ctx) > 1 ? 2.1 : 3.2;
+  /// Columns for product catalog grids (full screen width).
+  static int catalogCrossAxisCount(BuildContext ctx) {
+    return catalogCrossAxisCountForWidth(
+      MediaQuery.sizeOf(ctx).width,
+      landscape: isLandscape(ctx),
+    );
   }
+
+  /// Fixed tile height for dense catalog grids (prefer over aspect ratio).
+  /// Keeps cards short so landscape shows many products without flex-bloat.
+  static double catalogTileExtent(BuildContext ctx) {
+    if (isLandscapeCompact(ctx)) return 70;
+    if (isLandscape(ctx)) return 82;
+    return 96;
+  }
+
+  /// Legacy aspect-ratio helper (prefer [catalogTileExtent] for grids).
+  static double catalogTileAspectRatio(BuildContext ctx) {
+    if (isLandscapeCompact(ctx)) return 3.6;
+    if (isLandscape(ctx)) return 3.2;
+    return catalogCrossAxisCount(ctx) > 1 ? 2.6 : 3.2;
+  }
+
+  /// Multi-column dense lists (clientes, cobros, mis pedidos) in landscape.
+  static int denseListCrossAxisCount(BuildContext ctx) {
+    final w = MediaQuery.sizeOf(ctx).width;
+    if (!isLandscape(ctx)) return 1;
+    if (w >= 1100) return 3;
+    if (w >= 700) return 2;
+    return 1;
+  }
+
+  /// Tighter spacing for dense commercial lists in landscape.
+  static double denseListSpacing(BuildContext ctx) {
+    if (isLandscapeCompact(ctx)) return 4;
+    if (isLandscape(ctx)) return 6;
+    return 10;
+  }
+
+  /// Whether list/grid tiles should use compact chrome (landscape / short height).
+  static bool useCompactTiles(BuildContext ctx) =>
+      isLandscape(ctx) || isLandscapeCompact(ctx);
 
   // ---------------------------------------------------------------------------
   // Font size helpers
