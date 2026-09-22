@@ -1958,7 +1958,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                         left: 28,
                                       ),
                                       child: Text(
-                                        '${(prod['precio'] as num).toDouble().toStringAsFixed(2)} €/caja',
+                                        '${(prod['precio'] as num).toDouble().toStringAsFixed(2)} €/cj',
                                         style: TextStyle(
                                           color: AppTheme.textTertiary,
                                           fontSize: 11,

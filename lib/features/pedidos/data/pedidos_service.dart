@@ -561,7 +561,7 @@ class Product {
         return 'uds';
       case 'PIEZAS':
       case 'PIEZA':
-        return 'uds';
+        return 'pzs';
       case 'KILOGRAMOS':
       case 'KILO':
       case 'KG':

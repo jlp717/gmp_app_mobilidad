@@ -421,7 +421,7 @@ describe("bolsa ledger movement contracts", () => {
   test("movement writes preserve immutable ledger payload fields", async () => {
     q.mockResolvedValueOnce([{ ID: 1, CODIGOVENDEDOR: "10  ", EJERCICIO: 2026, MES: 6, LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
     await svc.acumularBolsa("10", 42, 6, { timestamp: "2026-06-09T23:36:39.000Z", lineId: 7, codigoArticulo: "ART-OVER", precioMinimoCongelado: 10, precioVenta: 12, cantidad: 3, unidadMedida: "CAJAS", idempotencyKey: "pedido-42-line-7-over-min" });
-    const movementInsert = q.mock.calls.find(([sql]) => /INSERT\s+INTO\s+JAVIER\.MOVIMIENTOS_BOLSA/i.test(sql));
+    const movementInsert = q.mock.calls.find(([sql]) => /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql));
     expect(movementInsert).toBeDefined();
     expect(movementInsert[0]).toEqual(expect.stringContaining("CREATED_AT"));
     expect(movementInsert[0]).toEqual(expect.stringContaining("LINEA_ID"));
@@ -488,7 +488,7 @@ describe("pedidos confirmation bolsa contract", () => {
       if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_STOCK_RESERVE/i.test(sql)) return [];
       if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMADO")) return [];
       if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return [{ ...header, ESTADO: "CONFIRMADO" }];
-      if (/FROM\s+JAVIER\.MOVIMIENTOS_BOLSA/i.test(sql)) {
+      if (/FROM\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql)) {
         movementReads += 1;
         return movementReads === 1 ? [] : [{
           ID: 99,
@@ -551,7 +551,7 @@ describe('bolsa ledger per-line persistence', () => {
       { timestamp: '2026-06-09T23:36:39.000Z', lineId: 8, codigoArticulo: 'ART-UNDER-2', precioMinimoCongelado: 5, precioVenta: 3, cantidad: 1, unidadMedida: 'UNIDADES', importe: 2, idempotencyKey: 'pedido-42-line-8-under-min' },
     ]);
 
-    const movementInserts = q.mock.calls.filter(([sql]) => /INSERT\s+INTO\s+JAVIER\.MOVIMIENTOS_BOLSA/i.test(sql));
+    const movementInserts = q.mock.calls.filter(([sql]) => /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql));
     expect(movementInserts).toHaveLength(1);
     const [sql, params] = movementInserts[0];
     expect((sql.match(/\(\?, \?, \?, \?, \?, \?,/g) || []).length).toBe(2);
@@ -567,13 +567,13 @@ describe('bolsa ledger per-line persistence', () => {
     db.getPool.mockReturnValue({ connect: jest.fn().mockResolvedValue(conn) });
     conn.query.mockImplementation(async (sql) => {
       if (/SET TRANSACTION ISOLATION LEVEL READ COMMITTED/i.test(sql)) return [];
-      if (/^LOCK TABLE JAVIER\.(BOLSA_COMERCIAL|MOVIMIENTOS_BOLSA) IN EXCLUSIVE MODE$/i.test(sql)) return [];
+      if (/^LOCK TABLE JAVIER\.(?:TEST_)?(BOLSA_COMERCIAL|MOVIMIENTOS_BOLSA) IN EXCLUSIVE MODE$/i.test(sql)) return [];
       if (/SELECT\s+ID,\s+CODIGOVENDEDOR/i.test(sql)) {
         return [{ ID: 1, CODIGOVENDEDOR: '10  ', EJERCICIO: 2026, MES: 6, LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
       }
-      if (/SELECT\s+IDEMPOTENCY_KEY\s+FROM\s+JAVIER\.MOVIMIENTOS_BOLSA/i.test(sql)) return [];
-      if (/UPDATE\s+JAVIER\.BOLSA_COMERCIAL/i.test(sql)) return [];
-      if (/INSERT\s+INTO\s+JAVIER\.MOVIMIENTOS_BOLSA/i.test(sql)) throw new Error('ledger insert failed');
+      if (/SELECT\s+IDEMPOTENCY_KEY\s+FROM\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql)) return [];
+      if (/UPDATE\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) return [];
+      if (/INSERT\s+INTO\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql)) throw new Error('ledger insert failed');
       if (/^ROLLBACK$/i.test(sql)) return [];
       return [];
     });
@@ -585,9 +585,9 @@ describe('bolsa ledger per-line persistence', () => {
 
     const sqls = conn.query.mock.calls.map(([sql]) => sql).join('\n');
     expect(sqls).toMatch(/SET TRANSACTION ISOLATION LEVEL READ COMMITTED/);
-    expect(sqls).toMatch(/LOCK TABLE JAVIER\.BOLSA_COMERCIAL IN EXCLUSIVE MODE/);
-    expect(sqls).toMatch(/UPDATE\s+JAVIER\.BOLSA_COMERCIAL/);
-    expect(sqls).toMatch(/INSERT\s+INTO\s+JAVIER\.MOVIMIENTOS_BOLSA/);
+    expect(sqls).toMatch(/LOCK TABLE JAVIER\.(?:TEST_)?BOLSA_COMERCIAL IN EXCLUSIVE MODE/);
+    expect(sqls).toMatch(/UPDATE\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/);
+    expect(sqls).toMatch(/INSERT\s+INTO\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/);
     expect(sqls).toMatch(/ROLLBACK/);
     expect(sqls).not.toMatch(/^COMMIT$/m);
     expect(conn.close).toHaveBeenCalled();
@@ -603,9 +603,9 @@ describe('bolsa idempotency and DSEDAC safety', () => {
     const result = await svc.consumirBolsa('10', 42, 6, [{ timestamp: '2026-06-09T23:36:39.000Z', lineId: 7, codigoArticulo: 'ART-UNDER-1', precioMinimoCongelado: 10, precioVenta: 7, cantidad: 2, unidadMedida: 'CAJAS', importe: 6 }]);
     expect(result).toMatchObject({ allowed: true, saldo: 300, duplicate: true });
     const sqls = q.mock.calls.map(([sql]) => sql).join('\n');
-    expect(sqls).toMatch(/SELECT\s+IDEMPOTENCY_KEY\s+FROM\s+JAVIER\.MOVIMIENTOS_BOLSA/i);
-    expect(q.mock.calls.some(([sql]) => /UPDATE\s+JAVIER\.BOLSA_COMERCIAL/i.test(sql))).toBe(false);
-    expect(q.mock.calls.some(([sql]) => /INSERT\s+INTO\s+JAVIER\.MOVIMIENTOS_BOLSA/i.test(sql))).toBe(false);
+    expect(sqls).toMatch(/SELECT\s+IDEMPOTENCY_KEY\s+FROM\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i);
+    expect(q.mock.calls.some(([sql]) => /UPDATE\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql))).toBe(false);
+    expect(q.mock.calls.some(([sql]) => /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql))).toBe(false);
   });
   test('bolsa service never writes to DSEDAC tables', () => {
     const fs = require('fs');

@@ -259,6 +259,13 @@ void main() {
       expect(removed.consumo, 0);
     });
 
+    test('Product.unitLabel distinguishes PIEZAS from UNIDADES', () {
+      expect(Product.unitLabel('UNIDADES'), 'uds');
+      expect(Product.unitLabel('PIEZAS'), 'pzs');
+      expect(Product.unitLabel('KILOGRAMOS'), 'kg');
+      expect(Product.unitLabel('CAJAS'), 'cajas');
+    });
+
     test('keeps gift lines at zero sale and negative cost margin', () {
       final line = OrderLine(
         codigoArticulo: 'P004',
