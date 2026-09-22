@@ -460,10 +460,11 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
 
         return Padding(
           padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            left: Responsive.useCompactTiles(ctx) ? 10 : 16,
+            right: Responsive.useCompactTiles(ctx) ? 10 : 16,
+            top: Responsive.useCompactTiles(ctx) ? 10 : 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom +
+                (Responsive.useCompactTiles(ctx) ? 10 : 16),
           ),
           child: SingleChildScrollView(
             child: Column(
@@ -474,7 +475,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   child: Container(
                     width: 40,
                     height: 4,
-                    margin: const EdgeInsets.only(bottom: 12),
+                    margin: EdgeInsets.only(
+                      bottom: Responsive.useCompactTiles(ctx) ? 8 : 12,
+                    ),
                     decoration: BoxDecoration(
                       color: AppTheme.textTertiary,
                       borderRadius: BorderRadius.circular(2),

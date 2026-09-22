@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/promotion_detail_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
@@ -91,11 +92,35 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
           Expanded(
             child: filtered.isEmpty
                 ? _buildEmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      return _buildPromoCard(filtered[index]);
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final cols = Responsive.denseListCrossAxisCount(context);
+                      final gap = Responsive.denseListSpacing(context);
+                      final compact = Responsive.useCompactTiles(context);
+
+                      if (cols <= 1) {
+                        return ListView.builder(
+                          padding: EdgeInsets.all(compact ? 8 : 12),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            return _buildPromoCard(filtered[index]);
+                          },
+                        );
+                      }
+
+                      return GridView.builder(
+                        padding: EdgeInsets.all(gap + 2),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: cols,
+                          mainAxisExtent: compact ? 112 : 136,
+                          mainAxisSpacing: gap,
+                          crossAxisSpacing: gap,
+                        ),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          return _buildPromoCard(filtered[index]);
+                        },
+                      );
                     },
                   ),
           ),

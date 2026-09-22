@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 
 class ClientEvolutionTab extends StatefulWidget {
@@ -132,8 +133,11 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
       );
     }
 
+    final compact = Responsive.useCompactTiles(context);
+    final pad = compact ? 10.0 : 16.0;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(pad),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -144,29 +148,29 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
                 .titleMedium
                 ?.copyWith(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: compact ? 10 : 16),
           if (_monthlySales.isNotEmpty)
             Container(
-              height: 250,
-              padding: const EdgeInsets.all(16),
+              height: compact ? 180 : 250,
+              padding: EdgeInsets.all(compact ? 10 : 16),
               decoration: AppTheme.glassMorphism(),
               child: _buildEvolutionChart(),
             )
           else
             const Center(child: Text('No hay datos de evolución mensual')),
-          const SizedBox(height: 24),
+          SizedBox(height: compact ? 16 : 24),
           Text(
-            'Productos M¡s Comprados',
+            'Productos Más Comprados',
             style: Theme.of(context)
                 .textTheme
                 .titleMedium
                 ?.copyWith(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: compact ? 10 : 16),
           if (_topProducts.isNotEmpty)
             _buildTopProductsList()
           else
-            const SizedBox(height: 24),
+            SizedBox(height: compact ? 16 : 24),
           Text(
             'Historial de Devoluciones',
             style: Theme.of(context)
@@ -174,7 +178,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
                 .titleMedium
                 ?.copyWith(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: compact ? 10 : 16),
           if (_returns.isNotEmpty)
             _buildReturnsList()
           else
@@ -250,50 +254,78 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
   }
 
   Widget _buildTopProductsList() {
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _topProducts.length > 10 ? 10 : _topProducts.length,
-      itemBuilder: (context, index) {
-        final product = _topProducts[index];
-        final name = '${product['name'] ?? 'Producto'}';
-        final code = product['code'] ?? '';
-        final sales = (product['totalSales'] as num?)?.toDouble() ?? 0;
-        final units = (product['totalUnits'] as num?)?.toInt() ?? 0;
+    final count = _topProducts.length > 10 ? 10 : _topProducts.length;
+    final cols = Responsive.denseListCrossAxisCount(context);
+    final gap = Responsive.denseListSpacing(context);
+    final compact = Responsive.useCompactTiles(context);
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          color: AppTheme.raisedSurface,
-          child: ListTile(
-            dense: true,
-            leading: CircleAvatar(
-              backgroundColor: AppTheme.info.withValues(alpha: 0.2),
-              child: Text(
-                '${index + 1}',
-                style: const TextStyle(color: AppTheme.info, fontSize: 12),
-              ),
-            ),
-            title: Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13),
-            ),
-            subtitle: Text(
-              'Cód: $code · $units uds',
-              style: const TextStyle(fontSize: 11),
-            ),
-            trailing: Text(
-              CurrencyFormatter.formatWhole(sales),
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppTheme.success,
-                fontSize: 13,
+    Widget tile(int index) {
+      final product = _topProducts[index];
+      final name = '${product['name'] ?? 'Producto'}';
+      final code = product['code'] ?? '';
+      final sales = (product['totalSales'] as num?)?.toDouble() ?? 0;
+      final units = (product['totalUnits'] as num?)?.toInt() ?? 0;
+
+      return Card(
+        margin: EdgeInsets.only(bottom: cols > 1 ? 0 : 8),
+        color: AppTheme.raisedSurface,
+        child: ListTile(
+          dense: compact,
+          visualDensity:
+              compact ? VisualDensity.compact : VisualDensity.standard,
+          leading: CircleAvatar(
+            radius: compact ? 14 : 20,
+            backgroundColor: AppTheme.info.withValues(alpha: 0.2),
+            child: Text(
+              '${index + 1}',
+              style: TextStyle(
+                color: AppTheme.info,
+                fontSize: compact ? 10 : 12,
               ),
             ),
           ),
-        );
-      },
+          title: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: compact ? 12 : 13),
+          ),
+          subtitle: Text(
+            'Cód: $code · $units uds',
+            style: TextStyle(fontSize: compact ? 10 : 11),
+          ),
+          trailing: Text(
+            CurrencyFormatter.formatWhole(sales),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppTheme.success,
+              fontSize: compact ? 12 : 13,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (cols <= 1) {
+      return ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: count,
+        itemBuilder: (context, index) => tile(index),
+      );
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
+        mainAxisExtent: compact ? 64 : 76,
+        mainAxisSpacing: gap,
+        crossAxisSpacing: gap,
+      ),
+      itemCount: count,
+      itemBuilder: (context, index) => tile(index),
     );
   }
 

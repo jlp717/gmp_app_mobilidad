@@ -170,9 +170,12 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
     return Dialog(
       backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: Responsive.useCompactTiles(context) ? 16 : 24,
+        vertical: Responsive.useCompactTiles(context) ? 16 : 40,
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(Responsive.useCompactTiles(context) ? 12 : 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +212,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: Responsive.useCompactTiles(context) ? 8 : 14),
 
             if (!hasTariffs) ...[
               Container(

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
@@ -91,12 +92,15 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     final margin = provider.porcentajeMargen;
     final total = provider.totalConIva;
 
+    final compact = Responsive.useCompactTiles(context);
+    final gap = compact ? 10.0 : 16.0;
+
     // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si lines crece mucho.
     final rows = <Widget>[
       _buildClientCard(provider),
-      const SizedBox(height: 16),
+      SizedBox(height: gap),
       _buildDeliveryCard(),
-      const SizedBox(height: 16),
+      SizedBox(height: gap),
       _buildSectionLabel('PRODUCTOS (${lines.length})'),
       const SizedBox(height: 8),
       ...lines.asMap().entries.map(
@@ -107,21 +111,25 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               provider,
             ),
           ),
-      const SizedBox(height: 16),
+      SizedBox(height: gap),
       _buildTotalsCard(provider, hasDiscount, total, margin),
-      const SizedBox(height: 16),
+      SizedBox(height: gap),
       if (provider.ivaBreakdown.isNotEmpty) _buildIvaBreakdown(provider),
-      const SizedBox(height: 24),
+      SizedBox(height: compact ? 12 : 24),
     ];
 
     return Dialog(
       backgroundColor: AppTheme.inkSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: compact ? 12 : 16,
+        vertical: compact ? 12 : 24,
+      ),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.88,
-          maxWidth: 520,
+          maxHeight: MediaQuery.of(context).size.height *
+              (Responsive.isLandscape(context) ? 0.95 : 0.88),
+          maxWidth: Responsive.isLandscape(context) ? 720 : 520,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -132,7 +140,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             // ── Scrollable Content ──
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 20),
                 itemCount: rows.length,
                 itemBuilder: (_, index) => rows[index],
               ),

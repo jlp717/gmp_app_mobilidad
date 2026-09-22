@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
@@ -220,15 +221,13 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
         const SizedBox(height: 20),
       ],
 
-      // Clients with alerts
+      // Clients with alerts — dense multi-col in landscape
       if (clients.isNotEmpty) ...[
         _buildSectionTitle(
           'Clientes con alertas (${clients.length})',
         ),
         const SizedBox(height: 8),
-        ...clients.map(
-          (c) => _buildClientTile(c as Map<String, dynamic>),
-        ),
+        _buildClientsGrid(clients),
       ],
 
       // Empty state
@@ -243,10 +242,44 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
     return RefreshIndicator(
       onRefresh: _loadDashboard,
       child: ListView.builder(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(
+          Responsive.useCompactTiles(context) ? 10 : 16,
+        ),
         itemCount: children.length,
         itemBuilder: (_, index) => children[index],
       ),
+    );
+  }
+
+  Widget _buildClientsGrid(List<dynamic> clients) {
+    final cols = Responsive.denseListCrossAxisCount(context);
+    final gap = Responsive.denseListSpacing(context);
+    if (cols <= 1) {
+      return Column(
+        children: clients
+            .map((c) => _buildClientTile(c as Map<String, dynamic>))
+            .toList(growable: false),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - (gap * (cols - 1))) / cols;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: clients
+              .map(
+                (c) => SizedBox(
+                  width: width,
+                  child: _buildClientTile(
+                    c as Map<String, dynamic>,
+                    compact: true,
+                  ),
+                ),
+              )
+              .toList(growable: false),
+        );
+      },
     );
   }
 
@@ -444,7 +477,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
 
   // ─── CLIENT TILES (expandable) ──────────────────────────────
 
-  Widget _buildClientTile(Map<String, dynamic> client) {
+  Widget _buildClientTile(Map<String, dynamic> client, {bool compact = false}) {
     final code = client['code']?.toString() ?? '';
     final name = client['name']?.toString() ?? '';
     final address = client['address']?.toString() ?? '';
@@ -466,7 +499,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
             : AppTheme.textSecondary.withValues(alpha: 0.1);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: EdgeInsets.only(bottom: compact ? 0 : 8),
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface,
         borderRadius: BorderRadius.circular(10),

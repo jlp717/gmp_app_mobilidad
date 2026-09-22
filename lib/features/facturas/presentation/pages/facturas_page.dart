@@ -327,15 +327,20 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   // ... (existing code)
 
-  Widget _buildFacturaCard(Factura factura) {
+  Widget _buildFacturaCard(Factura factura, {bool compact = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final documentColor = factura.isAlbaran ? AppTheme.warning : AppTheme.info;
     final documentIcon =
         factura.isAlbaran ? Icons.article_outlined : Icons.receipt_long_rounded;
-    // final isPaid = factura.estado.toLowerCase() == 'cobrada'; // Removed as property doesn't exist
+    final pad = compact ? 10.0 : 16.0;
+    final iconBox = compact ? 36.0 : 48.0;
+    final radius = compact ? 12.0 : 16.0;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: EdgeInsets.symmetric(
+        horizontal: compact ? 0 : 16,
+        vertical: compact ? 0 : 8,
+      ),
       decoration: BoxDecoration(
         gradient: isDark
             ? LinearGradient(
@@ -349,16 +354,17 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               )
             : null,
         color: isDark ? null : _cardFill,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(radius),
         boxShadow: [
           BoxShadow(
-            color: AppColors.systemBlack.withValues(alpha: 0.2),
-            blurRadius: 16,
-            offset: const Offset(0, 7),
+            color:
+                AppColors.systemBlack.withValues(alpha: compact ? 0.12 : 0.2),
+            blurRadius: compact ? 8 : 16,
+            offset: Offset(0, compact ? 3 : 7),
           ),
           BoxShadow(
             color: documentColor.withValues(alpha: 0.06),
-            blurRadius: 18,
+            blurRadius: compact ? 10 : 18,
           ),
         ],
         border: Border.all(
@@ -369,13 +375,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       ),
       child: Stack(
         children: [
-          // Color accent bar on the left
           Positioned(
             left: 0,
-            top: 20,
-            bottom: 20,
+            top: compact ? 12 : 20,
+            bottom: compact ? 12 : 20,
             child: Container(
-              width: 4,
+              width: compact ? 3 : 4,
               decoration: BoxDecoration(
                 color: documentColor,
                 borderRadius: const BorderRadius.only(
@@ -394,22 +399,23 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           Material(
             color: AppColors.transparent,
             child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () {}, // Optional: Show details
+              borderRadius: BorderRadius.circular(radius),
+              onTap: () {},
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(pad),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Icon Box
                         Container(
-                          width: 48, // Slightly larger
-                          height: 48,
+                          width: iconBox,
+                          height: iconBox,
                           decoration: BoxDecoration(
                             color: documentColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius:
+                                BorderRadius.circular(compact ? 8 : 12),
                             border: Border.all(
                               color: documentColor.withValues(alpha: 0.5),
                             ),
@@ -417,14 +423,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                           child: Icon(
                             documentIcon,
                             color: documentColor,
-                            size: 26,
+                            size: compact ? 18 : 26,
                           ),
                         ),
-                        const SizedBox(width: 14),
-
-                        // Info
+                        SizedBox(width: compact ? 8 : 14),
                         Expanded(
-                          flex: 4, // Give more space to Client Name
+                          flex: 4,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -433,15 +437,17 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                     factura.clienteNombre,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w900,
-                                  fontSize:
-                                      Responsive.isSmall(context) ? 16 : 19,
+                                  fontSize: compact
+                                      ? 13
+                                      : (Responsive.isSmall(context) ? 16 : 19),
                                   color: documentColor,
                                   letterSpacing: 0,
                                 ),
-                                maxLines: 2,
+                                maxLines: compact ? 1 : 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              if (factura.nombreFiscal != null &&
+                              if (!compact &&
+                                  factura.nombreFiscal != null &&
                                   factura.nombreFiscal!.isNotEmpty &&
                                   factura.nombreFiscal!.toUpperCase() !=
                                       (factura.nombreComercial ??
@@ -462,20 +468,20 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                              const SizedBox(height: 6),
+                              SizedBox(height: compact ? 4 : 6),
                               Wrap(
                                 crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 8,
-                                runSpacing: 6,
+                                spacing: compact ? 6 : 8,
+                                runSpacing: compact ? 4 : 6,
                                 children: [
                                   _buildDocumentTypeChip(
                                     factura: factura,
                                     color: documentColor,
                                   ),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: compact ? 6 : 10,
+                                      vertical: compact ? 2 : 4,
                                     ),
                                     decoration: BoxDecoration(
                                       color: isDark
@@ -490,15 +496,17 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                       ),
                                     ),
                                     child: Text(
-                                      factura.numeroFormateado, // ALBARAN
+                                      factura.numeroFormateado,
                                       style: TextStyle(
                                         color: isDark
                                             ? AppColors.themedWhite
                                             : AppColors.systemBlack87,
-                                        fontWeight: FontWeight.w900, // Heavy
-                                        fontSize: Responsive.isSmall(context)
-                                            ? 14
-                                            : 16,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: compact
+                                            ? 11
+                                            : (Responsive.isSmall(context)
+                                                ? 14
+                                                : 16),
                                       ),
                                     ),
                                   ),
@@ -508,8 +516,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                       color: isDark
                                           ? AppColors.themedWhite70
                                           : AppColors.systemGrey800,
-                                      fontSize:
-                                          Responsive.isSmall(context) ? 12 : 14,
+                                      fontSize: compact
+                                          ? 11
+                                          : (Responsive.isSmall(context)
+                                              ? 12
+                                              : 14),
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -518,10 +529,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                             ],
                           ),
                         ),
-
                         const SizedBox(width: 8),
-
-                        // Amount (Right Aligned)
                         Expanded(
                           flex: 2,
                           child: Column(
@@ -533,42 +541,42 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                   '${factura.total.toStringAsFixed(2)} €',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w900,
-                                    fontSize:
-                                        Responsive.isSmall(context) ? 18 : 22,
-                                    color: isDark
-                                        ? AppTheme.success
-                                        : AppTheme.success, // Green
+                                    fontSize: compact
+                                        ? 14
+                                        : (Responsive.isSmall(context)
+                                            ? 18
+                                            : 22),
+                                    color: AppTheme.success,
                                   ),
                                   textAlign: TextAlign.right,
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              _buildAmountBreakdown(
-                                label: 'Base',
-                                value: factura.base,
-                                isDark: isDark,
-                              ),
-                              _buildAmountBreakdown(
-                                label: 'IVA',
-                                value: factura.iva,
-                                isDark: isDark,
-                              ),
+                              if (!compact) ...[
+                                const SizedBox(height: 4),
+                                _buildAmountBreakdown(
+                                  label: 'Base',
+                                  value: factura.base,
+                                  isDark: isDark,
+                                ),
+                                _buildAmountBreakdown(
+                                  label: 'IVA',
+                                  value: factura.iva,
+                                  isDark: isDark,
+                                ),
+                              ],
                             ],
                           ),
                         ),
                       ],
                     ),
-
-                    const SizedBox(height: 16),
+                    SizedBox(height: compact ? 8 : 16),
                     Divider(
                       height: 1,
                       color: isDark
                           ? AppColors.themedWhite10
                           : AppColors.systemGrey100,
                     ),
-                    const SizedBox(height: 12),
-
-                    // Actions
+                    SizedBox(height: compact ? 6 : 12),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -1270,14 +1278,55 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                                 : RefreshIndicator(
                                     onRefresh: () =>
                                         _refreshData(forceRefresh: true),
-                                    // OPTIMIZATION: Use OptimizedListView for smooth scrolling
-                                    child: OptimizedListView(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 80),
-                                      itemCount: _facturas.length,
-                                      itemBuilder: (context, index) {
-                                        final factura = _facturas[index];
-                                        return _buildFacturaCard(factura);
+                                    child: LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final cols =
+                                            Responsive.denseListCrossAxisCount(
+                                                context);
+                                        final gap = Responsive.denseListSpacing(
+                                            context);
+                                        final compact =
+                                            Responsive.useCompactTiles(context);
+
+                                        if (cols <= 1) {
+                                          return OptimizedListView(
+                                            padding: EdgeInsets.only(
+                                              bottom: 80,
+                                              left: compact ? 10 : 0,
+                                              right: compact ? 10 : 0,
+                                            ),
+                                            itemCount: _facturas.length,
+                                            itemBuilder: (context, index) {
+                                              return _buildFacturaCard(
+                                                _facturas[index],
+                                                compact: compact,
+                                              );
+                                            },
+                                          );
+                                        }
+
+                                        return GridView.builder(
+                                          padding: EdgeInsets.fromLTRB(
+                                            gap + 4,
+                                            4,
+                                            gap + 4,
+                                            80,
+                                          ),
+                                          gridDelegate:
+                                              SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: cols,
+                                            mainAxisExtent: compact ? 128 : 156,
+                                            mainAxisSpacing: gap,
+                                            crossAxisSpacing: gap,
+                                          ),
+                                          itemCount: _facturas.length,
+                                          itemBuilder: (context, index) {
+                                            return _buildFacturaCard(
+                                              _facturas[index],
+                                              compact: true,
+                                            );
+                                          },
+                                        );
                                       },
                                     ),
                                   ),

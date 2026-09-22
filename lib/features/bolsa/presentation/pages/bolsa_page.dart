@@ -272,15 +272,19 @@ class _BolsaPageState extends ConsumerState<BolsaPage>
     // Header: summary, gap, progress, [chart block], gap, title, filters, gap
     const headerBase = 8;
     final headerCount = headerBase + (hasChart ? 2 : 0);
-    final bodyCount = provider.movements.isEmpty
+    final cols = Responsive.denseListCrossAxisCount(context);
+    final compact = Responsive.useCompactTiles(context);
+    final useGrid = cols > 1 && filtered.isNotEmpty;
+    final bodyCount = provider.movements.isEmpty || filtered.isEmpty
         ? 1
-        : filtered.isEmpty
+        : useGrid
             ? 1
             : filtered.length;
     final itemCount = headerCount + bodyCount + 1; // + bottom spacer
+    final listPad = compact ? 8.0 : 16.0;
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(listPad),
       itemCount: itemCount,
       itemBuilder: (context, index) {
         if (index < headerCount) {
@@ -289,15 +293,21 @@ class _BolsaPageState extends ConsumerState<BolsaPage>
             return _BolsaSummaryCard(status: status, monthLabel: monthLabel);
           }
           if (index == slot++) return _BolsaPeriodSelector(provider: provider);
-          if (index == slot++) return const SizedBox(height: 16);
+          if (index == slot++) {
+            return SizedBox(height: compact ? 8 : 16);
+          }
           if (index == slot++) return _ProgressBar(status: status);
           if (hasChart) {
-            if (index == slot++) return const SizedBox(height: 16);
+            if (index == slot++) {
+              return SizedBox(height: compact ? 8 : 16);
+            }
             if (index == slot++) {
               return BolsaMonthlyChart(history: provider.history);
             }
           }
-          if (index == slot++) return const SizedBox(height: 20);
+          if (index == slot++) {
+            return SizedBox(height: compact ? 12 : 20);
+          }
           if (index == slot++) {
             return Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 8),
@@ -345,14 +355,14 @@ class _BolsaPageState extends ConsumerState<BolsaPage>
           if (index == slot++) {
             return _MovimientosFilters(provider: provider);
           }
-          return const SizedBox(height: 8);
+          return SizedBox(height: compact ? 4 : 8);
         }
 
         final bodyIndex = index - headerCount;
         if (bodyIndex < bodyCount) {
           if (provider.movements.isEmpty) {
             return Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(compact ? 12 : 20),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: AppTheme.raisedSurface,
@@ -366,7 +376,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage>
           }
           if (filtered.isEmpty) {
             return Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(compact ? 12 : 20),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: AppTheme.raisedSurface,
@@ -378,13 +388,33 @@ class _BolsaPageState extends ConsumerState<BolsaPage>
               ),
             );
           }
+          if (useGrid) {
+            final gap = Responsive.denseListSpacing(context);
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: cols,
+                mainAxisExtent: compact ? 108 : 128,
+                mainAxisSpacing: gap,
+                crossAxisSpacing: gap,
+              ),
+              itemCount: filtered.length,
+              itemBuilder: (context, i) => _MovimientoTile(
+                movimiento: filtered[i],
+                canSeeMargin: canEdit,
+                compact: true,
+              ),
+            );
+          }
           return _MovimientoTile(
             movimiento: filtered[bodyIndex],
             canSeeMargin: canEdit,
+            compact: compact,
           );
         }
 
-        return const SizedBox(height: 32);
+        return SizedBox(height: compact ? 16 : 32);
       },
     );
   }
@@ -1359,9 +1389,11 @@ class _MovimientoTile extends StatelessWidget {
   const _MovimientoTile({
     required this.movimiento,
     required this.canSeeMargin,
+    this.compact = false,
   });
   final BolsaMovimiento movimiento;
   final bool canSeeMargin;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1373,7 +1405,7 @@ class _MovimientoTile extends StatelessWidget {
         ? '${movimiento.fecha!.day.toString().padLeft(2, '0')}/'
             '${movimiento.fecha!.month.toString().padLeft(2, '0')}'
         : '--';
-    final extraDetail = _extraDetailText();
+    final extraDetail = compact ? null : _extraDetailText();
     final signedAmount =
         "${isCredit ? '+' : '-'}${_formatMoney(movimiento.importe)}";
     final pedidoLabel = movimiento.displayPedido;
@@ -1382,19 +1414,22 @@ class _MovimientoTile extends StatelessWidget {
     return Card(
       elevation: 0,
       surfaceTintColor: AppColors.transparent,
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: EdgeInsets.only(bottom: compact ? 0 : 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         side: BorderSide(color: color.withValues(alpha: 0.24), width: 0.8),
       ),
       color: AppColors.transparent,
       child: ListTile(
+        dense: compact,
+        visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         ),
         tileColor: AppTheme.softPanel.withValues(alpha: 0.88),
-        isThreeLine: extraDetail != null || movimiento.descripcion.isNotEmpty,
-        leading: Icon(icon, color: color),
+        isThreeLine: !compact &&
+            (extraDetail != null || movimiento.descripcion.isNotEmpty),
+        leading: Icon(icon, color: color, size: compact ? 20 : 24),
         title: Text(
           pedidoLabel.isNotEmpty
               ? '${movimiento.tipo.label} - $pedidoLabel'
@@ -1402,7 +1437,10 @@ class _MovimientoTile extends StatelessWidget {
           style: TextStyle(
             color: AppColors.themedWhite,
             fontWeight: FontWeight.w600,
+            fontSize: compact ? 12 : null,
           ),
+          maxLines: compact ? 1 : 2,
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1410,16 +1448,19 @@ class _MovimientoTile extends StatelessWidget {
             if (clienteLabel.isNotEmpty)
               Text(
                 clienteLabel,
-                style: TextStyle(color: AppColors.themedWhite70, fontSize: 11),
+                style: TextStyle(
+                  color: AppColors.themedWhite70,
+                  fontSize: compact ? 10 : 11,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-            if (movimiento.codigoArticulo.isNotEmpty)
+            if (!compact && movimiento.codigoArticulo.isNotEmpty)
               Text(
                 'Art.: ${movimiento.codigoArticulo}',
                 style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
               ),
-            if (movimiento.descripcion.isNotEmpty)
+            if (!compact && movimiento.descripcion.isNotEmpty)
               Text(
                 movimiento.descripcion,
                 style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
@@ -1439,11 +1480,13 @@ class _MovimientoTile extends StatelessWidget {
                 overflow: TextOverflow.visible,
               ),
             ],
-            const SizedBox(height: 2),
-            Text(
-              'Saldo: ${_formatMoney(movimiento.saldoAnterior)} -> ${_formatMoney(movimiento.saldoPosterior)}',
-              style: TextStyle(color: AppColors.themedWhite38, fontSize: 11),
-            ),
+            if (!compact) ...[
+              const SizedBox(height: 2),
+              Text(
+                'Saldo: ${_formatMoney(movimiento.saldoAnterior)} -> ${_formatMoney(movimiento.saldoPosterior)}',
+                style: TextStyle(color: AppColors.themedWhite38, fontSize: 11),
+              ),
+            ],
           ],
         ),
         trailing: Column(
@@ -1455,13 +1498,15 @@ class _MovimientoTile extends StatelessWidget {
               style: TextStyle(
                 color: color,
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: compact ? 12 : 14,
               ),
             ),
-            const SizedBox(height: 2),
             Text(
               dateStr,
-              style: TextStyle(color: AppColors.themedWhite38, fontSize: 11),
+              style: TextStyle(
+                color: AppColors.themedWhite54,
+                fontSize: compact ? 10 : 11,
+              ),
             ),
           ],
         ),

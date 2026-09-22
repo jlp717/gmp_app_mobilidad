@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
@@ -184,7 +185,9 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
   Widget build(BuildContext context) {
     return Container(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.85,
+        maxHeight: MediaQuery.of(context).size.height *
+            (Responsive.isLandscape(context) ? 0.95 : 0.85),
+        maxWidth: Responsive.isLandscape(context) ? 900 : double.infinity,
       ),
       decoration: BoxDecoration(
         color: AppTheme.inkSurface,
@@ -202,7 +205,10 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
         children: [
           // Handle
           Padding(
-            padding: const EdgeInsets.only(top: 12, bottom: 4),
+            padding: EdgeInsets.only(
+              top: Responsive.useCompactTiles(context) ? 8 : 12,
+              bottom: 4,
+            ),
             child: Container(
               width: 48,
               height: 4,
@@ -218,15 +224,19 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
 
           // Out of stock product card
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: EdgeInsets.symmetric(
+              horizontal: Responsive.useCompactTiles(context) ? 12 : 20,
+            ),
             child: _buildOutOfStockCard(),
           ),
 
-          const SizedBox(height: 12),
+          SizedBox(height: Responsive.useCompactTiles(context) ? 8 : 12),
 
           // Search bar toggle
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: EdgeInsets.symmetric(
+              horizontal: Responsive.useCompactTiles(context) ? 12 : 20,
+            ),
             child: _buildSearchToggle(),
           ),
 
@@ -649,13 +659,40 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
       );
     }
 
-    return ListView.builder(
+    final compact = Responsive.useCompactTiles(context);
+    final cols = Responsive.catalogCrossAxisCountForWidth(
+      MediaQuery.sizeOf(context).width *
+          (Responsive.isLandscape(context) ? 0.85 : 1),
+      landscape: Responsive.isLandscape(context),
+    );
+    final gap = Responsive.denseListSpacing(context);
+    final hPad = compact ? 12.0 : 20.0;
+
+    if (cols <= 1) {
+      return ListView.builder(
+        controller: scrollController,
+        padding: EdgeInsets.symmetric(horizontal: hPad),
+        itemCount: _alternatives.length,
+        itemBuilder: (context, index) {
+          final alt = _alternatives[index];
+          return _buildAlternativeCard(alt);
+        },
+      );
+    }
+
+    return GridView.builder(
       controller: scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 4),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols.clamp(2, 3),
+        mainAxisExtent: compact ? 120 : 140,
+        mainAxisSpacing: gap,
+        crossAxisSpacing: gap,
+      ),
       itemCount: _alternatives.length,
       itemBuilder: (context, index) {
         final alt = _alternatives[index];
-        return _buildAlternativeCard(alt);
+        return _buildAlternativeCard(alt, compact: true);
       },
     );
   }
@@ -901,7 +938,8 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
     setState(() => _selectedQty[code] = next);
   }
 
-  Widget _buildAlternativeCard(Map<String, dynamic> alt) {
+  Widget _buildAlternativeCard(Map<String, dynamic> alt,
+      {bool compact = false}) {
     final name = (alt['name'] ?? '').toString().trim();
     final code = (alt['code'] ?? '').toString().trim();
     final brand = (alt['brand'] ?? '').toString().trim();
@@ -939,8 +977,8 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      margin: EdgeInsets.only(bottom: compact ? 0 : 10),
+      padding: EdgeInsets.all(compact ? 10 : 14),
       decoration: BoxDecoration(
         color: AppTheme.raisedSurface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(14),

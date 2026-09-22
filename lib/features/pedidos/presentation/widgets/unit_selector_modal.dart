@@ -377,9 +377,12 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     return Dialog(
       backgroundColor: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: Responsive.useCompactTiles(context) ? 16 : 24,
+        vertical: Responsive.useCompactTiles(context) ? 16 : 40,
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(Responsive.useCompactTiles(context) ? 12 : 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

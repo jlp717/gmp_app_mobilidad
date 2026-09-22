@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/data/comercial_liquidacion_service.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/domain/liquidacion_domain.dart';
@@ -198,8 +199,11 @@ class _ComercialLiquidacionDiariaPageState
                 autovalidateMode: AutovalidateMode.onUserInteraction,
                 child: LayoutBuilder(
                   builder: (context, constraints) {
+                    final compact = Responsive.useCompactTiles(context);
+                    final pad = compact ? 10.0 : 16.0;
                     return SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                      padding:
+                          EdgeInsets.fromLTRB(pad, pad, pad, compact ? 16 : 24),
                       child: Center(
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 1180),
@@ -221,7 +225,7 @@ class _ComercialLiquidacionDiariaPageState
                                 totalAIngresar: _summary.totalAIngresar,
                                 status: status,
                               ),
-                              const SizedBox(height: 16),
+                              SizedBox(height: compact ? 10 : 16),
                               _MetricGrid(
                                 metrics: [
                                   _MetricData(
@@ -257,7 +261,7 @@ class _ComercialLiquidacionDiariaPageState
                                 ],
                               ),
                               if (_summary.porcentajeMinimoVendedor > 0) ...[
-                                const SizedBox(height: 12),
+                                SizedBox(height: compact ? 8 : 12),
                                 Semantics(
                                   label:
                                       'Porcentaje mínimo de cobro del vendedor',
@@ -265,15 +269,15 @@ class _ComercialLiquidacionDiariaPageState
                                     'Mínimo cobro vendedor (VDDX): ${_summary.porcentajeMinimoVendedor.toStringAsFixed(0)}%',
                                     style: TextStyle(
                                       color: AppTheme.textSecondary,
-                                      fontSize: 13,
+                                      fontSize: compact ? 12 : 13,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),
                               ],
-                              const SizedBox(height: 16),
+                              SizedBox(height: compact ? 10 : 16),
                               _DevolucionesList(returns: _returns),
-                              const SizedBox(height: 16),
+                              SizedBox(height: compact ? 10 : 16),
                               _LiquidacionWorkspace(
                                 ingresoBancoController: _ingresoBancoController,
                                 entregadoController: _entregadoController,
@@ -878,12 +882,13 @@ class _MetricGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final compact = Responsive.useCompactTiles(context);
         final columns = constraints.maxWidth >= 980
-            ? 4
+            ? (compact ? 5 : 4)
             : constraints.maxWidth >= 620
-                ? 2
+                ? (compact ? 3 : 2)
                 : 1;
-        const gap = 12.0;
+        final gap = compact ? 8.0 : 12.0;
         final width = (constraints.maxWidth - (gap * (columns - 1))) / columns;
 
         return Wrap(
@@ -893,7 +898,7 @@ class _MetricGrid extends StatelessWidget {
               .map(
                 (metric) => SizedBox(
                   width: width,
-                  child: _MetricTile(metric: metric),
+                  child: _MetricTile(metric: metric, compact: compact),
                 ),
               )
               .toList(growable: false),
@@ -904,9 +909,10 @@ class _MetricGrid extends StatelessWidget {
 }
 
 class _MetricTile extends StatefulWidget {
-  const _MetricTile({required this.metric});
+  const _MetricTile({required this.metric, this.compact = false});
 
   final _MetricData metric;
+  final bool compact;
 
   @override
   State<_MetricTile> createState() => _MetricTileState();
@@ -918,6 +924,7 @@ class _MetricTileState extends State<_MetricTile> {
   @override
   Widget build(BuildContext context) {
     final metric = widget.metric;
+    final compact = widget.compact;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -925,7 +932,7 @@ class _MetricTileState extends State<_MetricTile> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(compact ? 10 : 14),
         decoration: BoxDecoration(
           color: _hovered
               ? AppTheme.softPanel.withValues(alpha: 0.92)
@@ -946,15 +953,19 @@ class _MetricTileState extends State<_MetricTile> {
         child: Row(
           children: [
             Container(
-              width: 38,
-              height: 38,
+              width: compact ? 32 : 38,
+              height: compact ? 32 : 38,
               decoration: BoxDecoration(
                 color: metric.color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               ),
-              child: Icon(metric.icon, color: metric.color, size: 21),
+              child: Icon(
+                metric.icon,
+                color: metric.color,
+                size: compact ? 18 : 21,
+              ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: compact ? 8 : 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -965,11 +976,11 @@ class _MetricTileState extends State<_MetricTile> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: AppTheme.textSecondary,
-                      fontSize: 12,
+                      fontSize: compact ? 11 : 12,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: compact ? 4 : 6),
                   Text(
                     _money(metric.value),
                     maxLines: 1,

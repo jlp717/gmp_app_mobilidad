@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
@@ -980,25 +981,54 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         useDirectEndpoint: true,
         forceRefresh: true,
       ),
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        itemCount: filteredClients.length,
-        itemBuilder: (context, index) {
-          final client = filteredClients[index];
-          return RuteroClientListItem(
-            client: client,
-            index: index + 1,
-            formatCurrency: _formatCurrency,
-            formatVariation: _formatVariation,
-            onTap: () => unawaited(_navigateToMatrix(client)),
-            onMapTap: () => _openMaps(client),
-            onCallTap: () => _makeCall(client),
-            onWhatsAppTap: () => _openWhatsApp(client),
-            onNotesTap: () => _openNotesDialog(client),
-            showMargin: widget.isJefeVentas,
-            selectedYear: _selectedYear,
-            completedWeeks: _completedWeeks,
-            periodLabel: _periodLabel,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final cols = Responsive.denseListCrossAxisCount(context);
+          final gap = Responsive.denseListSpacing(context);
+          final compact = Responsive.useCompactTiles(context);
+
+          Widget item(int index) {
+            final client = filteredClients[index];
+            return RuteroClientListItem(
+              client: client,
+              index: index + 1,
+              formatCurrency: _formatCurrency,
+              formatVariation: _formatVariation,
+              onTap: () => unawaited(_navigateToMatrix(client)),
+              onMapTap: () => _openMaps(client),
+              onCallTap: () => _makeCall(client),
+              onWhatsAppTap: () => _openWhatsApp(client),
+              onNotesTap: () => _openNotesDialog(client),
+              showMargin: widget.isJefeVentas,
+              selectedYear: _selectedYear,
+              completedWeeks: _completedWeeks,
+              periodLabel: _periodLabel,
+              compact: compact || cols > 1,
+            );
+          }
+
+          if (cols <= 1) {
+            return ListView.builder(
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 8 : 12,
+                vertical: 4,
+              ),
+              itemCount: filteredClients.length,
+              itemBuilder: (context, index) => item(index),
+            );
+          }
+
+          return GridView.builder(
+            padding: EdgeInsets.symmetric(horizontal: gap + 2, vertical: 4),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cols,
+              // Keep LY/status block readable; densify chrome only.
+              mainAxisExtent: compact ? 168 : 196,
+              mainAxisSpacing: gap,
+              crossAxisSpacing: gap,
+            ),
+            itemCount: filteredClients.length,
+            itemBuilder: (context, index) => item(index),
           );
         },
       ),

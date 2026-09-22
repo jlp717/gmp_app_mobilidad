@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fi_filters_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
@@ -253,8 +254,26 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(4),
+    final compact = Responsive.useCompactTiles(context);
+    final cols = Responsive.denseListCrossAxisCount(context);
+    final gap = Responsive.denseListSpacing(context);
+
+    if (cols <= 1) {
+      return ListView.builder(
+        padding: EdgeInsets.all(compact ? 2 : 4),
+        itemCount: products.length,
+        itemBuilder: (context, index) => _buildFiProduct(products[index]),
+      );
+    }
+
+    return GridView.builder(
+      padding: EdgeInsets.all(compact ? 2 : 4),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
+        mainAxisExtent: compact ? 72 : 88,
+        mainAxisSpacing: gap,
+        crossAxisSpacing: gap,
+      ),
       itemCount: products.length,
       itemBuilder: (context, index) => _buildFiProduct(products[index]),
     );

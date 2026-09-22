@@ -84,6 +84,7 @@ class RuteroClientListItem extends StatelessWidget {
     this.completedWeeks = 0,
     this.selectedYear = 0,
     this.periodLabel = '',
+    this.compact = false,
   });
 
   final Map<String, dynamic> client;
@@ -99,6 +100,7 @@ class RuteroClientListItem extends StatelessWidget {
   final int completedWeeks;
   final int selectedYear;
   final String periodLabel;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -150,29 +152,29 @@ class RuteroClientListItem extends StatelessWidget {
         (observaciones['text'] as String).isNotEmpty;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.only(bottom: compact ? 0 : 12),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Color.alphaBlend(
           orderVisual.color.withValues(alpha: orderVisual.backgroundAlpha),
           AppTheme.raisedSurface,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(compact ? 12 : 16),
         border: Border.all(
           color: orderVisual.color.withValues(alpha: 0.68),
-          width: 1.6,
+          width: compact ? 1.2 : 1.6,
         ),
         boxShadow: [
           BoxShadow(
-            color: orderVisual.color.withValues(alpha: 0.16),
-            blurRadius: 14,
+            color: orderVisual.color.withValues(alpha: compact ? 0.1 : 0.16),
+            blurRadius: compact ? 8 : 14,
             offset: const Offset(0, 2),
           ),
         ],
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(compact ? 12 : 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -181,8 +183,10 @@ class RuteroClientListItem extends StatelessWidget {
                 onTap: onNotesTap,
                 child: Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 8 : 12,
+                    vertical: compact ? 4 : 6,
+                  ),
                   decoration: const BoxDecoration(
                     color: AppTheme.warning,
                     borderRadius: BorderRadius.only(
@@ -221,7 +225,7 @@ class RuteroClientListItem extends StatelessWidget {
               ),
             _buildOrderStatusBanner(orderVisual, hasObservaciones, context),
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(compact ? 8 : 16),
               child: Row(
                 children: [
                   _buildProgressIndicator(
@@ -233,7 +237,7 @@ class RuteroClientListItem extends StatelessWidget {
                     margin: margin,
                     showMargin: showMargin,
                   ),
-                  const SizedBox(width: 16),
+                  SizedBox(width: compact ? 8 : 16),
                   Expanded(
                     child: _buildClientInfo(
                       name: name,

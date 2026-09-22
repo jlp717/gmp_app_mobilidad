@@ -32,9 +32,9 @@ class OrderDetailSheet {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
+        initialChildSize: Responsive.isLandscape(context) ? 0.95 : 0.85,
+        minChildSize: Responsive.isLandscape(context) ? 0.6 : 0.5,
+        maxChildSize: 0.98,
         expand: false,
         builder: (ctx, scrollCtrl) => _OrderDetailBody(
           orderId: orderId,
@@ -340,8 +340,12 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   }
 
   Widget _buildHeader(OrderSummary header, Color statusColor) {
+    final compact = Responsive.useCompactTiles(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 12 : 16,
+        vertical: compact ? 6 : 10,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

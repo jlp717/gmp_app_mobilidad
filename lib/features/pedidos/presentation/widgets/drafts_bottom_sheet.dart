@@ -35,9 +35,11 @@ class _DraftsBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final drafts = provider.savedDrafts;
+    final compact = Responsive.useCompactTiles(context);
+    final pad = compact ? 10.0 : 16.0;
 
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(pad),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -50,19 +52,19 @@ class _DraftsBody extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: compact ? 8 : 12),
           if (drafts.isEmpty)
             Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: EdgeInsets.all(compact ? 16 : 24),
                 child: Column(
                   children: [
                     Icon(
                       Icons.description_outlined,
                       color: AppColors.themedWhite38,
-                      size: 48,
+                      size: compact ? 36 : 48,
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
                       'No hay borradores guardados',
                       style: TextStyle(color: AppColors.themedWhite54),

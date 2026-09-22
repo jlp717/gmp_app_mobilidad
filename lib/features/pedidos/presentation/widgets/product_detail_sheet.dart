@@ -52,9 +52,9 @@ class ProductDetailSheet extends StatefulWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.88,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
+        initialChildSize: Responsive.isLandscape(context) ? 0.95 : 0.88,
+        minChildSize: Responsive.isLandscape(context) ? 0.6 : 0.5,
+        maxChildSize: 0.98,
         expand: false,
         builder: (_, scrollCtrl) => ProductDetailSheet(
           productCode: productCode,

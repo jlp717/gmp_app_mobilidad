@@ -2932,26 +2932,67 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         // Client list
         const SizedBox(height: 8),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: filteredClients.length,
-            itemBuilder: (context, index) {
-              final client = filteredClients[index];
-              return _ClientCard(
-                client: client,
-                // cf: _nf, // REMOVED
-                showMargin: widget.isJefeVentas, // Pass permission checks
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => EnhancedClientMatrixPage(
-                      clientCode: (client['code'] as String?) ?? '',
-                      clientName: (client['name'] as String?) ?? 'Cliente',
-                      isJefeVentas: widget.isJefeVentas,
-                      vendedorCodes: _activeVendedorCode,
-                    ),
-                  ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final cols = Responsive.denseListCrossAxisCount(context);
+              final gap = Responsive.denseListSpacing(context);
+              final compact = Responsive.useCompactTiles(context);
+
+              if (cols <= 1) {
+                return ListView.builder(
+                  padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12),
+                  itemCount: filteredClients.length,
+                  itemBuilder: (context, index) {
+                    final client = filteredClients[index];
+                    return _ClientCard(
+                      client: client,
+                      compact: compact,
+                      showMargin: widget.isJefeVentas,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EnhancedClientMatrixPage(
+                            clientCode: (client['code'] as String?) ?? '',
+                            clientName:
+                                (client['name'] as String?) ?? 'Cliente',
+                            isJefeVentas: widget.isJefeVentas,
+                            vendedorCodes: _activeVendedorCode,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }
+
+              return GridView.builder(
+                padding: EdgeInsets.symmetric(horizontal: gap + 2, vertical: 4),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: cols,
+                  mainAxisExtent: compact ? 132 : 160,
+                  mainAxisSpacing: gap,
+                  crossAxisSpacing: gap,
                 ),
+                itemCount: filteredClients.length,
+                itemBuilder: (context, index) {
+                  final client = filteredClients[index];
+                  return _ClientCard(
+                    client: client,
+                    compact: true,
+                    showMargin: widget.isJefeVentas,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => EnhancedClientMatrixPage(
+                          clientCode: (client['code'] as String?) ?? '',
+                          clientName: (client['name'] as String?) ?? 'Cliente',
+                          isJefeVentas: widget.isJefeVentas,
+                          vendedorCodes: _activeVendedorCode,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -3158,11 +3199,13 @@ class _ClientCard extends StatelessWidget {
     // required this.cf, // REMOVED
     required this.onTap,
     this.showMargin = false, // Default false
+    this.compact = false,
   });
   final Map<String, dynamic> client;
   // final NumberFormat cf; // REMOVED
   final VoidCallback onTap;
   final bool showMargin;
+  final bool compact;
 
   String _formatCurrency(double value) {
     return CurrencyFormatter.formatWhole(value);
@@ -3274,17 +3317,17 @@ class _ClientCard extends StatelessWidget {
     }
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: EdgeInsets.only(bottom: compact ? 0 : 10),
       color: AppTheme.raisedSurface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(compact ? 10 : 12),
         side: BorderSide(color: statusColor.withValues(alpha: 0.3)),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(compact ? 10 : 12),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(compact ? 8 : 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -3297,11 +3340,12 @@ class _ClientCard extends StatelessWidget {
                       children: [
                         Text(
                           name,
-                          style: const TextStyle(
-                            fontSize: 13,
+                          style: TextStyle(
+                            fontSize: compact ? 12 : 13,
                             fontWeight: FontWeight.bold,
                           ),
                           overflow: TextOverflow.ellipsis,
+                          maxLines: compact ? 1 : 2,
                         ),
                         Text(
                           'Cód: $code',
