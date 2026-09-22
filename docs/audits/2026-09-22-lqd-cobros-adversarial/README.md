@@ -56,3 +56,17 @@ Evidencia: `cobro-stable-ref-evidence.jsonl`.
 cd backend && npm test -- --testPathPattern=comercial-devoluciones-service
 # 22 passed
 ```
+
+Post-deploy (`eb550c3` en 230, `/api/ready` OK):
+
+```json
+{
+  "source": "JAVIER.TEST_COBROS",
+  "totalAIngresar": 0.04,
+  "lqdIgnoredReason": "isolated_test_prefers_app_cobros_over_lqd_snapshot",
+  "lqdSource": "JAVIER.TEST_LQD",
+  "lqdTI": 1411.8
+}
+```
+
+Antes del fix ese día mostraba `totalAIngresar=1411.80` desde LQD.

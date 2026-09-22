@@ -127,7 +127,6 @@ async function invalidateRuteroCachesAfterPedido(vendedorCode) {
         const patterns = [
             patternFor('rutero:orders:v3', 2),
             patternFor('rutero:orders:app:v1', 3),
-            patternFor('rutero:orders:app:v2', 3),
             'query:rutero:day:payload:v4:*',
         ];
         if (code) {
