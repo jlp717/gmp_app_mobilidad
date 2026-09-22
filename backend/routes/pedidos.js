@@ -597,9 +597,8 @@ router.get('/families/detailed', async (req, res) => {
 
 /**
  * Req #8: GET /api/pedidos/draft-status/:vendedorCode
- * Indica al frontend si hay >= umbral (VDDX.PEDIDOSPENDIENTESSINCRONIZAR) borradores.
- * Llamada solo de lectura: no auto-confirma. El frontend puede llamar a
- * POST /api/pedidos/draft-status/:vendedorCode/auto-confirm para opt-in.
+ * Umbral: VDDX.PEDIDOSPENDIENTESSINCRONIZAR (TEST_VDDX si REPARTO_TABLE_SET=isolated_test).
+ * Lectura. El app llama POST .../auto-confirm al superar N (auto-envío).
  */
 router.get('/draft-status/:vendedorCode', async (req, res) => {
     try {

@@ -462,6 +462,11 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
         ? ` AND TRIM(C.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`
         : '';
 
+    // TEST/PROD frontera (2026-09-22):
+    // - orderStatus (verde/venta): CPC live (DSEDAC) + overlay db2AppTable(PEDIDOS_CAB)
+    //   → JAVIER.TEST_PEDIDOS_CAB en isolated_test. Cifras de venta/LY NO pasan por aquí.
+    // - ventas/LY/objetivos del día: comercialErpTable(LACLAE/CLI/…) → siempre DSED live
+    //   (LACLAE forzado prod; ver utils/comercial-erp-tables.js).
     // Live ERP (CPC) + app buffer (PEDIDOS_CAB). Demo bug: confirmed app
     // pedidos stay LOCAL and never hit CPC → ruta stayed "SIN VENTA".
     const cpcSql = `

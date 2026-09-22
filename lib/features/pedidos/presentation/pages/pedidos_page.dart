@@ -434,14 +434,16 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     if (firstVendor.isNotEmpty) {
       provider.refreshDraftStatus(firstVendor).then((_) {
         if (!mounted) return;
-        if (provider.hasDraftAccumulationWarning) {
+        if (provider.hasDraftAccumulationWarning ||
+            (provider.draftWarningMessage?.isNotEmpty ?? false)) {
           final msg = provider.draftWarningMessage ??
               'Tienes ${provider.accumulatedDraftCount} borradores '
                   'acumulados. Conviene confirmar el más antiguo.';
+          final isAutoSent = msg.toLowerCase().contains('confirmado');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(msg),
-              backgroundColor: AppTheme.warning,
+              backgroundColor: isAutoSent ? AppTheme.success : AppTheme.warning,
               duration: const Duration(seconds: 5),
               action: SnackBarAction(
                 label: 'Ver',

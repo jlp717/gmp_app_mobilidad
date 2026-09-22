@@ -122,8 +122,11 @@ async function getPedidosPendientesSyncThreshold(vendedorCode) {
 async function invalidateRuteroCachesAfterPedido(vendedorCode) {
     try {
         const code = String(vendedorCode || '').trim();
+        // orders:v3 (CPC) + orders:app (PEDIDOS_CAB overlay TEST) share family
+        // patternFor('rutero:orders:*') → query:query:rutero:orders:*
         const patterns = [
             patternFor('rutero:orders:v3', 2),
+            patternFor('rutero:orders:app:v1', 3),
             'query:rutero:day:payload:v4:*',
         ];
         if (code) {

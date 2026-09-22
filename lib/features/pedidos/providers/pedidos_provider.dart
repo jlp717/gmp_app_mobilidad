@@ -373,9 +373,12 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Consulta al backend si el comercial acumula ≥ umbral VDDX borradores.
-  /// Resultado disponible vía [draftWarningMessage] / [accumulatedDraftCount].
-  Future<void> refreshDraftStatus(String vendedorCode) async {
+  /// Consulta umbral VDDX; si count ≥ N (>0) auto-confirma el borrador más antiguo.
+  /// Resultado vía [draftWarningMessage] / [accumulatedDraftCount] / [draftAutoSendThreshold].
+  Future<void> refreshDraftStatus(
+    String vendedorCode, {
+    bool autoConfirmIfOverThreshold = true,
+  }) async {
     final code = vendedorCode.trim();
     if (code.isEmpty) return;
     try {
@@ -385,8 +388,8 @@ class PedidosProvider with ChangeNotifier {
         cacheTTL: CacheService.realtimeTTL,
       );
       final data = raw;
-      final warning = data['warning'] == true;
-      final count = (data['count'] ?? 0) is num
+      var warning = data['warning'] == true;
+      var count = (data['count'] ?? 0) is num
           ? (data['count'] as num).toInt()
           : int.tryParse((data['count'] ?? '0').toString()) ?? 0;
       final threshold = (data['threshold'] ?? 0) is num
@@ -395,6 +398,32 @@ class PedidosProvider with ChangeNotifier {
       _accumulatedDraftCount = count;
       _draftAutoSendThreshold = threshold;
       _draftWarningMessage = warning ? data['message']?.toString() : null;
+
+      // Auto-envío online: umbral VDDX (TEST_VDDX en isolated_test). N=0 = off.
+      if (autoConfirmIfOverThreshold &&
+          warning &&
+          threshold > 0 &&
+          count >= threshold) {
+        try {
+          final confirmed = await ApiClient.post(
+            '/pedidos/draft-status/$code/auto-confirm',
+            {},
+          );
+          warning = confirmed['warning'] == true;
+          count = (confirmed['count'] ?? count) is num
+              ? (confirmed['count'] as num).toInt()
+              : int.tryParse((confirmed['count'] ?? '$count').toString()) ??
+                  count;
+          _accumulatedDraftCount = count;
+          _draftWarningMessage =
+              confirmed['message']?.toString() ?? _draftWarningMessage;
+          if (confirmed['autoConfirmed'] == true) {
+            unawaited(loadOrders(vendedorCodes: code, forceRefresh: true));
+          }
+        } catch (_) {
+          // Mantener warning GET si el auto-confirm falla (stock/bolsa/etc.).
+        }
+      }
       notifyListeners();
     } catch (_) {
       // Silencioso: no crítico
