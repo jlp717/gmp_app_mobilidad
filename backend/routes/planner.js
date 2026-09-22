@@ -112,8 +112,16 @@ function resolveRuteroOrderDate({ date, year, month, week, normalizedDay, now })
     const selectedWeek = parseInt(week, 10);
     const dayIndex = RUTERO_WEEKDAY_INDEX[normalizedDay];
 
+    // Sin week/date: proyectar el weekday del path sobre la semana calendario de `now`.
+    // Antes devolvía dateParts(now) → martes viendo /lunes buscaba DIADOCUMENTO=hoy
+    // y los CONFIRMADO del lunes (PEDIDOS_CAB) quedaban "SIN VENTA".
     if (!Number.isFinite(selectedWeek) || selectedWeek < 1 || dayIndex === undefined) {
-        return dateParts(now);
+        if (dayIndex === undefined) return dateParts(now);
+        const jsDay = now.getDay(); // 0=domingo … 6=sábado
+        const nowIndex = jsDay === 0 ? 6 : jsDay - 1; // lunes=0 … domingo=6
+        const target = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        target.setDate(target.getDate() + (dayIndex - nowIndex));
+        return dateParts(target);
     }
 
     const firstOfMonth = new Date(currentYear, currentMonth - 1, 1);
@@ -548,7 +556,8 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
     }
 
     try {
-        const appCacheKey = `rutero:orders:app:v1:${orderDate.iso}:${ruteroBatchHash([...clientCodes, ...vendorCodes])}`;
+        // v2: bust stale SIN VENTA caches from pre-overlay / wrong-orderDate window
+        const appCacheKey = `rutero:orders:app:v2:${orderDate.iso}:${ruteroBatchHash([...clientCodes, ...vendorCodes])}`;
         const appRows = await cachedQuery(
             queryWithParams,
             appSql,

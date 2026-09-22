@@ -224,6 +224,49 @@ describe('Planner rutero/day route', () => {
     expect(client.orderStatus.hasOrder).toBe(true);
   });
 
+  test('GET /rutero/day/lunes without week projects orderDate onto that weekday', async () => {
+    mockGetClientsForDay.mockReturnValue(['4300000001']);
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (sql.includes('FROM DSEDAC.CLI')) {
+        return [{
+          CODE: '4300000001',
+          NAME: 'Cliente Uno',
+          ADDRESS: 'Calle 1',
+          CITY: 'Madrid',
+          PHONE: '600111111',
+          PHONE2: '',
+        }];
+      }
+      if (sql.includes('FROM JAVIER.RUTERO_CONFIG')) return [];
+      if (sql.includes('FROM DSEDAC.CPC')) return [];
+      if (/PEDIDOS_CAB/i.test(sql)) {
+        return [{
+          CODE: '4300000001',
+          ESTADO: 'CONFIRMADO',
+          TOTAL_COUNT: 1,
+          LAST_ORDER_ID: 75,
+          LAST_ORDER_NUMBER: 7,
+        }];
+      }
+      return [];
+    });
+
+    const res = await request(app)
+      .get('/rutero/day/lunes')
+      .query({ vendedorCodes: '15', role: 'comercial' });
+
+    expect(res.status).toBe(200);
+    // Relative to "today" of the test runner: orderDate must be the Monday of
+    // the current calendar week, not today's date when today is not Monday.
+    const orderDate = String(res.body.orderDate || '');
+    expect(orderDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const parsed = new Date(`${orderDate}T12:00:00`);
+    expect(parsed.getDay()).toBe(1); // Monday
+    const client = res.body.clients.find((c) => c.code === '4300000001');
+    expect(client.orderStatus.state).toBe('CONFIRMADO');
+    expect(client.orderStatus.label).toBe('VENTA CONFIRMADA');
+  });
+
   test('GET /rutero/day/:day keeps every manager client beyond the 200-row batch', async () => {
     const clientCodes = Array.from({ length: 201 }, (_, index) =>
       'C' + String(index + 1).padStart(9, '0')

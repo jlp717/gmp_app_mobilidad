@@ -350,7 +350,10 @@ class NotificationDataRepository {
   ) async {
     try {
       final dayName = _dayName(date);
-      final week = ((date.day + date.weekday - 2) ~/ 7) + 1;
+      final firstWeekday = DateTime(date.year, date.month).weekday;
+      final week = ((date.day + firstWeekday - 2) ~/ 7) + 1;
+      final routeDateIso =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
       final response = await ApiClient.get(
         '${ApiConfig.ruteroDay}/$dayName',
         queryParameters: {
@@ -359,13 +362,14 @@ class NotificationDataRepository {
           'year': date.year,
           'month': date.month,
           'week': week,
+          'date': routeDateIso,
         },
         cacheKey: [
           'notifications',
           'rutero_day',
+          'v2',
           profile.scopeKey,
-          date.year,
-          date.month,
+          routeDateIso,
           week,
           dayName,
         ].join(':'),
@@ -817,7 +821,8 @@ class NotificationBackendSnapshotMapper {
         localDraftCount: localOrders.localDraftCount,
         localPendingCount: localOrders.localPendingCount,
         localFailedCount: localOrders.localFailedCount,
-        serverDraftCount: NotificationDataRepository._toInt(ordersRaw['borrador']),
+        serverDraftCount:
+            NotificationDataRepository._toInt(ordersRaw['borrador']),
         serverPendingCount:
             NotificationDataRepository._toInt(ordersRaw['pendiente']),
         oldestAt: localOrders.oldestAt,
@@ -835,7 +840,8 @@ class NotificationBackendSnapshotMapper {
           ? _commissionsFrom(body['commissions'], now)
           : null,
       bolsa: _bolsaFrom(body['bolsa']),
-      salesDay: _salesDayFrom(body['metrics'], body['topClients'], body['stats']),
+      salesDay:
+          _salesDayFrom(body['metrics'], body['topClients'], body['stats']),
       deliveries: deliveries,
     );
   }
@@ -1027,7 +1033,9 @@ class NotificationBackendSnapshotMapper {
     final stats = statsRaw is Map
         ? Map<String, dynamic>.from(statsRaw)
         : const <String, dynamic>{};
-    final fromList = topRaw is List ? topRaw : (top['clients'] as List? ?? top['data'] as List? ?? const []);
+    final fromList = topRaw is List
+        ? topRaw
+        : (top['clients'] as List? ?? top['data'] as List? ?? const []);
     final names = fromList
         .whereType<Map>()
         .map((item) => item['name']?.toString() ?? '')
@@ -1037,7 +1045,8 @@ class NotificationBackendSnapshotMapper {
     final dashboardSales = NotificationDataRepository._toDouble(
       metrics['todaySales'],
     );
-    final dashboardOrders = NotificationDataRepository._toInt(metrics['todayOrders']);
+    final dashboardOrders =
+        NotificationDataRepository._toInt(metrics['todayOrders']);
     return SalesDayNotificationSnapshot(
       sales: dashboardSales > 0
           ? dashboardSales
