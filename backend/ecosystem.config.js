@@ -24,6 +24,18 @@ const defaultThreadPoolSize = '128';
 const defaultOldSpaceMb = '512';
 const defaultExecMode = process.env.PM2_EXEC_MODE || (isMultiInstance ? 'cluster' : 'fork');
 
+// Session product floor: commercial tablets must survive a full workday without
+// re-login. auth.js reads these env vars (defaults there remain 15m/7d for
+// unit tests); PM2 pins the production floor so a missing/short .env TTL
+// cannot silently shrink the day. Secrets stay in .env only.
+const authSessionTtlEnv = Object.freeze({
+    JWT_ACCESS_EXPIRES: process.env.JWT_ACCESS_EXPIRES || '24h',
+    JWT_REFRESH_EXPIRES: process.env.JWT_REFRESH_EXPIRES || '7d',
+    // Redis session lookups under cluster pressure; 1s caused false
+    // AUTH_SESSION_STORE_UNAVAILABLE which made Flutter wipe the local session.
+    AUTH_REDIS_TIMEOUT_MS: process.env.AUTH_REDIS_TIMEOUT_MS || '3000',
+});
+
 const runtimePerformanceEnv = {
     UV_THREADPOOL_SIZE: process.env.UV_THREADPOOL_SIZE || defaultThreadPoolSize,
     NODE_OPTIONS: process.env.NODE_OPTIONS || `--max-old-space-size=${defaultOldSpaceMb}`,
@@ -44,6 +56,7 @@ const runtimePerformanceEnv = {
     REDIS_COMMAND_TIMEOUT_MS: process.env.REDIS_COMMAND_TIMEOUT_MS || '1000',
     QUERY_CACHE_REBUILD_WAIT_MS: process.env.QUERY_CACHE_REBUILD_WAIT_MS || '5000',
     QUERY_CACHE_STALE_MS: process.env.QUERY_CACHE_STALE_MS || '300000',
+    ...authSessionTtlEnv,
 };
 
 const REPARTO_BOOLEAN_FLAGS = Object.freeze([
@@ -139,9 +152,8 @@ module.exports = {
                 SNAPSHOT_UNTIL_MONTH: '2',
                 ...repartoFailClosedEnv,
                 // JWT secrets loaded from .env — do NOT hardcode here
-                // (wrong secrets here cause "Invalid or expired token" errors)
-                // JWT_ACCESS_EXPIRES and JWT_REFRESH_EXPIRES are loaded from .env.
-                // auth.js accepts numeric milliseconds and values like 1h/7d.
+                // (wrong secrets here cause "Invalid or expired token" errors).
+                // Access/refresh TTLs are pinned via authSessionTtlEnv (24h/7d floor).
                 ...runtimePerformanceEnv,
             },
             env_ts: {

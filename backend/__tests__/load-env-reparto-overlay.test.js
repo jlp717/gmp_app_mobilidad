@@ -121,3 +121,39 @@ test('overlayRepartoFlags never repoints finance schema routing', () => {
     else process.env.REPARTIDOR_FINANCE_APP_SCHEMA = previousAppSchema;
   }
 });
+
+test('production floor raises short access TTL to 24h without touching secrets', () => {
+  const { enforceCommercialSessionTtlFloor, parseTtlMs } = require('../config/load-env');
+  const previous = {
+    NODE_ENV: process.env.NODE_ENV,
+    JWT_ACCESS_EXPIRES: process.env.JWT_ACCESS_EXPIRES,
+    JWT_REFRESH_EXPIRES: process.env.JWT_REFRESH_EXPIRES,
+    AUTH_REDIS_TIMEOUT_MS: process.env.AUTH_REDIS_TIMEOUT_MS,
+    REDIS_COMMAND_TIMEOUT_MS: process.env.REDIS_COMMAND_TIMEOUT_MS,
+    JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET,
+  };
+
+  try {
+    process.env.JWT_ACCESS_EXPIRES = '1h';
+    process.env.JWT_REFRESH_EXPIRES = '7d';
+    process.env.AUTH_REDIS_TIMEOUT_MS = '1000';
+    process.env.JWT_ACCESS_SECRET = 'unchanged-secret-marker-for-ttl-floor-test';
+
+    const skipped = enforceCommercialSessionTtlFloor({ production: false });
+    expect(skipped.applied).toBe(false);
+    expect(process.env.JWT_ACCESS_EXPIRES).toBe('1h');
+
+    const raised = enforceCommercialSessionTtlFloor({ production: true });
+    expect(raised.applied).toBe(true);
+    expect(process.env.JWT_ACCESS_EXPIRES).toBe('24h');
+    expect(parseTtlMs(process.env.JWT_ACCESS_EXPIRES)).toBe(24 * 60 * 60 * 1000);
+    expect(process.env.JWT_REFRESH_EXPIRES).toBe('7d');
+    expect(process.env.AUTH_REDIS_TIMEOUT_MS).toBe('3000');
+    expect(process.env.JWT_ACCESS_SECRET).toBe('unchanged-secret-marker-for-ttl-floor-test');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});

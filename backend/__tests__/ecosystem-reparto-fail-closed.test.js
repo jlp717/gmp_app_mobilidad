@@ -73,6 +73,37 @@ describe('PM2 reparto configuration', () => {
     });
   });
 
+  test('pins commercial session TTL floor to 24h access and 7d refresh', () => {
+    const names = [
+      'JWT_ACCESS_EXPIRES',
+      'JWT_REFRESH_EXPIRES',
+      'AUTH_REDIS_TIMEOUT_MS',
+    ];
+    const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+    let configured;
+    try {
+      for (const name of names) delete process.env[name];
+      jest.resetModules();
+      configured = require('../ecosystem.config');
+    } finally {
+      for (const name of names) {
+        if (previous[name] === undefined) delete process.env[name];
+        else process.env[name] = previous[name];
+      }
+    }
+    const pinned = configured.apps.find((candidate) => candidate.name === 'gmp-api');
+    expect(pinned.env).toMatchObject({
+      JWT_ACCESS_EXPIRES: '24h',
+      JWT_REFRESH_EXPIRES: '7d',
+      AUTH_REDIS_TIMEOUT_MS: '3000',
+    });
+    expect(pinned.env_production).toMatchObject({
+      JWT_ACCESS_EXPIRES: '24h',
+      JWT_REFRESH_EXPIRES: '7d',
+      AUTH_REDIS_TIMEOUT_MS: '3000',
+    });
+  });
+
   test('.env.example documents the capability disabled exactly once', () => {
     const source = fs.readFileSync(path.resolve(__dirname, '..', '.env.example'), 'utf8');
     expect(source.match(/^REPARTO_PRODUCTION_ERP_WRITES_APPROVED=false$/gm)).toHaveLength(1);

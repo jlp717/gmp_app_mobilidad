@@ -213,8 +213,7 @@ class ApiClient {
   static Dio _createDio() {
     final connectTimeout = ApiConfig.connectTimeout;
     final receiveTimeout = ApiConfig.receiveTimeout;
-    debugPrint(
-        '[ApiClient] Timeouts: connect=${connectTimeout.inSeconds}s, '
+    debugPrint('[ApiClient] Timeouts: connect=${connectTimeout.inSeconds}s, '
         'receive=${receiveTimeout.inSeconds}s (network=$_lastConnectivity)');
     final dio = Dio(
       BaseOptions(
@@ -586,7 +585,10 @@ class ApiClient {
       debugPrint('[ApiClient] Access token refreshed');
       return true;
     } on DioException catch (e) {
-      _lastTokenRefreshFailedDueToConnectivity = _isNetworkError(e);
+      // Treat gateway/Redis session-store blips as transient: wiping the local
+      // session here was forcing commercial re-login several times per day.
+      _lastTokenRefreshFailedDueToConnectivity =
+          _isNetworkError(e) || _isTransientAuthBackendError(e);
       final sessionMoved =
           epochAtStart != _authEpoch || _isStaleUnauthorized(e);
       if (!_lastTokenRefreshFailedDueToConnectivity && !sessionMoved) {
@@ -1085,6 +1087,26 @@ class ApiClient {
         e.type == DioExceptionType.unknown;
   }
 
+  /// Gateway / Redis session-store outages are recoverable; they must not
+  /// revoke the local commercial session (see fix-comercial-session-24h).
+  @visibleForTesting
+  static bool isTransientAuthBackendError(DioException e) =>
+      _isTransientAuthBackendError(e);
+
+  static bool _isTransientAuthBackendError(DioException e) {
+    final status = e.response?.statusCode;
+    if (status == 502 || status == 503 || status == 504) return true;
+    final data = e.response?.data;
+    if (data is Map) {
+      final code = data['code']?.toString();
+      if (code == 'AUTH_SESSION_STORE_UNAVAILABLE' ||
+          code == 'AUTH_PROFILE_UNAVAILABLE') {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// Converts untrusted JSON error fields without assuming they are strings.
   ///
   /// Validation middleware and DB adapters may return arrays or objects in
@@ -1201,11 +1223,15 @@ class ApiClient {
         final isStaleRequest = _isStaleUnauthorized(e);
         final leftoverCommercialInDelivery =
             _isDeliverySession && isCommercialOnlyPath(e.requestOptions.path);
+        // A transient refresh failure (Redis/gateway) must not cascade into
+        // global logout — the local 24h session remains until a definitive 401.
+        final refreshWasTransient = _lastTokenRefreshFailedDueToConnectivity;
         if (!isLoginRequest &&
             !_isLoggingOut &&
             !_isLoggingIn &&
             !isStaleRequest &&
-            !leftoverCommercialInDelivery) {
+            !leftoverCommercialInDelivery &&
+            !refreshWasTransient) {
           _isLoggingOut = true;
           debugPrint('[ApiClient] 401 detected - triggering logout');
           onUnauthorized?.call();

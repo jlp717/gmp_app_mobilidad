@@ -57,6 +57,52 @@ void main() {
       expect(committedToken, 'fresh-access-token');
     });
 
+    test('keeps the local session when refresh hits a Redis session-store 503',
+        () async {
+      ApiClient.resetForTesting();
+      ApiClient.authSessionExpiresAt =
+          DateTime.now().add(const Duration(hours: 1));
+      ApiClient.refreshTokenReaderOverride = () async => 'refresh-token';
+      ApiClient.dio.httpClientAdapter = _SessionStoreUnavailableAdapter();
+
+      var diverged = false;
+      ApiClient.onAuthSessionDiverged = () => diverged = true;
+
+      expect(await ApiClient.refreshAccessToken(), isFalse);
+      expect(ApiClient.lastTokenRefreshFailedDueToConnectivity, isTrue);
+      expect(diverged, isFalse);
+    });
+
+    test('does not logout on business 401 after a transient refresh failure',
+        () async {
+      ApiClient.resetForTesting();
+      ApiClient.authSessionExpiresAt =
+          DateTime.now().add(const Duration(hours: 1));
+      ApiClient.setAuthToken('expired-access');
+      ApiClient.refreshTokenReaderOverride = () async => 'refresh-token';
+
+      var unauthorized = false;
+      var diverged = false;
+      ApiClient.onUnauthorized = () => unauthorized = true;
+      ApiClient.onAuthSessionDiverged = () => diverged = true;
+      ApiClient.dio.httpClientAdapter = _ExpiredThenStoreDownAdapter();
+
+      ApiException? caught;
+      try {
+        await ApiClient.get('/dashboard/summary');
+        fail('Expected ApiException');
+      } on ApiException catch (error) {
+        caught = error;
+      }
+
+      expect(caught, isNotNull);
+      expect(caught!.statusCode, 401);
+      expect(ApiClient.lastTokenRefreshFailedDueToConnectivity, isTrue);
+      expect(diverged, isFalse);
+      expect(unauthorized, isFalse);
+      expect(ApiClient.authToken, 'expired-access');
+    });
+
     test('keeps the local session available when resume refresh is offline',
         () async {
       ApiClient.resetForTesting();
@@ -152,12 +198,12 @@ void main() {
   });
 
   group('Access token TTL contract', () {
-    test('server default TTL mirrors the backend 15-minute default', () {
+    test('server default TTL mirrors the product 24-hour access floor', () {
       expect(
         AuthNotifier.serverDefaultAccessTokenTtl,
-        const Duration(minutes: 15),
-        reason: 'Fallback must mirror the ACCESS_TTL_MS default of the '
-            'backend auth middleware, never an optimistic 1-hour guess.',
+        const Duration(hours: 24),
+        reason: 'Fallback must mirror JWT_ACCESS_EXPIRES=24h product floor '
+            '(PM2 ecosystem / .env.example), never the auth.js unit-test default.',
       );
     });
 
@@ -243,6 +289,64 @@ class _OfflineRefreshAdapter implements HttpClientAdapter {
     throw DioException.connectionError(
       requestOptions: options,
       reason: 'offline',
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _SessionStoreUnavailableAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return ResponseBody.fromString(
+      jsonEncode({
+        'error': 'El almacén de sesiones no está disponible.',
+        'code': 'AUTH_SESSION_STORE_UNAVAILABLE',
+      }),
+      503,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _ExpiredThenStoreDownAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    if (options.path.contains('/auth/refresh')) {
+      return ResponseBody.fromString(
+        jsonEncode({
+          'error': 'El almacén de sesiones no está disponible.',
+          'code': 'AUTH_SESSION_STORE_UNAVAILABLE',
+        }),
+        503,
+        headers: {
+          Headers.contentTypeHeader: ['application/json'],
+        },
+      );
+    }
+    return ResponseBody.fromString(
+      jsonEncode({
+        'error': 'Sesión expirada.',
+        'code': 'TOKEN_EXPIRED',
+      }),
+      401,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
     );
   }
 

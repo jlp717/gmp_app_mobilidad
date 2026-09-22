@@ -434,11 +434,11 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   @visibleForTesting
   static const Duration localSessionDuration = Duration(hours: 24);
 
-  /// Fallback access-token lifetime that mirrors the server default
-  /// (`ACCESS_TTL_MS` in backend/middleware/auth.js). Used only when the
-  /// server has not reported the real TTL; never an optimistic guess.
+  /// Fallback access-token lifetime that mirrors the product floor
+  /// (`JWT_ACCESS_EXPIRES=24h` via PM2 ecosystem / .env.example). Used only
+  /// when the server has not reported the real TTL; never an optimistic guess.
   @visibleForTesting
-  static const Duration serverDefaultAccessTokenTtl = Duration(minutes: 15);
+  static const Duration serverDefaultAccessTokenTtl = Duration(hours: 24);
   static const Duration _resumeRefreshThreshold = Duration(minutes: 5);
   static const String _sessionExpiresAtKey = 'session_expires_at';
 
