@@ -767,6 +767,48 @@ async function getLqdForVendorDay({
   };
 }
 
+function hasAppCobrosActivity(cobros = {}) {
+  return money(cobros.totalEfectivo) > 0
+    || money(cobros.totalCheques) > 0
+    || money(cobros.totalPostdatados) > 0
+    || money(cobros.totalRepartidorExcluded) > 0;
+}
+
+/**
+ * Prod: LQD ERP is the whiteboard of truth when the day exists.
+ * isolated_test: TEST_LQD is only a DSEDAC snapshot copy — it never absorbs
+ * JAVIER.TEST_COBROS writes. Prefer app cobros whenever the commercial
+ * registered anything that day so the UI does not show a stale ERP total.
+ */
+function chooseLiquidacionSummarySource({ lqd, cobros, saldoActual = 0 } = {}) {
+  const preferAppCobros = isIsolatedCommercialTest() && hasAppCobrosActivity(cobros);
+  const useLqd = Boolean(lqd) && !preferAppCobros;
+  if (useLqd) {
+    return {
+      useLqd: true,
+      totalEfectivo: lqd.totalEfectivo,
+      totalCheques: lqd.totalCheques,
+      totalPostdatados: lqd.totalPostdatados,
+      saldoActual: lqd.saldoActual,
+      totalAIngresar: lqd.totalAIngresar,
+      source: lqd.source,
+      lqdIgnoredReason: null,
+    };
+  }
+  return {
+    useLqd: false,
+    totalEfectivo: cobros.totalEfectivo,
+    totalCheques: cobros.totalCheques,
+    totalPostdatados: cobros.totalPostdatados,
+    saldoActual,
+    totalAIngresar: undefined,
+    source: preferAppCobros ? db2AppTable('COBROS') : 'COBROS',
+    lqdIgnoredReason: preferAppCobros && lqd
+      ? 'isolated_test_prefers_app_cobros_over_lqd_snapshot'
+      : null,
+  };
+}
+
 async function getDailySummary({
   vendorCodes,
   date,
@@ -792,21 +834,27 @@ async function getDailySummary({
     (sum, item) => sum + (item.yaCobrada === true ? Math.abs(item.amount || 0) : 0),
     0,
   );
+  const chosen = chooseLiquidacionSummarySource({ lqd, cobros, saldoActual });
   const summary = buildComercialLiquidacionSummary({
-    totalEfectivo: lqd ? lqd.totalEfectivo : cobros.totalEfectivo,
-    totalCheques: lqd ? lqd.totalCheques : cobros.totalCheques,
-    totalPostdatados: lqd ? lqd.totalPostdatados : cobros.totalPostdatados,
-    saldoActual: lqd ? lqd.saldoActual : saldoActual,
+    totalEfectivo: chosen.totalEfectivo,
+    totalCheques: chosen.totalCheques,
+    totalPostdatados: chosen.totalPostdatados,
+    saldoActual: chosen.saldoActual,
     devolucionesYaCobradas,
-    totalAIngresar: lqd ? lqd.totalAIngresar : undefined,
-    source: lqd ? lqd.source : 'COBROS',
+    totalAIngresar: chosen.totalAIngresar,
+    source: chosen.source,
   });
+  if (chosen.lqdIgnoredReason) {
+    summary.lqdIgnoredReason = chosen.lqdIgnoredReason;
+  }
 
   logger.info('[COMERCIAL_LIQUIDACION] daily summary built', {
     date: parsedDate.iso,
     vendors: sanitizeVendorCodes(vendorCodes).length,
     returns: returns.length,
     lqd: Boolean(lqd),
+    useLqd: chosen.useLqd,
+    lqdIgnoredReason: chosen.lqdIgnoredReason || undefined,
     saved: Boolean(savedDraft),
   });
 
@@ -1264,6 +1312,8 @@ module.exports = {
   classifyFormaPago,
   isPagareFormaPago,
   buildComercialLiquidacionSummary,
+  hasAppCobrosActivity,
+  chooseLiquidacionSummarySource,
   listReturns,
   listTestReturns,
   listPgCollectedDocuments,

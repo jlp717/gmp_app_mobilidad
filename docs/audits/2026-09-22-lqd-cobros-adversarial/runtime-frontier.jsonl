@@ -1,0 +1,4 @@
+{"name":"runtime_tables","pass":true,"REPARTO_TABLE_SET":"isolated_test","isolated":true,"cobrosTable":"JAVIER.TEST_COBROS","repartidorTable":"JAVIER.TEST_REPARTIDOR_COBROS","getLqdWouldUse":"JAVIER.TEST_LQD","laclae":"DSED.LACLAE","cvc":"DSEDAC.CVC","commercialTargets":"JAVIER.COMMERCIAL_TARGETS"}
+{"name":"frontier_laclae_prod","pass":true,"laclae":"DSED.LACLAE"}
+{"name":"frontier_cvc_prod_default","pass":true,"cvc":"DSEDAC.CVC"}
+{"name":"probe_cobro_token","pass":true,"token":"adv-cobro-35-1790066235454","table":"JAVIER.TEST_COBROS","importe":0.01,"ref":"CVC:COB:F:GMP:2025:F:0:12346:1:1"}

@@ -4,6 +4,7 @@ const {
   classifyFormaPago,
   isPagareFormaPago,
   buildComercialLiquidacionSummary,
+  chooseLiquidacionSummarySource,
   parseIsoDate,
   sanitizeVendorCodes,
   listReturns,
@@ -261,6 +262,78 @@ describe('getDailySummary', () => {
     expect(lqdSql).toMatch(/IMPORTETOTALAINGRESAR/);
     expect(lqdSql).not.toMatch(/VENDEDOR\s*=\s*'ALL'/i);
     expect(lqdSql).not.toMatch(/VISTA_DEUDA_BASE/i);
+  });
+
+  test('isolated_test prefers app cobros over TEST_LQD snapshot when cobros exist', async () => {
+    const restore = isolatedWriteEnv();
+    try {
+      mockQueryWithParams.mockImplementation(async (sql) => {
+        if (/TEST_COBROS|JAVIER\.COBROS/i.test(sql) && /FORMA_PAGO/i.test(sql)) {
+          return [{ FORMA_PAGO: 'CONTADO', TOTAL: '12.34' }];
+        }
+        if (/TEST_LQD|DSEDAC\.LQD/i.test(sql)) {
+          return [{
+            TOTAL_EFECTIVO: '528.39',
+            TOTAL_CHEQUES: '0',
+            TOTAL_POSTDATADOS: '0',
+            SALDO_ACTUAL: '0',
+            TOTAL_A_INGRESAR: '1411.80',
+            FILAS: 1,
+          }];
+        }
+        if (/DSED\.LACLAE/i.test(sql)) return [];
+        if (/TEST_LIQUIDACION_COMERCIAL/i.test(sql)) return [];
+        if (/VDDX/i.test(sql)) return [{ PORCENTAJEMINIMOCOBRO: 25 }];
+        return [];
+      });
+
+      const result = await getDailySummary({
+        vendorCodes: ['35'],
+        date: '2026-09-16',
+      });
+
+      expect(result.lqd).toEqual(expect.objectContaining({
+        totalAIngresar: 1411.8,
+        source: 'JAVIER.TEST_LQD',
+      }));
+      expect(result.summary.source).toMatch(/TEST_COBROS|COBROS/);
+      expect(result.summary.totalEfectivo).toBe(12.34);
+      expect(result.summary.totalAIngresar).toBe(12.34);
+      expect(result.summary.lqdIgnoredReason).toBe(
+        'isolated_test_prefers_app_cobros_over_lqd_snapshot',
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  test('prod keeps LQD even when app cobros exist same day', () => {
+    const previous = process.env.REPARTO_TABLE_SET;
+    delete process.env.REPARTO_TABLE_SET;
+    try {
+      const chosen = chooseLiquidacionSummarySource({
+        lqd: {
+          totalEfectivo: 100,
+          totalCheques: 0,
+          totalPostdatados: 0,
+          saldoActual: 0,
+          totalAIngresar: 100,
+          source: 'DSEDAC.LQD',
+        },
+        cobros: {
+          totalEfectivo: 12,
+          totalCheques: 0,
+          totalPostdatados: 0,
+          totalRepartidorExcluded: 0,
+        },
+      });
+      expect(chosen.useLqd).toBe(true);
+      expect(chosen.source).toBe('DSEDAC.LQD');
+      expect(chosen.lqdIgnoredReason).toBeNull();
+    } finally {
+      if (previous === undefined) delete process.env.REPARTO_TABLE_SET;
+      else process.env.REPARTO_TABLE_SET = previous;
+    }
   });
 });
 
