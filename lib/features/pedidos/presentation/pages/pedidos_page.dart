@@ -22,6 +22,10 @@ import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
+import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
+import 'package:gmp_app_mobilidad/core/widgets/offline_state_widget.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/dialogs/client_search_dialog.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/promotions_list_page.dart';
@@ -80,6 +84,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   Timer? _stockRefreshTimer;
   Timer? _autoSaveTimer;
   ProviderSubscription<String?>? _vendorSubscription;
+  StreamSubscription<ConnectivityStatus>? _connectivitySubscription;
+  bool _offlineSyncInFlight = false;
 
   // Mejora 10 — Mis Pedidos search & date filter
   String _orderSearch = '';
@@ -155,6 +161,16 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
     _catalogScrollController.addListener(_onCatalogScroll);
 
+    _connectivitySubscription =
+        ConnectivityService.instance.stream.listen((status) {
+      if (!mounted) return;
+      if (status == ConnectivityStatus.online) {
+        unawaited(_syncPendingOnReconnect());
+      } else {
+        setState(() {});
+      }
+    });
+
     // Auto-refresh stock every 120 seconds only when cart has items
     _stockRefreshTimer = Timer.periodic(
       const Duration(seconds: 120),
@@ -204,6 +220,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   void dispose() {
     unawaited(_flushDraftIfDirty());
     _vendorSubscription?.close();
+    unawaited(_connectivitySubscription?.cancel() ?? Future<void>.value());
     _stockRefreshTimer?.cancel();
     _autoSaveTimer?.cancel();
     _debounceTimer?.cancel();
@@ -298,13 +315,37 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   Future<void> _initOffline() async {
     try {
       await PedidosOfflineService.init();
-      // Auto-sync pending orders
+      OfflineSyncNotifier.refreshCounts(
+        pending: PedidosOfflineService.pendingSyncCount,
+        failed: PedidosOfflineService.getFailedSyncs().length,
+      );
+      if (mounted) setState(() {});
+      await _syncPendingOnReconnect();
+    } catch (e) {
+      _debugLog('[PedidosPage] Offline init error: $e');
+    }
+  }
+
+  /// Auto-envío al recuperar red: drena la cola Hive de pedidos pendientes.
+  Future<void> _syncPendingOnReconnect() async {
+    if (_offlineSyncInFlight || !mounted) return;
+    final pending = PedidosOfflineService.pendingSyncCount;
+    if (pending <= 0) {
+      if (mounted) setState(() {});
+      return;
+    }
+
+    _offlineSyncInFlight = true;
+    try {
       final provider = ref.read(pedidosProvider);
-      final synced = await provider.syncPendingOrders();
-      if (synced > 0 && mounted) {
+      final result = await OfflineSyncBridge.syncAll(notify: true);
+      if (!mounted) return;
+      if (result.pedidosSynced > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$synced pedido(s) sincronizado(s)'),
+            content: Text(
+              '${result.pedidosSynced} pedido(s) pendiente(s) enviados',
+            ),
             backgroundColor: AppTheme.success,
           ),
         );
@@ -313,9 +354,65 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           forceRefresh: true,
         );
       }
+      setState(() {});
     } catch (e) {
-      _debugLog('[PedidosPage] Offline init error: $e');
+      _debugLog('[PedidosPage] Reconnect sync error: $e');
+    } finally {
+      _offlineSyncInFlight = false;
     }
+  }
+
+  Widget _buildPendingSyncAlert() {
+    return ValueListenableBuilder<int>(
+      valueListenable: OfflineSyncNotifier.pendingCount,
+      builder: (context, pending, _) {
+        final localPending = PedidosOfflineService.pendingSyncCount;
+        final count = pending > 0 ? pending : localPending;
+        if (count <= 0) return const SizedBox.shrink();
+        final threshold = ref.read(pedidosProvider).draftAutoSendThreshold;
+        final detail = threshold > 0
+            ? '$count pendiente(s) de enviar (umbral auto-envío: $threshold).'
+            : '$count pedido(s) pendiente(s) de enviar al recuperar conexión.';
+        return Semantics(
+          liveRegion: true,
+          label: detail,
+          child: Material(
+            color: AppTheme.warning.withValues(alpha: 0.16),
+            child: InkWell(
+              onTap: () => unawaited(_syncPendingOnReconnect()),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.cloud_upload_outlined,
+                      size: 18,
+                      color: AppTheme.warning,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        detail,
+                        style: const TextStyle(
+                          color: AppTheme.warning,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => unawaited(_syncPendingOnReconnect()),
+                      child: const Text('Enviar'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _loadInitialData({bool forceRefreshProducts = false}) {
@@ -952,6 +1049,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         decoration: AppTheme.appBackground(),
         child: Column(
           children: [
+            const OfflineBanner(),
+            _buildPendingSyncAlert(),
             // "Ver como" vendor selector for JEFE_VENTAS — visible on BOTH tabs
             if (widget.isJefeVentas || widget.forceShowVendorSelector)
               GlobalVendorSelector(

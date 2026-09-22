@@ -15,6 +15,7 @@ module.exports = {
     addOrderLine: impl.addOrderLine,
     cancelOrder: impl.cancelOrder,
     checkDraftAccumulation: impl.checkDraftAccumulation,
+    getPedidosPendientesSyncThreshold: impl.getPedidosPendientesSyncThreshold,
     cloneOrder: impl.cloneOrder,
     generateOrderPdf: impl.generateOrderPdf,
     calculateLineImporte: impl.calculateLineImporte,

@@ -67,8 +67,8 @@ const SELECT_ORDER_VENDOR_FOR_AUTH_SQL = ERP_SCHEMA === 'DSEDAC'
     ? 'SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR, TRIM(CODIGOCLIENTEALBARAN) AS CODIGOCLIENTE FROM DSEDAC.PEDIDOS_CAB WHERE ID = ?'
     : `SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR, TRIM(COALESCE(NULLIF(CODIGOCLIENTE, ''), CODIGOCLIENTEALBARAN)) AS CODIGOCLIENTE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`;
 const logger = require('../../middleware/logger');
-const { cachedQuery, invalidateOnMutation } = require('../query-optimizer');
-const { redisCache, TTL } = require('../redis-cache');
+const { cachedQuery, invalidateOnMutation, patternFor } = require('../query-optimizer');
+const { redisCache, TTL, deleteCachePattern } = require('../redis-cache');
 
 // Best-effort cache invalidation tras una mutacion de pedidos.
 // No bloquea el flujo si Redis esta caido ni si el modulo esta mockeado en tests.
@@ -83,6 +83,59 @@ function invalidatePedidosCache(pedidoId) {
         }
     } catch (err) {
         logger.warn(`[PEDIDOS] Cache invalidation skipped: ${err.message}`);
+    }
+}
+
+/**
+ * VDDX.PEDIDOSPENDIENTESSINCRONIZAR — umbral ERP de auto-envío.
+ * isolated_test → JAVIER.TEST_VDDX (expand-contract); prod → DSEDAC.VDDX.
+ * 0 / ausente = auto-envío desactivado.
+ */
+function vddxSyncThresholdTable() {
+    if (String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test') {
+        return 'JAVIER.TEST_VDDX';
+    }
+    return comercialErpTable('VDDX');
+}
+
+async function getPedidosPendientesSyncThreshold(vendedorCode) {
+    const code = truncate(vendedorCode, 2);
+    if (!code) return 0;
+    try {
+        const rows = await queryWithParams(
+            `SELECT PEDIDOSPENDIENTESSINCRONIZAR AS THRESHOLD
+               FROM ${vddxSyncThresholdTable()}
+              WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
+              FETCH FIRST 1 ROW ONLY`,
+            [code],
+            false,
+        );
+        const raw = rows?.[0]?.THRESHOLD ?? rows?.[0]?.threshold;
+        const threshold = parseInt(raw, 10);
+        return Number.isFinite(threshold) && threshold > 0 ? threshold : 0;
+    } catch (err) {
+        logger.warn(`[PEDIDOS] VDDX sync threshold read failed: ${err.message}`);
+        return 0;
+    }
+}
+
+async function invalidateRuteroCachesAfterPedido(vendedorCode) {
+    try {
+        const code = String(vendedorCode || '').trim();
+        const patterns = [
+            patternFor('rutero:orders:v3', 2),
+            'query:rutero:day:payload:v4:*',
+        ];
+        if (code) {
+            const normalized = code.replace(/^0+/, '') || code;
+            patterns.push(
+                `query:rutero:day:payload:v4:scope:${normalized}:primary:*`,
+                `query:rutero:day:payload:v4:scope:${code}:primary:*`,
+            );
+        }
+        await Promise.all(patterns.map((p) => deleteCachePattern(p).catch(() => 0)));
+    } catch (err) {
+        logger.warn(`[PEDIDOS] Rutero cache invalidation skipped: ${err.message}`);
     }
 }
 const { formatErpDocumentLabel } = require('../../utils/erp-document-label');
@@ -4790,6 +4843,9 @@ async function confirmOrder(orderId, saleType, options = {}) {
 
     // Invalida cache tras confirmacion (cambia ESTADO, importes y stock reservas).
     invalidatePedidosCache(id);
+    await invalidateRuteroCachesAfterPedido(
+        order?.header?.vendedor || vendedorCode,
+    );
 
     if (order?.header) {
         order.header.cobroPropio = cobroPropio;
@@ -5515,14 +5571,17 @@ async function getBrands() {
 // Req #8: DRAFT ACCUMULATION CONTROL
 // ============================================================================
 /**
- * Si un comercial acumula >= threshold borradores, devuelve la lista de
- * borradores y opcionalmente auto-confirma el mas antiguo. Se disena como
- * funcion pura (lectura) por defecto; el caller (route POST /pedidos)
- * decide si invocar la auto-confirmacion pasando `autoConfirm: true`.
+ * Si un comercial acumula >= threshold borradores (VDDX.PEDIDOSPENDIENTESSINCRONIZAR),
+ * advierte y opcionalmente auto-confirma el mas antiguo.
+ * threshold=0 (ERP default mayoritario) desactiva auto-envío.
  */
-async function checkDraftAccumulation(vendedorCode, { autoConfirm = false, threshold = 3, options = {} } = {}) {
+async function checkDraftAccumulation(vendedorCode, { autoConfirm = false, threshold = null, options = {} } = {}) {
     const code = truncate(vendedorCode, 2);
-    if (!code) return { warning: false, drafts: [] };
+    if (!code) return { warning: false, drafts: [], threshold: 0, count: 0 };
+
+    const resolvedThreshold = threshold == null
+        ? await getPedidosPendientesSyncThreshold(code)
+        : (parseInt(threshold, 10) || 0);
 
     let drafts = [];
     try {
@@ -5538,41 +5597,50 @@ async function checkDraftAccumulation(vendedorCode, { autoConfirm = false, thres
         );
     } catch (err) {
         logger.warn(`[PEDIDOS] checkDraftAccumulation read error: ${err.message}`);
-        return { warning: false, drafts: [], error: err.message };
+        return { warning: false, drafts: [], error: err.message, threshold: resolvedThreshold, count: 0 };
     }
 
-    if (!drafts || drafts.length < threshold) {
-        return { warning: false, drafts: drafts || [], count: (drafts || []).length };
+    const count = (drafts || []).length;
+    if (!resolvedThreshold || count < resolvedThreshold) {
+        return {
+            warning: false,
+            drafts: drafts || [],
+            count,
+            threshold: resolvedThreshold,
+            autoSendEnabled: resolvedThreshold > 0,
+        };
     }
 
     const oldest = drafts[0];
     if (!autoConfirm) {
         return {
             warning: true,
-            count: drafts.length,
-            threshold,
+            count,
+            threshold: resolvedThreshold,
+            autoSendEnabled: true,
             oldestId: oldest.ID,
             oldestNumber: oldest.NUMEROPEDIDO,
-            message: `Tienes ${drafts.length} borradores acumulados. Se recomienda confirmar el mas antiguo (#${oldest.NUMEROPEDIDO}).`,
+            message: `Tienes ${count} borradores acumulados (umbral ${resolvedThreshold}). Se recomienda confirmar el mas antiguo (#${oldest.NUMEROPEDIDO}).`,
             drafts,
         };
     }
 
-    // Auto-confirm path (opt-in): seguro con try/catch que NO bloquea creacion
     try {
         await confirmOrder(oldest.ID, 'CC', {
             ...options,
             userId: options.userId || 'AUTO_DRAFT_GUARD',
             forceConfirm: true,
         });
-        logger.warn(`[PEDIDOS] Auto-confirmed draft #${oldest.NUMEROPEDIDO} (id=${oldest.ID}) por acumulacion (${drafts.length})`);
+        logger.warn(`[PEDIDOS] Auto-confirmed draft #${oldest.NUMEROPEDIDO} (id=${oldest.ID}) por acumulacion (${count}, umbral=${resolvedThreshold})`);
         return {
             warning: true,
             autoConfirmed: true,
             autoConfirmedId: oldest.ID,
             autoConfirmedNumber: oldest.NUMEROPEDIDO,
-            count: drafts.length,
-            message: `Tenias ${drafts.length} borradores. El mas antiguo (#${oldest.NUMEROPEDIDO}) se ha confirmado automaticamente.`,
+            count,
+            threshold: resolvedThreshold,
+            autoSendEnabled: true,
+            message: `Tenias ${count} borradores (umbral ${resolvedThreshold}). El mas antiguo (#${oldest.NUMEROPEDIDO}) se ha confirmado automaticamente.`,
             drafts,
         };
     } catch (confirmErr) {
@@ -5581,11 +5649,13 @@ async function checkDraftAccumulation(vendedorCode, { autoConfirm = false, thres
             warning: true,
             autoConfirmed: false,
             autoConfirmError: confirmErr.message,
-            count: drafts.length,
+            count,
+            threshold: resolvedThreshold,
+            autoSendEnabled: true,
             oldestId: oldest.ID,
             oldestNumber: oldest.NUMEROPEDIDO,
             drafts,
-            message: `${drafts.length} borradores acumulados. No se pudo auto-confirmar el mas antiguo (${confirmErr.code || confirmErr.message}).`,
+            message: `${count} borradores acumulados. No se pudo auto-confirmar el mas antiguo (${confirmErr.code || confirmErr.message}).`,
         };
     }
 }
@@ -7242,6 +7312,7 @@ module.exports = {
     getProductBrands,
     getActivePromotions: getActivePromotionsV2,
     checkDraftAccumulation,
+    getPedidosPendientesSyncThreshold,
     getClientBalance,
     cloneOrder,
     getComplementaryProducts,

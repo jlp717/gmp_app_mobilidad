@@ -160,6 +160,7 @@ class PedidosProvider with ChangeNotifier {
   // Req #8: Estado del aviso de borradores acumulados.
   String? _draftWarningMessage;
   int _accumulatedDraftCount = 0;
+  int _draftAutoSendThreshold = 0;
 
   // ── Client Balance ──
   Map<String, dynamic> _clientBalance = {};
@@ -358,8 +359,11 @@ class PedidosProvider with ChangeNotifier {
   // Req #8: getters de aviso de borradores acumulados.
   String? get draftWarningMessage => _draftWarningMessage;
   int get accumulatedDraftCount => _accumulatedDraftCount;
+  int get draftAutoSendThreshold => _draftAutoSendThreshold;
   bool get hasDraftAccumulationWarning =>
-      _draftWarningMessage != null && _accumulatedDraftCount >= 3;
+      _draftWarningMessage != null &&
+      _draftAutoSendThreshold > 0 &&
+      _accumulatedDraftCount >= _draftAutoSendThreshold;
 
   /// Llamado por la UI para limpiar el warning una vez mostrado.
   void clearDraftWarning() {
@@ -369,7 +373,7 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Consulta al backend si el comercial acumula 3+ borradores.
+  /// Consulta al backend si el comercial acumula ≥ umbral VDDX borradores.
   /// Resultado disponible vía [draftWarningMessage] / [accumulatedDraftCount].
   Future<void> refreshDraftStatus(String vendedorCode) async {
     final code = vendedorCode.trim();
@@ -385,7 +389,11 @@ class PedidosProvider with ChangeNotifier {
       final count = (data['count'] ?? 0) is num
           ? (data['count'] as num).toInt()
           : int.tryParse((data['count'] ?? '0').toString()) ?? 0;
+      final threshold = (data['threshold'] ?? 0) is num
+          ? (data['threshold'] as num).toInt()
+          : int.tryParse((data['threshold'] ?? '0').toString()) ?? 0;
       _accumulatedDraftCount = count;
+      _draftAutoSendThreshold = threshold;
       _draftWarningMessage = warning ? data['message']?.toString() : null;
       notifyListeners();
     } catch (_) {

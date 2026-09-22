@@ -597,7 +597,7 @@ router.get('/families/detailed', async (req, res) => {
 
 /**
  * Req #8: GET /api/pedidos/draft-status/:vendedorCode
- * Indica al frontend si hay >=3 borradores acumulados para advertir al usuario.
+ * Indica al frontend si hay >= umbral (VDDX.PEDIDOSPENDIENTESSINCRONIZAR) borradores.
  * Llamada solo de lectura: no auto-confirma. El frontend puede llamar a
  * POST /api/pedidos/draft-status/:vendedorCode/auto-confirm para opt-in.
  */

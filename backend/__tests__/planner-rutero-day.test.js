@@ -124,6 +124,10 @@ describe('Planner rutero/day route', () => {
         ];
       }
 
+      if (/PEDIDOS_CAB/i.test(sql)) {
+        return [];
+      }
+
       return [];
     });
   });
@@ -168,7 +172,56 @@ describe('Planner rutero/day route', () => {
     const orderStatusQueries = executedSql.filter(sql => sql.includes('FROM DSEDAC.CPC'));
     expect(orderStatusQueries).toHaveLength(1);
     expect(orderStatusQueries[0]).toContain('GROUP BY TRIM(C.CODIGOCLIENTEALBARAN)');
-    expect(executedSql.some(sql => sql.includes('PEDIDOS_CAB'))).toBe(false);
+    expect(executedSql.some(sql =>
+      /FROM\s+(JAVIER\.)?(TEST_)?PEDIDOS_CAB/i.test(sql) || sql.includes('PEDIDOS_CAB'),
+    )).toBe(true);
+  });
+
+  test('GET /rutero/day/:day paints CONFIRMADO from PEDIDOS_CAB when CPC is empty', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (sql.includes('FROM DSEDAC.CLI')) {
+        return [
+          {
+            CODE: '4300000001',
+            NAME: 'Cliente Uno',
+            ADDRESS: 'Calle 1',
+            CITY: 'Madrid',
+            PHONE: '600111111',
+            PHONE2: '',
+          },
+        ];
+      }
+      if (sql.includes('FROM JAVIER.RUTERO_CONFIG')) return [];
+      if (sql.includes('FROM DSEDAC.CPC') || sql.includes('FROM JAVIER.TEST_CPC')) return [];
+      if (/PEDIDOS_CAB/i.test(sql)) {
+        return [
+          {
+            CODE: '4300000001',
+            ESTADO: 'CONFIRMADO',
+            TOTAL_COUNT: 1,
+            LAST_ORDER_ID: 99,
+            LAST_ORDER_NUMBER: 42,
+          },
+        ];
+      }
+      return [];
+    });
+
+    const res = await request(app)
+      .get('/rutero/day/lunes')
+      .query({
+        vendedorCodes: '15',
+        role: 'comercial',
+        year: '2026',
+        month: '9',
+        week: '3',
+      });
+
+    expect(res.status).toBe(200);
+    const client = res.body.clients.find(c => c.code === '4300000001');
+    expect(client.orderStatus.state).toBe('CONFIRMADO');
+    expect(client.orderStatus.label).toBe('VENTA CONFIRMADA');
+    expect(client.orderStatus.hasOrder).toBe(true);
   });
 
   test('GET /rutero/day/:day keeps every manager client beyond the 200-row batch', async () => {

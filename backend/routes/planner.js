@@ -15,6 +15,7 @@ const {
     handleRouteError
 } = require('../utils/common');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
+const { db2AppTable } = require('../utils/db2-schemas');
 const { resolvePlannerRole, PlannerRoleError } = require('../src/modules/planner/domain/planner-role-policy');
 const { resolveVendorScope } = require('../middleware/vendor-scope');
 
@@ -461,9 +462,9 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
         ? ` AND TRIM(C.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`
         : '';
 
-    // JAVIER.PEDIDOS_CAB is the app/test buffer. Commercial Ruta reads live
-    // ERP orders from comercialErpTable('CPC'): client=CODIGOCLIENTEALBARAN, not ESTADO.
-    const sql = `
+    // Live ERP (CPC) + app buffer (PEDIDOS_CAB). Demo bug: confirmed app
+    // pedidos stay LOCAL and never hit CPC → ruta stayed "SIN VENTA".
+    const cpcSql = `
         SELECT
             TRIM(C.CODIGOCLIENTEALBARAN) AS CODE,
             COUNT(*) AS TOTAL_COUNT,
@@ -478,6 +479,27 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
         GROUP BY TRIM(C.CODIGOCLIENTEALBARAN)
     `;
 
+    const appSql = `
+        SELECT
+            TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))) AS CODE,
+            TRIM(C.ESTADO) AS ESTADO,
+            COUNT(*) AS TOTAL_COUNT,
+            MAX(C.ID) AS LAST_ORDER_ID,
+            MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER
+        FROM ${db2AppTable('PEDIDOS_CAB')} C
+        WHERE TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))) IN (${clientPlaceholders})
+          AND C.ANODOCUMENTO = ?
+          AND C.MESDOCUMENTO = ?
+          AND C.DIADOCUMENTO = ?
+          AND TRIM(C.ESTADO) IN (
+            'CONFIRMADO', 'ENVIADO', 'BORRADOR', 'CONFIRMANDO',
+            'PEND_APROB', 'PENDIENTE', 'PENDIENTE_APROBACION'
+          )
+          ${vendorFilterSql}
+        GROUP BY TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))),
+                 TRIM(C.ESTADO)
+    `;
+
     const params = [
         ...clientCodes,
         orderDate.year,
@@ -486,11 +508,12 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
         ...(useVendorFilter ? vendorCodes : []),
     ];
 
+    let degraded = false;
     try {
-        const orderCacheKey = `rutero:orders:v2:${orderDate.iso}:${ruteroBatchHash([...clientCodes, ...vendorCodes])}`;
+        const orderCacheKey = `rutero:orders:v3:${orderDate.iso}:${ruteroBatchHash([...clientCodes, ...vendorCodes])}`;
         const rows = await cachedQuery(
             queryWithParams,
-            sql,
+            cpcSql,
             orderCacheKey,
             TTL.REALTIME,
             params,
@@ -514,11 +537,67 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
                 date: orderDate.iso,
             });
         });
-        return { statusMap, degraded: false };
     } catch (_error) {
         logger.error('[RUTERO DAY] CPC production order status query failed');
-        return { statusMap, degraded: true };
+        degraded = true;
     }
+
+    try {
+        const appCacheKey = `rutero:orders:app:v1:${orderDate.iso}:${ruteroBatchHash([...clientCodes, ...vendorCodes])}`;
+        const appRows = await cachedQuery(
+            queryWithParams,
+            appSql,
+            appCacheKey,
+            TTL.REALTIME,
+            params,
+        );
+        (appRows || []).forEach((row) => {
+            const code = (row.CODE ?? row.code ?? '').toString().trim();
+            if (!code) return;
+            const estado = String(row.ESTADO ?? row.estado ?? '').trim().toUpperCase();
+            const totalCount = parseInt(row.TOTAL_COUNT ?? row.total_count, 10) || 0;
+            if (totalCount <= 0) return;
+            const lastOrderId = parseInt(row.LAST_ORDER_ID ?? row.last_order_id, 10) || null;
+            const lastOrderNumber = parseInt(row.LAST_ORDER_NUMBER ?? row.last_order_number, 10) || null;
+            const current = statusMap.get(code) || emptyRuteroOrderStatus(orderDate);
+            const isConfirmed = estado === 'CONFIRMADO' || estado === 'ENVIADO';
+            const isDraft = !isConfirmed;
+
+            if (isConfirmed) {
+                statusMap.set(code, {
+                    state: 'CONFIRMADO',
+                    label: 'VENTA CONFIRMADA',
+                    hasOrder: true,
+                    confirmedCount: (current.confirmedCount || 0) + totalCount,
+                    draftCount: current.draftCount || 0,
+                    totalCount: (current.totalCount || 0) + totalCount,
+                    lastOrderId,
+                    lastOrderNumber: lastOrderNumber || current.lastOrderNumber || null,
+                    date: orderDate.iso,
+                });
+                return;
+            }
+
+            if (isDraft && current.state !== 'CONFIRMADO') {
+                statusMap.set(code, {
+                    state: 'BORRADOR',
+                    label: 'PEDIDO BORRADOR',
+                    hasOrder: true,
+                    confirmedCount: current.confirmedCount || 0,
+                    draftCount: (current.draftCount || 0) + totalCount,
+                    totalCount: (current.totalCount || 0) + totalCount,
+                    lastOrderId,
+                    lastOrderNumber: lastOrderNumber || current.lastOrderNumber || null,
+                    date: orderDate.iso,
+                });
+            }
+        });
+    } catch (appErr) {
+        logger.warn(`[RUTERO DAY] PEDIDOS_CAB overlay skipped: ${appErr.message}`);
+        // Overlay failure must not flip the whole day to degraded if CPC worked.
+    }
+
+    return { statusMap, degraded };
 }
 
 // =============================================================================
