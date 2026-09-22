@@ -1,0 +1,531 @@
+﻿{
+  "tables": {
+    "ok": true,
+    "count": 9,
+    "rows": [
+      {
+        "TABLE_NAME": "BOLSA_COMERCIAL"
+      },
+      {
+        "TABLE_NAME": "MOVIMIENTOS_BOLSA"
+      },
+      {
+        "TABLE_NAME": "TEST_BOLSA_COMERCIAL"
+      },
+      {
+        "TABLE_NAME": "TEST_COBROS"
+      },
+      {
+        "TABLE_NAME": "TEST_LQD"
+      },
+      {
+        "TABLE_NAME": "TEST_MOVIMIENTOS_BOLSA"
+      },
+      {
+        "TABLE_NAME": "TEST_PEDIDOS_CAB"
+      },
+      {
+        "TABLE_NAME": "TEST_PEDIDOS_STOCK_RESERVE"
+      },
+      {
+        "TABLE_NAME": "TEST_VDDX"
+      }
+    ]
+  },
+  "movCounts": {
+    "ok": true,
+    "count": 4,
+    "rows": [
+      {
+        "T": "MOVIMIENTOS_BOLSA",
+        "N": 9
+      },
+      {
+        "T": "TEST_MOVIMIENTOS_BOLSA",
+        "N": 20
+      },
+      {
+        "T": "TEST_COBROS",
+        "N": 12
+      },
+      {
+        "T": "TEST_LQD",
+        "N": 62830
+      }
+    ]
+  },
+  "discountedVsTestMov": {
+    "ok": true,
+    "count": 19,
+    "rows": [
+      {
+        "PEDIDO_ID": 82,
+        "DESCUENTO_GLOBAL": 10,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 1.93
+      },
+      {
+        "PEDIDO_ID": 67,
+        "DESCUENTO_GLOBAL": 10,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 2,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 4.34
+      },
+      {
+        "PEDIDO_ID": 32,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 5.27
+      },
+      {
+        "PEDIDO_ID": 31,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 5.27
+      },
+      {
+        "PEDIDO_ID": 30,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 0.34
+      },
+      {
+        "PEDIDO_ID": 29,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 5.27
+      },
+      {
+        "PEDIDO_ID": 28,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 5.27
+      },
+      {
+        "PEDIDO_ID": 27,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 0.34
+      },
+      {
+        "PEDIDO_ID": 26,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 5.27
+      },
+      {
+        "PEDIDO_ID": 25,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 5.27
+      },
+      {
+        "PEDIDO_ID": 24,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 0.34
+      },
+      {
+        "PEDIDO_ID": 23,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 5.27
+      },
+      {
+        "PEDIDO_ID": 22,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 0.34
+      },
+      {
+        "PEDIDO_ID": 21,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 5.27
+      },
+      {
+        "PEDIDO_ID": 20,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 0.34
+      },
+      {
+        "PEDIDO_ID": 19,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 5.27
+      },
+      {
+        "PEDIDO_ID": 18,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 1.44
+      },
+      {
+        "PEDIDO_ID": 17,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 5.27
+      },
+      {
+        "PEDIDO_ID": 16,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_TEST": 1,
+        "MOV_APP": 0,
+        "CONSUMO_TEST": 0.34
+      }
+    ]
+  },
+  "recentTestMov": {
+    "ok": true,
+    "count": 15,
+    "rows": [
+      {
+        "ID": 29,
+        "V": "98",
+        "PEDIDO_ID": 32,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 5.27,
+        "CREATED_AT": "2026-09-22 14:25:02.503000"
+      },
+      {
+        "ID": 28,
+        "V": "35",
+        "PEDIDO_ID": 31,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 5.27,
+        "CREATED_AT": "2026-09-22 14:25:00.371000"
+      },
+      {
+        "ID": 27,
+        "V": "80",
+        "PEDIDO_ID": 30,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 0.34,
+        "CREATED_AT": "2026-09-22 14:24:58.226000"
+      },
+      {
+        "ID": 26,
+        "V": "98",
+        "PEDIDO_ID": 29,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 5.27,
+        "CREATED_AT": "2026-09-22 14:24:56.090000"
+      },
+      {
+        "ID": 25,
+        "V": "35",
+        "PEDIDO_ID": 28,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 5.27,
+        "CREATED_AT": "2026-09-22 14:24:53.661000"
+      },
+      {
+        "ID": 24,
+        "V": "80",
+        "PEDIDO_ID": 27,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 0.34,
+        "CREATED_AT": "2026-09-22 14:24:51.502000"
+      },
+      {
+        "ID": 23,
+        "V": "98",
+        "PEDIDO_ID": 26,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 5.27,
+        "CREATED_AT": "2026-09-22 14:24:49.329000"
+      },
+      {
+        "ID": 22,
+        "V": "35",
+        "PEDIDO_ID": 25,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 5.27,
+        "CREATED_AT": "2026-09-22 14:24:46.673000"
+      },
+      {
+        "ID": 21,
+        "V": "80",
+        "PEDIDO_ID": 24,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 0.34,
+        "CREATED_AT": "2026-09-22 14:24:44.536000"
+      },
+      {
+        "ID": 20,
+        "V": "35",
+        "PEDIDO_ID": 23,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 5.27,
+        "CREATED_AT": "2026-09-22 14:24:42.391000"
+      },
+      {
+        "ID": 19,
+        "V": "80",
+        "PEDIDO_ID": 22,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 0.34,
+        "CREATED_AT": "2026-09-22 14:24:40.152000"
+      },
+      {
+        "ID": 18,
+        "V": "35",
+        "PEDIDO_ID": 21,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 5.27,
+        "CREATED_AT": "2026-09-22 14:24:37.976000"
+      },
+      {
+        "ID": 17,
+        "V": "80",
+        "PEDIDO_ID": 20,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 0.34,
+        "CREATED_AT": "2026-09-22 14:24:35.820000"
+      },
+      {
+        "ID": 16,
+        "V": "35",
+        "PEDIDO_ID": 19,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 5.27,
+        "CREATED_AT": "2026-09-22 14:24:33.651000"
+      },
+      {
+        "ID": 15,
+        "V": "80",
+        "PEDIDO_ID": 18,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 1.44,
+        "CREATED_AT": "2026-09-22 14:24:31.499000"
+      }
+    ]
+  },
+  "vddxThresholds": {
+    "ok": true,
+    "count": 21,
+    "rows": [
+      {
+        "V": "16",
+        "TH": 3
+      },
+      {
+        "V": "03",
+        "TH": 3
+      },
+      {
+        "V": "33",
+        "TH": 3
+      },
+      {
+        "V": "05",
+        "TH": 3
+      },
+      {
+        "V": "92",
+        "TH": 3
+      },
+      {
+        "V": "02",
+        "TH": 3
+      },
+      {
+        "V": "10",
+        "TH": 3
+      },
+      {
+        "V": "13",
+        "TH": 3
+      },
+      {
+        "V": "93",
+        "TH": 3
+      },
+      {
+        "V": "18",
+        "TH": 3
+      },
+      {
+        "V": "14",
+        "TH": 3
+      },
+      {
+        "V": "80",
+        "TH": 3
+      },
+      {
+        "V": "81",
+        "TH": 3
+      },
+      {
+        "V": "83",
+        "TH": 3
+      },
+      {
+        "V": "35",
+        "TH": 3
+      },
+      {
+        "V": "72",
+        "TH": 3
+      },
+      {
+        "V": "73",
+        "TH": 3
+      },
+      {
+        "V": "53",
+        "TH": 3
+      },
+      {
+        "V": "15",
+        "TH": 3
+      },
+      {
+        "V": "90",
+        "TH": 2
+      },
+      {
+        "V": "86",
+        "TH": 2
+      }
+    ]
+  },
+  "vddxZeroCount": {
+    "ok": true,
+    "count": 1,
+    "rows": [
+      {
+        "WITH_TH": 21,
+        "ZERO_TH": 121,
+        "TOTAL": 142
+      }
+    ]
+  },
+  "expiredDrafts": {
+    "ok": true,
+    "count": 1,
+    "rows": [
+      {
+        "N": 0
+      }
+    ]
+  },
+  "cobrosIdempotencyCols": {
+    "ok": true,
+    "count": 1,
+    "rows": [
+      {
+        "COLUMN_NAME": "IDEMPOTENCY_TOKEN"
+      }
+    ]
+  },
+  "cobrosRecent": {
+    "ok": true,
+    "count": 8,
+    "rows": [
+      {
+        "ID": "CBR-8e38840212210864975441f8f5f18a09",
+        "V": "05",
+        "IMPORTE": 1898.44,
+        "FECHA": "2026-09-21 15:16:29.265106",
+        "IDEMPOTENCY_TOKEN": "6ef12066564bbaeea0f90e32bc9b05054b6652ca493a3787e911a0dc444390a8"
+      },
+      {
+        "ID": "CBR-40dc468097eca4b43a8ecfcc610982e2",
+        "V": "80",
+        "IMPORTE": 0.01,
+        "FECHA": "2026-09-16 22:24:11.288636",
+        "IDEMPOTENCY_TOKEN": "HitCob9590340006"
+      },
+      {
+        "ID": "CBR-3a040181a09e6ad93c0b8c4039b64ed4",
+        "V": "05",
+        "IMPORTE": 1435.84,
+        "FECHA": "2026-09-21 15:16:59.543242",
+        "IDEMPOTENCY_TOKEN": "26245532537434863a2c826fc07801f2f5390b05c18667bb43a0b4e87ada1bfd"
+      },
+      {
+        "ID": "CBR-25b5aee8c0a467b66e843b6bb8b4817c",
+        "V": "35",
+        "IMPORTE": 0.01,
+        "FECHA": "2026-09-22 10:35:42.621661",
+        "IDEMPOTENCY_TOKEN": "adv-cobro-35-1790066235454"
+      },
+      {
+        "ID": "CBR-1bbdd81070996be18dd489d34fb7956c",
+        "V": "35",
+        "IMPORTE": 0.01,
+        "FECHA": "2026-09-16 16:01:38.956334",
+        "IDEMPOTENCY_TOKEN": "HitCob9567386983"
+      },
+      {
+        "ID": "CBR-06734e30c57154add854bf93a8e5d7ff",
+        "V": "35",
+        "IMPORTE": 0.01,
+        "FECHA": "2026-09-16 22:24:39.607367",
+        "IDEMPOTENCY_TOKEN": "HitCob9590367703"
+      },
+      {
+        "ID": "CBR-0ccc65a087deff864845b946d83c0f4c",
+        "V": "35",
+        "IMPORTE": 0.01,
+        "FECHA": "2026-09-16 22:15:39.995863",
+        "IDEMPOTENCY_TOKEN": "HitCob9589828150"
+      },
+      {
+        "ID": "CBR-0a25906f39cc792464b026f8142d210f",
+        "V": "80",
+        "IMPORTE": 0.01,
+        "FECHA": "2026-09-16 16:53:38.462910",
+        "IDEMPOTENCY_TOKEN": "HitCob9570506823"
+      }
+    ]
+  },
+  "frontierReadOnly": {
+    "ok": true,
+    "count": 1,
+    "rows": [
+      {
+        "LQD_PROD": 62837
+      }
+    ]
+  }
+}

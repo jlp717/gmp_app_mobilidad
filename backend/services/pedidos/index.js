@@ -4602,14 +4602,37 @@ async function confirmOrder(orderId, saleType, options = {}) {
                 message: `Bolsa comercial insuficiente. Deficit: ${bolsaResult.deficit.toFixed(2)}. Saldo: ${bolsaResult.saldo.toFixed(2)}`,
             };
         }
+        // Fail-closed: pie discount that undercuts client tariff must never
+        // confirm with consumo=0 (silent ledger skip — senior verdict #67).
+        if (globalDiscountPct > 0 && !(Number(bolsaResult.consumo) > 0)) {
+            let expectedConsumo = 0;
+            for (const line of lines || []) {
+                const ref = bolsaService.resolveBolsaReferencePrice(line);
+                const qty = bolsaService.getLineQuantity(line);
+                const effective = bolsaService.resolveEffectiveSalePrice(line, globalDiscountPct);
+                if (ref > 0 && qty > 0 && effective + 0.0001 < ref) {
+                    expectedConsumo += (ref - effective) * qty;
+                }
+            }
+            expectedConsumo = Math.round((expectedConsumo + Number.EPSILON) * 100) / 100;
+            if (expectedConsumo > 0.009) {
+                const mismatch = new Error(
+                    `Bolsa inconsistente: DESCUENTO_GLOBAL=${globalDiscountPct} implica consumo≈${expectedConsumo.toFixed(2)} pero el validador devolvió 0`,
+                );
+                mismatch.code = 'BOLSA_DISCOUNT_CONSUMO_MISMATCH';
+                mismatch.status = 500;
+                throw mismatch;
+            }
+        }
         options._bolsaConsumo = bolsaResult.consumo || 0;
         options._bolsaAcumulacion = bolsaResult.acumulacion || 0;
         options._bolsaLineMovements = Array.isArray(bolsaResult.lineMovements) ? bolsaResult.lineMovements : [];
+        options._bolsaGlobalDiscountPct = globalDiscountPct;
     } catch (bolsaErr) {
         await revertConfirming('BOLSA_VALIDATION_FAILED');
         const err = new Error('No se pudo validar bolsa comercial. El pedido no se ha confirmado. Error: ' + bolsaErr.message);
-        err.code = 'BOLSA_VALIDATION_FAILED';
-        err.status = 503;
+        err.code = bolsaErr.code || 'BOLSA_VALIDATION_FAILED';
+        err.status = bolsaErr.status || 503;
         throw err;
     }
 
@@ -4795,22 +4818,30 @@ async function confirmOrder(orderId, saleType, options = {}) {
     // P0-BOLSA: Persist ledger after confirmation. Blocking: no silent success on write failure.
     const consumoAmount = Number(options._bolsaConsumo || 0);
     const acumulacionAmount = Number(options._bolsaAcumulacion || 0);
-    if ((consumoAmount || acumulacionAmount) && !options.skipBolsaMovement) {
+    const mustWriteBolsaLedger = (consumoAmount > 0 || acumulacionAmount > 0) && !options.skipBolsaMovement;
+    if (mustWriteBolsaLedger) {
         try {
             const bolsaService = require('../bolsa-comercial.service');
             const lineMovements = Array.isArray(options._bolsaLineMovements) ? options._bolsaLineMovements : [];
             const consumoMovements = lineMovements.filter(m => m && m.tipo === 'CONSUMO');
             const acumulacionMovements = lineMovements.filter(m => m && m.tipo === 'ACUMULACION');
-            if (consumoAmount) {
+            if (consumoAmount > 0) {
                 const consumoResult = await bolsaService.consumirBolsa(vendedorCode, id, consumoAmount, consumoMovements.length ? consumoMovements : undefined);
                 if (consumoResult && consumoResult.allowed === false) {
                     throw new Error('Bolsa insuficiente al registrar consumo. Deficit: ' + consumoResult.deficit);
                 }
+                if (consumoResult && consumoResult.duplicate === true && !(consumoMovements.length > 0)) {
+                    // Idempotent replay with no pending rows is OK; first confirm must write.
+                    logger.warn(`[PEDIDOS] Bolsa consumo idempotent replay for #${id} (no new ledger rows)`);
+                }
             }
-            if (acumulacionAmount) {
+            if (acumulacionAmount > 0) {
                 await bolsaService.acumularBolsa(vendedorCode, id, acumulacionAmount, acumulacionMovements.length ? acumulacionMovements : undefined);
             }
             order = await getOrderDetail(id);
+            logger.info(
+                `[PEDIDOS] Bolsa ledger written for #${id} consumo=${consumoAmount} acumulacion=${acumulacionAmount} dto=${options._bolsaGlobalDiscountPct || 0}`,
+            );
         } catch (bolsaErr) {
             logger.error('[PEDIDOS] Bolsa movement failed for confirmed order #' + id + ': ' + bolsaErr.message);
             if (!target.shouldExportToSystem) {
@@ -4843,6 +4874,8 @@ async function confirmOrder(orderId, saleType, options = {}) {
             err.status = 500;
             throw err;
         }
+    } else if (Number(options._bolsaGlobalDiscountPct || 0) > 0) {
+        logger.info(`[PEDIDOS] Confirm #${id} with dto=${options._bolsaGlobalDiscountPct} and no bolsa consumo (tariff-neutral after discounts)`);
     }
 
     // Invalida cache tras confirmacion (cambia ESTADO, importes y stock reservas).

@@ -1,0 +1,229 @@
+﻿{
+  "tables": {
+    "ok": true,
+    "label": "tables",
+    "count": 4,
+    "rows": [
+      {
+        "TABLE_NAME": "BOLSA_COMERCIAL"
+      },
+      {
+        "TABLE_NAME": "MOVIMIENTOS_BOLSA"
+      },
+      {
+        "TABLE_NAME": "TEST_BOLSA_COMERCIAL"
+      },
+      {
+        "TABLE_NAME": "TEST_MOVIMIENTOS_BOLSA"
+      }
+    ]
+  },
+  "pedido67Cab": {
+    "ok": true,
+    "label": "pedido67Cab",
+    "count": 1,
+    "rows": [
+      {
+        "ID": 67,
+        "ESTADO": "CONFIRMADO",
+        "V": "05",
+        "DG": 10,
+        "PD1": 10,
+        "IMPORTETOTAL": 42.98,
+        "IMPORTEBASE": 39.07
+      }
+    ]
+  },
+  "pedido67Lin": {
+    "ok": true,
+    "label": "pedido67Lin",
+    "count": 2,
+    "rows": [
+      {
+        "ID": 78,
+        "ART": "1412",
+        "CANTIDADENVASES": 3,
+        "CANTIDADUNIDADES": 3,
+        "UM": "CAJAS",
+        "PRECIOVENTA": 9.593,
+        "PRECIOTARIFA": 9.593,
+        "PRECIOTARIFACLIENTE": 9.593,
+        "PRECIOMINIMO": 8.51,
+        "IMPORTEVENTA": 28.78,
+        "DL": 0
+      },
+      {
+        "ID": 79,
+        "ART": "1686",
+        "CANTIDADENVASES": 2.5,
+        "CANTIDADUNIDADES": 2.5,
+        "UM": "KILOGRAMOS",
+        "PRECIOVENTA": 5.85,
+        "PRECIOTARIFA": 5.85,
+        "PRECIOTARIFACLIENTE": 5.85,
+        "PRECIOMINIMO": 5.189,
+        "IMPORTEVENTA": 14.63,
+        "DL": 0
+      }
+    ]
+  },
+  "movProd67": {
+    "ok": true,
+    "label": "movProd67",
+    "count": 0,
+    "rows": []
+  },
+  "movTestExists": {
+    "ok": true,
+    "label": "movTestExists",
+    "count": 1,
+    "rows": [
+      {
+        "C": 1
+      }
+    ]
+  },
+  "movTest67": {
+    "ok": true,
+    "label": "movTest67",
+    "count": 0,
+    "rows": []
+  },
+  "movTestRecent": {
+    "ok": true,
+    "label": "movTestRecent",
+    "count": 0,
+    "rows": []
+  },
+  "testBolsa": {
+    "ok": true,
+    "label": "testBolsa",
+    "count": 3,
+    "rows": [
+      {
+        "ID": 5,
+        "V": "33",
+        "EJERCICIO": 2026,
+        "MES": 9,
+        "SALDO_DISPONIBLE": 300,
+        "CONSUMIDO": 0,
+        "ACUMULADO": 0
+      },
+      {
+        "ID": 4,
+        "V": "15",
+        "EJERCICIO": 2026,
+        "MES": 9,
+        "SALDO_DISPONIBLE": 300,
+        "CONSUMIDO": 0,
+        "ACUMULADO": 0
+      },
+      {
+        "ID": 2,
+        "V": "05",
+        "EJERCICIO": 2026,
+        "MES": 9,
+        "SALDO_DISPONIBLE": 300,
+        "CONSUMIDO": 0,
+        "ACUMULADO": 0
+      }
+    ]
+  },
+  "discountedWithTestMov": {
+    "ok": true,
+    "label": "discountedWithTestMov",
+    "count": 10,
+    "rows": [
+      {
+        "PEDIDO_ID": 67,
+        "DESCUENTO_GLOBAL": 10,
+        "ESTADO": "CONFIRMADO",
+        "MOV_COUNT": 0,
+        "CONSUMO": 0,
+        "ACUM": 0
+      },
+      {
+        "PEDIDO_ID": 32,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_COUNT": 0,
+        "CONSUMO": 0,
+        "ACUM": 0
+      },
+      {
+        "PEDIDO_ID": 31,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_COUNT": 0,
+        "CONSUMO": 0,
+        "ACUM": 0
+      },
+      {
+        "PEDIDO_ID": 30,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_COUNT": 0,
+        "CONSUMO": 0,
+        "ACUM": 0
+      },
+      {
+        "PEDIDO_ID": 29,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_COUNT": 0,
+        "CONSUMO": 0,
+        "ACUM": 0
+      },
+      {
+        "PEDIDO_ID": 28,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_COUNT": 0,
+        "CONSUMO": 0,
+        "ACUM": 0
+      },
+      {
+        "PEDIDO_ID": 27,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_COUNT": 0,
+        "CONSUMO": 0,
+        "ACUM": 0
+      },
+      {
+        "PEDIDO_ID": 26,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_COUNT": 0,
+        "CONSUMO": 0,
+        "ACUM": 0
+      },
+      {
+        "PEDIDO_ID": 25,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_COUNT": 0,
+        "CONSUMO": 0,
+        "ACUM": 0
+      },
+      {
+        "PEDIDO_ID": 24,
+        "DESCUENTO_GLOBAL": 5,
+        "ESTADO": "CONFIRMADO",
+        "MOV_COUNT": 0,
+        "CONSUMO": 0,
+        "ACUM": 0
+      }
+    ]
+  },
+  "lqdSample": {
+    "ok": false,
+    "label": "lqdSample",
+    "error": "[odbc] Error executing the sql statement"
+  },
+  "cobrosRecent": {
+    "ok": false,
+    "label": "cobrosRecent",
+    "error": "[odbc] Error executing the sql statement"
+  }
+}

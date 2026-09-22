@@ -622,3 +622,173 @@ describe('bolsa idempotency and DSEDAC safety', () => {
     expect(source).toMatch(/CREATE\s+UNIQUE\s+INDEX\s+JAVIER\.UQ_MOV_BOLSA_IDEMP\s+ON\s+JAVIER\.MOVIMIENTOS_BOLSA\s*\(\s*IDEMPOTENCY_KEY\s*\)/i);
   });
 });
+
+describe('confirmOrder DESCUENTO_GLOBAL write-path contract', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    jest.clearAllMocks();
+    jest.dontMock('../services/bolsa-comercial.service');
+  });
+
+  test('source wires DESCUENTO_GLOBAL into validate and blocks silent consumo=0 mismatch', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const source = fs.readFileSync(path.join(__dirname, '../services/pedidos/index.js'), 'utf8');
+    expect(source).toMatch(/DESCUENTO_GLOBAL/);
+    expect(source).toMatch(/globalDiscountPct/);
+    expect(source).toMatch(/BOLSA_DISCOUNT_CONSUMO_MISMATCH/);
+    expect(source).toMatch(/mustWriteBolsaLedger/);
+    expect(source).toMatch(/consumirBolsa\(/);
+  });
+
+  test('confirmOrder calls consumirBolsa when pie discount undercuts client tariff', async () => {
+    const db = require('../config/db');
+    const header = {
+      ID: 67,
+      EJERCICIO: 2026,
+      NUMEROPEDIDO: 1067,
+      SERIEPEDIDO: 'M',
+      TERMINAL: 1,
+      DIADOCUMENTO: 22,
+      MESDOCUMENTO: 9,
+      ANODOCUMENTO: 2026,
+      HORADOCUMENTO: 120000,
+      CODIGOCLIENTE: 'C001',
+      NOMBRECLIENTE: 'Cliente Test',
+      CODIGOVENDEDOR: '05',
+      CODIGOFORMAPAGO: '01',
+      CODIGOTARIFA: 1,
+      CODIGOALMACEN: 1,
+      TIPOVENTA: 'CC',
+      IMPORTETOTAL: 39.07,
+      IMPORTEBASE: 39.07,
+      IMPORTEIVA: 0,
+      IMPORTECOSTO: 20,
+      IMPORTEMARGEN: 19,
+      OBSERVACIONES: '',
+    };
+    const lines = [
+      {
+        ID: 78,
+        PEDIDO_ID: 67,
+        SECUENCIA: 1,
+        CODIGOARTICULO: '1412',
+        DESCRIPCION: 'Art 1412',
+        CANTIDADENVASES: 3,
+        CANTIDADUNIDADES: 3,
+        UNIDADMEDIDA: 'CAJAS',
+        UNIDADESCAJA: 1,
+        PRECIOVENTA: 9.593,
+        PRECIOCOSTO: 5,
+        PRECIOTARIFA: 9.593,
+        PRECIOTARIFACLIENTE: 9.593,
+        PRECIOMINIMO: 8.51,
+        IMPORTEVENTA: 28.78,
+        IMPORTECOSTO: 15,
+        IMPORTEMARGEN: 13,
+        PORCENTAJEMARGEN: 45,
+        DESCUENTO_LINEA: 0,
+        PORCENTAJEDESCUENTO: 0,
+        TIPOLINEA: 'R',
+        TIPOVENTA: 'CC',
+        CLASELINEA: 'VT',
+        CODIGOIVA: '2',
+        ORDEN: 1,
+      },
+      {
+        ID: 79,
+        PEDIDO_ID: 67,
+        SECUENCIA: 2,
+        CODIGOARTICULO: '1686',
+        DESCRIPCION: 'Art 1686',
+        CANTIDADENVASES: 2.5,
+        CANTIDADUNIDADES: 2.5,
+        UNIDADMEDIDA: 'KILOGRAMOS',
+        UNIDADESCAJA: 1,
+        PRECIOVENTA: 5.85,
+        PRECIOCOSTO: 3,
+        PRECIOTARIFA: 5.85,
+        PRECIOTARIFACLIENTE: 5.85,
+        PRECIOMINIMO: 5.189,
+        IMPORTEVENTA: 14.63,
+        IMPORTECOSTO: 7.5,
+        IMPORTEMARGEN: 7,
+        PORCENTAJEMARGEN: 48,
+        DESCUENTO_LINEA: 0,
+        PORCENTAJEDESCUENTO: 0,
+        TIPOLINEA: 'R',
+        TIPOVENTA: 'CC',
+        CLASELINEA: 'VT',
+        CODIGOIVA: '2',
+        ORDEN: 2,
+      },
+    ];
+
+    db.queryWithParams.mockReset();
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql) && sql.includes('CONFIRMANDO')) return { count: 1 };
+      if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ...header, ESTADO: 'CONFIRMANDO' }];
+      if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return [{ CODIGOVEHICULO: '02', CODIGOREPARTIDOR: '05' }];
+      if (/FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return lines;
+      if (/DESCUENTO_GLOBAL/i.test(sql) && /PEDIDOS_CAB/i.test(sql)) {
+        return [{ DESCUENTO_GLOBAL: 10, PORCENTAJEDESCUENTO1: 10 }];
+      }
+      if (/FROM\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) {
+        return [{
+          ID: 2,
+          CODIGOVENDEDOR: '05  ',
+          EJERCICIO: 2026,
+          MES: 9,
+          LIMITE_PCT: 3,
+          LIMITE_IMPORTE: 0,
+          SALDO_DISPONIBLE: 300,
+          CONSUMIDO: 0,
+          ACUMULADO: 0,
+        }];
+      }
+      if (/FROM\s+DSEDAC\.ARO/i.test(sql)) {
+        return [
+          { CODE: '1412', ENVASES: 100, UNIDADES: 100 },
+          { CODE: '1686', ENVASES: 100, UNIDADES: 100 },
+        ];
+      }
+      if (/INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql)) return [];
+      if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql) && sql.includes('CONFIRMADO')) return [];
+      if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return [{ ...header, ESTADO: 'CONFIRMADO' }];
+      if (/FROM\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql)) return [];
+      return [];
+    });
+
+    jest.doMock('../services/query-optimizer', () => ({
+      cachedQuery: jest.fn((fn, sql, _key, _ttl, params) => fn(sql, params)),
+    }));
+    jest.doMock('../services/redis-cache', () => ({
+      redisCache: { get: jest.fn(), set: jest.fn(), del: jest.fn(), invalidatePattern: jest.fn() },
+      TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 },
+    }));
+    jest.doMock('../services/laclae', () => ({
+      getClientDays: jest.fn(() => ({ deliveryDays: ['martes'], deliveryDaysShort: 'M' })),
+    }));
+
+    const realBolsa = jest.requireActual('../services/bolsa-comercial.service');
+    const consumirBolsa = jest.fn().mockResolvedValue({ allowed: true, saldo: 295.66 });
+    jest.doMock('../services/bolsa-comercial.service', () => ({
+      ...realBolsa,
+      validateOrderWithBolsa: realBolsa.validateOrderWithBolsa,
+      consumirBolsa,
+      acumularBolsa: jest.fn(),
+      resolveBolsaReferencePrice: realBolsa.resolveBolsaReferencePrice,
+      getLineQuantity: realBolsa.getLineQuantity,
+      resolveEffectiveSalePrice: realBolsa.resolveEffectiveSalePrice,
+    }));
+
+    const pedidosService = require('../services/pedidos.service');
+    await pedidosService.confirmOrder(67, 'CC', { deliveryDate: '2026-09-22' });
+
+    expect(consumirBolsa).toHaveBeenCalled();
+    const [, pedidoId, importe, movements] = consumirBolsa.mock.calls[0];
+    expect(pedidoId).toBe(67);
+    expect(Number(importe)).toBeGreaterThan(0);
+    expect(Array.isArray(movements) ? movements.length : 0).toBeGreaterThan(0);
+  });
+});
