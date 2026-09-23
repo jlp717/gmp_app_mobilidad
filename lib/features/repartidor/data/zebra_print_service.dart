@@ -9,6 +9,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/thermal_ticket_layout.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_quantity_uom.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -599,7 +600,12 @@ class ZebraPrintService {
       final item = items[i];
       final partida = '${i + 1}';
       final deliveredQty = item.cantidadEntregada ?? item.cantidadPedida;
-      final bultos = item.bultos > 0 ? item.bultos : deliveredQty;
+      // Prefer driver-facing boxes when LAC packs pieces into envases
+      // (e.g. 27 baguettes = 1 caja); never print raw piece counts as Bult.
+      final bultos = ruteroPrintFacingQuantity(
+        item,
+        deliveredCanonical: deliveredQty,
+      );
       totalBultos += bultos;
       final importe = deliveredQty * item.precioUnitario;
 

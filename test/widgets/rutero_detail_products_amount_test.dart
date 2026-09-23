@@ -157,4 +157,49 @@ void main() {
     expect(find.text('27'), findsNothing);
     expect(find.textContaining('27 uds'), findsNothing);
   });
+
+  testWidgets('2×12 packed line shows 2 cajas not 24 pieces', (tester) async {
+    final line = EntregaItem(
+      itemId: '2',
+      codigoArticulo: 'A12',
+      descripcion: 'Producto factor 12',
+      cantidadPedida: 24,
+      bultos: 2,
+      unit: 'UNIDADES',
+      precioUnitario: 1,
+    );
+    expect(ruteroPrefersBoxQuantity(line), isTrue);
+    expect(ruteroDriverFacingOrderedQty(line), 2);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 800,
+            child: RuteroDetailProducts(
+              items: [line],
+              isLoadingItems: false,
+              itemsError: null,
+              productChecked: const {'2': true},
+              productQuantities: const {'2': 24},
+              ordenPreparacion: null,
+              canonicalDocumentTotal: 24,
+              quantitiesChanged: false,
+              onProductCheckedChanged: (_, __) {},
+              onQuantityChanged: (_, __) {},
+              onShowQuantityEditDialog: (_, __) {},
+              onRetryItems: () {},
+              onConfirmAll: () {},
+              onContinueToPayment: () {},
+              onOpenFicha: (_) {},
+              onShowFullscreenImage: (_, __) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('2 cajas'), findsOneWidget);
+    expect(find.textContaining('24 uds'), findsNothing);
+  });
 }

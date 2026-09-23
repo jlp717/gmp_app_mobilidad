@@ -39,7 +39,10 @@ class AsyncOperationModalController {
     // Safety timeout: auto-error if operation takes too long
     _timeoutTimer = Timer(timeout, () {
       if (!_closed && _stateNotifier.value == _ModalState.loading) {
-        error('La operación ha tardado demasiado. Inténtalo de nuevo.');
+        error(
+          'La operación ha tardado demasiado. '
+          'Puedes reintentar; no hace falta revisión manual.',
+        );
       }
     });
 

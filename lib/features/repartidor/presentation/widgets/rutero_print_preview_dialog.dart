@@ -119,11 +119,6 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
     return protocol == 'escpos' ? 'ESC/POS' : 'ZPL';
   }
 
-  String _formatQuantity(num value) {
-    final fixed = value.toDouble().toStringAsFixed(3);
-    return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
-  }
-
   double _deliveredQty(EntregaItem item) {
     return widget.deliveredQuantities?[ruteroLineKey(item)] ??
         item.cantidadPedida.toDouble();
@@ -204,7 +199,10 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
             .map(
               (item) => <String, dynamic>{
                 'desc': item.descripcion,
-                'qty': _deliveredQty(item),
+                'qty': ruteroPrintFacingQuantity(
+                  item,
+                  deliveredCanonical: _deliveredQty(item),
+                ),
                 'importe': _lineAmount(item),
               },
             )
@@ -321,34 +319,42 @@ class _RuteroPrintPreviewDialogState extends State<RuteroPrintPreviewDialog> {
                     ),
                     const SizedBox(height: 8),
                     ...widget.items.take(5).map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    item.descripcion,
-                                    style: TextStyle(
-                                      color: AppTheme.textSecondary,
-                                      fontSize: 12,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                Text(
-                                  'x${_formatQuantity(_deliveredQty(item))}'
-                                  '${(item.unit ?? '').trim().isEmpty ? '' : ' ${item.unit}'}  '
-                                  '${_lineAmount(item).toStringAsFixed(2)}€',
+                      (item) {
+                        final facing = ruteroPrintFacingQuantity(
+                          item,
+                          deliveredCanonical: _deliveredQty(item),
+                        );
+                        final unit = ruteroLineQuantityUnitLabel(item);
+                        final unitSuffix = unit.isEmpty ? '' : ' $unit';
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  item.descripcion,
                                   style: TextStyle(
                                     color: AppTheme.textSecondary,
                                     fontSize: 12,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
-                            ),
+                              ),
+                              Text(
+                                'x${formatRuteroQuantity(facing)}'
+                                '$unitSuffix  '
+                                '${_lineAmount(item).toStringAsFixed(2)}€',
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
+                        );
+                      },
+                    ),
                     if (widget.items.length > 5)
                       Text(
                         '... +${widget.items.length - 5} más',

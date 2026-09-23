@@ -119,15 +119,15 @@ Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero":
 - La rama de referencia de trabajo es `test`, no `main`.
 - El modo claro/oscuro debe aplicar el tema a toda la app (filtros, tablas, matrices y páginas), no solo el chrome.
 - Para validar el perfil de reparto, usar REPARTIDOR: jefe de ventas en modo reparto y repartidor raso; no el perfil comercial.
-- Las pruebas de rendimiento deben hacerse en móvil con el rol jefe de ventas (el que más datos carga).
-- No declarar el perfil de reparto cerrado al 100% mientras queden huecos o no se haya validado en emulador.
-- No afirmar 100% de latencia o rendimiento percibido sin medición `[campo]` en dispositivo; cifras de túnel/servidor no sustituyen el móvil.
-- El perfil comercial es un workstream aparte del de reparto (pedidos, devoluciones y liquidación diaria); no mezclar su validación con la de REPARTIDOR.
+- Rendimiento y latencia: medir en móvil con jefe de ventas; no afirmar 100% sin medición `[campo]` en dispositivo (túnel/servidor no sustituye).
+- Comercial y REPARTIDOR son workstreams aparte; no mezclar validación ni declarar 100% cerrado sin pruebas reales/emulador.
 - Identificadores de albarán/factura en UI y PDF deben mostrar la serie completa (p.ej. P-15-2296, no P-2296).
 - En cartera y deuda comercial, consultar tablas DSEDAC (CVC, FPG, CAC, CPC), no VISTA_DEUDA_BASE.
-- Las observaciones de cobro son obligatorias; nunca enviar `notas:null`.
-- En el sheet del rutero en curso, cobro y entrega se confirman juntos al Finalizar (nombre, apellidos, DNI y firma); no persistir el cobro con «Registrar cobro» antes de esa evidencia.
-- El documento de cobro se envía al finalizar (email del cliente en BBDD o uno indicado por el repartidor, o WhatsApp) y debe llegar a operaciones y al repartidor.
+- Observaciones de cobro obligatorias si el importe cobrado es >0; en crédito/sin cobro no bloquear por notas vacías; nunca enviar `notas:null`.
+- Al Finalizar en el sheet del rutero: cobro y entrega juntos (nombre, apellidos, DNI y firma); no persistir cobro antes; el documento (email BBDD/indicado o WhatsApp) debe llegar a operaciones y al repartidor.
+- Landscape comercial: densificar listados (~9–10 productos visibles en pedidos); tablet y móvil fluidos, sin tiles a pantalla completa ni scroll roto.
+- Bolsa comercial visible y actualizada en todo el flujo (carrito, confirmación, día de reparto, Mis pedidos), también al aplicar/quitar descuentos; UOM tipográfica correcta (caja/kg/uds reales).
+- La sesión del comercial debe durar 24 horas de verdad (misma o distinta tablet); no forzar re-login varias veces al día.
 
 ## Learned Workspace Facts
 
@@ -138,8 +138,8 @@ Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero":
 - Si las unidades entregadas difieren de las previstas, el albarán recalcula precio unitario/totales y la liquidación diaria debe cuadrar con esos importes.
 - Devoluciones sobre facturas ya cobradas (PG = FPG/pagaré, no es tipo de documento) ajustan la liquidación del vendedor (ya cobrados / caja); no restar otra vez el total LQD. Los días de plazo salen de FPG; 30 es un ejemplo, no un hardcode.
 - El saldo cobrable de una entrega se limita al importe del documento (CPC / total vivo del albarán), no a la deuda CVC del cliente; lista, ficha, cabecera y cobro deben coincidir si no se tocan cantidades.
-- En facturas, la lista debe mostrar totales agregados (importe, recuento, base con/sin IVA).
-- Las escrituras van solo a TEST (isolated_test / JAVIER.TEST_*); DSEDAC es lectura o copia hacia test, nunca escritura. En isolated_test el correo usa sink/allowlist (no bandejas ERP reales) pero construye to/cc completo (operaciones + repartidor).
+- Escrituras solo en TEST (isolated_test / JAVIER.TEST_*); DSEDAC es lectura o copia hacia test. En isolated_test el correo usa sink/allowlist pero construye to/cc completo (operaciones + repartidor). Frontera lectura: objetivos/comisiones/ventas LY siguen en PRODUCCIÓN; pedidos/autoenvío/offline y el flag visita→venta del rutero pueden usar TEST.
+- Cobros del comercial: PDF a Carlos, Javier y el comercial; no solapar/duplicar con cobros del repartidor; liquidación diaria a partir de esos cobros.
 - El login acepta nombre de vendedor (p.ej. diego) y código numérico; el match exacto de SEC-01 no debe romper el alias de nombre.
 - jefe_ventas con catálogo de vendedores ≥20 debe enviar ALL; no expandir el JWT a un IN de ~80–94 códigos.
-- El cuello SQL restante en frío es DSED.LACLAE (GROUP BY); bajarlo exige índice/DDL de Javier, no más parches de aplicación.
+- Borradores de pedido reservan stock 24h (si expiran, liberan y se borran). Offline comercial: cache local, alerta de pendientes en pedidos y auto-envío al reconectar; pedido en el día de ruta del cliente → rutero a «venta» verde (por día de pedido/ruta, no solo fecha de entrega).

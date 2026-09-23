@@ -243,6 +243,8 @@ class EntregaItem {
         const <String>['bultos', 'cantidadEnvases'],
       ),
       unit: json['unidad']?.toString() ??
+          json['unidadMedida']?.toString() ??
+          json['UNIDADMEDIDA']?.toString() ??
           json['UNIT']?.toString() ??
           json['unit']?.toString(),
       precioUnitario: _optionalDoubleAlias(

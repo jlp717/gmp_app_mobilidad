@@ -2135,8 +2135,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         final ok = await confirmRepartidorAction(
           context,
           title: '¿Estás seguro de modificar el albarán?',
-          message:
-              'Vas a cambiar ${linea.descripcion} de ${_formatQuantity(original)} a ${_formatQuantity(result)}. El importe se recalculará.',
+          message: 'Vas a cambiar ${linea.descripcion} de '
+              '${ruteroFacingQuantityChangeLabel(linea, fromCanonical: original, toCanonical: result)}. '
+              'El importe se recalculará.',
           confirmLabel: 'Sí, modificar',
         );
         if (!ok || !mounted) return;
@@ -3143,8 +3144,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         final actual = _productQuantities[ruteroLineKey(item)] ?? orig;
         if (_quantityDiffers(actual, orig)) {
           qtyChanges.add(
-            '${item.descripcion}: ${_formatQuantity(orig)} -> '
-            '${_formatQuantity(actual)}',
+            '${item.descripcion}: '
+            '${ruteroFacingQuantityChangeLabel(item, fromCanonical: orig, toCanonical: actual)}',
           );
         }
       }
