@@ -512,19 +512,23 @@ class CachePreWarmer {
         return;
       }
       final today = _isoDate(DateTime.now());
-      await ApiClient.get(
-        pendientesFirstPaintPath(selector, today),
-        cacheKey: pendientesFirstPaintCacheKey(
-          repartidorId: selector,
-          formattedDate: today,
+      // Same pair as repartidor_rutero_page._loadData — fire together so
+      // first paint does not pay two serial DB2 round-trips.
+      await Future.wait([
+        ApiClient.get(
+          pendientesFirstPaintPath(selector, today),
+          cacheKey: pendientesFirstPaintCacheKey(
+            repartidorId: selector,
+            formattedDate: today,
+          ),
+          cacheTTL: repartoFirstPaintTtl,
         ),
-        cacheTTL: repartoFirstPaintTtl,
-      );
-      await ApiClient.get(
-        weekFirstPaintPath(selector, today),
-        cacheKey: weekFirstPaintCacheKey(selector, today),
-        cacheTTL: repartoFirstPaintTtl,
-      );
+        ApiClient.get(
+          weekFirstPaintPath(selector, today),
+          cacheKey: weekFirstPaintCacheKey(selector, today),
+          cacheTTL: repartoFirstPaintTtl,
+        ),
+      ]);
       debugPrint('[CachePreWarmer] JEFE REPARTO week+pendientes pre-warmed');
     } catch (e) {
       debugPrint('[CachePreWarmer] JEFE REPARTO fleet pre-warm failed: $e');

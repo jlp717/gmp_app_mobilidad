@@ -211,8 +211,19 @@ class ApiClient {
   /// - Adaptive timeouts: mobile data gets +50% to handle carrier latency
   /// - Certificate pinning for production
   static Dio _createDio() {
-    final connectTimeout = ApiConfig.connectTimeout;
-    final receiveTimeout = ApiConfig.receiveTimeout;
+    final mobileData = _lastConnectivity == ConnectivityResult.mobile;
+    final connectTimeout = mobileData
+        ? Duration(
+            milliseconds:
+                (ApiConfig.connectTimeout.inMilliseconds * 1.5).round(),
+          )
+        : ApiConfig.connectTimeout;
+    final receiveTimeout = mobileData
+        ? Duration(
+            milliseconds:
+                (ApiConfig.receiveTimeout.inMilliseconds * 1.5).round(),
+          )
+        : ApiConfig.receiveTimeout;
     debugPrint('[ApiClient] Timeouts: connect=${connectTimeout.inSeconds}s, '
         'receive=${receiveTimeout.inSeconds}s (network=$_lastConnectivity)');
     final dio = Dio(
@@ -220,7 +231,9 @@ class ApiClient {
         baseUrl: ApiConfig.baseUrl,
         connectTimeout: connectTimeout,
         receiveTimeout: receiveTimeout,
-        sendTimeout: const Duration(seconds: 15),
+        sendTimeout: mobileData
+            ? const Duration(seconds: 22)
+            : const Duration(seconds: 15),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

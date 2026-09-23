@@ -224,6 +224,7 @@ class SyncQueueService {
 
     var successCount = 0;
     var skippedBackoff = 0;
+    var processed = 0;
     final now = DateTime.now();
 
     for (final op in ops) {
@@ -302,6 +303,11 @@ class SyncQueueService {
               error: 'idempotent_conflict:${apiError.code}',
             );
             debugPrint('[SyncQueue] Idempotent 409 accepted: ${op.type}');
+            // PERF: yield so sync progress / animations keep painting.
+            processed++;
+            if (processed % 2 == 0) {
+              await Future<void>.delayed(Duration.zero);
+            }
             continue;
           }
         }
@@ -340,6 +346,12 @@ class SyncQueueService {
           success: false,
           error: op.lastError,
         );
+      }
+      // PERF: mutations stay sequential (ordering/idempotency) but yield every
+      // 2 ops so the UI isolate can paint progress instead of freezing.
+      processed++;
+      if (processed % 2 == 0) {
+        await Future<void>.delayed(Duration.zero);
       }
     }
 

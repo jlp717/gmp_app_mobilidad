@@ -34,8 +34,10 @@ class _LazyIndexedStackState extends State<LazyIndexedStack>
     _activatedFlags =
         List.generate(widget.children.length, (i) => i == widget.index);
     _previousIndex = widget.index;
+    // PERF: 160ms fade-only — Opacity+Scale+Translate rebuilt the whole tab
+    // subtree every frame and added measurable INP on dense comercial shells.
     _animController = AnimationController(
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 160),
       vsync: this,
     );
     if (widget.children.isNotEmpty) {
@@ -73,7 +75,7 @@ class _LazyIndexedStackState extends State<LazyIndexedStack>
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return IndexedStack(
       index: widget.index,
       alignment: widget.alignment,
@@ -91,43 +93,17 @@ class _LazyIndexedStackState extends State<LazyIndexedStack>
 
         if (i == widget.index) {
           if (reduceMotion) return child;
-          return _TabEntrance(
-            controller: _animController,
-            child: child,
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: _animController,
+              curve: Curves.easeOut,
+            ),
+            child: RepaintBoundary(child: child),
           );
         }
 
         return child;
       }),
-    );
-  }
-}
-
-class _TabEntrance extends AnimatedWidget {
-  const _TabEntrance({
-    required Animation<double> controller,
-    required this.child,
-  }) : super(listenable: controller);
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final animation = listenable as Animation<double>;
-    final curvedValue = Curves.easeOutCubic.transform(animation.value);
-
-    return RepaintBoundary(
-      child: Opacity(
-        opacity: curvedValue,
-        child: Transform.scale(
-          scale: 0.992 + (0.008 * curvedValue),
-          alignment: Alignment.topCenter,
-          child: Transform.translate(
-            offset: Offset(0, 12 * (1 - curvedValue)),
-            child: child,
-          ),
-        ),
-      ),
     );
   }
 }

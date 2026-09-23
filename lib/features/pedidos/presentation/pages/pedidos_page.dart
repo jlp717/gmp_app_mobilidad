@@ -1934,9 +1934,15 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         final gridGap = Responsive.denseListSpacing(context);
 
         if (columns <= 1) {
+          // PERF: fixed extent + 1-screen cache — landscape dense scroll without
+          // layout-measure jank on 200+ product catalogs.
+          final tileExtent = Responsive.catalogTileExtent(context);
           return ListView.builder(
             controller: _catalogScrollController,
             padding: listPad,
+            itemExtent: tileExtent,
+            cacheExtent: MediaQuery.sizeOf(context).height,
+            addAutomaticKeepAlives: false,
             itemCount: displayList.length + (provider.hasMoreProducts ? 1 : 0),
             itemBuilder: (itemCtx, i) {
               if (i >= displayList.length) {
@@ -2011,6 +2017,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         return GridView.builder(
           controller: _catalogScrollController,
           padding: listPad,
+          cacheExtent: MediaQuery.sizeOf(context).height,
+          addAutomaticKeepAlives: false,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
             mainAxisExtent: tileExtent,
@@ -2890,38 +2898,46 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         final compact = Responsive.useCompactTiles(context);
         final gap = Responsive.denseListSpacing(context);
 
-        Widget buildCard(OrderSummary order) {
-          return OrderCard(
-            order: order,
-            compact: compact || cols > 1,
-            isMarginVisible:
-                ref.watch(pedidosProvider.select((p) => p.isMarginVisible)),
-            onTap: () => _showOrderDetail(order),
-            onDuplicate: () => _duplicateOrder(order),
-            onViewAlbaran:
-                OrderStatusConfig.canonicalDisplayStatus(order.estado) ==
-                        'CONFIRMADO'
-                    ? () => _viewAlbaran(order)
-                    : null,
-            onResend: order.estado == 'BORRADOR'
-                ? () => _confirmBorrador(order)
-                : null,
-            onDelete: order.estado == 'BORRADOR'
-                ? () => _deleteBorrador(order)
-                : null,
-          );
-        }
-
         if (cols <= 1) {
+          // PERF: watch margin once — not per OrderCard itemBuilder call.
+          final marginVisible =
+              ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
           return ListView.builder(
             padding: EdgeInsets.only(bottom: compact ? 8 : 16),
+            cacheExtent: MediaQuery.sizeOf(context).height,
+            addAutomaticKeepAlives: false,
+            itemExtent: compact ? 132 : 160,
             itemCount: sortedOrders.length,
-            itemBuilder: (context, index) => buildCard(sortedOrders[index]),
+            itemBuilder: (context, index) {
+              final order = sortedOrders[index];
+              return OrderCard(
+                order: order,
+                compact: compact || cols > 1,
+                isMarginVisible: marginVisible,
+                onTap: () => _showOrderDetail(order),
+                onDuplicate: () => _duplicateOrder(order),
+                onViewAlbaran:
+                    OrderStatusConfig.canonicalDisplayStatus(order.estado) ==
+                            'CONFIRMADO'
+                        ? () => _viewAlbaran(order)
+                        : null,
+                onResend: order.estado == 'BORRADOR'
+                    ? () => _confirmBorrador(order)
+                    : null,
+                onDelete: order.estado == 'BORRADOR'
+                    ? () => _deleteBorrador(order)
+                    : null,
+              );
+            },
           );
         }
 
+        final marginVisible =
+            ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
         return GridView.builder(
           padding: EdgeInsets.fromLTRB(gap, 4, gap, compact ? 8 : 16),
+          cacheExtent: MediaQuery.sizeOf(context).height,
+          addAutomaticKeepAlives: false,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: cols,
             mainAxisExtent: compact ? 132 : 160,
@@ -2929,7 +2945,27 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             crossAxisSpacing: gap,
           ),
           itemCount: sortedOrders.length,
-          itemBuilder: (context, index) => buildCard(sortedOrders[index]),
+          itemBuilder: (context, index) {
+            final order = sortedOrders[index];
+            return OrderCard(
+              order: order,
+              compact: compact || cols > 1,
+              isMarginVisible: marginVisible,
+              onTap: () => _showOrderDetail(order),
+              onDuplicate: () => _duplicateOrder(order),
+              onViewAlbaran:
+                  OrderStatusConfig.canonicalDisplayStatus(order.estado) ==
+                          'CONFIRMADO'
+                      ? () => _viewAlbaran(order)
+                      : null,
+              onResend: order.estado == 'BORRADOR'
+                  ? () => _confirmBorrador(order)
+                  : null,
+              onDelete: order.estado == 'BORRADOR'
+                  ? () => _deleteBorrador(order)
+                  : null,
+            );
+          },
         );
       },
     );

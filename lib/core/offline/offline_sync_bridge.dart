@@ -27,12 +27,37 @@ class OfflineSyncRunResult {
   int get totalPending => queuePending + pedidosPending;
 }
 
+/// Live progress for sync UI (avoids frozen progress bars during long drains).
+class OfflineSyncProgress {
+  const OfflineSyncProgress({
+    required this.phase,
+    required this.message,
+    this.fraction,
+  });
+
+  /// `queue` | `pedidos` | `maintenance` | `done`
+  final String phase;
+  final String message;
+  final double? fraction;
+}
+
 class OfflineSyncBridge {
   OfflineSyncBridge._();
 
   static bool _inProgress = false;
 
+  /// Bumped during [syncAll] so headers/modals can animate instead of freezing.
+  static final ValueNotifier<OfflineSyncProgress?> progress =
+      ValueNotifier<OfflineSyncProgress?>(null);
+
+  static void _setProgress(OfflineSyncProgress? value) {
+    progress.value = value;
+  }
+
   /// Process both offline queues. Safe to call on every online transition.
+  ///
+  /// PERF: SyncQueue (entregas/cobros) and Pedidos queue are independent —
+  /// run them in parallel so wall-clock ≈ max(queue, pedidos) instead of sum.
   static Future<OfflineSyncRunResult> syncAll({
     bool notify = true,
   }) async {
@@ -48,13 +73,45 @@ class OfflineSyncBridge {
     }
 
     _inProgress = true;
+    _setProgress(
+      const OfflineSyncProgress(
+        phase: 'queue',
+        message: 'Sincronizando pendientes…',
+        fraction: 0.05,
+      ),
+    );
     try {
-      final queue = await SyncQueueService.instance.processAllWithResult();
-      await PedidosOfflineService.init();
-      final pedidos = await PedidosOfflineService.syncPendingOrdersWithResult();
-      final pedidosSynced = pedidos['synced'] as int? ?? 0;
-      final pedidosFailed = pedidos['failed'] as int? ?? 0;
-      final pedidosPending = pedidos['remainingPending'] as int? ??
+      late final SyncProcessResult queue;
+      late final Map<String, dynamic> pedidosMap;
+
+      await Future.wait<void>([
+        () async {
+          _setProgress(
+            const OfflineSyncProgress(
+              phase: 'queue',
+              message: 'Enviando entregas y cobros…',
+              fraction: 0.15,
+            ),
+          );
+          queue = await SyncQueueService.instance.processAllWithResult();
+        }(),
+        () async {
+          _setProgress(
+            const OfflineSyncProgress(
+              phase: 'pedidos',
+              message: 'Enviando pedidos offline…',
+              fraction: 0.2,
+            ),
+          );
+          await PedidosOfflineService.init();
+          pedidosMap =
+              await PedidosOfflineService.syncPendingOrdersWithResult();
+        }(),
+      ]);
+
+      final pedidosSynced = pedidosMap['synced'] as int? ?? 0;
+      final pedidosFailed = pedidosMap['failed'] as int? ?? 0;
+      final pedidosPending = pedidosMap['remainingPending'] as int? ??
           PedidosOfflineService.pendingSyncCount;
 
       final result = OfflineSyncRunResult(
@@ -68,6 +125,13 @@ class OfflineSyncBridge {
 
       // EARS-5: after every drain, stale evidence inbox records escalate
       // manualReview and their bytes are dropped. Never blocks the run.
+      _setProgress(
+        const OfflineSyncProgress(
+          phase: 'maintenance',
+          message: 'Limpiando evidencias…',
+          fraction: 0.9,
+        ),
+      );
       await runRepartoEvidenceInboxMaintenance();
 
       if (notify) {
@@ -88,11 +152,22 @@ class OfflineSyncBridge {
 
       debugPrint(
         '[OfflineSyncBridge] queue=${queue.synced}/${queue.failed} '
-        'pedidos=$pedidosSynced/$pedidosFailed',
+        'pedidos=$pedidosSynced/$pedidosFailed (parallel)',
+      );
+      _setProgress(
+        OfflineSyncProgress(
+          phase: 'done',
+          message: 'Sync listo',
+          fraction: 1,
+        ),
       );
       return result;
     } finally {
       _inProgress = false;
+      // Clear after a beat so listeners can show "done" briefly.
+      Future<void>.delayed(const Duration(milliseconds: 400), () {
+        if (!_inProgress) _setProgress(null);
+      });
     }
   }
 }

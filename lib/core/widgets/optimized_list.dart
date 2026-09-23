@@ -1,9 +1,9 @@
 /// Optimized ListView Widgets
 /// ==========================
 /// High-performance list widgets with:
-/// - Increased cache extent for smoother scrolling
-/// - AutomaticKeepAliveClientMixin for tab persistence
-/// - RepaintBoundary for isolated repaints
+/// - Tunable cache extent (default 1 screen — enough for smooth scroll)
+/// - Optional itemExtent / prototypeItem for O(1) scroll extent
+/// - RepaintBoundary isolation when callers opt in
 /// - Const optimizations
 library;
 
@@ -19,6 +19,10 @@ class OptimizedListView extends StatelessWidget {
     this.padding,
     this.physics,
     this.shrinkWrap = false,
+    this.itemExtent,
+    this.prototypeItem,
+    this.cacheExtentScreens = 1.0,
+    this.isolateRepaints = true,
   });
   final int itemCount;
   final Widget Function(BuildContext, int) itemBuilder;
@@ -27,24 +31,42 @@ class OptimizedListView extends StatelessWidget {
   final ScrollPhysics? physics;
   final bool shrinkWrap;
 
+  /// Fixed row height — enables cheap scroll-offset math (prefer when uniform).
+  final double? itemExtent;
+
+  /// Alternative to [itemExtent] when height is derived from a prototype widget.
+  final Widget? prototypeItem;
+
+  /// Screens of off-screen cache. 1.0 ≈ smooth without prebuilding 3 screens.
+  final double cacheExtentScreens;
+
+  /// Wrap each tile in RepaintBoundary (disable if tiles already isolate).
+  final bool isolateRepaints;
+
   @override
   Widget build(BuildContext context) {
+    // PERF: 1 screen cache — heavy cards at 1.5–3 screens inflate build/memory
+    // with no perceived smoothness gain on operational lists.
+    final cacheExtent =
+        MediaQuery.sizeOf(context).height * cacheExtentScreens.clamp(0.25, 2.0);
+
     return ListView.builder(
       controller: controller,
       padding: padding,
       physics: physics ?? const AlwaysScrollableScrollPhysics(),
       shrinkWrap: shrinkWrap,
       itemCount: itemCount,
-      // 1.5 screens of cache: heavy cards (gradients + shadows) at 3 screens
-      // pre-built ~24 offscreen tiles per scroll direction, inflating build
-      // cost and memory for no perceived smoothness gain on these pages.
-      cacheExtent: MediaQuery.of(context).size.height * 1.5,
-      addSemanticIndexes: false, // Slight perf gain if not using accessibility
+      itemExtent: itemExtent,
+      prototypeItem: prototypeItem,
+      cacheExtent: cacheExtent,
+      // We wrap tiles ourselves when isolateRepaints; avoid double boundaries.
+      addRepaintBoundaries: !isolateRepaints,
+      addAutomaticKeepAlives: false,
+      addSemanticIndexes: false,
       itemBuilder: (context, index) {
-        // Wrap each item in RepaintBoundary for isolated repaints
-        return RepaintBoundary(
-          child: itemBuilder(context, index),
-        );
+        final child = itemBuilder(context, index);
+        if (!isolateRepaints) return child;
+        return RepaintBoundary(child: child);
       },
     );
   }
@@ -56,20 +78,40 @@ class OptimizedSliverList extends StatelessWidget {
     required this.itemCount,
     required this.itemBuilder,
     super.key,
+    this.itemExtent,
+    this.isolateRepaints = true,
   });
   final int itemCount;
   final Widget Function(BuildContext, int) itemBuilder;
+  final double? itemExtent;
+  final bool isolateRepaints;
 
   @override
   Widget build(BuildContext context) {
+    if (itemExtent != null) {
+      return SliverFixedExtentList(
+        itemExtent: itemExtent!,
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final child = itemBuilder(context, index);
+            return isolateRepaints ? RepaintBoundary(child: child) : child;
+          },
+          childCount: itemCount,
+          addAutomaticKeepAlives: false,
+          addRepaintBoundaries: !isolateRepaints,
+        ),
+      );
+    }
+
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          return RepaintBoundary(
-            child: itemBuilder(context, index),
-          );
+          final child = itemBuilder(context, index);
+          return isolateRepaints ? RepaintBoundary(child: child) : child;
         },
         childCount: itemCount,
+        addAutomaticKeepAlives: false,
+        addRepaintBoundaries: !isolateRepaints,
       ),
     );
   }

@@ -130,26 +130,33 @@ class RuteroDetailProducts extends StatelessWidget {
           child: ListView.builder(
             controller: scrollController,
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            // PERF: 1-screen cache + isolated tiles — modal product lists
+            // stay smooth while checking/editing quantities.
+            cacheExtent: 480,
+            addAutomaticKeepAlives: false,
             itemCount: items.length,
             itemBuilder: (context, index) {
               final linea = items[index];
               final lineId = ruteroLineKey(linea);
-              return _ProductCard(
-                linea: linea,
-                isChecked: productChecked[lineId] ?? false,
-                quantity: productQuantities[lineId] ?? linea.cantidadPedida,
-                readOnly: readOnly,
-                onCheckedChanged: (value) =>
-                    onProductCheckedChanged(lineId, value),
-                onQuantityChanged: (value) => onQuantityChanged(lineId, value),
-                onShowEditDialog: () => onShowQuantityEditDialog(
-                  linea,
-                  productQuantities[lineId] ?? linea.cantidadPedida,
-                ),
-                onOpenFicha: () => onOpenFicha(linea),
-                onShowFullscreenImage: () => onShowFullscreenImage(
-                  linea.codigoArticulo,
-                  linea.descripcion,
+              return RepaintBoundary(
+                child: _ProductCard(
+                  linea: linea,
+                  isChecked: productChecked[lineId] ?? false,
+                  quantity: productQuantities[lineId] ?? linea.cantidadPedida,
+                  readOnly: readOnly,
+                  onCheckedChanged: (value) =>
+                      onProductCheckedChanged(lineId, value),
+                  onQuantityChanged: (value) =>
+                      onQuantityChanged(lineId, value),
+                  onShowEditDialog: () => onShowQuantityEditDialog(
+                    linea,
+                    productQuantities[lineId] ?? linea.cantidadPedida,
+                  ),
+                  onOpenFicha: () => onOpenFicha(linea),
+                  onShowFullscreenImage: () => onShowFullscreenImage(
+                    linea.codigoArticulo,
+                    linea.descripcion,
+                  ),
                 ),
               );
             },

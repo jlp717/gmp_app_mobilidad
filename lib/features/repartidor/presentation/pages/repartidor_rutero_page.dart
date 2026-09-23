@@ -355,6 +355,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         backgroundColor: AppTheme.raisedSurface,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
+          // PERF: ~1 screen of cache for delivery cards (variable height).
+          cacheExtent: 600,
           slivers: [
             // HEADER (COMPACT)
             SliverToBoxAdapter(
@@ -884,27 +886,32 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             (context, index) {
               final albaran = albaranes[index];
 
-              return Column(
-                children: [
-                  SmartDeliveryCard(
-                    albaran: albaran,
-                    onTap: () => _showDetailDialog(albaran),
-                    onSwipeComplete: () => _openConfirmationFromSwipe(albaran),
-                    onSwipeNote: () => _showDetailDialog(albaran),
-                    repartidorNames: widget.repartidorNames,
-                  ),
-                  if (index < albaranes.length - 1)
-                    Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: AppTheme.borderColor.withValues(alpha: 0.3),
-                      indent: 12,
-                      endIndent: 12,
+              return RepaintBoundary(
+                child: Column(
+                  children: [
+                    SmartDeliveryCard(
+                      albaran: albaran,
+                      onTap: () => _showDetailDialog(albaran),
+                      onSwipeComplete: () =>
+                          _openConfirmationFromSwipe(albaran),
+                      onSwipeNote: () => _showDetailDialog(albaran),
+                      repartidorNames: widget.repartidorNames,
                     ),
-                ],
+                    if (index < albaranes.length - 1)
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: AppTheme.borderColor.withValues(alpha: 0.3),
+                        indent: 12,
+                        endIndent: 12,
+                      ),
+                  ],
+                ),
               );
             },
             childCount: albaranes.length,
+            addAutomaticKeepAlives: false,
+            addRepaintBoundaries: false,
           ),
         ),
       ),

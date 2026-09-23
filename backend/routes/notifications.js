@@ -11,7 +11,7 @@ const express = require('express');
 const logger = require('../middleware/logger');
 const { getOrSetCache } = require('../services/redis-cache');
 
-const SNAPSHOT_TTL_SECONDS = 60;
+const SNAPSHOT_TTL_SECONDS = 120;
 const LOADER_KEYS = Object.freeze([
     'orders',
     'kpi',
@@ -207,10 +207,12 @@ function createDefaultLoaders() {
         },
         async commissions(ctx) {
             if (ctx.user?.showCommissions === false) return null;
+            // JEFE ALL commissions cold path is multi-second; badge does not need it.
+            if (ctx.scope?.isJefe) return null;
             const commissions = require('./commissions');
             const handler = lastRouteHandler(commissions, '/summary');
             if (!handler) return null;
-            const vendedorCode = ctx.scope.isJefe ? 'ALL' : ctx.scope.primary;
+            const vendedorCode = ctx.scope.primary;
             if (!vendedorCode) return null;
             return invokeExpressHandler(handler, {
                 user: ctx.user,
@@ -231,6 +233,8 @@ function createDefaultLoaders() {
             return bolsaService.getBolsaStatus(ctx.scope.primary, year, month);
         },
         async metrics(ctx) {
+            // Panel metrics for JEFE ALL contend with queryGate; badge uses kpi/orders.
+            if (ctx.scope?.isJefe) return null;
             const { __deps } = require('../src/controllers/dashboard.controller');
             const result = await __deps.dashboardService.getMetrics(
                 ctx.scope.csv,
@@ -239,6 +243,7 @@ function createDefaultLoaders() {
             return result?.payload ?? result ?? null;
         },
         async topClients(ctx) {
+            if (ctx.scope?.isJefe) return null;
             const analytics = require('./analytics');
             const handler = lastRouteHandler(analytics, '/top-clients');
             if (!handler) return null;

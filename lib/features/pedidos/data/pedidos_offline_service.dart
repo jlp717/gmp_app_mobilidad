@@ -19,7 +19,8 @@ class PedidosOfflineService {
   static const _syncQueueBoxName = 'pedidos_sync_queue';
   static const _defaultMaxBatchSize = 25;
   static const _maxBatchSize = 50;
-  static const _maxConcurrentSyncs = 1;
+  // PERF: independent orders can sync in parallel (was 1 → wall-clock = sum).
+  static const _maxConcurrentSyncs = 3;
   static const _defaultYieldEvery = 5;
   static const _maxTransientAttempts = 8;
   static const String _anonymousScope = 'anon';
@@ -325,6 +326,9 @@ class PedidosOfflineService {
   }
 
   /// Sync pending orders with bounded batch size and explicit progress.
+  ///
+  /// PERF: [maxConcurrency] drains independent orders in parallel (default 3)
+  /// so N pending ≈ ceil(N/concurrency) round-trips instead of N sequential.
   static Future<Map<String, dynamic>> syncPendingOrdersWithResult({
     int maxBatchSize = _defaultMaxBatchSize,
     int maxConcurrency = _maxConcurrentSyncs,
@@ -335,15 +339,16 @@ class PedidosOfflineService {
     final batchLimit = maxBatchSize.clamp(1, _maxBatchSize);
     final effectiveConcurrency = maxConcurrency.clamp(1, _maxConcurrentSyncs);
     final selected = pending.take(batchLimit).toList(growable: false);
-    final failures = [];
+    final failures = <dynamic>[];
     var transientFailures = 0;
     var processed = 0;
     var synced = 0;
+    var nextIndex = 0;
 
-    for (final item in selected) {
+    Future<void> processOne(Map item) async {
       final syncKey = item['syncKey'].toString();
       try {
-        final prepared = await _prepareSyncItem(box, syncKey, item as Map);
+        final prepared = await _prepareSyncItem(box, syncKey, item);
         var orderId = _asIntOrNull(prepared['serverOrderId']);
         final saleType = prepared['saleType'] as String? ?? 'CC';
 
@@ -404,10 +409,26 @@ class PedidosOfflineService {
         }
       }
       processed++;
-      if (yieldEvery == 0) {
-      } else if (processed % yieldEvery == 0) {
-        await Future.delayed(Duration.zero);
+      if (yieldEvery > 0 && processed % yieldEvery == 0) {
+        await Future<void>.delayed(Duration.zero);
       }
+    }
+
+    Future<void> worker() async {
+      while (true) {
+        // Take next index before any await (single-threaded claim).
+        if (nextIndex >= selected.length) return;
+        final claim = nextIndex;
+        nextIndex = claim + 1;
+        await processOne(selected[claim] as Map);
+      }
+    }
+
+    final workers = effectiveConcurrency.clamp(1, selected.length);
+    if (selected.isNotEmpty) {
+      await Future.wait(
+        List.generate(workers, (_) => worker()),
+      );
     }
 
     final remainingPending = getPendingSyncs().length;

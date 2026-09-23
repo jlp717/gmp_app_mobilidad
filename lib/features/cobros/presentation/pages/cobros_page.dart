@@ -349,6 +349,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                                 padding: EdgeInsets.symmetric(
                                   horizontal: compact ? 10 : 16,
                                 ),
+                                // PERF: fixed extent + 1-screen cache for dense
+                                // landscape cobros without scroll layout thrash.
+                                itemExtent: compact ? 88 : 104,
+                                cacheExtent: MediaQuery.sizeOf(context).height,
+                                addAutomaticKeepAlives: false,
                                 itemCount: visibleClients.length,
                                 itemBuilder: (context, index) {
                                   return _buildClientCobroCard(
@@ -364,6 +369,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                                 horizontal: gap + 4,
                                 vertical: 4,
                               ),
+                              cacheExtent: MediaQuery.sizeOf(context).height,
+                              addAutomaticKeepAlives: false,
                               gridDelegate:
                                   SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: cols,
