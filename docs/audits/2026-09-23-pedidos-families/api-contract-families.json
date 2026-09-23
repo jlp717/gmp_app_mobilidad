@@ -1,0 +1,113 @@
+{
+  "capturedAt": "2026-09-23T06:55:17.627Z",
+  "endpoints": {
+    "GET /api/pedidos/families": {
+      "success": true,
+      "families": "string[]",
+      "sampleCount": 96,
+      "sampleHead": [
+        "000",
+        "001",
+        "0011",
+        "0012",
+        "0013",
+        "002",
+        "002019",
+        "002025",
+        "0021",
+        "0022",
+        "0023",
+        "003"
+      ],
+      "includesImpulsoCode003": true
+    },
+    "GET /api/pedidos/families/detailed": {
+      "success": true,
+      "families": [
+        {
+          "code": "string",
+          "name": "string",
+          "prefamily": "string",
+          "artCount": "number",
+          "isNestle": "boolean",
+          "isImpulso": "boolean"
+        }
+      ],
+      "sampleCount": 96,
+      "sampleHead": [
+        {
+          "code": "020",
+          "name": "ACCESORIOS HELADO",
+          "prefamily": "",
+          "artCount": 5,
+          "isNestle": false,
+          "isImpulso": false
+        },
+        {
+          "code": "007",
+          "name": "AHUMADOS",
+          "prefamily": "",
+          "artCount": 4,
+          "isNestle": false,
+          "isImpulso": false
+        },
+        {
+          "code": "400018",
+          "name": "CARNE CERDO ELABORADA",
+          "prefamily": "",
+          "artCount": 36,
+          "isNestle": false,
+          "isImpulso": false
+        },
+        {
+          "code": "400039",
+          "name": "CARNE CONGELADA",
+          "prefamily": "",
+          "artCount": 18,
+          "isNestle": false,
+          "isImpulso": false
+        },
+        {
+          "code": "400009",
+          "name": "CARNE FRESCA CERDO",
+          "prefamily": "",
+          "artCount": 4,
+          "isNestle": false,
+          "isImpulso": false
+        },
+        {
+          "code": "400012",
+          "name": "CARNE FRESCA CORDERO AREN",
+          "prefamily": "",
+          "artCount": 1,
+          "isNestle": false,
+          "isImpulso": false
+        },
+        {
+          "code": "400036",
+          "name": "CARNE FRESCA POLLO",
+          "prefamily": "",
+          "artCount": 2,
+          "isNestle": false,
+          "isImpulso": false
+        },
+        {
+          "code": "400016",
+          "name": "CARNE FRESCA POLLO ARENAS",
+          "prefamily": "",
+          "artCount": 3,
+          "isNestle": false,
+          "isImpulso": false
+        }
+      ],
+      "impulso": {
+        "code": "003",
+        "name": "NESTLE IMPULSO",
+        "prefamily": "Z",
+        "artCount": 191,
+        "isNestle": true,
+        "isImpulso": true
+      }
+    }
+  }
+}

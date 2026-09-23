@@ -1,0 +1,1241 @@
+{
+  "capturedAt": "2026-09-23T06:48:53.858Z",
+  "qsys2": [
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "ART",
+      "table_schema": "DSEDAC",
+      "table_name": "ART"
+    },
+    {
+      "TABLE_SCHEMA": "DSEDAC",
+      "TABLE_NAME": "FAM",
+      "table_schema": "DSEDAC",
+      "table_name": "FAM"
+    },
+    {
+      "TABLE_SCHEMA": "JAVIER",
+      "TABLE_NAME": "TEST_ART",
+      "table_schema": "JAVIER",
+      "table_name": "TEST_ART"
+    },
+    {
+      "TABLE_SCHEMA": "JAVIER",
+      "TABLE_NAME": "TEST_FAM",
+      "table_schema": "JAVIER",
+      "table_name": "TEST_FAM"
+    }
+  ],
+  "famColumns": [
+    {
+      "COLUMN_NAME": "CODIGOFAMILIA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 6,
+      "column_name": "CODIGOFAMILIA",
+      "data_type": "CHAR",
+      "length": 6
+    },
+    {
+      "COLUMN_NAME": "DESCRIPCIONFAMILIA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 25,
+      "column_name": "DESCRIPCIONFAMILIA",
+      "data_type": "CHAR",
+      "length": 25
+    },
+    {
+      "COLUMN_NAME": "CODIGOCUENTACOMPRAS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "column_name": "CODIGOCUENTACOMPRAS",
+      "data_type": "CHAR",
+      "length": 10
+    },
+    {
+      "COLUMN_NAME": "CODIGOCUENTAVENTAS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "column_name": "CODIGOCUENTAVENTAS",
+      "data_type": "CHAR",
+      "length": 10
+    },
+    {
+      "COLUMN_NAME": "PLANTILLAANALITICACOMPRAS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "column_name": "PLANTILLAANALITICACOMPRAS",
+      "data_type": "CHAR",
+      "length": 10
+    },
+    {
+      "COLUMN_NAME": "PLANTILLAANALITICAVENTAS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "column_name": "PLANTILLAANALITICAVENTAS",
+      "data_type": "CHAR",
+      "length": 10
+    },
+    {
+      "COLUMN_NAME": "CODIGOCUENTACOMPRASDEVOL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "column_name": "CODIGOCUENTACOMPRASDEVOL",
+      "data_type": "CHAR",
+      "length": 10
+    },
+    {
+      "COLUMN_NAME": "CODIGOCUENTAVENTASDEVOL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "column_name": "CODIGOCUENTAVENTASDEVOL",
+      "data_type": "CHAR",
+      "length": 10
+    },
+    {
+      "COLUMN_NAME": "BLOQACTUPRECVENTAENCOMPRASSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "column_name": "BLOQACTUPRECVENTAENCOMPRASSN",
+      "data_type": "CHAR",
+      "length": 1
+    },
+    {
+      "COLUMN_NAME": "GRUPO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "column_name": "GRUPO",
+      "data_type": "CHAR",
+      "length": 1
+    },
+    {
+      "COLUMN_NAME": "PORCENTAJESOBRECOSTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 5,
+      "column_name": "PORCENTAJESOBRECOSTO",
+      "data_type": "NUMERIC",
+      "length": 5
+    },
+    {
+      "COLUMN_NAME": "PORCENTAJESOBREVENTA",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 5,
+      "column_name": "PORCENTAJESOBREVENTA",
+      "data_type": "NUMERIC",
+      "length": 5
+    },
+    {
+      "COLUMN_NAME": "SERIESVALIDAS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 30,
+      "column_name": "SERIESVALIDAS",
+      "data_type": "CHAR",
+      "length": 30
+    },
+    {
+      "COLUMN_NAME": "ID",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "column_name": "ID",
+      "data_type": "INTEGER",
+      "length": 4
+    },
+    {
+      "COLUMN_NAME": "MARCAACTUALIZACION",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 50,
+      "column_name": "MARCAACTUALIZACION",
+      "data_type": "VARCHAR",
+      "length": 50
+    }
+  ],
+  "famMasterCount": 115,
+  "famMaster": [
+    {
+      "code": "ZZZZZZ",
+      "name": "MERCANCIA APARTADA"
+    },
+    {
+      "code": "000",
+      "name": "PROMOCIONES"
+    },
+    {
+      "code": "001",
+      "name": "CONGELADO"
+    },
+    {
+      "code": "001001",
+      "name": "CUBITOS"
+    },
+    {
+      "code": "0011",
+      "name": "RAPPEL CONGELADO"
+    },
+    {
+      "code": "0012",
+      "name": "CONGELADO GURMELIA"
+    },
+    {
+      "code": "0013",
+      "name": "REFRIGERADO"
+    },
+    {
+      "code": "0017",
+      "name": "MASAS CONG.CRALEO"
+    },
+    {
+      "code": "0018",
+      "name": "MASAS CONG.PAN ILICITANA"
+    },
+    {
+      "code": "002",
+      "name": "CARNE VARIOS"
+    },
+    {
+      "code": "002017",
+      "name": "RAPPEL NESTLE 2017"
+    },
+    {
+      "code": "002018",
+      "name": "RAPPEL NESTLE 2018"
+    },
+    {
+      "code": "002019",
+      "name": "RAPPEL NESTLE 2019"
+    },
+    {
+      "code": "002020",
+      "name": "RAPPEL NESTLE 2020"
+    },
+    {
+      "code": "002021",
+      "name": "RAPPEL NESTLE 2021"
+    },
+    {
+      "code": "002022",
+      "name": "RAPPEL NESTLE 2022"
+    },
+    {
+      "code": "002023",
+      "name": "RAPPEL NESTLE 2023"
+    },
+    {
+      "code": "002024",
+      "name": "RAPPEL NESTLE 2024"
+    },
+    {
+      "code": "002025",
+      "name": "RAPPEL NESTLE 2026"
+    },
+    {
+      "code": "0021",
+      "name": "CARNE MATACHIN"
+    },
+    {
+      "code": "0022",
+      "name": "CARNE POLLO"
+    },
+    {
+      "code": "0023",
+      "name": "HUEVOS"
+    },
+    {
+      "code": "003",
+      "name": "NESTLE IMPULSO"
+    },
+    {
+      "code": "0030",
+      "name": "NESTLE PROMOCIONES"
+    },
+    {
+      "code": "003001",
+      "name": "NESTLE SMOOTHIE"
+    },
+    {
+      "code": "003002",
+      "name": "NESTLE MONDELEZ"
+    },
+    {
+      "code": "003003",
+      "name": "NESTLE ANTICA"
+    },
+    {
+      "code": "003004",
+      "name": "NESTLE PACK MONDELEZ"
+    },
+    {
+      "code": "003005",
+      "name": "NESTLE FRAPELATE"
+    },
+    {
+      "code": "003006",
+      "name": "NESTLE PACK"
+    },
+    {
+      "code": "0031",
+      "name": "NESTLE RESTAURACION"
+    },
+    {
+      "code": "0032",
+      "name": "NESTLE GRANELES LECHERA"
+    },
+    {
+      "code": "0033",
+      "name": "NESTLE GRA.4,5  VEGETALES"
+    },
+    {
+      "code": "0034",
+      "name": "NESTLE GRA.6L VEGETALES"
+    },
+    {
+      "code": "0035",
+      "name": "GRANELES 2.40 PROF.SIN CO"
+    },
+    {
+      "code": "0036",
+      "name": "NESTLE VENDING"
+    },
+    {
+      "code": "0037",
+      "name": "NESTLE BANQUETES"
+    },
+    {
+      "code": "0038",
+      "name": "NESTLE EXT.NATA PR.MAX.15"
+    },
+    {
+      "code": "0039",
+      "name": "NESTLE BOLLERIA NESTLE"
+    },
+    {
+      "code": "00399",
+      "name": "RAPPEL NESTLE"
+    },
+    {
+      "code": "003998",
+      "name": "MATERIAL PUBLICITARIO"
+    },
+    {
+      "code": "004",
+      "name": "MASAS CONG.BJV"
+    },
+    {
+      "code": "0040",
+      "name": "NESTLE PRECOCINADOS"
+    },
+    {
+      "code": "0041",
+      "name": "NESTLE MENU"
+    },
+    {
+      "code": "005",
+      "name": "MASAS CONG.SANCHEZ"
+    },
+    {
+      "code": "006",
+      "name": "MASAS CONG.AMPARIN"
+    },
+    {
+      "code": "0065",
+      "name": "MASAS CONG.VICENTE"
+    },
+    {
+      "code": "007",
+      "name": "AHUMADOS"
+    },
+    {
+      "code": "008",
+      "name": "MASAS CONG.MARFISOL"
+    },
+    {
+      "code": "009",
+      "name": "NESTLE CONSUMIBLES"
+    },
+    {
+      "code": "012",
+      "name": "HELADO DESCATALOGADO"
+    },
+    {
+      "code": "013",
+      "name": "MARISCO Y CEFALOPODOS"
+    },
+    {
+      "code": "015",
+      "name": "VARIOS ACCESORIOS HELADO"
+    },
+    {
+      "code": "016",
+      "name": "MASAS CONG.AMPARIN PAN"
+    },
+    {
+      "code": "017",
+      "name": "MASAS CONG.OKIN PAN"
+    },
+    {
+      "code": "018",
+      "name": "GRANIZADOS"
+    },
+    {
+      "code": "019",
+      "name": "MASAS CONG.AMPARIN S/DTO."
+    },
+    {
+      "code": "020",
+      "name": "ACCESORIOS HELADO"
+    },
+    {
+      "code": "021",
+      "name": "CONSUMIBLES"
+    },
+    {
+      "code": "022",
+      "name": "MASAS CONG.OKIN S/DTO."
+    },
+    {
+      "code": "025",
+      "name": "NESTLE PASTELERIA"
+    },
+    {
+      "code": "026",
+      "name": "NESTLE POLOS HIELO HOTEL"
+    },
+    {
+      "code": "029",
+      "name": "PIZZAS"
+    },
+    {
+      "code": "030",
+      "name": "DESCUENTOS VARIOS"
+    },
+    {
+      "code": "031",
+      "name": "NESTLE PRECOCINADOS"
+    },
+    {
+      "code": "032",
+      "name": "PASTELERIA CELIACOS"
+    },
+    {
+      "code": "036",
+      "name": "MASAS CONG.AMPARIN S DTO."
+    },
+    {
+      "code": "039998",
+      "name": "NESTLE PROMO.REGALOS"
+    },
+    {
+      "code": "039999",
+      "name": "NESTLE PROMO.DESPERTADOR"
+    },
+    {
+      "code": "040",
+      "name": "HELADOS NO NESTLE"
+    },
+    {
+      "code": "060",
+      "name": "TOPFRESH"
+    },
+    {
+      "code": "061",
+      "name": "HEINZ"
+    },
+    {
+      "code": "070",
+      "name": "NESTLE HELADO CONVENIENCI"
+    },
+    {
+      "code": "116",
+      "name": "MASAS CONG.OKIN PAN PROMO"
+    },
+    {
+      "code": "300000",
+      "name": "HELADO"
+    },
+    {
+      "code": "333",
+      "name": "NESTLE BLOQ.PROMOCION"
+    },
+    {
+      "code": "400000",
+      "name": "CONGELADO ARENAS"
+    },
+    {
+      "code": "400004",
+      "name": "CONGELADO BACALAO ARENAS"
+    },
+    {
+      "code": "400006",
+      "name": "CONGELADO CORDERO ARENAS"
+    },
+    {
+      "code": "400007",
+      "name": "CONGELADO CERDO ARENAS"
+    },
+    {
+      "code": "400008",
+      "name": "CONGELADO TERNERA ARENAS"
+    },
+    {
+      "code": "400009",
+      "name": "CARNE FRESCA CERDO"
+    },
+    {
+      "code": "400010",
+      "name": "CARNE FRESCA TERNERA AREN"
+    },
+    {
+      "code": "400011",
+      "name": "SECO ARENAS"
+    },
+    {
+      "code": "400012",
+      "name": "CARNE FRESCA CORDERO AREN"
+    },
+    {
+      "code": "400013",
+      "name": "CARNE FRESCA POLLO ARENAS"
+    },
+    {
+      "code": "400014",
+      "name": "CARNE FRESCA POLLO ARENAS"
+    },
+    {
+      "code": "400015",
+      "name": "CONGELADO ARENAS"
+    },
+    {
+      "code": "400016",
+      "name": "CARNE FRESCA POLLO ARENAS"
+    },
+    {
+      "code": "400017",
+      "name": "EMBUTIDOS ARENAS"
+    },
+    {
+      "code": "400018",
+      "name": "CARNE CERDO ELABORADA"
+    },
+    {
+      "code": "400033",
+      "name": "CONGELADO ARENAS"
+    },
+    {
+      "code": "400034",
+      "name": "CONGELADO ARENAS"
+    },
+    {
+      "code": "400035",
+      "name": "REFRIGERADO ARENAS"
+    },
+    {
+      "code": "400036",
+      "name": "CARNE FRESCA POLLO"
+    },
+    {
+      "code": "400037",
+      "name": "PRECOCINADOS ARENAS"
+    },
+    {
+      "code": "400038",
+      "name": "CARNE FRESCA POLLO ASAR"
+    },
+    {
+      "code": "400039",
+      "name": "CARNE CONGELADA"
+    },
+    {
+      "code": "400040",
+      "name": "CARNE CONGELADA"
+    },
+    {
+      "code": "400042",
+      "name": "REFRIGERADO ARENAS"
+    },
+    {
+      "code": "400043",
+      "name": "SECO ARENAS"
+    },
+    {
+      "code": "400044",
+      "name": "SECO ARENAS"
+    },
+    {
+      "code": "400045",
+      "name": "CONGELADO ARENAS"
+    },
+    {
+      "code": "400047",
+      "name": "CONGELADO VERDURA"
+    },
+    {
+      "code": "700",
+      "name": "MASAS CONG.PANAMAR PAN"
+    },
+    {
+      "code": "701",
+      "name": "MASAS CONG.PANAMAR BOLL."
+    },
+    {
+      "code": "702",
+      "name": "MASAS CONG.PANAMAR 13954"
+    },
+    {
+      "code": "704",
+      "name": "PROMO PANAMAR"
+    },
+    {
+      "code": "705",
+      "name": "MASAS CONG.PNM NO COLABOR"
+    },
+    {
+      "code": "706",
+      "name": "MASAS CONG.PNM SIN DTO."
+    },
+    {
+      "code": "800",
+      "name": "PATATAS DIEGO"
+    },
+    {
+      "code": "801",
+      "name": "MASAS CONG.PAN BARCO"
+    },
+    {
+      "code": "900",
+      "name": "MASAS CONG.LOLIPOP"
+    },
+    {
+      "code": "998",
+      "name": "ENVASES (CAJAS Y PALET)"
+    },
+    {
+      "code": "999",
+      "name": "REPUESTOS MAQUINAS POLLOS"
+    }
+  ],
+  "artActiveCount": 96,
+  "artActive": [
+    {
+      "code": "020",
+      "name": "ACCESORIOS HELADO",
+      "prefamily": "",
+      "artCount": 5
+    },
+    {
+      "code": "007",
+      "name": "AHUMADOS",
+      "prefamily": "",
+      "artCount": 4
+    },
+    {
+      "code": "400018",
+      "name": "CARNE CERDO ELABORADA",
+      "prefamily": "",
+      "artCount": 36
+    },
+    {
+      "code": "400039",
+      "name": "CARNE CONGELADA",
+      "prefamily": "",
+      "artCount": 18
+    },
+    {
+      "code": "400009",
+      "name": "CARNE FRESCA CERDO",
+      "prefamily": "",
+      "artCount": 4
+    },
+    {
+      "code": "400012",
+      "name": "CARNE FRESCA CORDERO AREN",
+      "prefamily": "",
+      "artCount": 1
+    },
+    {
+      "code": "400036",
+      "name": "CARNE FRESCA POLLO",
+      "prefamily": "",
+      "artCount": 2
+    },
+    {
+      "code": "400016",
+      "name": "CARNE FRESCA POLLO ARENAS",
+      "prefamily": "",
+      "artCount": 3
+    },
+    {
+      "code": "400014",
+      "name": "CARNE FRESCA POLLO ARENAS",
+      "prefamily": "",
+      "artCount": 2
+    },
+    {
+      "code": "400038",
+      "name": "CARNE FRESCA POLLO ASAR",
+      "prefamily": "",
+      "artCount": 4
+    },
+    {
+      "code": "400010",
+      "name": "CARNE FRESCA TERNERA AREN",
+      "prefamily": "",
+      "artCount": 13
+    },
+    {
+      "code": "0021",
+      "name": "CARNE MATACHIN",
+      "prefamily": "",
+      "artCount": 13
+    },
+    {
+      "code": "0022",
+      "name": "CARNE POLLO",
+      "prefamily": "",
+      "artCount": 25
+    },
+    {
+      "code": "002",
+      "name": "CARNE VARIOS",
+      "prefamily": "",
+      "artCount": 54
+    },
+    {
+      "code": "001",
+      "name": "CONGELADO",
+      "prefamily": "",
+      "artCount": 779
+    },
+    {
+      "code": "400015",
+      "name": "CONGELADO ARENAS",
+      "prefamily": "",
+      "artCount": 1
+    },
+    {
+      "code": "400000",
+      "name": "CONGELADO ARENAS",
+      "prefamily": "",
+      "artCount": 270
+    },
+    {
+      "code": "400034",
+      "name": "CONGELADO ARENAS",
+      "prefamily": "",
+      "artCount": 3
+    },
+    {
+      "code": "400033",
+      "name": "CONGELADO ARENAS",
+      "prefamily": "",
+      "artCount": 84
+    },
+    {
+      "code": "400045",
+      "name": "CONGELADO ARENAS",
+      "prefamily": "",
+      "artCount": 6
+    },
+    {
+      "code": "400004",
+      "name": "CONGELADO BACALAO ARENAS",
+      "prefamily": "",
+      "artCount": 9
+    },
+    {
+      "code": "400007",
+      "name": "CONGELADO CERDO ARENAS",
+      "prefamily": "",
+      "artCount": 8
+    },
+    {
+      "code": "400006",
+      "name": "CONGELADO CORDERO ARENAS",
+      "prefamily": "",
+      "artCount": 4
+    },
+    {
+      "code": "0012",
+      "name": "CONGELADO GURMELIA",
+      "prefamily": "",
+      "artCount": 1
+    },
+    {
+      "code": "400008",
+      "name": "CONGELADO TERNERA ARENAS",
+      "prefamily": "",
+      "artCount": 3
+    },
+    {
+      "code": "400047",
+      "name": "CONGELADO VERDURA",
+      "prefamily": "",
+      "artCount": 10
+    },
+    {
+      "code": "021",
+      "name": "CONSUMIBLES",
+      "prefamily": "",
+      "artCount": 46
+    },
+    {
+      "code": "030",
+      "name": "DESCUENTOS VARIOS",
+      "prefamily": "",
+      "artCount": 41
+    },
+    {
+      "code": "400017",
+      "name": "EMBUTIDOS ARENAS",
+      "prefamily": "",
+      "artCount": 1
+    },
+    {
+      "code": "998",
+      "name": "ENVASES (CAJAS Y PALET)",
+      "prefamily": "",
+      "artCount": 18
+    },
+    {
+      "code": "0035",
+      "name": "GRANELES 2.40 PROF.SIN CO",
+      "prefamily": "",
+      "artCount": 4
+    },
+    {
+      "code": "018",
+      "name": "GRANIZADOS",
+      "prefamily": "",
+      "artCount": 4
+    },
+    {
+      "code": "061",
+      "name": "HEINZ",
+      "prefamily": "",
+      "artCount": 4
+    },
+    {
+      "code": "040",
+      "name": "HELADOS NO NESTLE",
+      "prefamily": "",
+      "artCount": 5
+    },
+    {
+      "code": "0023",
+      "name": "HUEVOS",
+      "prefamily": "",
+      "artCount": 3
+    },
+    {
+      "code": "013",
+      "name": "MARISCO Y CEFALOPODOS",
+      "prefamily": "",
+      "artCount": 195
+    },
+    {
+      "code": "006",
+      "name": "MASAS CONG.AMPARIN",
+      "prefamily": "",
+      "artCount": 21
+    },
+    {
+      "code": "016",
+      "name": "MASAS CONG.AMPARIN PAN",
+      "prefamily": "",
+      "artCount": 11
+    },
+    {
+      "code": "019",
+      "name": "MASAS CONG.AMPARIN S/DTO.",
+      "prefamily": "",
+      "artCount": 5
+    },
+    {
+      "code": "004",
+      "name": "MASAS CONG.BJV",
+      "prefamily": "2",
+      "artCount": 15
+    },
+    {
+      "code": "900",
+      "name": "MASAS CONG.LOLIPOP",
+      "prefamily": "",
+      "artCount": 4
+    },
+    {
+      "code": "008",
+      "name": "MASAS CONG.MARFISOL",
+      "prefamily": "",
+      "artCount": 3
+    },
+    {
+      "code": "017",
+      "name": "MASAS CONG.OKIN PAN",
+      "prefamily": "",
+      "artCount": 3
+    },
+    {
+      "code": "801",
+      "name": "MASAS CONG.PAN BARCO",
+      "prefamily": "",
+      "artCount": 17
+    },
+    {
+      "code": "701",
+      "name": "MASAS CONG.PANAMAR BOLL.",
+      "prefamily": "",
+      "artCount": 110
+    },
+    {
+      "code": "700",
+      "name": "MASAS CONG.PANAMAR PAN",
+      "prefamily": "",
+      "artCount": 60
+    },
+    {
+      "code": "702",
+      "name": "MASAS CONG.PANAMAR 13954",
+      "prefamily": "",
+      "artCount": 1
+    },
+    {
+      "code": "005",
+      "name": "MASAS CONG.SANCHEZ",
+      "prefamily": "",
+      "artCount": 14
+    },
+    {
+      "code": "0065",
+      "name": "MASAS CONG.VICENTE",
+      "prefamily": "",
+      "artCount": 6
+    },
+    {
+      "code": "003998",
+      "name": "MATERIAL PUBLICITARIO",
+      "prefamily": "",
+      "artCount": 13
+    },
+    {
+      "code": "003003",
+      "name": "NESTLE ANTICA",
+      "prefamily": "",
+      "artCount": 11
+    },
+    {
+      "code": "0037",
+      "name": "NESTLE BANQUETES",
+      "prefamily": "",
+      "artCount": 6
+    },
+    {
+      "code": "0039",
+      "name": "NESTLE BOLLERIA NESTLE",
+      "prefamily": "",
+      "artCount": 5
+    },
+    {
+      "code": "009",
+      "name": "NESTLE CONSUMIBLES",
+      "prefamily": "",
+      "artCount": 24
+    },
+    {
+      "code": "003005",
+      "name": "NESTLE FRAPELATE",
+      "prefamily": "",
+      "artCount": 4
+    },
+    {
+      "code": "0033",
+      "name": "NESTLE GRA.4,5  VEGETALES",
+      "prefamily": "G",
+      "artCount": 13
+    },
+    {
+      "code": "0032",
+      "name": "NESTLE GRANELES LECHERA",
+      "prefamily": "L",
+      "artCount": 88
+    },
+    {
+      "code": "003",
+      "name": "NESTLE IMPULSO",
+      "prefamily": "Z",
+      "artCount": 191
+    },
+    {
+      "code": "0041",
+      "name": "NESTLE MENU",
+      "prefamily": "",
+      "artCount": 5
+    },
+    {
+      "code": "003002",
+      "name": "NESTLE MONDELEZ",
+      "prefamily": "",
+      "artCount": 10
+    },
+    {
+      "code": "003006",
+      "name": "NESTLE PACK",
+      "prefamily": "F",
+      "artCount": 48
+    },
+    {
+      "code": "025",
+      "name": "NESTLE PASTELERIA",
+      "prefamily": "V",
+      "artCount": 45
+    },
+    {
+      "code": "026",
+      "name": "NESTLE POLOS HIELO HOTEL",
+      "prefamily": "",
+      "artCount": 5
+    },
+    {
+      "code": "0040",
+      "name": "NESTLE PRECOCINADOS",
+      "prefamily": "",
+      "artCount": 20
+    },
+    {
+      "code": "039999",
+      "name": "NESTLE PROMO.DESPERTADOR",
+      "prefamily": "",
+      "artCount": 52
+    },
+    {
+      "code": "0030",
+      "name": "NESTLE PROMOCIONES",
+      "prefamily": "",
+      "artCount": 53
+    },
+    {
+      "code": "0031",
+      "name": "NESTLE RESTAURACION",
+      "prefamily": "C",
+      "artCount": 70
+    },
+    {
+      "code": "003001",
+      "name": "NESTLE SMOOTHIE",
+      "prefamily": "",
+      "artCount": 12
+    },
+    {
+      "code": "0036",
+      "name": "NESTLE VENDING",
+      "prefamily": "",
+      "artCount": 8
+    },
+    {
+      "code": "800",
+      "name": "PATATAS DIEGO",
+      "prefamily": "",
+      "artCount": 10
+    },
+    {
+      "code": "029",
+      "name": "PIZZAS",
+      "prefamily": "",
+      "artCount": 9
+    },
+    {
+      "code": "400037",
+      "name": "PRECOCINADOS ARENAS",
+      "prefamily": "",
+      "artCount": 24
+    },
+    {
+      "code": "000",
+      "name": "PROMOCIONES",
+      "prefamily": "",
+      "artCount": 5
+    },
+    {
+      "code": "0011",
+      "name": "RAPPEL CONGELADO",
+      "prefamily": "",
+      "artCount": 1
+    },
+    {
+      "code": "00399",
+      "name": "RAPPEL NESTLE",
+      "prefamily": "",
+      "artCount": 3
+    },
+    {
+      "code": "002019",
+      "name": "RAPPEL NESTLE 2019",
+      "prefamily": "",
+      "artCount": 1
+    },
+    {
+      "code": "002025",
+      "name": "RAPPEL NESTLE 2026",
+      "prefamily": "",
+      "artCount": 2
+    },
+    {
+      "code": "0013",
+      "name": "REFRIGERADO",
+      "prefamily": "",
+      "artCount": 4
+    },
+    {
+      "code": "400042",
+      "name": "REFRIGERADO ARENAS",
+      "prefamily": "",
+      "artCount": 3
+    },
+    {
+      "code": "400035",
+      "name": "REFRIGERADO ARENAS",
+      "prefamily": "",
+      "artCount": 2
+    },
+    {
+      "code": "400044",
+      "name": "SECO ARENAS",
+      "prefamily": "",
+      "artCount": 12
+    },
+    {
+      "code": "400043",
+      "name": "SECO ARENAS",
+      "prefamily": "",
+      "artCount": 5
+    },
+    {
+      "code": "400011",
+      "name": "SECO ARENAS",
+      "prefamily": "",
+      "artCount": 9
+    },
+    {
+      "code": "060",
+      "name": "TOPFRESH",
+      "prefamily": "",
+      "artCount": 77
+    },
+    {
+      "code": "015",
+      "name": "VARIOS ACCESORIOS HELADO",
+      "prefamily": "L",
+      "artCount": 7
+    },
+    {
+      "code": "011",
+      "name": "011",
+      "prefamily": "",
+      "artCount": 3
+    },
+    {
+      "code": "014",
+      "name": "014",
+      "prefamily": "",
+      "artCount": 5
+    },
+    {
+      "code": "023",
+      "name": "023",
+      "prefamily": "",
+      "artCount": 1
+    },
+    {
+      "code": "033",
+      "name": "033",
+      "prefamily": "",
+      "artCount": 1
+    },
+    {
+      "code": "050",
+      "name": "050",
+      "prefamily": "",
+      "artCount": 40
+    },
+    {
+      "code": "334",
+      "name": "334",
+      "prefamily": "",
+      "artCount": 4
+    },
+    {
+      "code": "400001",
+      "name": "400001",
+      "prefamily": "",
+      "artCount": 8
+    },
+    {
+      "code": "400002",
+      "name": "400002",
+      "prefamily": "",
+      "artCount": 1
+    },
+    {
+      "code": "402",
+      "name": "402",
+      "prefamily": "",
+      "artCount": 1
+    },
+    {
+      "code": "403",
+      "name": "403",
+      "prefamily": "",
+      "artCount": 2
+    },
+    {
+      "code": "417",
+      "name": "417",
+      "prefamily": "",
+      "artCount": 3
+    }
+  ],
+  "impulsoFam": [
+    {
+      "CODE": "003",
+      "NAME": "NESTLE IMPULSO",
+      "code": "003",
+      "name": "NESTLE IMPULSO"
+    }
+  ],
+  "test": {
+    "testFamCount": [
+      {
+        "N": 115,
+        "n": 115
+      }
+    ],
+    "testImpulso": [
+      {
+        "CODE": "003",
+        "NAME": "NESTLE IMPULSO",
+        "code": "003",
+        "name": "NESTLE IMPULSO"
+      }
+    ],
+    "testArtImpulso": [
+      {
+        "N": 191,
+        "n": 191
+      }
+    ]
+  },
+  "recommendation": {
+    "defaultVisiblePinned": [
+      "003",
+      "001",
+      "013",
+      "002",
+      "060",
+      "0031",
+      "700",
+      "701"
+    ],
+    "todas": "clear family+prefamily",
+    "nestleChip": "prefamily search NESTLE (marca/descripcion)",
+    "impulso": {
+      "code": "003",
+      "name": "NESTLE IMPULSO"
+    }
+  }
+}
