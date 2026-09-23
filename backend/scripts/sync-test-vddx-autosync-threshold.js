@@ -2,15 +2,37 @@
 'use strict';
 /**
  * Sync JAVIER.TEST_VDDX.PEDIDOSPENDIENTESSINCRONIZAR from DSEDAC.VDDX
- * for vendors with threshold > 0 (expand-contract prep; TEST only write).
+ * (expand-contract prep; TEST only write).
+ *
+ * Semantics (product):
+ *   PEDIDOSPENDIENTESSINCRONIZAR = 0 / NULL / missing → auto-envío OFF
+ *   > 0 → confirm automático al alcanzar ese número de borradores pendientes
+ *
+ * Flags:
+ *   --apply                 write to JAVIER.TEST_VDDX
+ *   --default-zero <n>      set TEST vendors still at 0 to <n> (demo default: 3)
+ *                           Does NOT touch DSEDAC.VDDX (prod frontier).
  */
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const odbc = require('odbc');
 const db2ConnectionString = require('./db2-connection');
 
+function argValue(flag) {
+  const idx = process.argv.indexOf(flag);
+  if (idx < 0) return null;
+  const raw = process.argv[idx + 1];
+  if (!raw || raw.startsWith('--')) return null;
+  return raw;
+}
+
 (async () => {
   const apply = process.argv.includes('--apply');
+  const defaultZeroRaw = argValue('--default-zero');
+  const defaultZero = defaultZeroRaw == null
+    ? null
+    : Math.max(0, parseInt(defaultZeroRaw, 10) || 0);
+
   const pool = await odbc.pool(db2ConnectionString());
   const conn = await pool.connect();
 
@@ -19,11 +41,25 @@ const db2ConnectionString = require('./db2-connection');
     FROM DSEDAC.VDDX
     WHERE PEDIDOSPENDIENTESSINCRONIZAR > 0
   `);
-  console.log('source vendors with T>0:', src.length);
+  console.log(JSON.stringify({
+    policy: 'TH=0 means auto-envio OFF (no silent default in app code)',
+    sourceVendorsWithTgt0: src.length,
+    defaultZeroForTest: defaultZero,
+    apply,
+  }));
   for (const r of src) console.log(JSON.stringify(r));
 
   if (!apply) {
-    console.log('DRY-RUN. Re-run with --apply to UPDATE JAVIER.TEST_VDDX');
+    const zeros = await conn.query(`
+      SELECT COUNT(*) AS ZERO_TH
+        FROM JAVIER.TEST_VDDX
+       WHERE COALESCE(PEDIDOSPENDIENTESSINCRONIZAR, 0) = 0
+    `);
+    console.log(JSON.stringify({
+      dryRun: true,
+      testZeroCount: zeros?.[0]?.ZERO_TH,
+      hint: 'Re-run with --apply [--default-zero 3] to UPDATE JAVIER.TEST_VDDX only',
+    }));
     await conn.close();
     await pool.close();
     return;
@@ -42,15 +78,31 @@ const db2ConnectionString = require('./db2-connection');
     console.log('updated', r.VD, '→', r.T, 'rows~', count);
   }
 
+  let defaulted = 0;
+  if (defaultZero && defaultZero > 0) {
+    const result = await conn.query(
+      `UPDATE JAVIER.TEST_VDDX
+          SET PEDIDOSPENDIENTESSINCRONIZAR = ?
+        WHERE COALESCE(PEDIDOSPENDIENTESSINCRONIZAR, 0) = 0`,
+      [defaultZero],
+    );
+    defaulted = typeof result?.count === 'number' ? result.count : 0;
+    console.log(JSON.stringify({ defaultZeroApplied: defaultZero, rows: defaulted }));
+  }
+
   const verify = await conn.query(`
-    SELECT TRIM(CODIGOVENDEDOR) AS VD, PEDIDOSPENDIENTESSINCRONIZAR AS T
+    SELECT
+      SUM(CASE WHEN COALESCE(PEDIDOSPENDIENTESSINCRONIZAR,0) > 0 THEN 1 ELSE 0 END) AS WITH_TH,
+      SUM(CASE WHEN COALESCE(PEDIDOSPENDIENTESSINCRONIZAR,0) = 0 THEN 1 ELSE 0 END) AS ZERO_TH,
+      COUNT(*) AS TOTAL
     FROM JAVIER.TEST_VDDX
-    WHERE PEDIDOSPENDIENTESSINCRONIZAR > 0
-    ORDER BY T DESC, VD
   `);
-  console.log('TEST_VDDX after:', verify.length);
-  for (const r of verify) console.log(JSON.stringify(r));
-  console.log('done updated~', updated);
+  console.log(JSON.stringify({
+    done: true,
+    syncedFromProd: updated,
+    defaultedZeros: defaulted,
+    testCounts: verify?.[0] || null,
+  }));
 
   await conn.close();
   await pool.close();

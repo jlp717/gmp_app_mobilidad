@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "path": "/api/comercial-liquidacion/resumen-diario?fecha=2026-09-16&vendedor=35",
+  "status": 200,
+  "source": "JAVIER.TEST_COBROS",
+  "totalAIngresar": 0.04,
+  "lqdIgnoredReason": "isolated_test_prefers_app_cobros_over_lqd_snapshot",
+  "prefersCobros": true,
+  "host": "127.0.0.1:3335",
+  "at": "2026-09-23T07:34:14Z"
+}

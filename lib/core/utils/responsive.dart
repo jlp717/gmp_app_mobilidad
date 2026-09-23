@@ -143,7 +143,9 @@ class Responsive {
   }) {
     if (landscape) {
       if (width >= 1100) return 4;
-      if (width >= 720) return 3;
+      // 680 (not 720): 1280 landscape − sidebar 90 − cart flex2/5 ≈ 714px
+      // catalog panel must still get 3 cols for ~9–10 visible tiles.
+      if (width >= 680) return 3;
       if (width >= 420) return 2;
       return 2;
     }

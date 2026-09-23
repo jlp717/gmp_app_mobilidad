@@ -159,14 +159,43 @@ async function notifyCommercialCobro({
         logger.error('[comercial-cobro-notify] email failed', {
           code: normalizeText(error?.code) || 'SMTP_FAILURE',
         });
-        results.push({ success: false });
+        results.push({ to, success: false });
       }
     }
 
-    return {
+    const summary = redactDeliverySummary(results);
+    // Opaque best-effort is banned: always return sink/policy evidence for audits.
+    const evidence = {
       skipped: false,
-      ...redactDeliverySummary(results),
+      paymentId: identity,
+      pdfBytes: Buffer.isBuffer(pdfBuffer) ? pdfBuffer.length : 0,
+      pdfFilename,
+      pdfMagic: Buffer.isBuffer(pdfBuffer) && pdfBuffer.length >= 5
+        ? pdfBuffer.subarray(0, 5).toString('utf8')
+        : null,
+      policy: delivery.policy || null,
+      redirected: Boolean(delivery.redirected),
+      intendedCount: Array.isArray(delivery.intendedRecipients)
+        ? delivery.intendedRecipients.length
+        : 0,
+      effectiveCount: Array.isArray(delivery.effectiveRecipients)
+        ? delivery.effectiveRecipients.length
+        : 0,
+      ...summary,
     };
+    logger.info('[comercial-cobro-notify] delivery', {
+      paymentId: identity,
+      pdfBytes: evidence.pdfBytes,
+      pdfMagic: evidence.pdfMagic,
+      policy: evidence.policy,
+      redirected: evidence.redirected,
+      intendedCount: evidence.intendedCount,
+      effectiveCount: evidence.effectiveCount,
+      attempted: evidence.attempted,
+      sent: evidence.sent,
+      failed: evidence.failed,
+    });
+    return evidence;
   } catch (error) {
     logger.warn('[comercial-cobro-notify] failed', {
       code: normalizeText(error?.code) || 'NOTIFICATION_FAILURE',

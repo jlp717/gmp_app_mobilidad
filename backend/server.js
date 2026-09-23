@@ -97,6 +97,11 @@ async function startServer() {
     } catch (error) {
       logger.warn(`Reparto notification scheduler unavailable: ${error.message}`);
     }
+    try {
+      require('./services/pedidos-draft-purge-scheduler').startPedidosDraftPurgeScheduler();
+    } catch (error) {
+      logger.warn(`Pedidos draft purge scheduler unavailable: ${error.message}`);
+    }
   });
   server.requestTimeout = HTTP_REQUEST_TIMEOUT_MS;
   server.headersTimeout = Math.min(65000, HTTP_REQUEST_TIMEOUT_MS + 5000);
@@ -177,6 +182,11 @@ async function gracefulShutdown(signal, exitCode = 0) {
     require('./services/reparto-notification-scheduler').stopRepartoNotificationScheduler();
   } catch (error) {
     logger.warn(`Reparto scheduler stop error: ${error.message}`);
+  }
+  try {
+    require('./services/pedidos-draft-purge-scheduler').stopPedidosDraftPurgeScheduler();
+  } catch (error) {
+    logger.warn(`Draft purge scheduler stop error: ${error.message}`);
   }
   if (global.__httpServer?.close) {
     await new Promise((resolve) => global.__httpServer.close(resolve));
