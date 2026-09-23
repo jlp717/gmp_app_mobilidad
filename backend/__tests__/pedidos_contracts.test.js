@@ -234,6 +234,51 @@ describe('pedidos product catalog contract', () => {
     });
   });
 
+  test('getProducts sortBy=purchases DESC ranks most purchased first', async () => {
+    let capturedSql = '';
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
+        return [];
+      }
+      capturedSql = sql;
+      return [];
+    });
+
+    await pedidosService.getProducts({
+      clientCode: 'C001',
+      limit: 20,
+      offset: 0,
+      sortBy: 'purchases',
+      sortOrder: 'DESC',
+    });
+
+    expect(capturedSql).toMatch(
+      /\(COALESCE\(PH\.SALES_THIS_YEAR,\s*0\)\s*\+\s*COALESCE\(PH\.SALES_PREV_YEAR,\s*0\)\)\s+DESC/i,
+    );
+  });
+
+  test('getProducts sortBy=name ASC ranks alphabetically', async () => {
+    let capturedSql = '';
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
+        return [];
+      }
+      capturedSql = sql;
+      return [];
+    });
+
+    await pedidosService.getProducts({
+      clientCode: 'C001',
+      limit: 20,
+      offset: 0,
+      sortBy: 'name',
+      sortOrder: 'ASC',
+    });
+
+    expect(capturedSql).toMatch(/A\.DESCRIPCIONARTICULO\s+ASC/i);
+    expect(capturedSql).not.toMatch(/COALESCE\(PH\.SALES_THIS_YEAR,\s*0\)\s+ASC/i);
+  });
+
   test('getProducts truncates long clientCode in LACLAE bind params', async () => {
     const longClient = '4300001091_OVERFLOW_EXTRA_CHARS';
     let capturedSql = '';

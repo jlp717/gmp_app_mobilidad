@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/domain/product_family_filter.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class ProductSearchWidget extends ConsumerStatefulWidget {
@@ -33,6 +34,14 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
     super.dispose();
   }
 
+  void _reloadProducts(PedidosProvider provider) {
+    provider.loadProducts(
+      vendedorCodes: widget.vendedorCodes,
+      search: _searchController.text.isEmpty ? null : _searchController.text,
+      reset: true,
+    );
+  }
+
   void _onSearchChanged(String value) {
     if (mounted) setState(() {});
     _debounce?.cancel();
@@ -46,14 +55,40 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
     });
   }
 
-  void _onFamilySelected(PedidosProvider provider, String? family) {
+  void _onFamilySelected(PedidosProvider provider, String? familyCode) {
     provider.setFamilyFilter(
-      provider.selectedFamily == family ? null : family,
+      provider.selectedFamily == familyCode ? null : familyCode,
     );
-    provider.loadProducts(
-      vendedorCodes: widget.vendedorCodes,
-      search: _searchController.text.isEmpty ? null : _searchController.text,
-      reset: true,
+    _reloadProducts(provider);
+  }
+
+  FilterChip _buildChip({
+    required BuildContext context,
+    required String label,
+    required bool selected,
+    required Color selectedColor,
+    required VoidCallback onSelected,
+    Widget? avatar,
+  }) {
+    return FilterChip(
+      avatar: avatar,
+      label: Text(label),
+      selected: selected,
+      selectedColor: selectedColor.withValues(alpha: 0.24),
+      backgroundColor: AppTheme.surfaceCommand.withValues(alpha: 0.94),
+      labelStyle: TextStyle(
+        color: selected ? selectedColor : AppTheme.textSecondary,
+        fontSize: Responsive.fontSize(context, small: 11, large: 13),
+        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+      ),
+      side: BorderSide(
+        color: selected
+            ? selectedColor
+            : AppTheme.activeRing.withValues(alpha: 0.14),
+      ),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      onSelected: (_) => onSelected(),
     );
   }
 
@@ -68,113 +103,90 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
     final families = ref.watch(pedidosProvider.select((p) => p.families));
     final provider = ref.read(pedidosProvider);
     final pad = Responsive.contentPadding(context);
+    final allSelected = selectedFamily == null && selectedPrefamily == null;
 
-    // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si families crece mucho.
+    // Layout: Todas | stock | Nestlé | familias DB (Impulso pinned primero).
     final chips = <Widget>[
-      // "Solo con stock" chip (Mejora 3)
       Padding(
         padding: const EdgeInsets.only(right: 8),
-        child: FilterChip(
-          avatar: Icon(
-            Icons.inventory_2_outlined,
-            size: 14,
-            color: onlyWithStock ? AppTheme.success : AppTheme.textTertiary,
+        child: Semantics(
+          button: true,
+          label: 'Todas las familias',
+          child: _buildChip(
+            context: context,
+            label: 'Todas',
+            selected: allSelected,
+            selectedColor: AppTheme.info,
+            onSelected: () {
+              provider.clearCatalogFamilyFilters();
+              _reloadProducts(provider);
+            },
           ),
-          label: const Text('Solo con stock'),
-          selected: onlyWithStock,
-          selectedColor: AppTheme.success.withValues(alpha: 0.24),
-          backgroundColor: AppTheme.surfaceCommand.withValues(alpha: 0.94),
-          labelStyle: TextStyle(
-            color: onlyWithStock ? AppTheme.success : AppTheme.textSecondary,
-            fontSize: Responsive.fontSize(context, small: 11, large: 13),
-          ),
-          side: BorderSide(
-            color: provider.onlyWithStock
-                ? AppTheme.success
-                : AppTheme.activeRing.withValues(alpha: 0.14),
-          ),
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.compact,
-          onSelected: (_) {
-            provider.setStockFilter(!onlyWithStock);
-            provider.loadProducts(
-              vendedorCodes: widget.vendedorCodes,
-              search: _searchController.text.isEmpty
-                  ? null
-                  : _searchController.text,
-              reset: true,
-            );
-          },
         ),
       ),
-      // Req #14: chip Nestlé (filtra por prefamilia)
       Padding(
         padding: const EdgeInsets.only(right: 8),
-        child: FilterChip(
-          avatar: Icon(
-            Icons.star,
-            size: 14,
-            color: selectedPrefamily == 'NESTLE'
-                ? AppTheme.accentAmber
-                : AppTheme.textTertiary,
-          ),
-          label: const Text('Nestlé'),
-          selected: selectedPrefamily == 'NESTLE',
-          selectedColor: AppTheme.accentAmber.withValues(alpha: 0.26),
-          backgroundColor: AppTheme.surfaceCommand.withValues(alpha: 0.94),
-          labelStyle: TextStyle(
-            color: selectedPrefamily == 'NESTLE'
-                ? AppTheme.accentAmber
-                : AppTheme.textSecondary,
-            fontSize: Responsive.fontSize(
-              context,
-              small: 11,
-              large: 13,
+        child: Semantics(
+          button: true,
+          label: 'Solo con stock',
+          child: _buildChip(
+            context: context,
+            label: 'Solo con stock',
+            selected: onlyWithStock,
+            selectedColor: AppTheme.success,
+            avatar: Icon(
+              Icons.inventory_2_outlined,
+              size: 14,
+              color: onlyWithStock ? AppTheme.success : AppTheme.textTertiary,
             ),
-            fontWeight: FontWeight.w600,
+            onSelected: () {
+              provider.setStockFilter(!onlyWithStock);
+              _reloadProducts(provider);
+            },
           ),
-          side: BorderSide(
-            color: selectedPrefamily == 'NESTLE'
-                ? AppTheme.accentAmber
-                : AppTheme.activeRing.withValues(alpha: 0.14),
-          ),
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.compact,
-          onSelected: (_) {
-            final next = selectedPrefamily == 'NESTLE' ? null : 'NESTLE';
-            provider.setPrefamilyFilter(next);
-            provider.loadProducts(
-              vendedorCodes: widget.vendedorCodes,
-              search: _searchController.text.isEmpty
-                  ? null
-                  : _searchController.text,
-              reset: true,
-            );
-          },
         ),
       ),
-      // Family chips
-      ...families.map((family) {
-        final selected = selectedFamily == family;
+      // Req #14: chip Nestlé (filtra por marca/descripcion vía prefamily=NESTLE)
+      Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: Semantics(
+          button: true,
+          label: 'Filtro Nestlé',
+          child: _buildChip(
+            context: context,
+            label: 'Nestlé',
+            selected: selectedPrefamily == 'NESTLE',
+            selectedColor: AppTheme.accentAmber,
+            avatar: Icon(
+              Icons.star,
+              size: 14,
+              color: selectedPrefamily == 'NESTLE'
+                  ? AppTheme.accentAmber
+                  : AppTheme.textTertiary,
+            ),
+            onSelected: () {
+              final next = selectedPrefamily == 'NESTLE' ? null : 'NESTLE';
+              provider.setPrefamilyFilter(next);
+              _reloadProducts(provider);
+            },
+          ),
+        ),
+      ),
+      ...families.map((ProductFamilyFilter family) {
+        final selected = selectedFamily == family.code;
         return Padding(
           padding: const EdgeInsets.only(right: 8),
-          child: FilterChip(
-            label: Text(family),
-            selected: selected,
-            selectedColor: AppTheme.info.withValues(alpha: 0.24),
-            backgroundColor: AppTheme.surfaceCommand.withValues(alpha: 0.94),
-            labelStyle: TextStyle(
-              color: selected ? AppTheme.info : AppTheme.textSecondary,
-              fontSize: Responsive.fontSize(context, small: 11, large: 13),
+          child: Semantics(
+            button: true,
+            label: 'Familia ${family.name}',
+            child: _buildChip(
+              context: context,
+              label: family.chipLabel,
+              selected: selected,
+              selectedColor:
+                  family.isImpulso ? AppTheme.accentAmber : AppTheme.info,
+              onSelected: () => _onFamilySelected(provider, family.code),
             ),
-            side: BorderSide(
-              color: selected
-                  ? AppTheme.info
-                  : AppTheme.activeRing.withValues(alpha: 0.14),
-            ),
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity.compact,
-            onSelected: (_) => _onFamilySelected(provider, family),
           ),
         );
       }),
@@ -198,7 +210,6 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Search field
           Padding(
             padding: EdgeInsets.symmetric(
               horizontal: pad.left,
@@ -256,7 +267,6 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
               ),
             ),
           ),
-          // Stock filter chip + Family chips
           SizedBox(
             height: 40,
             child: ListView.builder(

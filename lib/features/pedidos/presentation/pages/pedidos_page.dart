@@ -20,6 +20,7 @@ import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_catalog_prefs_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
@@ -27,11 +28,13 @@ import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/widgets/offline_state_widget.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/domain/catalog_product_sort.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/dialogs/client_search_dialog.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/promotions_list_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/add_to_order_sheet.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/albaran_info_dialog.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/catalog_sort_selector.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/client_balance_badge.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/complementary_products.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/drafts_bottom_sheet.dart';
@@ -102,11 +105,12 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   // Memoized catalog partition/sort for _buildProductList: partitioning +
   // sorting the whole catalog used to run on every build (each cart tap
   // re-sorted hundreds of items synchronously). Recomputed only when the
-  // products list, search text or favorites set actually change.
+  // products list, search text, favorites or sort mode actually change.
   List<Object>? _catalogDisplayCache;
   String? _catalogCacheSearch;
   int? _catalogCacheProductsVersion;
   Set<String>? _catalogCacheFavorites;
+  CatalogProductSort? _catalogCacheSort;
 
   // Rutero-style sort modes for order inspection
   String _orderSortMode =
@@ -150,6 +154,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       _loadInitialData();
       _initOffline();
       _initFavorites();
+      _initCatalogSortPrefs();
       ref.read(pedidosProvider).addListener(_onProviderChange);
     });
 
@@ -263,6 +268,34 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     } catch (e) {
       _debugLog('[PedidosPage] Favorites init error: $e');
     }
+  }
+
+  Future<void> _initCatalogSortPrefs() async {
+    try {
+      await PedidosCatalogPrefsService.init();
+      if (!mounted) return;
+      final saved = PedidosCatalogPrefsService.getSort();
+      ref.read(pedidosProvider).setCatalogSort(saved);
+    } catch (e) {
+      _debugLog('[PedidosPage] Catalog sort prefs init error: $e');
+    }
+  }
+
+  Future<void> _onCatalogSortChanged(CatalogProductSort sort) async {
+    final provider = ref.read(pedidosProvider);
+    if (provider.catalogSort == sort) return;
+    provider.setCatalogSort(sort);
+    _catalogDisplayCache = null;
+    unawaited(PedidosCatalogPrefsService.setSort(sort));
+    if (provider.hasClient) {
+      await provider.loadProducts(
+        vendedorCodes: _vendedorCodes,
+        search: provider.productSearch,
+        reset: true,
+        forceRefresh: true,
+      );
+    }
+    if (mounted) setState(() {});
   }
 
   String get _vendedorCodes {
@@ -1350,6 +1383,11 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ProductSearchWidget(
           vendedorCodes: _vendedorCodes,
         ),
+        CatalogSortSelector(
+          value: provider.catalogSort,
+          includeMargin: provider.isMarginVisible,
+          onChanged: _onCatalogSortChanged,
+        ),
         PromotionsBanner(
           key: ValueKey<String>(
             'promos-${catalog.clientCode}-${catalog.promoCount}',
@@ -1664,76 +1702,34 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       );
     }
 
-    // Sort: purchased grouped first, new products at end
-    // Default mode: purchased ASC (least bought first) → new alphabetical
-    // Search mode: purchased DESC (most spent first) → new alphabetical
-    final isSearching =
-        provider.productSearch != null && provider.productSearch!.isNotEmpty;
+    // Sort according to user preference (Hive-persisted). Purchase modes keep
+    // the "comprados | nuevos" partition; other modes are a flat ordered list.
     final favoritesSnapshot = Set<String>.from(provider.favoriteProductCodes);
     final productsVersion = provider.products.length;
+    final catalogSort = provider.catalogSort;
 
     // Reuse the memoized partition/sort while products (by length — the list
-    // is only ever appended/loaded), search text and favorites are unchanged.
+    // is only ever appended/loaded), search text, favorites and sort are unchanged.
     final cacheValid = _catalogDisplayCache != null &&
         _catalogCacheSearch == provider.productSearch &&
         _catalogCacheProductsVersion == productsVersion &&
+        _catalogCacheSort == catalogSort &&
         setEquals(_catalogCacheFavorites, favoritesSnapshot);
     List<Object> displayList;
     if (cacheValid) {
       displayList = _catalogDisplayCache!;
     } else {
-      final purchased = <Product>[];
-      final nuevos = <Product>[];
-      for (final p in provider.products) {
-        if (p.hasPurchased) {
-          purchased.add(p);
-        } else {
-          nuevos.add(p);
-        }
-      }
-
-      if (isSearching) {
-        purchased.sort((a, b) {
-          final aSales = a.salesThisYear + a.salesPrevYear;
-          final bSales = b.salesThisYear + b.salesPrevYear;
-          final salesCmp =
-              bSales.compareTo(aSales); // DESC: más gastado primero
-          if (salesCmp != 0) return salesCmp;
-          final aFav = provider.isFavorite(a.code) ? 1 : 0;
-          final bFav = provider.isFavorite(b.code) ? 1 : 0;
-          if (aFav != bFav) return bFav.compareTo(aFav);
-          return a.name.compareTo(b.name);
-        });
-      } else {
-        purchased.sort((a, b) {
-          final aSales = a.salesThisYear + a.salesPrevYear;
-          final bSales = b.salesThisYear + b.salesPrevYear;
-          final salesCmp =
-              aSales.compareTo(bSales); // ASC: menos comprado primero
-          if (salesCmp != 0) return salesCmp;
-          final aFav = provider.isFavorite(a.code) ? 1 : 0;
-          final bFav = provider.isFavorite(b.code) ? 1 : 0;
-          if (aFav != bFav) return bFav.compareTo(aFav);
-          return a.name.compareTo(b.name);
-        });
-      }
-      nuevos.sort((a, b) {
-        final aFav = provider.isFavorite(a.code) ? 1 : 0;
-        final bFav = provider.isFavorite(b.code) ? 1 : 0;
-        if (aFav != bFav) return bFav.compareTo(aFav);
-        return a.name.compareTo(b.name);
-      });
-
-      final showSeparator = purchased.isNotEmpty && nuevos.isNotEmpty;
-      displayList = <Object>[];
-      displayList.addAll(purchased);
-      if (showSeparator) displayList.add('__SEPARATOR__');
-      displayList.addAll(nuevos);
+      displayList = buildCatalogDisplayList(
+        provider.products,
+        catalogSort,
+        isFavorite: provider.isFavorite,
+      );
 
       _catalogDisplayCache = displayList;
       _catalogCacheSearch = provider.productSearch;
       _catalogCacheProductsVersion = productsVersion;
       _catalogCacheFavorites = favoritesSnapshot;
+      _catalogCacheSort = catalogSort;
     }
 
     final lineByProductCode = <String, OrderLine>{};

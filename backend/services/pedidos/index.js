@@ -89,7 +89,9 @@ function invalidatePedidosCache(pedidoId) {
 /**
  * VDDX.PEDIDOSPENDIENTESSINCRONIZAR — umbral ERP de auto-envío.
  * isolated_test → JAVIER.TEST_VDDX (expand-contract); prod → DSEDAC.VDDX.
- * 0 / ausente = auto-envío desactivado.
+ * Semántica: 0 / NULL / ausente = auto-envío DESACTIVADO (sin default silencioso
+ * en código). Para demo TEST, pinear umbral con
+ * `node scripts/sync-test-vddx-autosync-threshold.js --apply --default-zero 3`.
  */
 function vddxSyncThresholdTable() {
     if (String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test') {
@@ -2190,7 +2192,32 @@ async function initPedidosTables() {
 // PRODUCTS
 // ============================================================================
 
-async function getProducts({ search, clientCode, family, marca, prefamily, includeIva = false, limit = 50, offset = 0 }) {
+function buildCatalogRankOrderClause(sortBy, sortOrder) {
+    const dir = String(sortOrder || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+    const field = String(sortBy || 'purchases').toLowerCase().trim();
+    switch (field) {
+        case 'name':
+            return `A.DESCRIPCIONARTICULO ${dir}, TRIM(A.CODIGOARTICULO) ASC`;
+        case 'purchases':
+        default:
+            if (dir === 'DESC') {
+                // Más compra primero (importe histórico TY+PY), comprados antes que nuevos.
+                return `CASE WHEN COALESCE(PH.PURCHASE_COUNT, 0) > 0 THEN 0 ELSE 1 END ASC,
+                        (COALESCE(PH.SALES_THIS_YEAR, 0) + COALESCE(PH.SALES_PREV_YEAR, 0)) DESC,
+                        COALESCE(PH.PURCHASE_COUNT, 0) DESC,
+                        A.DESCRIPCIONARTICULO ASC,
+                        TRIM(A.CODIGOARTICULO) ASC`;
+            }
+            // Default histórico: menos compra primero (compat contratos).
+            return `CASE WHEN COALESCE(PH.PURCHASE_COUNT, 0) > 0 THEN 0 ELSE 1 END ASC,
+                    COALESCE(PH.SALES_THIS_YEAR, 0) ASC,
+                    COALESCE(PH.PURCHASE_COUNT, 0) DESC,
+                    A.DESCRIPCIONARTICULO ASC,
+                    TRIM(A.CODIGOARTICULO) ASC`;
+    }
+}
+
+async function getProducts({ search, clientCode, family, marca, prefamily, includeIva = false, limit = 50, offset = 0, sortBy, sortOrder }) {
     const params = [];
     let where = "WHERE A.ANOBAJA = 0 AND TRIM(A.CODIGOARTICULO) <> ''";
 
@@ -2241,7 +2268,10 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
     const equivalentSundayPrev = new Date(prevYear, 0, 1 + firstSundayOffsetPrev + (weekNumber - 1) * 7);
     const endMonthPrevious = equivalentSundayPrev.getMonth() + 1;
     const endDayPrevious = equivalentSundayPrev.getDate();
-    const resultCacheKey = `pedidos:products_final_v3:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${includeIva ? 'iva' : 'net'}`;
+    const normalizedSortBy = String(sortBy || 'purchases').toLowerCase().trim();
+    const normalizedSortOrder = String(sortOrder || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+    const rankOrderClause = buildCatalogRankOrderClause(normalizedSortBy, normalizedSortOrder);
+    const resultCacheKey = `pedidos:products_final_v3:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${includeIva ? 'iva' : 'net'}:${normalizedSortBy}:${normalizedSortOrder}`;
     const cachedProducts = await redisCache.get('route', resultCacheKey);
     if (cachedProducts) return cachedProducts;
 
@@ -2295,11 +2325,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
                 COALESCE(PH.PURCHASE_COUNT, 0) AS PURCHASE_COUNT,
                 ROW_NUMBER() OVER (
                     ORDER BY
-                        CASE WHEN COALESCE(PH.PURCHASE_COUNT, 0) > 0 THEN 0 ELSE 1 END ASC,
-                        COALESCE(PH.SALES_THIS_YEAR, 0) ASC,
-                        COALESCE(PH.PURCHASE_COUNT, 0) DESC,
-                        A.DESCRIPCIONARTICULO ASC,
-                        TRIM(A.CODIGOARTICULO) ASC
+                        ${rankOrderClause}
                 ) AS RN
             FROM ${comercialErpTable('ART')} A
             LEFT JOIN PH ON TRIM(A.CODIGOARTICULO) = PH.CODIGOARTICULO
@@ -2382,7 +2408,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
 
     const finalParams = [...historyParams, ...params, offset, offset + limit, clientCodeTrimmed];
 
-    const cacheKey = `pedidos:products_v2:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}`;
+    const cacheKey = `pedidos:products_v2:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${normalizedSortBy}:${normalizedSortOrder}`;
 
     try {
         const rows = await cachedQuery(
@@ -5575,16 +5601,27 @@ async function getFamiliesDetailed() {
         GROUP BY TRIM(A.CODIGOFAMILIA)
         ORDER BY NAME
     `;
-    const cacheKey = 'pedidos:families:detailed';
+    const cacheKey = 'pedidos:families:detailed:v2';
     try {
         const rows = await cachedQuery((sql) => query(sql), sql, cacheKey, TTL.SHORT);
-        return rows.map(r => ({
-            code: (r.CODE || '').trim(),
-            name: (r.NAME || r.CODE || '').trim(),
-            prefamily: (r.PREFAMILY || '').trim(),
-            artCount: Number(r.ART_COUNT) || 0,
-            isNestle: /NESTL/i.test(String(r.PREFAMILY || '')),
-        })).filter(f => f.code);
+        return rows.map(r => {
+            const code = (r.CODE || '').trim();
+            const name = (r.NAME || r.CODE || '').trim();
+            const prefamily = (r.PREFAMILY || '').trim();
+            // Flags from real FAM/ART fields (QSYS2-verified 2026-09-23):
+            // Impulso = CODIGOFAMILIA 003 / DESCRIPCIONFAMILIA "NESTLE IMPULSO".
+            // Nestlé = name/code family cluster (prefamilia ERP is often a 1-char bucket).
+            const isImpulso = code === '003' || /IMPULSO/i.test(name);
+            const isNestle = /NESTL/i.test(name) || /NESTL/i.test(prefamily) || code.startsWith('003');
+            return {
+                code,
+                name,
+                prefamily,
+                artCount: Number(r.ART_COUNT) || 0,
+                isNestle,
+                isImpulso,
+            };
+        }).filter(f => f.code);
     } catch (error) {
         logger.warn(`[PEDIDOS] getFamiliesDetailed error (returning []): ${error.message}`);
         return [];

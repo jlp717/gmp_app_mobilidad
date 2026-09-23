@@ -764,7 +764,7 @@ function createPedidosRoutes() {
 
   router.get('/products', async (req, res) => {
     try {
-      const { vendedorCodes, clientCode, family, marca, prefamily, search, limit, offset } = req.query;
+      const { vendedorCodes, clientCode, family, marca, prefamily, search, limit, offset, sortBy, sortOrder } = req.query;
       if (!vendedorCodes) return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
       if (!clientCode) return res.status(400).json({ success: false, error: 'clientCode is required' });
       const clientAccess = await authorizePedidoClientScope(req, clientCode, vendedorCodes, 'consultar catalogo para');
@@ -772,8 +772,11 @@ function createPedidosRoutes() {
       const scopedVendedorCodes = authorizedVendorCodesOrOriginal(clientAccess, vendedorCodes);
       const scopedClientCode = clientAccess.clientCode;
       const cacheSecurityScope = buildCacheSecurityScope(req, { includeMargin: true });
+      const rawSortBy = String(sortBy || 'purchases').toLowerCase().trim();
+      const normalizedSortBy = ['purchases', 'name'].includes(rawSortBy) ? rawSortBy : 'purchases';
+      const normalizedSortOrder = String(sortOrder || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
-      const cacheKey = `ddd:products:${cacheSecurityScope}:${scopedVendedorCodes}:${scopedClientCode}:${family || ''}:${marca || ''}:${prefamily || ''}:${search || ''}:${limit || 50}:${offset || 0}`;
+      const cacheKey = `ddd:products:${cacheSecurityScope}:${scopedVendedorCodes}:${scopedClientCode}:${family || ''}:${marca || ''}:${prefamily || ''}:${search || ''}:${limit || 50}:${offset || 0}:${normalizedSortBy}:${normalizedSortOrder}`;
       await withCache(cache, cacheKey, TTL_MS.PRODUCT_CATALOG, async () => {
         const result = await repo.searchProducts({
           vendedorCodes: scopedVendedorCodes,
@@ -783,7 +786,9 @@ function createPedidosRoutes() {
           prefamily: prefamily ? String(prefamily).trim() : undefined,
           search: search ? String(search).trim() : undefined,
           limit: parseInt(limit) || 50,
-          offset: parseInt(offset) || 0
+          offset: parseInt(offset) || 0,
+          sortBy: normalizedSortBy,
+          sortOrder: normalizedSortOrder,
         });
         return {
           success: true,

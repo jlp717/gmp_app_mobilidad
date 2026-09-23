@@ -18,6 +18,8 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_servic
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/domain/product_family_filter.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/domain/catalog_product_sort.dart';
 
 void _debugLog(String message) {
   if (kDebugMode) debugPrint(message);
@@ -125,7 +127,7 @@ class PedidosProvider with ChangeNotifier {
   String? _productSearch;
   String? _selectedFamily;
   String? _selectedBrand;
-  List<String> _families = [];
+  List<ProductFamilyFilter> _families = [];
   List<String> _brands = [];
   int _productOffset = 0;
   bool _hasMoreProducts = true;
@@ -179,6 +181,9 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Stock Filter ──
   bool _onlyWithStock = false;
+
+  // ── Catalog sort (Hive-persisted preference is applied from the page) ──
+  CatalogProductSort _catalogSort = CatalogProductSort.purchasesDesc;
 
   // ── Last Qty per Product (B3) ──
   final Map<String, double> _lastQtyByProduct = {};
@@ -282,7 +287,7 @@ class PedidosProvider with ChangeNotifier {
   String? get productSearch => _productSearch;
   String? get selectedFamily => _selectedFamily;
   String? get selectedBrand => _selectedBrand;
-  List<String> get families => _families;
+  List<ProductFamilyFilter> get families => _families;
   List<String> get brands => _brands;
   bool get hasMoreProducts => _hasMoreProducts;
   List<OrderSummary> get orders => _orders;
@@ -431,6 +436,16 @@ class PedidosProvider with ChangeNotifier {
   }
 
   bool get onlyWithStock => _onlyWithStock;
+
+  CatalogProductSort get catalogSort => _catalogSort;
+
+  /// Applies catalog sort preference (does not reload by itself).
+  void setCatalogSort(CatalogProductSort sort, {bool notify = true}) {
+    if (_catalogSort == sort) return;
+    _catalogSort = sort;
+    if (notify) notifyListeners();
+  }
+
   double lastQtyForProduct(String code, {String? clientCode}) {
     final key = _qtyKey(code, clientCode);
     if (_lastQtyByProduct.containsKey(key)) {
@@ -714,6 +729,8 @@ class PedidosProvider with ChangeNotifier {
         marca: requestBrand,
         prefamily: requestPrefamily,
         offset: requestOffset,
+        sortBy: _catalogSort.apiSortBy,
+        sortOrder: _catalogSort.apiSortOrder,
         forceRefresh: forceRefresh,
         cancelToken: cancelToken,
       );
@@ -757,7 +774,10 @@ class PedidosProvider with ChangeNotifier {
   }
 
   void setFamilyFilter(String? family) {
-    _selectedFamily = family;
+    final next = (family ?? '').trim();
+    _selectedFamily = next.isEmpty ? null : next;
+    // Familia y prefamilia Nestlé son excluyentes en el layout de chips.
+    if (_selectedFamily != null) _selectedPrefamily = null;
     notifyListeners();
   }
 
@@ -783,14 +803,24 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Chip "Todas": limpia familia y prefamilia.
+  void clearCatalogFamilyFilters() {
+    if (_selectedFamily == null && _selectedPrefamily == null) return;
+    _selectedFamily = null;
+    _selectedPrefamily = null;
+    notifyListeners();
+  }
+
   Future<void> loadFilters() async {
     try {
       final results = await Future.wait([
-        PedidosService.getFamilies(),
+        PedidosService.getFamiliesDetailed(),
         PedidosService.getBrands(),
       ]);
-      _families = results[0];
-      _brands = results[1];
+      _families = orderFamiliesForChips(
+        results[0] as List<ProductFamilyFilter>,
+      );
+      _brands = results[1] as List<String>;
       notifyListeners();
     } catch (e) {
       _debugLog('[PedidosProvider] Error loading filters: $e');

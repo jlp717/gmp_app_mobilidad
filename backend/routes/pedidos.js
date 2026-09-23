@@ -429,6 +429,9 @@ router.get('/products', async (req, res) => {
         const limit = parseIntSafe(req.query.limit, 50);
         const offset = parseIntSafe(req.query.offset, 0);
         const includeIva = parseBooleanFlag(req.query.includeIva);
+        const rawSortBy = String(req.query.sortBy || 'purchases').toLowerCase().trim();
+        const sortBy = ['purchases', 'name'].includes(rawSortBy) ? rawSortBy : 'purchases';
+        const sortOrder = String(req.query.sortOrder || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
         const result = await pedidosService.searchProducts({
             vendedorCodes: clientAccess.vendorCodes.length > 0 ? clientAccess.vendorCodes.join(',') : vendedorCodes,
@@ -440,7 +443,9 @@ router.get('/products', async (req, res) => {
             prefamily: prefamily ? String(prefamily).trim() : undefined,
             includeIva,
             limit,
-            offset
+            offset,
+            sortBy,
+            sortOrder,
         });
 
         const products = result.products.map(p => stripMarginFromProduct(p, req.user));

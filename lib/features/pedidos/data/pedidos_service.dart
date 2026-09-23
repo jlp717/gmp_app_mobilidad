@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/domain/product_family_filter.dart';
 
 void _debugLog(String message) {
   if (kDebugMode) debugPrint(message);
@@ -1744,6 +1745,8 @@ class PedidosService {
     bool includeIva = false,
     int limit = 50,
     int offset = 0,
+    String sortBy = 'purchases',
+    String sortOrder = 'ASC',
     bool forceRefresh = false,
     CancelToken? cancelToken,
   }) async {
@@ -1752,6 +1755,8 @@ class PedidosService {
       'limit': limit.toString(),
       'offset': offset.toString(),
       'includeIva': includeIva ? 'true' : 'false',
+      'sortBy': sortBy,
+      'sortOrder': sortOrder,
     };
     if (search != null && search.isNotEmpty) params['search'] = search;
     if (clientCode != null && clientCode.isNotEmpty) {
@@ -1772,6 +1777,8 @@ class PedidosService {
       marca ?? '',
       prefamily ?? '',
       if (includeIva) 'iva' else 'base',
+      sortBy,
+      sortOrder,
       limit,
       offset,
     ].join(':');
@@ -1890,6 +1897,10 @@ class PedidosService {
 
   static Future<List<String>> getFamilies() async {
     try {
+      final detailed = await getFamiliesDetailed();
+      if (detailed.isNotEmpty) {
+        return detailed.map((f) => f.code).toList();
+      }
       final response = await ApiClient.get(
         '$_base/families',
         cacheKey: 'pedidos:families',
@@ -1900,6 +1911,28 @@ class PedidosService {
           .toList();
     } catch (e) {
       _debugLog('[PedidosService] Error getFamilies: $e');
+      return [];
+    }
+  }
+
+  /// Req #14 / 2026-09-23: families with names from DSEDAC.FAM via ART activos.
+  static Future<List<ProductFamilyFilter>> getFamiliesDetailed() async {
+    try {
+      final response = await ApiClient.get(
+        '$_base/families/detailed',
+        cacheKey: 'pedidos:families:detailed:v2',
+        cacheTTL: const Duration(hours: 1),
+      );
+      final raw = response['families'] as List? ?? const [];
+      return raw
+          .whereType<Map>()
+          .map((row) => ProductFamilyFilter.fromJson(
+                Map<String, dynamic>.from(row),
+              ))
+          .where((f) => f.code.isNotEmpty)
+          .toList();
+    } catch (e) {
+      _debugLog('[PedidosService] Error getFamiliesDetailed: $e');
       return [];
     }
   }
