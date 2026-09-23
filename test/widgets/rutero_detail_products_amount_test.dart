@@ -108,4 +108,53 @@ void main() {
     expect(find.text('5,75 kg'), findsOneWidget);
     expect(find.text('2 cajas'), findsOneWidget);
   });
+
+  testWidgets('packed box line shows 1 caja not 27 pieces (ART 7020)',
+      (tester) async {
+    final baguette = EntregaItem(
+      itemId: '1',
+      codigoArticulo: '7020',
+      descripcion: 'PAN BAGUETTE ARTESANA 270GR',
+      cantidadPedida: 27,
+      bultos: 1,
+      unit: 'UNIDADES',
+      precioUnitario: 0.5,
+    );
+    expect(ruteroPrefersBoxQuantity(baguette), isTrue);
+    expect(ruteroDriverFacingOrderedQty(baguette), 1);
+    expect(ruteroLineQuantityUnitLabel(baguette), 'caja');
+    expect(ruteroCanonicalFromFacing(baguette, 1), 27);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 800,
+            child: RuteroDetailProducts(
+              items: [baguette],
+              isLoadingItems: false,
+              itemsError: null,
+              productChecked: const {'1': true},
+              productQuantities: const {'1': 27},
+              ordenPreparacion: '51349',
+              canonicalDocumentTotal: 14.04,
+              quantitiesChanged: false,
+              onProductCheckedChanged: (_, __) {},
+              onQuantityChanged: (_, __) {},
+              onShowQuantityEditDialog: (_, __) {},
+              onRetryItems: () {},
+              onConfirmAll: () {},
+              onContinueToPayment: () {},
+              onOpenFicha: (_) {},
+              onShowFullscreenImage: (_, __) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('1 caja'), findsOneWidget);
+    expect(find.text('27'), findsNothing);
+    expect(find.textContaining('27 uds'), findsNothing);
+  });
 }

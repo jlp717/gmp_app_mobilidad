@@ -194,7 +194,7 @@ class RuteroDetailPayment extends StatelessWidget {
             if (_hasCollectibleBalance) ...[
               const SizedBox(height: 20),
               _buildCollectedAmountField(),
-              if (notasController != null) ...[
+              if (notasController != null && isPaid) ...[
                 const SizedBox(height: 12),
                 _buildNotesField(),
               ],
@@ -705,6 +705,8 @@ class RuteroDetailPayment extends StatelessWidget {
       style: TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
         labelText: 'Observaciones de cobro *',
+        helperText: 'Obligatorias solo si cobras un importe > 0',
+        helperMaxLines: 2,
         counterStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 11),
         labelStyle: TextStyle(color: AppTheme.textSecondary),
         enabledBorder: OutlineInputBorder(

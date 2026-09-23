@@ -370,8 +370,12 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
       ),
     );
   } else if (input.isPaid) {
+    final importe = parseRuteroMoney(input.importeCobradoText);
+    final hasRealCobro = importe != null && importe > 0.004;
     final cobroNotes = input.cobroNotas.trim();
-    if (cobroNotes.isEmpty) {
+    // Observaciones only when there is a real cobro (>0). Credit / Sin cobro
+    // must never block with an empty notes field.
+    if (hasRealCobro && cobroNotes.isEmpty) {
       issues.add(
         const RuteroFieldIssue(
           tab: RuteroDeliveryTab.payment,
@@ -380,7 +384,6 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
         ),
       );
     }
-    final importe = parseRuteroMoney(input.importeCobradoText);
     if (importe == null || importe <= 0) {
       issues.add(
         const RuteroFieldIssue(

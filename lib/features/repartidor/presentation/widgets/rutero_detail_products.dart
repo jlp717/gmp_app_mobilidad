@@ -14,6 +14,57 @@ String _deliveryQuantityText(num value) {
   return fixed.replaceFirst(RegExp(r'\.?0+$'), '').replaceAll('.', ',');
 }
 
+/// True when LAC ships packed boxes (envases) whose pieces fill an integer
+/// factor — e.g. 1 caja × 27 baguettes. Drivers must see cajas, not piezas.
+bool ruteroPrefersBoxQuantity(EntregaItem item) {
+  final boxes = item.bultos;
+  final pieces = item.cantidadPedida;
+  if (boxes <= 0.0001 || pieces <= 0.0001) return false;
+  final unit = (item.unit ?? '').trim().toUpperCase();
+  if (unit.contains('KG') ||
+      unit.contains('KILO') ||
+      unit.contains('GRAM') ||
+      unit == 'G' ||
+      unit == 'GR' ||
+      unit.contains('LITR') ||
+      unit == 'LT' ||
+      unit == 'L') {
+    return false;
+  }
+  if (unit.contains('CAJ') ||
+      unit == 'CJ' ||
+      unit.contains('BOX') ||
+      unit.contains('ENVASE')) {
+    // Unit already says boxes: only remap when pedida is the piece count.
+    return pieces > boxes + 0.0001;
+  }
+  final factor = pieces / boxes;
+  if (factor <= 1.001) return false;
+  return (factor - factor.roundToDouble()).abs() < 0.001;
+}
+
+/// Pieces per box when [ruteroPrefersBoxQuantity] applies; otherwise 1.
+double ruteroUnitsPerBox(EntregaItem item) {
+  if (!ruteroPrefersBoxQuantity(item)) return 1;
+  return item.cantidadPedida / item.bultos;
+}
+
+/// Ordered qty in the unit the driver edits (cajas or piezas/kg).
+double ruteroDriverFacingOrderedQty(EntregaItem item) =>
+    ruteroPrefersBoxQuantity(item) ? item.bultos : item.cantidadPedida;
+
+/// Canonical (LAC) qty ↔ driver-facing qty.
+double ruteroCanonicalFromFacing(EntregaItem item, num facingQty) {
+  final factor = ruteroUnitsPerBox(item);
+  return double.parse((facingQty.toDouble() * factor).toStringAsFixed(3));
+}
+
+double ruteroFacingFromCanonical(EntregaItem item, num canonicalQty) {
+  final factor = ruteroUnitsPerBox(item);
+  if (factor <= 1.0001) return canonicalQty.toDouble();
+  return double.parse((canonicalQty.toDouble() / factor).toStringAsFixed(3));
+}
+
 /// Driver-facing unit: kg for weight (pollo 5,75), cajas for boxes.
 String ruteroQuantityUnitLabel(String? unit, {num? quantity}) {
   final raw = (unit ?? '').trim();
@@ -44,6 +95,18 @@ String ruteroQuantityUnitLabel(String? unit, {num? quantity}) {
   return raw.toLowerCase();
 }
 
+/// Unit label for a delivery line, preferring "caja/cajas" when packed.
+String ruteroLineQuantityUnitLabel(EntregaItem item) {
+  if (ruteroPrefersBoxQuantity(item)) {
+    final facing = ruteroDriverFacingOrderedQty(item);
+    return facing.abs() == 1 ? 'caja' : 'cajas';
+  }
+  return ruteroQuantityUnitLabel(
+    item.unit,
+    quantity: item.cantidadPedida,
+  );
+}
+
 /// Step for +/- controls: weight units use 0.1, piece units use 1.
 double quantityStepForUnit(String? unit) {
   final u = (unit ?? '').trim().toUpperCase();
@@ -67,6 +130,15 @@ double quantityStepForLine({required num cantidadPedida, String? unit}) {
   final ordered = cantidadPedida.toDouble();
   if ((ordered - ordered.roundToDouble()).abs() > 0.0001) return 0.1;
   return 1;
+}
+
+/// Canonical step used by +/- / dialog for a concrete line.
+double quantityStepForDeliveryLine(EntregaItem item) {
+  if (ruteroPrefersBoxQuantity(item)) return ruteroUnitsPerBox(item);
+  return quantityStepForLine(
+    unit: item.unit,
+    cantidadPedida: item.cantidadPedida,
+  );
 }
 
 bool isWeightLikeUnit(String? unit) => quantityStepForUnit(unit) < 1;
@@ -688,14 +760,9 @@ class _ProductCard extends StatelessWidget {
 
   Widget _buildQuantityControls(BuildContext context) {
     final maxQty = ruteroMaxDeliverableQuantity(linea.cantidadPedida);
-    final step = quantityStepForLine(
-      unit: linea.unit,
-      cantidadPedida: linea.cantidadPedida,
-    );
-    final unitLabel = ruteroQuantityUnitLabel(
-      linea.unit,
-      quantity: linea.cantidadPedida,
-    );
+    final step = quantityStepForDeliveryLine(linea);
+    final facingQty = ruteroFacingFromCanonical(linea, quantity);
+    final unitLabel = ruteroLineQuantityUnitLabel(linea);
     final lineAmount = ruteroLineDeliveredAmount(
       item: linea,
       deliveredQty: quantity,
@@ -731,12 +798,12 @@ class _ProductCard extends StatelessWidget {
                   alignment: Alignment.center,
                   child: Semantics(
                     label: unitLabel.isEmpty
-                        ? 'Cantidad ${_deliveryQuantityText(quantity)}'
-                        : 'Cantidad ${_deliveryQuantityText(quantity)} $unitLabel',
+                        ? 'Cantidad ${_deliveryQuantityText(facingQty)}'
+                        : 'Cantidad ${_deliveryQuantityText(facingQty)} $unitLabel',
                     child: Text(
                       unitLabel.isEmpty
-                          ? _deliveryQuantityText(quantity)
-                          : '${_deliveryQuantityText(quantity)} $unitLabel',
+                          ? _deliveryQuantityText(facingQty)
+                          : '${_deliveryQuantityText(facingQty)} $unitLabel',
                       style: TextStyle(
                         color: isModified
                             ? AppTheme.warning

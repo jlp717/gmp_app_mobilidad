@@ -114,8 +114,15 @@ class AsyncOperationModal extends StatelessWidget {
   static AsyncOperationModalController show(
     BuildContext context, {
     required String text,
+    Duration timeout = const Duration(seconds: 45),
+    Duration showCancelAfter = const Duration(seconds: 5),
   }) {
-    final controller = AsyncOperationModalController(context, text);
+    final controller = AsyncOperationModalController(
+      context,
+      text,
+      timeout: timeout,
+      showCancelAfter: showCancelAfter,
+    );
 
     showDialog(
       context: context,

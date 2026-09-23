@@ -78,6 +78,38 @@ void main() {
       expect(presentation.message, contains('repartidor de este albarán'));
       expect(presentation.message, isNot(contains('no es concluyente')));
     });
+
+    test('network timeout stays retryable and never says inconclusive', () {
+      final presentation = repartoConfirmationErrorPresentation(
+        error: ApiException(
+          'El servidor está tardando demasiado. Inténtalo de nuevo.',
+          statusCode: 0,
+        ),
+        acknowledged: false,
+      );
+      expect(presentation.canRetry, isTrue);
+      expect(presentation.message, contains('idempotente'));
+      expect(presentation.message, isNot(contains('no es concluyente')));
+      expect(
+        isTransientRepartoConfirmationFailure(
+          ApiException('timeout', statusCode: 0),
+        ),
+        isTrue,
+      );
+    });
+
+    test('REPARTO_CONFIRMATION_TIMEOUT 504 is retryable', () {
+      final presentation = repartoConfirmationErrorPresentation(
+        error: ApiException(
+          'La confirmacion no se pudo completar a tiempo',
+          statusCode: 504,
+          code: 'REPARTO_CONFIRMATION_TIMEOUT',
+        ),
+        acknowledged: false,
+      );
+      expect(presentation.canRetry, isTrue);
+      expect(presentation.message, contains('idempotente'));
+    });
   });
 
   test('normalizeRepartoServerId coerces integers', () {

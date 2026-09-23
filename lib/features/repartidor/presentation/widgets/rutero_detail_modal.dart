@@ -110,6 +110,12 @@ RepartoConfirmationErrorDisposition repartoConfirmationErrorDisposition({
     }
     final code = error.code ?? '';
     final status = error.statusCode ?? 0;
+    // Network / gateway timeouts must stay retryable: the journal keeps the
+    // idempotency key so a second POST is safe. Escalating to manualReview
+    // greys CONFIRMAR and shows "no es concluyente" on the next tap.
+    if (isTransientRepartoConfirmationFailure(error)) {
+      return RepartoConfirmationErrorDisposition.retryable;
+    }
     // Payment / capability failures are actionable: show the real message and
     // allow retry after the driver adjusts amount/method or connectivity.
     if (status == 422 ||
@@ -126,7 +132,44 @@ RepartoConfirmationErrorDisposition repartoConfirmationErrorDisposition({
     }
     return RepartoConfirmationErrorDisposition.manualReview;
   }
+  if (isTransientRepartoConfirmationFailure(error)) {
+    return RepartoConfirmationErrorDisposition.retryable;
+  }
   return RepartoConfirmationErrorDisposition.retryable;
+}
+
+/// Timeouts, sockets and 5xx gateway codes that must not lock the journal.
+@visibleForTesting
+bool isTransientRepartoConfirmationFailure(Object error) {
+  if (error is TimeoutException) return true;
+  if (error is RepartoEvidenceUploadException) {
+    final code = error.code;
+    final status = error.statusCode ?? 0;
+    return status == 0 ||
+        status == 408 ||
+        status == 502 ||
+        status == 503 ||
+        status == 504 ||
+        code.contains('TIMEOUT') ||
+        code == 'EVIDENCE_TIMEOUT';
+  }
+  if (error is ApiException) {
+    final code = error.code ?? '';
+    final status = error.statusCode ?? 0;
+    return status == 0 ||
+        status == 408 ||
+        status == 502 ||
+        status == 503 ||
+        status == 504 ||
+        code == 'REPARTO_CONFIRMATION_TIMEOUT' ||
+        code == 'REPARTO_RECEIPT_TIMEOUT' ||
+        code == 'EVIDENCE_TIMEOUT' ||
+        code.contains('TIMEOUT');
+  }
+  final label = error.toString().toLowerCase();
+  return label.contains('timeout') ||
+      label.contains('tardando demasiado') ||
+      label.contains('tardado demasiado');
 }
 
 class RepartoConfirmationErrorPresentation {
@@ -217,7 +260,16 @@ String? _paymentConfirmationErrorMessage(ApiException error) {
     case 'REPARTO_CONFIRMATION_ROLE_REQUIRED':
       return 'Esta entrega no pertenece a tu ruta. '
           'Entra como el repartidor de este albarán e inténtalo de nuevo.';
+    case 'REPARTO_CONFIRMATION_TIMEOUT':
+    case 'REPARTO_RECEIPT_TIMEOUT':
+    case 'EVIDENCE_TIMEOUT':
+      return 'La operación ha tardado demasiado. '
+          'Puedes reintentar: la confirmación es idempotente.';
     default:
+      if (isTransientRepartoConfirmationFailure(error)) {
+        return 'La operación ha tardado demasiado. '
+            'Puedes reintentar: la confirmación es idempotente.';
+      }
       return null;
   }
 }
@@ -1260,7 +1312,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         });
         return;
       }
-      if (_cobroNotasController.text.trim().isEmpty) {
+      if (_cobroNotasController.text.trim().isEmpty && (amount ?? 0) > 0.004) {
         setState(() {
           _pagoError = 'Las observaciones de cobro son obligatorias.';
           _spotlightField = 'pago';
@@ -1955,23 +2007,30 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     EntregaItem linea,
     double current,
   ) async {
-    final controller = TextEditingController(text: _formatQuantity(current));
+    final facingCurrent = ruteroFacingFromCanonical(linea, current);
+    final maxFacing = ruteroFacingFromCanonical(
+      linea,
+      ruteroMaxDeliverableQuantity(linea.cantidadPedida),
+    );
+    final controller =
+        TextEditingController(text: _formatQuantity(facingCurrent));
     double? parseQuantity(String raw) {
-      final parsed = double.tryParse(raw.trim().replaceAll(',', '.'));
-      if (parsed == null ||
-          parsed.isNaN ||
-          parsed.isInfinite ||
-          parsed < 0 ||
-          parsed > ruteroMaxDeliverableQuantity(linea.cantidadPedida)) {
+      final parsedFacing = double.tryParse(raw.trim().replaceAll(',', '.'));
+      if (parsedFacing == null ||
+          parsedFacing.isNaN ||
+          parsedFacing.isInfinite ||
+          parsedFacing < 0 ||
+          parsedFacing > maxFacing + 0.0001) {
         return null;
       }
-      return _normalizeQuantity(parsed);
+      final canonical = ruteroCanonicalFromFacing(linea, parsedFacing);
+      if (canonical > ruteroMaxDeliverableQuantity(linea.cantidadPedida)) {
+        return null;
+      }
+      return _normalizeQuantity(canonical);
     }
 
-    final unitLabel = ruteroQuantityUnitLabel(
-      linea.unit,
-      quantity: linea.cantidadPedida,
-    );
+    final unitLabel = ruteroLineQuantityUnitLabel(linea);
     final result = await showDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2005,7 +2064,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Cantidad original: ${_formatQuantity(linea.cantidadPedida)}'
+              'Cantidad original: ${_formatQuantity(facingCurrent)}'
               '${unitLabel.isEmpty ? '' : ' $unitLabel'}',
               style: TextStyle(
                 color: AppTheme.textSecondary,
@@ -2341,7 +2400,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         },
         // Idempotency token is stable in the journal, so a transient response
         // loss can be retried without creating a second delivery/cobro.
-        receiveTimeout: const Duration(seconds: 30),
+        // Client slightly above backend 30s so a 504 JSON arrives before Dio.
+        receiveTimeout: const Duration(seconds: 40),
         maxRetries: 1,
       );
       if (response['queued'] == true) {
@@ -2367,8 +2427,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         if (mounted) setState(() => _isAcknowledgedTombstone = true);
       }
       rethrow;
-    } catch (_) {
-      await _confirmationOperation.markManualReview(widget.albaran.id);
+    } catch (error) {
+      // Durable identity conflicts escalate; timeouts keep the journal
+      // recoverable so the same Idempotency-Key can be retried.
+      if (!isTransientRepartoConfirmationFailure(error)) {
+        await _confirmationOperation.markManualReview(widget.albaran.id);
+      }
       rethrow;
     }
     if (response['success'] != true) {
@@ -2509,7 +2573,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       });
       return;
     }
-    if (_cobroNotasController.text.trim().isEmpty) {
+    if (_cobroNotasController.text.trim().isEmpty && (amount ?? 0) > 0.004) {
       setState(() {
         _pagoError = 'Las observaciones de cobro son obligatorias.';
         _spotlightField = 'pago';
@@ -3362,6 +3426,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final modal = AsyncOperationModal.show(
       context,
       text: 'Preparando nota de entrega...',
+      timeout: const Duration(seconds: 90),
     );
     try {
       final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
@@ -3375,18 +3440,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             Uint8List.fromList(await Isolate.run(() => base64Decode(pdfData))),
       );
     } catch (error) {
-      modal.close();
       if (_isDeliveryNoteMissing(error)) {
+        modal.close();
         await _printCommercialPdf();
         return;
       }
       if (mounted) {
-        _showError(
+        modal.error(
           repartidorSafeOperationMessage(
             error: error,
             operation: 'receiptPrint',
           ),
+          onRetry: _printCanonicalDeliveryNote,
         );
+      } else {
+        modal.close();
       }
     }
   }
@@ -3807,15 +3875,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       confirmLabel: 'Sí, abrir PDF',
     );
     if (!ok || !mounted) return;
-    final modal =
-        AsyncOperationModal.show(context, text: 'Generando nota de entrega...');
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Generando nota de entrega...',
+      timeout: const Duration(seconds: 90),
+    );
     try {
       final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
       if (pdfData == null) throw Exception('No se pudo generar el PDF');
       _cachedPdfBase64 = pdfData;
 
+      if (!mounted) {
+        modal.close();
+        return;
+      }
       modal.close();
-      if (!mounted) return;
 
       final pdfBytes = await Isolate.run(() => base64Decode(pdfData));
       const title = 'Nota de entrega';
@@ -3843,8 +3917,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ),
       );
     } catch (error) {
-      modal.close();
       if (_isDeliveryNoteMissing(error)) {
+        modal.close();
         await _previewCommercialPdf();
         return;
       }
@@ -3853,6 +3927,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           repartidorSafeOperationMessage(error: error, operation: 'pdfPreview'),
           onRetry: _previewReceiptPdf,
         );
+      } else {
+        modal.close();
       }
     }
   }
@@ -3865,6 +3941,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final modal = AsyncOperationModal.show(
       context,
       text: 'Preparando nota de entrega...',
+      timeout: const Duration(seconds: 90),
     );
     try {
       final file = await _prepareDeliveryNotePdfFile();
@@ -3877,18 +3954,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         sharePositionOrigin: _shareOrigin(),
       );
     } catch (error) {
-      modal.close();
       if (_isDeliveryNoteMissing(error)) {
+        modal.close();
         await _shareCommercialLocally();
         return;
       }
       if (mounted) {
-        _showError(
+        modal.error(
           repartidorSafeOperationMessage(
             error: error,
             operation: 'pdfDownload',
           ),
+          onRetry: _shareDeliveryNoteLocally,
         );
+      } else {
+        modal.close();
       }
     }
   }
@@ -3946,6 +4026,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final modal = AsyncOperationModal.show(
       context,
       text: 'Preparando nota de entrega para WhatsApp...',
+      timeout: const Duration(seconds: 90),
     );
     try {
       final confirmationId = await _resolveReceiptConfirmationId();
@@ -3985,18 +4066,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         }
       }
     } catch (error) {
-      modal.close();
       if (_isDeliveryNoteMissing(error)) {
+        modal.close();
         await _shareCommercialViaWhatsApp(prefilled: form);
         return;
       }
       if (mounted) {
-        _showError(
+        modal.error(
           repartidorSafeOperationMessage(
             error: error,
             operation: 'receiptWhatsApp',
           ),
+          onRetry: () => _shareDeliveryNoteViaWhatsApp(confirmFirst: false),
         );
+      } else {
+        modal.close();
       }
     }
   }

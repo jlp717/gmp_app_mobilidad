@@ -186,6 +186,31 @@ void main() {
     expect(result.messageFor('pago'), contains('observaciones de cobro'));
   });
 
+  test('credit / sin cobro does not require observaciones', () {
+    final unpaid = validateRuteroDeliveryForm(
+      _base(
+        isPaid: false,
+        importeCobradoText: '',
+        importeDisponibleCobro: 0,
+        cobroNotas: '',
+      ),
+    );
+    expect(unpaid.messageFor('pago'), isNull);
+    expect(unpaid.isValid, isTrue);
+
+    final zeroPaid = validateRuteroDeliveryForm(
+      _base(
+        isPaid: true,
+        importeCobradoText: '0,00',
+        importeDisponibleCobro: 10,
+        cobroNotas: '',
+      ),
+    );
+    // Importe 0 blocks on importe, never on absurdas observaciones.
+    expect(zeroPaid.messageFor('pago'), isNull);
+    expect(zeroPaid.messageFor('importe'), contains('importe cobrado'));
+  });
+
   test('untouched albarán keeps list/CPC header, not LAC line sum', () {
     expect(
       canonicalRuteroDocumentAmount(
