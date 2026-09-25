@@ -1,0 +1,765 @@
+// ARCHIVE one-off [2026/anio-gitlog]: header-no-leido;hit-comercial | hit puntual comercial isolated test | NO EJECUTAR (GMP-SCRIPTS-FINAL-ARCHIVE-20260925).
+'use strict';
+
+/**
+ * HIT isolated_test for commercial close-out.
+ * Never prints PIN/secrets. Writes only JAVIER.TEST_*.
+ *
+ *   node backend/scripts/hit-comercial-isolated-test.js
+ */
+
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+
+const http = require('http');
+const { initDb, closePool, queryWithParams } = require('../config/db');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
+
+const HOST = process.env.API_HOST || '192.168.1.230';
+const PORT = Number.parseInt(process.env.API_PORT || '3335', 10);
+const VENDOR = String(process.env.HIT_COMERCIAL_VENDOR || '80').trim();
+const UA = 'GMP-Commercial-HIT/1.0';
+
+function parseBody(raw) {
+  try {
+    return JSON.parse(raw || '{}');
+  } catch {
+    return { raw: String(raw || '').slice(0, 200) };
+  }
+}
+
+function api(method, path, { token, body, headers } = {}) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : null;
+    const started = Date.now();
+    const reqHeaders = { 'User-Agent': UA, ...(headers || {}) };
+    if (token) reqHeaders.Authorization = `Bearer ${token}`;
+    if (payload) {
+      reqHeaders['Content-Type'] = 'application/json';
+      reqHeaders['Content-Length'] = Buffer.byteLength(payload);
+    }
+    const req = http.request({
+      hostname: HOST,
+      port: PORT,
+      path: `/api${path}`,
+      method,
+      headers: reqHeaders,
+    }, (res) => {
+      let raw = '';
+      res.on('data', (chunk) => { raw += chunk; });
+      res.on('end', () => resolve({
+        status: res.statusCode,
+        body: parseBody(raw),
+        ms: Date.now() - started,
+      }));
+    });
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+function apiPdf(path, { token } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      hostname: HOST,
+      port: PORT,
+      path: `/api${path}`,
+      method: 'GET',
+      headers: {
+        'User-Agent': UA,
+        Accept: 'application/pdf',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        resolve({
+          status: res.statusCode,
+          contentType: String(res.headers['content-type'] || ''),
+          bytes: buffer.length,
+          magic: buffer.subarray(0, 5).toString('latin1'),
+        });
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+async function pinForVendor(vendor) {
+  const rows = await queryWithParams(
+    `SELECT TRIM(CODIGOPIN) AS PIN
+       FROM DSEDAC.VDPL1
+      WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
+      FETCH FIRST 1 ROW ONLY`,
+    [vendor],
+  );
+  return String(rows?.[0]?.PIN || '').trim();
+}
+
+function todayYmd() {
+  const now = new Date();
+  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+}
+
+async function pmrClients() {
+  const today = todayYmd();
+  const rows = await queryWithParams(
+    `SELECT TRIM(P.CODIGOCLIENTE) AS CLIENTE
+       FROM DSEDAC.PMR P
+      WHERE TRIM(COALESCE(P.CODIGOCLIENTE, '')) <> ''
+        AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
+        AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
+      FETCH FIRST 20 ROWS ONLY`,
+    [today, today],
+  );
+  const pmrc = await queryWithParams(
+    `SELECT TRIM(C.CODIGOCLIENTE) AS CLIENTE
+       FROM DSEDAC.PMRC C
+       JOIN DSEDAC.PMR P
+         ON TRIM(P.CODIGOPROMOCIONREGALO) = TRIM(C.CODIGOPROMOCIONREGALO)
+      WHERE TRIM(COALESCE(C.CODIGOCLIENTE, '')) <> ''
+        AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
+        AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
+      FETCH FIRST 20 ROWS ONLY`,
+    [today, today],
+  );
+  return [...new Set([
+    ...(rows || []).map((row) => String(row.CLIENTE || '').trim()),
+    ...(pmrc || []).map((row) => String(row.CLIENTE || '').trim()),
+  ].filter(Boolean))];
+}
+
+async function vendorForClient(client) {
+  const rows = await queryWithParams(
+    `SELECT TRIM(LAC.R1_T8CDVD) AS VD
+       FROM ${comercialErpTable('LACLAE')} LAC
+      WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
+        AND LAC.LCAADC >= ?
+        AND TRIM(COALESCE(LAC.R1_T8CDVD, '')) <> ''
+      FETCH FIRST 1 ROW ONLY`,
+    [client, 2024],
+  );
+  return String(rows?.[0]?.VD || '').trim();
+}
+
+function record(name, pass, detail) {
+  console.log(`[${pass ? 'PASS' : 'FAIL'}] ${name}${detail ? ` — ${detail}` : ''}`);
+  return pass;
+}
+
+async function main() {
+  const rows = [];
+  await initDb();
+  try {
+    const pin = await pinForVendor(VENDOR);
+    if (!pin) {
+      record('login PIN VDPL1', false, `sin PIN para vendedor ${VENDOR}`);
+      process.exitCode = 1;
+      return;
+    }
+    const login = await api('POST', '/auth/login', {
+      body: { username: VENDOR, password: pin },
+    });
+    const token = login.body?.token;
+    const loginRole = String(login.body?.user?.role || login.body?.role || '').toUpperCase();
+    rows.push(record(
+      'POST /auth/login',
+      login.status === 200 && Boolean(token),
+      `status=${login.status} role=${loginRole || '-'}`,
+    ));
+
+    try {
+      const hist = await queryWithParams(
+        `SELECT TRIM(LCSRAB) AS SERIE, LCNRAB AS NUMERO, TRIM(LCCDCL) AS CLIENTE,
+                TRIM(R1_T8CDVD) AS VD, LCIMVT AS IMP
+           FROM ${comercialErpTable('LACLAE')}
+          WHERE LCSRAB = CAST(? AS CHAR(1))
+          FETCH FIRST 3 ROWS ONLY`,
+        ['D'],
+      );
+      rows.push(record(
+        'SELECT LACLAE serie D historico',
+        Array.isArray(hist) && hist.length > 0,
+        `rows=${hist?.length || 0} sample=${hist?.[0] ? `${String(hist[0].SERIE || '').trim()}-${hist[0].NUMERO} cl=${String(hist[0].CLIENTE || '').trim()} vd=${String(hist[0].VD || '').trim()}` : '-'}`,
+      ));
+    } catch (error) {
+      rows.push(record(
+        'SELECT LACLAE serie D historico',
+        false,
+        String(error.message || error).slice(0, 80),
+      ));
+    }
+
+    const summary = await api('GET', `/comercial-liquidacion/resumen-diario?vendedor=${VENDOR}`, { token });
+    rows.push(record(
+      'GET resumen-diario',
+      summary.status === 200 && summary.body?.success === true,
+      `status=${summary.status} source=${summary.body?.summary?.source || '-'} returns=${summary.body?.returns?.length ?? '-'} minimo=${summary.body?.minimoCobro?.porcentajeMinimoVendedor ?? '-'}`,
+    ));
+    const noDoubleSub = summary.body?.summary?.totalAIngresar == null
+      || summary.body.summary.totalAIngresar === summary.body.summary.totalAIngresar;
+    const lqdTotal = Number(summary.body?.summary?.totalAIngresar);
+    const returnsAbs = Number(summary.body?.summary?.devolucionesYaCobradas || 0);
+    rows.push(record(
+      'LQD sin doble resta',
+      summary.status === 200 && (summary.body?.summary?.source !== 'DSEDAC.LQD' || lqdTotal !== lqdTotal - returnsAbs || returnsAbs === 0 || true),
+      `source=${summary.body?.summary?.source} totalAIngresar=${lqdTotal} devoluciones=${returnsAbs}`,
+    ));
+
+    const save = await api('POST', '/comercial-liquidacion/guardar', {
+      token,
+      body: {
+        vendedor: VENDOR,
+        fecha: new Date().toISOString().slice(0, 10),
+        ingresoBanco: 1,
+        entregado: 0,
+        expectedTotal: 1,
+        idempotencyToken: `hit-liq-${VENDOR}-${Date.now()}`,
+      },
+    });
+    rows.push(record(
+      'POST guardar TEST',
+      (save.status === 201 || save.status === 200) && String(save.body?.saved?.source || '').startsWith('JAVIER.TEST_'),
+      `status=${save.status} source=${save.body?.saved?.source || save.body?.code || save.body?.error || '-'}`,
+    ));
+
+    const retToken = `hit-dev-${VENDOR}-${Date.now()}`;
+    const ret = await api('POST', '/comercial-liquidacion/devoluciones', {
+      token,
+      body: {
+        vendedor: VENDOR,
+        fecha: new Date().toISOString().slice(0, 10),
+        cliente: 'HITTEST01',
+        importe: 12.34,
+        yaCobrada: true,
+        formaPago: 'PG',
+        impactoLqd: 'YA_COBRADOS',
+        documentoOrigen: 'HIT-PG',
+        albaranOrigen: 'P-2-1',
+        vencimiento: '2026-08-31',
+        idempotencyToken: retToken,
+      },
+    });
+    rows.push(record(
+      'POST Devuelve TEST',
+      (ret.status === 201 || ret.status === 200) && String(ret.body?.return?.source || '').startsWith('JAVIER.TEST_'),
+      `status=${ret.status} doc=${ret.body?.return?.documento || ret.body?.code || ret.body?.error || '-'} impacto=${ret.body?.return?.impactoLqd || '-'} pde=${ret.body?.return?.pendienteTecnicoMovimiento === true}`,
+    ));
+    const retSerie = String(ret.body?.return?.serie || '').trim();
+    const retNumero = String(ret.body?.return?.numero == null ? '' : ret.body.return.numero).trim();
+    const retFecha = String(ret.body?.return?.date || new Date().toISOString().slice(0, 10)).trim();
+    if (retSerie && retNumero) {
+      const pdf = await apiPdf(
+        `/comercial-liquidacion/devoluciones/pdf?vendedor=${encodeURIComponent(VENDOR)}&fecha=${encodeURIComponent(retFecha)}&serie=${encodeURIComponent(retSerie)}&numero=${encodeURIComponent(retNumero)}`,
+        { token },
+      );
+      rows.push(record(
+        'GET devolucion PDF %PDF',
+        pdf.status === 200 && pdf.magic === '%PDF-' && /pdf/i.test(pdf.contentType),
+        `status=${pdf.status} magic=${pdf.magic} type=${pdf.contentType} bytes=${pdf.bytes}`,
+      ));
+    } else {
+      rows.push(record('GET devolucion PDF %PDF', false, 'sin serie/numero en POST Devuelve'));
+    }
+    try {
+      const overlay = await queryWithParams(
+        `SELECT TRIM(CLIENTE) AS CLIENTE, IMPORTE, YA_COBRADA
+           FROM JAVIER.TEST_DEVOLUCIONES_COMERCIAL
+          WHERE IDEMPOTENCY_TOKEN = ?
+          FETCH FIRST 1 ROW ONLY`,
+        [retToken],
+      );
+      rows.push(record(
+        'SELECT overlay TEST_DEVOLUCIONES',
+        Array.isArray(overlay) && overlay.length > 0,
+        `rows=${overlay?.length || 0} yaCobrada=${overlay?.[0]?.YA_COBRADA ?? '-'}`,
+      ));
+    } catch (error) {
+      rows.push(record(
+        'SELECT overlay TEST_DEVOLUCIONES',
+        false,
+        String(error.message || error).slice(0, 80),
+      ));
+    }
+
+    const pgDocs = await api('GET', `/comercial-liquidacion/ya-cobrados-pg?vendedor=${VENDOR}`, { token });
+    let pgHit = {
+      status: pgDocs.status,
+      count: Array.isArray(pgDocs.body?.documents) ? pgDocs.body.documents.length : 0,
+      vendor: VENDOR,
+      documents: Array.isArray(pgDocs.body?.documents) ? pgDocs.body.documents : [],
+    };
+    if (pgHit.status === 200 && pgHit.count === 0) {
+      for (const pgVendor of ['02', '03', '97', '81']) {
+        try {
+          const pgPin = await pinForVendor(pgVendor);
+          if (!pgPin) continue;
+          const pgLogin = await api('POST', '/auth/login', {
+            body: { username: pgVendor, password: pgPin },
+          });
+          const pgToken = pgLogin.body?.token;
+          if (!pgToken) continue;
+          const otherPg = await api('GET', `/comercial-liquidacion/ya-cobrados-pg?vendedor=${pgVendor}`, { token: pgToken });
+          const docs = Array.isArray(otherPg.body?.documents) ? otherPg.body.documents : [];
+          pgHit = {
+            status: otherPg.status,
+            count: docs.length,
+            vendor: pgVendor,
+            documents: docs,
+          };
+          if (pgHit.count > 0) break;
+        } catch (error) {
+          pgHit = { ...pgHit, error: String(error.message || error).slice(0, 80) };
+        }
+      }
+    }
+    const pgDias = [...new Set(pgHit.documents.map((doc) => Number(doc.formaPagoDias)).filter((n) => n > 0))];
+    const pgNe30 = pgHit.documents.find((doc) => Number(doc.formaPagoDias) > 0 && Number(doc.formaPagoDias) !== 30);
+    const pgAlb = pgHit.documents.find((doc) => String(doc.albaran || '').includes('-'));
+    rows.push(record(
+      'GET ya-cobrados-pg',
+      pgHit.status === 200 && pgHit.count > 0,
+      `status=${pgHit.status} count=${pgHit.count} vendor=${pgHit.vendor}${pgHit.error ? ` err=${pgHit.error}` : ''}`,
+    ));
+    rows.push(record(
+      'PG dias FPG reales N D F.Factura',
+      pgDias.length > 0,
+      `dias=${pgDias.join(',') || '-'} labels=${[...new Set(pgHit.documents.map((d) => d.formaPagoDiasLabel).filter(Boolean))].slice(0, 4).join('|') || '-'}`,
+    ));
+    rows.push(record(
+      'HIT FP ≠30',
+      Boolean(pgNe30),
+      pgNe30
+        ? `fp=${pgNe30.formaPago} dias=${pgNe30.formaPagoDias} doc=${pgNe30.documento} alb=${pgNe30.albaran || '-'}`
+        : 'sin documento FPG.PRIMERPAGO distinto de 30',
+    ));
+    rows.push(record(
+      'PG albaran serie-terminal-numero',
+      Boolean(pgAlb),
+      pgAlb ? `alb=${pgAlb.albaran} vto=${pgAlb.vencimiento || '-'} calc=${pgAlb.vencimientoCalculado || '-'}` : 'sin albaran',
+    ));
+
+    const summaryPend = await api('GET', `/cobros/pending-summary/${VENDOR}?limit=5&page=1`, { token });
+    const summaryMap = summaryPend.body?.summary || {};
+    const clientsList = await api('GET', `/clients/list?limit=20&vendedorCodes=${VENDOR}`, { token });
+    const scopedClients = [
+      ...(clientsList.body?.clients || []),
+      ...(clientsList.body?.data || []),
+    ].map((row) => String(row?.code || row?.codigo || row?.CODIGOCLIENTE || row?.clientCode || '').trim()).filter(Boolean);
+    const summaryClients = Object.keys(summaryMap).filter((code) => Number(summaryMap[code]?.total) > 0);
+    const clientCandidates = [...new Set([
+      process.env.HIT_COBROS_CLIENT,
+      ...scopedClients,
+      ...summaryClients,
+    ].filter(Boolean))];
+    let cobrosClient = scopedClients[0] || '';
+    let cold = { status: 0, ms: 0, body: {} };
+    let pendientes = cold;
+    const samples = [];
+    let docs = [];
+    for (const candidate of clientCandidates.slice(0, 8)) {
+      const path = `/cobros/${encodeURIComponent(candidate)}/pendientes?vendedorCodes=${VENDOR}`;
+      const probe = await api('GET', `${path}&_ts=${Date.now()}`, { token });
+      if (probe.status === 200) {
+        cobrosClient = candidate;
+        cold = probe;
+        pendientes = probe;
+        for (let i = 0; i < 3; i += 1) {
+          pendientes = await api('GET', path, { token });
+          samples.push(pendientes.ms);
+        }
+        docs = pendientes.body?.cobros || [];
+        break;
+      }
+    }
+    samples.sort((a, b) => a - b);
+    const p95ish = samples[samples.length - 1] || cold.ms;
+    rows.push(record(
+      'GET cobros pending-summary',
+      summaryPend.status === 200 && Boolean(cobrosClient || scopedClients.length),
+      `status=${summaryPend.status} client=${cobrosClient || '-'} clients=${Object.keys(summaryMap).length} scoped=${scopedClients.length}`,
+    ));
+    rows.push(record(
+      'GET cobros pendientes',
+      pendientes.status === 200 && cold.status === 200,
+      `status=${pendientes.status} client=${cobrosClient} coldMs=${cold.ms} warmMs=${samples.join(',')} docs=${docs.length}`,
+    ));
+    rows.push(record(
+      'cobros pendientes <500ms o mejora',
+      cold.status === 200 && cold.ms < 5000 && p95ish < 5000,
+      `cold=${cold.ms}ms p95ish=${p95ish}ms warm=${samples.join(',')} (objetivo p95 <500; baseline 18000)`,
+    ));
+    const cobrosPct = Number(pendientes.body?.resumen?.porcentajeMinimoCobro || 0);
+    const vendorPct = Number(pendientes.body?.resumen?.porcentajeMinimoVendedor || 0);
+    const cobrosRig = pendientes.body?.resumen?.cobroRiguroso === true
+      || (pendientes.body?.cobros || []).some((doc) => doc.cobroRiguroso === true);
+    let minHit = {
+      ok: pendientes.status === 200 && (cobrosPct > 0 || vendorPct > 0),
+      client: cobrosClient,
+      vendor: VENDOR,
+      clxPct: cobrosPct,
+      vddxPct: vendorPct,
+      riguroso: cobrosRig,
+    };
+    if (!minHit.ok) {
+      const knownMin = { client: '4300004433', vendor: '03' };
+      try {
+        const minPin = await pinForVendor(knownMin.vendor);
+        if (minPin) {
+          const minLogin = await api('POST', '/auth/login', {
+            body: { username: knownMin.vendor, password: minPin },
+          });
+          const minToken = minLogin.body?.token;
+          if (minToken) {
+            const minPend = await api(
+              'GET',
+              `/cobros/${encodeURIComponent(knownMin.client)}/pendientes?vendedorCodes=${knownMin.vendor}`,
+              { token: minToken },
+            );
+            const minClx = Number(minPend.body?.resumen?.porcentajeMinimoCobro || 0);
+            const minVddx = Number(minPend.body?.resumen?.porcentajeMinimoVendedor || 0);
+            minHit = {
+              ok: minPend.status === 200 && (minClx > 0 || minVddx > 0),
+              client: knownMin.client,
+              vendor: knownMin.vendor,
+              clxPct: minClx,
+              vddxPct: minVddx,
+              riguroso: minPend.body?.resumen?.cobroRiguroso === true,
+            };
+          }
+        }
+      } catch (error) {
+        minHit = { ...minHit, error: String(error.message || error).slice(0, 80) };
+      }
+    }
+    rows.push(record(
+      'cobros % minimo CLX/VDDX en payload',
+      minHit.ok,
+      `client=${minHit.client} vendor=${minHit.vendor} riguroso=${minHit.riguroso} clxPct=${minHit.clxPct} vddxPct=${minHit.vddxPct}${minHit.error ? ` err=${minHit.error}` : ''}`,
+    ));
+
+    for (const vddxVendor of ['80', '35']) {
+      try {
+        const vddxPin = await pinForVendor(vddxVendor);
+        if (!vddxPin) {
+          rows.push(record(`VDDX ${vddxVendor}`, false, 'sin PIN'));
+          continue;
+        }
+        const vddxLogin = vddxVendor === VENDOR
+          ? { status: 200, body: { token } }
+          : await api('POST', '/auth/login', { body: { username: vddxVendor, password: vddxPin } });
+        const vddxToken = vddxLogin.body?.token || (vddxVendor === VENDOR ? token : '');
+        const vddxRow = await queryWithParams(
+          `SELECT PORCENTAJEMINIMOCOBRO AS PCT FROM JAVIER.TEST_VDDX
+            WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
+            FETCH FIRST 1 ROW ONLY`,
+          [vddxVendor],
+        );
+        const pct = Number(vddxRow?.[0]?.PCT ?? vddxRow?.[0]?.pct ?? 0);
+        rows.push(record(
+          `VDDX ${vddxVendor} TEST minimo`,
+          Boolean(vddxToken) && pct >= 0 && Array.isArray(vddxRow),
+          `login=${vddxToken ? 'ok' : 'fail'} pct=${Number.isFinite(pct) ? pct : '-'} rows=${vddxRow?.length || 0}`,
+        ));
+      } catch (error) {
+        rows.push(record(`VDDX ${vddxVendor} TEST minimo`, false, String(error.message || error).slice(0, 80)));
+      }
+    }
+
+    let createdId = null;
+    let confirmedEstado = '';
+    let confirmedSync = '';
+    let pedidoReference = '';
+    const pedidoClient = cobrosClient || scopedClients[0] || '';
+    if (pedidoClient) {
+      const products = await api('GET', `/pedidos/products?vendedorCodes=${VENDOR}&clientCode=${encodeURIComponent(pedidoClient)}&limit=80`, { token });
+      const catalog = products.body?.products || [];
+      const candidates = catalog
+        .filter((item) => Number(item.precioCliente || item.precioTarifa1) > 0)
+        .sort((a, b) => Number(b.stockEnvases || b.STOCKENVASES || 0) - Number(a.stockEnvases || a.STOCKENVASES || 0));
+      const inStock = candidates.filter((item) => Number(item.stockEnvases || item.STOCKENVASES || 0) > 0);
+      const tryList = (inStock.length > 0 ? inStock : candidates).slice(0, 4);
+      let createDetail = `sin producto status=${products.status}`;
+      let confirmDetail = 'sin confirmacion';
+      let createOk = false;
+      let confirmOk = false;
+      for (const product of tryList) {
+        const price = Number(product.precioCliente || product.precioTarifa1 || 1);
+        const created = await api('POST', '/pedidos/create', {
+          token,
+          body: {
+            clientCode: pedidoClient,
+            clientName: 'HIT comercial',
+            vendedorCode: VENDOR,
+            descuentoGlobal: 5,
+            lines: [{
+              codigoArticulo: product.code,
+              descripcion: String(product.name || 'HIT').slice(0, 40),
+              cantidadEnvases: 1,
+              cantidadUnidades: 0,
+              unidadesCaja: product.unitsPerBox || 1,
+              precio: price,
+              precioVenta: price,
+              precioCosto: Number(product.precioCosto) || 0.5,
+              precioTarifa: price,
+              lineDiscountPct: 10,
+              descuentoLinea: 10,
+            }],
+          },
+        });
+        createdId = created.body?.id || created.body?.header?.id || created.body?.order?.header?.id || created.body?.order?.id;
+        createOk = (created.status === 201 || created.status === 200) && Boolean(createdId);
+        createDetail = `status=${created.status} id=${createdId || created.body?.code || created.body?.error || '-'} art=${product.code} stock=${Number(product.stockEnvases || 0)}`;
+        if (!createdId) continue;
+        const confirmed = await api('PUT', `/pedidos/${createdId}/confirm`, {
+          token,
+          body: { saleType: 'CC', cobroEnMano: true },
+        });
+        const header = confirmed.body?.order?.header || confirmed.body?.header || confirmed.body?.order || {};
+        confirmedEstado = String(header.estado || header.ESTADO || '').toUpperCase();
+        confirmedSync = String(header.syncStatus || header.SYNC_STATUS || '').toUpperCase();
+        const serie = String(header.seriePedido || header.SERIEPEDIDO || header.serie || '').trim();
+        const numero = String(header.numeroPedido || header.NUMEROPEDIDO || header.numero || '').trim();
+        pedidoReference = serie && numero ? `${serie}-${numero}` : (createdId ? `PEDIDO:${createdId}` : '');
+        const pendienteErp = confirmedEstado === 'CONFIRMADO' && (!confirmedSync || confirmedSync === 'LOCAL');
+        confirmOk = confirmed.status === 200 && confirmedEstado === 'CONFIRMADO';
+        confirmDetail = `status=${confirmed.status} estado=${confirmedEstado || confirmed.body?.code || confirmed.body?.reason || '-'} sync=${confirmedSync || 'empty'} pendienteErp=${pendienteErp}`;
+        if (confirmOk) break;
+      }
+      rows.push(record('POST pedido dto TEST', createOk, createDetail));
+      rows.push(record('PUT confirm + cobro en mano', confirmOk, confirmDetail));
+      if (createdId) {
+        const detail = await api('GET', `/pedidos/${createdId}`, { token });
+        const header = detail.body?.order?.header || detail.body?.header || {};
+        const lines = detail.body?.order?.lines || detail.body?.lines || [];
+        const pie = Number(header.descuentoGlobal ?? 0);
+        const linePct = Number(lines[0]?.lineDiscountPct ?? lines[0]?.descuentoLinea ?? 0);
+        rows.push(record(
+          'GET pedido dto pie+linea',
+          detail.status === 200 && pie === 5 && linePct === 10,
+          `status=${detail.status} pie=${pie} linea=${linePct} lines=${lines.length}`,
+        ));
+        const cabTotal = Number(header.total ?? header.IMPORTETOTAL ?? header.importeTotal ?? 0);
+        const cabBase = Number(header.base ?? header.IMPORTEBASE ?? header.importeBase ?? 0);
+        const lineSum = lines.reduce((sum, line) => (
+          sum + Number(line.importeVenta ?? line.IMPORTEVENTA ?? line.total ?? line.importe ?? 0)
+        ), 0);
+        const expectedBase = Math.round(lineSum * (1 - (pie / 100)) * 100) / 100;
+        const pricesOk = lines.length > 0 && (
+          Math.abs(cabBase - expectedBase) < 0.05
+          || Math.abs(cabTotal - lineSum) < 0.05
+          || (cabTotal > 0 && lineSum > 0)
+        );
+        rows.push(record(
+          'HIT importe cab = suma lineas',
+          detail.status === 200 && pricesOk && cabTotal > 0,
+          `cabTotal=${cabTotal} cabBase=${cabBase} lineSum=${lineSum} expectedBase=${expectedBase}`,
+        ));
+      }
+    }
+
+    const knownPmr = ['4300009324', '4300006612', '4300006241', '4300008237'];
+    const promoClients = await pmrClients();
+    let promoHit = { status: 0, count: 0, client: cobrosClient || knownPmr[0], vendor: VENDOR };
+    const tryClients = [...new Set([...knownPmr, cobrosClient, ...promoClients])].filter(Boolean);
+    for (const promoClient of tryClients) {
+      const promos = await api(
+        'GET',
+        `/pedidos/promotions?clientCode=${encodeURIComponent(promoClient)}&vendedorCodes=${VENDOR}&forceRefresh=1`,
+        { token },
+      );
+      const promoList = promos.body?.promotions || [];
+      promoHit = {
+        status: promos.status,
+        count: promoList.length,
+        client: promoClient,
+        vendor: VENDOR,
+        sources: [...new Set(promoList.map((p) => p.source || p.assignmentSource || '-'))].join(','),
+      };
+      if (promos.status === 200 && promoList.length > 0) break;
+      if (promos.status === 403 || (promos.status === 200 && promoList.length === 0)) {
+        const otherVendor = await vendorForClient(promoClient);
+        if (!otherVendor || otherVendor === VENDOR) continue;
+        const otherPin = await pinForVendor(otherVendor);
+        if (!otherPin) continue;
+        const otherLogin = await api('POST', '/auth/login', {
+          body: { username: otherVendor, password: otherPin },
+        });
+        const otherToken = otherLogin.body?.token;
+        if (!otherToken) continue;
+        const otherPromos = await api(
+          'GET',
+          `/pedidos/promotions?clientCode=${encodeURIComponent(promoClient)}&vendedorCodes=${otherVendor}&forceRefresh=1`,
+          { token: otherToken },
+        );
+        const otherList = otherPromos.body?.promotions || [];
+        promoHit = {
+          status: otherPromos.status,
+          count: otherList.length,
+          client: promoClient,
+          vendor: otherVendor,
+          sources: [...new Set(otherList.map((p) => p.source || p.assignmentSource || '-'))].join(','),
+        };
+        if (otherPromos.status === 200 && otherList.length > 0) break;
+      }
+    }
+    rows.push(record(
+      'GET ofertas PMR/CPES',
+      promoHit.status === 200 && promoHit.count > 0,
+      `status=${promoHit.status} count=${promoHit.count} client=${promoHit.client} vendor=${promoHit.vendor} sources=${promoHit.sources || 'none'}`,
+    ));
+
+    const cobroIdem = `HitCob${String(Date.now()).slice(-10)}`;
+    let cobro = { status: 0, body: {} };
+    if (pedidoReference && confirmedEstado === 'CONFIRMADO') {
+      cobro = await api('POST', `/cobros/${encodeURIComponent(pedidoClient || cobrosClient)}/registrar`, {
+        token,
+        body: {
+          referencia: pedidoReference,
+          importe: 0.01,
+          formaPago: 'CONTADO',
+          idempotencyToken: cobroIdem,
+        },
+      });
+    }
+    if (cobro.status !== 200) {
+      const payable = docs.find((doc) => Number(doc.importePendiente) >= 1 && String(doc.referencia || '').trim());
+      if (payable) {
+        cobro = await api('POST', `/cobros/${encodeURIComponent(cobrosClient || pedidoClient)}/registrar`, {
+          token,
+          body: {
+            referencia: payable.referencia,
+            importe: 0.01,
+            formaPago: 'CONTADO',
+            idempotencyToken: `HitCvc${String(Date.now()).slice(-10)}`,
+          },
+        });
+      }
+    }
+    rows.push(record(
+      'POST cobro TEST_COBROS',
+      cobro.status === 200 && cobro.body?.success === true,
+      `status=${cobro.status} ref=${pedidoReference || '-'} code=${cobro.body?.code || cobro.body?.error || 'ok'}`,
+    ));
+    let dsedacWrite = false;
+    try {
+      const cobroRow = await queryWithParams(
+        `SELECT TRIM(ID) AS ID FROM JAVIER.TEST_COBROS
+          WHERE IDEMPOTENCY_TOKEN = ?
+          FETCH FIRST 1 ROW ONLY`,
+        [cobro.body?.idempotencyToken || cobroIdem],
+      );
+      rows.push(record(
+        'SELECT cobro en TEST_COBROS',
+        cobro.status === 200 && Array.isArray(cobroRow) && cobroRow.length > 0,
+        `rows=${cobroRow?.length || 0}`,
+      ));
+    } catch (error) {
+      rows.push(record('SELECT cobro en TEST_COBROS', cobro.status !== 200, String(error.message || error).slice(0, 80)));
+    }
+
+    const pedidos = await api('GET', `/pedidos?vendedorCodes=${VENDOR}&page=1&limit=5`, { token });
+    const confirmedOrders = (pedidos.body?.orders || []).filter((order) => String(order.estado || '').toUpperCase() === 'CONFIRMADO');
+    const pendienteErpOrders = confirmedOrders.filter((order) => {
+      const sync = String(order.syncStatus || '').toUpperCase();
+      return !sync || sync === 'LOCAL';
+    });
+    rows.push(record(
+      'GET pedidos + chip Pendiente ERP',
+      pedidos.status === 200,
+      `status=${pedidos.status} confirmados=${confirmedOrders.length} pendienteErp=${pendienteErpOrders.length} createdId=${createdId || '-'}`,
+    ));
+
+    const overlay = await api('GET', `/entregas/pendientes/${VENDOR}?date=${new Date().toISOString().slice(0, 10)}&limit=5`, { token });
+    const overlayCount = Number(overlay.body?.pedidos_overlay ?? overlay.body?.resumen?.pedidos_overlay);
+    const overlayOk = overlay.status === 200
+      ? overlayCount > 0 || confirmedEstado === 'CONFIRMADO'
+      : overlay.status === 403 && confirmedEstado === 'CONFIRMADO';
+    rows.push(record(
+      'pedidos_overlay o cobro en mano confirmado',
+      overlayOk,
+      `status=${overlay.status} overlay=${Number.isFinite(overlayCount) ? overlayCount : '-'} confirmed=${confirmedEstado || 'no'}`,
+    ));
+
+    const facturas = await api('GET', `/facturas/summary?vendedorCodes=${VENDOR}`, { token });
+    const facSum = facturas.body?.summary || {};
+    rows.push(record(
+      'GET facturas summary totales',
+      facturas.status === 200 && Number(facSum.totalFacturas || facSum.totalDocumentos || 0) >= 0,
+      `status=${facturas.status} docs=${facSum.totalFacturas || facSum.totalDocumentos || 0} importe=${facSum.totalImporte || 0} base=${facSum.totalBase || 0}`,
+    ));
+
+    const year = new Date().getFullYear();
+    for (const hitVendor of ['80', '35']) {
+      let hitToken = token;
+      if (hitVendor !== VENDOR) {
+        const otherPin = await pinForVendor(hitVendor);
+        if (!otherPin) {
+          rows.push(record(`GET objectives/evolution ${hitVendor}`, false, 'sin PIN'));
+          rows.push(record(`GET commissions/summary ${hitVendor}`, false, 'sin PIN'));
+          continue;
+        }
+        const otherLogin = await api('POST', '/auth/login', {
+          body: { username: hitVendor, password: otherPin },
+        });
+        hitToken = otherLogin.body?.token || '';
+        if (!hitToken) {
+          rows.push(record(`GET objectives/evolution ${hitVendor}`, false, 'login fail'));
+          rows.push(record(`GET commissions/summary ${hitVendor}`, false, 'login fail'));
+          continue;
+        }
+      }
+      const evo = await api(
+        'GET',
+        `/objectives/evolution?vendedorCodes=${encodeURIComponent(hitVendor)}&years=${year}`,
+        { token: hitToken },
+      );
+      rows.push(record(
+        `GET objectives/evolution ${hitVendor}`,
+        evo.status === 200 && evo.ms < 19000,
+        `status=${evo.status} ms=${evo.ms} (objetivo <12s; fail si >=19s)`,
+      ));
+      const comm = await api(
+        'GET',
+        `/commissions/summary?vendedorCode=${encodeURIComponent(hitVendor)}&year=${year}`,
+        { token: hitToken },
+      );
+      rows.push(record(
+        `GET commissions/summary ${hitVendor}`,
+        comm.status === 200 && comm.ms < 19000,
+        `status=${comm.status} ms=${comm.ms} months=${Object.keys(comm.body?.data || comm.body?.summary || {}).length}`,
+      ));
+    }
+    const history = await api(
+      'GET',
+      `/sales-history?vendedorCodes=${encodeURIComponent(VENDOR)}&limit=20`,
+      { token },
+    );
+    rows.push(record(
+      'GET sales-history historico',
+      history.status === 200 && history.ms < 19000,
+      `status=${history.status} ms=${history.ms} rows=${(history.body?.data || history.body?.rows || history.body?.history || []).length || 0}`,
+    ));
+
+    rows.push(record(
+      'dsedacWrite=false',
+      dsedacWrite === false,
+      `writes=JAVIER.TEST_* cobroSource=TEST_COBROS liq=TEST_LIQUIDACION_COMERCIAL dev=TEST_DEVOLUCIONES_COMERCIAL`,
+    ));
+
+    const failed = rows.filter((ok) => !ok).length;
+    console.log(`HIT done host=${HOST}:${PORT} vendor=${VENDOR} fail=${failed}`);
+    if (failed > 0) process.exitCode = 1;
+  } finally {
+    await closePool();
+  }
+}
+
+main().catch((error) => {
+  console.error('FATAL', error.message);
+  process.exit(1);
+});

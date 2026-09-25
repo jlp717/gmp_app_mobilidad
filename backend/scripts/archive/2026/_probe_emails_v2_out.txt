@@ -1,0 +1,1702 @@
+# ARCHIVE one-off [2026/anio-mtime]: artefacto txt | _-scratch + artefacto txt gitignored; salida probe emails | NO EJECUTAR (GMP-SCRIPTS-FINAL-ARCHIVE-20260925).
+﻿
+=== VDC columns ===
+[
+  {
+    "COLUMN_NAME": "CODIGOVENDEDOR",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 2
+  },
+  {
+    "COLUMN_NAME": "SUBEMPRESA",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 3
+  },
+  {
+    "COLUMN_NAME": "CUENTAVENTA",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 10
+  },
+  {
+    "COLUMN_NAME": "PORCENTAJECOMISIONCONTADO",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 5
+  },
+  {
+    "COLUMN_NAME": "PORCENTAJECOMISIONCREDITO",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 5
+  },
+  {
+    "COLUMN_NAME": "PORCENTAJECOMISIONSUBDISTRIB",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 5
+  },
+  {
+    "COLUMN_NAME": "VENDEDORASOCIADO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 2
+  },
+  {
+    "COLUMN_NAME": "CODIGOVEHICULO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 10
+  },
+  {
+    "COLUMN_NAME": "CODIGOTARIFA",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 2
+  },
+  {
+    "COLUMN_NAME": "PORCENTAJEDESCUENTO1",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 5
+  },
+  {
+    "COLUMN_NAME": "PORCENTAJEDESCUENTO2",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 5
+  },
+  {
+    "COLUMN_NAME": "PORCENTAJEDESCUENTO3",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 5
+  },
+  {
+    "COLUMN_NAME": "TIPOVENDEDOR",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "TEMPORADAACTIVA",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "NOMBREBANCO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 40
+  },
+  {
+    "COLUMN_NAME": "NUMEROCUENTA",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 20
+  },
+  {
+    "COLUMN_NAME": "IMPORTENOMINA",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 10
+  },
+  {
+    "COLUMN_NAME": "PORCENTAJECOMISIONMES",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 5
+  },
+  {
+    "COLUMN_NAME": "IMPORTESEGURIDADSOCIAL",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 10
+  },
+  {
+    "COLUMN_NAME": "TIPOLIQUIDACIONESCOMISIONES",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "CAMBIOPRECIOSN",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "APLICARBONIFICACIONESSN",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "IMPRIMIRTELEFONOSN",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "RETENCIONESSN",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "IMPRIMIRFACTURASPENDIENTESSN",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "CLAVELISTAPRECIO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 5
+  },
+  {
+    "COLUMN_NAME": "DIASLIMITECREDITO",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 2
+  },
+  {
+    "COLUMN_NAME": "DIASVENCIMIENTOLIQUIDACION",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 2
+  },
+  {
+    "COLUMN_NAME": "NUEVOCALCULOCOMISIONESSN",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "IMPORTEFIJO",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 10
+  },
+  {
+    "COLUMN_NAME": "IMPORTEDIETAS",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 10
+  },
+  {
+    "COLUMN_NAME": "PORCENTAJERETENCIONES",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 5
+  },
+  {
+    "COLUMN_NAME": "CODIGOEMPLEADO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 10
+  },
+  {
+    "COLUMN_NAME": "PROMOCIONCOMISIONVENDEDOR",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 3
+  },
+  {
+    "COLUMN_NAME": "ID",
+    "DATA_TYPE": "INTEGER",
+    "LENGTH": 4
+  },
+  {
+    "COLUMN_NAME": "MARCAACTUALIZACION",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 50
+  }
+]
+
+=== VDD emails join probe ===
+[
+  {
+    "CODIGO": "A4",
+    "EMAIL": "COMERCIALA4@MARI-PEPA.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "01",
+    "EMAIL": "GOYO@MARI-PEPA.COM",
+    "JEFE": "S"
+  },
+  {
+    "CODIGO": "02",
+    "EMAIL": "bartolo@mari-pepa.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "03",
+    "EMAIL": "martin2003gmp@gmail.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "04",
+    "EMAIL": "JBPESCADOR@HOTMAIL.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "05",
+    "EMAIL": "rodriguez2005gmp@gmail.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "08",
+    "EMAIL": "damian2008gmp@gmail.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "10",
+    "EMAIL": "EDGARGMP2010@GMAIL.COM",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "13",
+    "EMAIL": "2013joaquingarciabayonas@gmail.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "14",
+    "EMAIL": "bartolo@mari-pepa.com",
+    "JEFE": "S"
+  },
+  {
+    "CODIGO": "15",
+    "EMAIL": "ALFONSOSALAS@MARI-PEPA.COM",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "16",
+    "EMAIL": "2057asensio@gmail.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "18",
+    "EMAIL": "2033soler@gmail.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "19",
+    "EMAIL": "cesar@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "20",
+    "EMAIL": "CAYETANO@MARI-PEPA.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "21",
+    "EMAIL": "antoniomontejano2021@granjamaripepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "24",
+    "EMAIL": "COMERCIAL24@MARI-PEPA.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "25",
+    "EMAIL": "diegojimenez@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "26",
+    "EMAIL": "comercial26@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "27",
+    "EMAIL": "COMERCIAL27@MARI-PEPA.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "30",
+    "EMAIL": "CARLOS@MARI-PEPA.COM",
+    "JEFE": "S"
+  },
+  {
+    "CODIGO": "32",
+    "EMAIL": "pedidos@granjamaripepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "33",
+    "EMAIL": "domingoginer@granjamaripepa.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "34",
+    "EMAIL": "juanantonio@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "35",
+    "EMAIL": "raulmartinez@mari-pepa.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "36",
+    "EMAIL": "comercial36@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "37",
+    "EMAIL": "comercial37@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "39",
+    "EMAIL": "ANTONIOJ2039@GMAIL.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "40",
+    "EMAIL": "juanmecagmp@gmail.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "41",
+    "EMAIL": "2060alfonso@gmail.com",
+    "JEFE": "S"
+  },
+  {
+    "CODIGO": "42",
+    "EMAIL": "PACOJIMENEZ@GRANJAMARIPEPA.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "43",
+    "EMAIL": "2043JAIME@GMAIL.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "44",
+    "EMAIL": "romera2009gmp@gmail.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "45",
+    "EMAIL": "comercial45@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "46",
+    "EMAIL": "peDIDOS@GRANJAMARIPEPA.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "48",
+    "EMAIL": "ramongmp2000@gmail.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "49",
+    "EMAIL": "joseangelgmp@gmail.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "50",
+    "EMAIL": "comercial50@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "51",
+    "EMAIL": "comercial51@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "52",
+    "EMAIL": "comercial52@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "53",
+    "EMAIL": "COMERCIAL53@MARI-PEPA.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "54",
+    "EMAIL": "alan@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "55",
+    "EMAIL": "COMERCIAL55@MARI-PEPA.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "56",
+    "EMAIL": "joseantonio56gmp@gmail.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "57",
+    "EMAIL": "comercial57@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "59",
+    "EMAIL": "comercial59@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "63",
+    "EMAIL": "PEDRO@GRANJAMARIPEPA.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "64",
+    "EMAIL": "josemaria@mari-pepa.com",
+    "JEFE": "S"
+  },
+  {
+    "CODIGO": "65",
+    "EMAIL": "MARISOL@MARI-PEPA.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "66",
+    "EMAIL": "comercial66@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "67",
+    "EMAIL": "comercial67@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "68",
+    "EMAIL": "carmen@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "69",
+    "EMAIL": "comercial69@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "70",
+    "EMAIL": "comercial70@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "72",
+    "EMAIL": "josemiguel.acacio@mari-pepa.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "73",
+    "EMAIL": "josemiguel.andujar@mari-pepa.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "74",
+    "EMAIL": "comercial74@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "75",
+    "EMAIL": "angelo@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "76",
+    "EMAIL": "gazquezmorales@yahoo.es",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "77",
+    "EMAIL": "juanmanuel@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "78",
+    "EMAIL": "COMERCIAL76@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "79",
+    "EMAIL": "comercial79@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "80",
+    "EMAIL": "juanluis@granjamaripepa.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "81",
+    "EMAIL": "andresmgmp@gmail.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "83",
+    "EMAIL": "JOSEANTONIOGMP@GMAIL.COM",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "84",
+    "EMAIL": "comercial84@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "85",
+    "EMAIL": "ramonrgmp@gmail.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "86",
+    "EMAIL": "COMERCIAL86@MARI-PEPA.COM",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "87",
+    "EMAIL": "comercial78@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "89",
+    "EMAIL": "comercial89@mari-pepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "91",
+    "EMAIL": "juanfrancisco@granjamaripepa.com",
+    "JEFE": ""
+  },
+  {
+    "CODIGO": "92",
+    "EMAIL": "vanesa@mari-pepa.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "93",
+    "EMAIL": "maricarmen@granjamaripepa.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "94",
+    "EMAIL": "comercial94@mari-pepa.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "95",
+    "EMAIL": "domingogarcia@mari-pepa.com",
+    "JEFE": "N"
+  },
+  {
+    "CODIGO": "98",
+    "EMAIL": "EA5HVT@GMAIL.COM",
+    "JEFE": "S"
+  }
+]
+
+=== VDC name-like cols ===
+[
+  {
+    "COLUMN_NAME": "NOMBREBANCO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 40
+  }
+]
+
+=== VDD name-like cols ===
+[
+  {
+    "COLUMN_NAME": "NOMBREVENDEDOR",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  }
+]
+
+=== VDX name-like cols ===
+[]
+
+=== VEN name-like cols ===
+[]
+
+=== VEND name-like cols ===
+[]
+
+=== Vendors with name from VDC* ===
+[
+  {
+    "COLUMN_NAME": "NOMBREBANCO",
+    "TABLE_NAME": "VDC"
+  },
+  {
+    "COLUMN_NAME": "NOMBREBANCO",
+    "TABLE_NAME": "VDCL1"
+  },
+  {
+    "COLUMN_NAME": "NOMBREVENDEDOR",
+    "TABLE_NAME": "VDD"
+  },
+  {
+    "COLUMN_NAME": "NOMBREVENDEDOR",
+    "TABLE_NAME": "VDDL1"
+  },
+  {
+    "COLUMN_NAME": "NOMBREVENDEDOR",
+    "TABLE_NAME": "VDDL2"
+  }
+]
+
+=== ALMACEN_PERSONAL cols ===
+[
+  {
+    "COLUMN_NAME": "ID",
+    "DATA_TYPE": "INTEGER",
+    "LENGTH": 4
+  },
+  {
+    "COLUMN_NAME": "NOMBRE",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 100
+  },
+  {
+    "COLUMN_NAME": "CODIGO_VENDEDOR",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 20
+  },
+  {
+    "COLUMN_NAME": "ROL",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 30
+  },
+  {
+    "COLUMN_NAME": "ACTIVO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "TELEFONO",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 20
+  },
+  {
+    "COLUMN_NAME": "EMAIL",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 100
+  },
+  {
+    "COLUMN_NAME": "CREATED_AT",
+    "DATA_TYPE": "TIMESTMP",
+    "LENGTH": 10
+  },
+  {
+    "COLUMN_NAME": "UPDATED_AT",
+    "DATA_TYPE": "TIMESTMP",
+    "LENGTH": 10
+  }
+]
+
+=== ALMACEN_PERSONAL emails ===
+[
+  {
+    "ID": 1,
+    "NOMBRE": "Juan P├®rez",
+    "CODIGO_VENDEDOR": "901",
+    "ROL": "PREPARADOR",
+    "ACTIVO": "S",
+    "TELEFONO": "600123456",
+    "EMAIL": null,
+    "CREATED_AT": "2026-02-19 19:35:58.533174",
+    "UPDATED_AT": null
+  },
+  {
+    "ID": 2,
+    "NOMBRE": "Mar├¡a Garc├¡a",
+    "CODIGO_VENDEDOR": "902",
+    "ROL": "JEFE_TURNO",
+    "ACTIVO": "S",
+    "TELEFONO": "600654321",
+    "EMAIL": null,
+    "CREATED_AT": "2026-02-19 19:35:58.533174",
+    "UPDATED_AT": null
+  },
+  {
+    "ID": 3,
+    "NOMBRE": "Carlos Ruiz",
+    "CODIGO_VENDEDOR": "903",
+    "ROL": "CARRETILLERO",
+    "ACTIVO": "S",
+    "TELEFONO": "600987654",
+    "EMAIL": null,
+    "CREATED_AT": "2026-02-19 19:35:58.533174",
+    "UPDATED_AT": null
+  },
+  {
+    "ID": 4,
+    "NOMBRE": "Ana L├│pez",
+    "CODIGO_VENDEDOR": "904",
+    "ROL": "PREPARADOR",
+    "ACTIVO": "S",
+    "TELEFONO": "600111222",
+    "EMAIL": null,
+    "CREATED_AT": "2026-02-19 19:35:58.533174",
+    "UPDATED_AT": null
+  },
+  {
+    "ID": 5,
+    "NOMBRE": "TEST_OPERARIO_SCRIPT",
+    "CODIGO_VENDEDOR": "T999",
+    "ROL": "PREPARADOR",
+    "ACTIVO": "N",
+    "TELEFONO": "000000000",
+    "EMAIL": "test@test.test",
+    "CREATED_AT": null,
+    "UPDATED_AT": "2026-03-20 23:23:37.233827"
+  }
+]
+
+=== APP_USERS exists ===
+[]
+
+=== APP_USUARIOS exists ===
+[]
+
+=== APPUSUARIOS exists ===
+[
+  {
+    "TABLE_SCHEMA": "DSEDAZ",
+    "TABLE_NAME": "APPUSUARIOS"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDUT",
+    "TABLE_NAME": "APPUSUARIOS"
+  },
+  {
+    "TABLE_SCHEMA": "DSTD02",
+    "TABLE_NAME": "APPUSUARIOS"
+  },
+  {
+    "TABLE_SCHEMA": "WTAD01",
+    "TABLE_NAME": "APPUSUARIOS"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "APPUSUARIOS"
+  }
+]
+
+=== USUARIOS_APP exists ===
+[]
+
+=== JAVIER tables with EMAIL col ===
+[
+  {
+    "TABLE_NAME": "ALMACEN_PERSONAL",
+    "COLUMN_NAME": "EMAIL",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 100
+  },
+  {
+    "TABLE_NAME": "CUSTOMER_CREDENTIALS",
+    "COLUMN_NAME": "EMAIL",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 255
+  },
+  {
+    "TABLE_NAME": "CUSTOMER_CREDENTIALS",
+    "COLUMN_NAME": "EMAIL_VERIFIED",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "TABLE_NAME": "CUSTOMER_EMAILS",
+    "COLUMN_NAME": "EMAIL_ADDRESS",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 255
+  },
+  {
+    "TABLE_NAME": "CUSTOMER_EMAILS",
+    "COLUMN_NAME": "EMAIL_ID",
+    "DATA_TYPE": "INTEGER",
+    "LENGTH": 4
+  },
+  {
+    "TABLE_NAME": "REPARTIDOR_LIQUIDACION_EMAILS",
+    "COLUMN_NAME": "EMAIL_KIND",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 20
+  },
+  {
+    "TABLE_NAME": "REPARTIDOR_LIQUIDACION_EMAILS",
+    "COLUMN_NAME": "RECIPIENT_EMAIL",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 180
+  },
+  {
+    "TABLE_NAME": "V_LEGACY_PASSWORD_CUSTOMERS",
+    "COLUMN_NAME": "EMAIL",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 255
+  }
+]
+
+=== REPARTIDOR_LIQUIDACION_EMAILS schema ===
+[
+  {
+    "COLUMN_NAME": "ID",
+    "DATA_TYPE": "BIGINT",
+    "LENGTH": 8
+  },
+  {
+    "COLUMN_NAME": "LIQUIDACION_OP_ID",
+    "DATA_TYPE": "BIGINT",
+    "LENGTH": 8
+  },
+  {
+    "COLUMN_NAME": "RECIPIENT_EMAIL",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 180
+  },
+  {
+    "COLUMN_NAME": "EMAIL_KIND",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 20
+  },
+  {
+    "COLUMN_NAME": "STATUS",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 20
+  },
+  {
+    "COLUMN_NAME": "ERROR_MESSAGE",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 1000
+  },
+  {
+    "COLUMN_NAME": "SENT_AT",
+    "DATA_TYPE": "TIMESTMP",
+    "LENGTH": 10
+  },
+  {
+    "COLUMN_NAME": "CREATED_AT",
+    "DATA_TYPE": "TIMESTMP",
+    "LENGTH": 10
+  }
+]
+
+=== REPARTIDOR_LIQUIDACION_EMAILS sample ===
+[]
+
+=== CUSTOMER_EMAILS schema ===
+[
+  {
+    "COLUMN_NAME": "EMAIL_ID",
+    "DATA_TYPE": "INTEGER",
+    "LENGTH": 4
+  },
+  {
+    "COLUMN_NAME": "CUSTOMER_ID",
+    "DATA_TYPE": "BIGINT",
+    "LENGTH": 8
+  },
+  {
+    "COLUMN_NAME": "EMAIL_ADDRESS",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 255
+  },
+  {
+    "COLUMN_NAME": "IS_PRIMARY",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "IS_VERIFIED",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "VERIFICATION_TOKEN",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 128
+  },
+  {
+    "COLUMN_NAME": "VERIFICATION_SENT_AT",
+    "DATA_TYPE": "TIMESTMP",
+    "LENGTH": 10
+  },
+  {
+    "COLUMN_NAME": "VERIFIED_AT",
+    "DATA_TYPE": "TIMESTMP",
+    "LENGTH": 10
+  },
+  {
+    "COLUMN_NAME": "CREATED_AT",
+    "DATA_TYPE": "TIMESTMP",
+    "LENGTH": 10
+  }
+]
+
+=== VDD base table? ===
+[
+  {
+    "TABLE_NAME": "VDC"
+  },
+  {
+    "TABLE_NAME": "VDD"
+  },
+  {
+    "TABLE_NAME": "VDDX"
+  }
+]
+
+=== get vendor names via common pattern ===
+[
+  {
+    "CODIGO": "02",
+    "NOMBRE": "02 BARTOLO"
+  },
+  {
+    "CODIGO": "71",
+    "NOMBRE": "ZZ ALBERTO"
+  },
+  {
+    "CODIGO": "03",
+    "NOMBRE": "03 MARTIN MANCHON RUIZ"
+  },
+  {
+    "CODIGO": "04",
+    "NOMBRE": "ZZ 04 JUAN BAUTISTA"
+  },
+  {
+    "CODIGO": "05",
+    "NOMBRE": "05 RODRIGUEZ"
+  }
+]
+
+=== VDD columns ===
+[
+  {
+    "COLUMN_NAME": "CODIGOVENDEDOR",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 2
+  },
+  {
+    "COLUMN_NAME": "NOMBREVENDEDOR",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "COLUMN_NAME": "DIRECCION",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "COLUMN_NAME": "CODIGOPOSTAL",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 5
+  },
+  {
+    "COLUMN_NAME": "SECUENCIACODIGOPOSTAL",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 4
+  },
+  {
+    "COLUMN_NAME": "POBLACION",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 25
+  },
+  {
+    "COLUMN_NAME": "PROVINCIA",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 34
+  },
+  {
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "COLUMN_NAME": "NIF",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 20
+  },
+  {
+    "COLUMN_NAME": "TELEFONO1",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 12
+  },
+  {
+    "COLUMN_NAME": "TELEFONO2",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 12
+  },
+  {
+    "COLUMN_NAME": "TELEFONOFAX",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 12
+  },
+  {
+    "COLUMN_NAME": "OBSERVACIONES",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "COLUMN_NAME": "CLAVE1",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "COLUMN_NAME": "CLAVE2",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "COLUMN_NAME": "CODIGOREFERENCIAVENDEDOR",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 8
+  },
+  {
+    "COLUMN_NAME": "IMPRIMIRETIQUETASN",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "COLUMN_NAME": "ID",
+    "DATA_TYPE": "INTEGER",
+    "LENGTH": 4
+  },
+  {
+    "COLUMN_NAME": "MARCAACTUALIZACION",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 50
+  }
+]
+
+=== Emails + names join VDD+VDDX ===
+[
+  {
+    "CODIGO": "A2",
+    "NOMBRE": "A2 JAVIER LACAL",
+    "EMAIL": "",
+    "JEFE": "S",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "A4",
+    "NOMBRE": "A4 JUNIOR",
+    "EMAIL": "COMERCIALA4@MARI-PEPA.COM",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "01",
+    "NOMBRE": "01 GOYO",
+    "EMAIL": "GOYO@MARI-PEPA.COM",
+    "JEFE": "S",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "02",
+    "NOMBRE": "02 BARTOLO",
+    "EMAIL": "bartolo@mari-pepa.com",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "03",
+    "NOMBRE": "03 MARTIN MANCHON RUIZ",
+    "EMAIL": "martin2003gmp@gmail.com",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "04",
+    "NOMBRE": "ZZ 04 JUAN BAUTISTA",
+    "EMAIL": "JBPESCADOR@HOTMAIL.COM",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "05",
+    "NOMBRE": "05 RODRIGUEZ",
+    "EMAIL": "rodriguez2005gmp@gmail.com",
+    "JEFE": "N",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "08",
+    "NOMBRE": "08 DAMIAN",
+    "EMAIL": "damian2008gmp@gmail.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "10",
+    "NOMBRE": "10 EDGAR",
+    "EMAIL": "EDGARGMP2010@GMAIL.COM",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "13",
+    "NOMBRE": "13 BAYONAS",
+    "EMAIL": "2013joaquingarciabayonas@gmail.com",
+    "JEFE": "N",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "14",
+    "NOMBRE": "14 QUI├æONERO",
+    "EMAIL": "bartolo@mari-pepa.com",
+    "JEFE": "S",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "15",
+    "NOMBRE": "15 ALFONSO SALAS",
+    "EMAIL": "ALFONSOSALAS@MARI-PEPA.COM",
+    "JEFE": "N",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "16",
+    "NOMBRE": "16 FRANCISCO ASENSIO",
+    "EMAIL": "2057asensio@gmail.com",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "18",
+    "NOMBRE": "18 JUAN SOLER",
+    "EMAIL": "2033soler@gmail.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "19",
+    "NOMBRE": "19 CESAR NICOLAS",
+    "EMAIL": "cesar@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "20",
+    "NOMBRE": "ZZ 20 CAYETANO MONTIEL",
+    "EMAIL": "CAYETANO@MARI-PEPA.COM",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "21",
+    "NOMBRE": "21 ANTONIO MONTEJANO",
+    "EMAIL": "antoniomontejano2021@granjamaripepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "24",
+    "NOMBRE": "ZZ 24 MARIO PADILLA PONCE",
+    "EMAIL": "COMERCIAL24@MARI-PEPA.COM",
+    "JEFE": "",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "25",
+    "NOMBRE": "25 DIEGO JIMENEZ",
+    "EMAIL": "diegojimenez@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "26",
+    "NOMBRE": "26 ADRIAN ORTEGA LOPEZ",
+    "EMAIL": "comercial26@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "27",
+    "NOMBRE": "27 ANTONIO RUIZ",
+    "EMAIL": "COMERCIAL27@MARI-PEPA.COM",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "30",
+    "NOMBRE": "30 CARLOS",
+    "EMAIL": "CARLOS@MARI-PEPA.COM",
+    "JEFE": "S",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "32",
+    "NOMBRE": "ZZ 32 PEDRO MIGUEL (NO CAMBIAR)",
+    "EMAIL": "pedidos@granjamaripepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "33",
+    "NOMBRE": "33 DOMINGO GINER",
+    "EMAIL": "domingoginer@granjamaripepa.com",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "34",
+    "NOMBRE": "ZZ 34 JUAN ANTONIO ALCAZAR",
+    "EMAIL": "juanantonio@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "35",
+    "NOMBRE": "35 RAUL MARTINEZ",
+    "EMAIL": "raulmartinez@mari-pepa.com",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "36",
+    "NOMBRE": "ZZ 36 PEDRO CRISTIAN",
+    "EMAIL": "comercial36@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "37",
+    "NOMBRE": "37 ADRIAN CANO",
+    "EMAIL": "comercial37@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "39",
+    "NOMBRE": "ZZ 39 ANTONIO JOSE SANCHEZ GARCIA",
+    "EMAIL": "ANTONIOJ2039@GMAIL.COM",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "40",
+    "NOMBRE": "ZZ 40 MECA",
+    "EMAIL": "juanmecagmp@gmail.com",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "41",
+    "NOMBRE": "41 ALFONSO LOPEZ RUBIO",
+    "EMAIL": "2060alfonso@gmail.com",
+    "JEFE": "S",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "42",
+    "NOMBRE": "42 PACO JIMENEZ",
+    "EMAIL": "PACOJIMENEZ@GRANJAMARIPEPA.COM",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "43",
+    "NOMBRE": "43 JAIME",
+    "EMAIL": "2043JAIME@GMAIL.COM",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "44",
+    "NOMBRE": "44 ROMERA",
+    "EMAIL": "romera2009gmp@gmail.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "45",
+    "NOMBRE": "ZZ 45 ALEJANDRO LOPEZ HERNANDEZ",
+    "EMAIL": "comercial45@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "46",
+    "NOMBRE": "46 FRANCISCO ANDRES SANCHEZ POVEDA",
+    "EMAIL": "peDIDOS@GRANJAMARIPEPA.COM",
+    "JEFE": "",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "48",
+    "NOMBRE": "48 RAMON PIERNAS",
+    "EMAIL": "ramongmp2000@gmail.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "49",
+    "NOMBRE": "49 JOSE ANGEL",
+    "EMAIL": "joseangelgmp@gmail.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "50",
+    "NOMBRE": "50 MARIANO MI├æARRO",
+    "EMAIL": "comercial50@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "51",
+    "NOMBRE": "ZZ 51 MIGUEL ANGEL GONZALEZ",
+    "EMAIL": "comercial51@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "52",
+    "NOMBRE": "ZZ 52 JAVIER MI├æARRO MENA",
+    "EMAIL": "comercial52@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "53",
+    "NOMBRE": "53 JUAN JOSE MARIN MARTINEZ",
+    "EMAIL": "COMERCIAL53@MARI-PEPA.COM",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "54",
+    "NOMBRE": "ZZ 54 ALAN ANTONIO VARGAS CABRERA",
+    "EMAIL": "alan@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "55",
+    "NOMBRE": "ZZ 55 MARIO HIDALGO ROS",
+    "EMAIL": "COMERCIAL55@MARI-PEPA.COM",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "56",
+    "NOMBRE": "56 JOSE ANTONIO SANCHEZ PADILLA",
+    "EMAIL": "joseantonio56gmp@gmail.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "57",
+    "NOMBRE": "57 DAVID MU├æOZ RODRIGUEZ",
+    "EMAIL": "comercial57@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "59",
+    "NOMBRE": "59 BRYAN DARIO ALVERCA DIAZ",
+    "EMAIL": "comercial59@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "63",
+    "NOMBRE": "63 PEDRO MARTINEZ",
+    "EMAIL": "PEDRO@GRANJAMARIPEPA.COM",
+    "JEFE": "",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "64",
+    "NOMBRE": "64 JOSE MARIA GARCIA ROMERO",
+    "EMAIL": "josemaria@mari-pepa.com",
+    "JEFE": "S",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "65",
+    "NOMBRE": "65 MARISOL",
+    "EMAIL": "MARISOL@MARI-PEPA.COM",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "66",
+    "NOMBRE": "66 ANTONIO SANCHEZ TEJEDOR",
+    "EMAIL": "comercial66@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "67",
+    "NOMBRE": "67 ANDREI FARCAS",
+    "EMAIL": "comercial67@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "68",
+    "NOMBRE": "68 CARMEN MARIA MARTINEZ MARTNEZ",
+    "EMAIL": "carmen@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "69",
+    "NOMBRE": "ZZ 69 MIGUEL SALAS",
+    "EMAIL": "comercial69@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "70",
+    "NOMBRE": "70 CASIANO",
+    "EMAIL": "comercial70@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "72",
+    "NOMBRE": "72 JOSE MIGUEL ACACIO",
+    "EMAIL": "josemiguel.acacio@mari-pepa.com",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "73",
+    "NOMBRE": "73 JOSE MIGUEL ANDUJAR",
+    "EMAIL": "josemiguel.andujar@mari-pepa.com",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "74",
+    "NOMBRE": "74 JULIO ANSELMO",
+    "EMAIL": "comercial74@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "75",
+    "NOMBRE": "75 ANGELO",
+    "EMAIL": "angelo@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "76",
+    "NOMBRE": "ZZ 76 JOSE MIGUEL GAZQUEZ MORALES",
+    "EMAIL": "gazquezmorales@yahoo.es",
+    "JEFE": "",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "77",
+    "NOMBRE": "ZZ 77 JUAN MANUEL DIAZ REQUENA",
+    "EMAIL": "juanmanuel@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "78",
+    "NOMBRE": "ZZ 78 EMILIO GOMEZ DEL AGUILA",
+    "EMAIL": "COMERCIAL76@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "79",
+    "NOMBRE": "79 FRANCISCO JAVIER (AL)",
+    "EMAIL": "comercial79@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "80",
+    "NOMBRE": "80 JUAN LUIS GALLEGO (AL)",
+    "EMAIL": "juanluis@granjamaripepa.com",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "81",
+    "NOMBRE": "81 ANDRES MARIA CRUZ MARTOS",
+    "EMAIL": "andresmgmp@gmail.com",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "83",
+    "NOMBRE": "83 JOSE ANTONIO SOLER FERRE (AL)",
+    "EMAIL": "JOSEANTONIOGMP@GMAIL.COM",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "84",
+    "NOMBRE": "84 MANUEL SILVA(AL)",
+    "EMAIL": "comercial84@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "85",
+    "NOMBRE": "ZZ 85 RAMON REQUENA (ALM)",
+    "EMAIL": "ramonrgmp@gmail.com",
+    "JEFE": "",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "86",
+    "NOMBRE": "86 JUAN DIEGO GARCIA LOPEZ",
+    "EMAIL": "COMERCIAL86@MARI-PEPA.COM",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "87",
+    "NOMBRE": "87 JOSE MARIA ARANA SANCHEZ",
+    "EMAIL": "comercial78@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "89",
+    "NOMBRE": "89 MIGUEL ANGEL TITO FRIAS",
+    "EMAIL": "comercial89@mari-pepa.com",
+    "JEFE": "",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "91",
+    "NOMBRE": "ZZ 91 JUAN FRANCISCO (MECANICO)",
+    "EMAIL": "juanfrancisco@granjamaripepa.com",
+    "JEFE": "",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "92",
+    "NOMBRE": "92 VANESA",
+    "EMAIL": "vanesa@mari-pepa.com",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "93",
+    "NOMBRE": "93 MARI CARMEN (TLV)",
+    "EMAIL": "maricarmen@granjamaripepa.com",
+    "JEFE": "N",
+    "REPARTO": "N"
+  },
+  {
+    "CODIGO": "94",
+    "NOMBRE": "94 JUAN JOSE GARCIA LORCA",
+    "EMAIL": "comercial94@mari-pepa.com",
+    "JEFE": "N",
+    "REPARTO": "S"
+  },
+  {
+    "CODIGO": "95",
+    "NOMBRE": "95 DOMINGO GARCIA",
+    "EMAIL": "domingogarcia@mari-pepa.com",
+    "JEFE": "N",
+    "REPARTO": ""
+  },
+  {
+    "CODIGO": "98",
+    "NOMBRE": "98 DIEGO (98)",
+    "EMAIL": "EA5HVT@GMAIL.COM",
+    "JEFE": "S",
+    "REPARTO": "S"
+  }
+]
+
+=== Tables with LATITUD+CODIGOCLIENTE ===
+[
+  {
+    "TABLE_NAME": "CACC"
+  },
+  {
+    "TABLE_NAME": "CACCL1"
+  },
+  {
+    "TABLE_NAME": "CACFIRMAS"
+  },
+  {
+    "TABLE_NAME": "CAPC"
+  },
+  {
+    "TABLE_NAME": "CAPCL1"
+  },
+  {
+    "TABLE_NAME": "CPC"
+  },
+  {
+    "TABLE_NAME": "CPC_BK1"
+  },
+  {
+    "TABLE_NAME": "CPC_BK2"
+  },
+  {
+    "TABLE_NAME": "CPCL1"
+  },
+  {
+    "TABLE_NAME": "CPCL2"
+  },
+  {
+    "TABLE_NAME": "CPK"
+  },
+  {
+    "TABLE_NAME": "CPKL1"
+  },
+  {
+    "TABLE_NAME": "CPRE"
+  },
+  {
+    "TABLE_NAME": "CPREL1"
+  },
+  {
+    "TABLE_NAME": "LOC"
+  },
+  {
+    "TABLE_NAME": "LOCL1"
+  },
+  {
+    "TABLE_NAME": "RHJ"
+  },
+  {
+    "TABLE_NAME": "RHJLOG"
+  },
+  {
+    "TABLE_NAME": "RHJLOGL1"
+  },
+  {
+    "TABLE_NAME": "RHJL1"
+  },
+  {
+    "TABLE_NAME": "TPG"
+  },
+  {
+    "TABLE_NAME": "TPGL1"
+  }
+]
+
+=== CLX email cols sample ===
+[
+  {
+    "COLUMN_NAME": "CORREOALBARANCREDIDOPDF"
+  },
+  {
+    "COLUMN_NAME": "CORREOELECTRONICOALBARANES"
+  },
+  {
+    "COLUMN_NAME": "CORREOELECTRONICOCLIENTE"
+  },
+  {
+    "COLUMN_NAME": "CORREOELECTRONICOGERENTE"
+  },
+  {
+    "COLUMN_NAME": "CORREOELECTRONICORESPONSABLE"
+  },
+  {
+    "COLUMN_NAME": "CORREOENDOSOSPDF"
+  },
+  {
+    "COLUMN_NAME": "CORREOFACTURACONTADOPDF"
+  },
+  {
+    "COLUMN_NAME": "CORREOFACTURACREDITOPDF"
+  },
+  {
+    "COLUMN_NAME": "CORREOWEBINTRANET"
+  },
+  {
+    "COLUMN_NAME": "ENVIARCORREOSN"
+  }
+]
+
+=== CRUT notes/obs columns ===
+[
+  {
+    "COLUMN_NAME": "OBSERVACIONESREPARTO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60,
+    "COLUMN_TEXT": "ObservacionesReparto                        T8OBSE"
+  }
+]

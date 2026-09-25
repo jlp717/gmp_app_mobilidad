@@ -1,0 +1,341 @@
+path,size,mtime,header,db2_write,guard_bypass,clase,justificacion,proposed_path
+backend/scripts/_append-comercial-hit-sample.js,n/a,n/a,header-no-leido;_scratch-hit,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored (.gitignore:198); hit comercial un solo uso,archive/oneoff/_append-comercial-hit-sample.js
+backend/scripts/_append-test-cac-pag.js,n/a,n/a,header-no-leido;_scratch-append,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; append puntual test CAC/PAG,archive/oneoff/_append-test-cac-pag.js
+backend/scripts/_append-test-hit-scope.js,n/a,n/a,header-no-leido;_scratch-append,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; append puntual alcance hit,archive/oneoff/_append-test-hit-scope.js
+backend/scripts/_apply_039_notifications.js,n/a,n/a,header-no-leido;_scratch-apply-039,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; aplicacion puntual migracion 039 notificaciones,archive/oneoff/_apply_039_notifications.js
+backend/scripts/_backfill_test_ingresos_created_at.js,n/a,n/a,header-no-leido;_scratch-backfill,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; backfill puntual TEST ingresos created_at,archive/oneoff/_backfill_test_ingresos_created_at.js
+backend/scripts/_bolsa-mov-probe.js,n/a,n/a,header-no-leido;_scratch-probe,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual movimientos bolsa,archive/oneoff/_bolsa-mov-probe.js
+backend/scripts/_bootstrap_missing_test_objects.js,n/a,n/a,header-no-leido;_scratch-bootstrap,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; bootstrap puntual objetos test faltantes,archive/oneoff/_bootstrap_missing_test_objects.js
+backend/scripts/_cert_field_gaps.js,n/a,n/a,header-no-leido;_scratch-cert,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; gaps campos certificacion puntual,archive/oneoff/_cert_field_gaps.js
+backend/scripts/_check_test_tables.js,n/a,n/a,header-no-leido;_scratch-check,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; check puntual tablas test,archive/oneoff/_check_test_tables.js
+backend/scripts/_count-test-after-hit.js,n/a,n/a,header-no-leido;_scratch-count,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; conteo puntual post-hit,archive/oneoff/_count-test-after-hit.js
+backend/scripts/_create_rutero_orden_test_table.js,n/a,n/a,header-no-leido;_scratch-ddl,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; DDL puntual tabla test rutero orden,archive/oneoff/_create_rutero_orden_test_table.js
+backend/scripts/_e2e_align_test_cobros_ledger.js,n/a,n/a,header-no-leido;_scratch-e2e,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; e2e puntual ledger cobros test,archive/oneoff/_e2e_align_test_cobros_ledger.js
+backend/scripts/_e2e_diego98_reparto_probe.js,n/a,n/a,header-no-leido;_scratch-e2e,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; e2e puntual probe diego98,archive/oneoff/_e2e_diego98_reparto_probe.js
+backend/scripts/_e2e_dual_jwt_reparto.js,n/a,n/a,header-no-leido;_scratch-e2e,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; e2e puntual dual JWT,archive/oneoff/_e2e_dual_jwt_reparto.js
+backend/scripts/_e2e_extra_tabs.js,n/a,n/a,header-no-leido;_scratch-e2e,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; e2e puntual tabs extra,archive/oneoff/_e2e_extra_tabs.js
+backend/scripts/_e2e_history_signature_probe.js,n/a,n/a,header-no-leido;_scratch-e2e,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; e2e puntual firma historico,archive/oneoff/_e2e_history_signature_probe.js
+backend/scripts/_e2e_hist_retry.js,n/a,n/a,header-no-leido;_scratch-e2e,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; e2e puntual reintento historico,archive/oneoff/_e2e_hist_retry.js
+backend/scripts/_e2e_inspect_evidencias.js,n/a,n/a,header-no-leido;_scratch-e2e,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; inspeccion puntual evidencias,archive/oneoff/_e2e_inspect_evidencias.js
+backend/scripts/_e2e_inspect_reparto_schema.js,n/a,n/a,header-no-leido;_scratch-e2e,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; inspeccion puntual schema reparto,archive/oneoff/_e2e_inspect_reparto_schema.js
+backend/scripts/_e2e_perfil_reparto_probe.js,n/a,n/a,header-no-leido;_scratch-e2e,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; e2e puntual perfil reparto,archive/oneoff/_e2e_perfil_reparto_probe.js
+backend/scripts/_e2e_perfil_reparto_writes.js,n/a,n/a,header-no-leido;_scratch-e2e-write,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; e2e puntual escrituras perfil (solo test),archive/oneoff/_e2e_perfil_reparto_writes.js
+backend/scripts/_e2e_post_confirm_overlay.js,n/a,n/a,header-no-leido;_scratch-e2e,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; e2e puntual overlay post-confirm,archive/oneoff/_e2e_post_confirm_overlay.js
+backend/scripts/_e2e_probe_evidence_insert.js,n/a,n/a,header-no-leido;_scratch-e2e-write,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; e2e puntual insert evidencia test,archive/oneoff/_e2e_probe_evidence_insert.js
+backend/scripts/_e2e_reparto_boss_gate.js,n/a,n/a,header-no-leido;_scratch-e2e,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; e2e puntual boss gate,archive/oneoff/_e2e_reparto_boss_gate.js
+backend/scripts/_fix_finanzas_logger.js,n/a,n/a,header-no-leido;_scratch-fix,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; fix puntual logger finanzas,archive/oneoff/_fix_finanzas_logger.js
+backend/scripts/_fix_historico_cycle.js,n/a,n/a,header-no-leido;_scratch-fix,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; fix puntual ciclo historico,archive/oneoff/_fix_historico_cycle.js
+backend/scripts/_fix_historico_status.js,n/a,n/a,header-no-leido;_scratch-fix,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; fix puntual estado historico,archive/oneoff/_fix_historico_status.js
+backend/scripts/_fix_outbox_id_route.js,n/a,n/a,header-no-leido;_scratch-fix,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; fix puntual ruta outbox id,archive/oneoff/_fix_outbox_id_route.js
+backend/scripts/_fix_role_corbalan.js,n/a,n/a,header-no-leido;_scratch-fix,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; fix puntual rol corbalan,archive/oneoff/_fix_role_corbalan.js
+backend/scripts/_hit-bolsa-confirm-write.js,n/a,n/a,header-no-leido;_scratch-hit-write,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; hit puntual escritura confirma bolsa test,archive/oneoff/_hit-bolsa-confirm-write.js
+backend/scripts/_hit-draft-purge-24h.js,n/a,n/a,header-no-leido;_scratch-hit,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; hit puntual purga borradores 24h,archive/oneoff/_hit-draft-purge-24h.js
+backend/scripts/_hit-liquidacion-test-cobros.js,n/a,n/a,header-no-leido;_scratch-hit,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; hit puntual liquidacion cobros test,archive/oneoff/_hit-liquidacion-test-cobros.js
+backend/scripts/_hit-rutero-verde-api.js,n/a,n/a,header-no-leido;_scratch-hit,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; hit puntual API rutero verde,archive/oneoff/_hit-rutero-verde-api.js
+backend/scripts/_hit-rutero-verde-seed.js,n/a,n/a,header-no-leido;_scratch-hit-seed,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; hit puntual seed rutero verde,archive/oneoff/_hit-rutero-verde-seed.js
+backend/scripts/_inspect-test-pg-sample.js,n/a,n/a,header-no-leido;_scratch-inspect,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; inspect puntual muestra PG test,archive/oneoff/_inspect-test-pg-sample.js
+backend/scripts/_inspect-test-pg.js,n/a,n/a,header-no-leido;_scratch-inspect,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; inspect puntual PG test,archive/oneoff/_inspect-test-pg.js
+backend/scripts/_inspect_commission_tiers.js,n/a,n/a,header-no-leido;_scratch-inspect,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; inspect puntual tiers comision,archive/oneoff/_inspect_commission_tiers.js
+backend/scripts/_inventory_reparto_sources.js,n/a,n/a,header-no-leido;_scratch-inventory,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; inventario puntual fuentes reparto (superado por WS1),archive/oneoff/_inventory_reparto_sources.js
+backend/scripts/_inventory_table_mappings.js,n/a,n/a,header-no-leido;_scratch-inventory,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; inventario puntual mapeos tablas (superado por WS1),archive/oneoff/_inventory_table_mappings.js
+backend/scripts/_login-probe.js,n/a,n/a,header-no-leido;_scratch-probe,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual login,archive/oneoff/_login-probe.js
+backend/scripts/_login_role_probe.js,n/a,n/a,header-no-leido;_scratch-probe,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual rol login,archive/oneoff/_login_role_probe.js
+backend/scripts/_parse_pm2_reparto.js,n/a,n/a,header-no-leido;_scratch-parse,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; parse puntual PM2 reparto,archive/oneoff/_parse_pm2_reparto.js
+backend/scripts/_patch-cobros-repo.js,n/a,n/a,header-no-leido;_scratch-patch,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; parche puntual repo cobros v1,archive/oneoff/_patch-cobros-repo.js
+backend/scripts/_patch-cobros-repo2.js,n/a,n/a,header-no-leido;_scratch-patch,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; parche puntual repo cobros v2,archive/oneoff/_patch-cobros-repo2.js
+backend/scripts/_patch-cobros-repo3.js,n/a,n/a,header-no-leido;_scratch-patch,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; parche puntual repo cobros v3,archive/oneoff/_patch-cobros-repo3.js
+backend/scripts/_patch-cobros-repo4.js,n/a,n/a,header-no-leido;_scratch-patch,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; parche puntual repo cobros v4,archive/oneoff/_patch-cobros-repo4.js
+backend/scripts/_patch-cobros-repo5.js,n/a,n/a,header-no-leido;_scratch-patch,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; parche puntual repo cobros v5,archive/oneoff/_patch-cobros-repo5.js
+backend/scripts/_print_mint_meta.js,n/a,n/a,header-no-leido;_scratch-mint,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; impresion puntual meta mint,archive/oneoff/_print_mint_meta.js
+backend/scripts/_probe-bolsa-backfill-discounted.js,n/a,n/a,header-no-leido;_scratch-probe,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual backfill bolsa descontada,archive/oneoff/_probe-bolsa-backfill-discounted.js
+backend/scripts/_probe-bolsa-liq-cobros-reverify.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual reverificacion bolsa-liq-cobros,archive/oneoff/_probe-bolsa-liq-cobros-reverify.js
+backend/scripts/_probe-bolsa-write-hit.js,n/a,n/a,header-no-leido;_scratch-probe-write,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual escritura bolsa test,archive/oneoff/_probe-bolsa-write-hit.js
+backend/scripts/_probe-cobros-sample.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual muestra cobros,archive/oneoff/_probe-cobros-sample.js
+backend/scripts/_probe-confirmados-fechareparto.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual confirmados fechareparto,archive/oneoff/_probe-confirmados-fechareparto.js
+backend/scripts/_probe-liq-cobros-cols.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual columnas liq-cobros,archive/oneoff/_probe-liq-cobros-cols.js
+backend/scripts/_probe-liq-cobros-evidence.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual evidencia liq-cobros,archive/oneoff/_probe-liq-cobros-evidence.js
+backend/scripts/_probe-pedido67-bolsa.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual pedido67 bolsa,archive/oneoff/_probe-pedido67-bolsa.js
+backend/scripts/_probe-senior-verdict-claims.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual veredicto claims,archive/oneoff/_probe-senior-verdict-claims.js
+backend/scripts/_probe_albaran_detail.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual detalle albaran,archive/oneoff/_probe_albaran_detail.js
+backend/scripts/_probe_appusuarios.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual appusuarios,archive/oneoff/_probe_appusuarios.js
+backend/scripts/_probe_commercial_rutero_live.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual rutero comercial (lectura),archive/oneoff/_probe_commercial_rutero_live.js
+backend/scripts/_probe_corbalan.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual corbalan,archive/oneoff/_probe_corbalan.js
+backend/scripts/_probe_cvc_lqd_firmas.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual firmas CVC/LQD,archive/oneoff/_probe_cvc_lqd_firmas.js
+backend/scripts/_probe_decimal_qty.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual cantidades decimales,archive/oneoff/_probe_decimal_qty.js
+backend/scripts/_probe_dim_vendedor.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual dim vendedor,archive/oneoff/_probe_dim_vendedor.js
+backend/scripts/_probe_emails_fix.js,n/a,n/a,header-no-leido;_scratch-probe,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual fix emails,archive/oneoff/_probe_emails_fix.js
+backend/scripts/_probe_emails_v2.js,n/a,n/a,header-no-leido;_scratch-probe,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual emails v2,archive/oneoff/_probe_emails_v2.js
+backend/scripts/_probe_finanzas_tabs.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual tabs finanzas,archive/oneoff/_probe_finanzas_tabs.js
+backend/scripts/_probe_gps_lac.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual GPS LAC,archive/oneoff/_probe_gps_lac.js
+backend/scripts/_probe_javier_table_sizes.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual tamanos tablas JAVIER,archive/oneoff/_probe_javier_table_sizes.js
+backend/scripts/_probe_lqd_indexes.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual indices LQD,archive/oneoff/_probe_lqd_indexes.js
+backend/scripts/_probe_lqd_insert.js,n/a,n/a,header-no-leido;_scratch-probe-write,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual insert LQD test,archive/oneoff/_probe_lqd_insert.js
+backend/scripts/_probe_lqd_overlap.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual solape LQD,archive/oneoff/_probe_lqd_overlap.js
+backend/scripts/_probe_notification_emails_hours.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual emails notificacion,archive/oneoff/_probe_notification_emails_hours.js
+backend/scripts/_probe_readiness_data.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual datos readiness,archive/oneoff/_probe_readiness_data.js
+backend/scripts/_probe_rutero_orden.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual orden rutero,archive/oneoff/_probe_rutero_orden.js
+backend/scripts/_probe_table_name_mapping.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual mapeo nombres tabla,archive/oneoff/_probe_table_name_mapping.js
+backend/scripts/_probe_targets_safe.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual targets safe v1,archive/oneoff/_probe_targets_safe.js
+backend/scripts/_probe_targets_safe2.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual targets safe v2,archive/oneoff/_probe_targets_safe2.js
+backend/scripts/_probe_test_cols.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual columnas test,archive/oneoff/_probe_test_cols.js
+backend/scripts/_probe_test_seed_counts.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual conteos seed test,archive/oneoff/_probe_test_seed_counts.js
+backend/scripts/_rebuild-test-lqd-pmrc.js,n/a,n/a,header-no-leido;_scratch-rebuild,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; rebuild puntual LQD/PMRC test,archive/oneoff/_rebuild-test-lqd-pmrc.js
+backend/scripts/_receipt_capability_diag.js,n/a,n/a,header-no-leido;_scratch-diag,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; diagnostico puntual capability recibos,archive/oneoff/_receipt_capability_diag.js
+backend/scripts/_receipt_retry.js,n/a,n/a,header-no-leido;_scratch-retry,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; reintento puntual recibos,archive/oneoff/_receipt_retry.js
+backend/scripts/_repair_finance_repo.js,n/a,n/a,header-no-leido;_scratch-repair,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; reparacion puntual repo finanzas,archive/oneoff/_repair_finance_repo.js
+backend/scripts/_repartidor-flag-probe.js,n/a,n/a,header-no-leido;_scratch-probe,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; probe puntual flag repartidor,archive/oneoff/_repartidor-flag-probe.js
+backend/scripts/_reparto_audit_followup.js,n/a,n/a,header-no-leido;_scratch-audit,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; seguimiento puntual auditoria reparto,archive/oneoff/_reparto_audit_followup.js
+backend/scripts/_reparto_full_endpoint_audit.js,n/a,n/a,header-no-leido;_scratch-audit,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; auditoria puntual endpoints reparto,archive/oneoff/_reparto_full_endpoint_audit.js
+backend/scripts/_restore_carlos_30.js,n/a,n/a,header-no-leido;_scratch-restore,YES,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; restauracion puntual caso carlos 30,archive/oneoff/_restore_carlos_30.js
+backend/scripts/_server-gap-check.js,n/a,n/a,header-no-leido;_scratch-check,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; check puntual gaps servidor,archive/oneoff/_server-gap-check.js
+backend/scripts/_ssh_mint_repartidor_jwt.js,n/a,n/a,header-no-leido;_scratch-ssh-mint,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; mint puntual JWT repartidor via SSH,archive/oneoff/_ssh_mint_repartidor_jwt.js
+backend/scripts/_tmp-count-test-copy.js,n/a,n/a,header-no-leido;_scratch-tmp,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; conteo puntual copia test,archive/oneoff/_tmp-count-test-copy.js
+backend/scripts/_tmp-emulator-7flows.js,n/a,n/a,header-no-leido;_scratch-tmp,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; flujos emulador puntuales 7flows,archive/oneoff/_tmp-emulator-7flows.js
+backend/scripts/_tmp-tunnel-7flows.js,n/a,n/a,header-no-leido;_scratch-tmp,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; tunel puntual 7flows,archive/oneoff/_tmp-tunnel-7flows.js
+backend/scripts/_validate_reparto_runtime.js,n/a,n/a,header-no-leido;_scratch-validate,NO,N-A,ARCHIVE-ONEOFF,_-scratch gitignored; validacion puntual runtime reparto (canon vive en backend/config),archive/oneoff/_validate_reparto_runtime.js
+backend/scripts/agent1-dsedac-discovery.js,n/a,n/a,const odbc=require('odbc'),NO,NO,TOOL-REUSABLE,descubrimiento DSEDAC solo lectura; reutilizable para WS inventario,tools/agent1-dsedac-discovery.js
+backend/scripts/agent3-column-mapping.js,n/a,n/a,const odbc=require('odbc'),NO,NO,TOOL-REUSABLE,mapeo columnas solo lectura; reutilizable alineamiento,tools/agent3-column-mapping.js
+backend/scripts/align-javier-dsedac-additive.js,n/a,n/a,const odbc=require('odbc')+ALTER JAVIER,YES,YES-sin-guard,TOOL-REUSABLE,ref package.json db2:align-javier-dsedac; DDL aditivo solo JAVIER (nunca DSEDAC),tools/align-javier-dsedac-additive.js
+backend/scripts/apply-bolsa-pricing-config.js,n/a,n/a,CREATE TABLE JAVIER.BOLSA_PRODUCTO_PRECIO,YES,YES-sin-guard,UNCLEAR-RISKY,crea tabla pricing + writes sin guard; revisar alcance prod antes de archivar,review/risky/apply-bolsa-pricing-config.js
+backend/scripts/apply-laclae-monthly.js,n/a,n/a,INSERT/UPDATE/DELETE/DROP JAVIER.LACLAE_MONTHLY,YES,YES-sin-guard,UNCLEAR-RISKY,contiene DELETE/DROP TABLE + INSERT segun grep; uso mensual con bypass posible,review/risky/apply-laclae-monthly.js
+backend/scripts/apply-objetivos-2026-ago-dic.js,n/a,n/a,UPDATE/INSERT JAVIER.COMMERCIAL_TARGETS,YES,YES-sin-guard,UNCLEAR-RISKY,UPDATE+INSERT directos segun grep; ventana ago-dic-2026 ligada a temp/,review/risky/apply-objetivos-2026-ago-dic.js
+backend/scripts/apply-test-talon-ddl.js,n/a,n/a,ALTER TABLE ... ADD COLUMN (TEST),YES,NO,TOOL-REUSABLE,DDL acotado a tablas TEST_*; reutilizable talon,tools/apply-test-talon-ddl.js
+backend/scripts/audit-api-live-readonly.js,n/a,n/a,header-no-leido;audit-readonly,NO,NO,TOOL-REUSABLE,nombre y patron readonly; auditoria API reutilizable,tools/audit-api-live-readonly.js
+backend/scripts/audit-commercial-cobros-readonly.js,n/a,n/a,const odbc=require('odbc')+readonly,NO,NO,TOOL-REUSABLE,ref package.json db2:audit-commercial-cobros; reconcilia DSEDAC.CVC en lectura,tools/audit-commercial-cobros-readonly.js
+backend/scripts/audit-keysets-readonly.js,n/a,n/a,const odbc=require('odbc'),NO,NO,TOOL-REUSABLE,patron readonly keysets; reutilizable,tools/audit-keysets-readonly.js
+backend/scripts/benchmark-endpoints.js,n/a,n/a,header-no-leido;benchmark,NO,N-A,ARCHIVE-ONEOFF,benchmark puntual endpoints; sin reuso previsto,archive/oneoff/benchmark-endpoints.js
+backend/scripts/capture-families-api-contract.js,n/a,n/a,header-no-leido;capture-contract,NO,N-A,ARCHIVE-ONEOFF,captura puntual contrato familias API,archive/oneoff/capture-families-api-contract.js
+backend/scripts/cert-mandate-probe.js,n/a,n/a,header-no-leido;cert-probe+odbcErrors,UNKNOWN,YES-sin-guard,UNCLEAR-RISKY,probe mandato con acceso DB2 y sin guard; alcance incierto,review/risky/cert-mandate-probe.js
+backend/scripts/cert-matrix-audit.js,n/a,n/a,const odbc + DELETE FROM DSEDAC.CRC,YES,YES-sin-guard,UNCLEAR-RISKY,"grep: DELETE FROM DSEDAC.CRC (linea 338) + DELETE JAVIER.COBROS; ESCRIBE ERP SIN assertNoDsedacWrite; maximo riesgo",review/risky/cert-matrix-audit.js
+backend/scripts/certify-reparto-confirm-local.js,n/a,n/a,header-no-leido;certify-confirm,YES,YES-sin-guard,UNCLEAR-RISKY,certifica confirmaciones (posible write) sin guard visible,review/risky/certify-reparto-confirm-local.js
+backend/scripts/check-auth-pin-readiness.js,n/a,n/a,header-no-leido;check-readiness,NO,NO,TOOL-REUSABLE,check readiness PIN sin writes; reutilizable,tools/check-auth-pin-readiness.js
+backend/scripts/check-cpc-join.js,n/a,n/a,const odbc + SELECT DSEDAC.CVC/CPC,NO,NO,TOOL-REUSABLE,verificacion joins CVC/CPC solo lectura,tools/check-cpc-join.js
+backend/scripts/check-firmas-columns.js,n/a,n/a,const odbc + requireEnv ODBC,NO,NO,TOOL-REUSABLE,check columnas firmas solo lectura con env,tools/check-firmas-columns.js
+backend/scripts/check-vendor-05.js,n/a,n/a,header-no-leido;check-vendor,NO,NO,TOOL-REUSABLE,check puntual vendor 05 lectura; reutilizable,tools/check-vendor-05.js
+backend/scripts/check_config_data.js,n/a,n/a,header-no-leido;check-config,NO,NO,TOOL-REUSABLE,check datos configuracion lectura,tools/check_config_data.js
+backend/scripts/cleanup-repartidor-finance-test-data.js,n/a,n/a,Uso: node scripts/cleanup...,YES,NO,TOOL-REUSABLE,ref package.json finance:cleanup; borra solo datos TEST por idempotency_token,tools/cleanup-repartidor-finance-test-data.js
+backend/scripts/commercial-readiness-battery.js,n/a,n/a,const odbc + dbConnect,NO,NO,TOOL-REUSABLE,bateria readiness reutilizable (pool-first ODBC opcional),tools/commercial-readiness-battery.js
+backend/scripts/commercial-test-aux-tables.js,n/a,n/a,CREATE/ALTER TABLE JAVIER.TEST_*,YES,NO,TOOL-REUSABLE,DDL acotado TEST_* (LIKE + PK/UNIQUE); reutilizable seed comercial,tools/commercial-test-aux-tables.js
+backend/scripts/compare-javier-dsedac-alignment.js,n/a,n/a,const odbc + ALTER generados,YES,YES-sin-guard,TOOL-REUSABLE,ref package.json; genera ALTER aditivos JAVIER (referencia pilar2-catalog-audit),tools/compare-javier-dsedac-alignment.js
+backend/scripts/compare-schemas.js,n/a,n/a,const odbc + pool query,NO,NO,TOOL-REUSABLE,comparacion schemas solo lectura,tools/compare-schemas.js
+backend/scripts/copy-comercial-erp-to-test.js,n/a,n/a,INSERT INTO JAVIER.TEST_* SELECT FROM DSEDAC,YES,NO,TOOL-REUSABLE,copia ERP->TEST (CREATE LIKE + INSERT SELECT + DELETE dest); nunca escribe DSEDAC segun header,tools/copy-comercial-erp-to-test.js
+backend/scripts/copy-javier-prod-to-test.js,n/a,n/a,ERP_CVC=DSEDAC.CVC lectura,YES,NO,TOOL-REUSABLE,copia PROD->TEST buffers JAVIER; lectura ERP,tools/copy-javier-prod-to-test.js
+backend/scripts/create_v_dim_cliente.js,n/a,n/a,header-no-leido;odbcErrors+CREATE VIEW,YES,YES-sin-guard,UNCLEAR-RISKY,crea vista dimension cliente en DB2 sin guard visible,review/risky/create_v_dim_cliente.js
+backend/scripts/db2-connection.js,n/a,n/a,ODBC_DSN/UID env helper,NO,NO,TOOL-REUSABLE,helper conexion DB2 por env; reutilizable,tools/db2-connection.js
+backend/scripts/db2_inventory.js,n/a,n/a,header-no-leido;inventory,NO,NO,TOOL-REUSABLE,inventario DB2 lectura; reutilizable,tools/db2_inventory.js
+backend/scripts/db2_inventory2.js,n/a,n/a,header-no-leido;inventory,NO,NO,TOOL-REUSABLE,inventario DB2 lectura v2,tools/db2_inventory2.js
+backend/scripts/db2_inventory3.js,n/a,n/a,header-no-leido;inventory,NO,NO,TOOL-REUSABLE,inventario DB2 lectura v3,tools/db2_inventory3.js
+backend/scripts/db2_inventory4.js,n/a,n/a,DSEDAC.CRCB SITUACION lectura,NO,NO,TOOL-REUSABLE,inventario DB2 lectura v4 (CRCB situacion),tools/db2_inventory4.js
+backend/scripts/db_create_indexes.js,n/a,n/a,header-no-leido;create-indexes,YES,YES-sin-guard,UNCLEAR-RISKY,crea indices en DB2 sin gate visible; revisar target schema,review/risky/db_create_indexes.js
+backend/scripts/demo-smoke-pedidos-cobros-bolsa.js,n/a,n/a,SELECT DSEDAC.CVC lectura,NO,N-A,ARCHIVE-ONEOFF,smoke demo puntual pedidos/cobros/bolsa,archive/oneoff/demo-smoke-pedidos-cobros-bolsa.js
+backend/scripts/diagnose-cpc-join.js,n/a,n/a,header-no-leido;diagnose,NO,NO,TOOL-REUSABLE,diagnostico join CPC lectura,tools/diagnose-cpc-join.js
+backend/scripts/diagnose-ddl.js,n/a,n/a,header-no-leido;diagnose-ddl,NO,NO,TOOL-REUSABLE,diagnostico DDL lectura,tools/diagnose-ddl.js
+backend/scripts/diag_vendor05.js,n/a,n/a,header-no-leido;diag,NO,NO,TOOL-REUSABLE,diagnostico vendor05 lectura,tools/diag_vendor05.js
+backend/scripts/discover-dsedac-columns.js,n/a,n/a,header-no-leido;discover,NO,NO,TOOL-REUSABLE,descubrimiento columnas DSEDAC lectura,tools/discover-dsedac-columns.js
+backend/scripts/discover-vista-unificada.js,n/a,n/a,header-no-leido;discover,NO,NO,TOOL-REUSABLE,descubrimiento vista unificada lectura,tools/discover-vista-unificada.js
+backend/scripts/ensure-comercial-test-ddl.js,n/a,n/a,header-no-leido;ensure-ddl-TEST,YES,NO,TOOL-REUSABLE,asegura DDL comercial TEST; reutilizable,tools/ensure-comercial-test-ddl.js
+backend/scripts/ensure-missing-reparto-ddl.js,n/a,n/a,header-no-leido;ensure-ddl,YES,NO,TOOL-REUSABLE,asegura DDL reparto faltante; reutilizable,tools/ensure-missing-reparto-ddl.js
+backend/scripts/ensure-test-commission-tiers.js,n/a,n/a,header-no-leido;ensure-tiers,YES,NO,TOOL-REUSABLE,asegura tiers comision test; reutilizable,tools/ensure-test-commission-tiers.js
+backend/scripts/erp_cobros_inventory.js,n/a,n/a,header-no-leido;inventory,NO,NO,TOOL-REUSABLE,inventario cobros ERP lectura,tools/erp_cobros_inventory.js
+backend/scripts/erp_diff_condensed.js,n/a,n/a,header-no-leido;diff,NO,NO,TOOL-REUSABLE,diff ERP condensado lectura,tools/erp_diff_condensed.js
+backend/scripts/execute-javier-dsedac-alignment.js,n/a,n/a,header-no-leido;execute-alignment,YES,YES-sin-guard,UNCLEAR-RISKY,EJECUTA alineamiento (no solo genera); sin guard visible,review/risky/execute-javier-dsedac-alignment.js
+backend/scripts/execute-vista-unificada.js,n/a,n/a,header-no-leido;execute-vista,YES,YES-sin-guard,UNCLEAR-RISKY,EJECUTA vista unificada en DB2; sin guard visible,review/risky/execute-vista-unificada.js
+backend/scripts/explore_tables.ts,n/a,n/a,header-no-leido;explore-ts,NO,N-A,ARCHIVE-ONEOFF,exploracion TS puntual (gitignored explore_*),archive/oneoff/explore_tables.ts
+backend/scripts/final-objectives.js,n/a,n/a,header-no-leido;final-objectives,UNKNOWN,N-A,ARCHIVE-ONEOFF,objetivos finales puntuales (corte ago-dic),archive/oneoff/final-objectives.js
+backend/scripts/find-dsedac-equivalents.js,n/a,n/a,header-no-leido;find-equivalents,NO,NO,TOOL-REUSABLE,busqueda equivalentes DSEDAC lectura,tools/find-dsedac-equivalents.js
+backend/scripts/find-limite-riesgo.js,n/a,n/a,header-no-leido;find-limite,NO,N-A,ARCHIVE-ONEOFF,busqueda puntual limite riesgo,archive/oneoff/find-limite-riesgo.js
+backend/scripts/find-physical-files.js,n/a,n/a,header-no-leido;find-files,NO,N-A,ARCHIVE-ONEOFF,busqueda puntual ficheros fisicos,archive/oneoff/find-physical-files.js
+backend/scripts/find_comerciales.ts,n/a,n/a,header-no-leido;find-ts,NO,N-A,ARCHIVE-ONEOFF,busqueda TS puntual comerciales (gitignored find_*),archive/oneoff/find_comerciales.ts
+backend/scripts/find_vendedores.ts,n/a,n/a,header-no-leido;find-ts,NO,N-A,ARCHIVE-ONEOFF,busqueda TS puntual vendedores (gitignored find_*),archive/oneoff/find_vendedores.ts
+backend/scripts/fix-agosto-2026-r1-weights.js,n/a,n/a,header-no-leido;fix-weights,YES,N-A,ARCHIVE-ONEOFF,fix puntual pesos agosto-2026 R1; ventana cerrada,archive/oneoff/fix-agosto-2026-r1-weights.js
+backend/scripts/fix_main_shell.py,n/a,n/a,header-no-leido;fix-py,UNKNOWN,N-A,ARCHIVE-ONEOFF,fix puntual shell en python; un solo uso,archive/oneoff/fix_main_shell.py
+backend/scripts/full-schema-audit.js,n/a,n/a,header-no-leido;schema-audit,NO,NO,TOOL-REUSABLE,auditoria completa schema lectura,tools/full-schema-audit.js
+backend/scripts/generate_align_migration.js,n/a,n/a,header-no-leido;generate-migration,NO,NO,TOOL-REUSABLE,generador migracion alineamiento (emite SQL sin ejecutar),tools/generate_align_migration.js
+backend/scripts/generate-pedidos-schema-align-sql.js,n/a,n/a,header-no-leido;generate-sql,NO,NO,TOOL-REUSABLE,ref package.json; generador SQL alineamiento pedidos,tools/generate-pedidos-schema-align-sql.js
+backend/scripts/generate-vista-deuda-completa.js,n/a,n/a,header-no-leido;generate-vista,NO,NO,TOOL-REUSABLE,generador vista deuda completa (emite SQL),tools/generate-vista-deuda-completa.js
+backend/scripts/generate-vista-deuda-final.js,n/a,n/a,header-no-leido;generate-vista,NO,NO,TOOL-REUSABLE,generador vista deuda final (filtro CPC canon),tools/generate-vista-deuda-final.js
+backend/scripts/generate-vista-unificada-sql.js,n/a,n/a,header-no-leido;generate-sql,NO,NO,TOOL-REUSABLE,generador SQL vista unificada,tools/generate-vista-unificada-sql.js
+backend/scripts/hit-comercial-huecos.js,n/a,n/a,header-no-leido;hit-comercial,UNKNOWN,N-A,ARCHIVE-ONEOFF,hit puntual huecos comercial,archive/oneoff/hit-comercial-huecos.js
+backend/scripts/hit-comercial-isolated-test.js,n/a,n/a,header-no-leido;hit-comercial,UNKNOWN,N-A,ARCHIVE-ONEOFF,hit puntual comercial isolated test,archive/oneoff/hit-comercial-isolated-test.js
+backend/scripts/hit-comercial-lac-select.js,n/a,n/a,header-no-leido;hit-comercial,UNKNOWN,N-A,ARCHIVE-ONEOFF,hit puntual comercial LAC select,archive/oneoff/hit-comercial-lac-select.js
+backend/scripts/hit-comercial-perfil-completo.js,n/a,n/a,header-no-leido;hit-comercial,UNKNOWN,N-A,ARCHIVE-ONEOFF,hit puntual perfil completo,archive/oneoff/hit-comercial-perfil-completo.js
+backend/scripts/hit-comercial-presentacion.js,n/a,n/a,header-no-leido;hit-comercial,UNKNOWN,N-A,ARCHIVE-ONEOFF,hit puntual presentacion,archive/oneoff/hit-comercial-presentacion.js
+backend/scripts/hit-comercial-tabs-rest.js,n/a,n/a,header-no-leido;hit-comercial,UNKNOWN,N-A,ARCHIVE-ONEOFF,hit puntual tabs rest,archive/oneoff/hit-comercial-tabs-rest.js
+backend/scripts/hit-commercial-demo-strict.js,n/a,n/a,header-no-leido;hit-demo,UNKNOWN,N-A,ARCHIVE-ONEOFF,hit puntual demo estricta,archive/oneoff/hit-commercial-demo-strict.js
+backend/scripts/hit-emulator-comercial-ui.js,n/a,n/a,EditText password=false/true (UI),NO,N-A,ARCHIVE-ONEOFF,automatizacion UI emulador puntual; sin secreto hardcodeado (verificado),archive/oneoff/hit-emulator-comercial-ui.js
+backend/scripts/hit-laclae-live-vs-test.js,n/a,n/a,header-no-leido;hit-laclae,UNKNOWN,N-A,ARCHIVE-ONEOFF,hit puntual LACLAE live vs test,archive/oneoff/hit-laclae-live-vs-test.js
+backend/scripts/hit-objectives-evolution-98.js,n/a,n/a,header-no-leido;hit-objectives,UNKNOWN,N-A,ARCHIVE-ONEOFF,hit puntual evolucion objetivos 98,archive/oneoff/hit-objectives-evolution-98.js
+backend/scripts/hit-reparto-almacen-latency.js,n/a,n/a,header-no-leido;hit-latency,NO,N-A,ARCHIVE-ONEOFF,hit puntual latencia almacen,archive/oneoff/hit-reparto-almacen-latency.js
+backend/scripts/hit-ssh-pin-file.js,n/a,n/a,header-no-leido;hit-ssh,UNKNOWN,N-A,ARCHIVE-ONEOFF,hit puntual PIN via SSH,archive/oneoff/hit-ssh-pin-file.js
+backend/scripts/import-bolsa-pricing-from-erp.js,n/a,n/a,header-no-leido;import-pricing,YES,YES-sin-guard,UNCLEAR-RISKY,importa pricing ERP->bolsa (write) sin guard visible,review/risky/import-bolsa-pricing-from-erp.js
+backend/scripts/inspect-comercial-catalog.js,n/a,n/a,header-no-leido;inspect,NO,N-A,ARCHIVE-ONEOFF,inspeccion puntual catalogo comercial,archive/oneoff/inspect-comercial-catalog.js
+backend/scripts/inspect-comercial-huecos.js,n/a,n/a,header-no-leido;inspect,NO,N-A,ARCHIVE-ONEOFF,inspeccion puntual huecos comercial,archive/oneoff/inspect-comercial-huecos.js
+backend/scripts/inspect-enb-sample.js,n/a,n/a,header-no-leido;inspect,NO,N-A,ARCHIVE-ONEOFF,inspeccion puntual muestra ENB,archive/oneoff/inspect-enb-sample.js
+backend/scripts/inspect-pizarra-fpg-real.js,n/a,n/a,header-no-leido;inspect-pizarra,NO,N-A,ARCHIVE-ONEOFF,inspeccion puntual pizarra FPG real,archive/oneoff/inspect-pizarra-fpg-real.js
+backend/scripts/inspect-pizarra-fpg-round2.js,n/a,n/a,header-no-leido;inspect-pizarra,NO,N-A,ARCHIVE-ONEOFF,inspeccion puntual pizarra FPG ronda2,archive/oneoff/inspect-pizarra-fpg-round2.js
+backend/scripts/inspect-pizarra-keys.js,n/a,n/a,header-no-leido;inspect-pizarra,NO,N-A,ARCHIVE-ONEOFF,inspeccion puntual claves pizarra,archive/oneoff/inspect-pizarra-keys.js
+backend/scripts/inspect-pizarra-pg-dev.js,n/a,n/a,header-no-leido;inspect-pizarra,NO,N-A,ARCHIVE-ONEOFF,inspeccion puntual pizarra PG dev,archive/oneoff/inspect-pizarra-pg-dev.js
+backend/scripts/inspect-pizarra-pg-sample.js,n/a,n/a,header-no-leido;inspect-pizarra,NO,N-A,ARCHIVE-ONEOFF,inspeccion puntual muestra PG,archive/oneoff/inspect-pizarra-pg-sample.js
+backend/scripts/inspect-promo-owners.js,n/a,n/a,header-no-leido;inspect,NO,N-A,ARCHIVE-ONEOFF,inspeccion puntual owners promo,archive/oneoff/inspect-promo-owners.js
+backend/scripts/inspect-promotions-real.js,n/a,n/a,header-no-leido;inspect,NO,N-A,ARCHIVE-ONEOFF,inspeccion puntual promociones reales,archive/oneoff/inspect-promotions-real.js
+backend/scripts/javier-pre-ds-functional-verify.js,n/a,n/a,header-no-leido;pre-ds-verify,NO,N-A,ARCHIVE-ONEOFF,verificacion puntual pre-DS funcional,archive/oneoff/javier-pre-ds-functional-verify.js
+backend/scripts/list-all-tables.js,n/a,n/a,header-no-leido;list-tables,NO,NO,TOOL-REUSABLE,listado tablas lectura reutilizable,tools/list-all-tables.js
+backend/scripts/list-pedidos-families.js,n/a,n/a,header-no-leido;list-families,NO,NO,TOOL-REUSABLE,listado familias pedidos lectura,tools/list-pedidos-families.js
+backend/scripts/live-reparto-confirm-isolated.js,n/a,n/a,header-no-leido;live-confirm,YES,YES-sin-guard,UNCLEAR-RISKY,confirmacion reparto (aislada pero write-path) sin guard visible,review/risky/live-reparto-confirm-isolated.js
+backend/scripts/mandato-v5-api-verify.js,n/a,n/a,header-no-leido;mandato-v5,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: verificacion API,archive/oneoff/mandato-v5-api-verify.js
+backend/scripts/mandato-v5-begin-probe.js,n/a,n/a,header-no-leido;mandato-v5,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: begin probe,archive/oneoff/mandato-v5-begin-probe.js
+backend/scripts/mandato-v5-check-orders.js,n/a,n/a,header-no-leido;mandato-v5,NO,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: check orders,archive/oneoff/mandato-v5-check-orders.js
+backend/scripts/mandato-v5-commit-probe.js,n/a,n/a,header-no-leido;mandato-v5,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: commit probe,archive/oneoff/mandato-v5-commit-probe.js
+backend/scripts/mandato-v5-cpc-cols-probe.js,n/a,n/a,header-no-leido;mandato-v5,NO,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: probe cols CPC,archive/oneoff/mandato-v5-cpc-cols-probe.js
+backend/scripts/mandato-v5-cpc-cols.js,n/a,n/a,header-no-leido;mandato-v5,NO,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: cols CPC,archive/oneoff/mandato-v5-cpc-cols.js
+backend/scripts/mandato-v5-cpc-insert-test.js,n/a,n/a,header-no-leido;mandato-v5-write,YES,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: insert test CPC (test only),archive/oneoff/mandato-v5-cpc-insert-test.js
+backend/scripts/mandato-v5-cpc-probe.js,n/a,n/a,header-no-leido;mandato-v5,NO,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: probe CPC,archive/oneoff/mandato-v5-cpc-probe.js
+backend/scripts/mandato-v5-db2-api.js,n/a,n/a,header-no-leido;mandato-v5,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: DB2 API,archive/oneoff/mandato-v5-db2-api.js
+backend/scripts/mandato-v5-db2-crosscheck.js,n/a,n/a,header-no-leido;mandato-v5,NO,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: crosscheck DB2,archive/oneoff/mandato-v5-db2-crosscheck.js
+backend/scripts/mandato-v5-debug.js,n/a,n/a,header-no-leido;mandato-v5,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: debug,archive/oneoff/mandato-v5-debug.js
+backend/scripts/mandato-v5-erp-export.js,n/a,n/a,header-no-leido;mandato-v5,NO,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: export ERP,archive/oneoff/mandato-v5-erp-export.js
+backend/scripts/mandato-v5-final.js,n/a,n/a,header-no-leido;mandato-v5,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: final,archive/oneoff/mandato-v5-final.js
+backend/scripts/mandato-v5-full-audit.js,n/a,n/a,header-no-leido;mandato-v5,NO,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: auditoria completa,archive/oneoff/mandato-v5-full-audit.js
+backend/scripts/mandato-v5-lpc-cols.js,n/a,n/a,header-no-leido;mandato-v5,NO,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: cols LPC,archive/oneoff/mandato-v5-lpc-cols.js
+backend/scripts/mandato-v5-pedido.js,n/a,n/a,header-no-leido;mandato-v5,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: pedido,archive/oneoff/mandato-v5-pedido.js
+backend/scripts/mandato-v5-pool-tx-probe.js,n/a,n/a,header-no-leido;mandato-v5,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: pool tx probe,archive/oneoff/mandato-v5-pool-tx-probe.js
+backend/scripts/mandato-v5-stock-race.js,n/a,n/a,header-no-leido;mandato-v5,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: stock race,archive/oneoff/mandato-v5-stock-race.js
+backend/scripts/mandato-v5-tx-probe.js,n/a,n/a,header-no-leido;mandato-v5,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico mandato-v5 puntual: tx probe,archive/oneoff/mandato-v5-tx-probe.js
+backend/scripts/migrate-pin-hashes.js,n/a,n/a,header-no-leido;migrate-pins,YES,N-A,ARCHIVE-ONEOFF,migracion puntual hashes PIN; ejecutada una vez,archive/oneoff/migrate-pin-hashes.js
+backend/scripts/pedidos_system_inventory.js,n/a,n/a,header-no-leido;inventory,NO,NO,TOOL-REUSABLE,ref package.json pedidos:inventory-system; inventario lectura,tools/pedidos_system_inventory.js
+backend/scripts/pilar2-align-defaults-additive.js,n/a,n/a,header-no-leido;pilar2-epico,YES,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: defaults aditivos,archive/oneoff/pilar2-align-defaults-additive.js
+backend/scripts/pilar2-build-report.js,n/a,n/a,header-no-leido;pilar2-epico,NO,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: build report,archive/oneoff/pilar2-build-report.js
+backend/scripts/pilar2-catalog-audit.js,n/a,n/a,ref compare-javier-dsedac-alignment,NO,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: catalog audit (cita compare script),archive/oneoff/pilar2-catalog-audit.js
+backend/scripts/pilar2-close-b1-b3.js,n/a,n/a,header-no-leido;pilar2-epico,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: cierre B1-B3,archive/oneoff/pilar2-close-b1-b3.js
+backend/scripts/pilar2-crud-smoke.js,n/a,n/a,header-no-leido;pilar2-epico,UNKNOWN,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: CRUD smoke,archive/oneoff/pilar2-crud-smoke.js
+backend/scripts/pilar2-db-schema-verify.js,n/a,n/a,header-no-leido;pilar2-epico,NO,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: schema verify,archive/oneoff/pilar2-db-schema-verify.js
+backend/scripts/pilar2-integrity-checks.js,n/a,n/a,header-no-leido;pilar2-epico,NO,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: integrity checks,archive/oneoff/pilar2-integrity-checks.js
+backend/scripts/pilar2-perf-checks.js,n/a,n/a,header-no-leido;pilar2-epico,NO,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: perf checks,archive/oneoff/pilar2-perf-checks.js
+backend/scripts/pilar2-render-comparison.js,n/a,n/a,header-no-leido;pilar2-epico,NO,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: render comparison,archive/oneoff/pilar2-render-comparison.js
+backend/scripts/pilar2-render-pending-ddl.js,n/a,n/a,header-no-leido;pilar2-epico,YES,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: pending DDL,archive/oneoff/pilar2-render-pending-ddl.js
+backend/scripts/pilar2-sql-runner.js,n/a,n/a,header-no-leido;pilar2-epico,YES,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: SQL runner,archive/oneoff/pilar2-sql-runner.js
+backend/scripts/pilar2-views-smoke.js,n/a,n/a,header-no-leido;pilar2-epico,NO,N-A,ARCHIVE-ONEOFF,epico pilar2 puntual: views smoke,archive/oneoff/pilar2-views-smoke.js
+backend/scripts/pizarra-qsys2-copy-test.js,n/a,n/a,header-no-leido;pizarra-copy,YES,N-A,ARCHIVE-ONEOFF,copia puntual pizarra QSYS2 a test,archive/oneoff/pizarra-qsys2-copy-test.js
+backend/scripts/pizarra-verify-test-copy.js,n/a,n/a,header-no-leido;pizarra-verify,NO,N-A,ARCHIVE-ONEOFF,verificacion puntual copia pizarra test,archive/oneoff/pizarra-verify-test-copy.js
+backend/scripts/powerbi_export.py,n/a,n/a,header-no-leido;powerbi-py,NO,N-A,ARCHIVE-ONEOFF,export ad-hoc PowerBI en python; un solo uso,archive/oneoff/powerbi_export.py
+backend/scripts/probe-credentials.js,n/a,n/a,getProbeCredentials env-only,NO,NO,TOOL-REUSABLE,helper credenciales probe SOLO por env (GMP_PROBE_USER/PASSWORD); sin secreto hardcodeado,tools/probe-credentials.js
+backend/scripts/recreate-test-commission-tiers.js,n/a,n/a,header-no-leido;recreate-tiers,YES,NO,TOOL-REUSABLE,recrea tiers comision test; reutilizable,tools/recreate-test-commission-tiers.js
+backend/scripts/repartidor_finance_db_inventory.js,n/a,n/a,header-no-leido;inventory,NO,NO,TOOL-REUSABLE,ref package.json finance:inventory-db; inventario lectura,tools/repartidor_finance_db_inventory.js
+backend/scripts/reparto-email-outbox-e2e.js,n/a,n/a,header-no-leido;e2e-outbox,UNKNOWN,N-A,ARCHIVE-ONEOFF,e2e puntual outbox email reparto,archive/oneoff/reparto-email-outbox-e2e.js
+backend/scripts/reparto-isolated-ddl-manifest.js,n/a,n/a,header-no-leido;ddl-manifest,NO,NO,TOOL-REUSABLE,manifiesto DDL isolated_test (emite sin ejecutar),tools/reparto-isolated-ddl-manifest.js
+backend/scripts/reparto-isolated-ddl-runner.js,n/a,n/a,header-no-leido;ddl-runner-TEST,YES,NO,TOOL-REUSABLE,runner DDL acotado isolated_test; reutilizable,tools/reparto-isolated-ddl-runner.js
+backend/scripts/reparto-production-ddl-runner.js,n/a,n/a,header-no-leido;ddl-runner-PROD,YES,YES-sin-guard,TOOL-REUSABLE,runner DDL produccion; REQUIERE aprobacion explicita Javier por ejecucion,tools/reparto-production-ddl-runner.js
+backend/scripts/run-020-migration.js,n/a,n/a,header-no-leido;run-migration-020,YES,NO,TOOL-REUSABLE,ejecutor migracion 020 (match sql/020_*),tools/run-020-migration.js
+backend/scripts/run-024-migration.js,n/a,n/a,header-no-leido;run-migration-024,YES,NO,TOOL-REUSABLE,ejecutor migracion 024 (match sql/024_*),tools/run-024-migration.js
+backend/scripts/run-migration-027.js,n/a,n/a,header-no-leido;run-migration-027,YES,NO,TOOL-REUSABLE,ejecutor migracion 027 (match sql/027_*),tools/run-migration-027.js
+backend/scripts/run-migrations.js,n/a,n/a,header-no-leido;run-migrations,YES,NO,TOOL-REUSABLE,ejecutor generico migraciones versionadas,tools/run-migrations.js
+backend/scripts/run_026_migration.js,n/a,n/a,header-no-leido;run-migration-026,YES,NO,TOOL-REUSABLE,ejecutor migracion 026 (match sql/026_*),tools/run_026_migration.js
+backend/scripts/run_create_view.sql,n/a,n/a,header-no-leido;run-view-muerta,N-A,N-A,ARCHIVE-ONEOFF,SQL puntual vista muerta VISTA_DEUDA_BASE (ver legacy/README),archive/oneoff/run_create_view.sql
+backend/scripts/run_scan_local.js,n/a,n/a,header-no-leido;scan-local,NO,NO,TOOL-REUSABLE,scan local reutilizable,tools/run_scan_local.js
+backend/scripts/scan_product_assets.js,n/a,n/a,header-no-leido;scan-assets,NO,NO,TOOL-REUSABLE,scan activos producto reutilizable,tools/scan_product_assets.js
+backend/scripts/setup_production.js,n/a,n/a,header-no-leido;setup-prod,YES,YES-sin-guard,UNCLEAR-RISKY,setup produccion con writes; NUNCA ejecutar sin aprobacion explicita,review/risky/setup_production.js
+backend/scripts/smoke-repartidor-tabs.js,n/a,n/a,header-no-leido;smoke-tabs,UNKNOWN,N-A,ARCHIVE-ONEOFF,smoke puntual tabs repartidor,archive/oneoff/smoke-repartidor-tabs.js
+backend/scripts/sync-test-vddx-autosync-threshold.js,n/a,n/a,header-no-leido;sync-threshold,YES,N-A,ARCHIVE-ONEOFF,sync puntual umbral autosync VDDX test,archive/oneoff/sync-test-vddx-autosync-threshold.js
+backend/scripts/test-app-view.js,n/a,n/a,header-no-leido;test-view,NO,N-A,ARCHIVE-ONEOFF,test puntual vista app (gitignored test_*),archive/oneoff/test-app-view.js
+backend/scripts/test-view-syntax.js,n/a,n/a,header-no-leido;test-syntax,NO,N-A,ARCHIVE-ONEOFF,test puntual sintaxis vista (gitignored test_*),archive/oneoff/test-view-syntax.js
+backend/scripts/truck_route_driver_inventory.js,n/a,n/a,header-no-leido;inventory,NO,NO,TOOL-REUSABLE,ref package.json pedidos:inventory-reparto; inventario lectura,tools/truck_route_driver_inventory.js
+backend/scripts/validate_production_config.js,n/a,n/a,header-no-leido;validate-config,NO,NO,TOOL-REUSABLE,validador config produccion (lectura),tools/validate_production_config.js
+backend/scripts/verify-024-migration.js,n/a,n/a,header-no-leido;verify-024,NO,NO,TOOL-REUSABLE,verificador migracion 024 (match sql/024_*),tools/verify-024-migration.js
+backend/scripts/verify-migration.js,n/a,n/a,header-no-leido;verify-migration,NO,NO,TOOL-REUSABLE,verificador generico migraciones,tools/verify-migration.js
+backend/scripts/verify-pf-columns.js,n/a,n/a,header-no-leido;verify-cols,NO,NO,TOOL-REUSABLE,verificador columnas PF lectura,tools/verify-pf-columns.js
+backend/scripts/verify-repartidor-cierre-live.js,n/a,n/a,header-no-leido;verify-LIVE,UNKNOWN,YES-sin-guard,UNCLEAR-RISKY,nombre indica LIVE (cierre repartidor); revisar target antes de archivar,review/risky/verify-repartidor-cierre-live.js
+backend/scripts/verify-repartidor-finance-schema.js,n/a,n/a,header-no-leido;verify-schema,NO,NO,TOOL-REUSABLE,ref package.json finance:verify-schema; verificador lectura,tools/verify-repartidor-finance-schema.js
+backend/scripts/verify-team-80.js,n/a,n/a,header-no-leido;verify-80,NO,NO,TOOL-REUSABLE,verificador team 80 (match sql/028_*) lectura,tools/verify-team-80.js
+backend/scripts/verify-vista-final.js,n/a,n/a,header-no-leido;verify-vista,NO,NO,TOOL-REUSABLE,verificador vista final lectura,tools/verify-vista-final.js
+backend/scripts/verify_javier_mirror.js,n/a,n/a,header-no-leido;verify-mirror,NO,NO,TOOL-REUSABLE,verificador espejo JAVIER lectura,tools/verify_javier_mirror.js
+backend/scripts/whatsapp-baileys-pair.js,n/a,n/a,header-no-leido;baileys-pair,UNKNOWN,YES-sin-guard,UNCLEAR-RISKY,emparejamiento WhatsApp Baileys (maneja sesion/credenciales); revisar custodia sesion,review/risky/whatsapp-baileys-pair.js
+backend/scripts/audit_server.bat,n/a,n/a,echo DRIVER ODBC AS400,NO,NO,TOOL-REUSABLE,auditoria servidor Windows (ODBC/iSeries) reutilizable,tools/audit_server.bat
+backend/scripts/install_server.bat,n/a,n/a,header-no-leido;install,UNKNOWN,NO,TOOL-REUSABLE,instalador servidor reutilizable,tools/install_server.bat
+backend/scripts/build.sh,n/a,n/a,header-no-leido;build,NO,NO,TOOL-REUSABLE,build backend reutilizable,tools/build.sh
+backend/scripts/audit_server_linux.sh,n/a,n/a,echo DRIVER ODBC unixODBC,NO,NO,TOOL-REUSABLE,auditoria servidor Linux reutilizable,tools/audit_server_linux.sh
+backend/scripts/deploy-cert-apt.sh,n/a,n/a,header-no-leido;deploy-cert,UNKNOWN,NO,TOOL-REUSABLE,despliegue certificado APT reutilizable (requiere aprobacion),tools/deploy-cert-apt.sh
+backend/scripts/diagnostic.sh,n/a,n/a,header-no-leido;diagnostic,NO,NO,TOOL-REUSABLE,diagnostico general reutilizable,tools/diagnostic.sh
+backend/scripts/monitor-activity.sh,n/a,n/a,header-no-leido;monitor,NO,NO,TOOL-REUSABLE,monitor actividad reutilizable,tools/monitor-activity.sh
+backend/scripts/log-rotation.sh,n/a,n/a,header-no-leido;logrotate,NO,NO,TOOL-REUSABLE,rotacion logs reutilizable,tools/log-rotation.sh
+backend/scripts/rollback.sh,n/a,n/a,header-no-leido;rollback,UNKNOWN,NO,TOOL-REUSABLE,ref package.json rollback; rollback reutilizable,tools/rollback.sh
+backend/scripts/_cert_live_reparto.sh,n/a,n/a,header-no-leido;_scratch-sh,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; cert live puntual,archive/oneoff/_cert_live_reparto.sh
+backend/scripts/_check_runtime_env.sh,n/a,n/a,header-no-leido;_scratch-sh,NO,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; check env puntual,archive/oneoff/_check_runtime_env.sh
+backend/scripts/_deploy_evidence_hex.sh,n/a,n/a,header-no-leido;_scratch-sh,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; deploy evidencia puntual,archive/oneoff/_deploy_evidence_hex.sh
+backend/scripts/_deploy_finance_fix.sh,n/a,n/a,header-no-leido;_scratch-sh,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; deploy fix finanzas puntual,archive/oneoff/_deploy_finance_fix.sh
+backend/scripts/_deploy_prepaid_overlay.sh,n/a,n/a,header-no-leido;_scratch-sh,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; deploy overlay prepago puntual,archive/oneoff/_deploy_prepaid_overlay.sh
+backend/scripts/_deploy_receipt_repo.sh,n/a,n/a,header-no-leido;_scratch-sh,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; deploy repo recibos puntual,archive/oneoff/_deploy_receipt_repo.sh
+backend/scripts/_deploy_week_owner.sh,n/a,n/a,header-no-leido;_scratch-sh,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; deploy week owner puntual,archive/oneoff/_deploy_week_owner.sh
+backend/scripts/_fix_env_and_probe.sh,n/a,n/a,header-no-leido;_scratch-sh,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; fix env puntual,archive/oneoff/_fix_env_and_probe.sh
+backend/scripts/_flip_staging_writes.sh,n/a,n/a,header-no-leido;_scratch-sh-risk,YES,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; FLIP escrituras staging (no re-ejecutar sin aprobacion),archive/oneoff/_flip_staging_writes.sh
+backend/scripts/_mint_remote.sh,n/a,n/a,header-no-leido;_scratch-sh,UNKNOWN,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; mint remoto puntual,archive/oneoff/_mint_remote.sh
+backend/scripts/_receipt_diag_remote.sh,n/a,n/a,header-no-leido;_scratch-sh,NO,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; diagnostico remoto recibos puntual,archive/oneoff/_receipt_diag_remote.sh
+backend/scripts/_remote-session-ttl-check.sh,n/a,n/a,header-no-leido;_scratch-sh,NO,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; check TTL sesion puntual,archive/oneoff/_remote-session-ttl-check.sh
+backend/scripts/_restore_production_reparto.sh,n/a,n/a,header-no-leido;_scratch-sh-risk,YES,N-A,ARCHIVE-ONEOFF,_-scratch shell gitignored; RESTORE produccion (no re-ejecutar jamas sin aprobacion),archive/oneoff/_restore_production_reparto.sh
+backend/scripts/db-indices.sql,n/a,n/a,CREATE INDEX DSEDAC.CPC_COMMISSION_IDX,YES,YES-sin-guard,UNCLEAR-RISKY,DDL suelto crea INDICE EN DSEDAC.CPC (schema ERP) sin gate; maximo riesgo,review/risky/db-indices.sql
+backend/scripts/error.log,n/a,n/a,artefacto log,N-A,N-A,ARCHIVE-ONEOFF,artefacto log (gitignored *.log); no codigo,archive/oneoff/error.log
+backend/scripts/server.log,n/a,n/a,artefacto log,N-A,N-A,ARCHIVE-ONEOFF,artefacto log (gitignored *.log); no codigo,archive/oneoff/server.log
+backend/scripts/scan_results.json,n/a,n/a,artefacto json,N-A,N-A,ARCHIVE-ONEOFF,artefacto resultado scan (gitignored *.json); no codigo,archive/oneoff/scan_results.json
+backend/scripts/_verify-report.json,n/a,n/a,artefacto json,N-A,N-A,ARCHIVE-ONEOFF,_-scratch + artefacto json gitignored; no codigo,archive/oneoff/_verify-report.json
+backend/scripts/_schema-mirror-out.txt,n/a,n/a,artefacto txt,N-A,N-A,ARCHIVE-ONEOFF,_-scratch + artefacto txt gitignored; salida espejo schema,archive/oneoff/_schema-mirror-out.txt
+backend/scripts/_probe_notification_out.json.txt,n/a,n/a,artefacto txt,N-A,N-A,ARCHIVE-ONEOFF,_-scratch + artefacto txt gitignored; salida probe,archive/oneoff/_probe_notification_out.json.txt
+backend/scripts/_probe_emails_v2_out.txt,n/a,n/a,artefacto txt,N-A,N-A,ARCHIVE-ONEOFF,_-scratch + artefacto txt gitignored; salida probe emails,archive/oneoff/_probe_emails_v2_out.txt
+backend/scripts/_env_toggle_templates.env.txt,n/a,n/a,artefacto txt,N-A,N-A,ARCHIVE-ONEOFF,_-scratch + artefacto txt gitignored; plantillas toggles env (revisar que no contenga valores reales),archive/oneoff/_env_toggle_templates.env.txt
+backend/scripts/legacy/create_view.js,n/a,n/a,"odbc + ALLOW_DB2_DDL gate + CREATE VIEW JAVIER.VISTA_DEUDA_BASE",YES,NO,ARCHIVE-ONEOFF,"archivado F4-02 segun legacy/README (vista muerta); gate ALLOW_DB2_DDL explicito; sha256 PENDIENTE (shell bloqueado)",legacy/create_view.js
+backend/scripts/legacy/create_view_v2.js,n/a,n/a,"odbc + ALLOW_DB2_DDL gate + CREATE OR REPLACE VIEW JAVIER.VISTA_DEUDA_BASE",YES,NO,ARCHIVE-ONEOFF,"archivado F4-02 (vista muerta); gate explicito; sha256 PENDIENTE",legacy/create_view_v2.js
+backend/scripts/legacy/create_view_full.js,n/a,n/a,"odbc + ALLOW_DB2_DDL gate + QSYS2.SYSCOLUMNS DSEDAC",YES,NO,ARCHIVE-ONEOFF,"archivado F4-02 (vista muerta, lee catalogo DSEDAC); gate explicito; sha256 PENDIENTE",legacy/create_view_full.js
+backend/scripts/legacy/create_view_final.js,n/a,n/a,"odbc + ALLOW_DB2_DDL gate + filtro CPC canon",YES,NO,ARCHIVE-ONEOFF,"archivado F4-02 (vista muerta, mismo filtro que generate-vista-deuda-final); gate explicito; sha256 PENDIENTE",legacy/create_view_final.js
+backend/scripts/legacy/README.md,n/a,n/a,Legacy VISTA_DEUDA_BASE archivados F4-02,NO,NO,ARCHIVE-ONEOFF,documenta archivado + fuente canon debt-view-contract.js + cero require; se queda,legacy/README.md
+backend/scripts/sql/001_create_app_roles.sql,n/a,n/a,header-no-leido;001-ddl,YES,NO,TOOL-REUSABLE,migracion versionada 001 roles app; se queda en sql/,sql/001_create_app_roles.sql
+backend/scripts/sql/001_create_app_users.sql,n/a,n/a,header-no-leido;001-ddl,YES,NO,TOOL-REUSABLE,migracion versionada 001 usuarios app; se queda,sql/001_create_app_users.sql
+backend/scripts/sql/002_create_repartidor_tables.sql,n/a,n/a,header-no-leido;002-ddl,YES,NO,TOOL-REUSABLE,migracion versionada 002 tablas repartidor; se queda,sql/002_create_repartidor_tables.sql
+backend/scripts/sql/020_repartidor_finance_tables.sql,n/a,n/a,header-no-leido;020-ddl,YES,NO,TOOL-REUSABLE,migracion versionada 020 finanzas (match run-020); se queda,sql/020_repartidor_finance_tables.sql
+backend/scripts/sql/021_verify_repartidor_finance_schema.sql,n/a,n/a,header-no-leido;021-verify,NO,NO,TOOL-REUSABLE,verificacion versionada 021; se queda,sql/021_verify_repartidor_finance_schema.sql
+backend/scripts/sql/022_cleanup_repartidor_finance_test_template.sql,n/a,n/a,header-no-leido;022-cleanup,YES,NO,TOOL-REUSABLE,limpieza versionada 022 template test; se queda,sql/022_cleanup_repartidor_finance_test_template.sql
+backend/scripts/sql/023_repartidor_finance_db_exploration_acs.sql,n/a,n/a,header-no-leido;023-explore,NO,NO,TOOL-REUSABLE,exploracion versionada 023 ACS; se queda,sql/023_repartidor_finance_db_exploration_acs.sql
+backend/scripts/sql/024_align_javier_to_dsedac.sql,n/a,n/a,header-no-leido;024-align,YES,NO,TOOL-REUSABLE,migracion versionada 024 alineamiento (match run-024/verify-024); se queda,sql/024_align_javier_to_dsedac.sql
+backend/scripts/sql/025_pedidos_reparto_linkage.sql,n/a,n/a,header-no-leido;025-linkage,YES,NO,TOOL-REUSABLE,migracion versionada 025 linkage pedidos-reparto; se queda,sql/025_pedidos_reparto_linkage.sql
+backend/scripts/sql/026_align_javier_immediate_fixes.sql,n/a,n/a,header-no-leido;026-align,YES,NO,TOOL-REUSABLE,migracion versionada 026 fixes (match run_026); se queda,sql/026_align_javier_immediate_fixes.sql
+backend/scripts/sql/027_align_pedidos_to_cpc.sql,n/a,n/a,header-no-leido;027-align,YES,NO,TOOL-REUSABLE,migracion versionada 027 pedidos->CPC (match run-migration-027); se queda,sql/027_align_pedidos_to_cpc.sql
+backend/scripts/sql/027_team_commission_config.sql,n/a,n/a,header-no-leido;027-config,YES,NO,TOOL-REUSABLE,config versionada 027 comisiones equipo; se queda,sql/027_team_commission_config.sql
+backend/scripts/sql/028_fix_team_commission_80.sql,n/a,n/a,header-no-leido;028-fix,YES,NO,TOOL-REUSABLE,fix versionado 028 comision 80 (match verify-team-80); se queda,sql/028_fix_team_commission_80.sql
+backend/scripts/sql/030_repartidor_finance_read_aliases.sql,n/a,n/a,header-no-leido;030-aliases,YES,NO,TOOL-REUSABLE,aliases lectura finanzas 030; se queda,sql/030_repartidor_finance_read_aliases.sql
+backend/scripts/sql/031_prepare_dsedac_app_buffers.sql,n/a,n/a,header-no-leido;031-buffers,YES,NO,TOOL-REUSABLE,preparacion buffers app 031 (JAVIER, no DSEDAC write); se queda,sql/031_prepare_dsedac_app_buffers.sql
+backend/scripts/sql/032_bolsa_pricing_config.sql,n/a,n/a,header-no-leido;032-pricing,YES,NO,TOOL-REUSABLE,config pricing bolsa 032 versionada; se queda,sql/032_bolsa_pricing_config.sql
+backend/scripts/sql/033_reparto_confirmation_test_tables.sql,n/a,n/a,header-no-leido;033-test-ddl,YES,NO,TOOL-REUSABLE,DDL test confirmacion 033; se queda,sql/033_reparto_confirmation_test_tables.sql
+backend/scripts/sql/034_repartidor_finance_isolated_test_tables.sql,n/a,n/a,header-no-leido;034-test-ddl,YES,NO,TOOL-REUSABLE,DDL test finanzas aisladas 034; se queda,sql/034_repartidor_finance_isolated_test_tables.sql
+backend/scripts/sql/035_verify_reparto_isolated_test_schema.sql,n/a,n/a,header-no-leido;035-verify,NO,NO,TOOL-REUSABLE,verificacion schema test 035; se queda,sql/035_verify_reparto_isolated_test_schema.sql
+backend/scripts/sql/036_reparto_confirmation_production_tables.sql,n/a,n/a,header-no-leido;036-prod-ddl,YES,NO,TOOL-REUSABLE,DDL produccion confirmacion 036 (requiere aprobacion al ejecutar); se queda,sql/036_reparto_confirmation_production_tables.sql
+backend/scripts/sql/037_repartidor_liquidacion_production_additive.sql,n/a,n/a,header-no-leido;037-prod-additive,YES,NO,TOOL-REUSABLE,DDL aditivo produccion liquidacion 037 (requiere aprobacion); se queda,sql/037_repartidor_liquidacion_production_additive.sql
+backend/scripts/sql/038_repartidor_rutero_orden.sql,n/a,n/a,header-no-leido;038-rutero,YES,NO,TOOL-REUSABLE,DDL rutero orden 038; se queda,sql/038_repartidor_rutero_orden.sql
+backend/scripts/sql/039_notification_roles_and_variance.sql,n/a,n/a,header-no-leido;039-notif,YES,NO,TOOL-REUSABLE,DDL notificaciones 039 (match _apply_039); se queda,sql/039_notification_roles_and_variance.sql
+backend/scripts/sql/040_repartidor_rutero_day_moves.sql,n/a,n/a,header-no-leido;040-day-moves,YES,NO,TOOL-REUSABLE,DDL day moves 040; se queda,sql/040_repartidor_rutero_day_moves.sql
+backend/scripts/sql/041_repartidor_rutero_tracking.sql,n/a,n/a,header-no-leido;041-tracking,YES,NO,TOOL-REUSABLE,DDL tracking 041; se queda,sql/041_repartidor_rutero_tracking.sql
+backend/scripts/sql/042_repartidor_rutero_isolated_test.sql,n/a,n/a,header-no-leido;042-test,YES,NO,TOOL-REUSABLE,DDL test rutero 042; se queda,sql/042_repartidor_rutero_isolated_test.sql
+backend/scripts/sql/vista_clientes_unificada.sql,n/a,n/a,header-no-leido;vista-unificada,NO,NO,TOOL-REUSABLE,definicion vista clientes unificada (match discover/execute); se queda,sql/vista_clientes_unificada.sql
+backend/scripts/sql/vista_deuda_completa.sql,n/a,n/a,header-no-leido;vista-deuda,NO,NO,TOOL-REUSABLE,definicion vista deuda completa (match generate); se queda,sql/vista_deuda_completa.sql
+backend/scripts/sql/opencode.json,n/a,n/a,artefacto config,N-A,N-A,ARCHIVE-ONEOFF,artefacto config local en sql/; no migracion,archive/oneoff/sql-opencode.json
+backend/scripts/sql/orchestrator.md,n/a,n/a,artefacto doc,N-A,N-A,ARCHIVE-ONEOFF,artefacto doc local en sql/; no migracion,archive/oneoff/sql-orchestrator.md
+backend/scripts/sql/migrations/2026-06-07T19-39-41-184Z_align_javier_to_dsedac_additive.sql,n/a,n/a,migracion timestamped additive,YES,NO,TOOL-REUSABLE,migracion historica generada 2026-06-07 19:39; se queda,sql/migrations/2026-06-07T19-39-41-184Z_align_javier_to_dsedac_additive.sql
+backend/scripts/sql/migrations/2026-06-07T19-39-41-184Z_align_javier_to_dsedac_additive.json,n/a,n/a,artefacto manifiesto migracion,N-A,N-A,TOOL-REUSABLE,manifiesto reporte migracion 19:39; se queda,sql/migrations/2026-06-07T19-39-41-184Z_align_javier_to_dsedac_additive.json
+backend/scripts/sql/migrations/2026-06-07T20-35-56-370Z_align_javier_to_dsedac_additive.sql,n/a,n/a,migracion timestamped additive,YES,NO,TOOL-REUSABLE,migracion historica 20:35; se queda,sql/migrations/2026-06-07T20-35-56-370Z_align_javier_to_dsedac_additive.sql
+backend/scripts/sql/migrations/2026-06-07T20-35-56-370Z_align_javier_to_dsedac_additive.json,n/a,n/a,artefacto manifiesto migracion,N-A,N-A,TOOL-REUSABLE,manifiesto 20:35; se queda,sql/migrations/2026-06-07T20-35-56-370Z_align_javier_to_dsedac_additive.json
+backend/scripts/sql/migrations/2026-06-07T21-06-16-768Z_align_javier_to_dsedac_additive.sql,n/a,n/a,migracion timestamped additive,YES,NO,TOOL-REUSABLE,migracion historica 21:06; se queda,sql/migrations/2026-06-07T21-06-16-768Z_align_javier_to_dsedac_additive.sql
+backend/scripts/sql/migrations/2026-06-07T21-06-16-768Z_align_javier_to_dsedac_additive.json,n/a,n/a,artefacto manifiesto migracion,N-A,N-A,TOOL-REUSABLE,manifiesto 21:06; se queda,sql/migrations/2026-06-07T21-06-16-768Z_align_javier_to_dsedac_additive.json
+backend/scripts/sql/migrations/2026-06-07T22-07-49-773Z_align_javier_to_dsedac_additive.sql,n/a,n/a,migracion timestamped additive,YES,NO,TOOL-REUSABLE,migracion historica 22:07; se queda,sql/migrations/2026-06-07T22-07-49-773Z_align_javier_to_dsedac_additive.sql
+backend/scripts/sql/migrations/2026-06-07T22-07-49-773Z_align_javier_to_dsedac_additive.json,n/a,n/a,artefacto manifiesto migracion,N-A,N-A,TOOL-REUSABLE,manifiesto 22:07; se queda,sql/migrations/2026-06-07T22-07-49-773Z_align_javier_to_dsedac_additive.json
+backend/scripts/sql/migrations/2026-06-11T21-33-30-660Z_align_javier_defaults_additive.sql,n/a,n/a,migracion timestamped defaults,YES,NO,TOOL-REUSABLE,migracion historica defaults 2026-06-11; se queda,sql/migrations/2026-06-11T21-33-30-660Z_align_javier_defaults_additive.sql
+backend/scripts/sql/migrations/2026-06-11T21-33-30-660Z_align_javier_defaults_additive.json,n/a,n/a,artefacto manifiesto migracion,N-A,N-A,TOOL-REUSABLE,manifiesto defaults; se queda,sql/migrations/2026-06-11T21-33-30-660Z_align_javier_defaults_additive.json
+backend/scripts/sql/migrations/2026-06-11T23-26-07-473Z_b1_b3_blockers_closure.sql,n/a,n/a,migracion timestamped cierre B1-B3,YES,NO,TOOL-REUSABLE,migracion historica cierre B1-B3; se queda,sql/migrations/2026-06-11T23-26-07-473Z_b1_b3_blockers_closure.sql
+backend/scripts/sql/migrations/2026-06-11T23-26-07-473Z_b1_b3_blockers_closure.json,n/a,n/a,artefacto manifiesto migracion,N-A,N-A,TOOL-REUSABLE,manifiesto cierre B1-B3; se queda,sql/migrations/2026-06-11T23-26-07-473Z_b1_b3_blockers_closure.json
+backend/scripts/sql/migrations/2026-06-19T06-17-21-469Z_align_javier_to_dsedac_additive.sql,n/a,n/a,migracion timestamped additive,YES,NO,TOOL-REUSABLE,migracion historica 2026-06-19 06:17; se queda,sql/migrations/2026-06-19T06-17-21-469Z_align_javier_to_dsedac_additive.sql
+backend/scripts/sql/migrations/2026-06-19T06-17-21-469Z_align_javier_to_dsedac_additive.json,n/a,n/a,artefacto manifiesto migracion,N-A,N-A,TOOL-REUSABLE,manifiesto 06:17; se queda,sql/migrations/2026-06-19T06-17-21-469Z_align_javier_to_dsedac_additive.json
+backend/scripts/sql/migrations/2026-06-19T07-02-27-246Z_align_javier_to_dsedac_additive.sql,n/a,n/a,migracion timestamped additive,YES,NO,TOOL-REUSABLE,migracion historica 07:02; se queda,sql/migrations/2026-06-19T07-02-27-246Z_align_javier_to_dsedac_additive.sql
+backend/scripts/sql/migrations/2026-06-19T07-02-27-246Z_align_javier_to_dsedac_additive.json,n/a,n/a,artefacto manifiesto migracion,N-A,N-A,TOOL-REUSABLE,manifiesto 07:02; se queda,sql/migrations/2026-06-19T07-02-27-246Z_align_javier_to_dsedac_additive.json
+backend/scripts/sql/migrations/2026-08-27_repartidor-rutero-day-moves-forward.sql,n/a,n/a,migracion forward day-moves,YES,NO,TOOL-REUSABLE,forward versionado day-moves; se queda,sql/migrations/2026-08-27_repartidor-rutero-day-moves-forward.sql
+backend/scripts/sql/migrations/2026-08-27_repartidor-rutero-day-moves-rollback.sql,n/a,n/a,migracion rollback day-moves,YES,NO,TOOL-REUSABLE,rollback versionado day-moves; se queda,sql/migrations/2026-08-27_repartidor-rutero-day-moves-rollback.sql
+backend/scripts/sql/migrations/2026-08-27_repartidor-rutero-tracking-forward.sql,n/a,n/a,migracion forward tracking,YES,NO,TOOL-REUSABLE,forward versionado tracking; se queda,sql/migrations/2026-08-27_repartidor-rutero-tracking-forward.sql
+backend/scripts/sql/migrations/2026-08-27_repartidor-rutero-tracking-rollback.sql,n/a,n/a,migracion rollback tracking,YES,NO,TOOL-REUSABLE,rollback versionado tracking; se queda,sql/migrations/2026-08-27_repartidor-rutero-tracking-rollback.sql
+backend/scripts/temp/commercial-targets-ago-dic-backup-2026-08-05T09-46-53-449Z.json,n/a,n/a,artefacto backup targets,N-A,N-A,ARCHIVE-ONEOFF,backup puntual targets ago-dic (origen apply-objetivos); no codigo,archive/oneoff/temp-commercial-targets-backup.json
+backend/scripts/temp/objetivos-2026-ago-dic-plan.json,n/a,n/a,artefacto plan objetivos,N-A,N-A,ARCHIVE-ONEOFF,plan puntual objetivos ago-dic; no codigo,archive/oneoff/temp-objetivos-plan.json
+backend/scripts/validation/validate_invoice_amounts.js,n/a,n/a,Validates neto/IVA/total + odbc env-only,NO,NO,TOOL-REUSABLE,validador facturas reutilizable (reporte JSON+CSV); unico en validation/,validation/validate_invoice_amounts.js
+backend/scripts/__pycache__/powerbi_export.cpython-311.pyc,n/a,n/a,artefacto pyc,N-A,N-A,ARCHIVE-ONEOFF,bytecode compilado python; no fuente,archive/oneoff/__pycache__-powerbi_export.pyc

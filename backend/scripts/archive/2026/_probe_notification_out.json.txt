@@ -1,0 +1,1626 @@
+# ARCHIVE one-off [2026/anio-mtime]: artefacto txt | _-scratch + artefacto txt gitignored; salida probe | NO EJECUTAR (GMP-SCRIPTS-FINAL-ARCHIVE-20260925).
+﻿
+=== CORREO columns DSEDAC/JAVIER ===
+[
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "ASA",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "ASAL1",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "BKIABE",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "BKIABEL1",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "BKIMSG",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "BKIMSGL1",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CCN",
+    "COLUMN_NAME": "PERSONACONTACTOCORREOELECTRO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 250
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CCNL1",
+    "COLUMN_NAME": "PERSONACONTACTOCORREOELECTRO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 250
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLEX",
+    "COLUMN_NAME": "CORREOELECTRONICOCLIENTE",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLEXL1",
+    "COLUMN_NAME": "CORREOELECTRONICOCLIENTE",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLI",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLIL1",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLIL2",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLIL5",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLX",
+    "COLUMN_NAME": "CORREOALBARANCREDIDOPDF",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLX",
+    "COLUMN_NAME": "CORREOELECTRONICOALBARANES",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLX",
+    "COLUMN_NAME": "CORREOELECTRONICOCLIENTE",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLX",
+    "COLUMN_NAME": "CORREOELECTRONICOGERENTE",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 50
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLX",
+    "COLUMN_NAME": "CORREOELECTRONICORESPONSABLE",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 500
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLX",
+    "COLUMN_NAME": "CORREOENDOSOSPDF",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLX",
+    "COLUMN_NAME": "CORREOFACTURACONTADOPDF",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLX",
+    "COLUMN_NAME": "CORREOFACTURACREDITOPDF",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLX",
+    "COLUMN_NAME": "CORREOWEBINTRANET",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLX",
+    "COLUMN_NAME": "ENVIARCORREOSN",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLXL1",
+    "COLUMN_NAME": "CORREOALBARANCREDIDOPDF",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLXL1",
+    "COLUMN_NAME": "CORREOELECTRONICOALBARANES",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLXL1",
+    "COLUMN_NAME": "CORREOELECTRONICOCLIENTE",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLXL1",
+    "COLUMN_NAME": "CORREOELECTRONICOGERENTE",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 50
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLXL1",
+    "COLUMN_NAME": "CORREOELECTRONICORESPONSABLE",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 500
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLXL1",
+    "COLUMN_NAME": "CORREOENDOSOSPDF",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLXL1",
+    "COLUMN_NAME": "CORREOFACTURACONTADOPDF",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLXL1",
+    "COLUMN_NAME": "CORREOFACTURACREDITOPDF",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLXL1",
+    "COLUMN_NAME": "CORREOWEBINTRANET",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CLXL1",
+    "COLUMN_NAME": "ENVIARCORREOSN",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "COF",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "COF",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "COF",
+    "COLUMN_NAME": "OMITIRCORREOSN",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "COFD",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "COFDL1",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "COFL1",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "COFL1",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "COFL1",
+    "COLUMN_NAME": "OMITIRCORREOSN",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CTO",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CTOL1",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "DLGX",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "DLGXL1",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "EVS",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "EVSL1",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "FECA",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "FECAL1",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "FEEM",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "FEEML1",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "FERE",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "FEREL1",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "FVT",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 64
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "FVTL1",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 64
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LCS",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LCSL1",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LOC",
+    "COLUMN_NAME": "CORREOELECTRONICOCONTACTO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 50
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "LOCL1",
+    "COLUMN_NAME": "CORREOELECTRONICOCONTACTO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 50
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "PRV",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "PRVL1",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "PRVL2",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "PRVX",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 70
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "PRVX",
+    "COLUMN_NAME": "CORREOELECTRONICOCUADERNO68",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "PRVXL1",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 70
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "PRVXL1",
+    "COLUMN_NAME": "CORREOELECTRONICOCUADERNO68",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 60
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "PVX",
+    "COLUMN_NAME": "CORREOELECTRONICOPROVEEDOR",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 50
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "PVXL1",
+    "COLUMN_NAME": "CORREOELECTRONICOPROVEEDOR",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 50
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "SBE",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "SBE",
+    "COLUMN_NAME": "CORREOELECTRONICOCONTACTO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "SBEL1",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "SBEL1",
+    "COLUMN_NAME": "CORREOELECTRONICOCONTACTO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VDD",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VDDL1",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VDDL2",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VDDX",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 50
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "VDDXL1",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 50
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "CLIENT_SIGNERS",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "V_DIM_CLIENTE",
+    "COLUMN_NAME": "CORREOELECTRONICOCLIENTE",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 256
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "V_DIM_PROVEEDOR",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 70
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "V_DIM_VENDEDOR",
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 50
+  },
+  {
+    "TABLE_SCHEMA": "JAVIER",
+    "TABLE_NAME": "VISTA_DEUDA_BASE",
+    "COLUMN_NAME": "APARTADOCORREOS",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 6
+  }
+]
+
+=== DSEDAC.VDDX columns ===
+[
+  {
+    "COLUMN_NAME": "CODIGOVENDEDOR",
+    "SYSTEM_COLUMN_NAME": "VXCDVD    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 2,
+    "COLUMN_TEXT": "CodigoVendedor                              VXCDVD"
+  },
+  {
+    "COLUMN_NAME": "IMPRESORA",
+    "SYSTEM_COLUMN_NAME": "VXIMPR    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 10,
+    "COLUMN_TEXT": "Impresora                                   VXIMPR"
+  },
+  {
+    "COLUMN_NAME": "NOCOBRADAENFCOMSN",
+    "SYSTEM_COLUMN_NAME": "VXSNNC    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "NoCobradaEnFcomSN                           VXSNNC"
+  },
+  {
+    "COLUMN_NAME": "PREVENTISTAVARIOSREPARTIDOSN",
+    "SYSTEM_COLUMN_NAME": "VXSNPV    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PreventistaVariosRepartidoSN                VXSNPV"
+  },
+  {
+    "COLUMN_NAME": "INCENTIVOALTANUEVOCLIENTESN",
+    "SYSTEM_COLUMN_NAME": "VXSNIA    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "IncentivoAltaNuevoClienteSN                 VXSNIA"
+  },
+  {
+    "COLUMN_NAME": "TABLACOMISIONESPRODUCTO",
+    "SYSTEM_COLUMN_NAME": "VXCDC7    ",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 3,
+    "COLUMN_TEXT": "TablaComisionesProducto                     VXCDC7"
+  },
+  {
+    "COLUMN_NAME": "CORREOELECTRONICO",
+    "SYSTEM_COLUMN_NAME": "VXCOEL    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 50,
+    "COLUMN_TEXT": "CorreoElectronico                           VXCOEL"
+  },
+  {
+    "COLUMN_NAME": "PERMITIRSUPERARLIMCREDITOSN",
+    "SYSTEM_COLUMN_NAME": "VXSNLC    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PermitirSuperarLimCreditoSN                 VXSNLC"
+  },
+  {
+    "COLUMN_NAME": "PORCENTAJEMINIMOCOBRO",
+    "SYSTEM_COLUMN_NAME": "VXPJMC    ",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 5,
+    "COLUMN_TEXT": "PorcentajeMinimoCobro                       VXPJMC"
+  },
+  {
+    "COLUMN_NAME": "OBLIGARCOBRARPTJMINEXCEDISN",
+    "SYSTEM_COLUMN_NAME": "VXSNOC    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "ObligarCobrarPtjMinExcediSN                 VXSNOC"
+  },
+  {
+    "COLUMN_NAME": "PERMITESUPERARIMPOLIMICREDSN",
+    "SYSTEM_COLUMN_NAME": "VXSNSL    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PermiteSuperarImpoLimiCredSN                VXSNSL"
+  },
+  {
+    "COLUMN_NAME": "PERMITESUPERARPORCENMINIMOSN",
+    "SYSTEM_COLUMN_NAME": "VXSNSP    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PermiteSuperarPorcenMinimoSN                VXSNSP"
+  },
+  {
+    "COLUMN_NAME": "IMPEDIRCONTADOCONPENDIENTESN",
+    "SYSTEM_COLUMN_NAME": "VXSNIP    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "ImpedirContadoConPendienteSN                VXSNIP"
+  },
+  {
+    "COLUMN_NAME": "OBLIGARCOBROTOTALSISUPERALSN",
+    "SYSTEM_COLUMN_NAME": "VXSNBC    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "ObligarCobroTotalSiSuperaLSN                VXSNBC"
+  },
+  {
+    "COLUMN_NAME": "TIPOVENTAPORDEFECTO",
+    "SYSTEM_COLUMN_NAME": "VXTVDF    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 2,
+    "COLUMN_TEXT": "TipoVentaPorDefecto                         VXTVDF"
+  },
+  {
+    "COLUMN_NAME": "PERMITIRVENTAESPECIALSN",
+    "SYSTEM_COLUMN_NAME": "VXSNVE    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PermitirVentaEspecialSN                     VXSNVE"
+  },
+  {
+    "COLUMN_NAME": "PERMITIRPRECIOCEROSN",
+    "SYSTEM_COLUMN_NAME": "VXSNP0    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PermitirPrecioCeroSN                        VXSNP0"
+  },
+  {
+    "COLUMN_NAME": "PERMITIRSINCARGO",
+    "SYSTEM_COLUMN_NAME": "VXSNPS    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PermitirSinCargo                            VXSNPS"
+  },
+  {
+    "COLUMN_NAME": "PERMITEPREVENTASN",
+    "SYSTEM_COLUMN_NAME": "VXSNEP    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PermitePreventaSN                           VXSNEP"
+  },
+  {
+    "COLUMN_NAME": "PERMITEAUTOVENTASN",
+    "SYSTEM_COLUMN_NAME": "VXSNEA    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PermiteAutoventaSN                          VXSNEA"
+  },
+  {
+    "COLUMN_NAME": "PERMITEREPARTOSN",
+    "SYSTEM_COLUMN_NAME": "VXSNER    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PermiteRepartoSN                            VXSNER"
+  },
+  {
+    "COLUMN_NAME": "PERMITEINVENTARIOSN",
+    "SYSTEM_COLUMN_NAME": "VXSNEI    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PermiteInventarioSN                         VXSNEI"
+  },
+  {
+    "COLUMN_NAME": "PROBADORSN",
+    "SYSTEM_COLUMN_NAME": "VXSNPR    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "ProbadorSN                                  VXSNPR"
+  },
+  {
+    "COLUMN_NAME": "VERPOSITIVOSHISTORICOVENTASN",
+    "SYSTEM_COLUMN_NAME": "VXSNVP    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "VerPositivosHistoricoVentaSN                VXSNVP"
+  },
+  {
+    "COLUMN_NAME": "JEFEVENTASSN",
+    "SYSTEM_COLUMN_NAME": "VXSNJV    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "JefeVentasSN                                VXSNJV"
+  },
+  {
+    "COLUMN_NAME": "SOLICITARPINPRECIOMINIMOSN",
+    "SYSTEM_COLUMN_NAME": "VXSNPM    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "SolicitarPinPrecioMinimoSN                  VXSNPM"
+  },
+  {
+    "COLUMN_NAME": "SOLICITARPINCOBROSDEUDASN",
+    "SYSTEM_COLUMN_NAME": "VXSNPC    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "SolicitarPinCobrosDeudaSN                   VXSNPC"
+  },
+  {
+    "COLUMN_NAME": "PERMITIRVENTACONPGRDVTOPDTSN",
+    "SYSTEM_COLUMN_NAME": "VXSNPD    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "PermitirVentaConPgrDvtoPdtSN                VXSNPD"
+  },
+  {
+    "COLUMN_NAME": "COBRARTODOPORDEFECTOAUTOVENTA",
+    "SYSTEM_COLUMN_NAME": "VXCTAU    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "CobrarTodoPorDefectoAutoventa               VXCTAU"
+  },
+  {
+    "COLUMN_NAME": "DIASGENERACIONESTADISTICA",
+    "SYSTEM_COLUMN_NAME": "VXDGES    ",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 3,
+    "COLUMN_TEXT": "DiasGeneracionEstadistica                   VXDGES"
+  },
+  {
+    "COLUMN_NAME": "OBLIGARGPSACTIVOSINCRONIZACION",
+    "SYSTEM_COLUMN_NAME": "VXGPSS    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "ObligarGpsActivoSincronizacion              VXGPSS"
+  },
+  {
+    "COLUMN_NAME": "OBLIGARGPSACTIVOPEDIDOS",
+    "SYSTEM_COLUMN_NAME": "VXGPSP    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "ObligarGpsActivoPedidos                     VXGPSP"
+  },
+  {
+    "COLUMN_NAME": "TARIFAPRECIOMINIMO",
+    "SYSTEM_COLUMN_NAME": "VXTRPM    ",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 2,
+    "COLUMN_TEXT": "TarifaPrecioMinimo                          VXTRPM"
+  },
+  {
+    "COLUMN_NAME": "PEDIDOSPENDIENTESSINCRONIZAR",
+    "SYSTEM_COLUMN_NAME": "VXPDPS    ",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 3,
+    "COLUMN_TEXT": "PedidosPendientesSincronizar                VXPDPS"
+  },
+  {
+    "COLUMN_NAME": "SOLICITARMEDIDACANTIDADSN",
+    "SYSTEM_COLUMN_NAME": "VXSNSM    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "SolicitarMedidaCantidadSN                   VXSNSM"
+  },
+  {
+    "COLUMN_NAME": "CODIGOUSUARIO",
+    "SYSTEM_COLUMN_NAME": "VXCDUS    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 10,
+    "COLUMN_TEXT": "CodigoUsuario                               VXCDUS"
+  },
+  {
+    "COLUMN_NAME": "ID",
+    "SYSTEM_COLUMN_NAME": "ID        ",
+    "DATA_TYPE": "INTEGER",
+    "LENGTH": 4,
+    "COLUMN_TEXT": null
+  },
+  {
+    "COLUMN_NAME": "MARCAACTUALIZACION",
+    "SYSTEM_COLUMN_NAME": "MARCA00001",
+    "DATA_TYPE": "VARCHAR",
+    "LENGTH": 50,
+    "COLUMN_TEXT": null
+  }
+]
+
+=== Vendor emails sample (Lacal/Corbalan/oficina) ===
+{
+  "__error": true,
+  "message": "[odbc] Error executing the sql statement",
+  "odbc": {
+    "state": "42S22",
+    "code": -205,
+    "message": "[IBM][Controlador ODBC de System i Access][DB2 para i5/OS]SQL0205 - Texto de mensaje de error no disponible. El mensaje no se puede traducir satisfactoriamente."
+  }
+}
+
+=== All non-empty VDDX emails (first 200) ===
+{
+  "__error": true,
+  "message": "[odbc] Error executing the sql statement",
+  "odbc": {
+    "state": "42S22",
+    "code": -205,
+    "message": "[IBM][Controlador ODBC de System i Access][DB2 para i5/OS]SQL0205 - Texto de mensaje de error no disponible. El mensaje no se puede traducir satisfactoriamente."
+  }
+}
+
+=== Hour/open/close columns on client/route tables ===
+[
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "DIACIERREDOMINGOSN",
+    "SYSTEM_COLUMN_NAME": "T8DICD    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "DiaCierreDomingoSN                          T8DICD"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "DIACIERREJUEVESSN",
+    "SYSTEM_COLUMN_NAME": "T8DICJ    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "DiaCierreJuevesSN                           T8DICJ"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "DIACIERRELUNESSN",
+    "SYSTEM_COLUMN_NAME": "T8DICL    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "DiaCierreLunesSN                            T8DICL"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "DIACIERREMARTESSN",
+    "SYSTEM_COLUMN_NAME": "T8DICM    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "DiaCierreMartesSN                           T8DICM"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "DIACIERREMIERCOLESSN",
+    "SYSTEM_COLUMN_NAME": "T8DICX    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "DiaCierreMiercolesSN                        T8DICX"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "DIACIERRESABADOSN",
+    "SYSTEM_COLUMN_NAME": "T8DICS    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "DiaCierreSabadoSN                           T8DICS"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "DIACIERREVIERNESSN",
+    "SYSTEM_COLUMN_NAME": "T8DICV    ",
+    "DATA_TYPE": "CHAR",
+    "LENGTH": 1,
+    "COLUMN_TEXT": "DiaCierreViernesSN                          T8DICV"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "HORALLAMADA",
+    "SYSTEM_COLUMN_NAME": "T8HRLL    ",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 6,
+    "COLUMN_TEXT": "HoraLlamada                                 T8HRLL"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "HORAREPARTODESDE",
+    "SYSTEM_COLUMN_NAME": "T8HRRD    ",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 6,
+    "COLUMN_TEXT": "HoraRepartoDesde                            T8HRRD"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "HORAREPARTOHASTA",
+    "SYSTEM_COLUMN_NAME": "T8HRRH    ",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 6,
+    "COLUMN_TEXT": "HoraRepartoHasta                            T8HRRH"
+  },
+  {
+    "TABLE_SCHEMA": "DSEDAC",
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "HORAVISITA",
+    "SYSTEM_COLUMN_NAME": "T8HRVI    ",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 6,
+    "COLUMN_TEXT": "HoraVisita                                  T8HRVI"
+  }
+]
+
+=== System hour columns DSEDAC ===
+[
+  {
+    "TABLE_NAME": "CDLO",
+    "COLUMN_NAME": "HORALLAMADA",
+    "SYSTEM_COLUMN_NAME": "T8HRLL    ",
+    "COLUMN_TEXT": "HoraLlamada                                 T8HRLL"
+  },
+  {
+    "TABLE_NAME": "CDLO",
+    "COLUMN_NAME": "HORAREPARTODESDE",
+    "SYSTEM_COLUMN_NAME": "T8HRRD    ",
+    "COLUMN_TEXT": "HoraRepartoDesde                            T8HRRD"
+  },
+  {
+    "TABLE_NAME": "CDLO",
+    "COLUMN_NAME": "HORAREPARTOHASTA",
+    "SYSTEM_COLUMN_NAME": "T8HRRH    ",
+    "COLUMN_TEXT": "HoraRepartoHasta                            T8HRRH"
+  },
+  {
+    "TABLE_NAME": "CDLO",
+    "COLUMN_NAME": "HORAVISITA",
+    "SYSTEM_COLUMN_NAME": "T8HRVI    ",
+    "COLUMN_TEXT": "HoraVisita                                  T8HRVI"
+  },
+  {
+    "TABLE_NAME": "CDLOL1",
+    "COLUMN_NAME": "HORALLAMADA",
+    "SYSTEM_COLUMN_NAME": "T8HRLL    ",
+    "COLUMN_TEXT": "HoraLlamada                                 T8HRLL"
+  },
+  {
+    "TABLE_NAME": "CDLOL1",
+    "COLUMN_NAME": "HORAREPARTODESDE",
+    "SYSTEM_COLUMN_NAME": "T8HRRD    ",
+    "COLUMN_TEXT": "HoraRepartoDesde                            T8HRRD"
+  },
+  {
+    "TABLE_NAME": "CDLOL1",
+    "COLUMN_NAME": "HORAREPARTOHASTA",
+    "SYSTEM_COLUMN_NAME": "T8HRRH    ",
+    "COLUMN_TEXT": "HoraRepartoHasta                            T8HRRH"
+  },
+  {
+    "TABLE_NAME": "CDLOL1",
+    "COLUMN_NAME": "HORAVISITA",
+    "SYSTEM_COLUMN_NAME": "T8HRVI    ",
+    "COLUMN_TEXT": "HoraVisita                                  T8HRVI"
+  },
+  {
+    "TABLE_NAME": "CIE",
+    "COLUMN_NAME": "IMPORTEAPERTURA",
+    "SYSTEM_COLUMN_NAME": "CTIMEA    ",
+    "COLUMN_TEXT": "ImporteApertura                             CTIMEA"
+  },
+  {
+    "TABLE_NAME": "CIEL1",
+    "COLUMN_NAME": "IMPORTEAPERTURA",
+    "SYSTEM_COLUMN_NAME": "CTIMEA    ",
+    "COLUMN_TEXT": "ImporteApertura                             CTIMEA"
+  },
+  {
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "HORALLAMADA",
+    "SYSTEM_COLUMN_NAME": "T8HRLL    ",
+    "COLUMN_TEXT": "HoraLlamada                                 T8HRLL"
+  },
+  {
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "HORAREPARTODESDE",
+    "SYSTEM_COLUMN_NAME": "T8HRRD    ",
+    "COLUMN_TEXT": "HoraRepartoDesde                            T8HRRD"
+  },
+  {
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "HORAREPARTOHASTA",
+    "SYSTEM_COLUMN_NAME": "T8HRRH    ",
+    "COLUMN_TEXT": "HoraRepartoHasta                            T8HRRH"
+  },
+  {
+    "TABLE_NAME": "CRUT",
+    "COLUMN_NAME": "HORAVISITA",
+    "SYSTEM_COLUMN_NAME": "T8HRVI    ",
+    "COLUMN_TEXT": "HoraVisita                                  T8HRVI"
+  },
+  {
+    "TABLE_NAME": "CRUTL1",
+    "COLUMN_NAME": "HORALLAMADA",
+    "SYSTEM_COLUMN_NAME": "T8HRLL    ",
+    "COLUMN_TEXT": "HoraLlamada                                 T8HRLL"
+  },
+  {
+    "TABLE_NAME": "CRUTL1",
+    "COLUMN_NAME": "HORAREPARTODESDE",
+    "SYSTEM_COLUMN_NAME": "T8HRRD    ",
+    "COLUMN_TEXT": "HoraRepartoDesde                            T8HRRD"
+  },
+  {
+    "TABLE_NAME": "CRUTL1",
+    "COLUMN_NAME": "HORAREPARTOHASTA",
+    "SYSTEM_COLUMN_NAME": "T8HRRH    ",
+    "COLUMN_TEXT": "HoraRepartoHasta                            T8HRRH"
+  },
+  {
+    "TABLE_NAME": "CRUTL1",
+    "COLUMN_NAME": "HORAVISITA",
+    "SYSTEM_COLUMN_NAME": "T8HRVI    ",
+    "COLUMN_TEXT": "HoraVisita                                  T8HRVI"
+  },
+  {
+    "TABLE_NAME": "SBM",
+    "COLUMN_NAME": "ASIENTOAPERTURA",
+    "SYSTEM_COLUMN_NAME": "SBCDAP    ",
+    "COLUMN_TEXT": "AsientoApertura                             SBCDAP"
+  },
+  {
+    "TABLE_NAME": "SBML1",
+    "COLUMN_NAME": "ASIENTOAPERTURA",
+    "SYSTEM_COLUMN_NAME": "SBCDAP    ",
+    "COLUMN_TEXT": "Cod Ast. Apertura"
+  }
+]
+
+=== CRUT hour sample ===
+[
+  {
+    "CLIENTE": "4300009989",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 100000,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300007269",
+    "HORAREPARTODESDE": 80000,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300007013",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 110000
+  },
+  {
+    "CLIENTE": "4300006834",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 120000
+  },
+  {
+    "CLIENTE": "4300008738",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 80000
+  },
+  {
+    "CLIENTE": "4300007908",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 80000
+  },
+  {
+    "CLIENTE": "4300007896",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300070055",
+    "HORAREPARTODESDE": 122000,
+    "HORAREPARTOHASTA": 123000,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300071055",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300003066",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300005082",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300008060",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300004113",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 100000
+  },
+  {
+    "CLIENTE": "4300002598",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 100000
+  },
+  {
+    "CLIENTE": "4300070011",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300070006",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300070007",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300003884",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300030747",
+    "HORAREPARTODESDE": 90000,
+    "HORAREPARTOHASTA": 200000,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 90000
+  },
+  {
+    "CLIENTE": "4300030049",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 100000
+  },
+  {
+    "CLIENTE": "4300072592",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 100000
+  },
+  {
+    "CLIENTE": "4300008072",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 110000
+  },
+  {
+    "CLIENTE": "4300076440",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 110000
+  },
+  {
+    "CLIENTE": "4300072857",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 120000
+  },
+  {
+    "CLIENTE": "4300073196",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 120000
+  },
+  {
+    "CLIENTE": "4300007904",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 110000
+  },
+  {
+    "CLIENTE": "4300007609",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 120000
+  },
+  {
+    "CLIENTE": "4300008058",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 110000
+  },
+  {
+    "CLIENTE": "4300008734",
+    "HORAREPARTODESDE": 0,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 120000
+  },
+  {
+    "CLIENTE": "4300003479",
+    "HORAREPARTODESDE": 93000,
+    "HORAREPARTOHASTA": 0,
+    "HORAVISITA": 0,
+    "HORALLAMADA": 200000
+  }
+]
+
+=== JAVIER email/outbox/notif tables ===
+[
+  {
+    "TABLE_NAME": "CUSTOMER_EMAILS"
+  },
+  {
+    "TABLE_NAME": "KPI_ALERTS"
+  },
+  {
+    "TABLE_NAME": "REPARTIDOR_LIQUIDACION_EMAILS"
+  },
+  {
+    "TABLE_NAME": "REPARTIDOR_LIQUIDACION_OUTBOX"
+  },
+  {
+    "TABLE_NAME": "TEST_REPARTIDOR_LIQUIDACION_OUTBOX"
+  }
+]
+
+=== GPS columns DSEDAC ===
+[
+  {
+    "TABLE_NAME": "CACC",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CACC",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CACCL1",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CACCL1",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CACFIRMAS",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CACFIRMAS",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CAPC",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CAPC",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CAPCL1",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CAPCL1",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPC",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPC",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPC_BK1",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPC_BK1",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPC_BK2",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPC_BK2",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPCL1",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPCL1",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPCL2",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPCL2",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPK",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPK",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPKL1",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPKL1",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPRE",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPRE",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPREL1",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "CPREL1",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "LOC",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "LOC",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "LOCL1",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "LOCL1",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "RHJ",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "RHJ",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "RHJLOG",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "RHJLOG",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "RHJLOGL1",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "RHJLOGL1",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "RHJL1",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "RHJL1",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "TPG",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "TPG",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "TPGL1",
+    "COLUMN_NAME": "LATITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  },
+  {
+    "TABLE_NAME": "TPGL1",
+    "COLUMN_NAME": "LONGITUD",
+    "DATA_TYPE": "NUMERIC",
+    "LENGTH": 15
+  }
+]
+
+=== Document vendor/repartidor columns ===
+[
+  {
+    "TABLE_NAME": "LAC",
+    "COLUMN_NAME": "CODIGOCOMERCIAL"
+  },
+  {
+    "TABLE_NAME": "LAC",
+    "COLUMN_NAME": "CODIGORUTAREPARTO"
+  },
+  {
+    "TABLE_NAME": "LAC",
+    "COLUMN_NAME": "CODIGOVENDEDOR"
+  },
+  {
+    "TABLE_NAME": "LAC",
+    "COLUMN_NAME": "CODIGOVENDEDORCOBRO"
+  }
+]

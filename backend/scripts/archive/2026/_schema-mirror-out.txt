@@ -1,0 +1,214 @@
+# ARCHIVE one-off [2026/anio-mtime]: artefacto txt | _-scratch + artefacto txt gitignored; salida espejo schema | NO EJECUTAR (GMP-SCRIPTS-FINAL-ARCHIVE-20260925).
+﻿DB2 TABLE MIRROR VERIFICATION
+Timestamp: 2026-06-19T06:21:39.137Z
+Connection: DSN=GMP, UID=JAVIER, NAM=1, CCSID=1208
+├ó┼ôÔÇª Connected to DB2
+
+
+================================================================================
+COMPARING: 1. REPARTIDOR_COBROS vs DSEDAC.CVC
+  JAVIER.REPARTIDOR_COBROS  vs  DSEDAC.CVC
+================================================================================
+  DSEDAC columns: 108
+  JAVIER columns: 130
+  App-only columns in JAVIER: 26
+  App-only columns:
+    + IDEMPOTENCY_TOKEN (VARCHAR(128,0))
+    + CREATED_AT (TIMESTMP(10,0))
+    + UPDATED_AT (TIMESTMP(10,0))
+    + STATUS (VARCHAR(20,0))
+    + OPERADOR (VARCHAR(50,0))
+    + PANTALLA_ORIGEN (VARCHAR(20,0))
+    + LIQUIDADO_SN (CHAR(1,0))
+    + LIQUIDACION_TOKEN (VARCHAR(128,0))
+    + SUBEMPRESAREGISTRO (CHAR(3,0))
+    + EJERCICIOREGISTRO (NUMERIC(4,0))
+    + SERIEREGISTRO (CHAR(1,0))
+    + TERMINALREGISTRO (NUMERIC(3,0))
+    + NUMEROREGISTRO (NUMERIC(6,0))
+    + NUMEROREGISTROORIGINAL (NUMERIC(6,0))
+    + CUENTACOBRADO (CHAR(10,0))
+    + CUENTATALONES (CHAR(10,0))
+    + CUENTADESCUENTO (CHAR(10,0))
+    + IMPORTETOTALCOBRADO (NUMERIC(10,2))
+    + IMPORTETOTALTALONES (NUMERIC(10,2))
+    + IMPORTETOTALOTROS (NUMERIC(10,2))
+    + IMPORTETOTALDESCUENTO (NUMERIC(10,2))
+    + IMPORTETOTALPENDIENTE (NUMERIC(10,2))
+    + EXTENSIONCONCEPTO (CHAR(40,0))
+    + CODIGOCONCEPTOCONTRAPARTIDA (CHAR(2,0))
+    + DESCCONCEPTOCONTRAPARTIDA (CHAR(40,0))
+    + EXTCONCEPTOCONTRAPARTIDA (CHAR(40,0))
+  ├ó┬Ø┼Æ MISSING from JAVIER (4):
+    - IMPRESOSN
+    - DIAIMPRESO
+    - MESIMPRESO
+    - ANOIMPRESO
+  ├ó┬Ø┼Æ TYPE MISMATCHES (1):
+    DESCRIPCIONCONCEPTO: JAVIER=CHAR(40,0) | DSEDAC=CHAR(30,0)
+
+================================================================================
+COMPARING: 2. REPARTIDOR_LIQUIDACION_OPS vs DSEDAC.LQD
+  JAVIER.REPARTIDOR_LIQUIDACION_OPS  vs  DSEDAC.LQD
+================================================================================
+  DSEDAC columns: 32
+  JAVIER columns: 38
+  App-only columns in JAVIER: 6
+  App-only columns:
+    + IDEMPOTENCY_TOKEN (VARCHAR(128,0))
+    + CREATED_AT (TIMESTMP(10,0))
+    + UPDATED_AT (TIMESTMP(10,0))
+    + STATUS (VARCHAR(20,0))
+    + OPERADOR (VARCHAR(50,0))
+    + PANTALLA_ORIGEN (VARCHAR(20,0))
+  ├ó┼ôÔÇª ALL DSEDAC columns present in JAVIER with matching types
+
+================================================================================
+COMPARING: 3. REPARTIDOR_ENTREGAS vs DSEDAC.OPP
+  JAVIER.REPARTIDOR_ENTREGAS  vs  DSEDAC.OPP
+================================================================================
+  DSEDAC columns: 44
+  JAVIER columns: 50
+  App-only columns in JAVIER: 6
+  App-only columns:
+    + IDEMPOTENCY_TOKEN (VARCHAR(128,0))
+    + CREATED_AT (TIMESTMP(10,0))
+    + UPDATED_AT (TIMESTMP(10,0))
+    + STATUS (VARCHAR(20,0))
+    + OPERADOR (VARCHAR(50,0))
+    + PANTALLA_ORIGEN (VARCHAR(20,0))
+  ├ó┼ôÔÇª ALL DSEDAC columns present in JAVIER with matching types
+
+================================================================================
+COMPARING: 4. REPARTIDOR_ENTREGA_LINEAS vs DSEDAC.LAC
+  JAVIER.REPARTIDOR_ENTREGA_LINEAS  vs  DSEDAC.LAC
+================================================================================
+  DSEDAC columns: 126
+  JAVIER columns: 132
+  App-only columns in JAVIER: 6
+  App-only columns:
+    + IDEMPOTENCY_TOKEN (VARCHAR(128,0))
+    + CREATED_AT (TIMESTMP(10,0))
+    + UPDATED_AT (TIMESTMP(10,0))
+    + STATUS (VARCHAR(20,0))
+    + OPERADOR (VARCHAR(50,0))
+    + PANTALLA_ORIGEN (VARCHAR(20,0))
+  ├ó┼ôÔÇª ALL DSEDAC columns present in JAVIER with matching types
+
+================================================================================
+COMPARING: 5. REPARTIDOR_FIRMAS vs DSEDAC.CACFIRMAS
+  JAVIER.REPARTIDOR_FIRMAS  vs  DSEDAC.CACFIRMAS
+================================================================================
+  DSEDAC columns: 17
+  JAVIER columns: 25
+  App-only columns in JAVIER: 8
+  App-only columns:
+    + ID (INTEGER(4,0))
+    + MARCAACTUALIZACION (VARCHAR(50,0))
+    + IDEMPOTENCY_TOKEN (VARCHAR(128,0))
+    + CREATED_AT (TIMESTMP(10,0))
+    + UPDATED_AT (TIMESTMP(10,0))
+    + STATUS (VARCHAR(20,0))
+    + OPERADOR (VARCHAR(50,0))
+    + PANTALLA_ORIGEN (VARCHAR(20,0))
+  ├ó┼ôÔÇª ALL DSEDAC columns present in JAVIER with matching types
+
+================================================================================
+COMPARING: 6. REPARTIDOR_OBJETIVOS vs DSEDAC.CMV
+  JAVIER.REPARTIDOR_OBJETIVOS  vs  DSEDAC.CMV
+================================================================================
+  DSEDAC columns: 9
+  JAVIER columns: 15
+  App-only columns in JAVIER: 6
+  App-only columns:
+    + IDEMPOTENCY_TOKEN (VARCHAR(128,0))
+    + CREATED_AT (TIMESTMP(10,0))
+    + UPDATED_AT (TIMESTMP(10,0))
+    + STATUS (VARCHAR(20,0))
+    + OPERADOR (VARCHAR(50,0))
+    + PANTALLA_ORIGEN (VARCHAR(20,0))
+  ├ó┼ôÔÇª ALL DSEDAC columns present in JAVIER with matching types
+
+================================================================================
+COMPARING: 7. DELIVERY_STATUS vs DSEDAC.CPC
+  JAVIER.DELIVERY_STATUS  vs  DSEDAC.CPC
+================================================================================
+  DSEDAC columns: 141
+  JAVIER columns: 147
+  App-only columns in JAVIER: 6
+  App-only columns:
+    + IDEMPOTENCY_TOKEN (VARCHAR(128,0))
+    + CREATED_AT (TIMESTMP(10,0))
+    + UPDATED_AT (TIMESTMP(10,0))
+    + STATUS (VARCHAR(20,0))
+    + OPERADOR (VARCHAR(50,0))
+    + PANTALLA_ORIGEN (VARCHAR(20,0))
+  ├ó┼ôÔÇª ALL DSEDAC columns present in JAVIER with matching types
+
+================================================================================
+COMPARING: 8. CLIENT_SIGNERS vs DSEDAC.CLI
+  JAVIER.CLIENT_SIGNERS  vs  DSEDAC.CLI
+================================================================================
+  DSEDAC columns: 50
+  JAVIER columns: 56
+  App-only columns in JAVIER: 6
+  App-only columns:
+    + IDEMPOTENCY_TOKEN (VARCHAR(128,0))
+    + CREATED_AT (TIMESTMP(10,0))
+    + UPDATED_AT (TIMESTMP(10,0))
+    + STATUS (VARCHAR(20,0))
+    + OPERADOR (VARCHAR(50,0))
+    + PANTALLA_ORIGEN (VARCHAR(20,0))
+  ├ó┼ôÔÇª ALL DSEDAC columns present in JAVIER with matching types
+
+================================================================================
+VERIFYING EXISTING TABLES
+================================================================================
+  ├ó┼ôÔÇª JAVIER.LQD EXISTS
+  ├ó┼ôÔÇª JAVIER.COMM_CONFIG EXISTS
+  ├ó┼ôÔÇª JAVIER.VENDOR_PIN_HASHES EXISTS
+  ├ó┼ôÔÇª JAVIER.REPARTIDOR_FINANCIAL_BALANCES EXISTS
+  ├ó┼ôÔÇª JAVIER.REPARTIDOR_COMMISSION_TIERS EXISTS
+  ├ó┼ôÔÇª JAVIER.REPARTIDOR_LIQUIDACION_EMAILS EXISTS
+
+================================================================================
+LQD CROSS-SCHEMA COMPARISON
+================================================================================
+
+================================================================================
+COMPARING: JAVIER.LQD vs DSEDAC.LQD
+  JAVIER.LQD  vs  DSEDAC.LQD
+================================================================================
+  DSEDAC columns: 32
+  JAVIER columns: 32
+  App-only columns in JAVIER: 0
+  ├ó┼ôÔÇª ALL DSEDAC columns present in JAVIER with matching types
+
+================================================================================
+COMPARING: JAVIER.COMM_CONFIG vs DSEDAC.COMM_CONFIG
+  JAVIER.COMM_CONFIG  vs  DSEDAC.COMM_CONFIG
+================================================================================
+  DSEDAC columns: 10
+  JAVIER columns: 10
+  App-only columns in JAVIER: 0
+  ├ó┼ôÔÇª ALL DSEDAC columns present in JAVIER with matching types
+
+================================================================================
+FINAL SUMMARY
+================================================================================
+  ├ó┬Ø┼Æ 1. REPARTIDOR_COBROS vs DSEDAC.CVC
+  ├ó┼ôÔÇª 2. REPARTIDOR_LIQUIDACION_OPS vs DSEDAC.LQD
+  ├ó┼ôÔÇª 3. REPARTIDOR_ENTREGAS vs DSEDAC.OPP
+  ├ó┼ôÔÇª 4. REPARTIDOR_ENTREGA_LINEAS vs DSEDAC.LAC
+  ├ó┼ôÔÇª 5. REPARTIDOR_FIRMAS vs DSEDAC.CACFIRMAS
+  ├ó┼ôÔÇª 6. REPARTIDOR_OBJETIVOS vs DSEDAC.CMV
+  ├ó┼ôÔÇª 7. DELIVERY_STATUS vs DSEDAC.CPC
+  ├ó┼ôÔÇª 8. CLIENT_SIGNERS vs DSEDAC.CLI
+
+  Total pairs compared: 8
+  All matched: ├ó┬Ø┼Æ NO
+  Total missing columns: 4
+  Total type mismatches: 1
+  Total app-only columns: 70
+
+├ó┼ôÔÇª Verification complete.

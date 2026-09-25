@@ -1,0 +1,243 @@
+{
+  "ts": "2026-06-19T07:12:05.008Z",
+  "tasks": [
+    {
+      "task": "TASK1 Schema CPC/LPC vs PEDIDOS_*",
+      "result": "PASS",
+      "evidence": {
+        "pairs": [
+          {
+            "pair": "DSEDAC.CPC vs JAVIER.PEDIDOS_CAB",
+            "dsedacCols": 141,
+            "javierCols": 176,
+            "missingInJavier": 0,
+            "typeMismatches": 0,
+            "appOnlyCols": 35,
+            "ok": true
+          },
+          {
+            "pair": "DSEDAC.LPC vs JAVIER.PEDIDOS_LIN",
+            "dsedacCols": 71,
+            "javierCols": 83,
+            "missingInJavier": 0,
+            "typeMismatches": 0,
+            "appOnlyCols": 12,
+            "ok": true
+          }
+        ],
+        "note": "align-javier-dsedac-additive: 0 DDL needed when run locally"
+      }
+    },
+    {
+      "task": "TASK2 Verify P-093-003431 in DSEDAC.CPC",
+      "result": "PASS",
+      "evidence": {
+        "formatted": "P-093-003431",
+        "row": {
+          "CLIENTE": "4300039513",
+          "VENDEDOR": "93",
+          "SITUACION": "A",
+          "IMPORTETOTAL": 0,
+          "NUMEROPEDIDO": 3431,
+          "TERMINALPEDIDO": 93,
+          "SERIE": "P",
+          "EJERCICIOPEDIDO": 2019,
+          "DIADOCUMENTO": 24,
+          "MESDOCUMENTO": 4,
+          "ANODOCUMENTO": 2019
+        },
+        "expectedSituacion": "A (pending Acisa)"
+      }
+    },
+    {
+      "task": "AUTH login",
+      "result": "PASS",
+      "evidence": {
+        "role": "JEFE_VENTAS"
+      }
+    },
+    {
+      "task": "TASK2 Borrador create + list",
+      "result": "PASS",
+      "evidence": {
+        "createStatus": 201,
+        "orderId": 118,
+        "estado": "BORRADOR",
+        "inList": true
+      }
+    },
+    {
+      "task": "TASK2 Add line to borrador",
+      "result": "FAIL",
+      "evidence": {
+        "status": 500,
+        "error": "codigoArticulo is required"
+      }
+    },
+    {
+      "task": "TASK2 Confirm borrador -> CONFIRMADO",
+      "result": "PASS",
+      "evidence": {
+        "confirmStatus": 200,
+        "estado": "CONFIRMADO",
+        "syncStatus": "SYNCED",
+        "numero": 73
+      }
+    },
+    {
+      "task": "TASK6 No duplicate lines on confirm",
+      "result": "PASS",
+      "evidence": {
+        "duplicates": []
+      }
+    },
+    {
+      "task": "TASK6 Line totals precio x qty (DB2)",
+      "result": "PASS",
+      "evidence": {
+        "lines": [
+          {
+            "sec": 1,
+            "qty": 2,
+            "price": 10,
+            "importe": 20,
+            "expected": 20,
+            "ok": true
+          }
+        ]
+      }
+    },
+    {
+      "task": "TASK6 Line totals precio x qty (API)",
+      "result": "PASS",
+      "evidence": {
+        "lineCount": 1
+      }
+    },
+    {
+      "task": "TASK2 DSEDAC.CPC export when flags on",
+      "result": "PASS",
+      "evidence": {
+        "exportOn": true,
+        "cpcRows": 1,
+        "note": "expected CPC row"
+      }
+    },
+    {
+      "task": "TASK3 Cobros historico API",
+      "result": "PASS",
+      "evidence": {
+        "status": 200,
+        "count": 0
+      }
+    },
+    {
+      "task": "TASK3 Cobros summary vs client pendientes",
+      "result": "PASS",
+      "evidence": {
+        "summaryStatus": 200,
+        "grandTotal": 83008.82,
+        "sampleClient": "4300010359",
+        "detailSum": 39024.26,
+        "summaryPending": 39024.26,
+        "docCount": 4,
+        "detailTotalFromResumen": 39024.26
+      }
+    },
+    {
+      "task": "TASK3 Vendor 93 cobros summary",
+      "result": "PASS",
+      "evidence": {
+        "grandTotal": 83008.82,
+        "clientCount": 40
+      }
+    },
+    {
+      "task": "TASK3 Comercial vs repartidor cobros isolation",
+      "result": "PASS",
+      "evidence": {
+        "note": "Comercial pending-summary uses DSEDAC.CVC scoped by vendor; REPARTIDOR_COBROS subtracts rep collections from pendientes. Rep-only rows for v93:",
+        "repOnlyCountSample": 0
+      }
+    },
+    {
+      "task": "TASK4 Promotions API vs DB2 count",
+      "result": "PASS",
+      "evidence": {
+        "clientCode": "4300000354",
+        "dbCount": 0,
+        "apiCount": 0,
+        "apiStatus": 200,
+        "note": "No PMR promos for other v93 clients; checked portfolio sample"
+      }
+    },
+    {
+      "task": "TASK5 Bolsa idempotency no duplicates",
+      "result": "PASS",
+      "evidence": {
+        "duplicateKeys": []
+      }
+    },
+    {
+      "task": "TASK5 Bolsa one movement per line (sample)",
+      "result": "PASS",
+      "evidence": {
+        "lineDuplicates": []
+      }
+    },
+    {
+      "task": "TASK5 Bolsa importe = precio x cantidad",
+      "result": "PASS",
+      "evidence": {
+        "badRows": []
+      }
+    },
+    {
+      "task": "TASK5 Bolsa API history fields",
+      "result": "PASS",
+      "evidence": {
+        "status": 200,
+        "sample": null
+      }
+    }
+  ],
+  "env": {
+    "exportFlags": {
+      "PEDIDOS_EXPORT_TO_SYSTEM": "true",
+      "PEDIDOS_DSEDAC_EXPORT_APPROVED": "true",
+      "PEDIDOS_CONFIRMATION_SCHEMA": "JAVIER",
+      "DB2_WRITE_SCHEMA": "JAVIER"
+    }
+  },
+  "pedidosStates": {
+    "valid": [
+      "BORRADOR",
+      "PENDIENTE_APROBACION",
+      "CONFIRMANDO",
+      "CONFIRMADO",
+      "ENVIADO",
+      "ANULADO"
+    ],
+    "inDb": [
+      {
+        "ESTADO": "BORRADOR",
+        "C": 21
+      },
+      {
+        "ESTADO": "ANULADO",
+        "C": 20
+      },
+      {
+        "ESTADO": "CONFIRMADO",
+        "C": 16
+      },
+      {
+        "ESTADO": "ENVIADO",
+        "C": 1
+      }
+    ],
+    "noise": "PEND_APROB legacy maps to PENDIENTE_APROBACION; CONFIRMANDO is transient confirm lock"
+  },
+  "overall": "FAIL",
+  "failCount": 1
+}

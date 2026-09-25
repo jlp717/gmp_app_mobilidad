@@ -1,0 +1,54 @@
+// ARCHIVE one-off [2026/anio-gitlog]: header-no-leido;test-syntax | test puntual sintaxis vista (gitignored test_*) | NO EJECUTAR (GMP-SCRIPTS-FINAL-ARCHIVE-20260925).
+#!/usr/bin/env node
+const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+const CONN = db2ConnectionString();
+
+(async () => {
+  const pool = await odbc.pool(CONN);
+  const conn = await pool.connect();
+
+  const tests = [
+    {
+      name: 'Simple view',
+      sql: 'CREATE VIEW JAVIER.TEST_VISTA AS SELECT CODIGOCLIENTE, NOMBRECLIENTE FROM DSEDAC.CLIL1'
+    },
+    {
+      name: 'AS alias',
+      sql: 'CREATE VIEW JAVIER.TEST_VISTA AS SELECT CODIGOCLIENTE, CODIGOCLIENTE AS CLCL1_CODIGOCLIENTE FROM DSEDAC.CLIL1'
+    },
+    {
+      name: 'Long column name',
+      sql: "CREATE VIEW JAVIER.TEST_VISTA AS SELECT CODIGOCLIENTE, NOMBRECLIENTE, 'S' AS CLCL1_DIASLIMITECREDITOCONFECHAALB FROM DSEDAC.CLIL1"
+    },
+    {
+      name: 'LEFT JOIN basic',
+      sql: 'CREATE VIEW JAVIER.TEST_VISTA AS SELECT CLIL1.CODIGOCLIENTE, CLIL1.NOMBRECLIENTE, CLCL1.DIASLIMITECREDITO FROM DSEDAC.CLIL1 CLIL1 LEFT JOIN DSEDAC.CLCL1 CLCL1 ON TRIM(CLCL1.CODIGOCLIENTE) = TRIM(CLIL1.CODIGOCLIENTE)'
+    },
+    {
+      name: 'LEFT JOIN multi',
+      sql: 'CREATE VIEW JAVIER.TEST_VISTA AS SELECT CLIL1.CODIGOCLIENTE, CLIL1.NOMBRECLIENTE, CLCL1.DIASLIMITECREDITO, CLCL1.DIASLIMITECREDITOCONFECHAALB FROM DSEDAC.CLIL1 CLIL1 LEFT JOIN DSEDAC.CLCL1 CLCL1 ON TRIM(CLCL1.CODIGOCLIENTE) = TRIM(CLIL1.CODIGOCLIENTE) LEFT JOIN DSEDAC.CLIX CLIX ON TRIM(CLIX.CODIGOCLIENTE) = TRIM(CLIL1.CODIGOCLIENTE)'
+    },
+    {
+      name: 'All 5 tables minimal',
+      sql: 'CREATE VIEW JAVIER.TEST_VISTA AS SELECT CLIL1.CODIGOCLIENTE, CLIL1.NOMBRECLIENTE, CLCL1.DIASLIMITECREDITO, CLCL1.DIASLIMITECREDITOCONFECHAALB, CLIX.TIPOFACTURACIONPEDIDOS, CRUT.SECUENCIA, VDDL1.NOMBREVENDEDOR FROM DSEDAC.CLIL1 CLIL1 LEFT JOIN DSEDAC.CLCL1 CLCL1 ON TRIM(CLCL1.CODIGOCLIENTE) = TRIM(CLIL1.CODIGOCLIENTE) LEFT JOIN DSEDAC.CLIX CLIX ON TRIM(CLIX.CODIGOCLIENTE) = TRIM(CLIL1.CODIGOCLIENTE) LEFT JOIN DSEDAC.CRUT CRUT ON TRIM(CRUT.CODIGOCLIENTE) = TRIM(CLIL1.CODIGOCLIENTE) AND CRUT.SECUENCIA = 1 LEFT JOIN DSEDAC.VDDL1 VDDL1 ON TRIM(VDDL1.CODIGOVENDEDOR) = TRIM(CRUT.CODIGOVENDEDOR)'
+    },
+  ];
+
+  for (const t of tests) {
+    try { await conn.query('DROP VIEW JAVIER.TEST_VISTA'); } catch (_) {}
+    try {
+      await conn.query(t.sql);
+      console.log(`âœ… ${t.name}`);
+    } catch (e) {
+      const odbc = (e.odbcErrors || [])[0] || {};
+      console.log(`âŒ ${t.name}: ${e.message.substring(0,200)}`);
+    }
+  }
+
+  try { await conn.query('DROP VIEW JAVIER.TEST_VISTA'); } catch (_) {}
+  await conn.close();
+  await pool.close();
+})();
