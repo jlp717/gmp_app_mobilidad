@@ -1103,6 +1103,7 @@ class RepartidorDataService {
         cacheResponse: false,
         allowStale: false,
         receiveTimeout: const Duration(seconds: 60),
+        skipRetry: true,
       );
       return base64Decode(RepartoReceiptPdf.fromResponse(response).base64);
     } on RepartoReceiptUnavailableException {

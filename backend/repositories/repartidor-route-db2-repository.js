@@ -171,7 +171,7 @@ function confirmationDocumentIdExpr(alias = 'CPC') {
 function confirmationOverlayJoins(tablesList = confirmationStatusOverlayTables()) {
   return (tablesList || []).map((tables, index) => {
     const overlayAlias = `TC${index}`;
-    return `LEFT JOIN ${tables.confirmations} ${overlayAlias} ON TRIM(${overlayAlias}.DOCUMENT_ID) = ${confirmationDocumentIdExpr('CPC')}`;
+    return `LEFT JOIN ${tables.confirmations} ${overlayAlias} ON ${overlayAlias}.DOCUMENT_ID = ${confirmationDocumentIdExpr('CPC')}`;
   }).join('\n');
 }
 
@@ -211,7 +211,7 @@ function confirmationScopedOwnerJoin(repartidorIds, documentAlias = 'CPC', confi
   if (!ownerIds.length || !tables) return { sql: '', params: [] };
   return {
     sql: `LEFT JOIN ${tables.confirmations} ${confirmationAlias}
-              ON TRIM(${confirmationAlias}.DOCUMENT_ID) = ${confirmationDocumentIdExpr(documentAlias)}
+              ON ${confirmationAlias}.DOCUMENT_ID = ${confirmationDocumentIdExpr(documentAlias)}
              AND UPPER(TRIM(${confirmationAlias}.STATUS)) IN ('ENTREGADO', 'PARCIAL', 'NO_ENTREGADO', 'RECHAZADO')
              AND TRIM(${confirmationAlias}.REPARTIDOR_ID) IN (${ownerIds.map(() => '?').join(',')})`,
     params: ownerIds,
@@ -286,7 +286,7 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
               CAST(NULL AS VARCHAR(10)) AS FORMA_PAGO_COBRO`;
       const paymentJoin = cobrosTable
         ? ` LEFT JOIN ${cobrosTable} CO
-               ON TRIM(CO.IDEMPOTENCY_TOKEN) = TRIM(C.IDEMPOTENCY_KEY)`
+               ON CO.IDEMPOTENCY_TOKEN = C.IDEMPOTENCY_KEY`
         : '';
       const confirmRows = await runQueryWithParams(
         `SELECT TRIM(C.DOCUMENT_ID) AS DOCUMENT_ID,
@@ -301,9 +301,9 @@ async function overlayCanonicalConfirmations(rows, { repartidorIds, clientCode }
               ${paymentSelect}
          FROM ${tables.confirmations} C
          ${paymentJoin}
-        WHERE TRIM(C.DOCUMENT_ID) IN (${documentPlaceholders})
-          AND TRIM(C.REPARTIDOR_ID) IN (${driverPlaceholders})
-         ORDER BY TRIM(C.DOCUMENT_ID), TRIM(C.STATUS), C.ID`,
+        WHERE C.DOCUMENT_ID IN (${documentPlaceholders})
+          AND C.REPARTIDOR_ID IN (${driverPlaceholders})
+         ORDER BY C.DOCUMENT_ID, C.STATUS, C.ID`,
         [...documentIds, ...drivers],
         false,
       );
@@ -643,6 +643,7 @@ async function getCollectionsSummaryBatch(selectedMonth, selectedYear, repartido
                   AND OPP.CODIGOREPARTIDOR IN (${repartidorParams.map(() => '?').join(',')})
             ),
             UNIQUE_DOCUMENTS AS (
+                -- F4-03 JUSTIFIED: passthrough CTE, SOURCE_DOCUMENTS proyecta columnas explicitas arriba
                 SELECT * FROM SOURCE_DOCUMENTS WHERE DOCUMENT_RANK = 1
             ),
             CVC_INSTALLMENTS AS (
@@ -747,6 +748,7 @@ async function getCollectionsDailyBatch(selectedYear, selectedMonth, repartidorI
                   AND OPP.CODIGOREPARTIDOR IN (${repartidorIdList.map(() => '?').join(',')})
             ),
             UNIQUE_DOCUMENTS AS (
+                -- F4-03 JUSTIFIED: passthrough CTE, SOURCE_DOCUMENTS proyecta columnas explicitas arriba
                 SELECT * FROM SOURCE_DOCUMENTS WHERE DOCUMENT_RANK = 1
             ),
             CVC_INSTALLMENTS AS (
@@ -904,7 +906,7 @@ function confirmationOwnerScopeClause(repartidorIds, documentAlias = 'CPC') {
   const sql = tablesList.map((tables) => `OR EXISTS (
         SELECT 1
           FROM ${tables.confirmations} C_SCOPE
-         WHERE TRIM(C_SCOPE.DOCUMENT_ID) = ${confirmationDocumentIdExpr(documentAlias)}
+         WHERE C_SCOPE.DOCUMENT_ID = ${confirmationDocumentIdExpr(documentAlias)}
            AND UPPER(TRIM(C_SCOPE.STATUS)) IN (${statusPlaceholders})
            AND TRIM(C_SCOPE.REPARTIDOR_ID) IN (${ownerPlaceholders})
       )`).join('\n      ');
@@ -992,7 +994,7 @@ async function getClientDocumentsFast({
     ' WHERE CPC.CODIGOCLIENTEALBARAN=? AND ' + ownerFilter + ' AND CPC.NUMEROALBARAN<900000 AND CPC.EJERCICIOALBARAN>0',
     ...(yearClauses.length ? [' AND ' + yearClauses.join(' AND ')] : []),
     ...(dateClauses.length ? [' AND ' + dateClauses.join(' AND ')] : []),
-    '), UNIQUE_DOCUMENTS AS (SELECT * FROM SOURCE_DOCUMENTS WHERE ALBARAN_RANK=1) SELECT * FROM UNIQUE_DOCUMENTS',
+    '), UNIQUE_DOCUMENTS AS (/* F4-03 JUSTIFIED: passthrough CTE, SOURCE_DOCUMENTS proyecta columnas explicitas */ SELECT * FROM SOURCE_DOCUMENTS WHERE ALBARAN_RANK=1) /* F4-03 JUSTIFIED: UNIQUE_DOCUMENTS ya deduplicado por ALBARAN_RANK=1 */ SELECT * FROM UNIQUE_DOCUMENTS',
   ].join('\n');
   const baseParams = [...effective.params, clientCode, ...ids, ...scope.params, ...yearParams, ...dateParams];
   const sortedIds = [...ids].map((id) => String(id).trim()).sort();
@@ -1211,6 +1213,7 @@ async function getClientDocumentsLegacy({
                   ${dateFilter}
             ),
             UNIQUE_DOCUMENTS AS (
+                -- F4-03 JUSTIFIED: passthrough CTE, SOURCE_DOCUMENTS proyecta columnas explicitas arriba
                 SELECT * FROM SOURCE_DOCUMENTS WHERE ALBARAN_RANK = 1
             ),
             INVOICE_HEADERS AS (
@@ -1279,6 +1282,7 @@ async function getClientDocumentsLegacy({
                 FROM LOGICAL_DOCUMENTS
             ),
             PAGED_DOCUMENTS AS (
+                -- F4-03 JUSTIFIED: NUMBERED_DOCUMENTS proyecta LOGICAL_KEY/SORT_DATE/SORT_NUMBER/TOTAL_COUNT/LOGICAL_POSITION explicitos
                 SELECT * FROM NUMBERED_DOCUMENTS
                 WHERE LOGICAL_POSITION > ?
                   AND LOGICAL_POSITION <= ?

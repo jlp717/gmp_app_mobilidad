@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
@@ -1197,6 +1198,19 @@ class EntregasNotifier extends Notifier<EntregasState> {
       if (response['success'] == true && response['albaran'] != null) {
         final albaran = AlbaranEntrega.fromJson(
           response['albaran'] as Map<String, dynamic>,
+        );
+        // REQ-32 repro (p. ej. P7223): traza documentoTipo, importe CPC,
+        // estado CVC, disponible, puedeCobrarse, esCTR y forma de pago.
+        debugPrint(
+          '[Entregas] detalle ${albaran.erpDocumentLabel} '
+          'tipo=${albaran.documentoTipo} '
+          'importe=${albaran.importeTotal} '
+          'cvcPendiente=${albaran.importeCvcPendiente} '
+          'capped=${albaran.cobroSaldoCapped} '
+          'disponible=${albaran.importeDisponibleCobro} '
+          'puedeCobrarse=${albaran.puedeCobrarse} '
+          'esCTR=${albaran.esCTR} '
+          'fp=${albaran.formaPago}',
         );
         final patched = state.albaranes.map((existing) {
           if (existing.id != albaran.id) return existing;

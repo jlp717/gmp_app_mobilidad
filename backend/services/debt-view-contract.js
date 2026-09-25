@@ -106,6 +106,13 @@ function cvcDocumentAmountSql(alias = 'C') {
     ELSE NULL END)`;
 }
 
+/**
+ * @deprecated F4-01 — joins CAC/CPC por identidad parcial (serie/numero sin
+ * subempresa ni cliente). Cero callers en prod (solo tests). Fuente canon:
+ * usa cvcDocumentAmountJoins (identidad completa + dedup CPC con ROW_NUMBER)
+ * junto a cvcDocumentAmountSql. Se mantiene exportado solo por compatibilidad
+ * con debt-view-contract.test.js; no anadir nuevos usos.
+ */
 function cvcDocumentJoins(alias = 'C') {
   const cac = comercialErpTable('CAC');
   const cpc = comercialErpTable('CPC');

@@ -2751,8 +2751,8 @@ router.post('/pay', verifyToken, validateBody(payBodySchema), async (req, res) =
             },
         });
     } catch (e) {
-        logger.error(`[COMMISSIONS] Payment error: ${e.message}`);
-        res.status(500).json({ success: false, error: 'Error al registrar el pago en DB', details: e.message });
+        // F2b-04: error generico via handler central; detalle solo en log (sin details interno).
+        handleRouteError(e, res, 'Error registrando el pago', 500, { code: 'COMMISSIONS_PAY_ERROR' });
     }
 });
 

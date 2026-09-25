@@ -274,7 +274,8 @@ describe('entregas route coverage gaps', () => {
     const overlaySql = mockQueryWithParams.mock.calls
       .map(([sql]) => sql)
       .find((sql) => String(sql).includes('TEST_REPARTO_CONFIRMACIONES'));
-    expect(overlaySql).toContain('TRIM(C.DOCUMENT_ID) IN');
+    expect(overlaySql).toContain('WHERE C.DOCUMENT_ID IN');
+    expect(overlaySql).not.toContain('TRIM(C.DOCUMENT_ID) IN');
     expect(overlaySql).not.toContain('TRIM(C.REPARTIDOR_ID) IN');
   });
 
@@ -509,6 +510,11 @@ describe('entregas route coverage gaps', () => {
       esCTR: true, cobroObligatorio: true, formaPagoDesc: 'Contado', tipoPago: 'CONTADO',
       items: [expect.objectContaining({ cantidadPedida: 2, cantidadEntregada: 1, cantidadRechazada: 1, cantidadPendiente: 0 })],
     });
+    const detailSql = mockQueryWithParams.mock.calls
+      .map(([sql]) => String(sql))
+      .find((sql) => sql.includes('FROM JAVIER.TEST_REPARTO_CONFIRMACIONES C'));
+    expect(detailSql).toContain('WHERE C.DOCUMENT_ID = ?');
+    expect(detailSql).not.toContain('TRIM(C.DOCUMENT_ID) = ?');
   });
 
   test('returns a typed error when the albaran header query fails', async () => {

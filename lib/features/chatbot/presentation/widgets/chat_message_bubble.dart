@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/features/chatbot/data/chatbot_document_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
@@ -181,7 +181,7 @@ class ChatMessageBubble extends ConsumerWidget {
                                   if (metadata.exportable != null)
                                     ChatExportTable(data: metadata.exportable!),
                                   if (metadata.documents.isNotEmpty)
-                                    _buildDocumentCards(context),
+                                    _buildDocumentCards(context, ref),
                                   _buildActionRow(context, ref),
                                   if (metadata.suggestedFollowUps.isNotEmpty)
                                     _buildFollowUpChips(),
@@ -232,7 +232,7 @@ class ChatMessageBubble extends ConsumerWidget {
     );
   }
 
-  Widget _buildDocumentCards(BuildContext context) {
+  Widget _buildDocumentCards(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Column(
@@ -261,7 +261,7 @@ class ChatMessageBubble extends ConsumerWidget {
               ),
               child: InkWell(
                 borderRadius: BorderRadius.circular(8),
-                onTap: () => _openDocument(context, document),
+                onTap: () => _openDocument(context, ref, document),
                 child: Padding(
                   padding: const EdgeInsets.all(10),
                   child: LayoutBuilder(
@@ -316,7 +316,7 @@ class ChatMessageBubble extends ConsumerWidget {
                       final openButton = Tooltip(
                         message: 'Abrir PDF',
                         child: TextButton.icon(
-                          onPressed: () => _openDocument(context, document),
+                          onPressed: () => _openDocument(context, ref, document),
                           icon: const Icon(Icons.open_in_new, size: 14),
                           label: const Text(
                             'Abrir',
@@ -503,7 +503,7 @@ class ChatMessageBubble extends ConsumerWidget {
               semanticsLabel: 'Abrir documento PDF',
               tooltip:
                   'Abrir el PDF asociado sin salir de la respuesta del asistente',
-              onTap: () => _openDocuments(context, metadata.documents),
+              onTap: () => _openDocuments(context, ref, metadata.documents),
             ),
           if (hasData)
             _ActionChip(
@@ -531,10 +531,11 @@ class ChatMessageBubble extends ConsumerWidget {
 
   Future<void> _openDocuments(
     BuildContext context,
+    WidgetRef ref,
     List<ChatDocumentReference> documents,
   ) async {
     if (documents.length == 1) {
-      await _openDocument(context, documents.first);
+      await _openDocument(context, ref, documents.first);
       return;
     }
 
@@ -578,7 +579,7 @@ class ChatMessageBubble extends ConsumerWidget {
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
-                    _openDocument(context, doc);
+                    _openDocument(context, ref, doc);
                   },
                 ),
               ),
@@ -591,6 +592,7 @@ class ChatMessageBubble extends ConsumerWidget {
 
   Future<void> _openDocument(
     BuildContext context,
+    WidgetRef ref,
     ChatDocumentReference document,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -603,18 +605,11 @@ class ChatMessageBubble extends ConsumerWidget {
     );
 
     try {
-      final bytes = await ApiClient.getBytes(
-        _normalizeDocumentEndpoint(document.url),
-        queryParameters: {
-          'preview': 'true',
-          '_t': DateTime.now().millisecondsSinceEpoch.toString(),
-        },
-      );
+      final bytes = await ref
+          .read(chatbotDocumentServiceProvider)
+          .fetchPreviewBytes(document.url);
       if (!context.mounted) return;
       messenger.hideCurrentSnackBar();
-      if (bytes.length < 100) {
-        throw Exception('El documento recibido no parece un PDF valido.');
-      }
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
           builder: (_) => PdfPreviewScreen(
@@ -635,21 +630,6 @@ class ChatMessageBubble extends ConsumerWidget {
         ),
       );
     }
-  }
-
-  String _normalizeDocumentEndpoint(String rawUrl) {
-    var endpoint = rawUrl.trim();
-    final baseUrl = ApiClient.dio.options.baseUrl;
-    if (endpoint.startsWith(baseUrl)) {
-      endpoint = endpoint.substring(baseUrl.length);
-    }
-    if (endpoint.startsWith('/api/')) {
-      endpoint = endpoint.substring(4);
-    }
-    if (!endpoint.startsWith('/')) {
-      endpoint = '/$endpoint';
-    }
-    return endpoint;
   }
 
   String _documentFileName(ChatDocumentReference document) {

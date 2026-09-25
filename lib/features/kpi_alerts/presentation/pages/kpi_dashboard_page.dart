@@ -139,9 +139,14 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
         title: const Text('Alertas comerciales'),
         backgroundColor: AppTheme.raisedSurface,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadDashboard,
+          Semantics(
+            button: true,
+            label: 'Recargar alertas comerciales',
+            child: IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Reintentar',
+              onPressed: _loadDashboard,
+            ),
           ),
         ],
       ),
@@ -200,13 +205,15 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
     final byType = (_data!['byType'] as List<dynamic>?) ?? [];
     final clients = (_data!['clients'] as List<dynamic>?) ?? [];
     final lastLoad = _data!['lastLoad'] as Map<String, dynamic>?;
+    final freshness = _data!['freshness'] as Map<String, dynamic>?;
+    final gaps = _data!['gaps'] as Map<String, dynamic>?;
 
     final totalAlerts = (totals['alerts'] as num?)?.toInt() ?? 0;
 
     // ponytail: widgets preconstruidos eager; .builder difiere inflate/layout. upgrade: itemBuilder por indice si clients crece mucho.
     final children = <Widget>[
-      // Last update banner
-      _buildUpdateBanner(lastLoad, totalAlerts),
+      // Last update banner + STALE + huecos (REQ-G3/G4)
+      _buildUpdateBanner(lastLoad, totalAlerts, freshness, gaps),
       const SizedBox(height: 16),
 
       // Summary cards
@@ -284,16 +291,36 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
   }
 
   // ─── UPDATE BANNER ──────────────────────────────────────────
+  // REQ-G3/G4: STALE visible si ultima COMPLETED >7d (nunca servir como fresco),
+  // fecha ultima carga + reintentar, hueco CUOTA_SIN_COMPRA visible sin datos.
 
-  Widget _buildUpdateBanner(Map<String, dynamic>? lastLoad, int totalAlerts) {
+  Widget _buildUpdateBanner(
+    Map<String, dynamic>? lastLoad,
+    int totalAlerts, [
+    Map<String, dynamic>? freshness,
+    Map<String, dynamic>? gaps,
+  ]) {
+    final completedAt = lastLoad?['completedAt']?.toString() ?? '';
+    final stale = (freshness?['stale'] as bool?) ??
+        _isStaleFallback(completedAt);
+    final days = (freshness?['daysSinceLoad'] as num?)?.toInt();
+    final missingTypes =
+        (gaps?['missingAlertTypes'] as List?)?.map((e) => e.toString()).toList() ??
+            const <String>[];
+
     String label;
     Color dotColor;
 
     if (lastLoad == null) {
       label = 'Sin datos de Nestlé cargados aun';
       dotColor = AppTheme.warning;
+    } else if (stale) {
+      final dateLabel = _formatDate(completedAt);
+      final ageLabel =
+          days != null ? 'hace $days d' : _formatRelativeTime(completedAt);
+      label = 'STALE · datos de $dateLabel ($ageLabel) · no son frescos';
+      dotColor = AppTheme.warning;
     } else {
-      final completedAt = lastLoad['completedAt']?.toString() ?? '';
       final relativeTime = _formatRelativeTime(completedAt);
       label = 'Datos actualizados $relativeTime';
       dotColor = AppTheme.success;
@@ -304,33 +331,91 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
       }
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: dotColor.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: dotColor,
-              shape: BoxShape.circle,
+    final gapLabel = missingTypes.isNotEmpty
+        ? 'Hueco: ${missingTypes.join(', ')} sin datos (falta CSV)'
+        : null;
+
+    return Semantics(
+      label: stale
+          ? 'Datos rancios. $label. ${gapLabel ?? ''}'
+          : label,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.raisedSurface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: dotColor.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                if (stale || lastLoad == null)
+                  Semantics(
+                    button: true,
+                    label: 'Reintentar carga de alertas',
+                    child: IconButton(
+                      icon: const Icon(Icons.refresh, size: 18),
+                      color: AppTheme.textSecondary,
+                      tooltip: 'Reintentar',
+                      onPressed: _loadDashboard,
+                    ),
+                  ),
+              ],
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-            ),
-          ),
-        ],
+            if (gapLabel != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                gapLabel,
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
+  }
+
+  bool _isStaleFallback(String dateStr) {
+    if (dateStr.isEmpty) return true;
+    try {
+      final date = DateTime.parse(dateStr);
+      return DateTime.now().difference(date).inDays > 7;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  String _formatDate(String dateStr) {
+    if (dateStr.isEmpty) return 'fecha desconocida';
+    try {
+      final date = DateTime.parse(dateStr).toLocal();
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (_) {
+      return dateStr;
+    }
   }
 
   String _formatRelativeTime(String dateStr) {

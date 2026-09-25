@@ -1,4 +1,4 @@
-/// COBROS PROVIDER — 100% Riverpod (ChangeNotifierProvider.family.autoDispose)
+/// COBROS PROVIDER — 100% Riverpod (NotifierProvider.family.autoDispose)
 ///
 /// State management for cobros/entregas module.
 /// Uses family pattern to parameterize by employeeCode + isRepartidor.
@@ -81,170 +81,369 @@ void _addForceRefreshParam(Map<String, String> params, bool forceRefresh) {
   }
 }
 
-class CobrosProvider extends ChangeNotifier {
-  CobrosProvider({
-    required this.employeeCode,
+// ============================================================
+// Immutable State
+// ============================================================
+
+class CobrosState {
+  const CobrosState({
+    this.employeeCode = '',
     this.isRepartidor = false,
+    this.isLoading = false,
+    this.error,
+    this.albaranesPendientes = const <Albaran>[],
+    this.albaranActual,
+    this.cobrosPendientes = const <CobroPendiente>[],
+    this.historicoCobros = const <CobroHistorico>[],
+    this.resumenCobros,
+    this.estadoClienteActual,
+    this.pendingSummary = const <String, Map<String, dynamic>>{},
+    this.lastSummaryVendorCode,
+    this.lastSummaryVendorCodes,
+    this.lastSummaryTipoDocumento,
+    this.lastSummaryFechaDesde,
+    this.lastSummaryFechaHasta,
+    this.grandTotal = 0,
+    this.grandTotalVencido = 0,
+    this.cvcGrandTotal = 0,
+    this.cvcGrandTotalVencido = 0,
+    this.appAdjustmentsTotal = 0,
+    this.appOrdersTotal = 0,
+    this.portfolioClientCount = 0,
+    this.portfolioVencidoClientCount = 0,
+    this.summarySource = '',
+    this.filtroEstado = 'todos',
+    this.filtroCliente = '',
+    this.filtroFecha,
   });
+
   final String employeeCode;
   final bool isRepartidor;
+  final bool isLoading;
+  final String? error;
+  final List<Albaran> albaranesPendientes;
+  final Albaran? albaranActual;
+  final List<CobroPendiente> cobrosPendientes;
+  final List<CobroHistorico> historicoCobros;
+  final ResumenCobros? resumenCobros;
+  final EstadoCliente? estadoClienteActual;
+  final Map<String, Map<String, dynamic>> pendingSummary;
+  final String? lastSummaryVendorCode;
+  final List<String>? lastSummaryVendorCodes;
+  final String? lastSummaryTipoDocumento;
+  final String? lastSummaryFechaDesde;
+  final String? lastSummaryFechaHasta;
+  final double grandTotal;
+  final double grandTotalVencido;
+  final double cvcGrandTotal;
+  final double cvcGrandTotalVencido;
+  final double appAdjustmentsTotal;
+  final double appOrdersTotal;
+  final int portfolioClientCount;
+  final int portfolioVencidoClientCount;
+  final String summarySource;
+  final String filtroEstado;
+  final String filtroCliente;
+  final DateTime? filtroFecha;
 
-  bool _isLoading = false;
-  String? _error;
-  bool _disposed = false;
+  static const _sentinel = Object();
 
-  List<Albaran> _albaranesPendientes = [];
-  Albaran? _albaranActual;
-  List<CobroPendiente> _cobrosPendientes = [];
-  List<CobroHistorico> _historicoCobros = [];
-  ResumenCobros? _resumenCobros;
-  EstadoCliente? _estadoClienteActual;
-  Map<String, Map<String, dynamic>> _pendingSummary = {};
-  String? _lastSummaryVendorCode;
-  List<String>? _lastSummaryVendorCodes;
-  String? _lastSummaryTipoDocumento;
-  String? _lastSummaryFechaDesde;
-  String? _lastSummaryFechaHasta;
-  double _grandTotal = 0;
-  double _grandTotalVencido = 0;
-  double _cvcGrandTotal = 0;
-  double _cvcGrandTotalVencido = 0;
-  double _appAdjustmentsTotal = 0;
-  double _appOrdersTotal = 0;
-  int _portfolioClientCount = 0;
-  int _portfolioVencidoClientCount = 0;
-  String _summarySource = '';
-  String _filtroEstado = 'todos';
-  String _filtroCliente = '';
-  DateTime? _filtroFecha;
-  final Map<String, String> _pendingCobroIdempotencyTokens = {};
-
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  List<Albaran> get albaranesPendientes => _albaranesPendientes;
-  Albaran? get albaranActual => _albaranActual;
-  List<CobroPendiente> get cobrosPendientes => _cobrosPendientes;
-  List<CobroHistorico> get historicoCobros =>
-      List.unmodifiable(_historicoCobros);
-  ResumenCobros? get resumenCobros => _resumenCobros;
-  EstadoCliente? get estadoClienteActual => _estadoClienteActual;
-  String get filtroEstado => _filtroEstado;
-  String get filtroCliente => _filtroCliente;
-  Map<String, Map<String, dynamic>> get pendingSummary => _pendingSummary;
-  double get grandTotal => _grandTotal;
-  double get grandTotalVencido => _grandTotalVencido;
-  double get cvcGrandTotal => _cvcGrandTotal;
-  double get cvcGrandTotalVencido => _cvcGrandTotalVencido;
-  double get appAdjustmentsTotal => _appAdjustmentsTotal;
-  double get appOrdersTotal => _appOrdersTotal;
-  int get portfolioClientCount => _portfolioClientCount;
-  int get portfolioVencidoClientCount => _portfolioVencidoClientCount;
-  String get summarySource => _summarySource;
+  CobrosState copyWith({
+    String? employeeCode,
+    bool? isRepartidor,
+    bool? isLoading,
+    Object? error = _sentinel,
+    List<Albaran>? albaranesPendientes,
+    Object? albaranActual = _sentinel,
+    List<CobroPendiente>? cobrosPendientes,
+    List<CobroHistorico>? historicoCobros,
+    Object? resumenCobros = _sentinel,
+    Object? estadoClienteActual = _sentinel,
+    Map<String, Map<String, dynamic>>? pendingSummary,
+    Object? lastSummaryVendorCode = _sentinel,
+    Object? lastSummaryVendorCodes = _sentinel,
+    Object? lastSummaryTipoDocumento = _sentinel,
+    Object? lastSummaryFechaDesde = _sentinel,
+    Object? lastSummaryFechaHasta = _sentinel,
+    double? grandTotal,
+    double? grandTotalVencido,
+    double? cvcGrandTotal,
+    double? cvcGrandTotalVencido,
+    double? appAdjustmentsTotal,
+    double? appOrdersTotal,
+    int? portfolioClientCount,
+    int? portfolioVencidoClientCount,
+    String? summarySource,
+    String? filtroEstado,
+    String? filtroCliente,
+    Object? filtroFecha = _sentinel,
+  }) {
+    return CobrosState(
+      employeeCode: employeeCode ?? this.employeeCode,
+      isRepartidor: isRepartidor ?? this.isRepartidor,
+      isLoading: isLoading ?? this.isLoading,
+      error: error == _sentinel ? this.error : error as String?,
+      albaranesPendientes: albaranesPendientes ?? this.albaranesPendientes,
+      albaranActual: albaranActual == _sentinel
+          ? this.albaranActual
+          : albaranActual as Albaran?,
+      cobrosPendientes: cobrosPendientes ?? this.cobrosPendientes,
+      historicoCobros: historicoCobros ?? this.historicoCobros,
+      resumenCobros: resumenCobros == _sentinel
+          ? this.resumenCobros
+          : resumenCobros as ResumenCobros?,
+      estadoClienteActual: estadoClienteActual == _sentinel
+          ? this.estadoClienteActual
+          : estadoClienteActual as EstadoCliente?,
+      pendingSummary: pendingSummary ?? this.pendingSummary,
+      lastSummaryVendorCode: lastSummaryVendorCode == _sentinel
+          ? this.lastSummaryVendorCode
+          : lastSummaryVendorCode as String?,
+      lastSummaryVendorCodes: lastSummaryVendorCodes == _sentinel
+          ? this.lastSummaryVendorCodes
+          : lastSummaryVendorCodes as List<String>?,
+      lastSummaryTipoDocumento: lastSummaryTipoDocumento == _sentinel
+          ? this.lastSummaryTipoDocumento
+          : lastSummaryTipoDocumento as String?,
+      lastSummaryFechaDesde: lastSummaryFechaDesde == _sentinel
+          ? this.lastSummaryFechaDesde
+          : lastSummaryFechaDesde as String?,
+      lastSummaryFechaHasta: lastSummaryFechaHasta == _sentinel
+          ? this.lastSummaryFechaHasta
+          : lastSummaryFechaHasta as String?,
+      grandTotal: grandTotal ?? this.grandTotal,
+      grandTotalVencido: grandTotalVencido ?? this.grandTotalVencido,
+      cvcGrandTotal: cvcGrandTotal ?? this.cvcGrandTotal,
+      cvcGrandTotalVencido: cvcGrandTotalVencido ?? this.cvcGrandTotalVencido,
+      appAdjustmentsTotal: appAdjustmentsTotal ?? this.appAdjustmentsTotal,
+      appOrdersTotal: appOrdersTotal ?? this.appOrdersTotal,
+      portfolioClientCount: portfolioClientCount ?? this.portfolioClientCount,
+      portfolioVencidoClientCount:
+          portfolioVencidoClientCount ?? this.portfolioVencidoClientCount,
+      summarySource: summarySource ?? this.summarySource,
+      filtroEstado: filtroEstado ?? this.filtroEstado,
+      filtroCliente: filtroCliente ?? this.filtroCliente,
+      filtroFecha: filtroFecha == _sentinel
+          ? this.filtroFecha
+          : filtroFecha as DateTime?,
+    );
+  }
 
   /// Numero de clientes con cualquier importe pendiente (>0).
-  int get clientsWithDebt => _pendingSummary.values
+  int get clientsWithDebt => pendingSummary.values
       .where((v) => ((v['total'] as num?)?.toDouble() ?? 0) > 0)
       .length;
 
   /// Numero de clientes con importe vencido (>0).
-  int get clientsWithVencido => _pendingSummary.values
+  int get clientsWithVencido => pendingSummary.values
       .where((v) => ((v['vencido'] as num?)?.toDouble() ?? 0) > 0)
       .length;
 
-  int get totalEntregasPendientes => _albaranesPendientes
+  int get totalEntregasPendientes => albaranesPendientes
       .where((a) => a.estado == EstadoEntrega.pendiente)
       .length;
-  int get totalEntregasCompletadas => _albaranesPendientes
+  int get totalEntregasCompletadas => albaranesPendientes
       .where((a) => a.estado == EstadoEntrega.entregado)
       .length;
-  double get totalImportePendiente => _albaranesPendientes
+  double get totalImportePendiente => albaranesPendientes
       .where((a) => a.estado != EstadoEntrega.entregado)
       .fold(0, (sum, a) => sum + a.importeTotal);
-  int get totalCTRPendientes => _albaranesPendientes
+  int get totalCTRPendientes => albaranesPendientes
       .where((a) => a.esCTR && a.estado != EstadoEntrega.entregado)
       .length;
 
   List<Albaran> get albaranesFiltrados {
-    var resultado = _albaranesPendientes;
-    if (_filtroEstado != 'todos') {
-      final estado = EstadoEntrega.fromString(_filtroEstado);
+    var resultado = albaranesPendientes;
+    if (filtroEstado != 'todos') {
+      final estado = EstadoEntrega.fromString(filtroEstado);
       resultado = resultado.where((a) => a.estado == estado).toList();
     }
-    if (_filtroCliente.isNotEmpty) {
+    if (filtroCliente.isNotEmpty) {
       resultado = resultado
           .where(
             (a) =>
                 a.nombreCliente
                     .toLowerCase()
-                    .contains(_filtroCliente.toLowerCase()) ||
-                a.codigoCliente.contains(_filtroCliente),
+                    .contains(filtroCliente.toLowerCase()) ||
+                a.codigoCliente.contains(filtroCliente),
           )
           .toList();
     }
     return resultado;
   }
 
+  double pendingForClient(String code) {
+    final entry = pendingSummary[code.trim()];
+    return (entry?['total'] as num?)?.toDouble() ?? 0;
+  }
+
+  bool hasPendingSummaryForClient(String code) {
+    return pendingSummary.containsKey(code.trim());
+  }
+
+  /// Req #15: importe vencido por cliente (subset de pending).
+  double vencidoForClient(String code) {
+    final entry = pendingSummary[code.trim()];
+    return (entry?['vencido'] as num?)?.toDouble() ?? 0;
+  }
+
+  /// Req #15: estado consolidado por cliente — VENCIDO | PENDIENTE | AL_DIA.
+  String estadoForClient(String code) {
+    final entry = pendingSummary[code.trim()];
+    return estadoFromPendingSummaryEntry(entry);
+  }
+
+  /// Solo documentos cobrables por el comercial (excluye responsabilidad repartidor).
+  List<CobroPendiente> cobrosPendientesComercial() {
+    return cobrosPendientes.where((c) {
+      if (c.cobradoPorRepartidor || c.documentoNoDisponible) return false;
+      return c.estado != EstadoCobro.alDia && c.importePendiente > 0.0001;
+    }).toList(growable: false);
+  }
+}
+
+// ============================================================
+// Notifier (family by CobrosParams)
+// ============================================================
+
+class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
+  final Map<String, String> _pendingCobroIdempotencyTokens = {};
+
+  /// Exposed for tests/diagnostics: number of in-flight idempotency tokens.
+  int get pendingIdempotencyTokenCount =>
+      _pendingCobroIdempotencyTokens.length;
+
+  @override
+  CobrosState build(CobrosParams arg) {
+    ref.onDispose(_pendingCobroIdempotencyTokens.clear);
+    return CobrosState(
+      employeeCode: arg.employeeCode,
+      isRepartidor: arg.isRepartidor,
+    );
+  }
+
+  // ── Read-through getters (compat for callers migrating to State) ──
+  String get employeeCode => state.employeeCode;
+  bool get isRepartidor => state.isRepartidor;
+  bool get isLoading => state.isLoading;
+  String? get error => state.error;
+  List<Albaran> get albaranesPendientes => state.albaranesPendientes;
+  Albaran? get albaranActual => state.albaranActual;
+  List<CobroPendiente> get cobrosPendientes => state.cobrosPendientes;
+  List<CobroHistorico> get historicoCobros => state.historicoCobros;
+  ResumenCobros? get resumenCobros => state.resumenCobros;
+  EstadoCliente? get estadoClienteActual => state.estadoClienteActual;
+  String get filtroEstado => state.filtroEstado;
+  String get filtroCliente => state.filtroCliente;
+  Map<String, Map<String, dynamic>> get pendingSummary => state.pendingSummary;
+  double get grandTotal => state.grandTotal;
+  double get grandTotalVencido => state.grandTotalVencido;
+  double get cvcGrandTotal => state.cvcGrandTotal;
+  double get cvcGrandTotalVencido => state.cvcGrandTotalVencido;
+  double get appAdjustmentsTotal => state.appAdjustmentsTotal;
+  double get appOrdersTotal => state.appOrdersTotal;
+  int get portfolioClientCount => state.portfolioClientCount;
+  int get portfolioVencidoClientCount => state.portfolioVencidoClientCount;
+  String get summarySource => state.summarySource;
+  int get clientsWithDebt => state.clientsWithDebt;
+  int get clientsWithVencido => state.clientsWithVencido;
+  int get totalEntregasPendientes => state.totalEntregasPendientes;
+  int get totalEntregasCompletadas => state.totalEntregasCompletadas;
+  double get totalImportePendiente => state.totalImportePendiente;
+  int get totalCTRPendientes => state.totalCTRPendientes;
+  List<Albaran> get albaranesFiltrados => state.albaranesFiltrados;
+
+  double pendingForClient(String code) => state.pendingForClient(code);
+  bool hasPendingSummaryForClient(String code) =>
+      state.hasPendingSummaryForClient(code);
+  double vencidoForClient(String code) => state.vencidoForClient(code);
+  String estadoForClient(String code) => state.estadoForClient(code);
+  List<CobroPendiente> cobrosPendientesComercial() =>
+      state.cobrosPendientesComercial();
+
   void setFiltroEstado(String estado) {
-    _filtroEstado = estado;
-    notifyListeners();
+    state = state.copyWith(filtroEstado: estado);
   }
 
   void setFiltroCliente(String cliente) {
-    _filtroCliente = cliente;
-    notifyListeners();
+    state = state.copyWith(filtroCliente: cliente);
   }
 
   void limpiarFiltros() {
-    _filtroEstado = 'todos';
-    _filtroCliente = '';
-    _filtroFecha = null;
-    notifyListeners();
+    state = state.copyWith(
+      filtroEstado: 'todos',
+      filtroCliente: '',
+      filtroFecha: null,
+    );
   }
 
   Future<void> cargarAlbaranesPendientes() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    // REQ-32: el perfil comercial sin modo reparto no llama a entregas
+    // (el backend exige rol reparto, 403). Usa cobrosPendientesComercial.
+    if (!state.isRepartidor) {
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        error: 'Disponible solo en modo reparto. Usa tus cobros pendientes.',
+      );
+      return;
+    }
+    state = state.copyWith(isLoading: true, error: null);
     try {
       final response = await ApiClient.get(
-        '/entregas/pendientes/$employeeCode',
-        cacheKey: 'entregas:pendientes:$employeeCode:default',
+        '/entregas/pendientes/${state.employeeCode}',
+        cacheKey: 'entregas:pendientes:${state.employeeCode}:default',
         cacheTTL: const Duration(minutes: 2),
       );
+      if (!ref.mounted) return;
       if (response['success'] == true) {
-        _albaranesPendientes = (response['albaranes'] as List<dynamic>?)
+        final items = (response['albaranes'] as List<dynamic>?)
                 ?.map((e) => Albaran.fromJson(e as Map<String, dynamic>))
                 .toList() ??
             [];
+        state = state.copyWith(albaranesPendientes: items);
       } else {
-        _error = (response['error'] as String?) ?? 'Error cargando albaranes';
+        state = state.copyWith(
+          error: (response['error'] as String?) ?? 'Error cargando albaranes',
+        );
       }
     } catch (e) {
-      _error = 'Error de conexión: $e';
+      if (!ref.mounted) return;
+      state = state.copyWith(error: 'Error de conexión: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!ref.mounted) return;
+      state = state.copyWith(isLoading: false);
     }
   }
 
   Future<void> cargarDetalleAlbaran(int numeroAlbaran, int ejercicio) async {
-    _isLoading = true;
-    notifyListeners();
+    // REQ-32: comercial sin modo reparto no llama a entregas/albaran.
+    if (!state.isRepartidor) {
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        error: 'Disponible solo en modo reparto. Usa tus cobros pendientes.',
+      );
+      return;
+    }
+    state = state.copyWith(isLoading: true);
     try {
       final response = await ApiClient.get(
         '/entregas/albaran/$numeroAlbaran/$ejercicio',
         cacheKey: 'entregas:albaran:$numeroAlbaran:$ejercicio',
         cacheTTL: const Duration(minutes: 2),
       );
+      if (!ref.mounted) return;
       if (response['success'] == true && response['albaran'] != null) {
-        _albaranActual =
-            Albaran.fromJson(response['albaran'] as Map<String, dynamic>);
+        state = state.copyWith(
+          albaranActual:
+              Albaran.fromJson(response['albaran'] as Map<String, dynamic>),
+        );
       }
     } catch (e) {
-      _error = 'Error cargando albarán: $e';
+      if (!ref.mounted) return;
+      state = state.copyWith(error: 'Error cargando albarán: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!ref.mounted) return;
+      state = state.copyWith(isLoading: false);
     }
   }
 
@@ -256,22 +455,26 @@ class CobrosProvider extends ChangeNotifier {
     double? latitud,
     double? longitud,
   }) async {
-    _error =
-        'Endpoint retirado (410). Usa el flujo canónico de confirmación de entrega.';
-    notifyListeners();
+    if (!ref.mounted) return false;
+    state = state.copyWith(
+      error:
+          'Endpoint retirado (410). Usa el flujo canónico de confirmación de entrega.',
+    );
     return false;
   }
 
   Future<bool> registrarFirma(String entregaId, String base64Firma) async {
-    _error =
-        'Endpoint retirado (410). La firma se sube por el flujo canónico de evidencias.';
-    notifyListeners();
+    if (!ref.mounted) return false;
+    state = state.copyWith(
+      error:
+          'Endpoint retirado (410). La firma se sube por el flujo canónico de evidencias.',
+    );
     return false;
   }
 
   String _buildEntregaCompletionIdempotencyKey(String albaranId) {
     final timestamp = DateTime.now().microsecondsSinceEpoch;
-    final safeEmployee = employeeCode
+    final safeEmployee = state.employeeCode
         .trim()
         .replaceAll(RegExp('[^A-Za-z0-9_.:-]'), '-')
         .replaceFirst(RegExp(r'^$'), 'sin-repartidor');
@@ -286,9 +489,11 @@ class CobrosProvider extends ChangeNotifier {
     String albaranId, {
     String? observaciones,
   }) async {
-    _error =
-        'Endpoint retirado (410). Completa la entrega desde el detalle canónico del rutero.';
-    notifyListeners();
+    if (!ref.mounted) return false;
+    state = state.copyWith(
+      error:
+          'Endpoint retirado (410). Completa la entrega desde el detalle canónico del rutero.',
+    );
     return false;
   }
 
@@ -303,27 +508,25 @@ class CobrosProvider extends ChangeNotifier {
     String? fechaDesde,
     String? fechaHasta,
   }) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    if (!ref.mounted) return;
+    state = state.copyWith(isLoading: true, error: null);
     try {
       String baseEndpoint;
+      String? nextVendorCode;
+      List<String>? nextVendorCodes;
       if (vendedorCodes != null && vendedorCodes.isNotEmpty) {
-        _lastSummaryVendorCode = null;
-        _lastSummaryVendorCodes = List<String>.from(vendedorCodes);
+        nextVendorCode = null;
+        nextVendorCodes = List<String>.from(vendedorCodes);
         baseEndpoint = '/cobros/pending-summary/${vendedorCodes.join(',')}';
       } else if (vendedorCode != null && vendedorCode.isNotEmpty) {
-        _lastSummaryVendorCode = vendedorCode;
-        _lastSummaryVendorCodes = null;
+        nextVendorCode = vendedorCode;
+        nextVendorCodes = null;
         baseEndpoint = '/cobros/pending-summary/$vendedorCode';
       } else {
-        _lastSummaryVendorCode = null;
-        _lastSummaryVendorCodes = null;
+        nextVendorCode = null;
+        nextVendorCodes = null;
         baseEndpoint = '/cobros/pending-summary/ALL';
       }
-      _lastSummaryTipoDocumento = tipoDocumento?.trim();
-      _lastSummaryFechaDesde = fechaDesde?.trim();
-      _lastSummaryFechaHasta = fechaHasta?.trim();
       final safeLimit = limit < 1 ? 1 : (limit > 2000 ? 2000 : limit);
       final safeOffset = offset < 0 ? 0 : offset;
       final safePage = page < 1 ? 1 : page;
@@ -345,56 +548,65 @@ class CobrosProvider extends ChangeNotifier {
         forceRefresh: forceRefresh,
         allowStale: false,
       );
+      if (!ref.mounted) return;
       if (response['success'] == true) {
         final raw = response['summary'] as Map<String, dynamic>? ?? {};
-        _pendingSummary =
+        final summary =
             raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
-        _grandTotal = (response['grandTotal'] as num?)?.toDouble() ?? 0;
-        _grandTotalVencido =
+        final grandTotal =
+            (response['grandTotal'] as num?)?.toDouble() ?? 0;
+        final grandTotalVencido =
             (response['grandTotalVencido'] as num?)?.toDouble() ?? 0;
-        _cvcGrandTotal = (response['cvcGrandTotal'] as num?)?.toDouble() ?? 0;
-        _cvcGrandTotalVencido =
+        final cvcGrandTotal =
+            (response['cvcGrandTotal'] as num?)?.toDouble() ?? 0;
+        final cvcGrandTotalVencido =
             (response['cvcGrandTotalVencido'] as num?)?.toDouble() ?? 0;
-        _appAdjustmentsTotal =
+        final appAdjustmentsTotal =
             (response['appAdjustmentsTotal'] as num?)?.toDouble() ?? 0;
-        _appOrdersTotal = (response['appOrdersTotal'] as num?)?.toDouble() ?? 0;
-        _portfolioClientCount = (response['clientCount'] as num?)?.toInt() ??
-            _pendingSummary.length;
-        _portfolioVencidoClientCount =
-            (response['vencidoClientCount'] as num?)?.toInt() ??
-                clientsWithVencido;
-        _summarySource = (response['source'] as String?) ?? '';
-        _error = null;
+        final appOrdersTotal =
+            (response['appOrdersTotal'] as num?)?.toDouble() ?? 0;
+        final nextState = state.copyWith(
+          lastSummaryVendorCode: nextVendorCode,
+          lastSummaryVendorCodes: nextVendorCodes,
+          lastSummaryTipoDocumento: tipoDocumento?.trim(),
+          lastSummaryFechaDesde: fechaDesde?.trim(),
+          lastSummaryFechaHasta: fechaHasta?.trim(),
+        );
+        final vencidos = summary.values
+            .where((v) => ((v['vencido'] as num?)?.toDouble() ?? 0) > 0)
+            .length;
+        state = nextState.copyWith(
+          pendingSummary: summary,
+          grandTotal: grandTotal,
+          grandTotalVencido: grandTotalVencido,
+          cvcGrandTotal: cvcGrandTotal,
+          cvcGrandTotalVencido: cvcGrandTotalVencido,
+          appAdjustmentsTotal: appAdjustmentsTotal,
+          appOrdersTotal: appOrdersTotal,
+          portfolioClientCount: (response['clientCount'] as num?)?.toInt() ??
+              summary.length,
+          portfolioVencidoClientCount:
+              (response['vencidoClientCount'] as num?)?.toInt() ?? vencidos,
+          summarySource: (response['source'] as String?) ?? '',
+          error: null,
+        );
       } else {
-        _error = 'Error al cargar resumen de pendientes';
+        state = state.copyWith(
+          lastSummaryVendorCode: nextVendorCode,
+          lastSummaryVendorCodes: nextVendorCodes,
+          lastSummaryTipoDocumento: tipoDocumento?.trim(),
+          lastSummaryFechaDesde: fechaDesde?.trim(),
+          lastSummaryFechaHasta: fechaHasta?.trim(),
+          error: 'Error al cargar resumen de pendientes',
+        );
       }
     } catch (e) {
-      _error = 'Error de conexión: $e';
+      if (!ref.mounted) return;
+      state = state.copyWith(error: 'Error de conexión: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!ref.mounted) return;
+      state = state.copyWith(isLoading: false);
     }
-  }
-
-  double pendingForClient(String code) {
-    final entry = _pendingSummary[code.trim()];
-    return (entry?['total'] as num?)?.toDouble() ?? 0;
-  }
-
-  bool hasPendingSummaryForClient(String code) {
-    return _pendingSummary.containsKey(code.trim());
-  }
-
-  /// Req #15: importe vencido por cliente (subset de pending).
-  double vencidoForClient(String code) {
-    final entry = _pendingSummary[code.trim()];
-    return (entry?['vencido'] as num?)?.toDouble() ?? 0;
-  }
-
-  /// Req #15: estado consolidado por cliente — VENCIDO | PENDIENTE | AL_DIA.
-  String estadoForClient(String code) {
-    final entry = _pendingSummary[code.trim()];
-    return estadoFromPendingSummaryEntry(entry);
   }
 
   Future<void> cargarCobrosPendientes(
@@ -405,9 +617,8 @@ class CobrosProvider extends ChangeNotifier {
     String? vendedorCodes,
     bool forceRefresh = false,
   }) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    if (!ref.mounted) return;
+    state = state.copyWith(isLoading: true, error: null);
     try {
       final params = <String, String>{};
       if (tipoDocumento != null && tipoDocumento.trim().isNotEmpty) {
@@ -433,25 +644,34 @@ class CobrosProvider extends ChangeNotifier {
         forceRefresh: forceRefresh,
         allowStale: false,
       );
+      if (!ref.mounted) return;
       if (response['success'] == true) {
         final payload = response['pendientes'] is Map
             ? Map<String, dynamic>.from(response['pendientes'] as Map)
             : response;
-        _cobrosPendientes = _parseCobrosPendientes(payload['cobros']);
+        final items = _parseCobrosPendientes(payload['cobros']);
+        Object? resumen = CobrosState._sentinel;
         if (payload['resumen'] != null) {
-          _resumenCobros = ResumenCobros.fromJson(
+          resumen = ResumenCobros.fromJson(
             payload['resumen'] as Map<String, dynamic>,
           );
         }
-        _error = null;
+        state = state.copyWith(
+          cobrosPendientes: items,
+          resumenCobros: resumen,
+          error: null,
+        );
       } else {
-        _error = (response['error'] as String?) ?? 'Error cargando cobros';
+        state = state.copyWith(
+          error: (response['error'] as String?) ?? 'Error cargando cobros',
+        );
       }
     } catch (e) {
-      _error = 'Error cargando cobros: $e';
+      if (!ref.mounted) return;
+      state = state.copyWith(error: 'Error cargando cobros: $e');
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!ref.mounted) return;
+      state = state.copyWith(isLoading: false);
     }
   }
 
@@ -501,14 +721,6 @@ class CobrosProvider extends ChangeNotifier {
     return out;
   }
 
-  /// Solo documentos cobrables por el comercial (excluye responsabilidad repartidor).
-  List<CobroPendiente> cobrosPendientesComercial() {
-    return _cobrosPendientes.where((c) {
-      if (c.cobradoPorRepartidor || c.documentoNoDisponible) return false;
-      return c.estado != EstadoCobro.alDia && c.importePendiente > 0.0001;
-    }).toList(growable: false);
-  }
-
   Future<void> cargarHistoricoCobros(
     String codigoCliente, {
     String? vendedorCodes,
@@ -526,18 +738,20 @@ class CobrosProvider extends ChangeNotifier {
         forceRefresh: forceRefresh,
         maxStale: const Duration(minutes: 10),
       );
+      if (!ref.mounted) return;
       if (response['success'] == true) {
         final list = response['historico'] as List? ?? [];
-        _historicoCobros = _dedupeHistoricoCobros(
-          list
-              .map(
-                (e) => CobroHistorico.fromJson(
-                  Map<String, dynamic>.from(e as Map),
-                ),
-              )
-              .toList(growable: false),
+        state = state.copyWith(
+          historicoCobros: _dedupeHistoricoCobros(
+            list
+                .map(
+                  (e) => CobroHistorico.fromJson(
+                    Map<String, dynamic>.from(e as Map),
+                  ),
+                )
+                .toList(growable: false),
+          ),
         );
-        notifyListeners();
       }
     } catch (e) {
       debugPrint('[CobrosProvider] cargarHistoricoCobros error: $e');
@@ -561,16 +775,18 @@ class CobrosProvider extends ChangeNotifier {
         forceRefresh: forceRefresh,
         allowStale: false,
       );
+      if (!ref.mounted) return;
       if (response['success'] == true && response['estadoCliente'] != null) {
-        _estadoClienteActual = EstadoCliente.fromJson(
-          response['estadoCliente'] as Map<String, dynamic>,
+        state = state.copyWith(
+          estadoClienteActual: EstadoCliente.fromJson(
+            response['estadoCliente'] as Map<String, dynamic>,
+          ),
         );
-        notifyListeners();
       }
     } catch (e) {
       debugPrint('[CobrosProvider] verificarEstadoCliente error: $e');
-      _estadoClienteActual = null;
-      notifyListeners();
+      if (!ref.mounted) return;
+      state = state.copyWith(estadoClienteActual: null);
     }
   }
 
@@ -591,7 +807,7 @@ class CobrosProvider extends ChangeNotifier {
       formaPago.trim().toUpperCase(),
       tipoVenta.code,
       tipoModo.code,
-      if (isRepartidor) 'REPARTIDOR' else 'COMERCIAL',
+      if (state.isRepartidor) 'REPARTIDOR' else 'COMERCIAL',
     ].join('|');
   }
 
@@ -616,12 +832,16 @@ class CobrosProvider extends ChangeNotifier {
     bool reloadAfter = true,
   }) async {
     final paymentObservations = observaciones?.trim() ?? '';
-    if (paymentObservations.isEmpty) {
-      _error = 'Indica las observaciones del cobro antes de confirmar';
-      notifyListeners();
+    // Observaciones obligatorias solo si hay cobro real (importe > 0).
+    // En crédito/sin cobro no se bloquea; nunca se envía notas:null.
+    if (paymentObservations.isEmpty && importe > 0.004) {
+      if (!ref.mounted) return false;
+      state = state.copyWith(
+        error: 'Indica las observaciones del cobro antes de confirmar',
+      );
       return false;
     }
-    final actorCode = codigoUsuario ?? employeeCode;
+    final actorCode = codigoUsuario ?? state.employeeCode;
     final attemptKey = _cobroAttemptKey(
       codigoCliente: codigoCliente,
       referencia: referencia,
@@ -648,13 +868,14 @@ class CobrosProvider extends ChangeNotifier {
         'formaPago': formaPago,
         'tipoVenta': tipoVenta.code,
         'tipoModo': tipoModo.code,
-        'tipoUsuario': isRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
+        'tipoUsuario': state.isRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
         'codigoUsuario': actorCode,
         if (vendedorCodes != null && vendedorCodes.trim().isNotEmpty)
           'vendedorCodes': vendedorCodes.trim(),
         'observaciones': paymentObservations,
         'idempotencyToken': idempotencyToken,
       });
+      if (!ref.mounted) return response['success'] == true;
       if (response['success'] == true) {
         await CacheService.invalidateByPrefix(
           'cobros:pendientes:$codigoCliente',
@@ -664,6 +885,12 @@ class CobrosProvider extends ChangeNotifier {
         );
         await CacheService.invalidateByPrefix('cobros:estado:$codigoCliente');
         await CacheService.invalidateByPrefix('cobros:pending-summary:');
+        await CacheService.invalidateByPrefix('repartidor:liquidacion');
+        await CacheService.invalidateByPrefix('repartidor_finanzas');
+        await CacheService.invalidateByPrefix('liquidacion');
+        if (!ref.mounted) return true;
+        // Emite al instante para que la liquidación suba sin esperar recarga.
+        state = state.copyWith();
         if (reloadAfter) {
           await cargarCobrosPendientes(
             codigoCliente,
@@ -681,8 +908,8 @@ class CobrosProvider extends ChangeNotifier {
       if (!_shouldKeepCobroRetryToken(e)) {
         _pendingCobroIdempotencyTokens.remove(attemptKey);
       }
-      _error = 'Error registrando cobro: $e';
-      notifyListeners();
+      if (!ref.mounted) return false;
+      state = state.copyWith(error: 'Error registrando cobro: $e');
       return false;
     }
   }
@@ -690,60 +917,28 @@ class CobrosProvider extends ChangeNotifier {
   Future<void> refreshLoadedPendingSummary({
     bool forceRefresh = true,
   }) async {
-    if (_pendingSummary.isEmpty &&
-        _lastSummaryVendorCode == null &&
-        (_lastSummaryVendorCodes == null || _lastSummaryVendorCodes!.isEmpty)) {
+    if (state.pendingSummary.isEmpty &&
+        state.lastSummaryVendorCode == null &&
+        (state.lastSummaryVendorCodes == null ||
+            state.lastSummaryVendorCodes!.isEmpty)) {
       return;
     }
     await cargarPendingSummary(
-      _lastSummaryVendorCode,
-      vendedorCodes: _lastSummaryVendorCodes,
-      tipoDocumento: _lastSummaryTipoDocumento,
-      fechaDesde: _lastSummaryFechaDesde,
-      fechaHasta: _lastSummaryFechaHasta,
+      state.lastSummaryVendorCode,
+      vendedorCodes: state.lastSummaryVendorCodes,
+      tipoDocumento: state.lastSummaryTipoDocumento,
+      fechaDesde: state.lastSummaryFechaDesde,
+      fechaHasta: state.lastSummaryFechaHasta,
       forceRefresh: forceRefresh,
     );
   }
 
   void limpiarDatos() {
-    _albaranesPendientes = [];
-    _cobrosPendientes = [];
-    _historicoCobros = [];
-    _albaranActual = null;
-    _resumenCobros = null;
-    _estadoClienteActual = null;
-    _pendingSummary = {};
-    _grandTotal = 0;
-    _grandTotalVencido = 0;
-    _cvcGrandTotal = 0;
-    _cvcGrandTotalVencido = 0;
-    _appAdjustmentsTotal = 0;
-    _appOrdersTotal = 0;
-    _portfolioClientCount = 0;
-    _portfolioVencidoClientCount = 0;
-    _summarySource = '';
-    _lastSummaryVendorCode = null;
-    _lastSummaryVendorCodes = null;
-    _lastSummaryTipoDocumento = null;
-    _lastSummaryFechaDesde = null;
-    _lastSummaryFechaHasta = null;
-    _error = null;
-    notifyListeners();
-  }
-
-  @override
-  void notifyListeners() {
-    // Guard: el provider es autoDispose y hay recargas fire-and-forget
-    // (p.ej. cargarPendingSummary tras registrarCobro). Nunca emitir
-    // estado después de dispose.
-    if (_disposed) return;
-    super.notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    _disposed = true;
-    super.dispose();
+    if (!ref.mounted) return;
+    state = CobrosState(
+      employeeCode: state.employeeCode,
+      isRepartidor: state.isRepartidor,
+    );
   }
 }
 
@@ -751,12 +946,9 @@ class CobrosProvider extends ChangeNotifier {
 // Riverpod provider — clean family, no hacks, no null checks
 // ============================================================
 
-final cobrosProvider =
-    ChangeNotifierProvider.family.autoDispose<CobrosProvider, CobrosParams>(
-  (ref, params) => CobrosProvider(
-    employeeCode: params.employeeCode,
-    isRepartidor: params.isRepartidor,
-  ),
+final cobrosProvider = NotifierProvider.family
+    .autoDispose<CobrosNotifier, CobrosState, CobrosParams>(
+  CobrosNotifier.new,
 );
 
 class CobrosParams {

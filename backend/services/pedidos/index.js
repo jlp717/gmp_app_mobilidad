@@ -421,7 +421,7 @@ function applyProductPriceView(product, includeIva = false) {
     view.ivaRate = iva.ivaRate;
     view.includeIva = parseBooleanFlag(includeIva);
 
-    const priceFields = ['precioTarifa1', 'precioMinimo', 'precioCliente', 'precioTarifaCliente'];
+    const priceFields = ['precioTarifa1', 'precioMinimo', 'precioCliente', 'precioTarifaCliente', 'precioCompetitivo', 'precioMinimoPolitica'];
     for (const field of priceFields) {
         const base = view[field];
         if (base === null || base === undefined) continue;
@@ -522,6 +522,7 @@ const PEDIDO_SALE_TYPE_LABELS = Object.freeze({
     CC: 'Venta',
     VC: 'Venta sin nombre',
     NV: 'No venta',
+    CT: 'Contado',
 });
 
 function normalizePedidoSaleType(value = 'CC') {
@@ -553,8 +554,17 @@ function normalizePedidoSaleType(value = 'CC') {
     ) {
         return 'NV';
     }
+    if (
+        canonical === 'CT' ||
+        canonical === 'CTR' ||
+        canonical === 'CONTADO' ||
+        canonical === 'CONTRA_REEMBOLSO' ||
+        canonical === 'CONTRAREEMBOLSO'
+    ) {
+        return 'CT';
+    }
 
-    const err = new Error('tipoventa/saleType debe ser CC (Venta), VC (Venta sin nombre) o NV (No venta)');
+    const err = new Error('tipoventa/saleType debe ser CC (Venta), VC (Venta sin nombre), NV (No venta) o CT (Contado)');
     err.code = 'INVALID_SALE_TYPE';
     err.status = 400;
     throw err;
@@ -1189,6 +1199,7 @@ function normalizeAssignmentRow(row) {
     return {
         vehicleCode: trimString(row.CODIGOVEHICULO || row.VEHICLECODE).substring(0, 10),
         driverCode: trimString(row.CODIGOREPARTIDOR || row.DRIVERCODE).substring(0, 2),
+        driverName: trimString(row.NOMBREVENDEDOR || row.DRIVERNAME),
         vehicleMatricula: trimString(row.MATRICULA || row.VEHICULOMATRICULA),
         vehicleDescription: trimString(row.DESC_VEHICULO || row.DESCRIPCIONVEHICULO || row.VEHICLEDESCRIPTION),
         routeCode: trimString(row.RUTA || row.CODIGORUTA).substring(0, 10),
@@ -1255,6 +1266,7 @@ async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDat
                    TRIM(CPC.CODIGORUTA) AS RUTA,
                    TRIM(VEH.MATRICULA) AS MATRICULA,
                    TRIM(VEH.DESCRIPCIONVEHICULO) AS DESC_VEHICULO,
+                   TRIM(VDD.NOMBREVENDEDOR) AS NOMBREVENDEDOR,
                    COUNT(*) AS USOS,
                    MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) AS ULTIMA_FECHA
             FROM ${comercialErpTable('OPP')} OPP
@@ -1262,11 +1274,13 @@ async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDat
               ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
              AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
             LEFT JOIN ${comercialErpTable('VEH')} VEH ON TRIM(VEH.CODIGOVEHICULO) = TRIM(OPP.CODIGOVEHICULO)
+            LEFT JOIN ${comercialErpTable('VDD')} VDD ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
             WHERE (TRIM(CPC.CODIGOCLIENTEALBARAN) = ?${vendorFilter})
               AND OPP.ANOREPARTO >= YEAR(CURRENT DATE) - 1
               AND TRIM(OPP.CODIGOVEHICULO) <> ''
             GROUP BY TRIM(OPP.CODIGOVEHICULO), TRIM(OPP.CODIGOREPARTIDOR),
-                     TRIM(CPC.CODIGORUTA), TRIM(VEH.MATRICULA), TRIM(VEH.DESCRIPCIONVEHICULO)
+                     TRIM(CPC.CODIGORUTA), TRIM(VEH.MATRICULA), TRIM(VEH.DESCRIPCIONVEHICULO),
+                     TRIM(VDD.NOMBREVENDEDOR)
             ORDER BY USOS DESC, ULTIMA_FECHA DESC
             FETCH FIRST 1 ROW ONLY`,
             params,
@@ -1290,6 +1304,7 @@ async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDat
     return {
         vehicleCode: '',
         driverCode: '',
+        driverName: '',
         vehicleMatricula: '',
         vehicleDescription: '',
         routeCode: explicitRouteCode || defaults.routeCode || '',
@@ -1328,6 +1343,7 @@ async function getDeliveryOptions({ clientCode, vendedorCode, deliveryDate }) {
         selectedDeliveryDateFormatted: formatDateDisplay(deliveryPlan.date.iso),
         vehicleCode: assignment.vehicleCode || '',
         driverCode: assignment.driverCode || '',
+        driverName: assignment.driverName || '',
         vehicleMatricula: assignment.vehicleMatricula || '',
         vehicleDescription: assignment.vehicleDescription || '',
         truckConfidence: assignment.confidence || 'sin-datos',
@@ -1348,9 +1364,12 @@ async function getAvailableVehicles() {
                 V.MATRICULA      AS matricula,
                 V.DESCRIPCIONVEHICULO AS description,
                 V.CODIGOCONDUCTOR AS driverCode,
+                TRIM(D.NOMBREVENDEDOR) AS driverName,
                 V.TONELADAS      AS toneladas,
                 V.CARGAMAXIMA    AS cargaMaxima
             FROM ${comercialErpTable('VEH')} V
+            LEFT JOIN ${comercialErpTable('VDD')} D
+              ON TRIM(D.CODIGOVENDEDOR) = TRIM(V.CODIGOCONDUCTOR)
             ORDER BY V.CODIGOVEHICULO
         `;
         const rows = await queryWithParams(sql, []);
@@ -1358,7 +1377,8 @@ async function getAvailableVehicles() {
             code:        trimString(row.CODE        || row.code        || '').substring(0, 10),
             matricula:   trimString(row.MATRICULA   || row.matricula   || ''),
             description: trimString(row.DESCRIPTION || row.description || ''),
-            driverCode:  trimString(row.DRIVERCODE  || row.driverCode  || ''),
+            driverCode:  trimString(row.DRIVERCODE  || row.driverCode  || '').substring(0, 2),
+            driverName:  trimString(row.DRIVERNAME  || row.driverName  || row.NOMBREVENDEDOR || row.nombrevendedor || ''),
             toneladas:   numberValue(row.TONELADAS  || row.toneladas),
             cargaMaxima: numberValue(row.CARGAMAXIMA|| row.cargaMaxima),
         }));
@@ -1416,6 +1436,15 @@ function truncate(value, length) {
     return trimString(value).substring(0, length);
 }
 
+// REQ-02.3: strip diacritics so "jamon" matches "JAMÓN". Mirrors the
+// TRANSLATE() applied to the DB2 column in getProducts. Pure function,
+// no SQL involved — safe to run before binding.
+function normalizeSearchTerm(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+}
+
 function isMissingPricingTableError(error) {
     const message = String(error?.message || error?.sqlMessage || error || '');
     const upperMessage = message.toUpperCase();
@@ -1445,14 +1474,73 @@ function effectiveMinPriceFromRow(row) {
     return Math.max(configuredFloor, marginFloor);
 }
 
+function resolveMargenObjetivoPct(row) {
+    const fromRow = parseFloat(row?.MARGEN_OBJETIVO_PCT ?? row?.margenObjetivoPct);
+    if (Number.isFinite(fromRow) && fromRow > 0 && fromRow < 100) return fromRow;
+    const fromEnv = parseFloat(process.env.MARGEN_OBJETIVO_PCT);
+    if (Number.isFinite(fromEnv) && fromEnv > 0 && fromEnv < 100) return fromEnv;
+    return 20;
+}
+
+function resolvePrecioMinimoPolitica(competitivo, margenPct) {
+    const comp = roundPrice(competitivo);
+    const margin = parseFloat(margenPct);
+    if (!(comp > 0) || !(margin > 0) || !(margin < 100)) return 0;
+    return roundPrice(comp / (1 - margin / 100));
+}
+
+const PRECIO_HISTORICO_TEST_TABLE = 'JAVIER.TEST_PRECIO_HISTORICO';
+
+async function savePrecioHistoricoTEST({ clientCode, lines }) {
+    const client = truncate(clientCode, 10);
+    const rows = Array.isArray(lines) ? lines : [];
+    if (!client || rows.length === 0) return 0;
+    let saved = 0;
+    for (const line of rows) {
+        const article = truncate(line.CODIGOARTICULO || line.codigoArticulo, 10);
+        const price = roundPrice(line.PRECIOVENTA ?? line.precioVenta ?? line.precio);
+        if (!article || !(price > 0)) continue;
+        const tipo = String(line.CLASELINEA || line.claseLinea || 'VT').trim().toUpperCase();
+        if (tipo === 'G' || line.isAutoGift === true) continue;
+        try {
+            await queryWithParams(
+                `INSERT INTO ${PRECIO_HISTORICO_TEST_TABLE} (CODIGOCLIENTE, CODIGOARTICULO, PRECIOVENTA, FECHA) VALUES (?, ?, ?, CURRENT TIMESTAMP)`,
+                [client, article, price],
+                false,
+            );
+            saved += 1;
+        } catch (err) {
+            logger.warn(`[PEDIDOS] TEST historico precios skip ${client}/${article}: ${err.message}`);
+            return saved;
+        }
+    }
+    return saved;
+}
+
+async function getPrecioHistoricoTEST({ clientCode, articleCode }) {
+    try {
+        const rows = await queryWithParams(
+            `SELECT PRECIOVENTA, FECHA FROM ${PRECIO_HISTORICO_TEST_TABLE} WHERE CODIGOCLIENTE = CAST(? AS CHAR(10)) AND TRIM(CODIGOARTICULO) = ? ORDER BY FECHA DESC FETCH FIRST 2 ROWS ONLY`,
+            [truncate(clientCode, 10), truncate(articleCode, 10)],
+            false,
+        );
+        return Array.isArray(rows) ? rows : [];
+    } catch (err) {
+        logger.warn(`[PEDIDOS] TEST historico precios read skip: ${err.message}`);
+        return [];
+    }
+}
+
 function mergeConfiguredPricing(product, productPricing, clientPrice) {
     const next = { ...product };
+    const competitivo = roundPrice(product.precioTarifa1 ?? product.PRECIOTARIFA1 ?? 0);
+    if (competitivo > 0) next.precioCompetitivo = competitivo;
 
     if (productPricing) {
         const configuredMin = effectiveMinPriceFromRow(productPricing);
         const manufacturingCost = roundPrice(productPricing.COSTE_FABRICACION ?? 0);
         const lockedFloor = roundPrice(productPricing.PRECIO_MINIMO ?? 0);
-        const marginPct = parseFloat(productPricing.MARGEN_OBJETIVO_PCT) || 0;
+        const marginPct = resolveMargenObjetivoPct(productPricing);
 
         next.precioMinimoBase = lockedFloor;
         next.costeFabricacion = manufacturingCost;
@@ -1462,6 +1550,25 @@ function mergeConfiguredPricing(product, productPricing, clientPrice) {
 
         if (configuredMin > 0) next.precioMinimo = configuredMin;
         if (manufacturingCost > 0) next.precioCosto = manufacturingCost;
+    } else if (competitivo > 0) {
+        next.margenObjetivoPct = resolveMargenObjetivoPct({});
+    }
+    const isPesEspecial = Boolean(
+        clientPrice && String(clientPrice.IS_SPECIAL_PRICE || '').trim().toUpperCase() === 'S',
+    );
+    if (!isPesEspecial && competitivo > 0) {
+        const marginPct = Number(next.margenObjetivoPct) || resolveMargenObjetivoPct(productPricing || {});
+        const politicaMin = resolvePrecioMinimoPolitica(competitivo, marginPct);
+        if (politicaMin > 0) {
+            next.precioCompetitivo = competitivo;
+            next.margenObjetivoPct = marginPct;
+            next.precioMinimoPolitica = politicaMin;
+            const currentMin = roundPrice(next.precioMinimo);
+            if (politicaMin > currentMin) {
+                next.precioMinimo = politicaMin;
+                next.precioMinimoSource = 'POLITICA_MARGEN_TARIFA1';
+            }
+        }
     }
 
     if (clientPrice) {
@@ -2217,13 +2324,17 @@ function buildCatalogRankOrderClause(sortBy, sortOrder) {
     }
 }
 
-async function getProducts({ search, clientCode, family, marca, prefamily, includeIva = false, limit = 50, offset = 0, sortBy, sortOrder }) {
+async function getProducts({ search, clientCode, family, marca, prefamily, includeIva = false, onlyStock = false, limit = 50, offset = 0, sortBy, sortOrder }) {
     const params = [];
     let where = "WHERE A.ANOBAJA = 0 AND TRIM(A.CODIGOARTICULO) <> ''";
 
+    // REQ-02.3: tilde-tolerant search. Term normalized in JS (NFD strip);
+    // column normalized in SQL via TRANSLATE. Both sides UPPER. Binding kept
+    // parameterized — sanitizeForSQL only strips dangerous chars upstream.
+    const unaccentSql = (col) => `TRANSLATE(UPPER(${col}),'ÁÉÍÓÚÜÑÀÈÌÒÙÄËÏÖÜ','AEIOUUNAEIOUAEIOU')`;
     if (search) {
-        const s = `%${search.toUpperCase()}%`;
-        where += ' AND (UPPER(A.DESCRIPCIONARTICULO) LIKE ? OR TRIM(A.CODIGOARTICULO) LIKE ?)';
+        const s = `%${normalizeSearchTerm(search).toUpperCase()}%`;
+        where += ` AND (${unaccentSql('A.DESCRIPCIONARTICULO')} LIKE ? OR TRIM(A.CODIGOARTICULO) LIKE ?)`;
         params.push(s, s);
     }
     if (family) {
@@ -2250,6 +2361,16 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
         params.push(likeStart, likeStart, likeAny);
     }
 
+    // REQ-04: server-side stock filter BEFORE RN pagination. Gross availability
+    // in ARO (columns ENVASESDISPONIBLES/UNIDADESDISPONIBLES, same as STOCK CTE
+    // below; CODIGOALMACEN=1). EXISTS keeps pages full so `results.length>=50`
+    // stays a valid hasMore signal. Net reserves still post-filtered as safety
+    // net. Fully parametrized — no interpolation of user input.
+    if (parseBooleanFlag(onlyStock)) {
+        where += ` AND EXISTS (SELECT 1 FROM ${comercialErpTable('ARO')} S WHERE S.CODIGOARTICULO = TRIM(A.CODIGOARTICULO) AND S.CODIGOALMACEN = ? AND (S.ENVASESDISPONIBLES > 0 OR S.UNIDADESDISPONIBLES > 0))`;
+        params.push(1);
+    }
+
     const now = new Date();
     const currentYear = now.getFullYear();
     const prevYear = currentYear - 1;
@@ -2271,7 +2392,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
     const normalizedSortBy = String(sortBy || 'purchases').toLowerCase().trim();
     const normalizedSortOrder = String(sortOrder || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
     const rankOrderClause = buildCatalogRankOrderClause(normalizedSortBy, normalizedSortOrder);
-    const resultCacheKey = `pedidos:products_final_v3:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${includeIva ? 'iva' : 'net'}:${normalizedSortBy}:${normalizedSortOrder}`;
+    const resultCacheKey = `pedidos:products_final_v3:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${includeIva ? 'iva' : 'net'}:${normalizedSortBy}:${normalizedSortOrder}:${onlyStock ? 'stock' : 'all'}`;
     const cachedProducts = await redisCache.get('route', resultCacheKey);
     if (cachedProducts) return cachedProducts;
 
@@ -2408,7 +2529,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
 
     const finalParams = [...historyParams, ...params, offset, offset + limit, clientCodeTrimmed];
 
-    const cacheKey = `pedidos:products_v2:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${normalizedSortBy}:${normalizedSortOrder}`;
+    const cacheKey = `pedidos:products_v2:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${normalizedSortBy}:${normalizedSortOrder}:${onlyStock ? 'stock' : 'all'}`;
 
     try {
         const rows = await cachedQuery(
@@ -2464,7 +2585,15 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
             return product;
         });
         const pricedProducts = await applyConfiguredPricingToProducts(products, clientCodeTrimmed);
-        const finalProducts = pricedProducts.map(product => applyProductPriceView(product, includeIva));
+        let finalProducts = pricedProducts.map(product => applyProductPriceView(product, includeIva));
+        // REQ-04: server filters gross stock pre-pagination (EXISTS on ARO);
+        // this local pass only removes net-zero rows eaten by active reserves.
+        // Cache key already includes the flag, so filtered/unfiltered pages
+        // never mix.
+        if (parseBooleanFlag(onlyStock)) {
+            finalProducts = finalProducts.filter(p =>
+                (Number(p.stockEnvases) || 0) > 0 || (Number(p.stockUnidades) || 0) > 0);
+        }
         await redisCache.set('route', resultCacheKey, finalProducts, TTL.SHORT);
         return finalProducts;
     } catch (error) {
@@ -3265,6 +3394,7 @@ async function createOrder({
     await assertMinCobroAllowsOrder({
         clientCode: truncate(clientCode, 10),
         vendorCode: vendedorCode,
+        saleType: normalizePedidoSaleType(tipoventa),
     });
     lines = applyGiftPromotionsToLines(lines, await getActivePromotionsV2(truncate(clientCode, 10)));
     lines = await hydrateGiftArticles(lines);
@@ -3692,7 +3822,7 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
         LEFT JOIN (
             SELECT PEDIDO_ID,
                    COUNT(*) AS BOLSA_MOV_COUNT,
-                   COALESCE(SUM(IMPORTE), 0) AS BOLSA_NETO
+                   COALESCE(SUM(CASE WHEN TRIM(TIPO) = 'CONSUMO' THEN -IMPORTE ELSE IMPORTE END), 0) AS BOLSA_NETO
               FROM ${db2AppTable('MOVIMIENTOS_BOLSA')}
              WHERE PEDIDO_ID IS NOT NULL
              GROUP BY PEDIDO_ID
@@ -3871,8 +4001,11 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
                 bolsaNeto: roundMoney(parseFloat(r.BOLSA_NETO) || 0),
                 createdAt: r.CREATED_AT,
                 updatedAt: r.UPDATED_AT,
+                repartidorNombre: '',
+                repartidorTelefono: '',
             };
         });
+        await enrichOrdersWithRepartidorContact(orders);
         return { orders, count: orders.length };
     } catch (error) {
         logger.error(`[PEDIDOS] getOrders error: ${error.message}`);
@@ -3883,6 +4016,49 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
 // ============================================================================
 // ORDER DETAIL
 // ============================================================================
+
+async function hasErpColumn(schema, table, column) {
+    try {
+        const rows = await queryWithParams(
+            `SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ? FETCH FIRST 1 ROW ONLY`,
+            [schema, table, column],
+            false,
+        );
+        return Array.isArray(rows) && rows.length > 0;
+    } catch (_) {
+        return false;
+    }
+}
+
+async function enrichOrdersWithRepartidorContact(orders) {
+    const list = Array.isArray(orders) ? orders : [];
+    const codes = [...new Set(list.map((o) => String(o.repartidorCode || '').trim()).filter(Boolean))];
+    if (codes.length === 0) return list;
+    try {
+        const placeholders = codes.map(() => 'TRIM(CAST(? AS VARCHAR(2)))').join(',');
+        const hasNombre = await hasErpColumn('DSEDAC', 'VDD', 'NOMBREVENDEDOR');
+        const nameExpr = hasNombre ? 'TRIM(VDD.NOMBREVENDEDOR)' : `''`;
+        const rows = await queryWithParams(
+            `SELECT TRIM(VDD.CODIGOVENDEDOR) AS CODE, ${nameExpr} AS NOMBRE FROM ${comercialErpTable('VDD')} VDD WHERE TRIM(VDD.CODIGOVENDEDOR) IN (${placeholders})`,
+            codes,
+            false,
+        );
+        const byCode = new Map((rows || []).map((r) => [String(r.CODE || '').trim(), String(r.NOMBRE || '').trim()]));
+        for (const order of list) {
+            const code = String(order.repartidorCode || '').trim();
+            if (!code) continue;
+            order.repartidorNombre = byCode.get(code) || '';
+            order.repartidorTelefono = '';
+        }
+    } catch (err) {
+        logger.warn(`[PEDIDOS] repartidor contact enrich skip: ${err.message}`);
+        for (const order of list) {
+            order.repartidorNombre = order.repartidorNombre || '';
+            order.repartidorTelefono = order.repartidorTelefono || '';
+        }
+    }
+    return list;
+}
 
 function toBolsaNumber(value) {
     if (value === undefined || value === null || value === '') return 0;
@@ -3899,13 +4075,24 @@ function toBolsaRawNumber(value) {
 function mapBolsaMovementRow(row) {
     const tipo = String(row.TIPO || '').trim();
     const importe = toBolsaNumber(row.IMPORTE);
+    const saldoAnterior = toBolsaNumber(row.SALDO_ANTERIOR);
+    const saldoPosterior = toBolsaNumber(row.SALDO_POSTERIOR);
+    // REQ-15: descuadre visible con idempotencyKey, tolerancia ±0,01.
+    if (Math.abs((saldoPosterior - saldoAnterior) - (tipo === 'CONSUMO' ? -importe : importe)) > 0.01) {
+        try {
+            logger.warn(
+                `[BOLSA_SALDO_MISMATCH] id=${row.ID} idempotencyKey=${String(row.IDEMPOTENCY_KEY || '').trim() || 'n/a'} ` +
+                `anterior=${saldoAnterior} posterior=${saldoPosterior} importe=${importe} tipo=${tipo}`,
+            );
+        } catch (_) { /* never break read path */ }
+    }
     return {
         id: row.ID,
         tipo,
         importe,
         importeFirmado: tipo === 'CONSUMO' ? -importe : importe,
-        saldoAnterior: toBolsaNumber(row.SALDO_ANTERIOR),
-        saldoPosterior: toBolsaNumber(row.SALDO_POSTERIOR),
+        saldoAnterior,
+        saldoPosterior,
         codigoArticulo: String(row.CODIGO_ARTICULO || '').trim(),
         descripcion: String(row.DESCRIPCION || '').trim(),
         pedidoId: row.PEDIDO_ID,
@@ -4551,7 +4738,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     const clientCode = trimString(currentRows[0].CODIGOCLIENTE || options.clientCode);
     const vendedorCode = trimString(currentRows[0].CODIGOVENDEDOR || options.vendedorCode);
     try {
-        await assertMinCobroAllowsOrder({ clientCode, vendorCode: vendedorCode });
+        await assertMinCobroAllowsOrder({ clientCode, vendorCode: vendedorCode, saleType: effectiveSaleType });
     } catch (gateErr) {
         await revertConfirming('MIN_COBRO_ORDER_BLOCKED');
         throw gateErr;
@@ -4904,6 +5091,12 @@ async function confirmOrder(orderId, saleType, options = {}) {
         logger.info(`[PEDIDOS] Confirm #${id} with dto=${options._bolsaGlobalDiscountPct} and no bolsa consumo (tariff-neutral after discounts)`);
     }
 
+    // REQ-28: guarda precioVenta confirmado en historico TEST (best-effort, nunca bloquea confirm).
+    try {
+        await savePrecioHistoricoTEST({ clientCode, lines });
+    } catch (histErr) {
+        logger.warn(`[PEDIDOS] TEST historico precios no guardado #${id}: ${histErr.message}`);
+    }
     // Invalida cache tras confirmacion (cambia ESTADO, importes y stock reservas).
     invalidatePedidosCache(id);
     await invalidateRuteroCachesAfterPedido(
@@ -6036,6 +6229,18 @@ async function getActivePrdPromotionsV2(today, cols) {
         const rows = hasDateRange
             ? await queryWithParams(sql, [today, today])
             : await queryWithParams(sql, [], []);
+        // REQ-25 tanda4: log total/vigentes (TEST-only observable, sin cambio
+        // de logica: rows ya viene filtrada por vigencia en el WHERE).
+        const vigentes = Array.isArray(rows) ? rows.length : 0;
+        if (vigentes === 0) {
+            try {
+                const probe = await queryWithParams(`SELECT COUNT(*) AS TOTAL FROM ${promotionsTable}`, [], false, false);
+                const total = parseInt(probe?.[0]?.TOTAL, 10) || 0;
+                logger.info(`[PEDIDOS] ${promotionsTable} total filas=${total}; vigentes hoy=0`);
+            } catch (_) { /* best-effort */ }
+        } else {
+            logger.info(`[PEDIDOS] ${promotionsTable} vigentes hoy=${vigentes}`);
+        }
         return (rows || []).map(r => ({
             source: 'PRD',
             code: trimString(r.CODIGOARTICULO),
@@ -7261,6 +7466,27 @@ async function getProductHistory(productCode, clientCode) {
     }
 }
 
+async function getProductPriceHistory(productCode, clientCode) {
+    const product = truncate(productCode, 10);
+    const client = truncate(clientCode, 10);
+    let competitivo = 0;
+    try {
+        const rows = await queryWithParams(
+            `SELECT COALESCE(PRECIOTARIFA, 0) AS PRECIO FROM ${comercialErpTable('ARA')} WHERE TRIM(CODIGOARTICULO) = ? AND CODIGOTARIFA = 1 FETCH FIRST 1 ROW ONLY`,
+            [product],
+            false,
+        );
+        competitivo = roundPrice(rows?.[0]?.PRECIO ?? 0);
+    } catch (err) {
+        logger.warn(`[PEDIDOS] price-history competitivo skip: ${err.message}`);
+    }
+    const hist = await getPrecioHistoricoTEST({ clientCode: client, articleCode: product });
+    const last = hist.length > 0 ? roundPrice(hist[0].PRECIOVENTA ?? hist[0].precioVenta ?? 0) : 0;
+    const prev = hist.length > 1 ? roundPrice(hist[1].PRECIOVENTA ?? hist[1].precioVenta ?? 0) : 0;
+    const pctSubida = prev > 0 && last > 0 ? roundPrice(((last - prev) / prev) * 100) : 0;
+    return { productCode: product, clientCode: client, ultimoPrecio: last, precioAnterior: prev, pctSubida, competitivo };
+}
+
 // =============================================================================
 // MODULE EXPORTS
 // =============================================================================
@@ -7358,6 +7584,7 @@ module.exports = {
     buildCreateOrderPayloadHash,
     getProducts,
     searchProducts,
+    normalizeSearchTerm,
     getProductDetail,
     getStock,
     getStockBatch,
@@ -7402,6 +7629,11 @@ module.exports = {
     applyConfiguredPricingToProducts,
     applyConfiguredPricingToProduct,
     effectiveMinPriceFromRow,
+    resolveMargenObjetivoPct,
+    resolvePrecioMinimoPolitica,
+    savePrecioHistoricoTEST,
+    getPrecioHistoricoTEST,
+    PRECIO_HISTORICO_TEST_TABLE,
     isOrderTransitionAllowed,
     canonicalOrderStatus,
     storedOrderStatus,
@@ -7409,6 +7641,7 @@ module.exports = {
     getOrderStats,
     getOrderAlbaran,
     getProductHistory,
+    getProductPriceHistory,
     pedidosBreaker,
     _private: {
         getNextOrderNumber,

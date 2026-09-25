@@ -54,7 +54,7 @@ router.get('/products', async (req, res) => {
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo productos', 500);
+        handleRouteError(error, res, 'Error obteniendo productos', 500, { code: 'MASTER_PRODUCTS_ERROR' });
     }
 });
 
@@ -103,7 +103,7 @@ router.get('/vendedores', async (req, res) => {
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo vendedores', 500);
+        handleRouteError(error, res, 'Error obteniendo vendedores', 500, { code: 'MASTER_VENDEDORES_ERROR' });
     }
 });
 
@@ -142,7 +142,7 @@ router.get('/families', async (req, res) => {
             name: (f.NAME ?? f.name ?? '').toString().trim()
         })));
     } catch (error) {
-        handleRouteError(error, res, 'Error loading families', 500);
+        handleRouteError(error, res, 'Error loading families', 500, { code: 'MASTER_FAMILIES_ERROR' });
     }
 });
 

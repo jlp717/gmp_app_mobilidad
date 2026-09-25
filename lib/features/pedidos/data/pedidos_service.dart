@@ -47,6 +47,8 @@ class Product {
     this.precioMinimoCalculado = 0,
     this.costeFabricacion = 0,
     this.margenObjetivoPct = 0,
+    this.precioCompetitivo = 0,
+    this.precioMinimoPolitica = 0,
     this.nameExt = '',
     this.familyName = '',
     this.prefamilia = '',
@@ -94,7 +96,9 @@ class Product {
       stockEnvases: _toDouble(json['stockEnvases']),
       stockUnidades: _toDouble(json['stockUnidades']),
       precioTarifa1: _toDouble(json['precioTarifa1']),
-      precioMinimo: _toDouble(json['precioMinimo']),
+      precioMinimo: _toDouble(
+        json['precioMinimo'] ?? json['precioMinimoAviso'],
+      ),
       precioCliente: _toDouble(json['precioCliente']),
       precioCosto: _toDouble(json['precioCosto']),
       codigoTarifaCliente: json['codigoTarifaCliente'] is int
@@ -112,6 +116,10 @@ class Product {
       precioMinimoCalculado: _toDouble(json['precioMinimoCalculado']),
       costeFabricacion: _toDouble(json['costeFabricacion']),
       margenObjetivoPct: _toDouble(json['margenObjetivoPct']),
+      precioCompetitivo: _toDouble(
+        json['precioCompetitivo'] ?? json['precioTarifa1'],
+      ),
+      precioMinimoPolitica: _toDouble(json['precioMinimoPolitica']),
       nameExt: (json['nameExt'] ?? '').toString().trim(),
       familyName: (json['familyName'] ?? '').toString().trim(),
       prefamilia: (json['prefamilia'] ?? '').toString().trim(),
@@ -183,6 +191,8 @@ class Product {
       precioMinimoCalculado: precioMinimoCalculado,
       costeFabricacion: costeFabricacion,
       margenObjetivoPct: margenObjetivoPct,
+      precioCompetitivo: precioCompetitivo,
+      precioMinimoPolitica: precioMinimoPolitica,
       nameExt: nameExt,
       familyName: familyName,
       prefamilia: prefamilia,
@@ -243,6 +253,8 @@ class Product {
   final double precioMinimoCalculado;
   final double costeFabricacion;
   final double margenObjetivoPct;
+  final double precioCompetitivo;
+  final double precioMinimoPolitica;
   // Extended fields from ART table
   final String nameExt;
   final String familyName;
@@ -1119,25 +1131,51 @@ class OrderLine {
     return cantidadUnidades;
   }
 
+  /// Redondeo dinero compartido con backend (`toMoney` en
+  /// `bolsa-comercial.service.js`): mitad hacia arriba a 2 decimales.
+  static double bolsaToMoney(double value) {
+    if (!value.isFinite) return 0;
+    return ((value + 1e-9) * 100).round() / 100;
+  }
+
+  /// Precio unitario efectivo tras dto de línea y opcional global.
+  /// Espejo de `resolveEffectiveSalePrice` backend: misma fórmula,
+  /// mismo redondeo. NO usar `importeVenta * factor` (doble redondeo
+  /// distinto al backend → descuadres tipo "1 € preview → 0 después").
+  double bolsaEffectiveUnitPrice(double globalFactor) {
+    var effective = precioVenta;
+    if (lineDiscountPct > 0 && lineDiscountPct <= 100) {
+      effective = precioVenta * (1 - (lineDiscountPct / 100));
+    }
+    final factor = (globalFactor.isFinite && globalFactor > 0 && globalFactor <= 1)
+        ? globalFactor
+        : 1.0;
+    if (factor < 1) effective = effective * factor;
+    return bolsaToMoney(effective);
+  }
+
+  /// Referencia tarifa compartida con backend (`resolveBolsaReferencePrice`):
+  /// tarifaCliente ?? tarifa ?? mínimo.
+  double get bolsaReferencePrice => precioTarifaCliente > 0
+      ? precioTarifaCliente
+      : (precioTarifa > 0 ? precioTarifa : precioMinimo);
+
   OrderBolsaImpact get estimatedBolsaImpact => estimatedBolsaImpactForFactor(1);
 
-  /// Bolsa vs tarifa usando el importe ya descontado de línea, escalado por
-  /// [globalFactor] (1 - dto global / 100). Así alinear/quitar descuentos
-  /// actualiza el preview de bolsa en carrito y confirmación.
+  /// Bolsa vs tarifa con la MISMA fórmula que backend `validateOrderWithBolsa`:
+  /// `diff = round2((effectiveUnit - referencePrice) * billingQuantity)`,
+  /// redondeo solo al final (±0,01). Positivas y negativas, misma vía.
   OrderBolsaImpact estimatedBolsaImpactForFactor(double globalFactor) {
-    final referencePrice = precioTarifaCliente > 0
-        ? precioTarifaCliente
-        : (precioTarifa > 0 ? precioTarifa : precioMinimo);
-    if (referencePrice <= 0 || billingQuantity <= 0) {
+    final referencePrice = bolsaReferencePrice;
+    final qty = billingQuantity;
+    if (referencePrice <= 0 || qty <= 0) {
       return const OrderBolsaImpact();
     }
-    final factor =
-        (globalFactor.isFinite && globalFactor > 0 && globalFactor <= 1)
-            ? globalFactor
-            : 1.0;
-    final saleTotal = importeVenta * factor;
-    final referenceTotal = referencePrice * billingQuantity;
-    final diff = double.parse((saleTotal - referenceTotal).toStringAsFixed(2));
+    final factor = (globalFactor.isFinite && globalFactor > 0 && globalFactor <= 1)
+        ? globalFactor
+        : 1.0;
+    final saleUnit = bolsaEffectiveUnitPrice(factor);
+    final diff = bolsaToMoney((saleUnit - referencePrice) * qty);
     if (diff > 0) {
       return OrderBolsaImpact(
         acumulacion: diff,
@@ -1251,6 +1289,8 @@ class OrderSummary {
     this.fechaReparto = '',
     this.fechaRepartoFormatted = '',
     this.repartidorCode = '',
+    this.repartidorNombre = '',
+    this.repartidorTelefono = '',
     this.vehicleCode = '',
     this.ruta = '',
     this.diasReparto = '',
@@ -1296,6 +1336,13 @@ class OrderSummary {
       fechaRepartoFormatted:
           (json['fechaRepartoFormatted'] ?? '').toString().trim(),
       repartidorCode: (json['repartidorCode'] ?? '').toString().trim(),
+      repartidorNombre: (json['repartidorNombre'] ?? json['driverName'] ?? '')
+          .toString()
+          .trim(),
+      repartidorTelefono:
+          (json['repartidorTelefono'] ?? json['driverPhone'] ?? '')
+              .toString()
+              .trim(),
       vehicleCode: (json['vehicleCode'] ?? '').toString().trim(),
       ruta: (json['ruta'] ?? '').toString().trim(),
       diasReparto: (json['diasReparto'] ?? '').toString().trim(),
@@ -1323,11 +1370,24 @@ class OrderSummary {
     );
   }
 
+  /// Umbral de impacto: por debajo de media céntima se muestra 0,00
+  /// ("sin impacto"). Evita chips fantasma por ruido de redondeo.
+  static const double bolsaImpactEpsilon = 0.005;
+
+  static bool _hasSignedImpact(double neto) => neto.abs() >= bolsaImpactEpsilon;
+
+  static double _summaryNeto(Map<String, dynamic> summary) {
+    final neto = _toDouble(summary['neto']);
+    if (neto.abs() >= 1e-9) return neto;
+    // Fallback: neto = acumulacion - consumo (misma fórmula backend
+    // `buildBolsaSummary`). Cubre payloads sin campo `neto`.
+    return _toDouble(summary['acumulacion']) - _toDouble(summary['consumo']);
+  }
+
   static bool? _parseBolsaGenerada(Map<String, dynamic> json) {
-    if (json['bolsaNeto'] != null &&
-        _toDouble(json['bolsaNeto']).abs() > 0.0001) {
-      return true;
-    }
+    final neto = _parseBolsaNeto(json);
+    if (_hasSignedImpact(neto)) return true;
+    if (json['bolsaNeto'] != null) return false;
     if (json['bolsaGenerada'] == true) return true;
     if (json['bolsaGenerada'] == false) return false;
     final summary = json['bolsaSummary'];
@@ -1351,7 +1411,7 @@ class OrderSummary {
     }
     final summary = json['bolsaSummary'];
     if (summary is Map) {
-      return _toDouble(summary['neto']);
+      return _summaryNeto(Map<String, dynamic>.from(summary));
     }
     return 0;
   }
@@ -1382,6 +1442,8 @@ class OrderSummary {
   final String fechaReparto;
   final String fechaRepartoFormatted;
   final String repartidorCode;
+  final String repartidorNombre;
+  final String repartidorTelefono;
   final String vehicleCode;
   final String ruta;
   final String diasReparto;
@@ -1415,6 +1477,7 @@ class OrderDeliveryOptions {
     this.selectedDeliveryDateFormatted = '',
     this.vehicleCode = '',
     this.driverCode = '',
+    this.driverName = '',
     this.vehicleMatricula = '',
     this.vehicleDescription = '',
     this.truckConfidence = '',
@@ -1447,6 +1510,7 @@ class OrderDeliveryOptions {
           (json['selectedDeliveryDateFormatted'] ?? '').toString().trim(),
       vehicleCode: (json['vehicleCode'] ?? '').toString().trim(),
       driverCode: (json['driverCode'] ?? '').toString().trim(),
+      driverName: (json['driverName'] ?? '').toString().trim(),
       vehicleMatricula: (json['vehicleMatricula'] ?? '').toString().trim(),
       vehicleDescription: (json['vehicleDescription'] ?? '').toString().trim(),
       truckConfidence: (json['truckConfidence'] ?? '').toString().trim(),
@@ -1467,6 +1531,7 @@ class OrderDeliveryOptions {
   final String selectedDeliveryDateFormatted;
   final String vehicleCode;
   final String driverCode;
+  final String driverName;
   final String vehicleMatricula;
   final String vehicleDescription;
   final String truckConfidence;
@@ -1484,10 +1549,13 @@ class OrderDeliveryOptions {
   }
 
   String get truckLabel {
+    final driver = driverName.isNotEmpty
+        ? driverName
+        : (driverCode.isNotEmpty ? 'Rep. $driverCode' : '');
     final parts = [
       if (vehicleCode.isNotEmpty) vehicleCode,
       if (vehicleMatricula.isNotEmpty) vehicleMatricula,
-      if (driverCode.isNotEmpty) 'Rep. $driverCode',
+      if (driver.isNotEmpty) driver,
     ];
     return parts.isEmpty ? 'Sin camion sugerido' : parts.join(' - ');
   }
@@ -1743,6 +1811,7 @@ class PedidosService {
     String? marca,
     String? prefamily,
     bool includeIva = false,
+    bool onlyStock = false,
     int limit = 50,
     int offset = 0,
     String sortBy = 'purchases',
@@ -1767,6 +1836,7 @@ class PedidosService {
     if (prefamily != null && prefamily.isNotEmpty) {
       params['prefamily'] = prefamily;
     }
+    if (onlyStock) params['onlyStock'] = 'true';
 
     final cacheKey = [
       'pedidos:products',
@@ -1776,6 +1846,7 @@ class PedidosService {
       family ?? '',
       marca ?? '',
       prefamily ?? '',
+      if (onlyStock) 'stock' else 'all',
       if (includeIva) 'iva' else 'base',
       sortBy,
       sortOrder,
@@ -1842,6 +1913,26 @@ class PedidosService {
     } catch (e) {
       _debugLog('[PedidosService] Error getProductDetail: $e');
       rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> getProductPriceHistory(
+    String productCode,
+    String clientCode,
+  ) async {
+    final product = productCode.trim();
+    final client = clientCode.trim();
+    if (product.isEmpty || client.isEmpty) return {};
+    try {
+      final response = await ApiClient.get(
+        '$_base/product-price-history/$product/$client',
+        cacheKey: 'pedidos:price-history:$product:$client',
+        cacheTTL: CacheService.realtimeTTL,
+      );
+      return Map<String, dynamic>.from(response);
+    } catch (e) {
+      _debugLog('[PedidosService] Error getProductPriceHistory: $e');
+      return {};
     }
   }
 
@@ -2501,6 +2592,7 @@ String ivaLabelFromCode(String? code) {
   final normalized = (code ?? '').trim();
   switch (normalized) {
     case '0':
+      return 'General (21%)';
     case '4':
       return 'Exento (0%)';
     case '1':

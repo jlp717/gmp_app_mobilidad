@@ -5,7 +5,7 @@ const { requireVendorQueryScope } = require('../middleware/vendor-scope');
 const logger = require('../middleware/logger');
 const { query, queryWithParams } = require('../config/db');
 const {
-    buildVendedorFilter,
+    buildBoundVendorFilter,
     formatCurrency,
     MIN_YEAR,
     sanitizeForSQL,
@@ -24,7 +24,9 @@ router.get('/client-report', verifyToken, requireVendorQueryScope, async (req, r
         }
 
         const safeCode = sanitizeForSQL(code.trim());
-        const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
+        // F2a-05: filtro bindeado canonico; jamas interpolar vendedorCodes.
+        const vendorBound = buildBoundVendorFilter(vendedorCodes, 'L.CODIGOVENDEDOR');
+        const vendedorFilter = vendorBound.clause;
 
         // Get complete client data for PDF report
         const clientRows = await queryWithParams(`
@@ -47,7 +49,7 @@ router.get('/client-report', verifyToken, requireVendorQueryScope, async (req, r
         AND ANODOCUMENTO >= ? ${vendedorFilter}
       GROUP BY ANODOCUMENTO
       ORDER BY ANODOCUMENTO
-    `, [safeCode, MIN_YEAR]);
+    `, [safeCode, MIN_YEAR, ...vendorBound.params]);
 
         // Top 10 products
         const topProducts = await queryWithParams(`
@@ -63,7 +65,7 @@ router.get('/client-report', verifyToken, requireVendorQueryScope, async (req, r
       GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
       ORDER BY sales DESC
       FETCH FIRST 10 ROWS ONLY
-    `, [safeCode, MIN_YEAR]);
+    `, [safeCode, MIN_YEAR, ...vendorBound.params]);
 
         res.json({
             exportDate: new Date().toISOString(),
@@ -94,7 +96,7 @@ router.get('/client-report', verifyToken, requireVendorQueryScope, async (req, r
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error exportando datos', 500);
+        handleRouteError(error, res, 'Error exportando datos', 500, { code: 'EXPORT_CLIENT_REPORT_ERROR' });
     }
 });
 

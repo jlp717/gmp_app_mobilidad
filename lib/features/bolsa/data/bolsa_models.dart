@@ -4,6 +4,18 @@
 /// y movimientos (acumulaciones/consumos).
 library;
 
+import 'package:freezed_annotation/freezed_annotation.dart';
+
+part 'bolsa_models.freezed.dart';
+part 'bolsa_models.g.dart';
+
+/// Parsers tolerantes (num o String) — idénticos a los helpers manuales
+/// previos para mantener el JSON compatible con el backend.
+double _jsonDouble(dynamic v) =>
+    v is num ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0;
+int _jsonInt(dynamic v) =>
+    v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0;
+
 /// Estado de la bolsa para un vendedor en un mes concreto.
 class BolsaStatus {
   BolsaStatus({
@@ -242,6 +254,50 @@ class BolsaMovimiento {
   /// Importe con signo: positivo si acumulación, negativo si consumo.
   double get importeFirmado => tipo.isCredit ? importe : -importe;
 
+  /// Variación real de saldo (posterior − anterior). Debe coincidir con
+  /// [importeFirmado] ±0,01; si no, el movimiento se marca "revisar" (REQ-15).
+  double get variacionSaldo =>
+      double.parse((saldoPosterior - saldoAnterior).toStringAsFixed(2));
+
+  /// True si el descuadre supera la tolerancia ±0,01 (backend loguea
+  /// `BOLSA_SALDO_MISMATCH` con `idempotencyKey` en el mismo caso).
+  bool get hasSaldoMismatch =>
+      (variacionSaldo - importeFirmado).abs() > 0.01;
+
+  /// Motivo legible de la variación para comercial/jefe (REQ-15).
+  /// Nunca expone margen: solo artículo, cantidades y efecto en saldo.
+  String motivoVariacion({String? articuloFallback}) {
+    final signo = tipo.isCredit ? '+' : '-';
+    final articulo = descripcion.isNotEmpty
+        ? descripcion
+        : (codigoArticulo.isNotEmpty
+            ? codigoArticulo
+            : (articuloFallback ?? 'línea'));
+    final qty = cantidad != null ? _qtyConUnidad() : null;
+    switch (tipo) {
+      case BolsaMovimientoTipo.acumulacion:
+        return '$signo${_eur(importe)} por venta sobre tarifa en $articulo'
+            '${qty == null ? '' : ' ($qty)'}';
+      case BolsaMovimientoTipo.consumo:
+        return '$signo${_eur(importe)} por venta bajo tarifa en $articulo'
+            '${qty == null ? '' : ' ($qty)'}';
+      case BolsaMovimientoTipo.ajuste:
+        return '$signo${_eur(importe)} ajuste manual'
+            '${idempotencyKey == null ? '' : ' · $idempotencyKey'}';
+      case BolsaMovimientoTipo.desconocido:
+        return '$signo${_eur(importe)} movimiento en $articulo';
+    }
+  }
+
+  String _qtyConUnidad() {
+    final q = cantidad!;
+    final base = q == q.roundToDouble() ? q.toStringAsFixed(0) : q.toStringAsFixed(2);
+    final unit = unidadMedida?.trim() ?? '';
+    return unit.isEmpty ? base : '$base $unit';
+  }
+
+  static String _eur(double v) => '${v.toStringAsFixed(2)} €';
+
   String get displayPedido {
     final ref = pedidoReferencia?.trim();
     if (ref != null && ref.isNotEmpty) return ref;
@@ -259,34 +315,21 @@ class BolsaMovimiento {
 }
 
 /// Punto histórico mensual (acumulado/consumido por mes).
-class BolsaMonthlyPoint {
-  BolsaMonthlyPoint({
-    required this.ejercicio,
-    required this.mes,
-    required this.acumulado,
-    required this.consumido,
-    required this.saldoDisponible,
-  });
+///
+/// F3-03 piloto freezed: JSON idéntico al manual previo gracias a
+/// [_jsonInt]/[_jsonDouble] (toleran num, String y claves ausentes → 0).
+@freezed
+class BolsaMonthlyPoint with _$BolsaMonthlyPoint {
+  const factory BolsaMonthlyPoint({
+    @JsonKey(fromJson: _jsonInt) required int ejercicio,
+    @JsonKey(fromJson: _jsonInt) required int mes,
+    @JsonKey(fromJson: _jsonDouble) required double acumulado,
+    @JsonKey(fromJson: _jsonDouble) required double consumido,
+    @JsonKey(fromJson: _jsonDouble) required double saldoDisponible,
+  }) = _BolsaMonthlyPoint;
 
-  factory BolsaMonthlyPoint.fromJson(Map<String, dynamic> json) {
-    double n(dynamic v) =>
-        v is num ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0;
-    int i(dynamic v) =>
-        v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0;
-    return BolsaMonthlyPoint(
-      ejercicio: i(json['ejercicio']),
-      mes: i(json['mes']),
-      acumulado: n(json['acumulado']),
-      consumido: n(json['consumido']),
-      saldoDisponible: n(json['saldoDisponible']),
-    );
-  }
-
-  final int ejercicio;
-  final int mes;
-  final double acumulado;
-  final double consumido;
-  final double saldoDisponible;
+  factory BolsaMonthlyPoint.fromJson(Map<String, dynamic> json) =>
+      _$BolsaMonthlyPointFromJson(json);
 }
 
 class BolsaGroupedSummary {

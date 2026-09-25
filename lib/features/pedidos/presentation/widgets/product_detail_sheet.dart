@@ -10,6 +10,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -75,9 +77,13 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   bool _loading = true;
   String? _error;
   ProductDetail? _detail;
+  Map<String, dynamic>? _priceHistory;
   CancelToken? _detailCancelToken;
   CancelToken? _downloadCancelToken;
   int _loadGeneration = 0;
+  // REQ-06: 404 on ficha disables share actions instead of crashing.
+  bool _fichaMissing = false;
+  bool _sharingFicha = false;
 
   @override
   void initState() {
@@ -112,6 +118,15 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         _detail = detail;
         _loading = false;
       });
+      final client = widget.clientCode?.trim() ?? '';
+      if (client.isNotEmpty) {
+        final history = await PedidosService.getProductPriceHistory(
+          widget.productCode,
+          client,
+        );
+        if (!mounted || generation != _loadGeneration) return;
+        setState(() => _priceHistory = history);
+      }
     } catch (e) {
       if (e is ApiException && e.code == 'CANCELLED') return;
       if (!mounted || generation != _loadGeneration) return;
@@ -190,11 +205,264 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     } catch (e) {
       if (navigator.canPop()) navigator.pop();
       if (e is ApiException && e.code == 'CANCELLED') return;
-      final msg = e.toString().contains('404')
+      final is404 = e.toString().contains('404');
+      if (is404 && mounted) setState(() => _fichaMissing = true);
+      final msg = is404
           ? 'No hay ficha técnica para este producto'
           : 'Error al descargar: $e';
       messenger.showSnackBar(SnackBar(content: Text(msg)));
     }
+  }
+
+  /// REQ-06: downloads ficha PDF bytes via GET /products/:code/ficha and
+  /// returns the temp file, or null on 404 (disables share). No new backend
+  /// endpoint — solo-cliente con share_plus + url_launcher (spec opción a).
+  Future<File?> _downloadFichaFile() async {
+    final code = widget.productCode.trim();
+    final url =
+        '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(code)}/ficha';
+    final filePath =
+        '${(await getTemporaryDirectory()).path}/${code}_ficha.pdf';
+    try {
+      _downloadCancelToken?.cancel('superseded ficha download');
+      final cancelToken = CancelToken();
+      _downloadCancelToken = cancelToken;
+      await ApiClient.download(url, filePath, cancelToken: cancelToken);
+      final file = File(filePath);
+      if (!file.existsSync() || file.lengthSync() < 100) return null;
+      return file;
+    } catch (e) {
+      if (e is ApiException && e.code == 'CANCELLED') return null;
+      if (e.toString().contains('404') && mounted) {
+        setState(() => _fichaMissing = true);
+      }
+      return null;
+    }
+  }
+
+  /// REQ-06: share options sheet replicating facturas _showShareOptions
+  /// (WhatsApp + Email), backed by the downloaded ficha PDF.
+  void _showFichaShareOptions(BuildContext context) {
+    if (_fichaMissing) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay ficha técnica para compartir')),
+      );
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.transparent,
+      builder: (sheetContext) {
+        final scheme = Theme.of(sheetContext).colorScheme;
+        return Container(
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: scheme.outline,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Compartir ficha ${widget.productCode.trim()}',
+                    style: Theme.of(sheetContext)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Semantics(
+                  button: true,
+                  label: 'Compartir ficha por WhatsApp',
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.whatsappGreen,
+                      child: Icon(
+                        Icons.chat,
+                        color: AppColors.onAccent,
+                        size: 20,
+                      ),
+                    ),
+                    title: const Text('WhatsApp'),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _shareFichaViaWhatsApp(context);
+                    },
+                  ),
+                ),
+                Semantics(
+                  button: true,
+                  label: 'Compartir ficha por correo',
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: AppTheme.info,
+                      child: Icon(
+                        Icons.email_outlined,
+                        color: AppColors.onAccent,
+                        size: 20,
+                      ),
+                    ),
+                    title: const Text('Email'),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _shareFichaViaEmail(context);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _shareFichaViaWhatsApp(BuildContext context) async {
+    final phone = await _askPhoneNumber(context);
+    if (phone == null || !context.mounted) return;
+    if (!mounted) return;
+    setState(() => _sharingFicha = true);
+    try {
+      final file = await _downloadFichaFile();
+      if (!mounted) return;
+      if (file == null) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sin ficha para compartir'),
+          ),
+        );
+        return;
+      }
+      // REQ-22/23 tanda4: directo wa.me primero, sin doble picker.
+      // Descarga previa ya hecha para adjuntar manual.
+      final digits = phone.replaceAll(RegExp(r'\D'), '');
+      final message =
+          'Hola, le adjunto la ficha técnica ${widget.productName} '
+          '(${widget.productCode.trim()}).';
+      if (digits.isNotEmpty) {
+        final uri = Uri.parse(
+          'https://wa.me/$digits?text=${Uri.encodeComponent(message)}',
+        );
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (mounted && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Ficha descargada: adjúntala en el chat de WhatsApp.',
+                ),
+              ),
+            );
+          }
+          return;
+        }
+      }
+      // Fallback: WA ausente → share sheet con PDF.
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center: Offset(
+                renderBox.size.width / 2,
+                renderBox.size.height / 2,
+              ),
+              width: 1,
+              height: 1,
+            )
+          : null;
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: 'Ficha técnica ${widget.productName} '
+            '(${widget.productCode.trim()})',
+        subject: 'Ficha técnica ${widget.productCode.trim()}',
+        sharePositionOrigin: origin,
+      );
+    } finally {
+      if (mounted) setState(() => _sharingFicha = false);
+    }
+  }
+
+  Future<void> _shareFichaViaEmail(BuildContext context) async {
+    if (!mounted) return;
+    setState(() => _sharingFicha = true);
+    try {
+      final file = await _downloadFichaFile();
+      if (!context.mounted) return;
+      if (file == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No hay ficha técnica para este producto'),
+          ),
+        );
+        return;
+      }
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center: Offset(
+                renderBox.size.width / 2,
+                renderBox.size.height / 2,
+              ),
+              width: 1,
+              height: 1,
+            )
+          : null;
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        subject: 'Ficha técnica ${widget.productCode.trim()} - '
+            '${widget.productName}',
+        sharePositionOrigin: origin,
+      );
+    } finally {
+      if (mounted) setState(() => _sharingFicha = false);
+    }
+  }
+
+  Future<String?> _askPhoneNumber(BuildContext context) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.softPanel,
+        title: const Text('WhatsApp'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(
+            hintText: 'Nº teléfono (ej. 34600112233)',
+            prefixIcon: Icon(Icons.phone),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          Semantics(
+            button: true,
+            label: 'Enviar ficha por WhatsApp',
+            child: TextButton(
+              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+              child: const Text('Continuar'),
+            ),
+          ),
+        ],
+      ),
+    );
+    return (result == null || result.isEmpty) ? null : result;
   }
 
   @override
@@ -263,6 +531,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         _buildDragHandle(),
         _buildHeader(p),
         const SizedBox(height: 16),
+        _buildPriceHistoryStrip(p),
+        const SizedBox(height: 16),
         _buildProductData(p),
         const SizedBox(height: 16),
         _buildImageSection(p.code),
@@ -279,6 +549,84 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         const SizedBox(height: 20),
         _buildHistoryButton(),
         const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildPriceHistoryStrip(Product p) {
+    final history = _priceHistory;
+    final competitivo = history != null &&
+            (history['competitivo'] is num)
+        ? (history['competitivo'] as num).toDouble()
+        : p.precioCompetitivo > 0
+            ? p.precioCompetitivo
+            : p.precioTarifa1;
+    final ultimo = history != null && history['ultimoPrecio'] is num
+        ? (history['ultimoPrecio'] as num).toDouble()
+        : 0.0;
+    final pct = history != null && history['pctSubida'] is num
+        ? (history['pctSubida'] as num).toDouble()
+        : 0.0;
+    return Semantics(
+      label:
+          'Histórico precios: último ${ultimo.toStringAsFixed(2)}, subida ${pct.toStringAsFixed(1)} por ciento, competitivo ${competitivo.toStringAsFixed(2)}',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.inkSurface.withValues(alpha: 0.36),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppColors.themedWhite.withValues(alpha: 0.06),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _historyStat(
+              Icons.history,
+              ultimo > 0
+                  ? PedidosFormatters.money(ultimo, decimals: 2)
+                  : '—',
+              'Último',
+            ),
+            _historyStat(
+              Icons.trending_up,
+              pct != 0 ? '${pct.toStringAsFixed(1)}%' : '—',
+              '% subida',
+            ),
+            _historyStat(
+              Icons.tag_outlined,
+              competitivo > 0
+                  ? PedidosFormatters.money(competitivo, decimals: 2)
+                  : '—',
+              'Competitivo',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _historyStat(IconData icon, String value, String label) {
+    return Column(
+      children: [
+        Icon(icon, color: AppTheme.info, size: 14),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            color: AppTheme.info,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 10,
+          ),
+        ),
       ],
     );
   }
@@ -507,6 +855,43 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+          // REQ-06: share ficha via WhatsApp / Email (replicates facturas
+          // _showShareOptions pattern, client-side via share_plus + wa.me).
+          // 404 disables share instead of crashing.
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: Semantics(
+              button: true,
+              label: _fichaMissing
+                  ? 'Sin ficha técnica para compartir'
+                  : 'Compartir ficha técnica por WhatsApp o correo',
+              child: OutlinedButton.icon(
+                onPressed: (_fichaMissing || _sharingFicha)
+                    ? null
+                    : () => _showFichaShareOptions(context),
+                icon: _sharingFicha
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.share_outlined, size: 18),
+                label: Text(
+                  _fichaMissing
+                      ? 'Sin ficha para compartir'
+                      : 'Compartir ficha',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.success,
+                  side: const BorderSide(color: AppTheme.success),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),

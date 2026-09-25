@@ -1,3 +1,4 @@
+-- UNCLASSIFIED — do not run without human confirmation. See audit <2026-09-25>.
 -- =============================================================================
 -- GMP APP - DATABASE INDICES
 -- Recommended indices for DB2/i5/OS performance optimization

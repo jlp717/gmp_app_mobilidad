@@ -825,7 +825,7 @@ router.get('/rutero/week/:repartidorId', verifyToken, async (req, res) => {
                 dayName: ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'][new Date(wd.formatted).getDay()],
                 clients: totalAlbaranes,
                 completed: entregados,
-                status: status
+                status
             };
         });
 

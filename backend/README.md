@@ -7,8 +7,11 @@ API única de datos para la app GMP Movilidad. Puerta exclusiva hacia IBM DB2 fo
 ## Capas (src/)
 
 ```
+// WS2 DDD-CONSOLIDATION-001-FINAL: src/routes/* (22 ficheros TS/JS) archivado en
+// backend/docs/archive/ts-routes-7239f17/. Canónico: backend/routes/*.js legacy +
+// backend/src/modules/* DDD. Esta capa src/ lista queda histórica.
 src/
-├── routes/        # 19 routers: validación de entrada + autorización. SIN SQL.
+├── routes/        # ARCHIVADO WS2 (22 ficheros → docs/archive/ts-routes-7239f17/): NO usar.
 ├── controllers/   # orquestan request/response
 ├── services/      # reglas de negocio
 ├── middleware/    # auth JWT, rate-limit, prometheus, http-cache, seguridad
@@ -38,6 +41,8 @@ npm run db2:audit-commercial-cobros   # audits read-only contra DB2
 - SQL siempre parametrizado. Pool con timeouts (`DB_POOL_*`), presupuesto global de conexiones.
 
 ## Salud y observabilidad
+
+- Testing: requisito sistema unixODBC (`libodbc.so.2`) para suite completa. Ver [`docs/testing-setup.md`](docs/testing-setup.md).
 
 - Liveness: `GET /api/health`
 - Readiness productiva: `GET /api/ready` con User-Agent `GMP-SRE-HealthCheck/1.0`

@@ -130,10 +130,14 @@ class _VehiclesPageState extends State<VehiclesPage>
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: v.imageUrl != null && v.imageUrl!.isNotEmpty
+                    // F1b-02: decode cache 2x del tile max (64px) patron
+                    // smart_product_image (73-85); solo visual, sin logica.
                     ? Image.network(
                         v.imageUrl!,
                         headers: ApiClient.authHeaders,
                         fit: BoxFit.cover,
+                        cacheWidth: 128,
+                        cacheHeight: 128,
                         errorBuilder: (_, __, ___) => const Icon(
                           Icons.local_shipping_rounded,
                           color: AppTheme.info,

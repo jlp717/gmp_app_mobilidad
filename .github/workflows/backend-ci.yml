@@ -11,6 +11,10 @@ on:
     paths:
       - 'backend/**'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 # Limitation: required-check branch protection was not verifiable; GitHub API returned 401.
 jobs:
   test:
@@ -23,6 +27,8 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
+      - name: Install unixODBC (required by node odbc / libodbc.so.2)
+        run: sudo apt-get update && sudo apt-get install -y unixodbc unixodbc-dev
       - run: npm ci
         working-directory: backend
       - run: npm run test:ci -- --coverage

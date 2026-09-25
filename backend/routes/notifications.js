@@ -11,7 +11,7 @@ const express = require('express');
 const logger = require('../middleware/logger');
 const { getOrSetCache } = require('../services/redis-cache');
 
-const SNAPSHOT_TTL_SECONDS = 120;
+const SNAPSHOT_TTL_SECONDS = 60;
 const LOADER_KEYS = Object.freeze([
     'orders',
     'kpi',
@@ -55,6 +55,11 @@ function addDays(date, days) {
 }
 
 function resolveVendorScope(user) {
+    // F2a-04: delega en canonico; jamas emite csv 'ALL' literal sin visibles.
+    const {
+        resolveVendorScope: resolveCanonicalVendorScope,
+        getCachedActiveGmpVendorCatalog,
+    } = require('../middleware/vendor-scope');
     const raw = Array.isArray(user?.vendedorCodes)
         ? user.vendedorCodes
         : Array.isArray(user?.vendorCodes)
@@ -66,10 +71,22 @@ function resolveVendorScope(user) {
     const isJefe = user?.isJefeVentas === true
         || ['JEFE_VENTAS', 'ADMIN', 'JEFE'].includes(String(user?.role || '').toUpperCase());
     if (list.length > 0) {
-        return { csv: list.join(','), list, isJefe, primary: list[0] };
+        const scope = resolveCanonicalVendorScope(user, list, { visibleCodes: list });
+        const codes = scope.ok && scope.codes.length ? scope.codes : list;
+        return { csv: codes.join(','), list: codes, isJefe, primary: codes[0] || '' };
     }
     if (isJefe) {
-        return { csv: 'ALL', list: [], isJefe, primary: '' };
+        const scope = resolveCanonicalVendorScope(user, 'ALL', { visibleCodes: [] });
+        if (scope.literalAll) {
+            const catalog = getCachedActiveGmpVendorCatalog();
+            if (catalog.length) {
+                return { csv: catalog.join(','), list: catalog, isJefe, primary: catalog[0] || '' };
+            }
+        }
+        if (scope.ok && !scope.literalAll && scope.codes.length) {
+            return { csv: scope.codes.join(','), list: scope.codes, isJefe, primary: scope.codes[0] || '' };
+        }
+        return { csv: '', list: [], isJefe, primary: '' };
     }
     const own = String(user?.code || user?.codigo || user?.id || '').trim();
     return { csv: own, list: own ? [own] : [], isJefe, primary: own };

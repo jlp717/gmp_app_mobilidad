@@ -69,16 +69,29 @@ function resolveVendorCodes(req) {
     return { codes };
   }
 
-  if (requestedIsAll) {
-    return { codes: visible };
+  // F2a-03: JEFE via canonico. ALL => literalAll con catalogo o set>=20;
+  // jamas set vacio (codes:[]) al servicio.
+  const { resolveVendorScope, getCachedActiveGmpVendorCatalog } = require('../middleware/vendor-scope');
+  const scope = resolveVendorScope(
+    req.user || {},
+    requestedIsAll ? 'ALL' : (requestedCodes.length ? requestedCodes : 'ALL'),
+    { visibleCodes: visible },
+  );
+  if (!scope.ok) {
+    return { error: scope.reason === 'empty_request' ? 'JEFE_VENTAS sin alcance de vendedores' : 'JEFE_VENTAS no puede consultar vendedores fuera de su alcance' };
   }
-  if (requestedCodes.length === 0) {
-    return { codes: visible };
+  if (scope.literalAll) {
+    const catalog = getCachedActiveGmpVendorCatalog();
+    const codes = catalog.length ? catalog : visible;
+    if (!codes.length) {
+      return { error: 'JEFE_VENTAS sin catalogo de vendedores' };
+    }
+    return { codes, literalAll: true };
   }
-  if (visible.length > 0 && requestedCodes.some((code) => !visible.some((item) => codesMatch(code, item)))) {
-    return { error: 'JEFE_VENTAS no puede consultar vendedores fuera de su alcance' };
+  if (!scope.codes.length) {
+    return { error: 'JEFE_VENTAS sin alcance de vendedores' };
   }
-  return { codes: requestedCodes };
+  return { codes: scope.codes };
 }
 
 function resolveDate(req) {
@@ -99,6 +112,32 @@ function sendTypedError(res, error, fallbackCode) {
     code: status >= 500 ? (error?.code || fallbackCode) : (error?.code || 'REQUEST_ERROR'),
     error: status >= 500 ? 'Error interno del servidor' : (error?.message || 'Solicitud invalida'),
   });
+}
+
+// F2b-05: texto max 64 con allowlist; cliente alfanumerico max 10.
+// Malicioso o largo => 400, nunca filtro crudo al servicio.
+const LIQUIDACION_TEXT_RE = /^[A-Za-z0-9 _.\-áéíóúÁÉÍÓÚñÑüÜ]+$/;
+const LIQUIDACION_TEXT_MAX = 64;
+const LIQUIDACION_CODE_RE = /^[A-Za-z0-9]+$/;
+
+function clampLiquidacionText(value, field, res) {
+  if (value === undefined || value === null || value === '') return '';
+  const text = String(value).trim();
+  if (text.length > LIQUIDACION_TEXT_MAX || !LIQUIDACION_TEXT_RE.test(text)) {
+    res.status(400).json({ success: false, code: 'VALIDATION_ERROR', error: `filtro ${field} invalido (max 64, sin simbolos de control)` });
+    return null;
+  }
+  return text;
+}
+
+function clampLiquidacionClient(value, res) {
+  if (value === undefined || value === null || value === '') return '';
+  const text = String(value).trim();
+  if (text.length > 10 || !LIQUIDACION_CODE_RE.test(text)) {
+    res.status(400).json({ success: false, code: 'VALIDATION_ERROR', error: 'cliente invalido (alfanumerico, max 10)' });
+    return null;
+  }
+  return text;
 }
 
 function wantsPdf(req) {
@@ -122,8 +161,10 @@ router.get('/devoluciones/pdf', async (req, res) => {
     if (fecha.error) {
       return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', error: fecha.error });
     }
-    const serie = String(req.query.serie || '').trim();
-    const numero = String(req.query.numero || '').trim();
+    const serie = clampLiquidacionText(req.query.serie, 'serie', res);
+    if (serie === null) return;
+    const numero = clampLiquidacionText(req.query.numero, 'numero', res);
+    if (numero === null) return;
     if (!serie || !numero) {
       return res.status(400).json({
         success: false,
@@ -151,7 +192,8 @@ router.get('/devoluciones', async (req, res) => {
     if (fecha.error) {
       return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', error: fecha.error });
     }
-    const clientCode = String(req.query.cliente || req.query.clientCode || '').trim();
+    const clientCode = clampLiquidacionClient(req.query.cliente || req.query.clientCode, res);
+    if (clientCode === null) return;
     const returns = await listReturns({
       vendorCodes: vendors.codes,
       date: fecha.date,
@@ -200,7 +242,8 @@ router.get('/ya-cobrados-pg', async (req, res) => {
   try {
     const vendors = resolveVendorCodes(req);
     if (vendors.error) return forbidden(res, vendors.error);
-    const clientCode = String(req.query.cliente || req.query.clientCode || '').trim();
+    const clientCode = clampLiquidacionClient(req.query.cliente || req.query.clientCode, res);
+    if (clientCode === null) return;
     const documents = await listPgCollectedDocuments({
       vendorCodes: vendors.codes,
       clientCode,

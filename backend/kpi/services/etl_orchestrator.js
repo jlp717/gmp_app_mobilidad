@@ -5,7 +5,7 @@ const SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { fetchCSVsFromSFTP, loadLocalCSVs } = require('./sftp_client');
+const { fetchCSVsFromSFTP, loadLocalCSVs, EXPECTED_FILES } = require('./sftp_client');
 const { parseCSV } = require('./csv_parser');
 const { PROCESSORS } = require('./alert_rules');
 const { kpiQuery } = require('../config/db');
@@ -25,6 +25,49 @@ function generateLoadId(date = new Date()) {
   const week1 = new Date(d.getFullYear(), 0, 4);
   const weekNum = 1 + Math.round(((d - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
   return `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+// REQ-G3/G4: frescura auditable. STALE si ultima COMPLETED > STALE_DAYS.
+// No se sirven alertas caducadas como frescas; la app muestra badge con fecha.
+const STALE_DAYS = 7;
+// Mapeo fichero esperado -> tipo de alerta para huecos visibles (sin inventar CSVs).
+const FILE_TO_ALERT_TYPE = {
+  'Desviacion_Ventas.csv': 'DESVIACION_VENTAS',
+  'Clientes_ConCuotaSinCompra.csv': 'CUOTA_SIN_COMPRA',
+  'Desviacion_Referenciacion.csv': 'DESVIACION_REFERENCIACION',
+  'Mensaje_Promociones.csv': 'PROMOCION',
+  'Altas_Clientes.csv': 'ALTA_CLIENTE',
+  'Mensajes_Clientes.csv': 'AVISO',
+  'Medios_Clientes.csv': 'MEDIOS_CLIENTE',
+};
+
+function getMissingFiles(processedNames) {
+  const seen = new Set((processedNames || []).map((n) => String(n).trim()));
+  return (EXPECTED_FILES || []).filter((n) => !seen.has(n));
+}
+
+function getMissingAlertTypes(missingFiles) {
+  return (missingFiles || [])
+    .map((f) => FILE_TO_ALERT_TYPE[f])
+    .filter(Boolean);
+}
+
+function buildFreshness(completedAt, now = new Date()) {
+  if (!completedAt) {
+    return { fresh: false, stale: true, daysSinceLoad: null, staleSince: null };
+  }
+  const completed = new Date(completedAt);
+  if (Number.isNaN(completed.getTime())) {
+    return { fresh: false, stale: true, daysSinceLoad: null, staleSince: completedAt };
+  }
+  const days = Math.floor((now - completed) / 86400000);
+  const stale = days > STALE_DAYS;
+  return {
+    fresh: !stale,
+    stale,
+    daysSinceLoad: days,
+    staleSince: stale ? completed.toISOString() : null,
+  };
 }
 
 /**
@@ -84,6 +127,15 @@ async function runETL({ localDir, loadId, force = false } = {}) {
     throw new Error('No hay archivos CSV para procesar');
   }
 
+  // REQ-G2/G4: hueco visible por fichero esperado ausente (sin inventar CSVs).
+  // Ej: falta Clientes_ConCuotaSinCompra.csv -> gap CUOTA_SIN_COMPRA sin datos.
+  const downloadedNames = csvResult.files.map((f) => f.name);
+  const missingFiles = getMissingFiles(downloadedNames);
+  const missingAlertTypes = getMissingAlertTypes(missingFiles);
+  if (missingFiles.length > 0) {
+    logger.warn(`[kpi:etl] Hueco visible load_id=${currentLoadId}: faltan ${missingFiles.join(', ')} (gaps: ${missingAlertTypes.join(', ') || 'ninguno'})`);
+  }
+
   // 3. Calcular checksum global
   const globalHash = crypto.createHash('sha256')
     .update(csvResult.files.map((f) => f.hash).join('|'))
@@ -97,7 +149,8 @@ async function runETL({ localDir, loadId, force = false } = {}) {
     [currentLoadId, filesList, globalHash]
   );
 
-  // 5. Desactivar alertas anteriores y limpiar alertas expiradas
+  // 5. Desactivar alertas anteriores y limpiar alertas expiradas.
+  // REQ-G4: la expiracion ocurre SOLO dentro de runETL, nunca en rutas/lecturas.
   await kpiQuery(`UPDATE ${SCHEMA}.KPI_ALERTS SET IS_ACTIVE = 0 WHERE IS_ACTIVE = 1`);
   await kpiQuery(`DELETE FROM ${SCHEMA}.KPI_ALERTS WHERE EXPIRES_AT IS NOT NULL AND EXPIRES_AT < CURRENT TIMESTAMP`);
 
@@ -223,7 +276,7 @@ async function runETL({ localDir, loadId, force = false } = {}) {
     }
   }
 
-  return { loadId: currentLoadId, totalAlerts, fileResults, skipped: false };
+  return { loadId: currentLoadId, totalAlerts, fileResults, skipped: false, missingFiles, missingAlertTypes };
 }
 
 /**
@@ -363,4 +416,4 @@ function cleanupTempDir(dirPath) {
   }
 }
 
-module.exports = { runETL, generateLoadId };
+module.exports = { runETL, generateLoadId, STALE_DAYS, FILE_TO_ALERT_TYPE, getMissingFiles, getMissingAlertTypes, buildFreshness };

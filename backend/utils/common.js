@@ -214,7 +214,10 @@ const LAC_SERIEALBARAN_FILTER = `L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')`;
  */
 function sanitizeForSQL(value) {
     if (value === null || value === undefined) return '';
-    return String(value).replace(/[^a-zA-Z0-9\s.\-_áéíóúÁÉÍÓÚñÑ]/g, '');
+    // Allowlist: alphanumerics + Spanish diacritics (incl. ü/Ü for words like
+    // pingüino) + space/dot/hyphen/underscore. LIKE wildcards are NOT allowed
+    // from user input — getProducts adds controlled %...% AFTER normalize.
+    return String(value).replace(/[^a-zA-Z0-9\s.\-_áéíóúÁÉÍÓÚñÑüÜ]/g, '');
 }
 
 /**

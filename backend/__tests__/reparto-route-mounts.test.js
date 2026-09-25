@@ -112,10 +112,18 @@ describe('canonical reparto app mounts', () => {
   test('mounts the canonical finance router exactly once before family selection', () => {
     const source = loadAppSource();
     const financeMount = "app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);";
-    const firstFamilyBranch = source.indexOf('if (USE_TS_ROUTES && global.__TS_APP__)');
+    // WS2 DDD-CONSOLIDATION-001-FINAL: familia TS archivada, sin branching TS.
+    // Marcador real vigente: bloque legacy JS + DDD.
+    const firstFamilyMarker = source.indexOf('// WS2: solo familia JS legacy + DDD');
+    const plannerMount = "app.use('/api', plannerRoutes);";
 
     expect(countOccurrences(source, financeMount)).toBe(1);
     expect(source.indexOf(financeMount)).toBeGreaterThan(0);
-    expect(source.indexOf(financeMount)).toBeLessThan(firstFamilyBranch);
+    expect(firstFamilyMarker).toBeGreaterThan(0);
+    expect(source.indexOf(financeMount)).toBeLessThan(firstFamilyMarker);
+    expect(source.indexOf(financeMount)).toBeLessThan(source.indexOf(plannerMount));
+    expect(source).not.toContain('USE_TS_ROUTES && global.__TS_APP__');
+    expect(source).not.toContain('global.__TS_APP__');
+    expect(source).not.toContain('const USE_TS_ROUTES =');
   });
 });

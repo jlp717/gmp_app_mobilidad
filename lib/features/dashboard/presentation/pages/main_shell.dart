@@ -30,7 +30,7 @@ import 'package:gmp_app_mobilidad/features/liquidacion_comercial/presentation/pa
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/client_evolution_page.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/objectives_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/pedidos_page.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_clientes_page.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_historico_page.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_panel_page.dart';
@@ -573,14 +573,14 @@ class _MainShellState extends ConsumerState<MainShell> {
       _selectedRepartidor = 'ALL';
     }
 
-    // Req #2: Sincroniza rol del usuario en pedidosProvider para que la UI
+    // Req #2: Sincroniza rol del usuario en pedidosNotifierProvider para que la UI
     // muestre/oculte márgenes según corresponda. Se hace de forma defensiva
     // post-frame para no notificar listeners durante el build.
     final currentRole = user.role;
     final currentUserCode = user.code;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(pedidosProvider).setUserRole(currentRole, code: currentUserCode);
+      ref.read(pedidosNotifierProvider.notifier).setUserRole(currentRole, code: currentUserCode);
     });
 
     // PERFORMANCE: Use select() to only rebuild when vendedorCodes changes
@@ -631,7 +631,12 @@ class _MainShellState extends ConsumerState<MainShell> {
       drawer: _buildPhoneDrawer(user, isJefeVentas),
       body: DecoratedBox(
         decoration: AppTheme.appBackground(),
+        // REQ-20 tanda4: safe-area inferior global en un punto (shell).
+        // minimum max(inset, 0): paridad pixel cuando no hay inset.
         child: SafeArea(
+          minimum: EdgeInsets.only(
+            bottom: Responsive.bottomSafeInset(context),
+          ),
           child: _buildCurrentPage(isJefeVentas),
         ),
       ),
@@ -657,6 +662,9 @@ class _MainShellState extends ConsumerState<MainShell> {
         ),
         child: SafeArea(
           top: false,
+          minimum: EdgeInsets.only(
+            bottom: Responsive.bottomSafeInset(context),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
@@ -719,129 +727,140 @@ class _MainShellState extends ConsumerState<MainShell> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
-        padding: const EdgeInsets.fromLTRB(4, 5, 4, 6),
-        decoration: BoxDecoration(
-          gradient: isSelected
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    item.color.withValues(alpha: 0.24),
-                    AppTheme.surfaceCommand,
-                    item.color.withValues(alpha: 0.08),
-                  ],
-                  stops: const [0.0, 0.58, 1.0],
-                )
-              : null,
-          color: isSelected ? null : AppColors.transparent,
+    return Semantics(
+        button: true,
+        selected: isSelected,
+        label: 'Ir a ${item.label}',
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          border: Border.all(
-            color: isSelected
-                ? item.color.withValues(alpha: 0.48)
-                : AppColors.transparent,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: item.color.withValues(alpha: 0.14),
-                    blurRadius: 16,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
+            padding: const EdgeInsets.fromLTRB(4, 5, 4, 6),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        item.color.withValues(alpha: 0.24),
+                        AppTheme.surfaceCommand,
+                        item.color.withValues(alpha: 0.08),
+                      ],
+                      stops: const [0.0, 0.58, 1.0],
+                    )
+                  : null,
+              color: isSelected ? null : AppColors.transparent,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              border: Border.all(
+                color: isSelected
+                    ? item.color.withValues(alpha: 0.48)
+                    : AppColors.transparent,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: item.color.withValues(alpha: 0.14),
+                        blurRadius: 16,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 20,
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: isSelected ? item.color : AppColors.transparent,
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: item.color.withValues(alpha: 0.32),
+                              blurRadius: 8,
+                            ),
+                          ]
+                        : null,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                   ),
-                ]
-              : null,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 20,
-              height: 2,
-              decoration: BoxDecoration(
-                color: isSelected ? item.color : AppColors.transparent,
-                boxShadow: isSelected
-                    ? [
-                        BoxShadow(
-                          color: item.color.withValues(alpha: 0.32),
-                          blurRadius: 8,
-                        ),
-                      ]
-                    : null,
-                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-              ),
+                ),
+                const SizedBox(height: 5),
+                Icon(
+                  isSelected ? item.selectedIcon : item.icon,
+                  color: isSelected ? item.color : AppTheme.textSecondary,
+                  size: 21,
+                ),
+                const SizedBox(height: 3),
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 180),
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: isSelected
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                  child: Text(
+                    _compactBottomLabel(item.label),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 5),
-            Icon(
-              isSelected ? item.selectedIcon : item.icon,
-              color: isSelected ? item.color : AppTheme.textSecondary,
-              size: 21,
-            ),
-            const SizedBox(height: 3),
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 180),
-              style: TextStyle(
-                fontSize: 9,
-                color:
-                    isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-              ),
-              child: Text(
-                _compactBottomLabel(item.label),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+          ),
+        ));
   }
 
   /// Small avatar button at the left of the bottom nav to open drawer
   Widget _buildBottomNavDrawerButton(UserModel user) {
     return Builder(
-      builder: (ctx) => GestureDetector(
-        onTap: () => Scaffold.of(ctx).openDrawer(),
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: 48,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppTheme.mutedPanel,
-                  border: Border.all(
-                    color: AppTheme.borderColor.withValues(alpha: 0.9),
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
-                    style: TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
+        builder: (ctx) => Semantics(
+              button: true,
+              label: 'Abrir menu de usuario',
+              child: GestureDetector(
+                onTap: () => Scaffold.of(ctx).openDrawer(),
+                behavior: HitTestBehavior.opaque,
+                child: SizedBox(
+                  width: 48,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 26,
+                        height: 26,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppTheme.mutedPanel,
+                          border: Border.all(
+                            color: AppTheme.borderColor.withValues(alpha: 0.9),
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            user.name.isNotEmpty
+                                ? user.name[0].toUpperCase()
+                                : 'U',
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Icon(Icons.menu, color: AppTheme.textSecondary, size: 10),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 2),
-              Icon(Icons.menu, color: AppTheme.textSecondary, size: 10),
-            ],
-          ),
-        ),
-      ),
-    );
+            ));
   }
 
   /// Overflow bottom sheet for nav items that don't fit in bottom bar
@@ -982,7 +1001,11 @@ class _MainShellState extends ConsumerState<MainShell> {
       backgroundColor: AppColors.transparent,
       body: DecoratedBox(
         decoration: AppTheme.appBackground(),
+        // REQ-20 tanda4: mismo punto shell en tablet (contenido Expanded).
         child: SafeArea(
+          minimum: EdgeInsets.only(
+            bottom: Responsive.bottomSafeInset(context),
+          ),
           child: Row(
             children: [
               // Sidebar Navigation
@@ -1071,38 +1094,42 @@ class _MainShellState extends ConsumerState<MainShell> {
 
               // Expand button when sidebar is collapsed
               if (!_isNavExpanded)
-                GestureDetector(
-                  onTap: () => setState(() => _isNavExpanded = true),
-                  child: Container(
-                    width: 24,
-                    decoration: BoxDecoration(
-                      color: AppTheme.raisedSurface,
-                      border: Border(
-                        right: BorderSide(
-                          color: AppTheme.borderColor.withValues(alpha: 0.72),
-                        ),
-                      ),
-                    ),
-                    child: Center(
+                Semantics(
+                    button: true,
+                    label: 'Mostrar navegacion lateral',
+                    child: GestureDetector(
+                      onTap: () => setState(() => _isNavExpanded = true),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 20,
-                          horizontal: 4,
-                        ),
+                        width: 24,
                         decoration: BoxDecoration(
-                          color: AppTheme.softPanel,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppTheme.borderColor),
+                          color: AppTheme.raisedSurface,
+                          border: Border(
+                            right: BorderSide(
+                              color:
+                                  AppTheme.borderColor.withValues(alpha: 0.72),
+                            ),
+                          ),
                         ),
-                        child: Icon(
-                          Icons.chevron_right_rounded,
-                          color: AppTheme.textSecondary,
-                          size: 16,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 20,
+                              horizontal: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.softPanel,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.borderColor),
+                            ),
+                            child: Icon(
+                              Icons.chevron_right_rounded,
+                              color: AppTheme.textSecondary,
+                              size: 16,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                ),
+                    )),
 
               // Main Content
               Expanded(
@@ -1467,160 +1494,171 @@ class _MainShellState extends ConsumerState<MainShell> {
   }) {
     final isSmall = Responsive.isSmall(context);
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        padding:
-            EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
-        decoration: BoxDecoration(
+    return Semantics(
+        button: true,
+        selected: isSelected,
+        label: 'Ir a ${item.label}',
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          gradient: isSelected
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    item.color.withValues(alpha: 0.22),
-                    AppTheme.surfaceCommand,
-                    item.color.withValues(alpha: 0.06),
-                  ],
-                  stops: const [0.0, 0.60, 1.0],
-                )
-              : null,
-          color: isSelected ? null : AppColors.transparent,
-          border: Border.all(
-            color: isSelected
-                ? item.color.withValues(alpha: 0.48)
-                : AppColors.transparent,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: item.color.withValues(alpha: 0.12),
-                    blurRadius: 18,
-                  ),
-                ]
-              : null,
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            if (isSelected)
-              Positioned(
-                left: 0,
-                top: 8,
-                bottom: 8,
-                child: Container(
-                  width: 3,
-                  decoration: BoxDecoration(
-                    color: item.color,
-                    boxShadow: [
-                      BoxShadow(
-                        color: item.color.withValues(alpha: 0.34),
-                        blurRadius: 9,
-                      ),
-                    ],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding:
+                EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              gradient: isSelected
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        item.color.withValues(alpha: 0.22),
+                        AppTheme.surfaceCommand,
+                        item.color.withValues(alpha: 0.06),
+                      ],
+                      stops: const [0.0, 0.60, 1.0],
+                    )
+                  : null,
+              color: isSelected ? null : AppColors.transparent,
+              border: Border.all(
+                color: isSelected
+                    ? item.color.withValues(alpha: 0.48)
+                    : AppColors.transparent,
               ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: item.color.withValues(alpha: 0.12),
+                        blurRadius: 18,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                Icon(
-                  isSelected ? item.selectedIcon : item.icon,
-                  color: isSelected ? item.color : AppTheme.textSecondary,
-                  size: isSmall ? 20 : 24,
-                ),
-                const SizedBox(height: 4),
-                AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 180),
-                  style: TextStyle(
-                    fontSize: isSmall ? 8 : 10,
-                    color: isSelected
-                        ? AppTheme.textPrimary
-                        : AppTheme.textSecondary,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                if (isSelected)
+                  Positioned(
+                    left: 0,
+                    top: 8,
+                    bottom: 8,
+                    child: Container(
+                      width: 3,
+                      decoration: BoxDecoration(
+                        color: item.color,
+                        boxShadow: [
+                          BoxShadow(
+                            color: item.color.withValues(alpha: 0.34),
+                            blurRadius: 9,
+                          ),
+                        ],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
                   ),
-                  child: Text(
-                    item.label,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isSelected ? item.selectedIcon : item.icon,
+                      color: isSelected ? item.color : AppTheme.textSecondary,
+                      size: isSmall ? 20 : 24,
+                    ),
+                    const SizedBox(height: 4),
+                    AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 180),
+                      style: TextStyle(
+                        fontSize: isSmall ? 8 : 10,
+                        color: isSelected
+                            ? AppTheme.textPrimary
+                            : AppTheme.textSecondary,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                      child: Text(
+                        item.label,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ));
+  }
+
+  Widget _buildLogoutButton() {
+    return Semantics(
+        button: true,
+        label: 'Cerrar sesion',
+        child: InkWell(
+          onTap: () async {
+            final authState = ref.read(authProvider).value;
+            if (authState == null) return;
+            await _showLogoutConfirmation(authState);
+          },
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              color: AppTheme.error.withValues(alpha: 0.08),
+              border: Border.all(color: AppTheme.error.withValues(alpha: 0.22)),
+            ),
+            child: const Column(
+              children: [
+                Icon(Icons.logout_rounded, color: AppTheme.error, size: 20),
+                SizedBox(height: 4),
+                Text(
+                  'Salir',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.error,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLogoutButton() {
-    return InkWell(
-      onTap: () async {
-        final authState = ref.read(authProvider).value;
-        if (authState == null) return;
-        await _showLogoutConfirmation(authState);
-      },
-      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          color: AppTheme.error.withValues(alpha: 0.08),
-          border: Border.all(color: AppTheme.error.withValues(alpha: 0.22)),
-        ),
-        child: const Column(
-          children: [
-            Icon(Icons.logout_rounded, color: AppTheme.error, size: 20),
-            SizedBox(height: 4),
-            Text(
-              'Salir',
-              style: TextStyle(
-                fontSize: 10,
-                color: AppTheme.error,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+          ),
+        ));
   }
 
   Widget _buildNetworkSettingsButton() {
-    return InkWell(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const NetworkSettingsPage()),
-      ),
-      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
+    return Semantics(
+        button: true,
+        label: 'Ajustes de red',
+        child: InkWell(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const NetworkSettingsPage()),
+          ),
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          color: AppTheme.softPanel,
-          border: Border.all(color: AppTheme.borderColor),
-        ),
-        child: Column(
-          children: [
-            Icon(Icons.wifi, color: AppTheme.textSecondary, size: 20),
-            SizedBox(height: 4),
-            Text(
-              'Red',
-              style: TextStyle(
-                fontSize: 10,
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              color: AppTheme.softPanel,
+              border: Border.all(color: AppTheme.borderColor),
             ),
-          ],
-        ),
-      ),
-    );
+            child: Column(
+              children: [
+                Icon(Icons.wifi, color: AppTheme.textSecondary, size: 20),
+                SizedBox(height: 4),
+                Text(
+                  'Red',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ));
   }
 
   void _openNotificationSettings() {
@@ -1630,71 +1668,77 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   Widget _buildNotificationSettingsButton() {
-    return InkWell(
-      onTap: _openNotificationSettings,
-      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
+    return Semantics(
+        button: true,
+        label: 'Ajustes de avisos',
+        child: InkWell(
+          onTap: _openNotificationSettings,
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          color: AppTheme.softPanel,
-          border: Border.all(color: AppTheme.borderColor),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              Icons.notifications_active_outlined,
-              color: AppTheme.info,
-              size: 20,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              color: AppTheme.softPanel,
+              border: Border.all(color: AppTheme.borderColor),
             ),
-            SizedBox(height: 4),
-            Text(
-              'Avisos',
-              style: TextStyle(
-                fontSize: 10,
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.notifications_active_outlined,
+                  color: AppTheme.info,
+                  size: 20,
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Avisos',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
+          ),
+        ));
   }
 
   Widget _buildCollapseButton() {
-    return InkWell(
-      onTap: () => setState(() => _isNavExpanded = !_isNavExpanded),
-      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
+    return Semantics(
+        button: true,
+        label: 'Ocultar o mostrar navegacion lateral',
+        child: InkWell(
+          onTap: () => setState(() => _isNavExpanded = !_isNavExpanded),
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          color: AppTheme.softPanel,
-          border: Border.all(color: AppTheme.borderColor),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              _isNavExpanded
-                  ? Icons.chevron_left_rounded
-                  : Icons.chevron_right_rounded,
-              color: AppTheme.textSecondary,
-              size: 20,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              color: AppTheme.softPanel,
+              border: Border.all(color: AppTheme.borderColor),
             ),
-            const SizedBox(height: 4),
-            Text(
-              _isNavExpanded ? 'Ocultar' : '',
-              style: TextStyle(
-                fontSize: 9,
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
+            child: Column(
+              children: [
+                Icon(
+                  _isNavExpanded
+                      ? Icons.chevron_left_rounded
+                      : Icons.chevron_right_rounded,
+                  color: AppTheme.textSecondary,
+                  size: 20,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _isNavExpanded ? 'Ocultar' : '',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
+          ),
+        ));
   }
 
   // Header Dropdown Widget for Repartidor Mode

@@ -15,7 +15,7 @@ const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, c
 const { verifyToken } = require('../middleware/auth');
 const { authorizeVendorScope, isFinancialRole, userScopeCodes, normalizeCode } = require('../middleware/vendor-scope');
 const { emailLimiter } = require('../middleware/security');
-const { normalizeEmail } = require('../services/reparto-email-delivery-policy');
+const { normalizeEmail, resolveRepartoEmailDelivery, isIsolatedTest } = require('../services/reparto-email-delivery-policy');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 
 const FACTURA_PDF_CACHE_VERSION = 'v4';
@@ -366,6 +366,49 @@ function clampFacturasOffset(value) {
     return Math.min(FACTURA_MAX_OFFSET, parsed);
 }
 
+// F2b-05: clamps de entrada. Texto max 64 con allowlist (letras, numeros,
+// espacios y -_.), limit 1-500, offset >= 0. Malicioso o largo => 400.
+const FACTURA_TEXT_RE = /^[A-Za-z0-9 _.\-áéíóúÁÉÍÓÚñÑüÜ]+$/;
+const FACTURA_TEXT_MAX = 64;
+
+function clampFacturaText(value, field, res) {
+    if (value === undefined || value === null || value === '') return undefined;
+    const text = String(value).trim();
+    if (text.length > FACTURA_TEXT_MAX || !FACTURA_TEXT_RE.test(text)) {
+        res.status(400).json({ success: false, code: 'INVALID_FACTURA_FILTER', error: `Filtro ${field} invalido (max 64, sin simbolos de control)` });
+        return null;
+    }
+    return text;
+}
+
+function clampFacturaYear(value, res) {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (!/^\d{4}$/.test(String(value).trim())) {
+        res.status(400).json({ success: false, code: 'INVALID_FACTURA_FILTER', error: 'Filtro year invalido (YYYY)' });
+        return null;
+    }
+    const year = parseInt(value, 10);
+    if (year < 1900 || year > 2100) {
+        res.status(400).json({ success: false, code: 'INVALID_FACTURA_FILTER', error: 'Filtro year fuera de rango' });
+        return null;
+    }
+    return year;
+}
+
+function clampFacturaMonth(value, res) {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (!/^\d{1,2}$/.test(String(value).trim())) {
+        res.status(400).json({ success: false, code: 'INVALID_FACTURA_FILTER', error: 'Filtro month invalido (1-12)' });
+        return null;
+    }
+    const month = parseInt(value, 10);
+    if (month < 1 || month > 12) {
+        res.status(400).json({ success: false, code: 'INVALID_FACTURA_FILTER', error: 'Filtro month fuera de rango' });
+        return null;
+    }
+    return month;
+}
+
 /**
  * GET /api/facturas
  */
@@ -375,15 +418,31 @@ router.get('/', verifyToken, async (req, res, next) => {
         const scoped = scopeVendedorCodesQuery(req);
         if (scoped.status) return res.status(scoped.status).json(scoped.body);
 
+        // F2b-05: filtros crudos jamas pasan sin clampar; null = 400 ya respondido.
+        const year = clampFacturaYear(req.query.year, res);
+        if (year === null) return;
+        const month = clampFacturaMonth(req.query.month, res);
+        if (month === null) return;
+        const search = clampFacturaText(req.query.search, 'search', res);
+        if (search === null) return;
+        const clientId = clampFacturaText(req.query.clientId, 'clientId', res);
+        if (clientId === null) return;
+        const clientSearch = clampFacturaText(req.query.clientSearch, 'clientSearch', res);
+        if (clientSearch === null) return;
+        const docSearch = clampFacturaText(req.query.docSearch, 'docSearch', res);
+        if (docSearch === null) return;
+        const documentType = clampFacturaText(req.query.documentType || req.query.tipoDocumento, 'documentType', res);
+        if (documentType === null) return;
+
         const params = {
             vendedorCodes: scoped.vendedorCodes,
-            year: req.query.year ? parseInt(req.query.year) : undefined,
-            month: req.query.month ? parseInt(req.query.month) : undefined,
-            search: req.query.search,
-            clientId: req.query.clientId,
-            clientSearch: req.query.clientSearch,
-            docSearch: req.query.docSearch,
-            documentType: req.query.documentType || req.query.tipoDocumento,
+            year,
+            month,
+            search,
+            clientId,
+            clientSearch,
+            docSearch,
+            documentType,
             dateFrom: req.query.dateFrom,
             dateTo: req.query.dateTo,
             limit: req.query.limit ? parseInt(req.query.limit, 10) : undefined,
@@ -689,9 +748,32 @@ router.post('/send-email', verifyToken, emailLimiter, async (req, res, next) => 
         }
         // ASVS V8: emails leave our perimeter; only the client's own email or a
         // financial role may receive a commercial document.
-        if (!authorizeDocumentShareRecipient(req, document, destinatario)) {
+        // REQ-21 tanda4: en isolated_test el auto-envío a allowlist no es 422
+        // falso (QsyS2: DSEDAC.CLI sin columna EMAIL; detalle sin clienteEmail).
+        const testBypass = isIsolatedTest(process.env)
+            && (() => {
+                try {
+                    resolveRepartoEmailDelivery({
+                        recipients: [destinatario],
+                        env: process.env,
+                        mode: 'manual',
+                    });
+                    return true;
+                } catch (_) {
+                    return false;
+                }
+            })();
+        if (!testBypass && !authorizeDocumentShareRecipient(req, document, destinatario)) {
             return res.status(422).json(emailDestinatarioNotAllowedResponse());
         }
+
+        // REQ-21 tanda4: delivery-policy TEST con to/cc auditados.
+        // isolated_test redirige SMTP a sink; prod envía directo.
+        const delivery = resolveRepartoEmailDelivery({
+            recipients: [destinatario],
+            env: process.env,
+            mode: 'automatic',
+        });
 
         const pdfDocument = await buildCommercialDocumentPdf(document);
         const emailSubject = asunto || `${document.label} ${documentVisibleId(document)} - Granja Mari Pepa`;
@@ -699,7 +781,7 @@ router.post('/send-email', verifyToken, emailLimiter, async (req, res, next) => 
         const pdfFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 
         const result = await withFacturaEmailTimeout(sendEmailWithPdf({
-            to: destinatario,
+            to: delivery.effectiveRecipients[0] || destinatario,
             subject: emailSubject,
             htmlBody,
             pdfBuffer: pdfDocument.pdfBuffer,
@@ -709,7 +791,11 @@ router.post('/send-email', verifyToken, emailLimiter, async (req, res, next) => 
         res.json({
             success: true,
             message: `Email enviado correctamente a ${destinatario}`,
-            messageId: result.messageId
+            messageId: result.messageId,
+            intendedRecipients: delivery.intendedRecipients,
+            effectiveRecipients: delivery.effectiveRecipients,
+            redirected: delivery.redirected,
+            deliveryPolicy: delivery.policy
         });
     } catch (error) {
         if (error.status === 400) {
@@ -754,9 +840,28 @@ router.post('/share/email', verifyToken, emailLimiter, async (req, res, next) =>
         }
         // ASVS V8: emails leave our perimeter; only the client's own email or a
         // financial role may receive a commercial document.
-        if (!authorizeDocumentShareRecipient(req, document, destinatario)) {
+        // REQ-21 tanda4 legacy: mismo bypass TEST que /send-email.
+        const legacyTestBypass = isIsolatedTest(process.env)
+            && (() => {
+                try {
+                    resolveRepartoEmailDelivery({
+                        recipients: [destinatario],
+                        env: process.env,
+                        mode: 'manual',
+                    });
+                    return true;
+                } catch (_) {
+                    return false;
+                }
+            })();
+        if (!legacyTestBypass && !authorizeDocumentShareRecipient(req, document, destinatario)) {
             return res.status(422).json(emailDestinatarioNotAllowedResponse());
         }
+        const legacyDelivery = resolveRepartoEmailDelivery({
+            recipients: [destinatario],
+            env: process.env,
+            mode: 'automatic',
+        });
 
         const pdfDocument = await buildCommercialDocumentPdf(document);
         const emailSubject = `${document.label} ${documentVisibleId(document)} - Granja Mari Pepa`;
@@ -764,7 +869,7 @@ router.post('/share/email', verifyToken, emailLimiter, async (req, res, next) =>
         const pdfFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 
         const result = await withFacturaEmailTimeout(sendEmailWithPdf({
-            to: destinatario,
+            to: legacyDelivery.effectiveRecipients[0] || destinatario,
             subject: emailSubject,
             htmlBody,
             pdfBuffer: pdfDocument.pdfBuffer,
@@ -774,7 +879,11 @@ router.post('/share/email', verifyToken, emailLimiter, async (req, res, next) =>
         res.json({
             success: true,
             message: `Email enviado correctamente a ${destinatario}`,
-            messageId: result.messageId
+            messageId: result.messageId,
+            intendedRecipients: legacyDelivery.intendedRecipients,
+            effectiveRecipients: legacyDelivery.effectiveRecipients,
+            redirected: legacyDelivery.redirected,
+            deliveryPolicy: legacyDelivery.policy
         });
     } catch (error) {
         if (error.status === 400) {

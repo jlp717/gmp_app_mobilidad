@@ -45,7 +45,8 @@ function repartoFamilyWriteGuard(req, res, next) {
   }
   return repartoConfirmationWriteGuard(req, res, next);
 }
-const USE_TS_ROUTES = repartoRouteMode.useTsRoutes;
+// WS2 DDD-CONSOLIDATION-001-FINAL: USE_TS_ROUTES retirado (TS archivado en
+// docs/archive/ts-routes-7239f17/). Solo queda familia JS legacy + DDD.
 const USE_DDD_ROUTES = repartoRouteMode.useDddRoutes;
 
 const Sentry = global.__GMP_SENTRY__ || null;
@@ -68,6 +69,8 @@ const {
     globalLimiter,
     createSecurityHeaders,
     validateContentType,
+    sanitizeInput,
+    detectSqlInjection,
     cobrosLimiter,
     pedidosLimiter,
     emailLimiter,
@@ -88,14 +91,13 @@ const notificationsRoutes = require('./routes/notifications');
 const { cacheMiddleware, invalidationMiddleware, getCacheStats: getHttpCacheStats } = require('./middleware/http-cache');
 const { createOptimizedQuery } = require('./services/query-optimizer');
 const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
-const { createCompressionMiddleware } = require('./middleware/compression');
 const { prometheusMetrics, metricsHandler, requireInternalMetricsAccess, canSeeInternalDetails, publicReadyPayload } = require('./middleware/prometheus-metrics');
 const { checkAuthPinHashReadiness } = require('./services/auth-pin-readiness');
 
 // =============================================================================
-// FEATURE TOGGLE: USE_TS_ROUTES
-// Set USE_TS_ROUTES=true to use compiled TypeScript routes (from dist/)
-// Set USE_TS_ROUTES=false (default) to use legacy JavaScript routes
+// WS2 DDD-CONSOLIDATION-001-FINAL: USE_TS_ROUTES retirado y archivado.
+// Familia TypeScript (dist/ + src/routes + src/server.ts + src/index.ts) movida a
+// docs/archive/ts-routes-7239f17/. Solo quedan legacy JS + DDD (USE_DDD_ROUTES).
 // =============================================================================
 const repartoDiagnostic = sanitizedRepartoDiagnostic(repartoRuntime, repartoRouteMode);
 logger.info(`[REPARTO_RUNTIME] ${JSON.stringify(repartoDiagnostic)}`);
@@ -149,42 +151,8 @@ let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   productsRoutes, bolsaRoutes, evolutionRoutes,
   pedidosRoutes, cobrosRoutes, comercialLiquidacionRoutes, kpiModule;
 
-if (USE_TS_ROUTES) {
-  // ==================== COMPILED TYPESCRIPT ROUTES ====================
-  logger.info('🚀 Loading COMPILED TypeScript routes from dist/');
-  try {
-    const tsApp = require('./dist/index').default;
-    // We don't mount individual routes - the TS app is self-contained
-    // Instead we'll mount the entire TS app as middleware
-    // (Individual route vars set to empty routers for legacy mount compatibility)
-    const { Router } = require('express');
-    const emptyRouter = Router();
-    authRoutes = emptyRouter;
-    dashboardRoutes = emptyRouter;
-    analyticsRoutes = emptyRouter;
-    masterRoutes = emptyRouter;
-    clientsRoutes = emptyRouter;
-    plannerRoutes = emptyRouter;
-    objectivesRoutes = emptyRouter;
-    exportRoutes = emptyRouter;
-    chatbotRoutes = emptyRouter;
-    commissionsRoutes = emptyRouter;
-    filtersRoutes = emptyRouter;
-    entregasRoutes = emptyRouter;
-    repartidorRoutes = emptyRouter;
-    userActionsRoutes = emptyRouter;
-    facturasRoutes = emptyRouter;
-
-    // Mount TS app - it handles its own /api prefix, auth, etc.
-    // We use a flag so startServer can mount it after middleware
-    global.__TS_APP__ = tsApp;
-  } catch (err) {
-    logger.error(`❌ Failed to load TS routes: ${err.message}`);
-    throw err;
-  }
-}
-
-if (!USE_TS_ROUTES) {
+// WS2: familia TS eliminada. Carga directa legacy JS (sin branching TS).
+{
   // ==================== LEGACY JAVASCRIPT ROUTES ====================
   authRoutes = require('./routes/auth');
   dashboardRoutes = require('./routes/dashboard');
@@ -412,6 +380,10 @@ app.use((err, req, res, next) => {
   next(err);
 });
 app.use(validateContentType);
+// F2b-03: sanitize + deteccion SQLi globales. sanitizeInput respeta credenciales
+// y texto libre (notas/observaciones); login PIN intacto (auth.js monta los suyos).
+app.use(sanitizeInput);
+app.use(detectSqlInjection);
 
 // ==================== OPTIMIZATION MIDDLEWARE ====================
 app.use(prometheusMetrics);  // Prometheus metrics collection (must be before other middleware)
@@ -773,12 +745,8 @@ app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, cano
 app.use('/api/repartidor', verifyToken, repartoFamilyWriteGuard);
 app.use('/api/entregas', verifyToken, repartoConfirmationWriteGuard);
 
-if (USE_TS_ROUTES && global.__TS_APP__) {
-  // TS app handles its own auth, routes, and middleware
-  app.use(global.__TS_APP__);
-  app.use('/api/notifications', verifyToken, notificationsRoutes);
-  logger.info('✅ TypeScript routes mounted (compiled from src/)');
-} else {
+// WS2: solo familia JS legacy + DDD (TS archivado). Sin branching TS.
+{
   // Legacy JavaScript routes
   app.use('/api', verifyToken);
   app.use('/api', cacheMiddleware); // Authenticated HTTP cache; requires req.user from verifyToken

@@ -3,7 +3,23 @@ name: API Docs
 on:
   push:
     branches: [test, main]
+    paths:
+      - 'docs/openapi/**'
+      - 'docs/postman/**'
+      - 'scripts/generate-postman-collection.js'
+      - 'backend/**/openapi*'
+      - '.github/workflows/api-docs.yml'
   pull_request:
+    paths:
+      - 'docs/openapi/**'
+      - 'docs/postman/**'
+      - 'scripts/generate-postman-collection.js'
+      - 'backend/**/openapi*'
+      - '.github/workflows/api-docs.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

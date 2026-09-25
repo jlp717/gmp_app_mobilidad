@@ -17,8 +17,10 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/presentation/widgets/bolsa_monthly_chart.dart';
+import 'package:gmp_app_mobilidad/features/bolsa/presentation/widgets/bolsa_movement_detail_sheet.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/providers/bolsa_provider.dart';
 import 'package:intl/intl.dart';
 
@@ -88,18 +90,18 @@ class _BolsaPageState extends ConsumerState<BolsaPage>
       final key = 'GROUPED:${codes.join(',')}';
       if (_lastLoadedVendor != key) {
         _lastLoadedVendor = key;
-        ref.read(bolsaProvider).loadGrouped(vendedorCodes: codes);
+        ref.read(bolsaProvider.notifier).loadGrouped(vendedorCodes: codes);
       }
       return;
     }
     if (normalized == null || normalized.isEmpty) {
       _lastLoadedVendor = null;
-      ref.read(bolsaProvider).load('');
+      ref.read(bolsaProvider.notifier).load('');
       return;
     }
     if (normalized != _lastLoadedVendor) {
       _lastLoadedVendor = normalized;
-      ref.read(bolsaProvider).load(normalized);
+      ref.read(bolsaProvider.notifier).load(normalized);
     }
   }
 
@@ -188,7 +190,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage>
           p.selectedYear,
           p.selectedMonth,
         )));
-    final provider = ref.read(bolsaProvider);
+    final provider = ref.read(bolsaProvider.notifier);
     final isJefeVentas = ref.watch(
       authProvider.select((s) => s.value?.user?.isJefeVentas ?? false),
     );
@@ -283,7 +285,9 @@ class _BolsaPageState extends ConsumerState<BolsaPage>
     final itemCount = headerCount + bodyCount + 1; // + bottom spacer
     final listPad = compact ? 8.0 : 16.0;
 
-    return ListView.builder(
+    // F1b-01: virtualized via OptimizedListView (heterogeneous header+rows,
+    // no fixed itemExtent; 1-screen cache + repaint isolation internal).
+    return OptimizedListView(
       padding: EdgeInsets.all(listPad),
       itemCount: itemCount,
       itemBuilder: (context, index) {
@@ -739,7 +743,8 @@ class _GroupedBolsaView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vendedores = summary.vendedores;
-    return ListView.builder(
+    // F1b-01: virtualized via OptimizedListView (heterogeneous rows).
+    return OptimizedListView(
       padding: const EdgeInsets.all(16),
       itemCount: vendedores.isEmpty ? 6 : vendedores.length + 5,
       itemBuilder: (context, index) {
@@ -1430,6 +1435,13 @@ class _MovimientoTile extends StatelessWidget {
         isThreeLine: !compact &&
             (extraDetail != null || movimiento.descripcion.isNotEmpty),
         leading: Icon(icon, color: color, size: compact ? 20 : 24),
+        // REQ-14: tap abre detalle con 3 bloques (artículos+fotos,
+        // precio cliente+dto, bolsa+saldo). Con Semantics.
+        onTap: () => showBolsaMovementDetailSheet(
+          context,
+          movimiento: movimiento,
+          canSeeMargin: canSeeMargin,
+        ),
         title: Text(
           pedidoLabel.isNotEmpty
               ? '${movimiento.tipo.label} - $pedidoLabel'
@@ -1519,6 +1531,9 @@ class _MovimientoTile extends StatelessWidget {
       if (movimiento.displayPedido.isNotEmpty) movimiento.displayPedido,
       if (movimiento.lineId != null) 'Línea ${movimiento.lineId}',
       if (movimiento.cantidad != null) 'Cant. ${_formatQuantityWithUnit()}',
+      // REQ-15: motivo legible siempre visible; margen solo jefe.
+      movimiento.motivoVariacion(),
+      if (movimiento.hasSaldoMismatch) 'Revisar saldo',
       if (canSeeMargin && movimiento.precioMinimoCongelado != null)
         'Mín. ${_formatMoney(movimiento.precioMinimoCongelado!)}',
       if (canSeeMargin && movimiento.precioVenta != null)

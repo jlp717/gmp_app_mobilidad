@@ -280,6 +280,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Guardar'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Guardar orden'));
+    await tester.pumpAndSettle();
     final rows = puts.single.data['orden'] as List;
     expect(rows.map((row) => row['documentId']), ['DOC-2', 'DOC-1']);
     expect(puts.single.data['baseRevision'], 'rev-1');

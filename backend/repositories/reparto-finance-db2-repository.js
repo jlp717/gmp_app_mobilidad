@@ -248,6 +248,66 @@ function liquidacionCollectedExpression(info, alias = '') {
   return components.map((column) => `COALESCE(${prefix}${column}, 0)`).join(' + ');
 }
 
+// F1c-03: prohibido SELECT */OPS.*/BASE.* en paths prod. Lista explicita del
+// ledger de liquidaciones (canon copy-javier-prod-to-test.js + init-tables.js),
+// filtrada por info.has para variantes aligned/legacy. Solo lectura.
+function liquidacionOpsExplicitColumns(info, alias = 'OPS') {
+  const prefix = alias ? `${alias}.` : '';
+  const candidates = [
+    'ID',
+    'SUBEMPRESALIQUIDACION',
+    'EJERCICIOLIQUIDACION',
+    'SERIELIQUIDACION',
+    'TERMINALLIQUIDACION',
+    'NUMEROLIQUIDACION',
+    'DIALIQUIDACION',
+    'MESLIQUIDACION',
+    'ANOLIQUIDACION',
+    'HORALIQUIDACION',
+    'CODIGOVENDEDOR',
+    'CODIGO_REPARTIDOR',
+    'CODIGOVENDEDORUSUARIO',
+    'CODIGOUSUARIO',
+    'MATRICULA',
+    'KILOMETROSSALIDA',
+    'KILOMETROSLLEGADA',
+    'KILOMETROSRECORRIDOS',
+    'IMPORTEEFECTIVO',
+    'IMPORTECHEQUES',
+    'IMPORTEPOSTDATADOS',
+    'IMPORTESALDOACTUAL',
+    'IMPORTETOTALAINGRESAR',
+    'IMPORTEINGRESOENBANCO',
+    'IMPORTEGASTOS',
+    'IMPRESOSN',
+    'CODIGOVEHICULO',
+    'REVISADOSN',
+    'IDMARCALIQUIDACION',
+    'IMPORTEEFECTIVO2',
+    'IMPORTEENTREGADO2',
+    'IMPORTETARJETA',
+    'MARCAACTUALIZACION',
+    'TOTAL_COBROS_DIA',
+    'IDEMPOTENCY_TOKEN',
+    'STATUS',
+    'OPERADOR',
+    'PANTALLA_ORIGEN',
+    'CREATED_AT',
+  ];
+  let columns = candidates;
+  if (info && typeof info.has === 'function') {
+    const existing = candidates.filter((column) => {
+      try {
+        return info.has('REPARTIDOR_LIQUIDACION_OPS', column);
+      } catch (_) {
+        return false;
+      }
+    });
+    if (existing.length > 0) columns = existing;
+  }
+  return columns.map((column) => `${prefix}${column}`).join(', ');
+}
+
 function cobroReplaySelect(info) {
   const candidates = [
     'ID',
@@ -495,14 +555,22 @@ function createRepartoFinanceDb2Repository(options = {}) {
       const token = String(idempotencyToken || '').trim();
       if (String(tables.liquidationOps || '').toUpperCase() === 'JAVIER.LQD') {
         return run(`
-    SELECT LQD.*
+    SELECT LQD.IDMARCALIQUIDACION, LQD.SUBEMPRESALIQUIDACION, LQD.EJERCICIOLIQUIDACION,
+      LQD.SERIELIQUIDACION, LQD.TERMINALLIQUIDACION, LQD.NUMEROLIQUIDACION,
+      LQD.DIALIQUIDACION, LQD.MESLIQUIDACION, LQD.ANOLIQUIDACION, LQD.HORALIQUIDACION,
+      LQD.CODIGOVENDEDOR, LQD.CODIGOVENDEDORUSUARIO, LQD.CODIGOUSUARIO, LQD.MATRICULA,
+      LQD.KILOMETROSSALIDA, LQD.KILOMETROSLLEGADA, LQD.KILOMETROSRECORRIDOS,
+      LQD.IMPORTEEFECTIVO, LQD.IMPORTECHEQUES, LQD.IMPORTEPOSTDATADOS,
+      LQD.IMPORTESALDOACTUAL, LQD.IMPORTETOTALAINGRESAR, LQD.IMPORTEINGRESOENBANCO,
+      LQD.IMPORTEGASTOS, LQD.IMPRESOSN, LQD.CODIGOVEHICULO, LQD.REVISADOSN,
+      LQD.IMPORTEEFECTIVO2, LQD.IMPORTEENTREGADO2, LQD.IMPORTETARJETA, LQD.MARCAACTUALIZACION
     FROM JAVIER.LQD LQD
     WHERE TRIM(LQD.IDMARCALIQUIDACION) = ?
     FETCH FIRST 1 ROW ONLY
   `, [token.slice(0, 30)]);
       }
       return run(`
-    SELECT OPS.*
+    SELECT ${liquidacionOpsExplicitColumns(null, 'OPS')}
     FROM ${tables.liquidationOps} OPS
     WHERE OPS.IDEMPOTENCY_TOKEN = ?
     FETCH FIRST 1 ROW ONLY
@@ -756,7 +824,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
         : '';
       const limitSql = ids.length === 1 ? 'FETCH FIRST 1 ROW ONLY' : '';
       return run(`
-    SELECT OPS.*
+    SELECT ${liquidacionOpsExplicitColumns(info, 'OPS')}
       FROM ${tables.liquidationOps} OPS
      WHERE ${ownerFilter.sql}
        AND OPS.DIALIQUIDACION = ?
@@ -1039,6 +1107,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
       );
       const test = branch(tables.cobros);
       return run(`
+    -- F4-03 JUSTIFIED: union de dos ramas con la misma proyeccion explicita selectList (prod+test)
     SELECT * FROM (
       ${prod.sql}
       UNION ALL
@@ -1070,7 +1139,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
       );
       const liquidatedAmountExpression = liquidacionCollectedExpression(info, 'OPS');
       return run(`
-    SELECT OPS.*, ${liquidatedAmountExpression} AS TOTAL_LIQUIDADO_COBROS
+    SELECT ${liquidacionOpsExplicitColumns(info, 'OPS')}, ${liquidatedAmountExpression} AS TOTAL_LIQUIDADO_COBROS
     FROM ${tables.liquidationOps} OPS
     WHERE ${liquidacionCodeFilter.sql}
       AND OPS.ANOLIQUIDACION = ?
@@ -1178,6 +1247,7 @@ function createRepartoFinanceDb2Repository(options = {}) {
           AND COALESCE(APP_COBROS.DEXDOCUMENTO, 1) = COALESCE(CVC.DEXDOCUMENTO, 1)` : '';
 
       return run(`
+    -- F4-03 JUSTIFIED: PAGED proyecta RN/TOTAL_COUNT sobre BASE de columnas explicitas; BASE.* propaga esa proyeccion
     SELECT *
     FROM (
       SELECT

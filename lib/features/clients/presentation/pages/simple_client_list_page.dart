@@ -1284,8 +1284,9 @@ class _ClientCard extends StatelessWidget {
                     hasPrefetchedAlerts: hasPrefetchedAlerts,
                   ),
 
-                // Route & Days Badges
-                if (!compact) _buildRouteDaysRow(),
+                // Route & Days Badges — senior siempre visible (REQ-33):
+                // compact ocultaba la fila y el Reparto dejaba de verse.
+                _buildRouteDaysRow(),
               ],
             ),
           ),

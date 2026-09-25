@@ -2,7 +2,7 @@ name: Flutter CI
 
 on:
   push:
-    branches: [main, develop, test]
+    branches: [main, develop]
     paths:
       - 'lib/**'
       - 'test/**'
@@ -15,6 +15,10 @@ on:
       - 'test/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:

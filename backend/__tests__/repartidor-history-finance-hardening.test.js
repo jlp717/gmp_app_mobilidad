@@ -150,8 +150,10 @@ describe('repartidor history document hardening', () => {
     const confirmSql = mockQueryWithParams.mock.calls
       .map(([sql]) => sql)
       .find((sql) => /FROM JAVIER\.TEST_REPARTO_CONFIRMACIONES C\b/i.test(String(sql)));
-    expect(confirmSql).toContain('TRIM(C.DOCUMENT_ID) IN');
-    expect(confirmSql).toContain('TRIM(C.REPARTIDOR_ID) IN');
+    expect(confirmSql).toContain('WHERE C.DOCUMENT_ID IN');
+    expect(confirmSql).toContain('AND C.REPARTIDOR_ID IN');
+    expect(confirmSql).not.toContain('TRIM(C.DOCUMENT_ID) IN');
+    expect(confirmSql).not.toContain('TRIM(C.REPARTIDOR_ID) IN');
     expect(confirmSql).not.toContain('PEDIDOS_CAB');
   });
 

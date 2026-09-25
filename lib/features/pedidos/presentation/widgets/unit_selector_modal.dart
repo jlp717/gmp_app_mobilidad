@@ -134,15 +134,17 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     }
   }
 
-  /// Build equivalence description: "1 cj = 8 uds" or "U/R: 20"
+  /// Build equivalence description: "1 cj = 6 uds" with real displayUnit.
+  /// Never hardcodes "uds": uses product.displayUnit abbreviation.
   String? _buildEquivalence() {
     final p = widget.product;
     if (p == null) return null;
 
     final parts = <String>[];
     if (p.unitsPerBox > 1) {
+      final abbr = _unitAbbr(p.displayUnit);
       parts.add(
-        '1 cj = ${p.unitsPerBox.toStringAsFixed(p.unitsPerBox == p.unitsPerBox.roundToDouble() ? 0 : 1)} uds',
+        '1 cj = ${p.unitsPerBox.toStringAsFixed(p.unitsPerBox == p.unitsPerBox.roundToDouble() ? 0 : 1)} $abbr',
       );
     }
     if (p.unitsRetractil > 0) {
@@ -153,7 +155,9 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     return parts.isEmpty ? null : parts.join('  ·  ');
   }
 
-  /// Get stock for the selected unit
+  /// Get stock for the selected unit.
+  /// Countable units (cajas/uds/pzs/band./est.) show whole numbers;
+  /// 1 decimal only for KG/L.
   String _stockForUnit(String unit) {
     final p = widget.product;
     if (p == null) return '';
@@ -162,12 +166,12 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
 
     switch (unit.toUpperCase()) {
       case 'CAJAS':
-        return '${_fmtNum(envases)} cj';
+        return '${envases.round()} cj';
       case 'KILOGRAMOS':
       case 'LITROS':
         return '${_fmtNum(p.stockForUnit(unit), decimals: 1)} ${_unitAbbr(unit)}';
       default:
-        return '${_fmtNum(p.stockForUnit(unit))} ${_unitAbbr(unit)}';
+        return '${p.stockForUnit(unit).round()} ${_unitAbbr(unit)}';
     }
   }
 
@@ -193,24 +197,19 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
   }
 
   /// Content description per unit button.
-  /// CAJAS: "1 cj = 10 band" – non-CAJAS: "1 band = 0.1 cj"
+  /// CAJAS: "1 cj = 6 uds" – non-CAJAS: "6 uds = 1 cj".
+  /// Inverse 0,167-style text is forbidden as primary label.
   String? _subtitleForUnit(String unit) {
     final p = widget.product;
     if (p == null || p.unitsPerBox <= 1) return null;
     final abbr = _unitAbbr(p.displayUnit);
+    final n = p.unitsPerBox;
+    final nStr =
+        n == n.roundToDouble() ? n.toInt().toString() : n.toStringAsFixed(2);
     if (unit == 'CAJAS') {
-      final n = p.unitsPerBox;
-      final nStr =
-          n == n.roundToDouble() ? n.toInt().toString() : n.toStringAsFixed(2);
       return '1 cj = $nStr $abbr';
     }
-    // Inverse: how many boxes per 1 unit
-    final frac = 1.0 / p.unitsPerBox;
-    final fracStr = frac
-        .toStringAsFixed(3)
-        .replaceAll(RegExp(r'0+$'), '')
-        .replaceAll(RegExp(r'\.$'), '');
-    return '1 $abbr = $fracStr cj';
+    return '$nStr $abbr = 1 cj';
   }
 
   /// Get Neto U/R price if applicable

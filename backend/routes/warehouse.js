@@ -894,7 +894,7 @@ router.get('/articles', verifyToken, async (req, res) => {
             where += ` AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE ?`;
         }
 
-        let queryParams = [];
+        const queryParams = [];
         for (const kw of garbageKeywords) {
             queryParams.push(`%${kw}%`);
         }
@@ -1343,7 +1343,7 @@ router.get('/load-history', verifyToken, async (req, res) => {
     try {
         const { vehicleCode, dateFrom, dateTo } = req.query;
         let where = '1=1';
-        let params = [];
+        const params = [];
         if (vehicleCode) {
             where += ' AND H.CODIGOVEHICULO = ?';
             params.push(vehicleCode);
@@ -1412,7 +1412,7 @@ router.get('/load-history', verifyToken, async (req, res) => {
         try {
             const { vehicleCode } = req.query;
             let where = '1=1';
-            let params = [];
+            const params = [];
             if (vehicleCode) {
                 where = 'CODIGOVEHICULO = ?';
                 params.push(vehicleCode);

@@ -10,10 +10,48 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
 
-class BolsaMonthlyChart extends StatelessWidget {
+class BolsaMonthlyChart extends StatefulWidget {
   const BolsaMonthlyChart({required this.history, super.key});
 
   final List<BolsaMonthlyPoint> history;
+
+  @override
+  State<BolsaMonthlyChart> createState() => _BolsaMonthlyChartState();
+}
+
+class _BolsaMonthlyChartState extends State<BolsaMonthlyChart> {
+  final ScrollController _scrollController = ScrollController();
+
+  List<BolsaMonthlyPoint> get history => widget.history;
+
+  @override
+  void initState() {
+    super.initState();
+    // REQ-16: el viewport inicial muestra el mes actual (último punto,
+    // backend devuelve cronológico antiguo→reciente). Sin crash con <12.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrent());
+  }
+
+  @override
+  void didUpdateWidget(BolsaMonthlyChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.history.length != widget.history.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrent());
+    }
+  }
+
+  void _scrollToCurrent() {
+    if (!_scrollController.hasClients) return;
+    final max = _scrollController.position.maxScrollExtent;
+    if (!max.isFinite || max <= 0) return;
+    _scrollController.jumpTo(max);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   static const _months = [
     'Enero',
@@ -45,134 +83,140 @@ class BolsaMonthlyChart extends StatelessWidget {
     final now = DateTime.now();
     final currentKey = '${now.year}-${now.month}';
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.raisedSurface,
-            AppTheme.softPanel.withValues(alpha: 0.92),
-            AppTheme.info.withValues(alpha: 0.045),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        border: Border.all(
-          color: AppTheme.info.withValues(alpha: 0.22),
-        ),
-        boxShadow: AppTheme.elevation1,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.show_chart,
-                color: AppTheme.info,
-                size: 18,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Histórico 12 meses',
-                style: TextStyle(
-                  color: AppColors.themedWhite,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
-              const Spacer(),
-              _legendDot('Acum.', AppTheme.success),
-              const SizedBox(width: 8),
-              _legendDot('Cons.', AppTheme.warning),
-            ],
+    return Semantics(
+        container: true,
+        label:
+            'Histórico de bolsa de los últimos 12 meses, acumulado total ${_eur(totalAcum)}, consumido total ${_eur(totalCons)}, saldo neto ${_eur(saldoNeto)}',
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppTheme.raisedSurface,
+                AppTheme.softPanel.withValues(alpha: 0.92),
+                AppTheme.info.withValues(alpha: 0.045),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+            border: Border.all(
+              color: AppTheme.info.withValues(alpha: 0.22),
+            ),
+            boxShadow: AppTheme.elevation1,
           ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 128,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: history.map((p) {
-                  final isCurrent = '${p.ejercicio}-${p.mes}' == currentKey;
-                  final acumH = (p.acumulado / maxVal) * 86;
-                  final consH = (p.consumido / maxVal) * 86;
-                  return SizedBox(
-                    width: 72,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          if (p.acumulado > 0 || p.consumido > 0)
-                            Text(
-                              _kFormat(p.acumulado),
-                              style: TextStyle(
-                                fontSize: 8,
-                                color: AppColors.themedWhite
-                                    .withValues(alpha: 0.45),
-                              ),
-                            ),
-                          const SizedBox(height: 2),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.show_chart,
+                    color: AppTheme.info,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Histórico 12 meses',
+                    style: TextStyle(
+                      color: AppColors.themedWhite,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const Spacer(),
+                  _legendDot('Acum.', AppTheme.success),
+                  const SizedBox(width: 8),
+                  _legendDot('Cons.', AppTheme.warning),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 128,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: history.map((p) {
+                      final isCurrent = '${p.ejercicio}-${p.mes}' == currentKey;
+                      final acumH = (p.acumulado / maxVal) * 86;
+                      final consH = (p.consumido / maxVal) * 86;
+                      return SizedBox(
+                        width: 72,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              _bar(
-                                height: acumH,
-                                color: AppTheme.success,
-                                glow: isCurrent,
+                              if (p.acumulado > 0 || p.consumido > 0)
+                                Text(
+                                  _kFormat(p.acumulado),
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    color: AppColors.themedWhite
+                                        .withValues(alpha: 0.45),
+                                  ),
+                                ),
+                              const SizedBox(height: 2),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  _bar(
+                                    height: acumH,
+                                    color: AppTheme.success,
+                                    glow: isCurrent,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  _bar(
+                                    height: consH,
+                                    color: AppTheme.warning,
+                                    glow: isCurrent,
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 2),
-                              _bar(
-                                height: consH,
-                                color: AppTheme.warning,
-                                glow: isCurrent,
+                              const SizedBox(height: 5),
+                              Text(
+                                _months[(p.mes - 1).clamp(0, 11)],
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: isCurrent
+                                      ? FontWeight.w800
+                                      : FontWeight.w500,
+                                  color: isCurrent
+                                      ? AppTheme.info
+                                      : AppColors.themedWhite
+                                          .withValues(alpha: 0.55),
+                                ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 5),
-                          Text(
-                            _months[(p.mes - 1).clamp(0, 11)],
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight:
-                                  isCurrent ? FontWeight.w800 : FontWeight.w500,
-                              color: isCurrent
-                                  ? AppTheme.info
-                                  : AppColors.themedWhite
-                                      .withValues(alpha: 0.55),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _stat('Acumulado total', _eur(totalAcum), AppTheme.success),
-              const SizedBox(width: 8),
-              _stat('Consumido total', _eur(totalCons), AppTheme.warning),
-              const SizedBox(width: 8),
-              _stat(
-                'Saldo neto',
-                _eur(saldoNeto),
-                saldoNeto >= 0 ? AppTheme.info : AppTheme.error,
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _stat('Acumulado total', _eur(totalAcum), AppTheme.success),
+                  const SizedBox(width: 8),
+                  _stat('Consumido total', _eur(totalCons), AppTheme.warning),
+                  const SizedBox(width: 8),
+                  _stat(
+                    'Saldo neto',
+                    _eur(saldoNeto),
+                    saldoNeto >= 0 ? AppTheme.info : AppTheme.error,
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
-    );
+        ));
   }
 
   Widget _bar({

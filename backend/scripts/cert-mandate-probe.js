@@ -1,3 +1,4 @@
+// UNCLASSIFIED — do not run without human confirmation. See audit <2026-09-25>.
 'use strict';
 
 require('dotenv').config();

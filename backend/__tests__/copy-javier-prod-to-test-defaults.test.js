@@ -5,7 +5,7 @@ const {
   compareTableMetadata,
   normalizeColumnDefault,
   safeDefaultExpression,
-} = require('../scripts/copy-javier-prod-to-test');
+} = require('../scripts/tools/copy-javier-prod-to-test');
 
 function column(overrides = {}) {
   return {

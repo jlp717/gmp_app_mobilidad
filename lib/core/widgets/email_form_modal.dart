@@ -37,21 +37,28 @@ class EmailFormModal extends StatefulWidget {
     super.key,
     this.defaultSubject = '',
     this.defaultBody = '',
+    this.defaultEmail = '',
   });
   final String defaultSubject;
   final String defaultBody;
+
+  /// REQ-21 tanda4: email cliente precargado desde DB (editable).
+  /// Vacío = flujo libre actual.
+  final String defaultEmail;
 
   /// Show the modal and return the form result, or null if cancelled
   static Future<EmailFormResult?> show(
     BuildContext context, {
     String defaultSubject = '',
     String defaultBody = '',
+    String defaultEmail = '',
   }) {
     return showDialog<EmailFormResult>(
       context: context,
       builder: (ctx) => EmailFormModal(
         defaultSubject: defaultSubject,
         defaultBody: defaultBody,
+        defaultEmail: defaultEmail,
       ),
     );
   }
@@ -69,7 +76,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
   @override
   void initState() {
     super.initState();
-    _emailController = TextEditingController();
+    _emailController = TextEditingController(text: widget.defaultEmail);
     _subjectController = TextEditingController(text: widget.defaultSubject);
     _bodyController = TextEditingController(text: widget.defaultBody);
   }

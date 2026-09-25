@@ -31,99 +31,96 @@ async function loadMetadataCache() {
     }
 
     try {
-        const conn = await dbPool.connect();
-        try {
-            // Load Family names
+        const famSql = `SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM ${comercialErpTable('FAM')}`;
+        const fiSql = (t) => `SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable(t)}`;
+
+        async function safeQuery(sql) {
+            const c = await dbPool.connect();
             try {
-                const famRows = await conn.query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM ${comercialErpTable('FAM')}`);
-                familyNames = {};
-                famRows.forEach(r => {
-                    const code = (r.CODIGOFAMILIA || '').toString().trim();
-                    const name = (r.DESCRIPCIONFAMILIA || '').toString().trim();
-                    if (code) familyNames[code] = name;
-                });
-                logger.info(`  📁 FAM: ${Object.keys(familyNames).length} families`);
-            } catch (e) {
-                logger.warn(`  ⚠️ FAM table failed: ${e.message}`);
+                return await c.query(sql);
+            } finally {
+                await c.close();
             }
-
-            // Load FI1 names
-            try {
-                const fi1Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI1')}`);
-                fi1Names = {};
-                fi1Rows.forEach(r => {
-                    const code = (r.CODIGOFILTRO || '').toString().trim();
-                    const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
-                    if (code) fi1Names[code] = name;
-                });
-                logger.info(`  📁 FI1: ${Object.keys(fi1Names).length} entries`);
-            } catch (e) {
-                logger.warn(`  ⚠️ FI1 table failed: ${e.message}`);
-            }
-
-            // Load FI2 names
-            try {
-                const fi2Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI2')}`);
-                fi2Names = {};
-                fi2Rows.forEach(r => {
-                    const code = (r.CODIGOFILTRO || '').toString().trim();
-                    const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
-                    if (code) fi2Names[code] = name;
-                });
-                logger.info(`  📁 FI2: ${Object.keys(fi2Names).length} entries`);
-            } catch (e) {
-                logger.warn(`  ⚠️ FI2 table failed: ${e.message}`);
-            }
-
-            // Load FI3 names
-            try {
-                const fi3Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI3')}`);
-                fi3Names = {};
-                fi3Rows.forEach(r => {
-                    const code = (r.CODIGOFILTRO || '').toString().trim();
-                    const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
-                    if (code) fi3Names[code] = name;
-                });
-                logger.info(`  📁 FI3: ${Object.keys(fi3Names).length} entries`);
-            } catch (e) {
-                logger.warn(`  ⚠️ FI3 table failed: ${e.message}`);
-            }
-
-            // Load FI4 names
-            try {
-                const fi4Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI4')}`);
-                fi4Names = {};
-                fi4Rows.forEach(r => {
-                    const code = (r.CODIGOFILTRO || '').toString().trim();
-                    const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
-                    if (code) fi4Names[code] = name;
-                });
-                logger.info(`  📁 FI4: ${Object.keys(fi4Names).length} entries`);
-            } catch (e) {
-                logger.warn(`  ⚠️ FI4 table failed: ${e.message}`);
-            }
-
-            // Load FI5 names
-            try {
-                const fi5Rows = await conn.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI5')}`);
-                fi5Names = {};
-                fi5Rows.forEach(r => {
-                    const code = (r.CODIGOFILTRO || '').toString().trim();
-                    const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
-                    if (code) fi5Names[code] = name;
-                });
-                logger.info(`  📁 FI5: ${Object.keys(fi5Names).length} entries`);
-            } catch (e) {
-                logger.warn(`  ⚠️ FI5 table failed: ${e.message}`);
-            }
-
-            cacheReady = true;
-            cacheLoadTime = Date.now() - start;
-            logger.info(`📦 Metadata cache loaded in ${cacheLoadTime}ms`);
-
-        } finally {
-            await conn.close();
         }
+
+        function toCodeMap(rows, codeKey, nameKey) {
+            const map = {};
+            rows.forEach(r => {
+                const code = (r[codeKey] || '').toString().trim();
+                const name = (r[nameKey] || '').toString().trim();
+                if (code) map[code] = name;
+            });
+            return map;
+        }
+
+        // 6 queries en paralelo (1 RTT): try/catch por tabla, mismo contrato.
+        const [famOut, fi1Out, fi2Out, fi3Out, fi4Out, fi5Out] = await Promise.all([
+            safeQuery(famSql).then(
+                (rows) => ({ ok: true, map: toCodeMap(rows, 'CODIGOFAMILIA', 'DESCRIPCIONFAMILIA') }),
+                (e) => ({ ok: false, error: e }),
+            ),
+            safeQuery(fiSql('FI1')).then(
+                (rows) => ({ ok: true, map: toCodeMap(rows, 'CODIGOFILTRO', 'DESCRIPCIONFILTRO') }),
+                (e) => ({ ok: false, error: e }),
+            ),
+            safeQuery(fiSql('FI2')).then(
+                (rows) => ({ ok: true, map: toCodeMap(rows, 'CODIGOFILTRO', 'DESCRIPCIONFILTRO') }),
+                (e) => ({ ok: false, error: e }),
+            ),
+            safeQuery(fiSql('FI3')).then(
+                (rows) => ({ ok: true, map: toCodeMap(rows, 'CODIGOFILTRO', 'DESCRIPCIONFILTRO') }),
+                (e) => ({ ok: false, error: e }),
+            ),
+            safeQuery(fiSql('FI4')).then(
+                (rows) => ({ ok: true, map: toCodeMap(rows, 'CODIGOFILTRO', 'DESCRIPCIONFILTRO') }),
+                (e) => ({ ok: false, error: e }),
+            ),
+            safeQuery(fiSql('FI5')).then(
+                (rows) => ({ ok: true, map: toCodeMap(rows, 'CODIGOFILTRO', 'DESCRIPCIONFILTRO') }),
+                (e) => ({ ok: false, error: e }),
+            ),
+        ]);
+
+        if (famOut.ok) {
+            familyNames = famOut.map;
+            logger.info(`  📁 FAM: ${Object.keys(familyNames).length} families`);
+        } else {
+            logger.warn(`  ⚠️ FAM table failed: ${famOut.error.message}`);
+        }
+        if (fi1Out.ok) {
+            fi1Names = fi1Out.map;
+            logger.info(`  📁 FI1: ${Object.keys(fi1Names).length} entries`);
+        } else {
+            logger.warn(`  ⚠️ FI1 table failed: ${fi1Out.error.message}`);
+        }
+        if (fi2Out.ok) {
+            fi2Names = fi2Out.map;
+            logger.info(`  📁 FI2: ${Object.keys(fi2Names).length} entries`);
+        } else {
+            logger.warn(`  ⚠️ FI2 table failed: ${fi2Out.error.message}`);
+        }
+        if (fi3Out.ok) {
+            fi3Names = fi3Out.map;
+            logger.info(`  📁 FI3: ${Object.keys(fi3Names).length} entries`);
+        } else {
+            logger.warn(`  ⚠️ FI3 table failed: ${fi3Out.error.message}`);
+        }
+        if (fi4Out.ok) {
+            fi4Names = fi4Out.map;
+            logger.info(`  📁 FI4: ${Object.keys(fi4Names).length} entries`);
+        } else {
+            logger.warn(`  ⚠️ FI4 table failed: ${fi4Out.error.message}`);
+        }
+        if (fi5Out.ok) {
+            fi5Names = fi5Out.map;
+            logger.info(`  📁 FI5: ${Object.keys(fi5Names).length} entries`);
+        } else {
+            logger.warn(`  ⚠️ FI5 table failed: ${fi5Out.error.message}`);
+        }
+
+        cacheReady = true;
+        cacheLoadTime = Date.now() - start;
+        logger.info(`📦 Metadata cache loaded in ${cacheLoadTime}ms`);
     } catch (error) {
         logger.error(`❌ Metadata cache failed: ${error.message}`);
         cacheReady = false;

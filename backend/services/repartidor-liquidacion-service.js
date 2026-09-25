@@ -481,6 +481,31 @@ function projectStructuredEntry(entry, type) {
   });
 }
 
+// REQ-30: proyeccion de un cobro del dia dentro del desglose. Solo
+// identificacion e importe del movimiento; sin tokens, actores ni PII.
+function projectDesglosePayment(entry) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    throw capabilityError('El cobro persistido no tiene una estructura valida');
+  }
+  const id = String(entry.id ?? '').trim();
+  const amount = Number(entry.amount);
+  const paymentMethod = String(entry.paymentMethod ?? '').trim();
+  const collectedAt = String(entry.collectedAt ?? '').trim();
+  if (!id || !Number.isFinite(amount) || !collectedAt || Number.isNaN(Date.parse(collectedAt))) {
+    throw capabilityError('El cobro persistido esta corrupto');
+  }
+  return Object.freeze({
+    id, amount,
+    ...(paymentMethod ? { paymentMethod } : {}),
+    collectedAt,
+    ...(['codigoCliente', 'tipoDocumento', 'documento'].reduce((acc, key) => {
+      const value = String(entry[key] ?? '').trim();
+      if (value) acc[key] = value;
+      return acc;
+    }, {})),
+  });
+}
+
 function sameEntryIdentity(entry, command) {
   const detail = ENTRY_CONFIG[command.type].detail;
   return entry.repartidorId === command.repartidorId
@@ -588,13 +613,25 @@ function createRepartidorLiquidacionService({ repository } = {}) {
       const expenses = map(ledger.expenses, 'EXPENSE', 'expenses');
       const adjustments = map(ledger.adjustments, 'ADJUSTMENT', 'adjustments');
       const bankDeposits = map(ledger.bankDeposits, 'BANK_DEPOSIT', 'bankDeposits');
+      // REQ-30: el desglose incluye los cobros del dia. Ausente en
+      // repositorios antiguos => [] (nunca rompe lectores existentes).
+      const payments = (ledger.payments == null ? [] : ledger.payments);
+      if (!Array.isArray(payments)) throw capabilityError('payments persistido no es una lista');
+      const cobros = Object.freeze(payments.flatMap((entry) => {
+        try {
+          return [projectDesglosePayment(entry)];
+        } catch (_error) {
+          return [];
+        }
+      }));
       const sum = (entries) => Math.round((entries.reduce((acc, entry) => acc + entry.amount, 0)
         + Number.EPSILON) * 100) / 100;
       return Object.freeze({
         ...query, status: ledger.closed ? 'CLOSED' : 'OPEN',
-        expenses, adjustments, bankDeposits,
+        expenses, adjustments, bankDeposits, payments: cobros,
         totals: Object.freeze({
           expenses: sum(expenses), adjustments: sum(adjustments), bankDeposits: sum(bankDeposits),
+          payments: sum(cobros),
         }),
       });
     });

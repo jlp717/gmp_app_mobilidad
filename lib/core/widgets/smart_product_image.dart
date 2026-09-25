@@ -152,6 +152,14 @@ class SmartProductImage extends StatelessWidget {
     }
 
     final accent = _colorFromHash(_hashCode(productCode));
+    final base = width.isFinite && height.isFinite
+        ? (width < height ? width : height)
+        : width.isFinite
+            ? width
+            : height.isFinite
+                ? height
+                : 48.0;
+    final iconSize = (base * 0.35).clamp(18.0, 64.0);
 
     return SizedBox(
       width: width,
@@ -176,7 +184,7 @@ class SmartProductImage extends StatelessWidget {
                 Icon(
                   Icons.image_not_supported_rounded,
                   color: accent.withValues(alpha: 0.35),
-                  size: (width < height ? width : height) * 0.35,
+                  size: iconSize,
                 ),
                 const SizedBox(height: 4),
                 Text(

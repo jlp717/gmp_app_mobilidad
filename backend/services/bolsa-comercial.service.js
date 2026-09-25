@@ -780,12 +780,24 @@ function formatPedidoReference(serie, terminal, numero) {
 function mapMovimientoRow(r) {
     const localPedidoReferencia = formatPedidoReference(r.SERIEPEDIDO, r.TERMINAL, r.NUMEROPEDIDO);
     const systemPedidoReferencia = formatPedidoReference(r.SYSTEM_SERIEPEDIDO || r.SERIEPEDIDO, r.SYSTEM_TERMINALPEDIDO, r.SYSTEM_NUMEROPEDIDO);
+    const importe = parseFloat(r.IMPORTE) || 0;
+    const saldoAnterior = parseFloat(r.SALDO_ANTERIOR) || 0;
+    const saldoPosterior = parseFloat(r.SALDO_POSTERIOR) || 0;
+    // REQ-15: descuadre visible, nunca silencioso. Tolerancia ±0,01.
+    if (Math.abs((saldoPosterior - saldoAnterior) - (String(r.TIPO || '').trim() === 'CONSUMO' ? -importe : importe)) > 0.01) {
+        try {
+            logger.warn(
+                `[BOLSA_SALDO_MISMATCH] id=${r.ID} idempotencyKey=${(r.IDEMPOTENCY_KEY || '').trim() || 'n/a'} ` +
+                `anterior=${saldoAnterior} posterior=${saldoPosterior} importe=${importe} tipo=${(r.TIPO || '').trim()}`,
+            );
+        } catch (_) { /* never break read path */ }
+    }
     return {
         id: r.ID,
         tipo: (r.TIPO || '').trim(),
-        importe: parseFloat(r.IMPORTE) || 0,
-        saldoAnterior: parseFloat(r.SALDO_ANTERIOR) || 0,
-        saldoPosterior: parseFloat(r.SALDO_POSTERIOR) || 0,
+        importe,
+        saldoAnterior,
+        saldoPosterior,
         codigoArticulo: (r.CODIGO_ARTICULO || '').trim(),
         descripcion: (r.DESCRIPCION || '').trim(),
         pedidoId: nullableInt(r.PEDIDO_ID),

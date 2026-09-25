@@ -13,7 +13,9 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_helpers.dart'
+    as helpers;
 
 class PromotionsBanner extends ConsumerStatefulWidget {
   const PromotionsBanner({
@@ -63,9 +65,12 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
   @override
   void didUpdateWidget(covariant PromotionsBanner oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // REQ-03: single source — banner consumes widget.promotions (driven by
+    // provider.activePromotionsList) and never refetches divergently.
     if (widget.promotions != null) {
       _promotions = List<PromotionItem>.from(widget.promotions!);
       _isLoading = false;
+      _hasError = false;
     }
   }
 
@@ -74,15 +79,15 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
       setState(() {
         _hasError = false;
       });
-      final provider = ref.read(pedidosProvider);
-      final clientCode = normalizePedidoClientCode(provider.clientCode);
+      final provider = ref.read(pedidosNotifierProvider.notifier);
+      final clientCode = helpers.normalizePedidoClientCode(provider.clientCode);
       if (clientCode.isEmpty) {
         if (mounted) setState(() => _isLoading = false);
         return;
       }
-      final cacheKey = promotionsCacheKey(clientCode, provider.vendedorCodes);
+      final cacheKey = helpers.promotionsCacheKey(clientCode, provider.vendedorCodes);
       final cached = CacheService.get<Object?>(cacheKey);
-      final reuseCache = shouldReusePromotionsCache(cached);
+      final reuseCache = helpers.shouldReusePromotionsCache(cached);
       final Map<String, dynamic> response;
       if (reuseCache && cached is Map) {
         response = Map<String, dynamic>.from(cached);
@@ -99,7 +104,7 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
           cacheResponse: false,
           forceRefresh: false,
         );
-        if (shouldReusePromotionsCache(response)) {
+        if (helpers.shouldReusePromotionsCache(response)) {
           await CacheService.set(
             cacheKey,
             response,
@@ -143,8 +148,16 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
 
   @override
   Widget build(BuildContext context) {
+    // REQ-03: when driven by widget.promotions, surface the provider error
+    // state instead of silently rendering "0 promos".
+    var providerError = false;
+    if (widget.promotions != null) {
+      providerError =
+          ref.watch(pedidosNotifierProvider.select((p) => p.promotionsError));
+    }
+    final showError = _hasError || (providerError && _promotions.isEmpty);
     if (_isLoading) return const SizedBox.shrink();
-    if (_hasError) {
+    if (showError) {
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -167,9 +180,21 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
                 style: TextStyle(fontSize: 13),
               ),
             ),
-            TextButton(
-              onPressed: _retry,
-              child: const Text('Reintentar', style: TextStyle(fontSize: 12)),
+            Semantics(
+              button: true,
+              label: 'Reintentar cargar ofertas',
+              child: TextButton(
+                onPressed: () {
+                  if (widget.promotions != null) {
+                    ref
+                        .read(pedidosNotifierProvider.notifier)
+                        .loadPromotions();
+                  } else {
+                    _retry();
+                  }
+                },
+                child: const Text('Reintentar', style: TextStyle(fontSize: 12)),
+              ),
             ),
           ],
         ),

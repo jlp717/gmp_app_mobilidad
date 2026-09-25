@@ -492,27 +492,6 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
         GROUP BY TRIM(C.CODIGOCLIENTEALBARAN)
     `;
 
-    const appSql = `
-        SELECT
-            TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))) AS CODE,
-            TRIM(C.ESTADO) AS ESTADO,
-            COUNT(*) AS TOTAL_COUNT,
-            MAX(C.ID) AS LAST_ORDER_ID,
-            MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER
-        FROM ${db2AppTable('PEDIDOS_CAB')} C
-        WHERE TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))) IN (${clientPlaceholders})
-          AND C.ANODOCUMENTO = ?
-          AND C.MESDOCUMENTO = ?
-          AND C.DIADOCUMENTO = ?
-          AND TRIM(C.ESTADO) IN (
-            'CONFIRMADO', 'ENVIADO', 'BORRADOR', 'CONFIRMANDO',
-            'PEND_APROB', 'PENDIENTE', 'PENDIENTE_APROBACION'
-          )
-          ${vendorFilterSql}
-        GROUP BY TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))),
-                 TRIM(C.ESTADO)
-    `;
-
     const params = [
         ...clientCodes,
         orderDate.year,
@@ -556,6 +535,29 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
     }
 
     try {
+        // Overlay opcional: si la resolucion de la tabla app falla (o la
+        // query cae), se omite sin tumbar el dia. Nunca hardcodear el nombre
+        // fisico aqui: va por db2AppTable y jamas sale al body.
+        const appSql = `
+        SELECT
+            TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))) AS CODE,
+            TRIM(C.ESTADO) AS ESTADO,
+            COUNT(*) AS TOTAL_COUNT,
+            MAX(C.ID) AS LAST_ORDER_ID,
+            MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER
+        FROM ${db2AppTable('PEDIDOS_CAB')} C
+        WHERE TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))) IN (${clientPlaceholders})
+          AND C.ANODOCUMENTO = ?
+          AND C.MESDOCUMENTO = ?
+          AND C.DIADOCUMENTO = ?
+          AND TRIM(C.ESTADO) IN (
+            'CONFIRMADO', 'ENVIADO', 'BORRADOR', 'CONFIRMANDO',
+            'PEND_APROB', 'PENDIENTE', 'PENDIENTE_APROBACION'
+          )
+          ${vendorFilterSql}
+        GROUP BY TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))),
+                 TRIM(C.ESTADO)
+    `;
         // v2: bust stale SIN VENTA caches from pre-overlay / wrong-orderDate window
         const appCacheKey = `rutero:orders:app:v2:${orderDate.iso}:${ruteroBatchHash([...clientCodes, ...vendorCodes])}`;
         const appRows = await cachedQuery(
@@ -606,9 +608,10 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
                 });
             }
         });
-    } catch (appErr) {
-        logger.warn(`[RUTERO DAY] PEDIDOS_CAB overlay skipped: ${appErr.message}`);
+    } catch (_appErr) {
+        logger.warn('[RUTERO DAY] App overlay skipped (degraded order status)');
         // Overlay failure must not flip the whole day to degraded if CPC worked.
+        // No se propaga mensaje/SQL al cliente: el dia degrada a 200.
     }
 
     return { statusMap, degraded };
@@ -703,7 +706,7 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo rutero', 500);
+        handleRouteError(error, res, 'Error obteniendo rutero', 500, { code: 'PLANNER_CALENDAR_ERROR' });
     }
 });
 
@@ -992,7 +995,7 @@ router.post('/rutero/move_clients', requirePlannerVendorScope({ location: 'body'
 
     } catch (error) {
         if (conn) { try { await conn.rollback(); } catch (e) { logger.warn(`Rollback failed: ${e.message}`); } }
-        handleRouteError(error, res, 'Error moviendo clientes', 500);
+        handleRouteError(error, res, 'Error moviendo clientes', 500, { code: 'PLANNER_MOVE_CLIENTS_ERROR' });
     } finally {
         if (conn) { try { await conn.close(); } catch (e) { logger.warn(`Connection close failed: ${e.message}`); } }
     }
@@ -1219,7 +1222,7 @@ router.post('/rutero/config', requirePlannerVendorScope({ location: 'body', fiel
     } catch (error) {
         const odbcDetail = (error.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
         logger.error(`Rutero config save error: ${odbcDetail || error.message}`);
-        handleRouteError(error, res, 'Error guardando orden', 500);
+        handleRouteError(error, res, 'Error guardando orden', 500, { code: 'PLANNER_CONFIG_SAVE_ERROR' });
     }
 });
 
@@ -1333,7 +1336,7 @@ router.post('/rutero/reload-cache', async (req, res) => {
         logger.info(`[CACHE RELOAD] Complete in ${duration}ms`);
         res.json({ success: true, duration, message: 'Cache CDVI + LACLAE + RUTERO_CONFIG + Redis recargada' });
     } catch (error) {
-        handleRouteError(error, res, 'Error recargando caché', 500);
+        handleRouteError(error, res, 'Error recargando caché', 500, { code: 'PLANNER_RELOAD_CACHE_ERROR' });
     }
 });
 
@@ -1448,7 +1451,7 @@ router.get('/rutero/day-direct/:day', requirePlannerRole, requirePlannerVendorSc
 
     } catch (error) {
         logger.error(`[RUTERO DAY DIRECT] Error: ${error.message}\n${error.stack?.substring(0, 400)}`);
-        handleRouteError(error, res, 'Error obteniendo rutero', 500);
+        handleRouteError(error, res, 'Error obteniendo rutero', 500, { code: 'PLANNER_DAY_DIRECT_ERROR' });
     }
 });
 
@@ -1483,7 +1486,7 @@ router.post('/rutero/reload-cache-old', async (req, res) => {
         logger.info(`[CACHE RELOAD] Complete in ${duration}ms`);
         res.json({ success: true, duration, message: 'Cache CDVI + LACLAE + RUTERO_CONFIG + Redis recargada' });
     } catch (error) {
-        handleRouteError(error, res, 'Error recargando caché', 500);
+        handleRouteError(error, res, 'Error recargando caché', 500, { code: 'PLANNER_RELOAD_CACHE_OLD_ERROR' });
     }
 });
 
@@ -1950,7 +1953,7 @@ router.get('/rutero/day/:day', requirePlannerRole, requirePlannerVendorScope({ l
         return res.json(responsePayload);
 
     } catch (error) {
-        return handleRouteError(error, res, 'Error obteniendo rutero diario', 500);
+        return handleRouteError(error, res, 'Error obteniendo rutero diario', 500, { code: 'PLANNER_DAY_ERROR' });
     }
 });
 
@@ -2101,7 +2104,7 @@ router.get('/diagnose/client/:code', requirePlannerPrivilege, async (req, res) =
         res.json(results);
 
     } catch (error) {
-        handleRouteError(error, res, 'Error en diagnóstico', 500);
+        handleRouteError(error, res, 'Error en diagnóstico', 500, { code: 'PLANNER_DIAGNOSE_CLIENT_ERROR' });
     }
 });
 
@@ -2130,7 +2133,8 @@ router.get('/diagnose/vendor/:code', requirePlannerPrivilege, (req, res) => {
             timestamp: new Date().toISOString()
         });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        // F2b-04: error generico via handler central; detalle solo en log.
+        handleRouteError(error, res, 'Error interno del servidor', 500, { code: 'PLANNER_CACHE_DEBUG_ERROR' });
     }
 });
 
@@ -2278,7 +2282,7 @@ router.get('/rutero/client/:code/detail', requirePlannerClientOwnership, async (
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo detalle de cliente', 500);
+        handleRouteError(error, res, 'Error obteniendo detalle de cliente', 500, { code: 'PLANNER_CLIENT_DETAIL_ERROR' });
     }
 });
 

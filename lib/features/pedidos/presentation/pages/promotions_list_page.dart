@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
@@ -48,8 +49,13 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
     final totalPromos = groups.length;
     final visiblePromos = filtered.length;
 
+    // REQ-31 audit codigo (sin capturas dispositivo): Scaffold/AppBar opacos
+    // alpha 1.0 via themedSurface (light=surface FFFFFFFF, dark=darkSurfaceLayer).
+    // Sin TabBar en esta pagina. Texto tabs/chips nunca alpha<0.5 (full opacity);
+    // seleccionado success 007A52 / info 2563EB sobre surface >=4.5:1;
+    // ink 132027 sobre FFFFFFFF ~15.9:1. Fondos transparent/inkSurface directos = 0.
     return Scaffold(
-      backgroundColor: AppTheme.inkSurface,
+      backgroundColor: AppColors.themedSurface,
       appBar: AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -73,7 +79,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
             ),
           ],
         ),
-        backgroundColor: AppTheme.raisedSurface,
+        backgroundColor: AppColors.themedSurface,
         elevation: 0,
         actions: [
           IconButton(
@@ -131,55 +137,61 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
 
   Widget _buildEmptyState() {
     final hasAnyPromos = widget.promotions.isNotEmpty;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              hasAnyPromos ? Icons.search_off : Icons.local_offer_outlined,
-              size: 64,
-              color: AppTheme.textTertiary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              hasAnyPromos
-                  ? 'No hay promociones con esos filtros'
-                  : 'No hay promociones activas',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              hasAnyPromos
-                  ? 'Prueba a cambiar los filtros o la busqueda'
-                  : 'Las promociones apareceran aqui cuando esten disponibles',
-              style: TextStyle(
+    return Semantics(
+      label: hasAnyPromos
+          ? 'No hay promociones con esos filtros'
+          : 'Sin promociones activas para este cliente hoy',
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                hasAnyPromos ? Icons.search_off : Icons.local_offer_outlined,
+                size: 64,
                 color: AppTheme.textTertiary,
-                fontSize: 13,
               ),
-              textAlign: TextAlign.center,
-            ),
-            if (hasAnyPromos) ...[
               const SizedBox(height: 16),
-              FilledButton.tonalIcon(
-                onPressed: () {
-                  setState(() {
-                    _search = '';
-                    _typeFilter = 'TODAS';
-                    _onlyWithStock = false;
-                  });
-                },
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Limpiar filtros'),
+              Text(
+                hasAnyPromos
+                    ? 'No hay promociones con esos filtros'
+                    // REQ-25 tanda4: literal vacío informativo (nunca badge 0).
+                    : 'Sin promociones activas para este cliente hoy',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
               ),
+              const SizedBox(height: 8),
+              Text(
+                hasAnyPromos
+                    ? 'Prueba a cambiar los filtros o la busqueda'
+                    : 'Las promociones apareceran aqui cuando esten disponibles',
+                style: TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 13,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (hasAnyPromos) ...[
+                const SizedBox(height: 16),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    setState(() {
+                      _search = '';
+                      _typeFilter = 'TODAS';
+                      _onlyWithStock = false;
+                    });
+                  },
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Limpiar filtros'),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -187,7 +199,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
 
   Widget _buildFilters() {
     return Container(
-      color: AppTheme.raisedSurface,
+      color: AppColors.themedRaisedSurface,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Column(
         children: [

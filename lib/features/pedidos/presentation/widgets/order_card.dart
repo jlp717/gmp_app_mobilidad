@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
@@ -47,239 +48,264 @@ class OrderCard extends StatelessWidget {
     final vMargin = compact ? 3.0 : 6.0;
     final pad = compact ? 10.0 : 14.0;
 
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: hMargin, vertical: vMargin),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.raisedSurface,
-            AppTheme.softPanel.withValues(alpha: 0.92),
-            theme.primary.withValues(alpha: 0.055),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: theme.primary.withValues(alpha: 0.32)),
-        boxShadow: [
-          ...AppTheme.elevation1,
-          BoxShadow(
-            color: theme.primary.withValues(alpha: 0.06),
-            blurRadius: 16,
-          ),
-        ],
-      ),
-      child: Material(
-        color: AppColors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          onTap: onTap,
-          child: Padding(
-            padding: EdgeInsets.all(pad),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top row: status + date
-                Row(
-                  children: [
-                    OrderStatusBadge(estado: displayEstado, fontSize: 10),
-                    if (order.isPendienteErp) ...[
-                      const SizedBox(width: 6),
-                      Semantics(
-                        label: 'Pedido pendiente de envio al ERP',
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.info.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: AppColors.info.withValues(alpha: 0.4),
-                            ),
-                          ),
-                          child: Text(
-                            'Pendiente ERP',
-                            style: TextStyle(
-                              color: AppColors.info,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                    const Spacer(),
-                    Icon(
-                      Icons.calendar_today_outlined,
-                      size: 12,
-                      color: AppTheme.textPrimary.withValues(alpha: 0.4),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      order.fechaFormatted.isNotEmpty
-                          ? order.fechaFormatted
-                          : order.fecha,
-                      style: TextStyle(
-                        color: AppTheme.textPrimary.withValues(alpha: 0.5),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                // Client + order number
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: theme.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                        border: Border.all(
-                          color: theme.primary.withValues(alpha: 0.3),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: theme.primary.withValues(alpha: 0.10),
-                            blurRadius: 12,
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        theme.icon,
-                        color: theme.primary,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            order.clienteName,
-                            style: TextStyle(
-                              color: AppTheme.textPrimary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '#${order.numeroPedidoFormatted}  ·  ${order.clienteCode}',
-                            style: TextStyle(
-                              color: theme.primary.withValues(alpha: 0.8),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          ClientDebtStatusChip(
-                            balance: {
-                              if (order.saldoPendiente != null)
-                                'saldoPendiente': order.saldoPendiente,
-                              if (order.importeVencido != null)
-                                'vencido': order.importeVencido,
-                              if (order.deudaEstado.isNotEmpty)
-                                'balanceStatus': order.deudaEstado,
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                // Stats row
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.inkSurface.withValues(alpha: 0.36),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: AppColors.themedWhite.withValues(alpha: 0.06),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _statItem(
-                        Icons.format_list_numbered,
-                        '${order.lineCount} líneas',
-                        AppTheme.textSecondary,
-                      ),
-                      _statItem(
-                        Icons.euro,
-                        PedidosFormatters.money(order.total),
-                        AppTheme.success,
-                      ),
-                      if (isMarginVisible)
-                        _statItem(
-                          Icons.trending_up,
-                          '${order.margen.toStringAsFixed(1)}%',
-                          marginColor,
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _buildBolsaChip(displayEstado),
-                // Actions row (if available)
-                if (onDuplicate != null ||
-                    onViewAlbaran != null ||
-                    onResend != null ||
-                    onDelete != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Row(
-                      children: [
-                        if (onResend != null)
-                          _actionChip(
-                            context,
-                            Icons.send_outlined,
-                            'Confirmar',
-                            AppTheme.success,
-                            onResend!,
-                          ),
-                        if (onDelete != null)
-                          _actionChip(
-                            context,
-                            Icons.delete_outline,
-                            'Eliminar',
-                            AppTheme.error,
-                            onDelete!,
-                          ),
-                        if (onDuplicate != null)
-                          _actionChip(
-                            context,
-                            Icons.copy_all_outlined,
-                            'Duplicar',
-                            AppTheme.info,
-                            onDuplicate!,
-                          ),
-                        if (onViewAlbaran != null)
-                          _actionChip(
-                            context,
-                            Icons.description_outlined,
-                            'Albarán',
-                            AppTheme.accentIndigo,
-                            onViewAlbaran!,
-                          ),
-                      ],
-                    ),
-                  ),
+    return Semantics(
+        button: true,
+        label:
+            'Pedido ${order.numeroPedidoFormatted} de ${order.clienteName}, estado $displayEstado',
+        child: Container(
+          margin: EdgeInsets.symmetric(horizontal: hMargin, vertical: vMargin),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppTheme.raisedSurface,
+                AppTheme.softPanel.withValues(alpha: 0.92),
+                theme.primary.withValues(alpha: 0.055),
               ],
             ),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            border: Border.all(color: theme.primary.withValues(alpha: 0.32)),
+            boxShadow: [
+              ...AppTheme.elevation1,
+              BoxShadow(
+                color: theme.primary.withValues(alpha: 0.06),
+                blurRadius: 16,
+              ),
+            ],
           ),
-        ),
-      ),
-    );
+          child: Material(
+            color: AppColors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              onTap: onTap,
+              child: Padding(
+                padding: EdgeInsets.all(pad),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top row: status + date
+                    Row(
+                      children: [
+                        OrderStatusBadge(estado: displayEstado, fontSize: 10),
+                        if (order.isPendienteErp) ...[
+                          const SizedBox(width: 6),
+                          Semantics(
+                            label: 'Pedido pendiente de envio al ERP',
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.info.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: AppColors.info.withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Text(
+                                'Pendiente ERP',
+                                style: TextStyle(
+                                  color: AppColors.info,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        const Spacer(),
+                        Icon(
+                          Icons.calendar_today_outlined,
+                          size: 12,
+                          color: AppTheme.textPrimary.withValues(alpha: 0.4),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          order.fechaFormatted.isNotEmpty
+                              ? order.fechaFormatted
+                              : order.fecha,
+                          style: TextStyle(
+                            color: AppTheme.textPrimary.withValues(alpha: 0.5),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    // Client + order number
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: theme.primary.withValues(alpha: 0.12),
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusMd),
+                            border: Border.all(
+                              color: theme.primary.withValues(alpha: 0.3),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: theme.primary.withValues(alpha: 0.10),
+                                blurRadius: 12,
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            theme.icon,
+                            color: theme.primary,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                order.clienteName,
+                                style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '#${order.numeroPedidoFormatted}  ·  ${order.clienteCode}',
+                                style: TextStyle(
+                                  color: theme.primary.withValues(alpha: 0.8),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              ClientDebtStatusChip(
+                                balance: {
+                                  if (order.saldoPendiente != null)
+                                    'saldoPendiente': order.saldoPendiente,
+                                  if (order.importeVencido != null)
+                                    'vencido': order.importeVencido,
+                                  if (order.deudaEstado.isNotEmpty)
+                                    'balanceStatus': order.deudaEstado,
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    // Stats row
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.inkSurface.withValues(alpha: 0.36),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.themedWhite.withValues(alpha: 0.06),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _statItem(
+                            Icons.format_list_numbered,
+                            '${order.lineCount} líneas',
+                            AppTheme.textSecondary,
+                          ),
+                          _statItem(
+                            Icons.euro,
+                            PedidosFormatters.money(order.total),
+                            AppTheme.success,
+                          ),
+                          if (isMarginVisible)
+                            _statItem(
+                              Icons.trending_up,
+                              '${order.margen.toStringAsFixed(1)}%',
+                              marginColor,
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildRepartoRow(context),
+                    const SizedBox(height: 8),
+                    _buildBolsaChip(displayEstado),
+                    // REQ-18 (decisión BORRADOR-only): el CONFIRMADO lo gestiona
+                    // el ERP (409). Sin edición/borrado por comercial: el chip
+                    // abre cómo solicitar la anulación al jefe de ventas.
+                    if (displayEstado == 'CONFIRMADO')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            _actionChip(
+                              context,
+                              Icons.contact_support_outlined,
+                              'Solicitar anulación',
+                              AppTheme.warning,
+                              () => _showAnulacionInfo(context),
+                            ),
+                          ],
+                        ),
+                      ),
+                    // Actions row (if available)
+                    if (onDuplicate != null ||
+                        onViewAlbaran != null ||
+                        onResend != null ||
+                        onDelete != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            if (onResend != null)
+                              _actionChip(
+                                context,
+                                Icons.send_outlined,
+                                'Confirmar',
+                                AppTheme.success,
+                                onResend!,
+                              ),
+                            if (onDelete != null)
+                              _actionChip(
+                                context,
+                                Icons.delete_outline,
+                                'Eliminar',
+                                AppTheme.error,
+                                onDelete!,
+                              ),
+                            if (onDuplicate != null)
+                              _actionChip(
+                                context,
+                                Icons.copy_all_outlined,
+                                'Duplicar',
+                                AppTheme.info,
+                                onDuplicate!,
+                              ),
+                            if (onViewAlbaran != null)
+                              _actionChip(
+                                context,
+                                Icons.description_outlined,
+                                'Albarán',
+                                AppTheme.accentIndigo,
+                                onViewAlbaran!,
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ));
   }
 
   Widget _statItem(IconData icon, String value, Color color) {
@@ -308,31 +334,77 @@ class OrderCard extends StatelessWidget {
   ) {
     return Padding(
       padding: const EdgeInsets.only(right: 6),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: color, size: 12),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
+      child: Semantics(
+        button: true,
+        label: label,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: color, size: 12),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showAnulacionInfo(BuildContext context) {
+    final ref = order.numeroPedidoFormatted.isNotEmpty
+        ? order.numeroPedidoFormatted
+        : '#${order.numeroPedido}';
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.raisedSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Semantics(
+          header: true,
+          child: Text(
+            'Solicitar anulación',
+            style: TextStyle(
+              color: AppColors.themedWhite,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        content: Semantics(
+          label:
+              'El pedido $ref confirmado lo gestiona el ERP y no se puede editar ni borrar. Pide la anulación al jefe de ventas indicando motivo y referencia.',
+          child: Text(
+            'El pedido $ref ya está CONFIRMADO y lo gestiona el ERP: '
+            'no se puede editar ni borrar desde el móvil.\n\n'
+            'Pide la anulación a tu jefe de ventas indicando motivo y esta referencia.',
+            style: TextStyle(color: AppColors.themedWhite, fontSize: 13),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Entendido',
+              style: TextStyle(color: AppColors.themedWhite54),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -353,7 +425,8 @@ class OrderCard extends StatelessWidget {
     }
     final generada = order.bolsaGenerada;
     final neto = order.bolsaNeto;
-    final hasBolsaImpact = (generada ?? false) || neto.abs() > 0.0001;
+    final hasBolsaImpact =
+        (generada ?? false) || neto.abs() >= OrderSummary.bolsaImpactEpsilon;
     if (hasBolsaImpact) {
       final netoLabel = neto == 0
           ? ''
@@ -390,6 +463,154 @@ class OrderCard extends StatelessWidget {
       Icons.info_outline,
       'Bolsa: ver detalle del pedido',
       AppTheme.warning,
+    );
+  }
+
+  Widget _buildRepartoRow(BuildContext context) {
+    final fecha = order.fechaRepartoFormatted.isNotEmpty
+        ? order.fechaRepartoFormatted
+        : order.fechaReparto;
+    final quien = order.repartidorNombre.isNotEmpty
+        ? '${order.repartidorCode} · ${order.repartidorNombre}'
+        : order.repartidorCode;
+    final phone = order.repartidorTelefono.trim();
+    final hasPhone = phone.isNotEmpty;
+    return Semantics(
+      label:
+          'Día reparto ${fecha.isNotEmpty ? fecha : 'pendiente'}, reparte ${quien.isNotEmpty ? quien : 'sin asignar'}',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.inkSurface.withValues(alpha: 0.36),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppColors.themedWhite.withValues(alpha: 0.06),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.local_shipping_outlined,
+              color: AppTheme.info,
+              size: 14,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Reparto: ${fecha.isNotEmpty ? fecha : '—'} · ${quien.isNotEmpty ? quien : '—'}',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Semantics(
+              button: true,
+              enabled: hasPhone,
+              label: hasPhone
+                  ? 'Llamar repartidor ${quien.isNotEmpty ? quien : ''}'
+                  : 'Sin teléfono repartidor verificado',
+              child: InkWell(
+                onTap: hasPhone
+                    ? () => launchUrl(
+                          Uri.parse('tel:$phone'),
+                          mode: LaunchMode.externalApplication,
+                        )
+                    : null,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (hasPhone ? AppTheme.success : AppTheme.textTertiary)
+                        .withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color:
+                          (hasPhone ? AppTheme.success : AppTheme.textTertiary)
+                              .withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.call_outlined,
+                        color:
+                            hasPhone ? AppTheme.success : AppTheme.textTertiary,
+                        size: 12,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Llamar',
+                        style: TextStyle(
+                          color: hasPhone
+                              ? AppTheme.success
+                              : AppTheme.textTertiary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Semantics(
+              button: true,
+              enabled: hasPhone,
+              label: hasPhone
+                  ? 'Escribir SMS repartidor ${quien.isNotEmpty ? quien : ''}'
+                  : 'Sin teléfono repartidor verificado',
+              child: InkWell(
+                onTap: hasPhone
+                    ? () => launchUrl(
+                          Uri.parse('sms:$phone'),
+                          mode: LaunchMode.externalApplication,
+                        )
+                    : null,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (hasPhone ? AppTheme.info : AppTheme.textTertiary)
+                        .withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: (hasPhone ? AppTheme.info : AppTheme.textTertiary)
+                          .withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.sms_outlined,
+                        color: hasPhone ? AppTheme.info : AppTheme.textTertiary,
+                        size: 12,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'SMS',
+                        style: TextStyle(
+                          color:
+                              hasPhone ? AppTheme.info : AppTheme.textTertiary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

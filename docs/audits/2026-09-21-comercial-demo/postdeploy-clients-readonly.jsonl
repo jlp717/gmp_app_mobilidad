@@ -1,0 +1,8 @@
+{"check":"login","vendor":"35","status":200,"ms":334,"ok":true,"role":"COMERCIAL"}
+{"check":"clients_list","vendor":"35","status":200,"ms":1575,"ok":true,"returned":5,"count":152,"fastPath":true,"cache":"bypass","firstCode":"4300000066"}
+{"check":"clients_search","vendor":"35","status":200,"ms":1076,"ok":true,"returned":1,"count":1,"fastPath":true,"cache":"bypass","matchedCode":"4300000066"}
+{"check":"client_detail","vendor":"35","status":200,"ms":2918,"ok":false,"codeMatched":true,"bodyKeys":["client","monthlyTrend","topProducts"],"requestedCode":"4300000066"}
+{"check":"login","vendor":"80","status":200,"ms":203,"ok":true,"role":"COMERCIAL"}
+{"check":"clients_list","vendor":"80","status":200,"ms":808,"ok":true,"returned":5,"count":34,"fastPath":true,"cache":"bypass","firstCode":"4300030056"}
+{"check":"clients_search","vendor":"80","status":200,"ms":176,"ok":true,"returned":1,"count":1,"fastPath":true,"cache":"bypass","matchedCode":"4300030056"}
+{"check":"client_detail","vendor":"80","status":200,"ms":1628,"ok":false,"codeMatched":true,"bodyKeys":["client","monthlyTrend","topProducts"],"requestedCode":"4300030056"}

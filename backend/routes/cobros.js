@@ -26,6 +26,10 @@ const COBROS_TABLE = db2AppTable('COBROS');
 const REPARTIDOR_COBROS_TABLE = db2AppTable('REPARTIDOR_COBROS');
 const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
 
+// F5-02 TTL por dominio: lecturas de dinero/cobros en REALTIME 60.
+// Fallback a 60 para mocks legacy sin TTL.REALTIME. No tocar logica de dinero.
+const COBROS_MONEY_TTL = TTL.REALTIME || 60;
+
 // CTR / contra-reembolso: cobro en manos del repartidor, no del comercial.
 const FORMAS_PAGO_REPARTIDOR = ['01', 'CO', 'CTR', 'EF'];
 
@@ -41,7 +45,13 @@ async function invalidateCobrosCache(codigoCliente) {
             invalidateCachePattern(`query:query:cobros:pendientes:cvc:${cli}:*`),
             invalidateCachePattern(`query:query:cobros:historico:${cli}:*`),
             invalidateCachePattern('query:query:cobros:pending-summary:*'),
-            invalidateCachePattern('query:query:repartidor:collections:*'),
+            invalidateCachePattern(`query:query:repartidor:collections:*`),
+            // REQ-30: todo cobro (total o parcial) mueve la liquidacion del
+            // repartidor; invalida sus lecturas para que el desglose incluya
+            // el movimiento sin esperar al TTL.
+            invalidateCachePattern('query:query:repartidor:liquidacion:*'),
+            invalidateCachePattern('query:query:repartidor:finance:*'),
+            invalidateCachePattern('query:query:liquidacion:*'),
         ]);
     } catch (err) {
         logger.warn(`[COBROS] Cache invalidation skipped: ${err.message}`);
@@ -72,6 +82,41 @@ function limitRegistrarCobro(req, res, next) {
 function sanitizeCode(val) {
     if (val == null) return '';
     return String(val).trim();
+}
+
+// F2b-02: validacion Zod patron commissions.js (summaryQuerySchema):
+// codigoCliente alfanumerico max 10; paginacion clamped. Input invalido => 400 legible.
+let cobrosZod = null;
+try {
+    cobrosZod = require('zod').z;
+} catch (e) {
+    cobrosZod = null;
+}
+const cobroClientParamSchema = cobrosZod
+    ? cobrosZod.object({ codigoCliente: cobrosZod.string().regex(/^[A-Za-z0-9]+$/).max(10) }).strict()
+    : null;
+
+function validateCobroClientParam(req, res, next) {
+    // F2b-01 fail-closed: sin validador, 500 VALIDATOR_UNAVAILABLE, nunca next.
+    if (!cobroClientParamSchema) {
+        return res.status(500).json({ success: false, code: 'VALIDATOR_UNAVAILABLE', error: 'Validador no disponible' });
+    }
+    const parsed = cobroClientParamSchema.safeParse({ codigoCliente: String(req.params.codigoCliente || '') });
+    if (!parsed.success) {
+        return res.status(400).json({ success: false, code: 'INVALID_CLIENT_CODE', error: 'Codigo de cliente invalido (alfanumerico, max 10)' });
+    }
+    req.params.codigoCliente = parsed.data.codigoCliente;
+    next();
+}
+
+function validateCobrosPagination(req, res, next) {
+    const { limit, page, offset } = req.query;
+    for (const [name, value] of [['limit', limit], ['page', page], ['offset', offset]]) {
+        if (value !== undefined && !/^\d{1,7}$/.test(String(value))) {
+            return res.status(400).json({ success: false, code: 'INVALID_PAGINATION', error: `Parametro ${name} invalido (entero >= 0)` });
+        }
+    }
+    next();
 }
 
 function sendCobrosError(res, error, { code, message } = {}) {
@@ -338,9 +383,40 @@ function forbiddenVendor(res, message) {
 
 async function authorizeCobrosClientScope(req, codigoCliente, action = 'consultar') {
     const context = getCobrosContext(req);
-    if (context.isJefeVentas) return { ok: true };
-
     const user = req.user || {};
+    const deny = () => ({
+        ok: false,
+        status: 403,
+        body: {
+            success: false,
+            code: 'FORBIDDEN_CLIENT_VENDOR',
+            error: 'No autorizado para ' + action + ' este cliente',
+        },
+    });
+
+    // F2a-02: JEFE contra visibles/catalogo canonico; jamas ok total sin alcance.
+    if (context.isJefeVentas) {
+        const { resolveVendorScope, getCachedActiveGmpVendorCatalog } = require('../middleware/vendor-scope');
+        const visible = normalizeCodeList(context.vendorCodes);
+        const scope = resolveVendorScope(user, 'ALL', { visibleCodes: visible });
+        const effective = scope.literalAll ? getCachedActiveGmpVendorCatalog() : scope.codes;
+        const vendorCodes = normalizeCodeList(effective);
+        if (!vendorCodes.length) return deny();
+        const client = sanitizeCode(codigoCliente).substring(0, 10);
+        const clientVendorFilter = buildClientVendorParamFilter(vendorCodes, 'CLI');
+        if (!clientVendorFilter.clause) return deny();
+        const rows = await queryWithParams(
+            `SELECT 1
+               FROM ${comercialErpTable('CLI')} CLI
+              WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+                ${clientVendorFilter.clause}
+              FETCH FIRST 1 ROW ONLY`,
+            [client, ...clientVendorFilter.params],
+        );
+        if (!rows || rows.length === 0) return deny();
+        return { ok: true };
+    }
+
     const hasClientScope = Object.prototype.hasOwnProperty.call(user, 'clientCodes')
         || Object.prototype.hasOwnProperty.call(user, 'clienteCodes');
     if (hasClientScope) {
@@ -348,19 +424,12 @@ async function authorizeCobrosClientScope(req, codigoCliente, action = 'consulta
         if (allowedClientCodes.some((clientCode) => codesMatch(clientCode, codigoCliente))) {
             return { ok: true };
         }
-        return {
-            ok: false,
-            status: 403,
-            body: {
-                success: false,
-                code: 'FORBIDDEN_CLIENT_VENDOR',
-                error: 'No autorizado para ' + action + ' este cliente',
-            },
-        };
+        return deny();
     }
 
+    // F2a-02: roles no-comercial (ALMACEN/REPARTIDOR) solo su cliente asignado.
     const role = String(context.userRole || '').toUpperCase();
-    if (role !== 'COMERCIAL') return { ok: true };
+    if (role !== 'COMERCIAL') return deny();
 
     const userId = sanitizeCode(context.userId);
     if (!userId) return { ok: true };
@@ -450,7 +519,7 @@ function computeEstadoVencimiento(fechaVencimientoIso, fechaDocumentoIso) {
  * GET /api/cobros/:codigoCliente/pendientes
  * Solo devuelve pedidos confirmados pendientes de cobro
  */
-router.get('/:codigoCliente/pendientes', async (req, res) => {
+router.get('/:codigoCliente/pendientes', validateCobroClientParam, validateCobrosPagination, async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
         const clientScope = await authorizeCobrosClientScope(req, codigoCliente, 'consultar cobros');
@@ -537,7 +606,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 (sqlText) => queryWithParams(sqlText, sqlParams),
                 sql,
                 cacheKey,
-                TTL.MEDIUM
+                COBROS_MONEY_TTL // F5-02 dominio dinero-cobros REALTIME 60
             );
         } catch (cvcErr) {
             logger.warn(`[COBROS] CVC query failed (will use PEDIDOS_CAB fallback): ${cvcErr.message}`);
@@ -715,7 +784,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
  * GET /api/cobros/:codigoCliente/historico
  * Historial de cobros comerciales registrados en JAVIER.COBROS (app-side).
  */
-router.get('/:codigoCliente/historico', async (req, res) => {
+router.get('/:codigoCliente/historico', validateCobroClientParam, validateCobrosPagination, async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
         const clientScope = await authorizeCobrosClientScope(req, codigoCliente, 'consultar historico de cobros');
@@ -738,7 +807,7 @@ router.get('/:codigoCliente/historico', async (req, res) => {
             (sqlText) => queryWithParams(sqlText, [codigoCliente]),
             sql,
             cacheKey,
-            TTL.MEDIUM
+            COBROS_MONEY_TTL // F5-02 dominio dinero-cobros REALTIME 60
         );
         const historico = (rows || []).map(mapHistoricoRow);
 
@@ -755,7 +824,7 @@ router.get('/:codigoCliente/historico', async (req, res) => {
 /**
  * GET /api/cobros/:codigoCliente/estado
  */
-router.get('/:codigoCliente/estado', async (req, res) => {
+router.get('/:codigoCliente/estado', validateCobroClientParam, async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
         const clientScope = await authorizeCobrosClientScope(req, codigoCliente, 'consultar estado de cliente');
@@ -878,7 +947,7 @@ function isSameCobroPayload(row, expected) {
  * de red o doble-click. Si el mismo token llega 2 veces con el mismo payload,
  * devolvemos OK sin duplicar. Si llega con payload distinto, 409 conflict.
  */
-router.post('/:codigoCliente/registrar', limitRegistrarCobro, async (req, res) => {
+router.post('/:codigoCliente/registrar', limitRegistrarCobro, validateCobroClientParam, async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
         const clientScope = await authorizeCobrosClientScope(req, codigoCliente, 'registrar cobros');
@@ -1212,8 +1281,8 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             ? (sql = portfolioSql, params = vendorParams) => queryWithParams(sql, params)
             : (sql = portfolioSql) => query(sql, false);
         const [rows, portfolioRows] = await Promise.all([
-            cachedQuery(pageQueryFn, pageSql, cacheKeyVendedor, TTL.SHORT),
-            cachedQuery(portfolioQueryFn, portfolioSql, cacheKeyPortfolio, TTL.SHORT),
+            cachedQuery(pageQueryFn, pageSql, cacheKeyVendedor, COBROS_MONEY_TTL), // F5-02 dinero REALTIME 60
+            cachedQuery(portfolioQueryFn, portfolioSql, cacheKeyPortfolio, COBROS_MONEY_TTL), // F5-02 dinero REALTIME 60
         ]);
 
         const appAdjustments = new Map();

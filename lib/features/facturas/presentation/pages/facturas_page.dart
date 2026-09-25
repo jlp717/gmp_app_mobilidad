@@ -148,7 +148,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
     _debounceTimer = Timer(
       const Duration(milliseconds: 250),
-      _refreshData,
+      // REQ-07.1: typing bypasses the fresh-guard so the list refreshes
+      // while typing; generation in _refreshData cancels in-flight calls.
+      () => _refreshData(fromSearch: true),
     );
   }
 
@@ -713,10 +715,13 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     );
   }
 
-  Future<void> _refreshData({bool forceRefresh = false}) async {
+  Future<void> _refreshData({bool forceRefresh = false, bool fromSearch = false}) async {
     if (!mounted) return;
     if (_vendedorCodes.isEmpty) return;
+    // REQ-07.1: search typing invalidates the fresh-guard (bypass
+    // isUiDataFresh on the search path); non-search refreshes keep it.
     if (!forceRefresh &&
+        !fromSearch &&
         isUiDataFresh(_lastFetchTime) &&
         _facturas.isNotEmpty) {
       return;
@@ -1042,8 +1047,33 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   Future<void> _emailFactura(Factura factura) async {
     final documentLabel = factura.isAlbaran ? 'Albarán' : 'Factura';
+    // REQ-21 tanda4: QSYS2 verifica DSEDAC.CLI sin columna EMAIL
+    // (solo APARTADOCORREOS tipo correo). Sin email DB real hoy:
+    // campo libre editable; precarga cuando detalle exponga clienteEmail.
+    var defaultEmail = '';
+    try {
+      final detail = await FacturasService.getDetail(
+        factura.serie,
+        factura.numero,
+        factura.ejercicio,
+      );
+      final raw = detail?.header;
+      if (raw != null) {
+        final dyn = raw as dynamic;
+        try {
+          final mail = (dyn.clienteEmail as String?) ?? '';
+          if (mail.trim().isNotEmpty) defaultEmail = mail.trim();
+        } catch (_) {
+          // FacturaHeader sin clienteEmail hoy: flujo libre.
+        }
+      }
+    } catch (_) {
+      // Sin detalle: flujo libre actual.
+    }
+    if (!mounted) return;
     final result = await EmailFormModal.show(
       context,
+      defaultEmail: defaultEmail,
       defaultSubject:
           '$documentLabel ${factura.numeroFormateado} - ${factura.clienteNombre}',
       defaultBody: 'Hola ${factura.clienteNombre},\n\n'
@@ -1090,29 +1120,38 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
     if (result == null || !mounted) return;
 
+    // REQ-22 tanda4: envío directo wa.me tras form, sin doble picker.
+    // PDF: descarga previa para adjuntar manual (Share no inyecta a chat WA).
     final modal = AsyncOperationModal.show(
       context,
       text: 'Preparando documento...',
     );
     try {
-      // Download PDF
       final file = await FacturasService.downloadDocumentoPdf(factura);
-
-      // Get WhatsApp URL from backend
-      final whatsappUrl = await FacturasService.shareWhatsApp(
-        serie: factura.serie,
-        numero: factura.numero,
-        ejercicio: factura.ejercicio,
-        telefono: result.phone,
-        clienteNombre: factura.clienteNombre,
-        documentType: factura.isAlbaran ? 'albaran' : 'factura',
-        terminal: factura.isAlbaran ? factura.terminal : null,
-      );
-
       modal.close();
       if (!mounted) return;
 
-      // Share PDF with WhatsApp - this opens system share with PDF ready to attach
+      final digits = result.phone.replaceAll(RegExp(r'\D'), '');
+      final uri = Uri.parse(
+        'https://wa.me/$digits?text=${Uri.encodeComponent(result.message)}',
+      );
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'PDF descargado (${file.path.split('/').last}): '
+                'adjúntalo en el chat de WhatsApp.',
+              ),
+              backgroundColor: AppTheme.info,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Fallback: WA ausente → share sheet con PDF + aviso actual.
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
@@ -1122,23 +1161,21 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               height: 1,
             )
           : null;
-
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
         text: result.message,
         subject: result.message,
         sharePositionOrigin: origin,
       );
-
-      // If WhatsApp URL available, also open WhatsApp chat
-      if (whatsappUrl != null && whatsappUrl.isNotEmpty) {
-        final uri = Uri.parse(whatsappUrl);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(
-            uri,
-            mode: LaunchMode.externalApplication,
-          );
-        }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo abrir WhatsApp. PDF listo para compartir.',
+            ),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
       }
     } catch (e) {
       modal.close();

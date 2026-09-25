@@ -1,5 +1,13 @@
 'use strict';
 
+jest.mock('../config/db', () => ({
+  query: jest.fn(),
+  queryWithParams: jest.fn(),
+  getPool: jest.fn(),
+  initDb: jest.fn(),
+  closePool: jest.fn(),
+}));
+
 const { createErrorResponse, handleRouteError } = require('../utils/common');
 const { ValidationError } = require('../src/errors/AppError');
 

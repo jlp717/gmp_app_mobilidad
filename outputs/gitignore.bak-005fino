@@ -1,0 +1,337 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+venv/
+.venv/
+env/
+ENV/
+
+# Secrets and configuration
+# Arboles de agentes (Cline/Claude/Codex/Cursor/OpenCode), scripts del equipo y memory-bank:
+# fuera de git por decision de release 2026-09-01 (ver bloque final de este archivo).
+.opencode-legacy/
+.opencode-runtime/
+.env
+.config/
+.secrets/
+.credentials/
+*.key
+*.pem
+*.crt
+*.cert
+*.token
+tokens.json
+*.credentials.json
+*.env.local
+*.env.development.local
+*.env.test.local
+*.env.production.local
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Backend
+backend/node_modules/
+backend/*.log
+backend/.env
+backend/.env.*
+backend/db_exploration_results.json
+backend/db_probe_results.json
+
+# Logs and temp files
+logs/local/
+nul
+~$*.docx
+*.docx
+*.pdf
+server.log
+debug_output.txt
+flutter_*.log
+
+# Analysis / audit / build temp files
+an.txt
+an_utf8.txt
+analysis*.txt
+build_error*.txt
+build_log.txt
+audit_report.txt
+temp_*.js
+tmpclaude*
+
+# Scripts that shouldn't be in repo
+copy_sdk36_admin.bat
+install_cmake.bat
+run_app.bat
+update_ip_config.ps1
+
+# Node (raiz = tooling DX versionado e intencional; backend tiene el suyo)
+node_modules/
+# Environment files (keep .env.example)
+!.env.example
+
+# Security - Keystores and signing (NEVER commit these!)
+*.keystore
+*.jks
+key.properties
+android/key.properties
+upload-keystore.jks
+
+# Claude Code: arbol local completo fuera de git (decision release 2026-09-01, bloque final).
+# (.idea/ ya cubierto en bloque IntelliJ arriba — sin duplicar)
+
+# RuFlo / Claude-Flow runtime (keep config.yaml, ignore everything else)
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/metrics/
+.claude-flow/sessions/
+.claude-flow/security/
+.claude-flow/workflows/
+.claude-flow/hooks/
+.claude-flow/agents/
+.claude-flow/learning/
+.claude-flow/CAPABILITIES.md
+
+# Large local environments / tools (not part of repo)
+ipex_ollama/
+pixel-agents/
+
+# Deprecated/test files that shouldn't be tracked
+backend/deprecated/
+
+# Ruflo swarm runtime files
+.swarm/
+.swarm/*.db
+.swarm/*.db-wal
+.swarm/*.db-shm
+
+# OpenClaw and Schemas (Sensitive)
+.openclaw/
+config_patch.json
+full_schema.json
+schema.json
+
+# Debug and temp files (root)
+debug_*.js
+test_a*.js
+analyze_output*.txt
+build_output*.txt
+build_errors*.txt
+*.stackdump
+*.tmp
+*.bak
+*.orig
+/Sin*.canvas
+albaran_*.json
+Screenshot_*.jpg
+WhatsApp Image*.jpeg
+unnamed.jpg
+server.log
+*.pdf
+*.xlsx
+nul
+
+# Backend root temp files
+backend/output*.txt
+backend/debug_*.js
+backend/debug-*.js
+backend/check_*.js
+backend/db_*.js
+backend/test_*.js
+backend/verify_*.js
+backend/inspect_*.js
+backend/investigate_*.js
+backend/explore_*.js
+backend/diagnose_*.js
+backend/audit_*.js
+backend/analyze_*.js
+backend/find_*.js
+backend/list_*.js
+backend/fix_*.js
+backend/godmode*.js
+backend/god_mode*.js
+backend/*.json
+backend/*.txt
+backend/*.log
+
+# Certification / probe scratch (never commit)
+backend/_cert-patch*.js
+backend/_jv.out
+backend/scripts/_*.js
+chief-sessions.json
+
+# Backend scripts temp
+backend/scripts/debug_*.js
+backend/scripts/test_*.js
+backend/scripts/check_*.js
+backend/scripts/verify_*.js
+backend/scripts/inspect_*.js
+backend/scripts/investigate_*.js
+backend/scripts/explore_*.js
+backend/scripts/diagnose_*.js
+backend/scripts/audit_*.js
+backend/scripts/analyze_*.js
+backend/scripts/find_*.js
+backend/scripts/list_*.js
+backend/scripts/temp_*.js
+backend/scripts/_temp_*.js
+backend/scripts/fix_*.js
+backend/scripts/god_mode*.js
+backend/scripts/godmode*.js
+backend/scripts/verificar_*.js
+backend/scripts/resumen_*.js
+backend/scripts/analizar_*.js
+backend/scripts/*.log
+backend/scripts/*.txt
+backend/scripts/*.json
+backend/probe-interval-source.js
+
+# Redundant docs that shouldn't be tracked
+00_START_HERE.md
+AGENTDB_README.md
+CLAUDE_MASTER_PROMPT_COPYPASTE.txt
+COMO_USAR_PROMPTS.md
+FIX_LOGIN_ERROR.md
+IMPLEMENTATION_SUMMARY.md
+INFORME_VENTAS_*.txt
+KPIS_*.xlsx
+MASTER_OPTIMIZATION_PROMPT.md
+MIGRATION_STATUS.md
+PERFORMANCE_OPTIMIZATION_REPORT.md
+PLAN_MIS_PEDIDOS.md
+PRODUCCION_FIX.md
+README_PROMPTS.md
+SECURITY_*.md
+V3_*.md
+
+# Backend temp directories
+backend/reports/
+backend/tmp/
+backend/kpi/tmp/
+backend/audit/
+backend/coverage/
+backend/test-results/
+backend/logs/
+backend/deprecated/
+backend/scripts/cobros/
+backend/scripts/db/
+backend/scripts/testing/
+
+# Root temp fix scripts (one-off)
+fix_*.js
+
+# Docker
+.docker/
+*.docker
+
+# Makefile
+*.o
+*.a
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+
+# AcouZ — voice dictation tool (standalone, not tracked)
+acouz/
+.acouz/
+# GuardVibe (auto-added by guardvibe init)
+# .mcp.json tracked (MCP servers), CLAUDE.md tracked
+.guardvibe/
+
+docs/opencode-agent-governance/evals/last-validation.json
+docs/opencode-agent-governance/evals/canary-markers/
+
+# Higiene repo 2026-08-25 (Prompt 1): locales que nunca se versionan
+/uploads/
+/logs/
+/database_backup_*/
+.fvm/
+.husky/_/
+!backend/.env.example
+.semgrep/
+backend/.eslintrc-complexity.cjs
+
+
+# Agent/browser and local state artifacts (never versioned)
+.playwright-mcp/
+tmp/
+.flutter/
+.flutter_tool_state/
+.codex/graph-runs/
+.codex-remote-attachments/
+
+# Herramientas agenticas locales (bloque final 2026-08-28 REVOCADO 2026-08-29, spec team-port):
+# la gobernanza V7 (reglas/skills/plugins/agentes/scripts) SI se versiona; solo runtime/secretos fuera.
+# El detalle por herramienta vive en los bloques de arriba (OpenCode/Codex/Claude/Cline).
+
+# Decision de release 2026-09-01: arboles locales de asistentes, fuera de la rama.
+.cline/
+.clinerules/
+.claude/
+.opencode/
+.codex/
+.cursor/
+opencode.json
+.mcp.json
+scripts/cline/
+scripts/opencode/
+scripts/team/
+memory-bank/
+
+# Higiene GMP-HYGIENE-004 (canonico unico): agentes/editores locales + runtime nunca versionados
+.agent/
+.agents/
+.beads/
+.continue/
+.obsidian/
+.omo/
+.qoder/
+.qwen/
+.trae/
+.windsurf/
+.remember/
+vault/
+handoffs/
+uploads/
+logs/
+tmp/
+skills/caveman-*
+# Nota dedup: *.log/.env/.idea/ solo en su primer bloque (no duplicar abajo).

@@ -6,73 +6,105 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 
-/// Riverpod provider for LoadPlannerProvider.
+/// Riverpod provider for LoadPlanner (Notifier v2 — single source of truth).
 final loadPlannerProvider =
-    ChangeNotifierProvider<LoadPlannerProvider>((ref) => LoadPlannerProvider());
+    NotifierProvider<LoadPlannerProvider, LoadPlannerState>(
+  LoadPlannerProvider.new,
+);
 
-/// Central state manager for Load Planner V2.
+/// Immutable UI state for Load Planner V2.
 ///
-/// Handles: loading plans, drag-and-drop of boxes, collision detection,
-/// exclude/include orders, undo/redo, auto-save of manual layouts.
-class LoadPlannerProvider extends ChangeNotifier {
-  // ═══════════════════════════════════════════════════════════════════════════
-  // STATE
-  // ═══════════════════════════════════════════════════════════════════════════
+/// The notifier owns the undo/redo stacks, the autosave [Timer] and the
+/// current vehicle/date context (not part of the rebuildable state).
+class LoadPlannerState {
+  const LoadPlannerState({
+    this.placedBoxes = const [],
+    this.overflowBoxes = const [],
+    this.metrics,
+    this.truck,
+    this.viewMode = ViewMode.perspective,
+    this.colorMode = ColorMode.product,
+    this.selectedBoxIndex,
+    this.dragState,
+    this.isLoading = false,
+    this.error,
+    this.saveState = SaveState.saved,
+    this.hasManualChanges = false,
+    this.excludedOrders = const {},
+    this.isOptimizing = false,
+    this.canUndo = false,
+    this.canRedo = false,
+  });
 
-  List<LoadBox> _placedBoxes = [];
-  List<LoadBox> _overflowBoxes = [];
-  PlannerMetrics? _metrics;
-  TruckDimensions? _truck;
+  final List<LoadBox> placedBoxes;
+  final List<LoadBox> overflowBoxes;
+  final PlannerMetrics? metrics;
+  final TruckDimensions? truck;
 
-  // View state
-  ViewMode _viewMode = ViewMode.perspective;
-  ColorMode _colorMode = ColorMode.product;
-  int? _selectedBoxIndex;
-  DragState? _dragState;
+  final ViewMode viewMode;
+  final ColorMode colorMode;
+  final int? selectedBoxIndex;
+  final DragState? dragState;
 
-  // Loading / error
-  bool _isLoading = false;
-  String? _error;
+  final bool isLoading;
+  final String? error;
 
-  // Persistence
-  SaveState _saveState = SaveState.saved;
-  bool _hasManualChanges = false;
-  Timer? _autoSaveTimer;
-  String? _vehicleCode;
-  DateTime? _date;
+  final SaveState saveState;
+  final bool hasManualChanges;
+  final Set<int> excludedOrders;
+  final bool isOptimizing;
+  final bool canUndo;
+  final bool canRedo;
 
-  // Undo / Redo
-  final List<_Snapshot> _undoStack = [];
-  final List<_Snapshot> _redoStack = [];
-  static const int _maxUndoSteps = 30;
+  LoadPlannerState copyWith({
+    List<LoadBox>? placedBoxes,
+    List<LoadBox>? overflowBoxes,
+    PlannerMetrics? metrics,
+    TruckDimensions? truck,
+    ViewMode? viewMode,
+    ColorMode? colorMode,
+    int? selectedBoxIndex,
+    bool clearSelectedBox = false,
+    DragState? dragState,
+    bool clearDragState = false,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+    SaveState? saveState,
+    bool? hasManualChanges,
+    Set<int>? excludedOrders,
+    bool? isOptimizing,
+    bool? canUndo,
+    bool? canRedo,
+  }) {
+    return LoadPlannerState(
+      placedBoxes: placedBoxes ?? this.placedBoxes,
+      overflowBoxes: overflowBoxes ?? this.overflowBoxes,
+      metrics: metrics ?? this.metrics,
+      truck: truck ?? this.truck,
+      viewMode: viewMode ?? this.viewMode,
+      colorMode: colorMode ?? this.colorMode,
+      selectedBoxIndex:
+          clearSelectedBox ? null : (selectedBoxIndex ?? this.selectedBoxIndex),
+      dragState: clearDragState ? null : (dragState ?? this.dragState),
+      isLoading: isLoading ?? this.isLoading,
+      error: clearError ? null : (error ?? this.error),
+      saveState: saveState ?? this.saveState,
+      hasManualChanges: hasManualChanges ?? this.hasManualChanges,
+      excludedOrders: excludedOrders ?? this.excludedOrders,
+      isOptimizing: isOptimizing ?? this.isOptimizing,
+      canUndo: canUndo ?? this.canUndo,
+      canRedo: canRedo ?? this.canRedo,
+    );
+  }
 
-  // Excluded order numbers
-  final Set<int> _excludedOrders = {};
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // GETTERS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  List<LoadBox> get placedBoxes => _placedBoxes;
-  List<LoadBox> get overflowBoxes => _overflowBoxes;
-  PlannerMetrics? get metrics => _metrics;
-  TruckDimensions? get truck => _truck;
-  ViewMode get viewMode => _viewMode;
-  ColorMode get colorMode => _colorMode;
-  int? get selectedBoxIndex => _selectedBoxIndex;
-  DragState? get dragState => _dragState;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  SaveState get saveState => _saveState;
-  bool get hasManualChanges => _hasManualChanges;
-  Set<int> get excludedOrders => _excludedOrders;
-  bool get canUndo => _undoStack.isNotEmpty;
-  bool get canRedo => _redoStack.isNotEmpty;
+  bool isOrderExcluded(int orderNumber) =>
+      excludedOrders.contains(orderNumber);
 
   /// Unique client codes from placed boxes
   List<ClientSummary> get clientSummaries {
     final map = <String, _ClientAcc>{};
-    for (final b in _placedBoxes) {
+    for (final b in placedBoxes) {
       final acc = map.putIfAbsent(b.clientCode, _ClientAcc.new);
       acc.count++;
       acc.weight += b.weight;
@@ -90,6 +122,28 @@ class LoadPlannerProvider extends ChangeNotifier {
         .toList()
       ..sort((a, b) => b.totalWeight.compareTo(a.totalWeight));
   }
+}
+
+/// Central state manager for Load Planner V2.
+///
+/// Handles: loading plans, drag-and-drop of boxes, collision detection,
+/// exclude/include orders, undo/redo, auto-save of manual layouts.
+class LoadPlannerProvider extends Notifier<LoadPlannerState> {
+  // Undo / Redo (owned by the notifier, mirrored as flags in state)
+  final List<_Snapshot> _undoStack = [];
+  final List<_Snapshot> _redoStack = [];
+  static const int _maxUndoSteps = 30;
+
+  // Non-rebuildable context
+  Timer? _autoSaveTimer;
+  String? _vehicleCode;
+  DateTime? _date;
+
+  @override
+  LoadPlannerState build() {
+    ref.onDispose(() => _autoSaveTimer?.cancel());
+    return const LoadPlannerState();
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // LOAD PLAN
@@ -103,12 +157,15 @@ class LoadPlannerProvider extends ChangeNotifier {
   }) async {
     _vehicleCode = vehicleCode;
     _date = date;
-    _isLoading = true;
-    _error = null;
-    _excludedOrders.clear();
     _undoStack.clear();
     _redoStack.clear();
-    notifyListeners();
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      excludedOrders: {},
+      canUndo: false,
+      canRedo: false,
+    );
 
     try {
       // 1. Check for saved manual layout (non-fatal — if it fails, treat as null)
@@ -129,8 +186,8 @@ class LoadPlannerProvider extends ChangeNotifier {
       if (savedLayout != null) {
         // Restore from saved layout
         final layout = ManualLayout.fromJson(savedLayout);
-        _placedBoxes = layout.boxes;
-        _excludedOrders.addAll(layout.excludedOrders);
+        var placedBoxes = layout.boxes;
+        final excludedOrders = Set<int>.from(layout.excludedOrders);
 
         // Still need truck dimensions from API
         final result = await WarehouseDataService.planLoad(
@@ -139,7 +196,7 @@ class LoadPlannerProvider extends ChangeNotifier {
           month: date.month,
           day: date.day,
         );
-        _truck = TruckDimensions.fromVehicleConfig(
+        final truck = TruckDimensions.fromVehicleConfig(
           result.truck != null
               ? {
                   'code': result.truck!.code,
@@ -158,14 +215,14 @@ class LoadPlannerProvider extends ChangeNotifier {
         // Reconcile: check if saved boxes still match current orders
         final freshBoxIds = result.placed.map((b) => b.id).toSet()
           ..addAll(result.overflow.map((b) => b.id));
-        _placedBoxes =
-            _placedBoxes.where((b) => freshBoxIds.contains(b.id)).toList();
+        placedBoxes =
+            placedBoxes.where((b) => freshBoxIds.contains(b.id)).toList();
 
         // Add any NEW boxes from fresh plan that aren't in the saved layout
-        final savedIds = _placedBoxes.map((b) => b.id).toSet();
+        final savedIds = placedBoxes.map((b) => b.id).toSet();
         for (final freshBox in result.placed) {
           if (!savedIds.contains(freshBox.id)) {
-            _placedBoxes.add(
+            placedBoxes.add(
               LoadBox.fromJson({
                 'id': freshBox.id,
                 'label': freshBox.label,
@@ -184,7 +241,7 @@ class LoadPlannerProvider extends ChangeNotifier {
           }
         }
 
-        _overflowBoxes = result.overflow
+        final overflowBoxes = result.overflow
             .map(
               (b) => LoadBox.fromJson({
                 'id': b.id,
@@ -203,34 +260,46 @@ class LoadPlannerProvider extends ChangeNotifier {
             )
             .toList();
 
-        _recalculateMetrics();
-        _saveState = SaveState.saved;
-        _hasManualChanges = true;
+        state = state.copyWith(
+          placedBoxes: placedBoxes,
+          overflowBoxes: overflowBoxes,
+          excludedOrders: excludedOrders,
+          truck: truck,
+          metrics: _metricsFor(placedBoxes, overflowBoxes, truck),
+          saveState: SaveState.saved,
+          hasManualChanges: true,
+        );
       } else {
         // Fresh plan from algorithm
-        await _loadFreshPlan(vehicleCode, date);
-        _saveState = SaveState.saved;
-        _hasManualChanges = false;
+        _applyFreshPlan(await _fetchFreshPlan(vehicleCode, date));
+        state = state.copyWith(
+          saveState: SaveState.saved,
+          hasManualChanges: false,
+        );
       }
     } catch (e, stack) {
       debugPrint('[LoadPlanner] ERROR loading plan: $e');
       debugPrint('[LoadPlanner] Stack: $stack');
-      _error = e.toString();
+      state = state.copyWith(error: e.toString());
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      state = state.copyWith(isLoading: false);
     }
   }
 
-  Future<void> _loadFreshPlan(String vehicleCode, DateTime date) async {
-    final result = await WarehouseDataService.planLoad(
+  Future<LoadPlanResult> _fetchFreshPlan(
+    String vehicleCode,
+    DateTime date,
+  ) {
+    return WarehouseDataService.planLoad(
       vehicleCode: vehicleCode,
       year: date.year,
       month: date.month,
       day: date.day,
     );
+  }
 
-    _truck = TruckDimensions.fromVehicleConfig(
+  void _applyFreshPlan(LoadPlanResult result) {
+    final truck = TruckDimensions.fromVehicleConfig(
       result.truck != null
           ? {
               'code': result.truck!.code,
@@ -246,7 +315,7 @@ class LoadPlannerProvider extends ChangeNotifier {
           : {},
     );
 
-    _placedBoxes = result.placed
+    final placedBoxes = result.placed
         .map(
           (b) => LoadBox(
             id: b.id,
@@ -265,7 +334,7 @@ class LoadPlannerProvider extends ChangeNotifier {
         )
         .toList();
 
-    _overflowBoxes = result.overflow
+    final overflowBoxes = result.overflow
         .map(
           (b) => LoadBox(
             id: b.id,
@@ -284,38 +353,47 @@ class LoadPlannerProvider extends ChangeNotifier {
         )
         .toList();
 
-    _metrics = PlannerMetrics.fromJson({
-      'totalBoxes': result.metrics.totalBoxes,
-      'placedCount': result.metrics.placedCount,
-      'overflowCount': result.metrics.overflowCount,
-      'containerVolumeCm3': result.metrics.containerVolumeCm3,
-      'usedVolumeCm3': result.metrics.usedVolumeCm3,
-      'volumeOccupancyPct': result.metrics.volumeOccupancyPct,
-      'totalWeightKg': result.metrics.totalWeightKg,
-      'overflowWeightKg': result.metrics.overflowWeightKg,
-      'maxPayloadKg': result.metrics.maxPayloadKg,
-      'weightOccupancyPct': result.metrics.weightOccupancyPct,
-      'status': result.metrics.status,
-    });
+    state = state.copyWith(
+      truck: truck,
+      placedBoxes: placedBoxes,
+      overflowBoxes: overflowBoxes,
+      metrics: PlannerMetrics.fromJson({
+        'totalBoxes': result.metrics.totalBoxes,
+        'placedCount': result.metrics.placedCount,
+        'overflowCount': result.metrics.overflowCount,
+        'containerVolumeCm3': result.metrics.containerVolumeCm3,
+        'usedVolumeCm3': result.metrics.usedVolumeCm3,
+        'volumeOccupancyPct': result.metrics.volumeOccupancyPct,
+        'totalWeightKg': result.metrics.totalWeightKg,
+        'overflowWeightKg': result.metrics.overflowWeightKg,
+        'maxPayloadKg': result.metrics.maxPayloadKg,
+        'weightOccupancyPct': result.metrics.weightOccupancyPct,
+        'status': result.metrics.status,
+      }),
+    );
   }
 
   /// Reset to algorithm-computed layout, discarding manual changes
   Future<void> resetToAlgorithm() async {
-    if (_vehicleCode == null || _date == null) return;
+    final vehicleCode = _vehicleCode;
+    final date = _date;
+    if (vehicleCode == null || date == null) return;
     _pushUndo();
-    _excludedOrders.clear();
-    _hasManualChanges = false;
-    _isLoading = true;
-    notifyListeners();
+    state = state.copyWith(
+      excludedOrders: {},
+      hasManualChanges: false,
+      isLoading: true,
+      canUndo: _undoStack.isNotEmpty,
+      canRedo: false,
+    );
 
     try {
-      await _loadFreshPlan(_vehicleCode!, _date!);
-      _saveState = SaveState.saved;
+      _applyFreshPlan(await _fetchFreshPlan(vehicleCode, date));
+      state = state.copyWith(saveState: SaveState.saved);
     } catch (e) {
-      _error = e.toString();
+      state = state.copyWith(error: e.toString());
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      state = state.copyWith(isLoading: false);
     }
   }
 
@@ -323,22 +401,20 @@ class LoadPlannerProvider extends ChangeNotifier {
   // PROFIT OPTIMIZER
   // ═══════════════════════════════════════════════════════════════════════════
 
-  bool _isOptimizing = false;
-  bool get isOptimizing => _isOptimizing;
-
   /// Run profit optimizer: exclude orders the algorithm says to exclude,
   /// include ones it says to include.
   Future<void> runProfitOptimizer() async {
-    if (_vehicleCode == null || _date == null) return;
-    _isOptimizing = true;
-    notifyListeners();
+    final vehicleCode = _vehicleCode;
+    final date = _date;
+    if (vehicleCode == null || date == null) return;
+    state = state.copyWith(isOptimizing: true);
 
     try {
       final result = await WarehouseDataService.optimizeLoad(
-        vehicleCode: _vehicleCode!,
-        year: _date!.year,
-        month: _date!.month,
-        day: _date!.day,
+        vehicleCode: vehicleCode,
+        year: date.year,
+        month: date.month,
+        day: date.day,
       );
 
       final excludedSet =
@@ -347,46 +423,55 @@ class LoadPlannerProvider extends ChangeNotifier {
           (result['included'] as List?)?.cast<int>().toSet() ?? {};
 
       if (excludedSet.isEmpty && includedSet.isEmpty) {
-        _isOptimizing = false;
-        notifyListeners();
+        state = state.copyWith(isOptimizing: false);
         return;
       }
 
       _pushUndo();
 
+      final placedBoxes = List<LoadBox>.from(state.placedBoxes);
+      final overflowBoxes = List<LoadBox>.from(state.overflowBoxes);
+      final excludedOrders = Set<int>.from(state.excludedOrders);
+
       // Move excluded orders from placed to overflow
       final toExclude = <LoadBox>[];
-      _placedBoxes.removeWhere((b) {
+      placedBoxes.removeWhere((b) {
         if (excludedSet.contains(b.orderNumber)) {
           toExclude.add(b);
           return true;
         }
         return false;
       });
-      _overflowBoxes.addAll(toExclude);
-      _excludedOrders.addAll(excludedSet);
+      overflowBoxes.addAll(toExclude);
+      excludedOrders.addAll(excludedSet);
 
       // Move included orders from overflow to placed
       final toInclude = <LoadBox>[];
-      _overflowBoxes.removeWhere((b) {
+      overflowBoxes.removeWhere((b) {
         if (includedSet.contains(b.orderNumber)) {
           toInclude.add(b);
           return true;
         }
         return false;
       });
-      _placedBoxes.addAll(toInclude);
-      _excludedOrders.removeAll(includedSet);
+      placedBoxes.addAll(toInclude);
+      excludedOrders.removeAll(includedSet);
 
-      _hasManualChanges = true;
+      state = state.copyWith(
+        placedBoxes: placedBoxes,
+        overflowBoxes: overflowBoxes,
+        excludedOrders: excludedOrders,
+        hasManualChanges: true,
+        canUndo: _undoStack.isNotEmpty,
+        canRedo: false,
+      );
       _recalculateMetrics();
       _scheduleAutoSave();
     } catch (e) {
       debugPrint('[LoadPlanner] Optimizer error: $e');
-      _error = 'Error al optimizar: $e';
+      state = state.copyWith(error: 'Error al optimizar: $e');
     } finally {
-      _isOptimizing = false;
-      notifyListeners();
+      state = state.copyWith(isOptimizing: false);
     }
   }
 
@@ -395,13 +480,14 @@ class LoadPlannerProvider extends ChangeNotifier {
   // ═══════════════════════════════════════════════════════════════════════════
 
   void selectBox(int? index) {
-    _selectedBoxIndex = index;
-    notifyListeners();
+    state = state.copyWith(
+      selectedBoxIndex: index,
+      clearSelectedBox: index == null,
+    );
   }
 
   void clearSelection() {
-    _selectedBoxIndex = null;
-    notifyListeners();
+    state = state.copyWith(clearSelectedBox: true);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -409,13 +495,11 @@ class LoadPlannerProvider extends ChangeNotifier {
   // ═══════════════════════════════════════════════════════════════════════════
 
   void setViewMode(ViewMode mode) {
-    _viewMode = mode;
-    notifyListeners();
+    state = state.copyWith(viewMode: mode);
   }
 
   void setColorMode(ColorMode mode) {
-    _colorMode = mode;
-    notifyListeners();
+    state = state.copyWith(colorMode: mode);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -423,74 +507,91 @@ class LoadPlannerProvider extends ChangeNotifier {
   // ═══════════════════════════════════════════════════════════════════════════
 
   void startDrag(int boxIndex) {
-    if (boxIndex < 0 || boxIndex >= _placedBoxes.length) return;
-    final box = _placedBoxes[boxIndex];
-    _dragState = DragState(
-      boxIndex: boxIndex,
-      startX: box.x,
-      startY: box.y,
-      startZ: box.z,
+    if (boxIndex < 0 || boxIndex >= state.placedBoxes.length) return;
+    final box = state.placedBoxes[boxIndex];
+    state = state.copyWith(
+      dragState: DragState(
+        boxIndex: boxIndex,
+        startX: box.x,
+        startY: box.y,
+        startZ: box.z,
+      ),
+      selectedBoxIndex: boxIndex,
     );
-    _selectedBoxIndex = boxIndex;
-    notifyListeners();
   }
 
   /// Update dragged box position (in truck 3D coordinates)
   void updateDragPosition(double newX, double newY) {
-    if (_dragState == null || _truck == null) return;
-    final idx = _dragState!.boxIndex;
-    final box = _placedBoxes[idx];
+    final dragState = state.dragState;
+    final truck = state.truck;
+    if (dragState == null || truck == null) return;
+    final idx = dragState.boxIndex;
+    final box = state.placedBoxes[idx];
 
     // Clamp to truck interior bounds
-    final clampedX = newX.clamp(0.0, _truck!.lengthCm - box.w);
-    final clampedY = newY.clamp(0.0, _truck!.widthCm - box.d);
+    final clampedX = newX.clamp(0.0, truck.lengthCm - box.w);
+    final clampedY = newY.clamp(0.0, truck.widthCm - box.d);
 
-    _placedBoxes[idx] = box.copyWith(x: clampedX, y: clampedY);
+    final placedBoxes = List<LoadBox>.from(state.placedBoxes);
+    placedBoxes[idx] = box.copyWith(x: clampedX, y: clampedY);
 
     // Check collisions
-    final collision = _hasCollision(idx);
-    if (collision != _dragState!.hasCollision) {
-      _dragState = _dragState!.copyWith(hasCollision: collision);
-    }
-
-    notifyListeners();
+    final collision = _hasCollision(placedBoxes, idx);
+    state = state.copyWith(
+      placedBoxes: placedBoxes,
+      dragState: collision != dragState.hasCollision
+          ? dragState.copyWith(hasCollision: collision)
+          : dragState,
+    );
   }
 
   /// Finalize drag: if valid position, keep; if collision, revert.
   void endDrag() {
-    if (_dragState == null) return;
-    final idx = _dragState!.boxIndex;
+    final dragState = state.dragState;
+    if (dragState == null) return;
+    final idx = dragState.boxIndex;
 
-    if (_dragState!.hasCollision) {
+    if (dragState.hasCollision) {
       // Revert to original position
-      _placedBoxes[idx] = _placedBoxes[idx].copyWith(
-        x: _dragState!.startX,
-        y: _dragState!.startY,
-        z: _dragState!.startZ,
+      final placedBoxes = List<LoadBox>.from(state.placedBoxes);
+      placedBoxes[idx] = placedBoxes[idx].copyWith(
+        x: dragState.startX,
+        y: dragState.startY,
+        z: dragState.startZ,
+      );
+      state = state.copyWith(
+        placedBoxes: placedBoxes,
+        clearDragState: true,
       );
     } else {
       // Keep new position — push undo and mark dirty
       _pushUndo();
-      _hasManualChanges = true;
+      state = state.copyWith(
+        clearDragState: true,
+        hasManualChanges: true,
+        canUndo: _undoStack.isNotEmpty,
+        canRedo: false,
+      );
       _recalculateMetrics();
       _scheduleAutoSave();
     }
-
-    _dragState = null;
-    notifyListeners();
   }
 
   /// Cancel drag without applying
   void cancelDrag() {
-    if (_dragState == null) return;
-    final idx = _dragState!.boxIndex;
-    _placedBoxes[idx] = _placedBoxes[idx].copyWith(
-      x: _dragState!.startX,
-      y: _dragState!.startY,
-      z: _dragState!.startZ,
+    final dragState = state.dragState;
+    if (dragState == null) return;
+    final idx = dragState.boxIndex;
+    final placedBoxes = List<LoadBox>.from(state.placedBoxes);
+    placedBoxes[idx] = placedBoxes[idx].copyWith(
+      x: dragState.startX,
+      y: dragState.startY,
+      z: dragState.startZ,
     );
-    _dragState = null;
-    notifyListeners();
+    state = state.copyWith(
+      placedBoxes: placedBoxes,
+      clearDragState: true,
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -498,7 +599,8 @@ class LoadPlannerProvider extends ChangeNotifier {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /// Apply positions settled by the JS gravity engine.
-  /// Matches boxes by ID and updates their z position silently (no re-push).
+  /// Matches boxes by ID and updates their z position silently
+  /// (cosmetic only: no undo push, no auto-save).
   void applySettledPositions(List<Map<String, dynamic>> settledBoxes) {
     if (settledBoxes.isEmpty) return;
     final idToPos = <int, Map<String, dynamic>>{};
@@ -507,17 +609,24 @@ class LoadPlannerProvider extends ChangeNotifier {
       if (id != null) idToPos[id] = s;
     }
     var changed = false;
-    for (var i = 0; i < _placedBoxes.length; i++) {
-      final pos = idToPos[_placedBoxes[i].id];
+    final placedBoxes = List<LoadBox>.from(state.placedBoxes);
+    for (var i = 0; i < placedBoxes.length; i++) {
+      final pos = idToPos[placedBoxes[i].id];
       if (pos == null) continue;
       final newZ = (pos['z'] as num?)?.toDouble();
-      if (newZ != null && (newZ - _placedBoxes[i].z).abs() > 0.01) {
-        _placedBoxes[i] = _placedBoxes[i].copyWith(z: newZ);
+      if (newZ != null && (newZ - placedBoxes[i].z).abs() > 0.01) {
+        placedBoxes[i] = placedBoxes[i].copyWith(z: newZ);
         changed = true;
       }
     }
     if (changed) {
-      _recalculateMetrics();
+      final truck = state.truck;
+      state = state.copyWith(
+        placedBoxes: placedBoxes,
+        metrics: truck == null
+            ? state.metrics
+            : _metricsFor(placedBoxes, state.overflowBoxes, truck),
+      );
       // Don't schedule auto-save for gravity settle (cosmetic only)
     }
   }
@@ -541,17 +650,21 @@ class LoadPlannerProvider extends ChangeNotifier {
       if (id != null) overflowIds.add(id);
     }
 
+    final placedBoxes = List<LoadBox>.from(state.placedBoxes);
+    final overflowBoxes = List<LoadBox>.from(state.overflowBoxes);
+    final excludedOrders = Set<int>.from(state.excludedOrders);
+
     // Update placed box positions
-    for (var i = 0; i < _placedBoxes.length; i++) {
-      final pos = idToNew[_placedBoxes[i].id];
+    for (var i = 0; i < placedBoxes.length; i++) {
+      final pos = idToNew[placedBoxes[i].id];
       if (pos != null) {
-        _placedBoxes[i] = _placedBoxes[i].copyWith(
-          x: (pos['x'] as num?)?.toDouble() ?? _placedBoxes[i].x,
-          y: (pos['y'] as num?)?.toDouble() ?? _placedBoxes[i].y,
-          z: (pos['z'] as num?)?.toDouble() ?? _placedBoxes[i].z,
-          w: (pos['w'] as num?)?.toDouble() ?? _placedBoxes[i].w,
-          d: (pos['d'] as num?)?.toDouble() ?? _placedBoxes[i].d,
-          h: (pos['h'] as num?)?.toDouble() ?? _placedBoxes[i].h,
+        placedBoxes[i] = placedBoxes[i].copyWith(
+          x: (pos['x'] as num?)?.toDouble() ?? placedBoxes[i].x,
+          y: (pos['y'] as num?)?.toDouble() ?? placedBoxes[i].y,
+          z: (pos['z'] as num?)?.toDouble() ?? placedBoxes[i].z,
+          w: (pos['w'] as num?)?.toDouble() ?? placedBoxes[i].w,
+          d: (pos['d'] as num?)?.toDouble() ?? placedBoxes[i].d,
+          h: (pos['h'] as num?)?.toDouble() ?? placedBoxes[i].h,
         );
       }
     }
@@ -559,21 +672,27 @@ class LoadPlannerProvider extends ChangeNotifier {
     // Move overflow boxes
     if (overflowIds.isNotEmpty) {
       final toMove = <LoadBox>[];
-      _placedBoxes.removeWhere((b) {
+      placedBoxes.removeWhere((b) {
         if (overflowIds.contains(b.id)) {
           toMove.add(b);
-          _excludedOrders.add(b.orderNumber);
+          excludedOrders.add(b.orderNumber);
           return true;
         }
         return false;
       });
-      _overflowBoxes.addAll(toMove);
+      overflowBoxes.addAll(toMove);
     }
 
-    _hasManualChanges = true;
+    state = state.copyWith(
+      placedBoxes: placedBoxes,
+      overflowBoxes: overflowBoxes,
+      excludedOrders: excludedOrders,
+      hasManualChanges: true,
+      canUndo: _undoStack.isNotEmpty,
+      canRedo: false,
+    );
     _recalculateMetrics();
     _scheduleAutoSave();
-    notifyListeners();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -582,112 +701,156 @@ class LoadPlannerProvider extends ChangeNotifier {
 
   void excludeOrder(int orderNumber) {
     _pushUndo();
-    _excludedOrders.add(orderNumber);
+    final excludedOrders = Set<int>.from(state.excludedOrders)
+      ..add(orderNumber);
 
     // Move matching boxes from placed to overflow
+    final placedBoxes = List<LoadBox>.from(state.placedBoxes);
+    final overflowBoxes = List<LoadBox>.from(state.overflowBoxes);
     final toMove = <LoadBox>[];
-    _placedBoxes.removeWhere((b) {
+    placedBoxes.removeWhere((b) {
       if (b.orderNumber == orderNumber) {
         toMove.add(b);
         return true;
       }
       return false;
     });
-    _overflowBoxes.addAll(toMove);
+    overflowBoxes.addAll(toMove);
 
-    _hasManualChanges = true;
+    state = state.copyWith(
+      placedBoxes: placedBoxes,
+      overflowBoxes: overflowBoxes,
+      excludedOrders: excludedOrders,
+      hasManualChanges: true,
+      canUndo: _undoStack.isNotEmpty,
+      canRedo: false,
+    );
     _recalculateMetrics();
     _scheduleAutoSave();
-    notifyListeners();
   }
 
   void includeOrder(int orderNumber) {
     _pushUndo();
-    _excludedOrders.remove(orderNumber);
+    final excludedOrders = Set<int>.from(state.excludedOrders)
+      ..remove(orderNumber);
 
     // Move matching boxes from overflow back to placed
+    final placedBoxes = List<LoadBox>.from(state.placedBoxes);
+    final overflowBoxes = List<LoadBox>.from(state.overflowBoxes);
     final toRestore = <LoadBox>[];
-    _overflowBoxes.removeWhere((b) {
+    overflowBoxes.removeWhere((b) {
       if (b.orderNumber == orderNumber) {
         toRestore.add(b);
         return true;
       }
       return false;
     });
-    _placedBoxes.addAll(toRestore);
+    placedBoxes.addAll(toRestore);
 
-    _hasManualChanges = true;
+    state = state.copyWith(
+      placedBoxes: placedBoxes,
+      overflowBoxes: overflowBoxes,
+      excludedOrders: excludedOrders,
+      hasManualChanges: true,
+      canUndo: _undoStack.isNotEmpty,
+      canRedo: false,
+    );
     _recalculateMetrics();
     _scheduleAutoSave();
-    notifyListeners();
   }
-
-  bool isOrderExcluded(int orderNumber) =>
-      _excludedOrders.contains(orderNumber);
 
   /// Exclude ALL currently placed orders (move everything to overflow)
   void excludeAllOrders() {
-    if (_placedBoxes.isEmpty) return;
+    if (state.placedBoxes.isEmpty) return;
     _pushUndo();
-    final allOrderNumbers = _placedBoxes.map((b) => b.orderNumber).toSet();
-    _excludedOrders.addAll(allOrderNumbers);
-    _overflowBoxes.addAll(_placedBoxes);
-    _placedBoxes = [];
-    _hasManualChanges = true;
+    final excludedOrders = Set<int>.from(state.excludedOrders)
+      ..addAll(state.placedBoxes.map((b) => b.orderNumber));
+    final overflowBoxes = List<LoadBox>.from(state.overflowBoxes)
+      ..addAll(state.placedBoxes);
+    state = state.copyWith(
+      placedBoxes: const [],
+      overflowBoxes: overflowBoxes,
+      excludedOrders: excludedOrders,
+      hasManualChanges: true,
+      canUndo: _undoStack.isNotEmpty,
+      canRedo: false,
+    );
     _recalculateMetrics();
     _scheduleAutoSave();
-    notifyListeners();
   }
 
   /// Include ALL overflow orders (move everything back to placed)
   void includeAllOrders() {
-    if (_overflowBoxes.isEmpty) return;
+    if (state.overflowBoxes.isEmpty) return;
     _pushUndo();
-    _excludedOrders.clear();
-    _placedBoxes.addAll(_overflowBoxes);
-    _overflowBoxes = [];
-    _hasManualChanges = true;
+    final placedBoxes = List<LoadBox>.from(state.placedBoxes)
+      ..addAll(state.overflowBoxes);
+    state = state.copyWith(
+      placedBoxes: placedBoxes,
+      overflowBoxes: const [],
+      excludedOrders: <int>{},
+      hasManualChanges: true,
+      canUndo: _undoStack.isNotEmpty,
+      canRedo: false,
+    );
     _recalculateMetrics();
     _scheduleAutoSave();
-    notifyListeners();
   }
 
   /// Exclude all orders for a specific client
   void excludeByClient(String clientCode) {
     _pushUndo();
+    final placedBoxes = List<LoadBox>.from(state.placedBoxes);
+    final overflowBoxes = List<LoadBox>.from(state.overflowBoxes);
+    final excludedOrders = Set<int>.from(state.excludedOrders);
     final toMove = <LoadBox>[];
-    _placedBoxes.removeWhere((b) {
+    placedBoxes.removeWhere((b) {
       if (b.clientCode == clientCode) {
-        _excludedOrders.add(b.orderNumber);
+        excludedOrders.add(b.orderNumber);
         toMove.add(b);
         return true;
       }
       return false;
     });
-    _overflowBoxes.addAll(toMove);
-    _hasManualChanges = true;
+    overflowBoxes.addAll(toMove);
+    state = state.copyWith(
+      placedBoxes: placedBoxes,
+      overflowBoxes: overflowBoxes,
+      excludedOrders: excludedOrders,
+      hasManualChanges: true,
+      canUndo: _undoStack.isNotEmpty,
+      canRedo: false,
+    );
     _recalculateMetrics();
     _scheduleAutoSave();
-    notifyListeners();
   }
 
   /// Include all orders for a specific client
   void includeByClient(String clientCode) {
     _pushUndo();
+    final placedBoxes = List<LoadBox>.from(state.placedBoxes);
+    final overflowBoxes = List<LoadBox>.from(state.overflowBoxes);
+    final excludedOrders = Set<int>.from(state.excludedOrders);
     final toRestore = <LoadBox>[];
-    _overflowBoxes.removeWhere((b) {
+    overflowBoxes.removeWhere((b) {
       if (b.clientCode == clientCode) {
-        _excludedOrders.remove(b.orderNumber);
+        excludedOrders.remove(b.orderNumber);
         toRestore.add(b);
         return true;
       }
       return false;
     });
-    _placedBoxes.addAll(toRestore);
-    _hasManualChanges = true;
+    placedBoxes.addAll(toRestore);
+    state = state.copyWith(
+      placedBoxes: placedBoxes,
+      overflowBoxes: overflowBoxes,
+      excludedOrders: excludedOrders,
+      hasManualChanges: true,
+      canUndo: _undoStack.isNotEmpty,
+      canRedo: false,
+    );
     _recalculateMetrics();
     _scheduleAutoSave();
-    notifyListeners();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -697,19 +860,27 @@ class LoadPlannerProvider extends ChangeNotifier {
   void undo() {
     if (_undoStack.isEmpty) return;
     _redoStack.add(_currentSnapshot());
-    _restoreSnapshot(_undoStack.removeLast());
-    _hasManualChanges = true;
+    final snap = _undoStack.removeLast();
+    _restoreSnapshot(snap);
+    state = state.copyWith(
+      hasManualChanges: true,
+      canUndo: _undoStack.isNotEmpty,
+      canRedo: _redoStack.isNotEmpty,
+    );
     _scheduleAutoSave();
-    notifyListeners();
   }
 
   void redo() {
     if (_redoStack.isEmpty) return;
     _undoStack.add(_currentSnapshot());
-    _restoreSnapshot(_redoStack.removeLast());
-    _hasManualChanges = true;
+    final snap = _redoStack.removeLast();
+    _restoreSnapshot(snap);
+    state = state.copyWith(
+      hasManualChanges: true,
+      canUndo: _undoStack.isNotEmpty,
+      canRedo: _redoStack.isNotEmpty,
+    );
     _scheduleAutoSave();
-    notifyListeners();
   }
 
   void _pushUndo() {
@@ -721,31 +892,34 @@ class LoadPlannerProvider extends ChangeNotifier {
   }
 
   _Snapshot _currentSnapshot() => _Snapshot(
-        placed: _placedBoxes.map((b) => b.copyWith()).toList(),
-        overflow: _overflowBoxes.map((b) => b.copyWith()).toList(),
-        excluded: Set.from(_excludedOrders),
+        placed: state.placedBoxes.map((b) => b.copyWith()).toList(),
+        overflow: state.overflowBoxes.map((b) => b.copyWith()).toList(),
+        excluded: Set.from(state.excludedOrders),
       );
 
   void _restoreSnapshot(_Snapshot snap) {
-    _placedBoxes = snap.placed;
-    _overflowBoxes = snap.overflow;
-    _excludedOrders
-      ..clear()
-      ..addAll(snap.excluded);
-    _selectedBoxIndex = null;
-    _dragState = null;
-    _recalculateMetrics();
+    final truck = state.truck;
+    state = state.copyWith(
+      placedBoxes: snap.placed,
+      overflowBoxes: snap.overflow,
+      excludedOrders: snap.excluded,
+      clearSelectedBox: true,
+      clearDragState: true,
+      metrics: truck == null
+          ? state.metrics
+          : _metricsFor(snap.placed, snap.overflow, truck),
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // COLLISION DETECTION (AABB)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  bool _hasCollision(int boxIndex) {
-    final box = _placedBoxes[boxIndex];
-    for (var i = 0; i < _placedBoxes.length; i++) {
+  bool _hasCollision(List<LoadBox> boxes, int boxIndex) {
+    final box = boxes[boxIndex];
+    for (var i = 0; i < boxes.length; i++) {
       if (i == boxIndex) continue;
-      if (_boxesOverlap(box, _placedBoxes[i])) return true;
+      if (_boxesOverlap(box, boxes[i])) return true;
     }
     return false;
   }
@@ -765,12 +939,23 @@ class LoadPlannerProvider extends ChangeNotifier {
   // METRICS RECALCULATION
   // ═══════════════════════════════════════════════════════════════════════════
 
+  PlannerMetrics? _metricsFor(
+    List<LoadBox> placed,
+    List<LoadBox> overflow,
+    TruckDimensions truck,
+  ) {
+    return PlannerMetrics.fromBoxes(
+      placed: placed,
+      overflow: overflow,
+      truck: truck,
+    );
+  }
+
   void _recalculateMetrics() {
-    if (_truck == null) return;
-    _metrics = PlannerMetrics.fromBoxes(
-      placed: _placedBoxes,
-      overflow: _overflowBoxes,
-      truck: _truck!,
+    final truck = state.truck;
+    if (truck == null) return;
+    state = state.copyWith(
+      metrics: _metricsFor(state.placedBoxes, state.overflowBoxes, truck),
     );
   }
 
@@ -780,45 +965,35 @@ class LoadPlannerProvider extends ChangeNotifier {
 
   void _scheduleAutoSave() {
     _autoSaveTimer?.cancel();
-    _saveState = SaveState.unsaved;
+    state = state.copyWith(saveState: SaveState.unsaved);
     _autoSaveTimer = Timer(const Duration(seconds: 2), saveLayout);
   }
 
   Future<void> saveLayout() async {
-    if (_vehicleCode == null || _date == null) return;
-    if (!_hasManualChanges) return;
+    final vehicleCode = _vehicleCode;
+    final date = _date;
+    if (vehicleCode == null || date == null) return;
+    if (!state.hasManualChanges) return;
 
-    _saveState = SaveState.saving;
-    notifyListeners();
+    state = state.copyWith(saveState: SaveState.saving);
 
     try {
       final dateStr =
-          '${_date!.year}-${_date!.month.toString().padLeft(2, '0')}-${_date!.day.toString().padLeft(2, '0')}';
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
       await WarehouseDataService.saveManualLayout(
-        vehicleCode: _vehicleCode!,
+        vehicleCode: vehicleCode,
         date: dateStr,
         layoutJson: {
-          'boxes': _placedBoxes.map((b) => b.toJson()).toList(),
-          'excludedOrders': _excludedOrders.toList(),
+          'boxes': state.placedBoxes.map((b) => b.toJson()).toList(),
+          'excludedOrders': state.excludedOrders.toList(),
         },
-        metricsJson: _metrics?.toJson(),
+        metricsJson: state.metrics?.toJson(),
       );
-      _saveState = SaveState.saved;
+      state = state.copyWith(saveState: SaveState.saved);
     } catch (e) {
-      _saveState = SaveState.error;
+      state = state.copyWith(saveState: SaveState.error);
       debugPrint('Auto-save failed: $e');
     }
-    notifyListeners();
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CLEANUP
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  @override
-  void dispose() {
-    _autoSaveTimer?.cancel();
-    super.dispose();
   }
 }
 

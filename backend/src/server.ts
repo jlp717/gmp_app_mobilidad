@@ -1,4 +1,10 @@
 /**
+ * ARCHIVADO WS2 DDD-CONSOLIDATION-001-FINAL (2026-09-25, rama test @ 7239f17).
+ * Entrypoint TS retirado: runtime canonico es backend/server.js + backend/app.js
+ * (legacy JS + DDD src/modules). Este fichero se mueve a
+ * docs/archive/ts-routes-7239f17/src/server.ts (pendiente mv con shell).
+ * No importar desde codigo vivo.
+ *
  * GMP App Mobilidad - Production Server v4.0.0
  * 
  * Architecture: Clean Architecture + DDD

@@ -8,13 +8,13 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 class DraftsBottomSheet {
   static Future<void> show(
     BuildContext context,
     WidgetRef ref, {
-    required PedidosProvider provider,
+    required PedidosNotifier provider,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -30,7 +30,7 @@ class DraftsBottomSheet {
 class _DraftsBody extends StatelessWidget {
   const _DraftsBody({required this.provider});
 
-  final PedidosProvider provider;
+  final PedidosNotifier provider;
 
   @override
   Widget build(BuildContext context) {
@@ -138,6 +138,36 @@ class _DraftsBody extends StatelessWidget {
                 ),
               );
             }),
+          const SizedBox(height: 8),
+          // REQ-35: reserva 24h + purga + aviso de acumulación si aplica.
+          if ((provider.draftWarningMessage ?? '').isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: AppTheme.warning,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      provider.draftWarningMessage!,
+                      style: TextStyle(
+                        color: AppTheme.warning,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Text(
+            'Los borradores reservan stock 24h; al expirar se liberan y purgan.',
+            style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
+          ),
         ],
       ),
     );

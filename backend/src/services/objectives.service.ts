@@ -445,15 +445,22 @@ class ObjectivesService {
     const isAll = !vendedorCodes || vendedorCodes === 'ALL';
     const { clause: vendorClause, params: vendorParams } = buildVendedorFilterLACLAE(vendedorCodes || '');
 
-    // Get active days for working day calculations
-    let activeWeekDays: string[] = [];
-    if (!isAll) {
-      const firstCode = vendedorCodes!.split(',')[0].trim();
-      activeWeekDays = await getVendorActiveDays(firstCode);
-    }
+    const firstCode = !isAll ? vendedorCodes!.split(',')[0].trim() : '';
+    const currentYear = yearsArray[0] || now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    // Independent lookups share no data with the main LACLAE query — fire
+    // them first so all roundtrips overlap instead of adding up serially.
+    const activeDaysPromise: Promise<string[]> = !isAll
+      ? getVendorActiveDays(firstCode)
+      : Promise.resolve([]);
+    const fixedTargetPromise = !isAll
+      ? getFixedMonthlyTarget(firstCode, currentYear, currentMonth)
+      : Promise.resolve({ objetivo: null as number | null, baseComision: null as number | null, porcentaje: 10 });
+    const targetCfgPromise: Promise<number> = getVendorTargetConfig(vendedorCodes);
 
     // Monthly totals per year from LACLAE
-    const rows = await odbcPool.query<Record<string, unknown>[]>(`
+    const rowsPromise = odbcPool.query<Record<string, unknown>[]>(`
       SELECT
         L.LCAADC AS YEAR,
         L.LCMMDC AS MONTH,
@@ -468,58 +475,56 @@ class ObjectivesService {
       ORDER BY L.LCAADC, L.LCMMDC
     `, [...yearsParams, ...vendorParams]);
 
+    const [rows, activeWeekDays, fixedTarget, targetPct] = await Promise.all([
+      rowsPromise, activeDaysPromise, fixedTargetPromise, targetCfgPromise,
+    ]);
+    const fixedMonthlyTargetAmount: number | null = fixedTarget.objetivo ?? null;
+
     // Mutable array for B-sales injection
     const mutableRows = rows.map(r => ({
       YEAR: toInt(r.YEAR), MONTH: toInt(r.MONTH),
       SALES: toFloat(r.SALES), COST: toFloat(r.COST), CLIENTS: toInt(r.CLIENTS),
     }));
 
-    // Add B-sales
+    // Add B-sales — years are independent VENTAS_B lookups, fetch in parallel
+    // (same pattern as backend/routes/objectives.js addBSalesToRows).
     if (!isAll) {
-      const firstCode = vendedorCodes!.split(',')[0].trim();
-      for (const yr of uniqueYears) {
-        const bSalesMap = await getBSales(firstCode, yr);
+      const bSalesResults = await Promise.all(uniqueYears.map((yr) => getBSales(firstCode, yr)));
+      const rowsByYearMonth = new Map<string, (typeof mutableRows)[number]>();
+      for (const row of mutableRows) {
+        rowsByYearMonth.set(`${row.YEAR}:${row.MONTH}`, row);
+      }
+      uniqueYears.forEach((yr, index) => {
+        const bSalesMap = bSalesResults[index] || {};
         for (const [month, amount] of Object.entries(bSalesMap)) {
           const m = parseInt(month);
-          const existingRow = mutableRows.find(r => r.YEAR === yr && r.MONTH === m);
+          const existingRow = rowsByYearMonth.get(`${yr}:${m}`);
           if (existingRow) {
             existingRow.SALES += amount;
           } else if (amount > 0) {
-            mutableRows.push({ YEAR: yr, MONTH: m, SALES: amount, COST: 0, CLIENTS: 0 });
+            const newRow = { YEAR: yr, MONTH: m, SALES: amount, COST: 0, CLIENTS: 0 };
+            mutableRows.push(newRow);
+            rowsByYearMonth.set(`${yr}:${m}`, newRow);
           }
         }
-      }
+      });
     }
 
     // Load inherited objectives for new vendors
+    // (chained: getClientsMonthlySales needs currentClients first — keep serial)
     let inheritedMonthlySales: Record<number, { sales: number; cost: number; clients: number }> = {};
     if (!isAll) {
-      const currentYear = yearsArray[0] || now.getFullYear();
       const prevYear = currentYear - 1;
       const monthsWithData = mutableRows.filter(r => r.YEAR === prevYear).map(r => r.MONTH);
       const missingMonths = Array.from({ length: 12 }, (_, i) => i + 1).filter(m => !monthsWithData.includes(m));
 
       if (missingMonths.length > 0) {
-        const firstCode = vendedorCodes!.split(',')[0].trim();
         const currentClients = await getVendorCurrentClients(firstCode, currentYear);
         if (currentClients.length > 0) {
           inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
         }
       }
     }
-
-    // Fixed monthly targets
-    let fixedMonthlyTargetAmount: number | null = null;
-    if (!isAll) {
-      const firstCode = vendedorCodes!.split(',')[0].trim();
-      const currentYear = yearsArray[0] || now.getFullYear();
-      const currentMonth = now.getMonth() + 1;
-      const { objetivo } = await getFixedMonthlyTarget(firstCode, currentYear, currentMonth);
-      fixedMonthlyTargetAmount = objetivo;
-    }
-
-    // Get target config
-    const targetPct = await getVendorTargetConfig(vendedorCodes);
 
     // Build yearly data
     const yearlyData: Record<number, unknown[]> = {};

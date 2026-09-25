@@ -34,7 +34,7 @@ const {
   affectedSchemaPairs,
   runTableStep,
   runAfterCopyPreflight,
-} = require('../scripts/copy-javier-prod-to-test');
+} = require('../scripts/tools/copy-javier-prod-to-test');
 
 function column(overrides = {}) {
   return {
@@ -547,7 +547,7 @@ describe('operational identity and key contracts', () => {
   });
 
   test('preflight accepts TEST-only stronger contracts while requiring the production subset', async () => {
-    const { preflightMappingPairs } = require('../scripts/copy-javier-prod-to-test');
+    const { preflightMappingPairs } = require('../scripts/tools/copy-javier-prod-to-test');
     const auditPair = {
       group: 'finance', key: 'audit', objectType: 'TABLE',
       src: 'JAVIER.REPARTIDOR_COBROS_AUDIT', dst: 'JAVIER.TEST_REPARTIDOR_COBROS_AUDIT',

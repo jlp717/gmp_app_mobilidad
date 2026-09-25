@@ -3,7 +3,21 @@ name: security
 on:
   push:
     branches: [main, develop, test]
+    paths:
+      - 'backend/package*.json'
+      - 'backend/**/*.js'
+      - 'backend/**/*.ts'
+      - '.github/workflows/security.yml'
   pull_request:
+    paths:
+      - 'backend/package*.json'
+      - 'backend/**/*.js'
+      - 'backend/**/*.ts'
+      - '.github/workflows/security.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # SAST ya corre en backend-ci.yml (job semgrep-scan, --error sobre todas las severidades).

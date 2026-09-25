@@ -31,15 +31,14 @@ dependencies:
   flutter_secure_storage: ^10.2.0
   freezed_annotation: ^2.4.1
   geolocator: ^11.0.0
-  get_it: ^9.2.1
   go_router: ^13.2.0
   google_fonts: ^6.1.0
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   http: ^1.2.0
   image_picker: ^1.0.7
-  injectable: ^2.3.2
   intl: any
+  json_annotation: ^4.9.0 # F3-03: requerida por json_serializable para .g.dart
   latlong2: ^0.9.1
   open_filex: ^4.3.2 # Open files natively
   package_info_plus: ^9.0.0
@@ -74,7 +73,6 @@ dev_dependencies:
   hive_generator: ^2.0.1
   integration_test:
     sdk: flutter
-  injectable_generator: ^2.4.2
   json_serializable: ^6.7.1
   mockito: ^5.4.4
   mocktail: ^1.0.4

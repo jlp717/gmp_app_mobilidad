@@ -1,3 +1,4 @@
+// UNCLASSIFIED — do not run without human confirmation. See audit <2026-09-25>.
 #!/usr/bin/env node
 /**
  * One-shot Baileys pairing helper (prints QR in terminal).

@@ -156,10 +156,16 @@ module.exports = {
                 // Access/refresh TTLs are pinned via authSessionTtlEnv (24h/7d floor).
                 ...runtimePerformanceEnv,
             },
+            // WS2 DDD-CONSOLIDATION-001-FINAL: familia TS archivada
+            // (docs/archive/ts-routes-7239f17/). WS-FIX4: el perfil env_ts se
+            // conserva explícito y fail-closed aunque WS2 lo eliminó — invocar
+            // con `--env ts` debe resolver el mismo baseline producción que
+            // env/env_production, nunca un fallback implícito.
             env_ts: {
                 NODE_ENV: 'production',
-                PORT: 3335,  // gmp-api production port
-                USE_TS_ROUTES: 'false', // TS auth NOT compatible with Flutter yet — DO NOT enable
+                PORT: 3335,  // gmp-api production port (gmp-api-pre uses 3334)
+                USE_TS_ROUTES: 'false',
+                USE_DDD_ROUTES: 'true',
                 VENDOR_COLUMN: 'R1_T8CDVD',
                 SNAPSHOT_UNTIL_MONTH: '2',
                 ...repartoFailClosedEnv,

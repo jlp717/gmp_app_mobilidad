@@ -19,6 +19,37 @@ const FTP_CONFIG = {
 const REMOTE_FOLDER = process.env.KPI_SFTP_FOLDER || '/IN';
 const MAX_RETRIES = 3;
 
+// REQ-G1: referencias de entorno por nombre (nunca valores en codigo/logs/API).
+// Si falta una referencia, se avisa CONFIG_MISSING con el nombre, sin valor.
+const SFTP_ENV_REFS = {
+  host: 'KPI_SFTP_HOST',
+  port: 'KPI_SFTP_PORT',
+  user: 'KPI_SFTP_USER',
+  pass: 'KPI_SFTP_PASS',
+  folder: 'KPI_SFTP_FOLDER',
+};
+
+/**
+ * Estado no sensible para /etl/status y /health (REQ-G1).
+ * Expone host:puerto/carpeta/intentos sin usuario ni password (solo booleanos).
+ */
+function getSftpConfigStatus() {
+  const missingRefs = [];
+  if (!FTP_CONFIG.host) missingRefs.push(SFTP_ENV_REFS.host);
+  if (!FTP_CONFIG.user) missingRefs.push(SFTP_ENV_REFS.user);
+  if (!FTP_CONFIG.password) missingRefs.push(SFTP_ENV_REFS.pass);
+  return {
+    host: FTP_CONFIG.host || null,
+    port: FTP_CONFIG.port,
+    folder: REMOTE_FOLDER,
+    maxRetries: MAX_RETRIES,
+    hasUser: Boolean(FTP_CONFIG.user),
+    hasPassword: Boolean(FTP_CONFIG.password),
+    configured: missingRefs.length === 0,
+    missingRefs,
+  };
+}
+
 const EXPECTED_FILES = [
   'Desviacion_Ventas.csv',
   'Clientes_ConCuotaSinCompra.csv',
@@ -33,6 +64,16 @@ const EXPECTED_FILES = [
  * Descarga todos los CSVs esperados del FTPS a un directorio local temporal.
  */
 async function fetchCSVsFromSFTP(localDir) {
+  // REQ-G1: validar referencias sin imprimir valores. Solo nombres en CONFIG_MISSING.
+  const missingRefs = [];
+  if (!FTP_CONFIG.host) missingRefs.push(SFTP_ENV_REFS.host);
+  if (!FTP_CONFIG.user) missingRefs.push(SFTP_ENV_REFS.user);
+  if (!FTP_CONFIG.password) missingRefs.push(SFTP_ENV_REFS.pass);
+  if (missingRefs.length > 0) {
+    logger.error(`[kpi:ftps] CONFIG_MISSING: ${missingRefs.join(', ')} — definir referencia(s) de entorno`);
+    throw new Error(`FTPS CONFIG_MISSING: ${missingRefs.join(', ')}`);
+  }
+
   const downloadDir = localDir || path.join(
     process.env.KPI_TEMP_DIR || path.join(__dirname, '..', 'tmp'),
     `sftp_${Date.now()}`
@@ -51,7 +92,9 @@ async function fetchCSVsFromSFTP(localDir) {
 
     try {
       attempt++;
-      logger.info(`[kpi:ftps] Conectando a ${FTP_CONFIG.host}:${FTP_CONFIG.port} (intento ${attempt}/${MAX_RETRIES})`);
+      // REQ-G1: log solo host:puerto + intento N/3. Nunca usuario/password/carpeta sensible.
+      const safeHost = FTP_CONFIG.host || 'CONFIG_MISSING';
+      logger.info(`[kpi:ftps] Conectando a ${safeHost}:${FTP_CONFIG.port} (intento ${attempt}/${MAX_RETRIES})`);
 
       await client.access({
         host: FTP_CONFIG.host,
@@ -145,4 +188,6 @@ module.exports = {
   fetchCSVsFromSFTP,
   loadLocalCSVs,
   EXPECTED_FILES,
+  getSftpConfigStatus,
+  SFTP_ENV_REFS,
 };

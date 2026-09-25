@@ -17,13 +17,13 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 /// Shows the stock alternatives as a centered overlay modal.
 Future<void> showStockAlternativesSheet({
   required BuildContext context,
   required Product outOfStockProduct,
-  required PedidosProvider provider,
+  required PedidosNotifier provider,
   double? remainingQty,
 }) {
   return showDialog<void>(
@@ -48,7 +48,7 @@ class _StockAlternativesSheet extends StatefulWidget {
     this.remainingQty,
   });
   final Product product;
-  final PedidosProvider provider;
+  final PedidosNotifier provider;
   final double? remainingQty;
 
   @override
@@ -131,7 +131,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
       });
       return;
     }
-    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
       _searchProducts(query.trim());
     });
   }

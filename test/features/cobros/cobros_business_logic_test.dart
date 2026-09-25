@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
@@ -185,8 +186,11 @@ void main() {
       ApiClient.dio.interceptors.add(interceptor);
       addTearDown(() => ApiClient.dio.interceptors.remove(interceptor));
 
-      final provider = CobrosProvider(employeeCode: '98');
-      await provider.cargarPendingSummary(
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      const params = CobrosParams(employeeCode: '98');
+      final notifier = container.read(cobrosProvider(params).notifier);
+      await notifier.cargarPendingSummary(
         'ALL',
         limit: 9999,
         page: 0,
@@ -234,8 +238,11 @@ void main() {
       ApiClient.dio.interceptors.add(interceptor);
       addTearDown(() => ApiClient.dio.interceptors.remove(interceptor));
 
-      final provider = CobrosProvider(employeeCode: '01');
-      await provider.cargarCobrosPendientes(
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      const params = CobrosParams(employeeCode: '01');
+      final notifier = container.read(cobrosProvider(params).notifier);
+      await notifier.cargarCobrosPendientes(
         'C001',
         vendedorCodes: '01',
         forceRefresh: true,
@@ -244,7 +251,10 @@ void main() {
       expect(paths, hasLength(1));
       expect(paths.single, contains('vendedorCodes=01'));
       expect(paths.single, contains('_ts='));
-      expect(provider.cobrosPendientes, isEmpty);
+      expect(
+        container.read(cobrosProvider(params)).cobrosPendientes,
+        isEmpty,
+      );
     });
   });
 
@@ -335,12 +345,15 @@ void main() {
       ApiClient.dio.interceptors.add(interceptor);
       addTearDown(() => ApiClient.dio.interceptors.remove(interceptor));
 
-      final provider = CobrosProvider(employeeCode: 'TDD_RED_57');
-      final ok = await provider.completarEntrega('alb-1');
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      const params = CobrosParams(employeeCode: 'TDD_RED_57');
+      final notifier = container.read(cobrosProvider(params).notifier);
+      final ok = await notifier.completarEntrega('alb-1');
 
       expect(ok, isFalse);
       expect(mutationBodies, isEmpty);
-      expect(provider.error, contains('410'));
+      expect(container.read(cobrosProvider(params)).error, contains('410'));
     });
   });
 
@@ -422,8 +435,11 @@ void main() {
       });
       ApiClient.dio.interceptors.add(interceptor);
       addTearDown(() => ApiClient.dio.interceptors.remove(interceptor));
-      final provider = CobrosProvider(employeeCode: '35');
-      final result = await provider.registrarCobro(
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      const params = CobrosParams(employeeCode: '35');
+      final notifier = container.read(cobrosProvider(params).notifier);
+      final result = await notifier.registrarCobro(
         codigoCliente: 'C001',
         referencia: 'M-1',
         importe: 1,
@@ -435,7 +451,10 @@ void main() {
       );
       expect(result, isFalse);
       expect(requestBodies, isEmpty);
-      expect(provider.error, contains('observaciones'));
+      expect(
+        container.read(cobrosProvider(params)).error,
+        contains('observaciones'),
+      );
     });
 
     test('reuses idempotency token after an interrupted register attempt',
@@ -471,9 +490,12 @@ void main() {
       ApiClient.dio.interceptors.add(interceptor);
       addTearDown(() => ApiClient.dio.interceptors.remove(interceptor));
 
-      final provider = CobrosProvider(employeeCode: '57');
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      const params = CobrosParams(employeeCode: '57');
+      final notifier = container.read(cobrosProvider(params).notifier);
 
-      final first = await provider.registrarCobro(
+      final first = await notifier.registrarCobro(
         codigoCliente: '4300010363',
         referencia: 'M-1',
         importe: 12.34,
@@ -483,7 +505,7 @@ void main() {
         observaciones: '  Cobro parcial en visita  ',
         reloadAfter: false,
       );
-      final second = await provider.registrarCobro(
+      final second = await notifier.registrarCobro(
         codigoCliente: '4300010363',
         referencia: 'M-1',
         importe: 12.34,

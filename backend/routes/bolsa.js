@@ -5,6 +5,10 @@ const { verifyToken, requireRoles } = require('../middleware/auth');
 const logger = require('../middleware/logger');
 const bolsaService = require('../services/bolsa-comercial.service');
 const { bolsaLimiter } = require('../middleware/security');
+const {
+    resolveVendorScope: resolveCanonicalVendorScope,
+    getCachedActiveGmpVendorCatalog,
+} = require('../middleware/vendor-scope');
 
 const router = express.Router();
 router.use(bolsaLimiter);
@@ -54,23 +58,29 @@ function parseVendorCodesParam(value) {
         .filter(code => code.toUpperCase() !== 'ALL');
 }
 function authorizeVendorScope(req, vendedorCode) {
+    // F2a-01: delega en canonico vendor-scope.js. COMERCIAL propio intacto
+    // via resolveVendorScope (raso: su codigo; 80: equipo firmado).
     const user = req.user || {};
-    if (isManagerUser(user)) {
-        const visible = getVisibleVendorCodes(user);
-        if (visible.length === 0 || visible.some(code => vendorCodesMatch(code, vendedorCode))) return { ok: true };
-        return { ok: false };
-    }
-    const own = getUserVendorCode(user);
-    return { ok: Boolean(own && vendorCodesMatch(own, vendedorCode)) };
+    const visible = getVisibleVendorCodes(user);
+    const scope = resolveCanonicalVendorScope(user, [vendedorCode], { visibleCodes: visible });
+    return { ok: scope.ok };
 }
 function authorizeManagerCodes(req, requestedCodes) {
+    // F2a-01: manager sin visibles = catalogo VDC, nunca ok:true total (codes vacio).
     const user = req.user || {};
     if (!isManagerUser(user)) return { ok: false, code: 'MANAGER_REQUIRED' };
     const visible = getVisibleVendorCodes(user);
-    if (visible.length === 0 || requestedCodes.length === 0) return { ok: true, codes: requestedCodes.length ? requestedCodes : visible };
-    const unauthorized = requestedCodes.some(code => !visible.some(visibleCode => vendorCodesMatch(visibleCode, code)));
-    if (unauthorized) return { ok: false, code: 'FORBIDDEN_VENDOR' };
-    return { ok: true, codes: requestedCodes };
+    const requested = Array.isArray(requestedCodes) && requestedCodes.length ? requestedCodes : 'ALL';
+    const scope = resolveCanonicalVendorScope(user, requested, { visibleCodes: visible });
+    if (!scope.ok) return { ok: false, code: 'FORBIDDEN_VENDOR' };
+    if (scope.literalAll) {
+        const catalog = getCachedActiveGmpVendorCatalog();
+        if (catalog.length) return { ok: true, codes: catalog };
+        if (visible.length) return { ok: true, codes: visible };
+        return { ok: false, code: 'FORBIDDEN_VENDOR' };
+    }
+    if (!scope.codes.length) return { ok: false, code: 'FORBIDDEN_VENDOR' };
+    return { ok: true, codes: scope.codes };
 }
 function sendForbiddenVendor(req, res) { return res.status(403).json({ success: false, code: 'FORBIDDEN_VENDOR', error: 'No autorizado para consultar este vendedor', request_id: requestId(req) }); }
 function sendBolsaInternalError(req, res) { return res.status(500).json({ success: false, code: 'BOLSA_INTERNAL_ERROR', error: 'No se pudo procesar la bolsa comercial', request_id: requestId(req) }); }

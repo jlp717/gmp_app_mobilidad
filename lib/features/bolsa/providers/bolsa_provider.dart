@@ -2,6 +2,11 @@
 /// ==================================
 /// Estado de la bolsa para el vendedor en curso. Refresca al cambiar
 /// el vendedor seleccionado.
+///
+/// Migrado a Notifier + NotifierProvider (Riverpod puro, sin ChangeNotifier).
+/// El estado es [BolsaState] inmutable; la logica vive en [BolsaProvider]
+/// (Notifier) y los callers usan `ref.read(bolsaProvider.notifier)` para
+/// acciones y `ref.watch(bolsaProvider.select(...))` sobre el estado.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -13,60 +18,66 @@ void _debugLog(String message) {
   if (kDebugMode) debugPrint(message);
 }
 
-final bolsaProvider = ChangeNotifierProvider<BolsaProvider>(
-  (ref) => BolsaProvider(),
+final bolsaProvider = NotifierProvider<BolsaProvider, BolsaState>(
+  BolsaProvider.new,
 );
 
-class BolsaProvider with ChangeNotifier {
-  BolsaStatus? _status;
-  BolsaGroupedSummary? _groupedSummary;
-  List<BolsaMovimiento> _movements = [];
-  List<BolsaMonthlyPoint> _history = [];
-  bool _isLoading = false;
-  String? _error;
-  String? _currentVendor;
-  bool _isGroupedView = false;
-  List<String> _groupedVendorCodes = [];
-  int _loadGeneration = 0;
-  int _selectedYear = DateTime.now().year;
-  int _selectedMonth = DateTime.now().month;
+/// Estado inmutable de la bolsa comercial.
+@immutable
+class BolsaState {
+  const BolsaState({
+    this.status,
+    this.groupedSummary,
+    this.movements = const <BolsaMovimiento>[],
+    this.history = const <BolsaMonthlyPoint>[],
+    this.isLoading = false,
+    this.error,
+    this.currentVendor,
+    this.isGroupedView = false,
+    this.groupedVendorCodes = const <String>[],
+    required this.selectedYear,
+    required this.selectedMonth,
+    this.tipoFilter,
+    this.searchQuery = '',
+    this.dateFromFilter,
+    this.dateToFilter,
+    this.documentFilter = '',
+    this.clientFilter = '',
+  });
+
+  final BolsaStatus? status;
+  final BolsaGroupedSummary? groupedSummary;
+  final List<BolsaMovimiento> movements;
+  final List<BolsaMonthlyPoint> history;
+  final bool isLoading;
+  final String? error;
+  final String? currentVendor;
+  final bool isGroupedView;
+  final List<String> groupedVendorCodes;
+  final int selectedYear;
+  final int selectedMonth;
 
   // Filtros de movimientos
-  BolsaMovimientoTipo? _tipoFilter; // null = todos
-  String _searchQuery = '';
-  DateTime? _dateFromFilter;
-  DateTime? _dateToFilter;
-  String _documentFilter = '';
-  String _clientFilter = '';
+  final BolsaMovimientoTipo? tipoFilter; // null = todos
+  final String searchQuery;
+  final DateTime? dateFromFilter;
+  final DateTime? dateToFilter;
+  final String documentFilter;
+  final String clientFilter;
 
-  BolsaStatus? get status => _status;
-  BolsaGroupedSummary? get groupedSummary => _groupedSummary;
-  List<BolsaMovimiento> get movements => List.unmodifiable(_movements);
-  List<BolsaMonthlyPoint> get history => List.unmodifiable(_history);
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  String? get currentVendor => _currentVendor;
-  bool get isGroupedView => _isGroupedView;
-  bool get hasData => _status != null || _groupedSummary != null;
-  int get selectedYear => _selectedYear;
-  int get selectedMonth => _selectedMonth;
-  BolsaMovimientoTipo? get tipoFilter => _tipoFilter;
-  String get searchQuery => _searchQuery;
-  DateTime? get dateFromFilter => _dateFromFilter;
-  DateTime? get dateToFilter => _dateToFilter;
-  String get documentFilter => _documentFilter;
-  String get clientFilter => _clientFilter;
+  bool get hasData => status != null || groupedSummary != null;
+
   bool get hasAdvancedFilters =>
-      _dateFromFilter != null ||
-      _dateToFilter != null ||
-      _documentFilter.isNotEmpty ||
-      _clientFilter.isNotEmpty;
+      dateFromFilter != null ||
+      dateToFilter != null ||
+      documentFilter.isNotEmpty ||
+      clientFilter.isNotEmpty;
 
   /// Movimientos aplicando filtros activos.
   List<BolsaMovimiento> get filteredMovements {
-    final q = _searchQuery.trim().toLowerCase();
-    return _movements.where((m) {
-      if (_tipoFilter != null && m.tipo != _tipoFilter) return false;
+    final q = searchQuery.trim().toLowerCase();
+    return movements.where((m) {
+      if (tipoFilter != null && m.tipo != tipoFilter) return false;
       if (q.isNotEmpty) {
         final hay = m.codigoArticulo.toLowerCase().contains(q) ||
             m.descripcion.toLowerCase().contains(q) ||
@@ -85,77 +96,166 @@ class BolsaProvider with ChangeNotifier {
   /// Cuenta de movimientos por tipo (para badges en chips).
   Map<BolsaMovimientoTipo, int> get countsByTipo {
     final out = <BolsaMovimientoTipo, int>{};
-    for (final m in _movements) {
+    for (final m in movements) {
       out[m.tipo] = (out[m.tipo] ?? 0) + 1;
     }
     return out;
   }
 
+  BolsaState copyWith({
+    BolsaStatus? status,
+    BolsaGroupedSummary? groupedSummary,
+    List<BolsaMovimiento>? movements,
+    List<BolsaMonthlyPoint>? history,
+    bool? isLoading,
+    String? error,
+    String? currentVendor,
+    bool? isGroupedView,
+    List<String>? groupedVendorCodes,
+    int? selectedYear,
+    int? selectedMonth,
+    BolsaMovimientoTipo? tipoFilter,
+    String? searchQuery,
+    DateTime? dateFromFilter,
+    DateTime? dateToFilter,
+    String? documentFilter,
+    String? clientFilter,
+    bool clearStatus = false,
+    bool clearGroupedSummary = false,
+    bool clearError = false,
+    bool clearCurrentVendor = false,
+    bool clearTipoFilter = false,
+    bool clearDateFromFilter = false,
+    bool clearDateToFilter = false,
+  }) {
+    return BolsaState(
+      status: clearStatus ? null : (status ?? this.status),
+      groupedSummary:
+          clearGroupedSummary ? null : (groupedSummary ?? this.groupedSummary),
+      movements: movements ?? this.movements,
+      history: history ?? this.history,
+      isLoading: isLoading ?? this.isLoading,
+      error: clearError ? null : (error ?? this.error),
+      currentVendor:
+          clearCurrentVendor ? null : (currentVendor ?? this.currentVendor),
+      isGroupedView: isGroupedView ?? this.isGroupedView,
+      groupedVendorCodes: groupedVendorCodes ?? this.groupedVendorCodes,
+      selectedYear: selectedYear ?? this.selectedYear,
+      selectedMonth: selectedMonth ?? this.selectedMonth,
+      tipoFilter: clearTipoFilter ? null : (tipoFilter ?? this.tipoFilter),
+      searchQuery: searchQuery ?? this.searchQuery,
+      dateFromFilter:
+          clearDateFromFilter ? null : (dateFromFilter ?? this.dateFromFilter),
+      dateToFilter:
+          clearDateToFilter ? null : (dateToFilter ?? this.dateToFilter),
+      documentFilter: documentFilter ?? this.documentFilter,
+      clientFilter: clientFilter ?? this.clientFilter,
+    );
+  }
+}
+
+class BolsaProvider extends Notifier<BolsaState> {
+  int _loadGeneration = 0;
+
+  @override
+  BolsaState build() {
+    final now = DateTime.now();
+    return BolsaState(selectedYear: now.year, selectedMonth: now.month);
+  }
+
+  // ── Lecturas delegadas al estado (compat con widgets que reciben
+  // el notifier y leen provider.xxx) ──
+  BolsaStatus? get status => state.status;
+  BolsaGroupedSummary? get groupedSummary => state.groupedSummary;
+  List<BolsaMovimiento> get movements => state.movements;
+  List<BolsaMonthlyPoint> get history => state.history;
+  bool get isLoading => state.isLoading;
+  String? get error => state.error;
+  String? get currentVendor => state.currentVendor;
+  bool get isGroupedView => state.isGroupedView;
+  bool get hasData => state.hasData;
+  int get selectedYear => state.selectedYear;
+  int get selectedMonth => state.selectedMonth;
+  BolsaMovimientoTipo? get tipoFilter => state.tipoFilter;
+  String get searchQuery => state.searchQuery;
+  DateTime? get dateFromFilter => state.dateFromFilter;
+  DateTime? get dateToFilter => state.dateToFilter;
+  String get documentFilter => state.documentFilter;
+  String get clientFilter => state.clientFilter;
+  bool get hasAdvancedFilters => state.hasAdvancedFilters;
+  List<BolsaMovimiento> get filteredMovements => state.filteredMovements;
+  Map<BolsaMovimientoTipo, int> get countsByTipo => state.countsByTipo;
+
   void setTipoFilter(BolsaMovimientoTipo? tipo) {
-    if (_tipoFilter == tipo) return;
-    _tipoFilter = tipo;
-    notifyListeners();
+    if (state.tipoFilter == tipo) return;
+    state = state.copyWith(tipoFilter: tipo, clearTipoFilter: tipo == null);
   }
 
   void setSearchQuery(String q) {
     final v = q.trim();
-    if (_searchQuery == v) return;
-    _searchQuery = v;
-    notifyListeners();
+    if (state.searchQuery == v) return;
+    state = state.copyWith(searchQuery: v);
   }
 
   Future<void> setDateRange(DateTime? from, DateTime? to) async {
-    if (_sameDate(_dateFromFilter, from) && _sameDate(_dateToFilter, to)) {
+    if (_sameDate(state.dateFromFilter, from) &&
+        _sameDate(state.dateToFilter, to)) {
       return;
     }
-    _dateFromFilter = from;
-    _dateToFilter = to;
-    notifyListeners();
+    state = state.copyWith(
+      dateFromFilter: from,
+      dateToFilter: to,
+      clearDateFromFilter: from == null,
+      clearDateToFilter: to == null,
+    );
     await refresh();
   }
 
   Future<void> setDocumentFilter(String value) async {
     final next = value.trim();
-    if (_documentFilter == next) return;
-    _documentFilter = next;
-    notifyListeners();
+    if (state.documentFilter == next) return;
+    state = state.copyWith(documentFilter: next);
     await refresh();
   }
 
   Future<void> setClientFilter(String value) async {
     final next = value.trim();
-    if (_clientFilter == next) return;
-    _clientFilter = next;
-    notifyListeners();
+    if (state.clientFilter == next) return;
+    state = state.copyWith(clientFilter: next);
     await refresh();
   }
 
   Future<void> clearFilters() async {
-    if (_tipoFilter == null && _searchQuery.isEmpty && !hasAdvancedFilters) {
+    if (state.tipoFilter == null &&
+        state.searchQuery.isEmpty &&
+        !state.hasAdvancedFilters) {
       return;
     }
-    _tipoFilter = null;
-    _searchQuery = '';
-    _dateFromFilter = null;
-    _dateToFilter = null;
-    _documentFilter = '';
-    _clientFilter = '';
-    notifyListeners();
+    state = state.copyWith(
+      searchQuery: '',
+      documentFilter: '',
+      clientFilter: '',
+      clearTipoFilter: true,
+      clearDateFromFilter: true,
+      clearDateToFilter: true,
+    );
     await refresh();
   }
 
   void _clearVendorSelection({String? message}) {
     _loadGeneration++;
-    _status = null;
-    _groupedSummary = null;
-    _movements = [];
-    _history = [];
-    _currentVendor = null;
-    _isGroupedView = false;
-    _groupedVendorCodes = [];
-    _isLoading = false;
-    _error = message;
-    notifyListeners();
+    state = state.copyWith(
+      movements: const <BolsaMovimiento>[],
+      history: const <BolsaMonthlyPoint>[],
+      isLoading: false,
+      isGroupedView: false,
+      groupedVendorCodes: const <String>[],
+      error: message,
+      clearStatus: true,
+      clearGroupedSummary: true,
+      clearCurrentVendor: true,
+      clearError: message == null,
+    );
   }
 
   Future<void> load(String vendedorCode, {bool force = false}) async {
@@ -167,58 +267,60 @@ class BolsaProvider with ChangeNotifier {
       );
       return;
     }
-    if (!force && _currentVendor == code && _status != null) return;
-    _isLoading = true;
-    _error = null;
-    _currentVendor = code;
-    _isGroupedView = false;
-    _groupedSummary = null;
+    if (!force && state.currentVendor == code && state.status != null) return;
     final generation = ++_loadGeneration;
-    notifyListeners();
+    state = state.copyWith(
+      isLoading: true,
+      currentVendor: code,
+      isGroupedView: false,
+      clearError: true,
+      clearGroupedSummary: true,
+    );
     try {
       final results = await Future.wait([
         BolsaService.getStatus(
           code,
-          year: _selectedYear,
-          month: _selectedMonth,
+          year: state.selectedYear,
+          month: state.selectedMonth,
           forceRefresh: force,
         ),
         BolsaService.getMovements(
           code,
           limit: 150,
-          year: _selectedYear,
-          month: _selectedMonth,
-          dateFrom: _dateFromFilter,
-          dateTo: _dateToFilter,
-          documentQuery: _documentFilter,
-          clientQuery: _clientFilter,
-          forceRefresh: force || hasAdvancedFilters,
+          year: state.selectedYear,
+          month: state.selectedMonth,
+          dateFrom: state.dateFromFilter,
+          dateTo: state.dateToFilter,
+          documentQuery: state.documentFilter,
+          clientQuery: state.clientFilter,
+          forceRefresh: force || state.hasAdvancedFilters,
         ),
         BolsaService.getHistory(
           code,
           months: 12,
-          year: _selectedYear,
-          month: _selectedMonth,
+          year: state.selectedYear,
+          month: state.selectedMonth,
           forceRefresh: force,
         ),
       ]);
-      if (generation != _loadGeneration || _currentVendor != code) return;
-      _status = results[0] as BolsaStatus;
-      _movements = _dedupeMovements(
-        (results[1] as List<BolsaMovimiento>).toList(growable: false),
+      if (generation != _loadGeneration || state.currentVendor != code) return;
+      state = state.copyWith(
+        status: results[0] as BolsaStatus,
+        movements: _dedupeMovements(
+          (results[1] as List<BolsaMovimiento>).toList(growable: false),
+        ),
+        history:
+            (results[2] as List<BolsaMonthlyPoint>).toList(growable: false),
+        clearError: true,
       );
-      _history =
-          (results[2] as List<BolsaMonthlyPoint>).toList(growable: false);
-      _error = null;
     } catch (e) {
       if (generation == _loadGeneration) {
-        _error = e.toString();
+        state = state.copyWith(error: e.toString());
         _debugLog('[BolsaProvider] load error: $e');
       }
     } finally {
       if (generation == _loadGeneration) {
-        _isLoading = false;
-        notifyListeners();
+        state = state.copyWith(isLoading: false);
       }
     }
   }
@@ -233,40 +335,39 @@ class BolsaProvider with ChangeNotifier {
         .toList(growable: false);
     final key = codes.join(',');
     if (!force &&
-        _isGroupedView &&
-        _groupedSummary != null &&
-        key == _currentVendor) {
+        state.isGroupedView &&
+        state.groupedSummary != null &&
+        key == state.currentVendor) {
       return;
     }
-    _isLoading = true;
-    _error = null;
-    _currentVendor = key;
-    _groupedVendorCodes = codes;
-    _isGroupedView = true;
-    _status = null;
-    _movements = [];
-    _history = [];
     final generation = ++_loadGeneration;
-    notifyListeners();
+    state = state.copyWith(
+      isLoading: true,
+      currentVendor: key,
+      groupedVendorCodes: codes,
+      isGroupedView: true,
+      movements: const <BolsaMovimiento>[],
+      history: const <BolsaMonthlyPoint>[],
+      clearError: true,
+      clearStatus: true,
+    );
     try {
       final grouped = await BolsaService.getGroupedStatus(
-        year: _selectedYear,
-        month: _selectedMonth,
+        year: state.selectedYear,
+        month: state.selectedMonth,
         vendedorCodes: codes,
         forceRefresh: force,
       );
-      if (generation != _loadGeneration || !_isGroupedView) return;
-      _groupedSummary = grouped;
-      _error = null;
+      if (generation != _loadGeneration || !state.isGroupedView) return;
+      state = state.copyWith(groupedSummary: grouped, clearError: true);
     } catch (e) {
       if (generation == _loadGeneration) {
-        _error = e.toString();
+        state = state.copyWith(error: e.toString());
         _debugLog('[BolsaProvider] loadGrouped error: $e');
       }
     } finally {
       if (generation == _loadGeneration) {
-        _isLoading = false;
-        notifyListeners();
+        state = state.copyWith(isLoading: false);
       }
     }
   }
@@ -275,44 +376,47 @@ class BolsaProvider with ChangeNotifier {
     required double limitePct,
     double? limiteImporte,
   }) async {
-    final code = _currentVendor;
+    final code = state.currentVendor;
     if (code == null || code.isEmpty) return false;
     try {
       final updated = await BolsaService.updateConfig(
         code,
         limitePct: limitePct,
         limiteImporte: limiteImporte,
-        year: _selectedYear,
-        month: _selectedMonth,
+        year: state.selectedYear,
+        month: state.selectedMonth,
       );
-      _status = updated;
-      notifyListeners();
+      state = state.copyWith(status: updated);
       return true;
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      state = state.copyWith(error: e.toString());
       return false;
     }
   }
 
   Future<void> refresh() async {
-    if (_isGroupedView) {
-      await loadGrouped(vendedorCodes: _groupedVendorCodes, force: true);
+    if (state.isGroupedView) {
+      await loadGrouped(
+        vendedorCodes: List<String>.unmodifiable(state.groupedVendorCodes),
+        force: true,
+      );
       return;
     }
-    if (_currentVendor == null) return;
-    await load(_currentVendor!, force: true);
+    if (state.currentVendor == null) return;
+    await load(state.currentVendor!, force: true);
   }
 
   Future<void> setPeriod({required int year, required int month}) async {
     final boundedMonth = month.clamp(1, 12);
     final boundedYear = year.clamp(2020, 2030);
-    if (_selectedYear == boundedYear && _selectedMonth == boundedMonth) {
+    if (state.selectedYear == boundedYear &&
+        state.selectedMonth == boundedMonth) {
       return;
     }
-    _selectedYear = boundedYear;
-    _selectedMonth = boundedMonth;
-    notifyListeners();
+    state = state.copyWith(
+      selectedYear: boundedYear,
+      selectedMonth: boundedMonth,
+    );
     await refresh();
   }
 

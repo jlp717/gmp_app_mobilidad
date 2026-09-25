@@ -78,48 +78,31 @@ class CommissionsPdfService {
     String pdfType = 'commissions',
   }) async {
     try {
-      // Build URL with query params
-      final uri = Uri.parse(
-        '${ApiClient.dio.options.baseUrl}/commissions/pdf',
-      ).replace(
-        queryParameters: {
-          if (vendorCode.isNotEmpty) 'vendorCode': vendorCode,
-          if (year != null) 'year': year.toString(),
-          if (months != null) 'months': months, // New: comma-separated months
-          if (range != null && months == null)
-            'range': range, // Fallback for old API
-          'pdfType': pdfType,
-          'forceRefresh': '1',
-        },
+      // Route through ApiClient.getBytes to reuse shared interceptors
+      // (auth/refresh/retry) and typed error mapping. PDF generation
+      // is DB2-heavy: keep 180s receive timeout.
+      final queryParameters = <String, dynamic>{
+        if (vendorCode.isNotEmpty) 'vendorCode': vendorCode,
+        if (year != null) 'year': year.toString(),
+        if (months != null) 'months': months, // New: comma-separated months
+        if (range != null && months == null)
+          'range': range, // Fallback for old API
+        'pdfType': pdfType,
+        'forceRefresh': '1',
+      };
+
+      debugPrint(
+        '[CommissionsPDF] Requesting: ${ApiClient.dio.options.baseUrl}/commissions/pdf '
+        '$queryParameters',
       );
 
-      debugPrint('[CommissionsPDF] Requesting: $uri');
-
-      final response = await ApiClient.dio.get<Uint8List>(
-        uri.toString(),
-        options: Options(
-          responseType: ResponseType.bytes,
-          followRedirects: true,
-          receiveTimeout:
-              const Duration(seconds: 180), // PDF generation can be slow
-        ),
+      final pdfBytesList = await ApiClient.getBytes(
+        '/commissions/pdf',
+        queryParameters: queryParameters,
+        receiveTimeout: const Duration(seconds: 180),
       );
-
-      if (response.statusCode == 403) {
-        throw Exception('Solo DIEGO puede generar este informe');
-      }
-
-      if (response.statusCode != 200) {
-        final serverError = extractServerErrorMessage(response.data);
-        final errorMsg = serverError.isNotEmpty
-            ? serverError
-            : 'HTTP ${response.statusCode ?? "desconocido"}';
-        throw Exception('Error al generar PDF: $errorMsg');
-      }
-
-      // Validate response data
-      final pdfBytes = response.data;
-      if (pdfBytes == null || pdfBytes.isEmpty) {
+      final pdfBytes = Uint8List.fromList(pdfBytesList);
+      if (pdfBytes.isEmpty) {
         throw Exception('El PDF está vacío o corrupto');
       }
 
@@ -166,6 +149,15 @@ class CommissionsPdfService {
     } on TimeoutException {
       debugPrint('[CommissionsPDF] PDF open handler timed out');
       onSuccess();
+    } on ApiException catch (e) {
+      // Typed error from ApiClient.getBytes (shared interceptors).
+      if (e.statusCode == 403) {
+        throw Exception('Solo DIEGO puede generar este informe');
+      }
+      if ((e.statusCode ?? 0) == 0) {
+        throw Exception('Error de red: ${e.message}');
+      }
+      throw Exception('Error del servidor: ${e.message}');
     } on DioException catch (e) {
       // Handle Dio-specific errors
       if (e.type == DioExceptionType.connectionTimeout) {

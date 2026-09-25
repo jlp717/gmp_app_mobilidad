@@ -198,6 +198,22 @@ class Responsive {
       isLandscape(ctx) || isLandscapeCompact(ctx);
 
   // ---------------------------------------------------------------------------
+  // Safe-area helpers (REQ-20 tanda4)
+  // ---------------------------------------------------------------------------
+
+  /// Bottom system inset (gesture bar / nav) or 0 when absent.
+  /// Paridad garantizada: con viewPadding 0 devuelve [base] (0 por defecto).
+  static double bottomSafeInset(BuildContext ctx, {double base = 0}) {
+    final inset = MediaQuery.viewPaddingOf(ctx).bottom;
+    return inset > base ? inset : base;
+  }
+
+  /// Padding inferior `max(inset, base)` para FABs y botones al borde.
+  static EdgeInsets bottomSafePadding(BuildContext ctx, {double base = 0}) {
+    return EdgeInsets.only(bottom: bottomSafeInset(ctx, base: base));
+  }
+
+  // ---------------------------------------------------------------------------
   // Font size helpers
   // ---------------------------------------------------------------------------
 

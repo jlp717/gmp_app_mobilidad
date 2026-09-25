@@ -4,7 +4,14 @@
 const logger = require('../../middleware/logger');
 
 const KPI_CACHE_PREFIX = 'kpi:alerts:';
-const KPI_CACHE_TTL = parseInt(process.env.KPI_CACHE_TTL || '604800', 10); // 7 días por defecto
+// F5-02 TTL por dominio con constantes nombradas. Alertas 7 dias intactas;
+// dinero/cobros en REALTIME 60.
+const KPI_TTL_BY_DOMAIN = {
+  ALERTS: parseInt(process.env.KPI_CACHE_TTL || '604800', 10), // 7 dias por defecto
+  MONEY: 60, // == TTL.REALTIME del bus central
+  COBROS: 60, // == TTL.REALTIME del bus central
+};
+const KPI_CACHE_TTL = KPI_TTL_BY_DOMAIN.ALERTS; // alias compatibilidad
 const KPI_GLOBAL_KEY = 'kpi:last_load';
 
 let redisClient = null;
@@ -52,7 +59,7 @@ async function cacheClientAlerts(clientCode, alerts) {
   if (!redisClient) return;
   try {
     const key = `${KPI_CACHE_PREFIX}${clientCode}`;
-    await redisClient.set(key, JSON.stringify(alerts), { EX: KPI_CACHE_TTL });
+    await redisClient.set(key, JSON.stringify(alerts), { EX: KPI_TTL_BY_DOMAIN.ALERTS });
   } catch (err) {
     logger.warn(`[kpi:redis] Error cacheando alertas para ${clientCode}: ${err.message}`);
   }
@@ -124,6 +131,40 @@ function getRedisStatus() {
   };
 }
 
+// F5-01 invalidacion cruzada KPI: reacciona al bus central onInvalidationPattern.
+// Cualquier patron que mencione kpi (p.ej. "kpi*", "gmp:kpi*") dispara el
+// borrado local via scan+del para converger en cluster PM2.
+function handleKpiInvalidationPattern(pattern) {
+  if (/kpi/i.test(String(pattern || ''))) {
+    return invalidateKpiCache();
+  }
+  return Promise.resolve();
+}
+
+let kpiInvalidationHooked = false;
+function ensureKpiClusterInvalidation() {
+  if (kpiInvalidationHooked) return;
+  kpiInvalidationHooked = true;
+  try {
+    const { onInvalidationPattern } = require('../../services/redis-cache');
+    onInvalidationPattern((pattern) => {
+      handleKpiInvalidationPattern(pattern).catch(() => {});
+    });
+  } catch (_) {
+    // Redis opcional — workers siguen invalidando en local
+  }
+}
+
+ensureKpiClusterInvalidation();
+
+function __setRedisClientForTests(client) {
+  redisClient = client;
+}
+
+function __resetKpiClusterHookForTests() {
+  kpiInvalidationHooked = false;
+}
+
 module.exports = {
   initRedis,
   cacheClientAlerts,
@@ -131,4 +172,12 @@ module.exports = {
   invalidateKpiCache,
   getLastLoadInfo,
   getRedisStatus,
+  KPI_CACHE_PREFIX,
+  KPI_CACHE_TTL,
+  KPI_TTL_BY_DOMAIN,
+  KPI_GLOBAL_KEY,
+  handleKpiInvalidationPattern,
+  ensureKpiClusterInvalidation,
+  __setRedisClientForTests,
+  __resetKpiClusterHookForTests,
 };

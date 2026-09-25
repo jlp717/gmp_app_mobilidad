@@ -452,9 +452,14 @@ exports.validationSchemas = z ? {
     searchQuery: z.string().max(200)
 } : null;
 
+// F2b-01: fail-closed. Sin validador disponible, jamas next silencioso:
+// se responde 500 VALIDATOR_UNAVAILABLE para no operar sin validar.
 exports.validateBody = (schema) => {
     if (!z || !schema) {
-        return (req, res, next) => next(); // Skip validation if zod not available
+        return (req, res, next) => res.status(500).json({
+            error: 'Validador no disponible',
+            code: 'VALIDATOR_UNAVAILABLE'
+        });
     }
     
     return (req, res, next) => {
@@ -476,9 +481,14 @@ exports.validateBody = (schema) => {
     };
 };
 
+// F2b-01: fail-closed. Sin validador disponible, jamas next silencioso:
+// se responde 500 VALIDATOR_UNAVAILABLE para no operar sin validar.
 exports.validateQuery = (schema) => {
     if (!z || !schema) {
-        return (req, res, next) => next();
+        return (req, res, next) => res.status(500).json({
+            error: 'Validador no disponible',
+            code: 'VALIDATOR_UNAVAILABLE'
+        });
     }
     
     return (req, res, next) => {
@@ -510,6 +520,17 @@ const { sanitizeForSQL } = require('../utils/common');
 // y debilita la credencial). Van SIEMPRE parametrizados a la query.
 const SENSITIVE_FIELD_RE = /^(password|password_confirm|passwordConfirm|new_?password|current_?password|pin|secret|token|api_?key)$/i;
 
+// F2b-03: campos de texto libre con contrato real (notas de cobro/cliente):
+// el stripping agresivo mutilaria apostrofes/comillas legitimos. Solo se
+// normaliza espacio en blanco; viajan SIEMPRE parametrizados. Intencionadamente
+// estrecho: `note`/`comment`/otros siguen con strip total (contrato pinneado
+// en sanitize-input-credentials.test.js).
+const FREE_TEXT_FIELD_RE = /^(notas|observaciones|observacion|notes)$/i;
+
+function sanitizeFreeText(value) {
+    return String(value).replace(/\r?\n/g, ' ').trim();
+}
+
 exports.sanitizeInput = (req, res, next) => {
     if (req.body && typeof req.body === 'object') {
         const sanitize = (obj) => {
@@ -525,7 +546,13 @@ exports.sanitizeInput = (req, res, next) => {
                 const sanitizedObj = {};
                 for (const key of Object.keys(obj)) {
                     // Los campos sensibles pasan intactos (van parametrizados).
-                    sanitizedObj[key] = SENSITIVE_FIELD_RE.test(key) ? obj[key] : sanitize(obj[key]);
+                    if (SENSITIVE_FIELD_RE.test(key)) {
+                        sanitizedObj[key] = obj[key];
+                    } else if (FREE_TEXT_FIELD_RE.test(key) && typeof obj[key] === 'string') {
+                        sanitizedObj[key] = sanitizeFreeText(obj[key]);
+                    } else {
+                        sanitizedObj[key] = sanitize(obj[key]);
+                    }
                 }
                 return sanitizedObj;
             } else if (Array.isArray(obj)) {
@@ -581,17 +608,21 @@ exports.detectSqlInjection = (req, res, next) => {
     };
     
     for (const [key, value] of Object.entries(req.query)) {
+        // F2b-03: texto libre (notas) exento: se permite apóstrofe/comilla en busquedas de notas.
+        if (FREE_TEXT_FIELD_RE.test(key)) continue;
         if (typeof value === 'string' && checkForSqlInjection(value)) {
             logger.warn(`[SQL Injection Blocked] Suspicious query param: ${key}`);
             return res.status(400).json({ error: 'Invalid input detected' });
         }
     }
-    
+
     if (req.body && typeof req.body === 'object') {
         const checkObject = (obj, path = '') => {
             for (const [key, value] of Object.entries(obj)) {
                 const currentPath = path ? `${path}.${key}` : key;
-                
+
+                // F2b-03: texto libre exento del detector (viaja parametrizado).
+                if (FREE_TEXT_FIELD_RE.test(key) && typeof value === 'string') continue;
                 if (typeof value === 'string' && checkForSqlInjection(value)) {
                     logger.warn(`[SQL Injection Blocked] Suspicious field: ${currentPath}`);
                     return true;

@@ -1,0 +1,5 @@
+2026-09-21 10:09:25 [ERROR] ❌ Param Query Error (Final): [odbc] Error executing the sql statement [{"state":"HY000","code":-802}]
+  SQL: SELECT X.CODIGOCLIENTE AS CLIENT,C.CODIGOVENDEDOR AS VENDOR,X.PORCENTAJECOBRORIGUROSO AS PCT,SUM(C.IMPORTEVENCIMIENTO) AS TOTAL,SUM(C.IMPORTEPENDIENTE) AS PENDING FROM DSEDAC.CLX X JOIN DSEDAC.CVC C ON C.CODIGOCLIENTEALBARAN=X.CODIGOCLIENTE WHERE X.COBRORIGUROSOSN=CAST(? AS CHAR(1)) AND X.PORCENTAJE
+  Params: {"count":3,"types":["string","number","number"],"truncated":false}
+{"message":"[odbc] Error executing the sql statement"}
+client_loop: send disconnect: Connection reset by peer

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
@@ -149,10 +150,14 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
     final accent =
         widget.promoType == 'GIFT' ? AppTheme.accentIndigo : AppTheme.success;
 
+    // REQ-31 audit codigo (sin capturas dispositivo): Scaffold/AppBar opacos
+    // alpha 1.0 via themedSurface (light=surface FFFFFFFF). Sin TabBar en esta
+    // pagina. Texto nunca alpha<0.5 (minimo real 0.7 en sufijos, resto full);
+    // seleccionado/acento success 007A52 e info 2563EB sobre surface >=4.5:1.
     return Scaffold(
-      backgroundColor: AppTheme.inkSurface,
+      backgroundColor: AppColors.themedSurface,
       appBar: AppBar(
-        backgroundColor: AppTheme.raisedSurface,
+        backgroundColor: AppColors.themedSurface,
         elevation: 0,
         title: Text(
           widget.promoType == 'GIFT' ? 'Promocion Regalo' : 'Promocion Precio',
@@ -164,7 +169,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
             margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.raisedSurface,
+              color: AppColors.themedRaisedSurface,
               borderRadius: BorderRadius.circular(AppTheme.radiusLg),
               border: Border.all(color: accent.withValues(alpha: 0.34)),
               boxShadow: AppTheme.elevation1,
@@ -486,21 +491,24 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                child: ElevatedButton.icon(
-                  onPressed: _submittingGifts ||
-                          _giftSelection.isEmpty ||
-                          _eligibleGiftQty <= 0 ||
-                          (_eligibleGiftQty > 0 &&
-                              _selectedGiftQty > _eligibleGiftQty)
-                      ? null
-                      : _submitGiftSelection,
+                child: Semantics(
+                  button: true,
+                  label: 'Añadir regalos seleccionados',
+                  child: ElevatedButton.icon(
+                    onPressed: _submittingGifts ||
+                            _giftSelection.isEmpty ||
+                            _eligibleGiftQty <= 0 ||
+                            (_eligibleGiftQty > 0 &&
+                                _selectedGiftQty > _eligibleGiftQty)
+                        ? null
+                        : _submitGiftSelection,
                   icon: _submittingGifts
                       ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: AppTheme.inkSurface,
+                            color: AppColors.systemWhite,
                           ),
                         )
                       : const Icon(Icons.card_giftcard),
@@ -515,10 +523,11 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.warning,
-                    foregroundColor: AppTheme.inkSurface,
+                    foregroundColor: AppColors.systemWhite,
                     disabledBackgroundColor: AppTheme.softPanel,
                     disabledForegroundColor: AppTheme.textTertiary,
                     minimumSize: const Size.fromHeight(46),
+                  ),
                   ),
                 ),
               ),

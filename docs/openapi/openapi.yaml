@@ -10262,6 +10262,103 @@ paths:
                 error: "Error interno"
                 code: "HTTP_500"
       description: "GET pedidos · product history · {productCode} · {clientCode}. Contrato del handler Express existente."
+  /pedidos/product-price-history/{product}/{client}:
+    get:
+      tags:
+        - "Pedidos"
+      summary: "GET pedidos · product price history · {product} · {client}"
+      operationId: "get_Pedidos_pedidos_product_price_history_product_client"
+      parameters:
+        - name: "product"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            example: "ART0001"
+          description: "Identificador product."
+        - name: "client"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            example: "4300001"
+          description: "Identificador client."
+        - name: "vendedorCode"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            example: "R01"
+          description: "Filtro vendedorCode usado por el handler."
+        - name: "vendedorCodes"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+            example: "R01"
+          description: "Filtro vendedorCodes usado por el handler."
+      responses:
+        "200":
+          description: "Solicitud completada"
+          content:
+            application/json:
+              schema:
+                type: "object"
+                additionalProperties: true
+              example:
+                success: true
+                data: []
+        "400":
+          description: "Solicitud inválida"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Solicitud inválida"
+                code: "HTTP_400"
+        "401":
+          description: "Autenticación requerida"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Autenticación requerida"
+                code: "HTTP_401"
+        "403":
+          description: "Acceso denegado"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Acceso denegado"
+                code: "HTTP_403"
+        "429":
+          description: "Demasiadas solicitudes"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Demasiadas solicitudes"
+                code: "HTTP_429"
+        "500":
+          description: "Error interno"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Error interno"
+                code: "HTTP_500"
+      description: "GET pedidos · product price history · {product} · {client}. REQ-28 ultimo precio TEST + pct subida + competitivo tarifa 1."
   /pedidos/products:
     get:
       tags:

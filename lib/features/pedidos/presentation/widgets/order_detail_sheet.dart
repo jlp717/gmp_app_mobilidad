@@ -16,7 +16,7 @@ import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_pdf_generator.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 class OrderDetailSheet {
   /// Show order detail as a draggable bottom sheet
@@ -102,6 +102,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   }
 
   List<Widget> _buildQuantityChips(OrderLine line) {
+    // REQ-34: unidad vacia => chip UOM: — (no asumir cajas).
+    if (line.unidadMedida.trim().isEmpty) {
+      return [_buildChip('UOM: —', Icons.straighten)];
+    }
     final unit = line.unidadMedida.trim().toUpperCase();
     final unitLabel = Product.unitLabel(unit);
     if (unit == 'KILOGRAMOS' || unit == 'LITROS') {
@@ -147,6 +151,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   }
 
   Future<void> _deleteDraftOrder() async {
+    // REQ-36: Eliminar solo existe en BORRADOR.
+    if (_detail?.header.estado != 'BORRADOR') return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -184,7 +190,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
 
     setState(() => _isDeleting = true);
     try {
-      await ref.read(pedidosProvider.notifier).deleteDraftOrder(widget.orderId);
+      await ref.read(pedidosNotifierProvider.notifier).deleteDraftOrder(widget.orderId);
       if (mounted) Navigator.pop(context, 'deleted');
     } catch (e) {
       if (mounted) {
@@ -198,7 +204,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
 
   Future<void> _confirmOrder() async {
     final header = _detail?.header;
-    if (header == null) return;
+    // REQ-36: Confirmar solo existe en BORRADOR.
+    if (header == null || header.estado != 'BORRADOR') return;
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -240,7 +247,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     setState(() => _isConfirming = true);
     try {
       await ref
-          .read(pedidosProvider.notifier)
+          .read(pedidosNotifierProvider.notifier)
           .confirmExistingOrder(widget.orderId, header.tipoVenta);
       if (mounted) Navigator.pop(context, 'confirmed');
     } catch (e) {
@@ -262,29 +269,59 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     }
 
     if (_error != null) {
+      final rawError = _error ?? '';
+      final isOffline = rawError.toLowerCase().contains('socket') ||
+          rawError.toLowerCase().contains('network') ||
+          rawError.toLowerCase().contains('connection') ||
+          rawError.toLowerCase().contains('conexi') ||
+          rawError.toLowerCase().contains('timeout') ||
+          rawError.toLowerCase().contains('failed host');
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
-            const SizedBox(height: 12),
-            Text(
-              'Error al cargar pedido',
-              style: TextStyle(
-                color: AppColors.themedWhite,
-                fontSize: Responsive.fontSize(context, small: 14, large: 16),
+        child: Semantics(
+          label: isOffline
+              ? 'Sin conexión. No se pudo cargar el pedido'
+              : 'Error al cargar el pedido',
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isOffline ? Icons.cloud_off_outlined : Icons.error_outline,
+                color: isOffline ? AppTheme.warning : AppTheme.error,
+                size: 48,
               ),
-            ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: _loadDetail,
-              icon: const Icon(Icons.refresh, color: AppTheme.info),
-              label: const Text(
-                'Reintentar',
-                style: TextStyle(color: AppTheme.info),
+              const SizedBox(height: 12),
+              Text(
+                isOffline ? 'Sin conexión' : 'Error al cargar pedido',
+                style: TextStyle(
+                  color: AppColors.themedWhite,
+                  fontSize: Responsive.fontSize(context, small: 14, large: 16),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                isOffline
+                    ? 'Comprueba tu conexión e inténtalo de nuevo.'
+                    : 'No se pudo recuperar el detalle.',
+                style: TextStyle(
+                  color: AppColors.themedWhite70,
+                  fontSize: Responsive.fontSize(context, small: 13, large: 14),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 48,
+                child: TextButton.icon(
+                  onPressed: _loadDetail,
+                  icon: const Icon(Icons.refresh, color: AppTheme.info),
+                  label: const Text(
+                    'Reintentar',
+                    style: TextStyle(color: AppTheme.info),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -314,9 +351,12 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         Expanded(
           child: detail.lines.isEmpty
               ? Center(
-                  child: Text(
-                    'Sin lineas',
-                    style: TextStyle(color: AppColors.themedWhite38),
+                  child: Semantics(
+                    label: 'Pedido sin líneas',
+                    child: Text(
+                      'Sin lineas',
+                      style: TextStyle(color: AppColors.themedWhite38),
+                    ),
                   ),
                 )
               : ListView.builder(
@@ -341,99 +381,140 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
 
   Widget _buildHeader(OrderSummary header, Color statusColor) {
     final compact = Responsive.useCompactTiles(context);
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 12 : 16,
-        vertical: compact ? 6 : 10,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Pedido #${header.numeroPedido}',
-                style: TextStyle(
-                  color: AppColors.themedWhite,
-                  fontSize: Responsive.fontSize(context, small: 18, large: 22),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: statusColor.withValues(alpha: 0.5)),
-                ),
-                child: Text(
-                  header.estado,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+    // REQ-34: cabecera senior. El detalle backend no trae direccion,
+    // telefonos ni email del cliente: se muestran con guion explicito.
+    final routeDays = header.diasReparto.trim().isEmpty
+        ? '—'
+        : header.diasReparto.trim();
+    final routeLabel = header.ruta.trim().isEmpty
+        ? 'Ruta: — · Reparto: $routeDays'
+        : 'Ruta ${header.ruta.trim()} · Reparto: $routeDays';
+    final paymentLabel = header.formaPago.trim().isEmpty
+        ? 'Pago: —'
+        : 'Pago: ${header.formaPago.trim()}';
+    final sellerLabel = header.vendedorCode.trim().isEmpty
+        ? 'Vendedor: —'
+        : 'Vendedor: ${header.vendedorCode.trim()}';
+    return Semantics(
+      label: 'Pedido ${header.numeroPedidoFormatted.isNotEmpty ? header.numeroPedidoFormatted : header.numeroPedido}, '
+          '${header.clienteName}, estado ${header.estado}',
+      header: true,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 12 : 16,
+          vertical: compact ? 6 : 10,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    header.numeroPedidoFormatted.isNotEmpty
+                        ? 'Pedido ${header.numeroPedidoFormatted}'
+                        : 'Pedido #${header.numeroPedido}',
+                    style: TextStyle(
+                      color: AppColors.themedWhite,
+                      fontSize:
+                          Responsive.fontSize(context, small: 18, large: 22),
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _buildInfoRow(
-            Icons.storefront_outlined,
-            '${header.clienteName} (${header.clienteCode})',
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: _buildInfoRow(
-                  Icons.calendar_today_outlined,
-                  header.fecha,
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border:
+                        Border.all(color: statusColor.withValues(alpha: 0.5)),
+                  ),
+                  child: Text(
+                    header.estado,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-              ),
-              _buildInfoRow(
-                Icons.sell_outlined,
-                _saleTypeLabel(header.tipoVenta),
-              ),
-            ],
-          ),
-          if (header.vendedorCode.isNotEmpty) ...[
-            const SizedBox(height: 4),
+              ],
+            ),
+            const SizedBox(height: 8),
             _buildInfoRow(
-              Icons.badge_outlined,
-              'Vendedor: ${header.vendedorCode}',
+              Icons.storefront_outlined,
+              '${header.clienteName} (${header.clienteCode})',
+            ),
+            const SizedBox(height: 4),
+            _buildInfoRow(Icons.location_on_outlined, 'Dirección: —'),
+            const SizedBox(height: 4),
+            _buildInfoRow(Icons.phone_outlined, 'Tel: — · Email: —'),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildInfoRow(
+                    Icons.calendar_today_outlined,
+                    header.fechaFormatted.isNotEmpty
+                        ? header.fechaFormatted
+                        : header.fecha,
+                  ),
+                ),
+                _buildInfoRow(
+                  Icons.sell_outlined,
+                  _saleTypeLabel(header.tipoVenta),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            _buildInfoRow(Icons.route_outlined, routeLabel),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(child: _buildInfoRow(Icons.badge_outlined, sellerLabel)),
+                _buildInfoRow(Icons.payments_outlined, paymentLabel),
+              ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // REQ-34 checklist senior: cada fila campo a campo con — si vacio,
+  // solo AppColors/AppTheme, tipografia minima 13sp, Semantics explicito.
+  Widget _buildInfoRow(IconData icon, String text) {
+    return Semantics(
+      label: text,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: AppColors.themedWhite54, size: 14),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: AppColors.themedWhite70,
+                fontSize: Responsive.fontSize(context, small: 13, large: 14),
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String text) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: AppColors.themedWhite54, size: 14),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            text,
-            style: TextStyle(
-              color: AppColors.themedWhite70,
-              fontSize: Responsive.fontSize(context, small: 12, large: 14),
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildLineTile(OrderLine line, int number) {
     final showMargin = ref.watch(
-      pedidosProvider.select((p) => p.isMarginVisible),
+      pedidosNotifierProvider.select((p) => p.isMarginVisible),
     );
     final marginColor = line.porcentajeMargen >= 15
         ? AppTheme.success
@@ -533,8 +614,11 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                     runSpacing: 6,
                     children: [
                       ..._buildQuantityChips(line),
+                      // REQ-34: UOM con — si vacio, nunca hueco ambiguo.
                       _buildChip(
-                        Product.unitLabel(line.unidadMedida),
+                        line.unidadMedida.trim().isEmpty
+                            ? 'UOM: —'
+                            : Product.unitLabel(line.unidadMedida),
                         Icons.straighten,
                       ),
                     ],
@@ -663,22 +747,27 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   }
 
   Widget _buildChip(String label, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppTheme.inkSurface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: AppColors.themedWhite54, size: 12),
-          const SizedBox(width: 3),
-          Text(
-            label,
-            style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
-          ),
-        ],
+    // REQ-34: chips auxiliares con Semantics; solo AppColors/AppTheme.
+    // Tipografia 11sp auxiliar (cabecera senior >=13sp en _buildInfoRow).
+    return Semantics(
+      label: label,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.themedSoftPanel,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: AppColors.themedWhite54, size: 12),
+            const SizedBox(width: 3),
+            Text(
+              label,
+              style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -743,7 +832,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           Consumer(
             builder: (ctx, ref, _) {
               final showMargin = ref.watch(
-                pedidosProvider.select((p) => p.isMarginVisible),
+                pedidosNotifierProvider.select((p) => p.isMarginVisible),
               );
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -775,11 +864,28 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               );
             },
           ),
+          // REQ-34: bolsa actualizada siempre visible; — si sin impacto.
           if (detail.bolsaSummary.hasImpact) ...[
             const SizedBox(height: 10),
             Divider(color: AppTheme.borderColor),
             const SizedBox(height: 10),
             _buildOrderBolsaSummary(detail.bolsaSummary),
+          ] else ...[
+            const SizedBox(height: 10),
+            Divider(color: AppTheme.borderColor),
+            const SizedBox(height: 10),
+            Semantics(
+              label: 'Bolsa sin impacto',
+              child: Text(
+                'Bolsa: —',
+                style: TextStyle(
+                  color: AppColors.themedWhite70,
+                  fontSize:
+                      Responsive.fontSize(context, small: 13, large: 14),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ],
         ],
       ),
@@ -833,6 +939,12 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   }
 
   Widget _buildActions(OrderSummary header) {
+    // REQ-36: solo BORRADOR/CONFIRMADO muta. En CONFIRMADO la fila solo
+    // ofrece PDF/clonar; Confirmar/Eliminar exigen BORRADOR.
+    final canMutate =
+        header.estado == 'BORRADOR' || header.estado == 'CONFIRMADO';
+    if (!canMutate) return const SizedBox.shrink();
+    final canConfirm = header.estado == 'BORRADOR';
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -843,59 +955,83 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       child: Row(
         children: [
           // PDF export button
-          IconButton(
-            onPressed: _detail == null
-                ? null
-                : () async {
-                    HapticFeedback.lightImpact();
-                    final canSeeMargin = ref.watch(
-                      pedidosProvider.select((p) => p.isMarginVisible),
-                    );
-                    await OrderPdfGenerator.generateAndShare(
-                      context,
-                      _detail!,
-                      isMarginVisible: canSeeMargin,
-                    );
-                  },
-            icon: const Icon(Icons.picture_as_pdf),
-            color: AppTheme.success,
-            tooltip: 'Exportar PDF',
+          Semantics(
+            button: true,
+            label: 'Exportar pedido en PDF',
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: IconButton(
+                onPressed: _detail == null
+                    ? null
+                    : () async {
+                        HapticFeedback.lightImpact();
+                        final canSeeMargin = ref.watch(
+                          pedidosNotifierProvider.select((p) => p.isMarginVisible),
+                        );
+                        await OrderPdfGenerator.generateAndShare(
+                          context,
+                          _detail!,
+                          isMarginVisible: canSeeMargin,
+                        );
+                      },
+                icon: const Icon(Icons.picture_as_pdf),
+                color: AppTheme.success,
+                tooltip: 'Exportar PDF',
+              ),
+            ),
           ),
           // Clone button
-          IconButton(
-            onPressed: () {
-              HapticFeedback.mediumImpact();
-              Navigator.pop(context, 'clone:${widget.orderId}');
-            },
-            icon: const Icon(Icons.copy_all),
-            color: AppTheme.accentIndigo,
-            tooltip: 'Clonar pedido',
+          Semantics(
+            button: true,
+            label: 'Clonar pedido al carrito',
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: IconButton(
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  Navigator.pop(context, 'clone:${widget.orderId}');
+                },
+                icon: const Icon(Icons.copy_all),
+                color: AppTheme.accentIndigo,
+                tooltip: 'Clonar pedido',
+              ),
+            ),
           ),
           const Spacer(),
           // Confirm button
-          if (header.estado == 'BORRADOR') ...[
+          if (canConfirm) ...[
             Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _isConfirming ? null : _confirmOrder,
-                icon: _isConfirming
-                    ? SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.themedWhite,
-                        ),
-                      )
-                    : const Icon(Icons.check_circle_outline),
-                label: Text(_isConfirming ? 'Confirmando...' : 'Confirmar'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.success,
-                  foregroundColor: AppColors.systemBlack,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                height: 56,
+                child: Semantics(
+                  button: true,
+                  label: 'Confirmar pedido',
+                  child: ElevatedButton.icon(
+                    onPressed: _isConfirming ? null : _confirmOrder,
+                    icon: _isConfirming
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.themedWhite,
+                            ),
+                          )
+                        : const Icon(Icons.check_circle_outline),
+                    label:
+                        Text(_isConfirming ? 'Confirmando...' : 'Confirmar'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.success,
+                      foregroundColor: AppColors.systemBlack,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 0,
+                    ),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  elevation: 0,
                 ),
               ),
             ),
@@ -903,26 +1039,33 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           ],
           if (header.estado == 'BORRADOR')
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _isDeleting ? null : _deleteDraftOrder,
-                icon: _isDeleting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppTheme.error,
-                        ),
-                      )
-                    : const Icon(Icons.delete_outline),
-                label: Text(_isDeleting ? 'Eliminando...' : 'Eliminar'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.error,
-                  side: const BorderSide(color: AppTheme.error),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                height: 56,
+                child: Semantics(
+                  button: true,
+                  label: 'Eliminar borrador',
+                  child: OutlinedButton.icon(
+                    onPressed: _isDeleting ? null : _deleteDraftOrder,
+                    icon: _isDeleting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.error,
+                            ),
+                          )
+                        : const Icon(Icons.delete_outline),
+                    label: Text(_isDeleting ? 'Eliminando...' : 'Eliminar'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.error,
+                      side: const BorderSide(color: AppTheme.error),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
             ),

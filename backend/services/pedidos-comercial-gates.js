@@ -360,7 +360,13 @@ async function evaluateMinCobroOrderGate({ clientCode, vendorCode }) {
   };
 }
 
-async function assertMinCobroAllowsOrder({ clientCode, vendorCode }) {
+function isContadoExemptSaleType(saleType) {
+  const normalized = String(saleType || '').trim().toUpperCase();
+  return normalized === 'CT' || normalized === 'CTR' || normalized === 'CONTADO';
+}
+
+async function assertMinCobroAllowsOrder({ clientCode, vendorCode, saleType }) {
+  if (isContadoExemptSaleType(saleType)) return { blocked: false, actualPct: 100, exempt: 'CTR_CONTADO' };
   const gate = await evaluateMinCobroOrderGate({ clientCode, vendorCode });
   if (gate.blocked) {
     throw minCobroOrderError({
@@ -390,6 +396,7 @@ module.exports = {
   isGiftLine,
   applyGiftPromotionsToLines,
   evaluateMinCobroOrderGate,
+  isContadoExemptSaleType,
   assertMinCobroAllowsOrder,
   resolveMinCobroRule,
   capPendingToDocument,

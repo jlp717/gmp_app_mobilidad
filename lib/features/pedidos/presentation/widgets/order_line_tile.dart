@@ -13,7 +13,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 class OrderLineTile extends StatelessWidget {
   const OrderLineTile({
@@ -467,7 +467,7 @@ class OrderLineTile extends StatelessWidget {
                         Consumer(
                           builder: (ctx, ref, _) {
                             final visible = ref.watch(
-                              pedidosProvider.select((p) => p.isMarginVisible),
+                              pedidosNotifierProvider.select((p) => p.isMarginVisible),
                             );
                             if (!visible) return const SizedBox.shrink();
                             return Padding(
@@ -491,7 +491,7 @@ class OrderLineTile extends StatelessWidget {
                 Consumer(
                   builder: (ctx, ref, _) {
                     final visible = ref.watch(
-                      pedidosProvider.select((p) => p.isMarginVisible),
+                      pedidosNotifierProvider.select((p) => p.isMarginVisible),
                     );
                     if (!visible) return const SizedBox.shrink();
                     return Container(

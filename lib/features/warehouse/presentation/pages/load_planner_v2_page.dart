@@ -162,10 +162,10 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
             icon: Icons.arrow_back_rounded,
             onPressed: () async {
               HapticFeedback.lightImpact();
-              final provider = ref.read(loadPlannerProvider);
-              if (provider.hasManualChanges &&
-                  provider.saveState != SaveState.saved) {
-                await provider.saveLayout();
+              final plannerState = ref.read(loadPlannerProvider);
+              if (plannerState.hasManualChanges &&
+                  plannerState.saveState != SaveState.saved) {
+                await ref.read(loadPlannerProvider.notifier).saveLayout();
               }
               if (context.mounted) Navigator.of(context).pop();
             },
@@ -318,7 +318,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
   // TABLET LAYOUT – side by side with animated panel
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildTabletLayout(LoadPlannerProvider provider) {
+  Widget _buildTabletLayout(LoadPlannerState provider) {
     return Row(
       children: [
         // Canvas (main)
@@ -335,7 +335,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                   BoxInfoOverlay(
                     box: provider.placedBoxes[provider.selectedBoxIndex!],
                     index: provider.selectedBoxIndex!,
-                    onClose: () => provider.clearSelection(),
+                    onClose: () => ref
+                        .read(loadPlannerProvider.notifier)
+                        .clearSelection(),
                   ),
 
                 // Glassmorphism collision warning
@@ -416,7 +418,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
   // PHONE LAYOUT – canvas + bottom sheet
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildPhoneLayout(LoadPlannerProvider provider) {
+  Widget _buildPhoneLayout(LoadPlannerState provider) {
     return Stack(
       children: [
         // Full-screen canvas
@@ -428,7 +430,8 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
           BoxInfoOverlay(
             box: provider.placedBoxes[provider.selectedBoxIndex!],
             index: provider.selectedBoxIndex!,
-            onClose: () => provider.clearSelection(),
+            onClose: () =>
+                ref.read(loadPlannerProvider.notifier).clearSelection(),
           ),
 
         // Premium FAB with glow

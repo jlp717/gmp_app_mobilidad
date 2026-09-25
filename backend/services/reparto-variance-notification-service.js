@@ -207,19 +207,24 @@ async function resolveDocumentComercialCode(documentId, { query = queryWithParam
   if (!identity) return '';
 
   const params = [identity.ejercicio, identity.serie, identity.terminal, identity.numero];
-  let sql = `
-    SELECT TRIM(COALESCE(NULLIF(TRIM(CODIGOCOMERCIAL), ''), NULLIF(TRIM(CODIGOVENDEDOR), ''))) AS COMERCIAL
-      FROM DSEDAC.CPC
-     WHERE EJERCICIOALBARAN = ?
-       AND TRIM(SERIEALBARAN) = ?
-       AND TERMINALALBARAN = ?
-       AND NUMEROALBARAN = ?
-  `;
+  const clientFilter = identity.cliente ? ' AND TRIM(CODIGOCLIENTEALBARAN) = ?' : '';
   if (identity.cliente) {
-    sql += ' AND TRIM(CODIGOCLIENTEALBARAN) = ?';
     params.push(identity.cliente);
   }
-  sql += ' FETCH FIRST 1 ROW ONLY';
+  // F1c-01: dedup CPC determinista (patron debt-view-contract.js):
+  // ROW_NUMBER() ORDER BY ID DESC + RN=1. Sin ORDER BY, FETCH FIRST 1 es no
+  // determinista ante revisiones CPC duplicadas. Binding ? siempre.
+  const sql = `
+    SELECT COMERCIAL FROM (
+      SELECT TRIM(COALESCE(NULLIF(TRIM(CODIGOCOMERCIAL), ''), NULLIF(TRIM(CODIGOVENDEDOR), ''))) AS COMERCIAL,
+             ROW_NUMBER() OVER (ORDER BY ID DESC) AS RN
+        FROM DSEDAC.CPC
+       WHERE EJERCICIOALBARAN = ?
+         AND TRIM(SERIEALBARAN) = ?
+         AND TERMINALALBARAN = ?
+         AND NUMEROALBARAN = ?${clientFilter}
+    ) DEDUP WHERE RN = 1
+  `;
 
   try {
     const rows = await query(sql, params);
@@ -240,24 +245,28 @@ async function resolveDocumentClient(documentId, { query = queryWithParams } = {
   if (!identity) return { codigo: '', nombre: '' };
 
   const params = [identity.ejercicio, identity.serie, identity.terminal, identity.numero];
-  let sql = `
-    SELECT TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE,
-           TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''),
-                         NULLIF(TRIM(CLI.NOMBRECLIENTE), ''),
-                         TRIM(CPC.CODIGOCLIENTEALBARAN))) AS NOMBRE_CLIENTE
-      FROM DSEDAC.CPC CPC
-      LEFT JOIN DSEDAC.CLI CLI
-        ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-     WHERE CPC.EJERCICIOALBARAN = ?
-       AND TRIM(CPC.SERIEALBARAN) = ?
-       AND CPC.TERMINALALBARAN = ?
-       AND CPC.NUMEROALBARAN = ?
-  `;
+  const clientFilter = identity.cliente ? ' AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?' : '';
   if (identity.cliente) {
-    sql += ' AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?';
     params.push(identity.cliente);
   }
-  sql += ' FETCH FIRST 1 ROW ONLY';
+  // F1c-01: dedup CPC determinista (patron debt-view-contract.js):
+  // ROW_NUMBER() ORDER BY CPC.ID DESC + RN=1. Binding ? siempre.
+  const sql = `
+    SELECT CLIENTE, NOMBRE_CLIENTE FROM (
+      SELECT TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+             TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''),
+                           NULLIF(TRIM(CLI.NOMBRECLIENTE), ''),
+                           TRIM(CPC.CODIGOCLIENTEALBARAN))) AS NOMBRE_CLIENTE,
+             ROW_NUMBER() OVER (ORDER BY CPC.ID DESC) AS RN
+        FROM DSEDAC.CPC CPC
+        LEFT JOIN DSEDAC.CLI CLI
+          ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+       WHERE CPC.EJERCICIOALBARAN = ?
+         AND TRIM(CPC.SERIEALBARAN) = ?
+         AND CPC.TERMINALALBARAN = ?
+         AND CPC.NUMEROALBARAN = ?${clientFilter}
+    ) DEDUP WHERE RN = 1
+  `;
 
   try {
     const rows = await query(sql, params);

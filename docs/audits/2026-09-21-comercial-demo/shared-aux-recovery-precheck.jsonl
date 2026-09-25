@@ -1,0 +1,4 @@
+{"label":"idempotency","rows":[{"IDEMPOTENCY_KEY":"demo1789986705834assigned","PEDIDO_ID":64,"idempotency_key":"demo1789986705834assigned","pedido_id":64}]}
+{"label":"stock","error":"[odbc] Error preparing the SQL statement"}
+{"label":"orders","rows":[]}
+{"label":"movements","rows":[]}

@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const { query, getPoolMetrics } = require('../config/db');
 const logger = require('../middleware/logger');
+const { handleRouteError } = require('../utils/common');
 
 /**
  * GET /api/health
@@ -41,9 +42,11 @@ router.get('/', async (req, res) => {
             }
         };
     } catch (error) {
+        // F2b-04: detalle interno solo en log; respuesta publica generica.
+        logger.error(`[HEALTH] DB2 check failed: ${error?.message || error}`);
         health.database.db2 = {
             status: 'error',
-            error: error.message
+            error: 'Base de datos no disponible'
         };
         health.status = 'degraded';
     }
@@ -74,7 +77,9 @@ router.get('/', async (req, res) => {
         } catch (e) { /* Breakers not loaded yet */ }
         health.circuitBreakers = monitor.getHealthSummary();
     } catch (error) {
-        health.circuitBreakers = { error: error.message };
+        // F2b-04: detalle interno solo en log; respuesta publica generica.
+        logger.error(`[HEALTH] Circuit breaker check failed: ${error?.message || error}`);
+        health.circuitBreakers = { error: 'Monitor no disponible' };
     }
     
     // Memory usage
@@ -110,7 +115,9 @@ router.get('/readiness', async (req, res) => {
         await query('SELECT 1 FROM SYSIBM.SYSDUMMY1 FETCH FIRST 1 ROW ONLY');
         res.json({ status: 'ready', database: 'connected' });
     } catch (error) {
-        res.status(503).json({ status: 'not_ready', database: 'error', error: error.message });
+        // F2b-04: detalle interno solo en log; respuesta publica generica.
+        logger.error(`[HEALTH] Readiness check failed: ${error?.message || error}`);
+        res.status(503).json({ status: 'not_ready', database: 'error', error: 'Base de datos no disponible' });
     }
 });
 
@@ -124,7 +131,8 @@ router.get('/circuit-breakers', (req, res) => {
         const statuses = monitor.getAllStatuses();
         res.json({ circuitBreakers: statuses, summary: monitor.getHealthSummary() });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        // F2b-04: error generico via handler central; detalle solo en log.
+        handleRouteError(error, res, 'Error interno del servidor', 500, { code: 'HEALTH_CIRCUIT_ERROR' });
     }
 });
 
@@ -146,7 +154,8 @@ router.get('/cache', (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        // F2b-04: error generico via handler central; detalle solo en log.
+        handleRouteError(error, res, 'Error interno del servidor', 500, { code: 'HEALTH_CACHE_ERROR' });
     }
 });
 

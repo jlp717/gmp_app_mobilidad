@@ -56,11 +56,18 @@ class _RuteroNavigationButtonState extends State<RuteroNavigationButton> {
   }
 
   @override
-  Widget build(BuildContext context) => FilledButton.icon(
-        onPressed: _opening ? null : _open,
-        icon: const Icon(Icons.navigation),
-        label:
-            Text(_opening ? 'Abriendo navegación…' : 'Navegar a esta parada'),
-        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        enabled: !_opening,
+        label: _opening
+            ? 'Abriendo navegación hacia esta parada'
+            : 'Navegar a esta parada',
+        child: FilledButton.icon(
+          onPressed: _opening ? null : _open,
+          icon: const Icon(Icons.navigation),
+          label:
+              Text(_opening ? 'Abriendo navegación…' : 'Navegar a esta parada'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        ),
       );
 }

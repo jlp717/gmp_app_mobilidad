@@ -56,9 +56,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
   bool _isLoadingSummary = true;
   String? _loadError;
 
-  // Single source of truth: Riverpod provider
-  CobrosProvider get _provider =>
-      ref.read(cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)));
+  // Single source of truth: Riverpod provider (Notifier + immutable State)
+  CobrosParams get _params => CobrosParams(employeeCode: widget.employeeCode);
+  CobrosNotifier get _notifier =>
+      ref.read(cobrosProvider(_params).notifier);
+  CobrosState get _state => ref.read(cobrosProvider(_params));
 
   String _fallbackVendorCode(AuthState? authState) {
     final employee = widget.employeeCode.trim();
@@ -184,7 +186,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
     if (!mounted) return;
     final generation = ++_summaryLoadGeneration;
     final keepCurrentList =
-        !forceRefresh && _provider.pendingSummary.isNotEmpty;
+        !forceRefresh && _state.pendingSummary.isNotEmpty;
     setState(() {
       if (!keepCurrentList) {
         _isLoadingSummary = true;
@@ -202,7 +204,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
       String? vendedorCode, {
       List<String>? vendedorCodes,
     }) {
-      return _provider.cargarPendingSummary(
+      return _notifier.cargarPendingSummary(
         vendedorCode,
         vendedorCodes: vendedorCodes,
         fechaDesde: summaryFechaDesde,
@@ -244,11 +246,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
       // El provider captura sus propios errores y los expone en `error`.
       // Sin esto, un fallo del API mostraba la pantalla con totales a 0
       // como si fueran datos reales (fallo silencioso).
-      final providerError = _provider.error;
+      final providerError = _state.error;
       if (mounted &&
           generation == _summaryLoadGeneration &&
           providerError != null &&
-          _provider.pendingSummary.isEmpty) {
+          _state.pendingSummary.isEmpty) {
         setState(() => _loadError = providerError);
       }
     } catch (e) {
@@ -289,9 +291,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
     // Watch pendingSummary to trigger rebuilds only when pending data changes
     ref.watch(
       cobrosProvider(CobrosParams(employeeCode: widget.employeeCode))
-          .select((p) => p.pendingSummary),
+          .select((s) => s.pendingSummary),
     );
-    // Read full provider for grandTotal (not watched, just accessed when needed)
+    // Read full state for grandTotal (not watched, just accessed when needed)
     final cobros = ref.read(
       cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)),
     );
@@ -397,7 +399,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
     );
   }
 
-  List<Map<String, dynamic>> _visibleClients(CobrosProvider cobros) {
+  List<Map<String, dynamic>> _visibleClients(CobrosState cobros) {
     final search = _searchController.text.trim();
     if (search.isNotEmpty || cobros.pendingSummary.isEmpty) {
       return _foundClients;
@@ -460,7 +462,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
   /// Card resumen agregada en la cabecera: total pendiente, total vencido,
   /// numero de clientes con deuda. De un vistazo el comercial/jefe ve el
   /// estado global de cobros antes de entrar en el detalle por cliente.
-  Widget _buildSummaryCard(CobrosProvider cobros) {
+  Widget _buildSummaryCard(CobrosState cobros) {
     // Formato es_ES: el formateo manual anterior producía "1.234.56€"
     // (punto como separador decimal Y de miles a la vez).
     String fmtMoney(num v) => _moneyFormat.format(v);
@@ -822,7 +824,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
     );
   }
 
-  Widget _buildNoClientsState(CobrosProvider cobros, String searchQuery) {
+  Widget _buildNoClientsState(CobrosState cobros, String searchQuery) {
     final hasDebt = cobros.grandTotal > 0;
     final hasSummaryData = cobros.pendingSummary.isNotEmpty;
     final isFiltering = searchQuery.isNotEmpty || _estadoFilter != 'pendiente';
@@ -920,11 +922,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
     final code =
         (client['code'] ?? client['codigoCliente'] ?? client['codigo'] ?? '')
             .toString();
-    final pending = _provider.pendingForClient(code);
-    final vencido = _provider.vencidoForClient(code);
-    final estado = _provider.estadoForClient(code);
-    final hasSummary = _provider.hasPendingSummaryForClient(code);
-    final summaryEntry = _provider.pendingSummary[code.trim()];
+    final pending = _state.pendingForClient(code);
+    final vencido = _state.vencidoForClient(code);
+    final estado = _state.estadoForClient(code);
+    final hasSummary = _state.hasPendingSummaryForClient(code);
+    final summaryEntry = _state.pendingSummary[code.trim()];
     final docCount = (summaryEntry?['count'] as num?)?.toInt() ?? 0;
     final fromErpDebt = client['fromErpDebt'] == true;
 

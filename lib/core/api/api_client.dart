@@ -737,11 +737,13 @@ class ApiClient {
   static Options? _getOptionsForRead({
     bool forceRefresh = false,
     Duration? receiveTimeout,
+    bool skipRetry = false,
   }) {
-    if (!forceRefresh && receiveTimeout == null) return null;
+    if (!forceRefresh && receiveTimeout == null && !skipRetry) return null;
 
     return Options(
       receiveTimeout: receiveTimeout,
+      extra: {'skipRetry': skipRetry},
       headers: forceRefresh
           ? const {
               'Cache-Control': 'no-cache',
@@ -770,6 +772,7 @@ class ApiClient {
     Duration maxStale = const Duration(hours: 24),
     Duration? receiveTimeout,
     CancelToken? cancelToken,
+    bool skipRetry = false,
   }) async {
     final requestKey = _buildRequestKey('GET_MAP', endpoint, queryParameters);
     final effectiveCacheKey = cacheResponse
@@ -814,6 +817,7 @@ class ApiClient {
           options: _getOptionsForRead(
             forceRefresh: forceRefresh,
             receiveTimeout: receiveTimeout,
+            skipRetry: skipRetry,
           ),
         );
         final rawData = response.data;
@@ -976,6 +980,7 @@ class ApiClient {
   static Future<List<int>> getBytes(
     String endpoint, {
     Map<String, dynamic>? queryParameters,
+    Duration receiveTimeout = const Duration(seconds: 60),
   }) async {
     try {
       final response = await dio.get<Object?>(
@@ -983,7 +988,7 @@ class ApiClient {
         queryParameters: queryParameters,
         options: Options(
           responseType: ResponseType.bytes,
-          receiveTimeout: const Duration(seconds: 60),
+          receiveTimeout: receiveTimeout,
         ),
       );
       return response.data! as List<int>;

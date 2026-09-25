@@ -37,6 +37,14 @@ const { db2AppTable } = require('../../utils/db2-schemas');
 
 // ── Safe Query Helper (Parameterized) ────────────────────────────────────────
 
+// F1c-04: acota paginacion chatbot a 1-30. El limite nunca se interpola en el
+// SQL: viaja como parametro ? en FETCH FIRST ? ROWS ONLY (binding ODBC).
+function boundLimit(value, fallback = 20) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(Math.max(parsed, 1), 30);
+}
+
 async function safeQuery(conn, sql, params = []) {
     try {
         if (params.length > 0) {
@@ -235,7 +243,7 @@ async function searchClientsFlexibleRows(conn, query, limit = 20) {
     const variants = buildClientSearchVariants(query);
     if (variants.length === 0) return [];
 
-    const rowLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 30);
+    const rowLimit = boundLimit(limit, 20);
     const clauses = variants
         .map(() => '(UPPER(TRIM(NOMBRECLIENTE)) LIKE ? OR UPPER(TRIM(CODIGOCLIENTE)) LIKE ? OR UPPER(TRIM(POBLACION)) LIKE ?)')
         .join(' OR ');
@@ -243,6 +251,7 @@ async function searchClientsFlexibleRows(conn, query, limit = 20) {
         const term = `%${variant.toUpperCase()}%`;
         return [term, term, term];
     });
+    params.push(rowLimit);
 
     const rows = await safeQuery(conn, `
             SELECT TRIM(CODIGOCLIENTE) as CODIGO, TRIM(NOMBRECLIENTE) as NOMBRE,
@@ -250,7 +259,7 @@ async function searchClientsFlexibleRows(conn, query, limit = 20) {
             FROM ${comercialErpTable('CLI')}
             WHERE ${clauses}
             ORDER BY NOMBRECLIENTE
-            FETCH FIRST ${rowLimit} ROWS ONLY
+            FETCH FIRST ? ROWS ONLY
         `, params);
 
     const seen = new Set();
@@ -297,7 +306,7 @@ async function searchProductsFlexibleRows(conn, query, limit = 20) {
     const variants = buildProductSearchVariants(query);
     if (variants.length === 0) return [];
 
-    const rowLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 30);
+    const rowLimit = boundLimit(limit, 20);
     const clauses = variants
         .map(() => '(UPPER(TRIM(DESCRIPCIONARTICULO)) LIKE ? OR UPPER(TRIM(CODIGOARTICULO)) LIKE ?)')
         .join(' OR ');
@@ -305,6 +314,7 @@ async function searchProductsFlexibleRows(conn, query, limit = 20) {
         const term = `%${variant.toUpperCase()}%`;
         return [term, term];
     });
+    params.push(rowLimit);
 
     const rows = await safeQuery(conn, `
             SELECT TRIM(CODIGOARTICULO) as CODIGO, TRIM(DESCRIPCIONARTICULO) as NOMBRE,
@@ -312,7 +322,7 @@ async function searchProductsFlexibleRows(conn, query, limit = 20) {
             FROM ${comercialErpTable('ART')}
             WHERE ${clauses}
             ORDER BY DESCRIPCIONARTICULO
-            FETCH FIRST ${rowLimit} ROWS ONLY
+            FETCH FIRST ? ROWS ONLY
         `, params);
 
     const seen = new Set();

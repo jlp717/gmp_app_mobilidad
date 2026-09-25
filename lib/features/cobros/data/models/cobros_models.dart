@@ -2,12 +2,15 @@
 /// Modelos de datos para el módulo de cobros y entregas
 library;
 
+import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
 
 // Re-export EstadoEntrega from shared location
 export 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
+
+part 'cobros_models.freezed.dart';
 
 // ============================================
 // ENUMS
@@ -274,15 +277,21 @@ class CobroPendiente {
 }
 
 /// Registro histórico de cobro comercial (tabla JAVIER.COBROS / DB2).
-class CobroHistorico {
-  CobroHistorico({
-    required this.id,
-    required this.importe,
-    required this.fecha,
-    this.formaPago,
-    this.referencia = '',
-    this.observaciones = '',
-  });
+///
+/// F3-03 piloto freezed: `fromJson` conserva la lógica manual previa al
+/// byte (fallback MAYÚS/minús, tolerancia de fecha) para JSON idéntico.
+/// Solo parte `.freezed.dart`: freezed no requiere `.g.dart` al no haber
+/// `fromJson`/`toJson` generados que redirigir.
+@freezed
+class CobroHistorico with _$CobroHistorico {
+  const factory CobroHistorico({
+    required String id,
+    required double importe,
+    required DateTime fecha,
+    String? formaPago,
+    @Default('') String referencia,
+    @Default('') String observaciones,
+  }) = _CobroHistorico;
 
   factory CobroHistorico.fromJson(Map<String, dynamic> json) {
     dynamic pick(String upper, String lower) => json[upper] ?? json[lower];
@@ -304,13 +313,6 @@ class CobroHistorico {
       observaciones: pick('OBSERVACIONES', 'observaciones')?.toString() ?? '',
     );
   }
-
-  final String id;
-  final double importe;
-  final DateTime fecha;
-  final String? formaPago;
-  final String referencia;
-  final String observaciones;
 }
 
 /// Item de un albarán para entrega

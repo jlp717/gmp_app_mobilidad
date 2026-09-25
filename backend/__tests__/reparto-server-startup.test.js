@@ -163,11 +163,16 @@ describe('reparto server startup wiring', () => {
     const serverSource = loadServerSource();
     const appSource = loadAppSource();
     const canonicalMount = "app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);";
-    const firstFamilyBranch = appSource.indexOf('if (USE_TS_ROUTES && global.__TS_APP__)');
+    // WS2 DDD-CONSOLIDATION-001-FINAL: familia TS archivada, sin branching TS.
+    // Marcador real vigente: bloque legacy JS + DDD.
+    const firstFamilyMarker = appSource.indexOf('// WS2: solo familia JS legacy + DDD');
 
     expect(appSource.split(canonicalMount)).toHaveLength(2);
     expect(appSource.indexOf(canonicalMount)).toBeGreaterThan(0);
-    expect(appSource.indexOf(canonicalMount)).toBeLessThan(firstFamilyBranch);
+    expect(firstFamilyMarker).toBeGreaterThan(0);
+    expect(appSource.indexOf(canonicalMount)).toBeLessThan(firstFamilyMarker);
+    expect(appSource).not.toContain('USE_TS_ROUTES && global.__TS_APP__');
+    expect(appSource).not.toContain('global.__TS_APP__');
     expect(appSource).toContain('createRepartidorLiquidacionBootstrap({');
     expect(appSource).toContain('setCanonicalLiquidacionService(');
     expect(serverSource).toContain('await canonicalLiquidacionBootstrap.verifyCatalogReadOnly();');

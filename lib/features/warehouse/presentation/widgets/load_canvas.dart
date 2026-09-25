@@ -79,40 +79,41 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
     try {
       final data = jsonDecode(message.message) as Map<String, dynamic>;
       final type = data['type'] as String?;
-      final provider = ref.read(loadPlannerProvider);
+      final notifier = ref.read(loadPlannerProvider.notifier);
 
       switch (type) {
         case 'sceneReady':
           setState(() => _sceneReady = true);
-          _pushFullState(provider);
+          _pushFullState(ref.read(loadPlannerProvider));
 
         case 'boxSelected':
           final index = data['index'] as int?;
           if (index != null) {
             HapticFeedback.selectionClick();
-            provider.selectBox(index);
+            notifier.selectBox(index);
           }
 
         case 'canvasTapped':
-          provider.clearSelection();
+          notifier.clearSelection();
 
         case 'boxDragStart':
           final index = data['index'] as int?;
           if (index != null) {
             HapticFeedback.mediumImpact();
-            provider.startDrag(index);
+            notifier.startDrag(index);
           }
 
         case 'boxDragMove':
           final x = (data['x'] as num?)?.toDouble();
           final y = (data['y'] as num?)?.toDouble();
           if (x != null && y != null) {
-            provider.updateDragPosition(x, y);
+            notifier.updateDragPosition(x, y);
             // Push collision state back to JS
-            final hasCollision = provider.dragState?.hasCollision ?? false;
+            final drag = ref.read(loadPlannerProvider).dragState;
+            final hasCollision = drag?.hasCollision ?? false;
             if (hasCollision != _lastCollisionState) {
               _lastCollisionState = hasCollision;
-              final idx = provider.dragState?.boxIndex ?? -1;
+              final idx = drag?.boxIndex ?? -1;
               _runJs(
                 'ThreeBridge.setCollisionState($idx, $hasCollision)',
               );
@@ -120,25 +121,26 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
           }
 
         case 'boxDragEnd':
-          final hasCollision = provider.dragState?.hasCollision ?? false;
+          final hasCollision =
+              ref.read(loadPlannerProvider).dragState?.hasCollision ?? false;
           if (hasCollision) {
             HapticFeedback.heavyImpact();
           } else {
             HapticFeedback.lightImpact();
           }
-          provider.endDrag();
+          notifier.endDrag();
           _lastCollisionState = false;
           // After drag ends, sync positions back (provider may have reverted)
-          _pushBoxes(provider);
+          _pushBoxes(ref.read(loadPlannerProvider));
 
         case 'boxesSettled':
           // JS engine settled gravity — update provider positions
           final settledBoxes = data['boxes'] as List?;
           if (settledBoxes != null) {
-            provider.applySettledPositions(
+            notifier.applySettledPositions(
               settledBoxes.cast<Map<String, dynamic>>(),
             );
-            _lastBoxCount = provider.placedBoxes.length;
+            _lastBoxCount = ref.read(loadPlannerProvider).placedBoxes.length;
           }
 
         case 'boxesRepacked':
@@ -146,11 +148,11 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
           final placedList = data['placed'] as List?;
           final overflowList = data['overflow'] as List?;
           if (placedList != null) {
-            provider.applyRepackResult(
+            notifier.applyRepackResult(
               placedList.cast<Map<String, dynamic>>(),
               overflowList?.cast<Map<String, dynamic>>() ?? [],
             );
-            _lastBoxCount = provider.placedBoxes.length;
+            _lastBoxCount = ref.read(loadPlannerProvider).placedBoxes.length;
           }
       }
     } catch (e) {
@@ -177,7 +179,7 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
     _runJs('ThreeBridge.repack()');
   }
 
-  void _pushFullState(LoadPlannerProvider provider) {
+  void _pushFullState(LoadPlannerState provider) {
     if (!_sceneReady) return;
     if (provider.truck == null) return;
     _fullStatePushed = true;
@@ -210,7 +212,7 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
     _lastBoxCount = provider.placedBoxes.length;
   }
 
-  void _pushBoxes(LoadPlannerProvider provider) {
+  void _pushBoxes(LoadPlannerState provider) {
     final boxesJson = jsonEncode(
       provider.placedBoxes.map((b) => b.toJson()).toList(),
     );
@@ -241,7 +243,7 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
   // SYNC PROVIDER CHANGES → JS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  void _syncProviderToJs(LoadPlannerProvider provider) {
+  void _syncProviderToJs(LoadPlannerState provider) {
     if (!_sceneReady) return;
 
     // If full state was never pushed (sceneReady arrived before data loaded), push now

@@ -1397,7 +1397,7 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
         const paymentJoin = cobrosTable
             ? [
                 'LEFT JOIN ' + cobrosTable + ' CO',
-                'ON TRIM(CO.IDEMPOTENCY_TOKEN) = TRIM(C.IDEMPOTENCY_KEY)',
+                'ON CO.IDEMPOTENCY_TOKEN = C.IDEMPOTENCY_KEY',
             ].join('\n')
             : '';
         const sql = [
@@ -1407,8 +1407,8 @@ async function overlayCanonicalConfirmationStatuses(albaranes, repartidorIds) {
             paymentSelect,
             'FROM ' + tables.confirmations + ' C',
             paymentJoin,
-            'WHERE TRIM(C.DOCUMENT_ID) IN (' + documentPlaceholders + ')',
-            'ORDER BY TRIM(C.DOCUMENT_ID), TRIM(C.STATUS), C.ID',
+            'WHERE C.DOCUMENT_ID IN (' + documentPlaceholders + ')',
+            'ORDER BY C.DOCUMENT_ID, C.STATUS, C.ID',
         ].filter(Boolean).join('\n');
         // Match by DOCUMENT_ID only: the unique index is per document, so a
         // jefe viewing the driver's route still sees the persisted status.
@@ -1495,9 +1495,9 @@ async function loadCanonicalDetailProjection(documentId, repartidorId, clientCod
                    TRIM(C.STATUS) AS STATUS,
                    C.CONFIRMED_AT
             FROM ${tables.confirmations} C
-            WHERE TRIM(C.DOCUMENT_ID) = ?
+            WHERE C.DOCUMENT_ID = ?
               AND TRIM(C.CLIENTE_CODIGO) = ?
-            ORDER BY TRIM(C.STATUS), C.ID
+            ORDER BY C.STATUS, C.ID
         `, [documentId, clientCode], false, false);
         if (confirmations.length === 0) {
             return { availability: 'NONE', confirmation: null, linesById: new Map() };

@@ -13,7 +13,7 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/dialogs/delete_l
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_line_tile.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_preview_sheet.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 double _resolveLineDiscountPct({
   required String pctText,
@@ -47,6 +47,11 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
   final TextEditingController _obsCtrl = TextEditingController();
   final TextEditingController _discountCtrl = TextEditingController();
   final FocusNode _discountFocusNode = FocusNode();
+  // REQ-33: misma fuente que la lista (delivery-options → CRUT/LACLAE).
+  // Future memoizado por cliente+vendedor para no refetchear en cada
+  // rebuild del carrito (el header observa totales y líneas).
+  String _daysKey = '';
+  Future<OrderDeliveryOptions>? _daysFuture;
 
   @override
   void dispose() {
@@ -66,7 +71,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(pedidosProvider.select((p) => (
+    ref.watch(pedidosNotifierProvider.select((p) => (
           p.hasClient,
           p.hasLines,
           p.clientCode,
@@ -80,7 +85,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           p.estimatedBolsaImpact.consumo,
           p.estimatedBolsaImpact.acumulacion,
         )));
-    final provider = ref.read(pedidosProvider);
+    final provider = ref.read(pedidosNotifierProvider.notifier);
 
     return ColoredBox(
       color: AppTheme.inkSurface,
@@ -101,7 +106,19 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     );
   }
 
-  Widget _buildClientHeader(BuildContext context, PedidosProvider provider) {
+  Widget _buildClientHeader(BuildContext context, PedidosNotifier provider) {
+    final clientCode = provider.clientCode ?? '';
+    final vendorCode = widget.vendedorCode.trim();
+    final daysKey = '$clientCode|$vendorCode';
+    if (daysKey != _daysKey) {
+      _daysKey = daysKey;
+      _daysFuture = clientCode.isNotEmpty && vendorCode.isNotEmpty
+          ? PedidosService.getDeliveryOptions(
+              clientCode: clientCode,
+              vendedorCode: vendorCode,
+            )
+          : null;
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -110,142 +127,198 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           bottom: BorderSide(color: AppTheme.borderColor, width: 0.5),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.storefront_outlined,
-            color: provider.hasClient ? AppTheme.info : AppTheme.textTertiary,
-            size: 20,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: provider.hasClient
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        provider.clientName ?? '',
+          Row(
+            children: [
+              Icon(
+                Icons.storefront_outlined,
+                color:
+                    provider.hasClient ? AppTheme.info : AppTheme.textTertiary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: provider.hasClient
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            provider.clientName ?? '',
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: Responsive.fontSize(
+                                context,
+                                small: 13,
+                                large: 15,
+                              ),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            provider.clientCode ?? '',
+                            style: TextStyle(
+                              color: AppTheme.info,
+                              fontSize: Responsive.fontSize(
+                                context,
+                                small: 11,
+                                large: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Text(
+                        'Seleccionar cliente',
                         style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textTertiary,
                           fontSize: Responsive.fontSize(
                             context,
                             small: 13,
                             large: 15,
                           ),
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      Text(
-                        provider.clientCode ?? '',
-                        style: TextStyle(
-                          color: AppTheme.info,
-                          fontSize: Responsive.fontSize(
-                            context,
-                            small: 11,
-                            large: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : Text(
-                    'Seleccionar cliente',
+              ),
+              // Line count badge
+              if (provider.hasLines)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.info.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${provider.lineCount} lineas',
                     style: TextStyle(
-                      color: AppTheme.textTertiary,
+                      color: AppTheme.info,
                       fontSize:
-                          Responsive.fontSize(context, small: 13, large: 15),
+                          Responsive.fontSize(context, small: 11, large: 12),
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-          ),
-          // Line count badge
-          if (provider.hasLines)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppTheme.info.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                '${provider.lineCount} lineas',
-                style: TextStyle(
-                  color: AppTheme.info,
-                  fontSize: Responsive.fontSize(context, small: 11, large: 12),
-                  fontWeight: FontWeight.w600,
                 ),
-              ),
-            ),
-          // Clear cart button (Mejora 8)
-          if (provider.hasLines)
-            IconButton(
-              icon: const Icon(
-                Icons.delete_sweep_outlined,
-                color: AppTheme.error,
-                size: 20,
-              ),
-              tooltip: 'Vaciar carrito',
-              onPressed: () {
-                showDialog<void>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    backgroundColor: AppTheme.raisedSurface,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    title: Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          color: AppTheme.error,
-                          size: 22,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Vaciar carrito',
-                          style: TextStyle(
-                              color: AppTheme.textPrimary, fontSize: 16),
-                        ),
-                      ],
-                    ),
-                    content: Text(
-                      '¿Seguro que quieres eliminar todas las líneas del pedido?',
-                      style: TextStyle(color: AppTheme.textSecondary),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: Text(
-                          'Cancelar',
-                          style: TextStyle(color: AppTheme.textTertiary),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          provider.clearOrder();
-                          await provider.loadPromotions();
-                          // Guard: si el diálogo se cerró durante el await
-                          // (barrier), un pop extra cerraría la pantalla.
-                          if (ctx.mounted) Navigator.pop(ctx);
-                        },
-                        child: const Text(
-                          'Vaciar',
-                          style: TextStyle(
-                            color: AppTheme.error,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
+              // Clear cart button (Mejora 8)
+              if (provider.hasLines)
+                IconButton(
+                  icon: const Icon(
+                    Icons.delete_sweep_outlined,
+                    color: AppTheme.error,
+                    size: 20,
                   ),
-                );
-              },
-            ),
+                  tooltip: 'Vaciar carrito',
+                  onPressed: () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: AppTheme.raisedSurface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: Row(
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: AppTheme.error,
+                              size: 22,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Vaciar carrito',
+                              style: TextStyle(
+                                  color: AppTheme.textPrimary, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                        content: Text(
+                          '¿Seguro que quieres eliminar todas las líneas del pedido?',
+                          style: TextStyle(color: AppTheme.textSecondary),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: Text(
+                              'Cancelar',
+                              style: TextStyle(color: AppTheme.textTertiary),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              provider.clearOrder();
+                              await provider.loadPromotions();
+                              // Guard: si el diálogo se cerró durante el await
+                              // (barrier), un pop extra cerraría la pantalla.
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            },
+                            child: const Text(
+                              'Vaciar',
+                              style: TextStyle(
+                                color: AppTheme.error,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+          // REQ-33: Ruta + Visita + Reparto coherente con la lista de
+          // clientes. Sin cliente no se muestra; sin dato, guion explícito.
+          if (provider.hasClient) _buildClientRouteDaysRow(),
         ],
       ),
     );
   }
 
-  Widget _buildLinesList(BuildContext context, PedidosProvider provider) {
+  Widget _buildClientRouteDaysRow() {
+    final future = _daysFuture;
+    if (future == null) return const SizedBox.shrink();
+    return FutureBuilder<OrderDeliveryOptions>(
+      future: future,
+      builder: (ctx, snapshot) {
+        final days = snapshot.data?.allowedDeliveryDaysShort.trim() ?? '';
+        final label = snapshot.hasError || days.isEmpty
+            ? 'Reparto: —'
+            : 'Reparto: $days';
+        return Semantics(
+          label: 'Días de reparto del cliente, $label',
+          child: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.local_shipping_outlined,
+                  color: AppTheme.textTertiary,
+                  size: 14,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize:
+                          Responsive.fontSize(ctx, small: 12, large: 13),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLinesList(BuildContext context, PedidosNotifier provider) {
     return ReorderableListView.builder(
       scrollController: widget.scrollController,
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -359,7 +432,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     );
   }
 
-  Widget _buildSummaryBar(BuildContext context, PedidosProvider provider) {
+  Widget _buildSummaryBar(BuildContext context, PedidosNotifier provider) {
     final margin = provider.porcentajeMargen;
     final marginColor = margin >= 15
         ? AppTheme.success
@@ -678,7 +751,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
 
   Widget _buildBolsaImpactPreview(
     BuildContext context,
-    PedidosProvider provider,
+    PedidosNotifier provider,
   ) {
     final impact = provider.estimatedBolsaImpact;
     final isPureConsumption = impact.consumo > 0 && impact.acumulacion == 0;
@@ -789,7 +862,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     return '$h:$m';
   }
 
-  String _formatPrimaryQtyStat(PedidosProvider provider) {
+  String _formatPrimaryQtyStat(PedidosNotifier provider) {
     var boxes = 0.0;
     var units = 0.0;
     var kg = 0.0;
@@ -831,7 +904,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
         .replaceAll(RegExp(r'\.$'), '');
   }
 
-  String _formatTotalUnits(PedidosProvider provider) {
+  String _formatTotalUnits(PedidosNotifier provider) {
     final total = provider.totalUnidades;
     final hasWeightLines = provider.lines.any((l) {
       final u = l.unidadMedida.toUpperCase().trim();
@@ -849,7 +922,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
 
   void _showEditLineDialog(
     BuildContext context,
-    PedidosProvider provider,
+    PedidosNotifier provider,
     OrderLine line,
     int index,
   ) {
@@ -1455,7 +1528,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
 
   Future<void> _onConfirm(
     BuildContext context,
-    PedidosProvider provider,
+    PedidosNotifier provider,
   ) async {
     if (!provider.hasClient) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1575,7 +1648,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       ),
     ).then((selected) async {
       if (selected != null && selected['code'] != null) {
-        final provider = ref.read(pedidosProvider.notifier);
+        final provider = ref.read(pedidosNotifierProvider.notifier);
         final productCode = selected['code'] as String;
         final quantity = selected['qty'] as double;
         final unit = selected['unit'] as String;
@@ -1631,7 +1704,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
   }
 
   // E1 – Preview sheet before confirm (Amazon-style DraggableScrollableSheet)
-  void _showOrderPreview(BuildContext context, PedidosProvider provider) {
+  void _showOrderPreview(BuildContext context, PedidosNotifier provider) {
     if (!provider.hasClient) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

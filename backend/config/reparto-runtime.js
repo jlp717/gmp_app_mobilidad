@@ -492,6 +492,9 @@ function resolveRepartoRuntime(env = {}) {
 }
 
 function resolveRepartoRouteMode(env = {}) {
+  // WS2 DDD-CONSOLIDATION-001-FINAL: familia TS archivada en
+  // docs/archive/ts-routes-7239f17/. USE_TS_ROUTES queda como guard fail-closed
+  // (solo false valido); el modo 'typescript' esta muerto y nunca se retorna.
   const errors = [];
   const useTsRoutes = parseStrictBoolean(
     env.USE_TS_ROUTES,
@@ -526,7 +529,7 @@ function resolveRepartoRouteMode(env = {}) {
 
   return Object.freeze({
     valid: true,
-    mode: useTsRoutes ? 'typescript' : useDddRoutes ? 'ddd' : 'legacy',
+    mode: useDddRoutes ? 'ddd' : 'legacy',
     useTsRoutes,
     useDddRoutes,
     errors: Object.freeze([]),

@@ -5,7 +5,7 @@ const SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
 const { Router } = require('express');
 const { kpiQuery, kpiHealthCheck } = require('./config/db');
 const { getCachedClientAlerts, getRedisStatus, getLastLoadInfo } = require('./services/redis_cache');
-const { runETL } = require('./services/etl_orchestrator');
+const { runETL, STALE_DAYS, FILE_TO_ALERT_TYPE, getMissingFiles, getMissingAlertTypes, buildFreshness } = require('./services/etl_orchestrator');
 const { getSchedulerStatus } = require('./services/scheduler');
 const { getPrometheusMetrics, metricsMiddleware } = require('./services/metrics');
 const { transformAlert } = require('./services/alert_transformer');
@@ -16,6 +16,27 @@ const { getClientCodesFromCache } = require('../services/laclae');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 const router = Router();
+const FRESHNESS_DAYS = STALE_DAYS || 7;
+
+// REQ-G3/G4: frescura visible. STALE si ultima COMPLETED > 7d. Nunca servir
+// caducadas como frescas; la app muestra badge "datos de <fecha>" + reintentar.
+// La expiracion solo corre dentro de runETL, nunca en lecturas.
+function freshnessFromCompletedAt(completedAt, now = new Date()) {
+  if (typeof buildFreshness === 'function') return buildFreshness(completedAt, now);
+  if (!completedAt) return { fresh: false, stale: true, daysSinceLoad: null, staleSince: null };
+  const completed = new Date(completedAt);
+  if (Number.isNaN(completed.getTime())) return { fresh: false, stale: true, daysSinceLoad: null, staleSince: completedAt };
+  const days = Math.floor((now - completed) / 86400000);
+  const stale = days > FRESHNESS_DAYS;
+  return { fresh: !stale, stale, daysSinceLoad: days, staleSince: stale ? completed.toISOString() : null };
+}
+
+function gapsFromFilesProcessed(filesProcessed) {
+  const names = String(filesProcessed || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const missing = typeof getMissingFiles === 'function' ? getMissingFiles(names) : [];
+  const types = typeof getMissingAlertTypes === 'function' ? getMissingAlertTypes(missing) : [];
+  return { missingFiles: missing, missingAlertTypes: types };
+}
 const vendorClientSetCache = new Map();
 const vendorClientSetInFlight = new Map();
 const VENDOR_CLIENT_SET_TTL_MS = 10 * 60 * 1000;
@@ -267,7 +288,20 @@ router.get('/alerts/client/:clientId', async (req, res) => {
     for (const code of codesToTry) {
       const cached = await getCachedClientAlerts(code);
       if (cached && cached.length > 0) {
-        return res.json({ success: true, source: 'cache', clientId, alerts: cached });
+        // REQ-G3: lastLoad + frescura visibles aunque venga de cache.
+        let lastLoad = null;
+        try {
+          const lastRes = await kpiQuery(
+            `SELECT LOAD_ID, STATUS, COMPLETED_AT FROM ${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
+          );
+          lastLoad = lastRes.rows && lastRes.rows[0] ? lastRes.rows[0] : null;
+        } catch (_) { /* non-critical */ }
+        const completed = lastLoad && lastLoad.STATUS === 'COMPLETED' ? lastLoad.COMPLETED_AT : null;
+        return res.json({
+          success: true, source: 'cache', clientId, alerts: cached,
+          lastLoad: lastLoad ? { loadId: lastLoad.LOAD_ID, status: lastLoad.STATUS, completedAt: completed } : null,
+          freshness: { ...freshnessFromCompletedAt(completed), lastCompletedAt: completed },
+        });
       }
     }
 
@@ -290,7 +324,23 @@ router.get('/alerts/client/:clientId', async (req, res) => {
       logger.info(`[kpi:api] 0 alertas para ${clientId} (variantes: ${codesToTry.join(', ')})`);
     }
 
-    res.json({ success: true, source: 'db', clientId, alerts });
+    // REQ-G3/G4: lastLoad + frescura + hueco CUOTA_SIN_COMPRA visible sin datos.
+    let lastLoadRow = null;
+    try {
+      const lastRes = await kpiQuery(
+        `SELECT LOAD_ID, STATUS, FILES_PROCESSED, COMPLETED_AT FROM ${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
+      );
+      lastLoadRow = lastRes.rows && lastRes.rows[0] ? lastRes.rows[0] : null;
+    } catch (_) { /* non-critical */ }
+    const lastCompleted = lastLoadRow && lastLoadRow.STATUS === 'COMPLETED' ? lastLoadRow.COMPLETED_AT : null;
+    const gaps = gapsFromFilesProcessed(lastLoadRow ? lastLoadRow.FILES_PROCESSED : '');
+
+    res.json({
+      success: true, source: 'db', clientId, alerts,
+      lastLoad: lastLoadRow ? { loadId: lastLoadRow.LOAD_ID, status: lastLoadRow.STATUS, completedAt: lastCompleted } : null,
+      freshness: { ...freshnessFromCompletedAt(lastCompleted), lastCompletedAt: lastCompleted },
+      gaps,
+    });
   } catch (err) {
     logger.error(`[kpi:api] Error en GET /alerts/client/${req.params.clientId}: ${err.message}`);
     res.status(500).json({ success: false, error: 'Error consultando alertas del cliente' });
@@ -399,6 +449,8 @@ router.post('/etl/run', verifyToken, requireJefeVentas, async (req, res) => {
       totalAlerts: result.totalAlerts,
       skipped: result.skipped || false,
       fileResults: result.fileResults,
+      missingFiles: result.missingFiles || [],
+      missingAlertTypes: result.missingAlertTypes || [],
     });
   } catch (err) {
     logger.error(`[kpi:api] Error en POST /etl/run: ${err.message}`);
@@ -420,6 +472,18 @@ router.get('/etl/status', async (req, res) => {
     const scheduler = getSchedulerStatus();
     const redis = getRedisStatus();
     const lastLoad = await getLastLoadInfo();
+    // REQ-G1: estado FTPS sin sensibles (solo host:puerto + booleanos + missingRefs).
+    let sftp = null;
+    try {
+      const { getSftpConfigStatus } = require('./services/sftp_client');
+      sftp = getSftpConfigStatus();
+    } catch (_) { /* non-critical */ }
+
+    // REQ-G3/G4: frescura + hueco visible CUOTA_SIN_COMPRA sin datos.
+    const latest = loadResult.rows && loadResult.rows[0] ? loadResult.rows[0] : null;
+    const latestCompleted = latest && latest.STATUS === 'COMPLETED' ? latest.COMPLETED_AT : null;
+    const freshness = freshnessFromCompletedAt(latestCompleted);
+    const gaps = gapsFromFilesProcessed(latest ? latest.FILES_PROCESSED : '');
 
     res.json({
       success: true,
@@ -427,6 +491,13 @@ router.get('/etl/status', async (req, res) => {
       scheduler,
       redis,
       lastCacheUpdate: lastLoad,
+      sftp,
+      freshness: {
+        ...freshness,
+        lastCompletedAt: latestCompleted,
+        lastLoadId: latest ? latest.LOAD_ID : null,
+      },
+      gaps,
     });
   } catch (err) {
     logger.error(`[kpi:api] Error en GET /etl/status: ${err.message}`);
@@ -456,7 +527,21 @@ router.get('/health', async (req, res) => {
     }
   } catch (_) { /* non-critical */ }
 
-  const status = dbHealth.status === 'ok' ? 'ok' : 'degraded';
+  // REQ-G4: frescura sin sensibles. STALE -> degraded con causa, sin tumbar API.
+  let freshness = { fresh: false, stale: true, daysSinceLoad: null, staleSince: null, lastCompletedAt: null, lastLoadId: null };
+  let gaps = { missingFiles: [], missingAlertTypes: [] };
+  try {
+    const lastRes = await kpiQuery(
+      `SELECT LOAD_ID, STATUS, FILES_PROCESSED, COMPLETED_AT FROM ${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
+    );
+    const last = lastRes.rows && lastRes.rows[0] ? lastRes.rows[0] : null;
+    const completed = last && last.STATUS === 'COMPLETED' ? last.COMPLETED_AT : null;
+    const f = freshnessFromCompletedAt(completed);
+    freshness = { ...f, lastCompletedAt: completed, lastLoadId: last ? last.LOAD_ID : null };
+    gaps = gapsFromFilesProcessed(last ? last.FILES_PROCESSED : '');
+  } catch (_) { /* non-critical: freshness queda STALE visible */ }
+
+  const status = (dbHealth.status === 'ok' && !freshness.stale) ? 'ok' : 'degraded';
 
   res.status(status === 'ok' ? 200 : 503).json({
     service: 'kpi-glacius',
@@ -465,6 +550,9 @@ router.get('/health', async (req, res) => {
     redis,
     scheduler,
     alerts: alertStats,
+    freshness,
+    gaps,
+    cause: freshness.stale ? `STALE: ultima carga COMPLETED hace ${freshness.daysSinceLoad ?? '?'}d (> ${FRESHNESS_DAYS}d) o ausente; se sirve ultima cache valida sin mostrarla como fresca` : null,
     timestamp: new Date().toISOString(),
   });
 });
@@ -787,12 +875,15 @@ router.get('/dashboard', async (req, res) => {
       }
     }
 
-    // 6. Last load info
+    // 6. Last load info + frescura + huecos (REQ-G3/G4, sin inventar CSVs)
     const lastLoadResult = await kpiQuery(
-      `SELECT LOAD_ID, STATUS, TOTAL_ALERTS, COMPLETED_AT
+      `SELECT LOAD_ID, STATUS, TOTAL_ALERTS, FILES_PROCESSED, COMPLETED_AT
        FROM ${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
     );
     const lastLoad = lastLoadResult.rows[0] || null;
+    const lastCompletedAt = lastLoad && lastLoad.STATUS === 'COMPLETED' ? lastLoad.COMPLETED_AT : null;
+    const dashboardFreshness = freshnessFromCompletedAt(lastCompletedAt);
+    const dashboardGaps = gapsFromFilesProcessed(lastLoad ? lastLoad.FILES_PROCESSED : '');
 
     // Format byType as array with labels
     const typeLabels = {
@@ -852,6 +943,8 @@ router.get('/dashboard', async (req, res) => {
         totalAlerts: parseInt(lastLoad.TOTAL_ALERTS || 0),
         completedAt: lastLoad.COMPLETED_AT,
       } : null,
+      freshness: { ...dashboardFreshness, lastCompletedAt: lastCompletedAt },
+      gaps: dashboardGaps,
     });
   } catch (err) {
     logger.error(`[kpi:api] Error en GET /dashboard: ${err.message}`);

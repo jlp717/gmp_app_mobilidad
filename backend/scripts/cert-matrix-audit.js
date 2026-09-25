@@ -1,3 +1,4 @@
+// UNCLASSIFIED — do not run without human confirmation. See audit <2026-09-25>.
 'use strict';
 /**
  * GMP Certification Matrix Audit — run on server: cd backend && node scripts/cert-matrix-audit.js

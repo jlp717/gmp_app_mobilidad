@@ -358,9 +358,9 @@ async function sendConsolidatedEmail(vendorName, changes) {
     const moveChanges = changes.filter(c => c.details.movedClients);
     
     // Consolidar datos
-    let allReorderedClients = [];
-    let allMovedClients = [];
-    let affectedDays = new Set();
+    const allReorderedClients = [];
+    const allMovedClients = [];
+    const affectedDays = new Set();
     
     reorderChanges.forEach(c => {
         if (c.details.diaObjetivo) affectedDays.add(c.details.diaObjetivo);
@@ -574,7 +574,7 @@ async function sendConsolidatedEmail(vendorName, changes) {
     const htmlBody = generateProfessionalTemplate(content, 'Resumen de Cambios en Ruta', timestamp);
     
     // Construir asunto descriptivo
-    let subjectParts = [];
+    const subjectParts = [];
     if (allMovedClients.length > 0) subjectParts.push(`${allMovedClients.length} cambio(s) de día`);
     if (allReorderedClients.length > 0) subjectParts.push(`${allReorderedClients.length} reorden(es)`);
     const subjectLine = subjectParts.join(' + ') || 'Modificación';

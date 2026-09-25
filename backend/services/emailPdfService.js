@@ -388,7 +388,7 @@ async function sendEmailWithPdf({ to, cc, subject, htmlBody, textBody, pdfBuffer
             const mailOptions = {
                 from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
                 replyTo: REPLY_TO,
-                to: to,
+                to,
                 ...(ccList.length ? { cc: ccList.join(', ') } : {}),
                 subject: subject || `Documento - ${FROM_NAME}`,
                 html: effectiveHtml,

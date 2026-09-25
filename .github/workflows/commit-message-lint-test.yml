@@ -1,0 +1,115 @@
+name: Commit Message Lint (test)
+
+# WS2 GMP-HOOKS-001: espejo server-side de hooks locales, solo rama test.
+# - commit-msg (.husky/commit-msg -> commitlint --edit) se re-ejecuta aqui con
+#   @commitlint/cli + commitlint.config.js existente sobre rango base..HEAD.
+# - pre-commit (.husky/pre-commit: loop manual dart format / node --check,
+#   NO lint-staged real) se re-ejecuta aqui sobre changed files del rango.
+# No toca .husky/, no reescribe historia, no protege ramas, no despliega.
+# Reutiliza tooling de package.json (@commitlint/cli, config existente).
+# No anade dependencias pesadas: solo actions/checkout, setup-node y
+# flutter-action (provee `dart` en runner ubuntu-latest).
+
+"on":
+  push:
+    branches: [test]
+  pull_request:
+    branches: [test]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commit-message-lint-test:
+    name: Commitlint + staged-equivalent (test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Flutter (provides dart)
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: "3.35.6"
+          channel: stable
+          cache: true
+
+      - name: Install root tooling (commitlint)
+        run: npm ci --ignore-scripts
+
+      - name: Commitlint range base..HEAD (commitlint.config.js)
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+              BASE="HEAD~1"
+            fi
+          fi
+          if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
+            echo "::warning::Base $BASE no resoluble, fallback a HEAD~1"
+            BASE="HEAD~1"
+          fi
+          if ! git rev-parse --verify HEAD >/dev/null 2>&1; then
+            echo "::error::HEAD no resoluble"
+            exit 1
+          fi
+          echo "Rango: $BASE..HEAD"
+          git log --oneline "$BASE..HEAD" || true
+          npx commitlint --config ./commitlint.config.js --from "$BASE" --to HEAD --verbose
+
+      - name: Staged-equivalent checks (dart format / node --check)
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+              BASE="HEAD~1"
+            fi
+          fi
+          git rev-parse --verify "$BASE" >/dev/null 2>&1 || BASE="HEAD~1"
+          echo "Changed files en $BASE..HEAD:"
+          CHANGED=$(git diff --name-only --diff-filter=ACMR "$BASE" HEAD -- | tr -d '\r' || true)
+          echo "$CHANGED"
+          if [ -z "$CHANGED" ]; then
+            echo "Sin ficheros cambiados, nada que validar."
+            exit 0
+          fi
+          FAIL=0
+          for file in $CHANGED; do
+            case "$file" in
+              *.dart)
+                if [ -f "$file" ]; then
+                  echo "::group::dart format $file"
+                  dart format --output=none --set-exit-if-changed "$file" || { echo "::error::dart format fallo: $file"; FAIL=1; }
+                  echo "::endgroup::"
+                fi
+                ;;
+              *.js|*.cjs|*.mjs)
+                if [ -f "$file" ]; then
+                  echo "::group::node --check $file"
+                  node --check "$file" || { echo "::error::sintaxis JS invalida: $file"; FAIL=1; }
+                  echo "::endgroup::"
+                fi
+                ;;
+            esac
+          done
+          exit $FAIL

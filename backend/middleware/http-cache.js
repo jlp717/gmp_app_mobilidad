@@ -90,8 +90,18 @@ function ensureHttpCacheClusterInvalidation() {
 
 ensureHttpCacheClusterInvalidation();
 
+const ETAG_MAX_BYTES = 256 * 1024;
+
 function generateETag(data) {
-    return `"${crypto.createHash('md5').update(JSON.stringify(data)).digest('hex').substring(0, 16)}"`;
+    let serialized;
+    try {
+        serialized = typeof data === 'string' ? data : JSON.stringify(data);
+    } catch (_) {
+        return null;
+    }
+    if (serialized == null) return null;
+    if (Buffer.byteLength(serialized, 'utf8') >= ETAG_MAX_BYTES) return null;
+    return `"${crypto.createHash('md5').update(serialized).digest('hex').substring(0, 16)}"`;
 }
 
 function getAuthScope(req) {
@@ -294,10 +304,10 @@ function cached(cachePrefix, ttlSeconds) {
 
         if (cachedData) {
             res.setHeader('X-Cache-Status', 'HIT');
-            res.setHeader('ETag', etag);
+            if (etag) res.setHeader('ETag', etag);
             res.setHeader('Cache-Control', 'private, max-age=' + Math.floor(ttlSeconds * 0.5));
 
-            if (ifNoneMatch === etag) {
+            if (etag && ifNoneMatch === etag) {
                 return res.status(304).end();
             }
 
@@ -328,7 +338,8 @@ function cached(cachePrefix, ttlSeconds) {
                 set(cacheKey, data, ttlSeconds);
             }
             if (!responseForbidsStorage) {
-                res.setHeader('ETag', generateETag(data));
+                const freshEtag = generateETag(data);
+                if (freshEtag) res.setHeader('ETag', freshEtag);
                 res.setHeader('Cache-Control', 'private, max-age=' + Math.floor(ttlSeconds * 0.5));
             }
             return originalJson(data);

@@ -3,8 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const manifest = require('../scripts/reparto-isolated-ddl-manifest');
-const runner = require('../scripts/reparto-isolated-ddl-runner');
+const manifest = require('../scripts/tools/reparto-isolated-ddl-manifest');
+const runner = require('../scripts/tools/reparto-isolated-ddl-runner');
 
 const sqlDirectory = path.join(__dirname, '..', 'scripts', 'sql');
 

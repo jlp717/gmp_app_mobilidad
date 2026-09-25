@@ -1,5 +1,10 @@
 // scheduler.js: Planificador diario del ETL Glacius con node-schedule
 // Ejecuta a las 7:00 AM Europe/Madrid (lunes a viernes)
+// Catch-up documentado: vive en memoria del proceso Node; cada restart PM2 lo
+// mata hasta rearranque. Al arrancar, checkMissedRun() ejecuta UNA vez el
+// LOAD_ID=YYYY-WNN de la semana en curso si esta pendiente y el scheduler esta
+// habilitado. Idempotente por KPI_LOADS (COMPLETED -> skip). No mata PM2 ni
+// duplica LOAD_ID: guard IN_PROGRESS reciente + flag en memoria por worker.
 'use strict';
 
 const schedule = require('node-schedule');
@@ -9,6 +14,9 @@ const logger = require('../../middleware/logger');
 const SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
 
 let scheduledJob = null;
+let catchUpRunning = false;
+// Ventana en la que un IN_PROGRESS se considera "otro worker en marcha".
+const IN_PROGRESS_GUARD_MINUTES = 120;
 
 // Timezone para España peninsular (CET/CEST con cambio automático)
 const TZ = process.env.KPI_ETL_TZ || 'Europe/Madrid';
@@ -21,6 +29,11 @@ const DEFAULT_CRON = '0 7 * * 1-5';
  * Si no se completó y es día laborable, ejecuta el ETL inmediatamente.
  */
 async function checkMissedRun() {
+  // Guard en memoria: evita doble catch-up dentro del mismo worker.
+  if (catchUpRunning) {
+    logger.debug('[kpi:scheduler] Catch-up ya en marcha en este worker, skip');
+    return;
+  }
   try {
     const now = new Date();
     const tzNow = new Date(now.toLocaleString('en-US', { timeZone: TZ }));
@@ -34,7 +47,7 @@ async function checkMissedRun() {
 
     const currentLoadId = generateLoadId();
     const existing = await kpiQuery(
-      `SELECT ID, STATUS FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?`,
+      `SELECT ID, STATUS, STARTED_AT FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?`,
       [currentLoadId]
     );
 
@@ -43,14 +56,34 @@ async function checkMissedRun() {
       return;
     }
 
-    logger.info(`[kpi:scheduler] Catch-up: ejecutando ETL para ${currentLoadId} (semana pendiente)...`);
-    const result = await runETL();
-    if (result.skipped) {
-      logger.info(`[kpi:scheduler] Catch-up: ETL omitido (${result.loadId})`);
-    } else {
-      logger.info(`[kpi:scheduler] Catch-up completado: ${result.totalAlerts} alertas de ${result.fileResults.length} archivos`);
+    // No duplica LOAD_ID: si otro worker PM2 lo dejo IN_PROGRESS reciente, skip.
+    if (existing.rows.length > 0 && existing.rows[0].STATUS === 'IN_PROGRESS') {
+      const started = existing.rows[0].STARTED_AT ? new Date(existing.rows[0].STARTED_AT) : null;
+      const ageMin = started && !Number.isNaN(started.getTime())
+        ? (Date.now() - started.getTime()) / 60000
+        : Number.POSITIVE_INFINITY;
+      if (ageMin < IN_PROGRESS_GUARD_MINUTES) {
+        logger.info(`[kpi:scheduler] Catch-up: ${currentLoadId} IN_PROGRESS reciente (otro worker), skip sin duplicar`);
+        return;
+      }
+      logger.warn(`[kpi:scheduler] Catch-up: ${currentLoadId} IN_PROGRESS rancio (> ${IN_PROGRESS_GUARD_MINUTES}min), reprocesa via runETL`);
+    }
+
+    catchUpRunning = true;
+    try {
+      logger.info(`[kpi:scheduler] Catch-up: ejecutando ETL para ${currentLoadId} (semana pendiente)...`);
+      const result = await runETL();
+      if (result.skipped) {
+        logger.info(`[kpi:scheduler] Catch-up: ETL omitido (${result.loadId})`);
+      } else {
+        const gaps = (result.missingAlertTypes || []).join(', ') || 'ninguno';
+        logger.info(`[kpi:scheduler] Catch-up completado: ${result.totalAlerts} alertas de ${result.fileResults.length} archivos (gaps: ${gaps})`);
+      }
+    } finally {
+      catchUpRunning = false;
     }
   } catch (err) {
+    catchUpRunning = false;
     logger.error(`[kpi:scheduler] Error en catch-up ETL: ${err.message}`);
   }
 }

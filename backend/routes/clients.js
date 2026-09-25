@@ -4,8 +4,7 @@ const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const { query, queryWithParams } = require('../config/db');
 const {
-  buildVendedorFilter,
-  buildVendedorFilterLACLAE,
+  buildBoundLaclaeVendorFilter,
   formatCurrency,
   MIN_YEAR,
   LACLAE_SALES_FILTER,
@@ -54,13 +53,18 @@ function resolveClientsVendedorCodes(req, requested) {
     if (!userCode) return { ok: false, status: 403, body: { success: false, code: 'FORBIDDEN_VENDOR', error: 'Usuario sin vendedor asignado' } };
     return { ok: true, vendedorCodes: userCode };
   }
+  // F2a-04: manager via canonico resolveVendorScope/buildBound*. Sin ternaria visible->'ALL'.
+  const { resolveVendorScope: resolveCanonicalVendorScope } = require('../middleware/vendor-scope');
   const visible = clientsVisibleVendorCodes(user);
-  if (requestedAll) return { ok: true, vendedorCodes: visible.length ? visible.join(',') : 'ALL' };
-  const codes = raw.split(',').map(normalizeVendorCode).filter(Boolean);
-  if (visible.length && codes.some(code => !visible.some(v => clientCodesMatch(v, code)))) {
+  const scope = resolveCanonicalVendorScope(user, requestedAll ? 'ALL' : raw, { visibleCodes: visible });
+  if (!scope.ok) {
     return { ok: false, status: 403, body: { success: false, code: 'FORBIDDEN_VENDOR', error: 'Vendedor fuera de alcance' } };
   }
-  return { ok: true, vendedorCodes: codes.join(',') };
+  if (scope.literalAll) return { ok: true, vendedorCodes: 'ALL' };
+  if (!scope.codes.length) {
+    return { ok: false, status: 403, body: { success: false, code: 'FORBIDDEN_VENDOR', error: 'Vendedor fuera de alcance' } };
+  }
+  return { ok: true, vendedorCodes: scope.codes.join(',') };
 }
 
 async function assertClientInVendorScope(safeClientCode, vendedorCodes) {
@@ -128,6 +132,36 @@ function buildClientSearchFilter(safeSearch, alias = 'C') {
   };
 }
 
+// F2b-02: validacion Zod patron commissions.js: codigo alfanumerico max 10,
+// limit-offset clamped (parsePage). Input invalido => 400 legible.
+let clientsZod = null;
+try {
+    clientsZod = require('zod').z;
+} catch (e) {
+    clientsZod = null;
+}
+const salesHistoryParamSchema = clientsZod
+    ? clientsZod.object({ code: clientsZod.string().regex(/^[A-Za-z0-9]+$/).max(10) }).strict()
+    : null;
+
+function validateSalesHistoryClientCode(req, res, next) {
+    // F2b-01 fail-closed: sin validador, 500 VALIDATOR_UNAVAILABLE, nunca next.
+    if (!salesHistoryParamSchema) {
+        return res.status(500).json({ success: false, code: 'VALIDATOR_UNAVAILABLE', error: 'Validador no disponible' });
+    }
+    const parsed = salesHistoryParamSchema.safeParse({ code: String(req.params.code || '') });
+    if (!parsed.success) {
+        return res.status(400).json({ success: false, code: 'INVALID_CLIENT_CODE', error: 'Codigo de cliente invalido (alfanumerico, max 10)' });
+    }
+    const { limit, offset } = req.query;
+    for (const [name, value] of [['limit', limit], ['offset', offset]]) {
+        if (value !== undefined && !/^\d{1,7}$/.test(String(value))) {
+            return res.status(400).json({ success: false, code: 'INVALID_PAGINATION', error: `Parametro ${name} invalido (entero >= 0)` });
+        }
+    }
+    next();
+}
+
 function normalizeClientCodes(value, max = 20) {
   return String(value || '')
     .split(',')
@@ -187,7 +221,8 @@ const getClientsHandler = async (req, res) => {
     const scoped = resolveClientsVendedorCodes(req, vendedorCodes);
     if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
     vendedorCodes = scoped.vendedorCodes;
-    const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+    // F2a-05: filtro bindeado canonico (common.js buildBound*). Sin interpolacion.
+    const vendorBound = buildBoundLaclaeVendorFilter(vendedorCodes, '');
     const page = parsePage({ limit, offset }, { defaultLimit: 100, maxLimit: 200, maxOffset: 100000 });
     const safeLimit = page.limit;
     const safeOffset = page.offset;
@@ -222,9 +257,10 @@ const getClientsHandler = async (req, res) => {
         ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL')
         : buildLaclaeBoundedClientCodesSql(vendedorCodes, boundedLacParams);
     // Cached-code placeholders occur once in LACLAE_SCOPED and once in the outer CLI filter.
+    const fallbackVendorParams = laclaeBoundedFilter ? [] : vendorBound.params;
     const queryParams = clientCodesFilter
       ? [...clientCodeParams, ...clientCodeParams, ...searchClause.params]
-      : [...boundedLacParams, ...scopedCliParams, ...searchClause.params];
+      : [...boundedLacParams, ...scopedCliParams, ...fallbackVendorParams, ...searchClause.params];
 
     // Generate Cache Key (v5 = optimized with pre-filtered client codes)
     const cacheKey = `clients:list:v8:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${safeLimit}:${safeOffset}`;
@@ -237,7 +273,7 @@ const getClientsHandler = async (req, res) => {
     const queryStart = Date.now();
 
     // v6: single LACLAE CTE (one pass for stats + last vendor) — cert target p95 < 3s
-    const laclaeScopeFilter = laclaeBoundedFilter || vendedorFilter.replace(/L\./g, '');
+    const laclaeScopeFilter = laclaeBoundedFilter || vendorBound.clause;
     const clientQuery = (sql, params = []) => queryWithParams(sql, params, false);
     const clients = await cachedQuery(clientQuery, `
       WITH LACLAE_SCOPED AS (
@@ -436,7 +472,7 @@ router.put('/notes', verifyToken, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    handleRouteError(error, res, 'Error guardando notas', 500);
+    handleRouteError(error, res, 'Error guardando notas', 500, { code: 'CLIENTS_NOTES_SAVE_ERROR' });
   }
 });
 
@@ -538,7 +574,7 @@ router.get('/compare', verifyToken, async (req, res) => {
 
   } catch (error) {
     logger.error(`Client compare error: ${error.message} `);
-    handleRouteError(error, res, 'Error comparando clientes', 500);
+    handleRouteError(error, res, 'Error comparando clientes', 500, { code: 'CLIENTS_COMPARE_ERROR' });
   }
 });
 
@@ -755,7 +791,7 @@ router.get('/:code', verifyToken, async (req, res) => {
     });
 
   } catch (error) {
-    handleRouteError(error, res, 'Error obteniendo detalle de cliente', 500);
+    handleRouteError(error, res, 'Error obteniendo detalle de cliente', 500, { code: 'CLIENTS_DETAIL_ERROR' });
   }
 });
 
@@ -844,14 +880,14 @@ router.put('/:code/notes', verifyToken, async (req, res) => {
     res.json({ success: true, message: 'Notas guardadas correctamente' });
   } catch (error) {
     logger.error(`Save notes error: ${error.message}`);
-    handleRouteError(error, res, 'Error guardando notas', 500);
+    handleRouteError(error, res, 'Error guardando notas', 500, { code: 'CLIENTS_DETAIL_NOTES_SAVE_ERROR' });
   }
 });
 
 // =============================================================================
 // CLIENT SALES HISTORY - PRODUCTS BY FAMILY
 // =============================================================================
-router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
+router.get('/:code/sales-history/family', verifyToken, validateSalesHistoryClientCode, async (req, res) => {
   try {
     const { code } = req.params;
     let { vendedorCodes, limit = 100, family1, family2, family3, groupLevel } = req.query;
@@ -932,7 +968,7 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
 // =============================================================================
 // CLIENT SALES HISTORY
 // =============================================================================
-router.get('/:code/sales-history', verifyToken, async (req, res) => {
+router.get('/:code/sales-history', verifyToken, validateSalesHistoryClientCode, async (req, res) => {
   try {
     const { code } = req.params;
     let { vendedorCodes, limit = 50, offset = 0, groupByFamily = '0' } = req.query;

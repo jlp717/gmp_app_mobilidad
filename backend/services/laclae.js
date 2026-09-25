@@ -124,11 +124,15 @@ async function loadRuteroConfigCache(conn) {
         const rows = await conn.query(`
             SELECT TRIM(VENDEDOR) as VENDEDOR, TRIM(CLIENTE) as CLIENTE, TRIM(DIA) as DIA, ORDEN
             FROM JAVIER.RUTERO_CONFIG
+            WHERE ORDEN >= 0
         `);
 
         ruteroConfigCache = {};
         rows.forEach(r => {
             if (!r.VENDEDOR || !r.CLIENTE) return;
+            // F1c-02: ORDEN=-1 es entrada de bloqueo, no cliente real. Defensa
+            // en JS aunque el WHERE ya filtra (drivers que ignoran WHERE).
+            if (Number(r.ORDEN) === -1) return;
             if (!ruteroConfigCache[r.VENDEDOR]) ruteroConfigCache[r.VENDEDOR] = {};
 
             if (!ruteroConfigCache[r.VENDEDOR][r.CLIENTE]) {

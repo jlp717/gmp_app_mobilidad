@@ -23,7 +23,7 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_history_sheet.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/stock_alternatives_sheet.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/tarifa_selector_modal.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 class AddToOrderSheet {
   static Future<void> show(
@@ -85,7 +85,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
   @override
   void initState() {
     super.initState();
-    final prov = ref.read(pedidosProvider);
+    final prov = ref.read(pedidosNotifierProvider.notifier);
     OrderLine? existingLine;
     for (final line in prov.lines) {
       if (line.codigoArticulo == product.code && line.tipoLinea != 'G') {
@@ -169,7 +169,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
     _detailCancelToken?.cancel('superseded product detail request');
     final cancelToken = CancelToken();
     _detailCancelToken = cancelToken;
-    final prov = ref.read(pedidosProvider);
+    final prov = ref.read(pedidosNotifierProvider.notifier);
 
     try {
       final detail = await PedidosService.getProductDetail(
@@ -204,7 +204,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
     // Prioridad 1: Promo de precio activa (PRICE) → aplica promoPrice automáticamente
     // SOLO si el usuario NO ha sobrescrito manualmente el precio.
     if (!_userOverrodePrice) {
-      final prov = ref.read(pedidosProvider);
+      final prov = ref.read(pedidosNotifierProvider.notifier);
       final promo = prov.getPromo(product.code);
       if (promo != null && promo.promoType == 'PRICE' && promo.promoPrice > 0) {
         final promoUnitPrice = promo.promoPrice;
@@ -575,7 +575,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                 // compacta, al tocar muestra mini-graficos mensuales.
                 Builder(
                   builder: (innerCtx) {
-                    final prov = ref.read(pedidosProvider);
+                    final prov = ref.read(pedidosNotifierProvider.notifier);
                     return ProductComparativeStrip(
                       productCode: product.code,
                       clientCode: prov.hasClient ? prov.clientCode : null,
@@ -634,9 +634,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                       label: 'Datos producto',
                       color: AppTheme.info,
                       onTap: () {
-                        final prov = ref.read(pedidosProvider);
+                        final prov = ref.read(pedidosNotifierProvider.notifier);
                         final canSeeMargin = ref.watch(
-                          pedidosProvider.select((p) => p.isMarginVisible),
+                          pedidosNotifierProvider.select((p) => p.isMarginVisible),
                         );
                         ProductDetailSheet.show(
                           ctx,
@@ -649,15 +649,15 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                       },
                     ),
                     const SizedBox(width: 8),
-                    if (ref.read(pedidosProvider).hasClient)
+                    if (ref.read(pedidosNotifierProvider.notifier).hasClient)
                       _buildQuickLink(
                         icon: Icons.bar_chart_rounded,
                         label: 'Historial compras',
                         color: AppTheme.accentIndigo,
                         onTap: () {
-                          final prov = ref.read(pedidosProvider);
+                          final prov = ref.read(pedidosNotifierProvider.notifier);
                           final canSeeMargin = ref.watch(
-                            pedidosProvider.select((p) => p.isMarginVisible),
+                            pedidosNotifierProvider.select((p) => p.isMarginVisible),
                           );
                           ProductHistorySheet.show(
                             ctx,
@@ -678,7 +678,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     height: 40,
                     child: ElevatedButton.icon(
                       onPressed: () async {
-                        final prov = ref.read(pedidosProvider);
+                        final prov = ref.read(pedidosNotifierProvider.notifier);
                         final selected = await TarifaSelectorModal.show(
                           ctx,
                           product: product,
@@ -1108,7 +1108,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                               ),
                             if (boxContent.isEmpty && _selectedUnit != 'CAJAS')
                               Text(
-                                '1 caja = ${_formatUnitQty(qtyPerBox, _selectedUnit)} $selectedLabel · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)} €',
+                                '1 caja = ${_formatUnitQty(product.quantityPerBoxForUnit(product.displayUnit), product.displayUnit)} ${Product.unitLabel(product.displayUnit)} · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)} €',
                                 style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 11,
@@ -1128,7 +1128,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             ),
                             // Minimum price for selected unit
                             if (ref.watch(
-                                  pedidosProvider
+                                  pedidosNotifierProvider
                                       .select((p) => p.isMarginVisible),
                                 ) &&
                                 minPriceForSelected > 0)
@@ -1278,19 +1278,20 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    if (ref.watch(
-                          pedidosProvider.select((p) => p.isMarginVisible),
-                        ) &&
-                        product.precioMinimo > 0)
-                      Text(
-                        'Min: ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)} €/${Product.unitLabel(_selectedUnit)}',
-                        style: TextStyle(
-                          color: price > 0 &&
-                                  price <
-                                      product.minimumPriceForUnit(_selectedUnit)
-                              ? AppTheme.error
-                              : AppTheme.textTertiary,
-                          fontSize: 11,
+                    if (product.precioMinimo > 0)
+                      Semantics(
+                        label:
+                            'Precio mínimo política ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)} euros',
+                        child: Text(
+                          'Min: ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)} €/${Product.unitLabel(_selectedUnit)}',
+                          style: TextStyle(
+                            color: price > 0 &&
+                                    price <
+                                        product.minimumPriceForUnit(_selectedUnit)
+                                ? AppTheme.error
+                                : AppTheme.textTertiary,
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                     const Spacer(),
@@ -1304,10 +1305,40 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     ),
                   ],
                 ),
+                if (product.precioMinimo > 0 &&
+                    price > 0 &&
+                    price < product.minimumPriceForUnit(_selectedUnit))
+                  Semantics(
+                    label:
+                        'Aviso precio bajo mínimo permitido con cargo a bolsa',
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.account_balance_wallet_outlined,
+                            color: AppTheme.warning,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'Bajo mínimo permitido con cargo a bolsa',
+                              style: const TextStyle(
+                                color: AppTheme.warning,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 Consumer(
                   builder: (context, ref, _) {
                     if (!ref.watch(
-                      pedidosProvider.select((p) => p.isMarginVisible),
+                      pedidosNotifierProvider.select((p) => p.isMarginVisible),
                     )) {
                       return const SizedBox.shrink();
                     }
@@ -1425,7 +1456,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
       return;
     }
 
-    final provider = ref.read(pedidosProvider);
+    final provider = ref.read(pedidosNotifierProvider.notifier);
 
     var envases = 0.0;
     var unidades = 0.0;
@@ -1460,7 +1491,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
     _performAddLine(provider);
   }
 
-  void _performAddLine(PedidosProvider provider) {
+  void _performAddLine(PedidosNotifier provider) {
     var envases = 0.0;
     var unidades = 0.0;
 
@@ -1543,7 +1574,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
     Navigator.pop(context);
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) {
-        ref.read(pedidosProvider).loadComplementaryProducts();
+        ref.read(pedidosNotifierProvider.notifier).loadComplementaryProducts();
       }
     });
   }

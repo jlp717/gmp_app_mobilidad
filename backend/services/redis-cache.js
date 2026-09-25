@@ -65,6 +65,14 @@ const TTL = {
     REALTIME: 60,    // 1 minute
 };
 
+// F5-02 TTL por dominio con constantes nombradas. Alertas KPI 7 dias intactas;
+// dinero y cobros en REALTIME 60.
+const TTL_BY_DOMAIN = {
+    ALERTS: 604800, // 7 dias — KPI alertas, no cambiar comportamiento
+    MONEY: TTL.REALTIME, // 60 — lecturas de dinero
+    COBROS: TTL.REALTIME, // 60 — lecturas de cobros/deuda
+};
+
 // L1 In-Memory Cache (OPTIMIZED v3 - Maximum Performance)
 const L1_CACHE = new Map();
 const L1_STALE_CACHE = new Map(); // Stale-while-revalidate: serve expired data while refreshing
@@ -855,6 +863,7 @@ module.exports = {
     redisReconnectDelay,
     REDIS_RECONNECT_WATCHDOG_MS,
     TTL,
+    TTL_BY_DOMAIN,
     // Convenience methods
     initCache: () => redisCache.init(),
     getCache: (ns, key) => redisCache.get(ns, key),

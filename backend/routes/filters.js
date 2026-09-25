@@ -17,7 +17,7 @@ const { query, queryWithParams } = require('../config/db');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 // Cache para los filtros (se refresca cada 5 minutos)
-let filtersCache = {
+const filtersCache = {
     fi1: null,
     fi2All: null,
     fi3All: null,
@@ -221,7 +221,7 @@ router.get('/fi3', async (req, res) => {
 
         if (fi2Code || fi1Code) {
             // Construir condición parametrizada
-            let whereConditions = [];
+            const whereConditions = [];
             const params = [];
             if (fi1Code) { whereConditions.push('x.FILTRO01 = ?'); params.push(fi1Code.trim().padEnd(10)); }
             if (fi2Code) { whereConditions.push('x.FILTRO02 = ?'); params.push(fi2Code.trim().padEnd(10)); }
@@ -270,7 +270,7 @@ router.get('/fi4', async (req, res) => {
         let result = [];
 
         if (fi1Code || fi2Code || fi3Code) {
-            let whereConditions = [];
+            const whereConditions = [];
             const params = [];
             if (fi1Code) { whereConditions.push('x.FILTRO01 = ?'); params.push(fi1Code.trim().padEnd(10)); }
             if (fi2Code) { whereConditions.push('x.FILTRO02 = ?'); params.push(fi2Code.trim().padEnd(10)); }
@@ -360,7 +360,7 @@ router.get('/articles', async (req, res) => {
         const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 100, 500));
         const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
 
-        let whereConditions = ["a.BLOQUEADOSN <> 'S'"];
+        const whereConditions = ["a.BLOQUEADOSN <> 'S'"];
         const params = [];
 
         if (fi1) { whereConditions.push('TRIM(x.FILTRO01) = ?'); params.push(fi1.trim()); }
@@ -409,10 +409,10 @@ router.get('/articles', async (req, res) => {
 
         res.json({
             success: true,
-            articles: articles,
-            total: total,
-            limit: limit,
-            offset: offset,
+            articles,
+            total,
+            limit,
+            offset,
             filters: { fi1, fi2, fi3, fi4, fi5, search }
         });
 
@@ -458,7 +458,7 @@ router.get('/cascade', async (req, res) => {
 
         // FI3 options (si hay FI1 o FI2)
         if (fi1 || fi2) {
-            let fi3Conditions = ["a.BLOQUEADOSN <> 'S'"];
+            const fi3Conditions = ["a.BLOQUEADOSN <> 'S'"];
             const fi3Params = [];
             if (fi1) { fi3Conditions.push('TRIM(x.FILTRO01) = ?'); fi3Params.push(fi1.trim()); }
             if (fi2) { fi3Conditions.push('TRIM(x.FILTRO02) = ?'); fi3Params.push(fi2.trim()); }
@@ -481,7 +481,7 @@ router.get('/cascade', async (req, res) => {
 
         // FI4 options
         if (fi1 || fi2 || fi3) {
-            let fi4Conditions = ["a.BLOQUEADOSN <> 'S'"];
+            const fi4Conditions = ["a.BLOQUEADOSN <> 'S'"];
             const fi4Params = [];
             if (fi1) { fi4Conditions.push('TRIM(x.FILTRO01) = ?'); fi4Params.push(fi1.trim()); }
             if (fi2) { fi4Conditions.push('TRIM(x.FILTRO02) = ?'); fi4Params.push(fi2.trim()); }
@@ -504,7 +504,7 @@ router.get('/cascade', async (req, res) => {
         }
 
         // Count matching articles (siempre: sin filtros cuenta artículos no bloqueados)
-        let countConditions = ["a.BLOQUEADOSN <> 'S'"];
+        const countConditions = ["a.BLOQUEADOSN <> 'S'"];
         const countParams = [];
         if (fi1) { countConditions.push('TRIM(x.FILTRO01) = ?'); countParams.push(fi1.trim()); }
         if (fi2) { countConditions.push('TRIM(x.FILTRO02) = ?'); countParams.push(fi2.trim()); }

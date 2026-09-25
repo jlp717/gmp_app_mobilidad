@@ -9,7 +9,6 @@ const swaggerUi = require('swagger-ui-express');
 
 const router = express.Router();
 const isProduction = process.env.NODE_ENV === 'production';
-const isPublic = process.env.DOCS_PUBLIC === 'true' && !isProduction;
 const specPath = path.resolve(__dirname, '..', '..', 'docs', 'openapi', 'openapi.yaml');
 const document = yaml.load(fs.readFileSync(specPath, 'utf8'));
 
@@ -53,10 +52,21 @@ function basicAuth(req, res, next) {
   });
 }
 
-const guards = isPublic ? [] : [basicAuth];
+function isPublicDocs() {
+    return process.env.DOCS_PUBLIC === 'true' && process.env.NODE_ENV !== 'production';
+}
 
-router.get('/docs.json', ...guards, (_req, res) => res.json(document));
-router.use('/docs', ...guards, swaggerUi.serve, swaggerUi.setup(document, {
+// Guard evaluado por request (no capturado en require): evita flaky cuando el
+// entorno se fija despues del primer require (probe spawnSync, jest.resetModules).
+// Contrato intacto: publico solo con DOCS_PUBLIC=true fuera de produccion;
+// si no, Basic Auth con fail-closed 503 sin credenciales.
+function docsGuard(req, res, next) {
+    if (isPublicDocs()) return next();
+    return basicAuth(req, res, next);
+}
+
+router.get('/docs.json', docsGuard, (_req, res) => res.json(document));
+router.use('/docs', docsGuard, swaggerUi.serve, swaggerUi.setup(document, {
   customSiteTitle: 'GMP Movilidad API',
   swaggerOptions: { persistAuthorization: !isProduction },
 }));

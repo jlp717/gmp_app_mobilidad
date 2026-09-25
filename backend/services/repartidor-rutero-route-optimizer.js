@@ -111,7 +111,7 @@ function twoOpt(orden, options){
         // Recompute timeline for candidate to validate windows
         let state={cursor: options.origin, clock: options.departureMinute};
         let candLate=0; let candDist=0; let prev=options.origin;
-        let feasible=true;
+        const feasible=true;
         for(const r of cand){
           if(r.closedDay) continue;
           const dist= prev && r.geo ? haversineKm(prev.lat, prev.lng, r.geo.lat, r.geo.lng) : null;

@@ -1,7 +1,9 @@
 'use strict';
 
 /**
- * Contratos HTTP de los endpoints migrados a la arquitectura src/ en capas.
+ * Contratos HTTP DDD (WS2 DDD-CONSOLIDATION-001-FINAL).
+ * Antes: fabricas finas en src/routes/*.js. Ahora: mismos controladores de la
+ * capa aplicacion (src/controllers + src/services) sin pasar por src/routes.
  * Los payloads esperados replican el comportamiento legacy capturado ANTES del
  * refactor (Prompt 3). Cualquier desviacion aqui = regresion observable.
  */
@@ -49,13 +51,38 @@ jest.mock('../../services/repartidor-finance-service', () => ({
 }));
 
 const { errorHandler } = require('../../src/middlewares/errorHandler');
-// Explicit .js: jest moduleNameMapper pins the dashboard TS chain
-// (routes/controller/service) to its .ts twins for src/index.ts mounts;
-// explicit extensions bypass the mapper so these CommonJS factories
-// (createDashboardRoutes etc.) keep resolving their .js implementations.
-const { createDashboardRoutes } = require('../../src/routes/dashboard.routes.js');
-const { createPlannerRoutes } = require('../../src/routes/planner.routes.js');
-const { createRepartidorFinanzasRoutes } = require('../../src/routes/repartidorFinanzas.routes.js');
+// WS2 DDD-CONSOLIDATION-001-FINAL: contrato migrado a capa aplicacion DDD
+// (src/controllers + src/services), sin dependencia de src/routes/* (archivado).
+// Side-by-side: antes createDashboardRoutes() desde src/routes/dashboard.routes.js
+// (factoria fina: router.get('/metrics', verifyToken, metricsController)) — ahora
+// factoria local equivalente con mismos controladores canonicos.
+const { metricsController, salesEvolutionController } = require('../../src/controllers/dashboard.controller.js');
+const { ruteroWeekController } = require('../../src/controllers/planner.controller');
+const {
+    dailySummaryController,
+    vencimientosController,
+    commissionsSummaryController,
+} = require('../../src/controllers/repartidorFinanzas.controller');
+
+function createDashboardRoutes({ metrics = metricsController, evolution = salesEvolutionController } = {}) {
+    const router = express.Router();
+    const { verifyToken } = require('../../middleware/auth');
+    router.get('/metrics', verifyToken, metrics);
+    router.get('/sales-evolution', verifyToken, evolution);
+    return router;
+}
+function createPlannerRoutes({ week = ruteroWeekController } = {}) {
+    const router = express.Router();
+    router.get('/rutero/week', week);
+    return router;
+}
+function createRepartidorFinanzasRoutes(deps = {}) {
+    const router = express.Router();
+    router.get('/daily-summary/:repartidorId', deps.dailySummary || dailySummaryController);
+    router.get('/vencimientos/:repartidorId', deps.vencimientos || vencimientosController);
+    router.get('/commissions/summary/:repartidorId', deps.commissions || commissionsSummaryController);
+    return router;
+}
 const laclae = require('../../services/laclae');
 const financeSvc = require('../../services/repartidor-finance-service');
 

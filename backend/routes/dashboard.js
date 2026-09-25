@@ -9,10 +9,6 @@ const { TTL, redisCache } = require('../services/redis-cache');
 const { beginRouteFill, endRouteFill, sendFillBusy } = require('../services/route-cache-stampede');
 const {
     getCurrentDate,
-    buildVendedorFilter,
-    buildVendedorFilterLACLAE,
-    buildColumnaVendedorFilter,
-    getVendorColumn,
     getVendorColumnExpr,
     formatCurrency,
     MIN_YEAR,
@@ -490,7 +486,7 @@ router.get('/recent-sales', verifyToken, async (req, res) => {
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo ventas', 500);
+        handleRouteError(error, res, 'Error obteniendo ventas', 500, { code: 'DASHBOARD_RECENT_SALES_ERROR' });
     }
 });
 
@@ -528,7 +524,7 @@ router.get('/products-search', verifyToken, async (req, res) => {
 
     } catch (error) {
         logger.error(`Product search error: ${error.message}`);
-        handleRouteError(error, res, 'Error searching products', 500);
+        handleRouteError(error, res, 'Error searching products', 500, { code: 'DASHBOARD_PRODUCTS_SEARCH_ERROR' });
     }
 });
 

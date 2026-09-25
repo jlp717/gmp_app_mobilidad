@@ -10,7 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 class RecommendationsSection extends ConsumerStatefulWidget {
   const RecommendationsSection({
@@ -36,13 +36,13 @@ class _RecommendationsSectionState
     // select(): este panel solo depende de las listas de recomendación;
     // otros cambios del provider (carrito, búsqueda) no deben rebuildarlo.
     final clientHistory =
-        ref.watch(pedidosProvider.select((p) => p.clientHistory));
+        ref.watch(pedidosNotifierProvider.select((p) => p.clientHistory));
     final similarClients =
-        ref.watch(pedidosProvider.select((p) => p.similarClients));
+        ref.watch(pedidosNotifierProvider.select((p) => p.similarClients));
     final hasHistory = clientHistory.isNotEmpty;
     final hasSimilar = similarClients.isNotEmpty;
     final canSeeMargin =
-        ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
+        ref.watch(pedidosNotifierProvider.select((p) => p.isMarginVisible));
 
     if (!hasHistory && !hasSimilar) return const SizedBox.shrink();
 

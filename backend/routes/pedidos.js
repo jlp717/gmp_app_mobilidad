@@ -80,11 +80,23 @@ function sendPedidosError(error, res, fallbackMessage = 'Error procesando pedido
         : (Number.isInteger(error?.status) ? error.status : null);
     if (typedStatus && typedStatus >= 400 && typedStatus < 500) {
         if (res.headersSent) return;
-        return res.status(typedStatus).json({
+        const payload = {
             success: false,
             code: error.code || fallbackCode,
             error: error.message,
-        });
+        };
+        if (error.details && typeof error.details === 'object') {
+            payload.details = error.details;
+            if (error.code === 'MIN_COBRO_ORDER_BLOCKED') {
+                payload.minPct = error.details.minPct;
+                payload.actualPct = error.details.actualPct;
+                payload.source = error.details.source;
+                payload.clientCode = error.details.clientCode;
+                payload.vendorCode = error.details.vendorCode;
+                payload.message = error.message;
+            }
+        }
+        return res.status(typedStatus).json(payload);
     }
     const msg = String(error?.message || '');
     if (msg.includes('not found')) {
@@ -107,7 +119,9 @@ function normalizePedidoSaleTypeForRoute(value) {
         return pedidosService.normalizePedidoSaleType(value);
     }
     const normalized = String(value || 'CC').trim().toUpperCase();
-    if (['CC', 'VC', 'NV'].includes(normalized)) return normalized;
+    if (['CC', 'VC', 'NV', 'CT', 'CTR', 'CONTADO'].includes(normalized)) {
+        return normalized === 'CTR' || normalized === 'CONTADO' ? 'CT' : normalized;
+    }
     const error = new Error('Tipo de venta invalido');
     error.code = 'INVALID_SALE_TYPE';
     throw error;
@@ -142,8 +156,15 @@ function stripMarginFromOrder(order, user) {
 function stripMarginFromProduct(product, user) {
     if (canSeeMargin(user)) return product;
     const clean = { ...product };
+    // REQ-27: comercial ve aviso bajo-minimo via precioMinimoAviso +
+    // precioCompetitivo, pero nunca coste/margen/formula ni precioMinimo crudo.
+    const minimoAviso = Number(product?.precioMinimo ?? 0);
+    if (Number.isFinite(minimoAviso) && minimoAviso > 0) {
+        clean.precioMinimoAviso = minimoAviso;
+    }
     delete clean.precioMinimo;
     delete clean.precioCosto;
+    delete clean.costeFabricacion;
     delete clean.costo;
     delete clean.margen;
     delete clean.importeCosto;
@@ -429,6 +450,7 @@ router.get('/products', async (req, res) => {
         const limit = parseIntSafe(req.query.limit, 50);
         const offset = parseIntSafe(req.query.offset, 0);
         const includeIva = parseBooleanFlag(req.query.includeIva);
+        const onlyStock = parseBooleanFlag(req.query.onlyStock);
         const rawSortBy = String(req.query.sortBy || 'purchases').toLowerCase().trim();
         const sortBy = ['purchases', 'name'].includes(rawSortBy) ? rawSortBy : 'purchases';
         const sortOrder = String(req.query.sortOrder || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
@@ -442,6 +464,7 @@ router.get('/products', async (req, res) => {
             // Req #14: filtro Nestlé / otras prefamilias.
             prefamily: prefamily ? String(prefamily).trim() : undefined,
             includeIva,
+            onlyStock,
             limit,
             offset,
             sortBy,
@@ -885,6 +908,33 @@ router.get('/product-history/:productCode/:clientCode', async (req, res) => {
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /product-history/${req.params.productCode}/${req.params.clientCode}: ${error.message}`);
         return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
+    }
+});
+
+// REQ-28: GET /api/pedidos/product-price-history/:product/:client
+// Devuelve ultimo precio TEST + % subida + competitivo ARA tarifa 1.
+// Lectura DSEDAC + TEST; sin escrituras; QSYS2 verificado en servicio (best-effort).
+router.get('/product-price-history/:product/:client', async (req, res) => {
+    try {
+        const product = String(req.params.product || '').trim().substring(0, 10);
+        const client = String(req.params.client || '').trim().substring(0, 10);
+        if (!product || !client) {
+            return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', error: 'product y client requeridos' });
+        }
+        const clientAccess = await authorizePedidoClientScope(
+            req,
+            client,
+            req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+            'consultar historico precios',
+        );
+        if (!clientAccess.ok) {
+            return res.status(clientAccess.status).json(clientAccess.body);
+        }
+        const history = await pedidosService.getProductPriceHistory(product, clientAccess.clientCode);
+        res.json({ success: true, ...history });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in GET /product-price-history: ${error.message}`);
+        return sendPedidosError(error, res, 'Error obteniendo historico precios', 'PEDIDOS_PRICE_HISTORY_ERROR');
     }
 });
 

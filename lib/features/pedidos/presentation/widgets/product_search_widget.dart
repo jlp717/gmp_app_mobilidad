@@ -9,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/domain/product_family_filter.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 class ProductSearchWidget extends ConsumerStatefulWidget {
   const ProductSearchWidget({
@@ -34,28 +34,34 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
     super.dispose();
   }
 
-  void _reloadProducts(PedidosProvider provider) {
+  void _reloadProducts(PedidosNotifier provider) {
+    // REQ-02/REQ-04: search + chips bypass the 5-min product cache so typing
+    // and "Todas" always hit the network; CancelToken in loadProducts
+    // cancels the superseded request.
     provider.loadProducts(
       vendedorCodes: widget.vendedorCodes,
       search: _searchController.text.isEmpty ? null : _searchController.text,
       reset: true,
+      forceRefresh: true,
     );
   }
 
   void _onSearchChanged(String value) {
     if (mounted) setState(() {});
     _debounce?.cancel();
+    // REQ-02.1: realtime with debounce ≤300ms; clearing restores full catalog.
     _debounce = Timer(const Duration(milliseconds: 300), () {
-      final provider = ref.read(pedidosProvider.notifier);
+      final provider = ref.read(pedidosNotifierProvider.notifier);
       provider.loadProducts(
         vendedorCodes: widget.vendedorCodes,
         search: value.isEmpty ? null : value,
         reset: true,
+        forceRefresh: true,
       );
     });
   }
 
-  void _onFamilySelected(PedidosProvider provider, String? familyCode) {
+  void _onFamilySelected(PedidosNotifier provider, String? familyCode) {
     provider.setFamilyFilter(
       provider.selectedFamily == familyCode ? null : familyCode,
     );
@@ -95,15 +101,20 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
   @override
   Widget build(BuildContext context) {
     final onlyWithStock =
-        ref.watch(pedidosProvider.select((p) => p.onlyWithStock));
+        ref.watch(pedidosNotifierProvider.select((p) => p.onlyWithStock));
     final selectedFamily =
-        ref.watch(pedidosProvider.select((p) => p.selectedFamily));
+        ref.watch(pedidosNotifierProvider.select((p) => p.selectedFamily));
     final selectedPrefamily =
-        ref.watch(pedidosProvider.select((p) => p.selectedPrefamily));
-    final families = ref.watch(pedidosProvider.select((p) => p.families));
-    final provider = ref.read(pedidosProvider);
+        ref.watch(pedidosNotifierProvider.select((p) => p.selectedPrefamily));
+    final selectedBrand =
+        ref.watch(pedidosNotifierProvider.select((p) => p.selectedBrand));
+    final families = ref.watch(pedidosNotifierProvider.select((p) => p.families));
+    final provider = ref.read(pedidosNotifierProvider.notifier);
     final pad = Responsive.contentPadding(context);
-    final allSelected = selectedFamily == null && selectedPrefamily == null;
+    // REQ-04.1: "Todas" clears family + prefamily + brand.
+    final allSelected = selectedFamily == null &&
+        selectedPrefamily == null &&
+        (selectedBrand == null || selectedBrand!.isEmpty);
 
     // Layout: Todas | stock | Nestlé | familias DB (Impulso pinned primero).
     final chips = <Widget>[

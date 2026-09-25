@@ -76,7 +76,6 @@ backend/db_exploration_results.json
 backend/db_probe_results.json
 
 # Logs and temp files
-*.log
 logs/local/
 nul
 ~$*.docx
@@ -105,7 +104,6 @@ update_ip_config.ps1
 # Node (raiz = tooling DX versionado e intencional; backend tiene el suyo)
 node_modules/
 # Environment files (keep .env.example)
-.env
 !.env.example
 
 # Security - Keystores and signing (NEVER commit these!)
@@ -116,7 +114,7 @@ android/key.properties
 upload-keystore.jks
 
 # Claude Code: arbol local completo fuera de git (decision release 2026-09-01, bloque final).
-.idea/
+# (.idea/ ya cubierto en bloque IntelliJ arriba — sin duplicar)
 
 # RuFlo / Claude-Flow runtime (keep config.yaml, ignore everything else)
 .claude-flow/data/
@@ -164,10 +162,7 @@ albaran_*.json
 Screenshot_*.jpg
 WhatsApp Image*.jpeg
 unnamed.jpg
-server.log
-*.pdf
 *.xlsx
-nul
 
 # Backend root temp files
 backend/output*.txt
@@ -190,7 +185,6 @@ backend/godmode*.js
 backend/god_mode*.js
 backend/*.json
 backend/*.txt
-backend/*.log
 
 # Certification / probe scratch (never commit)
 backend/_cert-patch*.js
@@ -317,3 +311,22 @@ scripts/cline/
 scripts/opencode/
 scripts/team/
 memory-bank/
+
+# Higiene GMP-HYGIENE-004 (canonico unico): agentes/editores locales + runtime nunca versionados
+.agent/
+.agents/
+.beads/
+.continue/
+.obsidian/
+.omo/
+.qoder/
+.qwen/
+.trae/
+.windsurf/
+.remember/
+vault/
+handoffs/
+uploads/
+logs/
+skills/caveman-*
+# Nota dedup: *.log/.env/.idea/ solo en su primer bloque (no duplicar abajo).

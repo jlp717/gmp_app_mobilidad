@@ -9,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 class OrderKpiDashboard extends ConsumerWidget {
   const OrderKpiDashboard({required this.vendedorCodes, super.key});
@@ -18,11 +18,11 @@ class OrderKpiDashboard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // select(): solo KPIs — no rebuild con carrito/búsqueda/productos.
-    final stats = ref.watch(pedidosProvider.select((p) => p.orderStats));
+    final stats = ref.watch(pedidosNotifierProvider.select((p) => p.orderStats));
     final showMargin =
-        ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
+        ref.watch(pedidosNotifierProvider.select((p) => p.isMarginVisible));
     final isLoadingStats =
-        ref.watch(pedidosProvider.select((p) => p.isLoadingStats));
+        ref.watch(pedidosNotifierProvider.select((p) => p.isLoadingStats));
 
     if (isLoadingStats || stats == null) {
       return _buildLoadingState(showMarginCards: showMargin);

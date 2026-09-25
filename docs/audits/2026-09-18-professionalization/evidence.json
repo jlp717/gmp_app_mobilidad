@@ -1,0 +1,700 @@
+{
+  "kind": "normalized-and-reduced-agent-contracts",
+  "normalization": "status/confidence/risks normalized to graph schema; conflicting pinning claim corrected using Dart documentation; no runtime exploit inferred",
+  "nodes": 5,
+  "facts": [
+    {
+      "id": "BACKEND_DATA-01",
+      "node": "backend-data",
+      "claim": "Conviven legacy JS, TypeScript y DDD según flags; inventariar montaje efectivo.",
+      "evidence": [
+        {
+          "path": "backend/app.js",
+          "line": 152
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-02",
+      "node": "backend-data",
+      "claim": "Pool alternativo TS usa BEGIN WORK; riesgo condicionado al modo, en código canónico se documenta rechazo IBM i.",
+      "evidence": [
+        {
+          "path": "backend/src/core/infrastructure/database/db2-connection-pool.ts",
+          "line": 81
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-03",
+      "node": "backend-data",
+      "claim": "Pool canónico ya tiene límites, adquisición, circuit breaker y timeout; no rehacer sin medición.",
+      "evidence": [
+        {
+          "path": "backend/config/db.js",
+          "line": 49
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-04",
+      "node": "backend-data",
+      "claim": "Timeout intenta conn.cancel; falta evidencia con driver real de liberación de locks.",
+      "evidence": [
+        {
+          "path": "backend/config/db.js",
+          "line": 385
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-05",
+      "node": "backend-data",
+      "claim": "Acceso general incluye protección de escritura DSEDAC; mantener y probar todas las rutas de acceso.",
+      "evidence": [
+        {
+          "path": "backend/config/db.js",
+          "line": 730
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-06",
+      "node": "backend-data",
+      "claim": "Confirmación canónica valida catálogo antes de transacción y bloquea clave/documento.",
+      "evidence": [
+        {
+          "path": "backend/repositories/reparto-confirmation-db2-repository.js",
+          "line": 370
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-07",
+      "node": "backend-data",
+      "claim": "Confirmación rechaza misma idempotency key con payload distinto.",
+      "evidence": [
+        {
+          "path": "backend/services/reparto-confirmation-service.js",
+          "line": 435
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-08",
+      "node": "backend-data",
+      "claim": "Liquidación bloquea día, marca fuentes y encola correo en transacción.",
+      "evidence": [
+        {
+          "path": "backend/services/repartidor-liquidacion-service.js",
+          "line": 615
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-09",
+      "node": "backend-data",
+      "claim": "Redis L1/L2/pubsub coexiste con SWR de hasta una hora.",
+      "evidence": [
+        {
+          "path": "backend/services/redis-cache.js",
+          "line": 70
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-10",
+      "node": "backend-data",
+      "claim": "HTTP cache y query cache se solapan; precisa contrato end-to-end.",
+      "evidence": [
+        {
+          "path": "backend/middleware/http-cache.js",
+          "line": 181
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-11",
+      "node": "backend-data",
+      "claim": "Se conserva exclusión de cache para rutas de dinero.",
+      "evidence": [
+        {
+          "path": "backend/middleware/http-cache.js",
+          "line": 63
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-12",
+      "node": "backend-data",
+      "claim": "Invalidación/notificaciones post-commit contienen best-effort; riesgo de consistencia diferida.",
+      "evidence": [
+        {
+          "path": "backend/routes/repartidor-finanzas.js",
+          "line": 1162
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-13",
+      "node": "backend-data",
+      "claim": "Outbox variaciones contiene PENDING/FAILED/SENT; lease distribuido no acreditado en alcance revisado.",
+      "evidence": [
+        {
+          "path": "backend/services/reparto-variance-notification-service.js",
+          "line": 718
+        }
+      ]
+    },
+    {
+      "id": "BACKEND_DATA-14",
+      "node": "backend-data",
+      "claim": "Copias .repaired/.fromgit requieren clasificación de referencias, no borrado automático.",
+      "evidence": [
+        {
+          "path": "backend/repositories/reparto-finance-db2-repository.js.repaired",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-01",
+      "node": "flutter",
+      "claim": "Cifrado Hive por caja y claves en almacenamiento seguro; conservar y probar recuperación.",
+      "evidence": [
+        {
+          "path": "lib/core/storage/hive_secure_box.dart",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-02",
+      "node": "flutter",
+      "claim": "Cache segmentada por sesión/rol/vendedores; existe stale-if-error hasta 24h, requiere política por dato.",
+      "evidence": [
+        {
+          "path": "lib/core/cache/cache_service.dart",
+          "line": 62
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-03",
+      "node": "flutter",
+      "claim": "Cola offline conserva comandos y deriva operaciones antiguas a revisión; no sustituirla sin contratos.",
+      "evidence": [
+        {
+          "path": "lib/core/offline/sync_queue_service.dart",
+          "line": 214
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-04",
+      "node": "flutter",
+      "claim": "MainShell concentra navegación/UI; separar por responsabilidad conservando sincronía tabs/páginas.",
+      "evidence": [
+        {
+          "path": "lib/features/dashboard/presentation/pages/main_shell.dart",
+          "line": 114
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-05",
+      "node": "flutter",
+      "claim": "ApiClient concentra red/sesión/telemetría; extraer componentes con fachada compatible.",
+      "evidence": [
+        {
+          "path": "lib/core/api/api_client.dart",
+          "line": 20
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-06",
+      "node": "flutter",
+      "claim": "Analizador ignora diagnósticos de código/imports sin usar.",
+      "evidence": [
+        {
+          "path": "analysis_options.yaml",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-07",
+      "node": "flutter",
+      "claim": "Importes usan double: riesgo a caracterizar con casos de redondeo, no corrupción demostrada.",
+      "evidence": [
+        {
+          "path": "lib/features/liquidacion_comercial/domain/liquidacion_domain.dart",
+          "line": 184
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-08",
+      "node": "flutter",
+      "claim": "Android main declara localización background y almacenamiento global.",
+      "evidence": [
+        {
+          "path": "android/app/src/main/AndroidManifest.xml",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-09",
+      "node": "flutter",
+      "claim": "Android main permite HTTP a host LAN; separar debug y release.",
+      "evidence": [
+        {
+          "path": "android/app/src/main/res/xml/network_security_config.xml",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-10",
+      "node": "flutter",
+      "claim": "WebView almacén tiene JS y canal Dart: validar mensajes y navegación, sin bypass demostrado.",
+      "evidence": [
+        {
+          "path": "lib/features/warehouse/presentation/widgets/load_canvas.dart",
+          "line": 42
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-11",
+      "node": "flutter",
+      "claim": "Tema central usa Riverpod select; requiere pruebas de todas las superficies claro/oscuro.",
+      "evidence": [
+        {
+          "path": "lib/main.dart",
+          "line": 385
+        }
+      ]
+    },
+    {
+      "id": "FLUTTER-12",
+      "node": "flutter",
+      "claim": "Linux conserva identificador de plantilla; decidir soporte antes de invertir en builds.",
+      "evidence": [
+        {
+          "path": "linux/CMakeLists.txt",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-01",
+      "node": "quality-operations",
+      "claim": "E2E principal en CI manual; ampliar cierre REPARTIDOR con fixtures aisladas.",
+      "evidence": [
+        {
+          "path": ".github/workflows/flutter-tests.yml",
+          "line": 29
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-02",
+      "node": "quality-operations",
+      "claim": "Integración DB2 opt-in; hosted CI no certifica ODBC real.",
+      "evidence": [
+        {
+          "path": "backend/tests/README.md",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-03",
+      "node": "quality-operations",
+      "claim": "Jest collectCoverage=false, forceExit=true y detectOpenHandles=false.",
+      "evidence": [
+        {
+          "path": "backend/jest.config.js",
+          "line": 43
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-04",
+      "node": "quality-operations",
+      "claim": "npm test permite cero pruebas; CI usa script distinto.",
+      "evidence": [
+        {
+          "path": "backend/package.json",
+          "line": 20
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-05",
+      "node": "quality-operations",
+      "claim": "Workflows fijan distintas versiones Flutter.",
+      "evidence": [
+        {
+          "path": ".github/workflows/quality-gates.yml",
+          "line": 17
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-06",
+      "node": "quality-operations",
+      "claim": "Workflow calidad incluye placeholder de gate de cobertura.",
+      "evidence": [
+        {
+          "path": ".github/workflows/quality-gates.yml",
+          "line": 116
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-07",
+      "node": "quality-operations",
+      "claim": "Zero-trust relaja npm audit con || true.",
+      "evidence": [
+        {
+          "path": ".github/workflows/zero-trust-gates.yml",
+          "line": 74
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-08",
+      "node": "quality-operations",
+      "claim": "CI principal permite omitir tests y tolerar fallo de codegen.",
+      "evidence": [
+        {
+          "path": ".github/workflows/ci-cd.yml",
+          "line": 498
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-09",
+      "node": "quality-operations",
+      "claim": "Signing Android rechaza debug signing para release; conservar control.",
+      "evidence": [
+        {
+          "path": "android/app/build.gradle.kts",
+          "line": 16
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-10",
+      "node": "quality-operations",
+      "claim": "Distribución opcional no realizada puede acabar exit0; distinguir build/distributed/promoted.",
+      "evidence": [
+        {
+          "path": ".github/workflows/flutter-release.yml",
+          "line": 166
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-11",
+      "node": "quality-operations",
+      "claim": "Prometheus/Loki/Tempo/dashboards y k6 contienen placeholders mínimos; no acreditan observabilidad/carga.",
+      "evidence": [
+        {
+          "path": "observability/prometheus.yml",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-12",
+      "node": "quality-operations",
+      "claim": "Sentry es opcional por DSN y evita PII por defecto; activación/símbolos pendientes de evidencia.",
+      "evidence": [
+        {
+          "path": "backend/instrument.js",
+          "line": 11
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-13",
+      "node": "quality-operations",
+      "claim": "Compose usa tags mutables; revisar digest y superficie auxiliar.",
+      "evidence": [
+        {
+          "path": "docker-compose.yml",
+          "line": 101
+        }
+      ]
+    },
+    {
+      "id": "QUALITY_OPERATIONS-14",
+      "node": "quality-operations",
+      "claim": "Rollback legacy puede editar configuración sensible e iniciar PM2: incompatible con autonomía autorizada.",
+      "evidence": [
+        {
+          "path": "backend/scripts/rollback.sh",
+          "line": 37
+        }
+      ]
+    },
+    {
+      "id": "REPOSITORY-01",
+      "node": "repository",
+      "claim": "Spec agosto pide kernel versionado; ignorados septiembre declaran una decisión posterior distinta.",
+      "evidence": [
+        {
+          "path": "docs/superpowers/specs/2026-08-27-team-port-design.md",
+          "line": 16
+        }
+      ]
+    },
+    {
+      "id": "REPOSITORY-02",
+      "node": "repository",
+      "claim": "Ignore de árboles agente/gobernanza debe reconciliarse con reglas actuales y clean checkout.",
+      "evidence": [
+        {
+          "path": ".gitignore",
+          "line": 307
+        }
+      ]
+    },
+    {
+      "id": "REPOSITORY-03",
+      "node": "repository",
+      "claim": "README documenta runtime TS/arranque distinto de npm start real.",
+      "evidence": [
+        {
+          "path": "README.md",
+          "line": 55
+        }
+      ]
+    },
+    {
+      "id": "REPOSITORY-04",
+      "node": "repository",
+      "claim": "Makefile incluye rm y down -v: separar comandos de rutina y administrativos.",
+      "evidence": [
+        {
+          "path": "Makefile",
+          "line": 83
+        }
+      ]
+    },
+    {
+      "id": "REPOSITORY-05",
+      "node": "repository",
+      "claim": "Scripts package mezclan desarrollo con migración/optimización/rollback.",
+      "evidence": [
+        {
+          "path": "backend/package.json",
+          "line": 25
+        }
+      ]
+    },
+    {
+      "id": "REPOSITORY-06",
+      "node": "repository",
+      "claim": "Guard Dart domain existe y pasa; alcance limitado, ampliar contratos backend.",
+      "evidence": [
+        {
+          "path": "scripts/check_domain_imports.mjs",
+          "line": 9
+        }
+      ]
+    },
+    {
+      "id": "REPOSITORY-07",
+      "node": "repository",
+      "claim": "Politec contiene regla sobre outputs históricos y secretos; reutilizar controles existentes.",
+      "evidence": [
+        {
+          "path": "scripts/politec-quality-gate.ps1",
+          "line": 120
+        }
+      ]
+    },
+    {
+      "id": "REPOSITORY-08",
+      "node": "repository",
+      "claim": "Hay múltiples copias de skills; decidir fuente única y generación, no borrado por antigüedad.",
+      "evidence": [
+        {
+          "path": ".agents/skills",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "id": "REPOSITORY-09",
+      "node": "repository",
+      "claim": "Temporales tracked incluyen copia de ruta y resultados scripts; clasificación privada antes de publicación.",
+      "evidence": [
+        {
+          "path": "backend/routes/repartidor-finanzas.js.tmp2",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "id": "REPOSITORY-10",
+      "node": "repository",
+      "claim": "Docs vivos e históricos no tienen una única taxonomía de vigencia.",
+      "evidence": [
+        {
+          "path": "docs/spec/gmp.md",
+          "line": 31
+        }
+      ]
+    },
+    {
+      "id": "REPOSITORY-11",
+      "node": "repository",
+      "claim": "Publicación backend en main coexiste con rama de trabajo test; documentar cadena de promoción.",
+      "evidence": [
+        {
+          "path": ".github/workflows/backend-ci.yml",
+          "line": 46
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-01",
+      "node": "security",
+      "claim": "verifyToken protege /api tras rutas auth en montaje legacy.",
+      "evidence": [
+        {
+          "path": "backend/app.js",
+          "line": 783
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-02",
+      "node": "security",
+      "claim": "Token comprueba sesión activa/revocable; proteger esta garantía en cualquier migración.",
+      "evidence": [
+        {
+          "path": "backend/middleware/auth.js",
+          "line": 457
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-03",
+      "node": "security",
+      "claim": "Formato MAC propietario exige revisión de claims/protocolo; no se demostró bypass.",
+      "evidence": [
+        {
+          "path": "backend/middleware/auth.js",
+          "line": 169
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-04",
+      "node": "security",
+      "claim": "badCertificateCallback no obliga pin para certificados aceptados por raíces confiables; confirmado con documentación oficial Dart.",
+      "evidence": [
+        {
+          "path": "lib/core/api/api_client.dart",
+          "line": 247
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-05",
+      "node": "security",
+      "claim": "Android main amplía permisos de almacenamiento y ubicación.",
+      "evidence": [
+        {
+          "path": "android/app/src/main/AndroidManifest.xml",
+          "line": 14
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-06",
+      "node": "security",
+      "claim": "Reparto aplica ownership en detalle; ampliar matriz de pruebas, no presumir IDOR existente.",
+      "evidence": [
+        {
+          "path": "backend/routes/entregas.js",
+          "line": 1677
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-07",
+      "node": "security",
+      "claim": "Rutas de PDF/envío exigen matriz objeto/acción/scope y destinatario.",
+      "evidence": [
+        {
+          "path": "backend/routes/facturas.js",
+          "line": 520
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-08",
+      "node": "security",
+      "claim": "CORS productivo exige orígenes explícitos y proxy loopback; mantener límites según topología real.",
+      "evidence": [
+        {
+          "path": "backend/app.js",
+          "line": 354
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-09",
+      "node": "security",
+      "claim": "Ruta chatbot pasa mensaje/historial/contexto al orquestador sin schema estricto visible en ruta.",
+      "evidence": [
+        {
+          "path": "backend/routes/chatbot.js",
+          "line": 23
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-10",
+      "node": "security",
+      "claim": "RUM acepta endpoint suministrado por cliente; normalizar y evitar PII en logs.",
+      "evidence": [
+        {
+          "path": "backend/routes/telemetry.js",
+          "line": 19
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-11",
+      "node": "security",
+      "claim": "Gates SAST/lint tienen continue-on-error en workflow de calidad; uniformar required checks.",
+      "evidence": [
+        {
+          "path": ".github/workflows/quality-gates.yml",
+          "line": 54
+        }
+      ]
+    },
+    {
+      "id": "SECURITY-12",
+      "node": "security",
+      "claim": "HTTP cache usa scope y no-store; inventario sensible debe ser contractual.",
+      "evidence": [
+        {
+          "path": "backend/middleware/http-cache.js",
+          "line": 76
+        }
+      ]
+    }
+  ]
+}

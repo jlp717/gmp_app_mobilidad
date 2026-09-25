@@ -1,16 +1,21 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/application/load_planner_provider.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 
 void main() {
-  late LoadPlannerProvider provider;
+  late ProviderContainer container;
+  late LoadPlannerProvider notifier;
+
+  LoadPlannerState get state => container.read(loadPlannerProvider);
 
   setUp(() {
-    provider = LoadPlannerProvider();
+    container = ProviderContainer();
+    notifier = container.read(loadPlannerProvider.notifier);
   });
 
   tearDown(() {
-    provider.dispose();
+    container.dispose();
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -19,21 +24,21 @@ void main() {
 
   group('Initial state', () {
     test('has empty collections and defaults', () {
-      expect(provider.placedBoxes, isEmpty);
-      expect(provider.overflowBoxes, isEmpty);
-      expect(provider.metrics, isNull);
-      expect(provider.truck, isNull);
-      expect(provider.viewMode, ViewMode.perspective);
-      expect(provider.colorMode, ColorMode.product);
-      expect(provider.selectedBoxIndex, isNull);
-      expect(provider.dragState, isNull);
-      expect(provider.isLoading, false);
-      expect(provider.error, isNull);
-      expect(provider.saveState, SaveState.saved);
-      expect(provider.hasManualChanges, false);
-      expect(provider.canUndo, false);
-      expect(provider.canRedo, false);
-      expect(provider.excludedOrders, isEmpty);
+      expect(state.placedBoxes, isEmpty);
+      expect(state.overflowBoxes, isEmpty);
+      expect(state.metrics, isNull);
+      expect(state.truck, isNull);
+      expect(state.viewMode, ViewMode.perspective);
+      expect(state.colorMode, ColorMode.product);
+      expect(state.selectedBoxIndex, isNull);
+      expect(state.dragState, isNull);
+      expect(state.isLoading, false);
+      expect(state.error, isNull);
+      expect(state.saveState, SaveState.saved);
+      expect(state.hasManualChanges, false);
+      expect(state.canUndo, false);
+      expect(state.canRedo, false);
+      expect(state.excludedOrders, isEmpty);
     });
   });
 
@@ -44,28 +49,30 @@ void main() {
   group('Box selection', () {
     test('selectBox sets index and notifies', () {
       var notifyCount = 0;
-      provider
-        ..addListener(() => notifyCount++)
-        ..selectBox(3);
+      container.listen(
+        loadPlannerProvider,
+        (_, __) => notifyCount++,
+      );
+      notifier.selectBox(3);
 
-      expect(provider.selectedBoxIndex, 3);
+      expect(state.selectedBoxIndex, 3);
       expect(notifyCount, 1);
     });
 
     test('selectBox with null clears selection', () {
-      provider
+      notifier
         ..selectBox(5)
         ..selectBox(null);
 
-      expect(provider.selectedBoxIndex, isNull);
+      expect(state.selectedBoxIndex, isNull);
     });
 
     test('clearSelection clears selected index', () {
-      provider
+      notifier
         ..selectBox(2)
         ..clearSelection();
 
-      expect(provider.selectedBoxIndex, isNull);
+      expect(state.selectedBoxIndex, isNull);
     });
   });
 
@@ -76,35 +83,39 @@ void main() {
   group('View mode', () {
     test('setViewMode changes mode and notifies', () {
       var notifyCount = 0;
-      provider
-        ..addListener(() => notifyCount++)
-        ..setViewMode(ViewMode.top);
+      container.listen(
+        loadPlannerProvider,
+        (_, __) => notifyCount++,
+      );
+      notifier.setViewMode(ViewMode.top);
 
-      expect(provider.viewMode, ViewMode.top);
+      expect(state.viewMode, ViewMode.top);
       expect(notifyCount, 1);
     });
 
     test('setViewMode to front', () {
-      provider.setViewMode(ViewMode.front);
-      expect(provider.viewMode, ViewMode.front);
+      notifier.setViewMode(ViewMode.front);
+      expect(state.viewMode, ViewMode.front);
     });
   });
 
   group('Color mode', () {
     test('setColorMode changes mode and notifies', () {
       var notifyCount = 0;
-      provider
-        ..addListener(() => notifyCount++)
-        ..setColorMode(ColorMode.client);
+      container.listen(
+        loadPlannerProvider,
+        (_, __) => notifyCount++,
+      );
+      notifier.setColorMode(ColorMode.client);
 
-      expect(provider.colorMode, ColorMode.client);
+      expect(state.colorMode, ColorMode.client);
       expect(notifyCount, 1);
     });
 
     test('all color modes can be set', () {
       for (final mode in ColorMode.values) {
-        provider.setColorMode(mode);
-        expect(provider.colorMode, mode);
+        notifier.setColorMode(mode);
+        expect(state.colorMode, mode);
       }
     });
   });
@@ -115,30 +126,30 @@ void main() {
 
   group('Drag on empty state', () {
     test('startDrag with invalid index does nothing', () {
-      provider.startDrag(-1);
-      expect(provider.dragState, isNull);
+      notifier.startDrag(-1);
+      expect(state.dragState, isNull);
 
-      provider.startDrag(0); // no boxes
-      expect(provider.dragState, isNull);
+      notifier.startDrag(0); // no boxes
+      expect(state.dragState, isNull);
 
-      provider.startDrag(100);
-      expect(provider.dragState, isNull);
+      notifier.startDrag(100);
+      expect(state.dragState, isNull);
     });
 
     test('updateDragPosition does nothing without active drag', () {
       // Should not throw
-      provider.updateDragPosition(10, 20);
-      expect(provider.dragState, isNull);
+      notifier.updateDragPosition(10, 20);
+      expect(state.dragState, isNull);
     });
 
     test('endDrag does nothing without active drag', () {
-      provider.endDrag();
-      expect(provider.dragState, isNull);
+      notifier.endDrag();
+      expect(state.dragState, isNull);
     });
 
     test('cancelDrag does nothing without active drag', () {
-      provider.cancelDrag();
-      expect(provider.dragState, isNull);
+      notifier.cancelDrag();
+      expect(state.dragState, isNull);
     });
   });
 
@@ -148,7 +159,7 @@ void main() {
 
   group('Client summaries', () {
     test('returns empty list when no boxes', () {
-      expect(provider.clientSummaries, isEmpty);
+      expect(state.clientSummaries, isEmpty);
     });
   });
 
@@ -158,15 +169,15 @@ void main() {
 
   group('Undo/Redo on empty state', () {
     test('undo does nothing when stack is empty', () {
-      expect(provider.canUndo, false);
-      provider.undo(); // should not throw
-      expect(provider.canUndo, false);
+      expect(state.canUndo, false);
+      notifier.undo(); // should not throw
+      expect(state.canUndo, false);
     });
 
     test('redo does nothing when stack is empty', () {
-      expect(provider.canRedo, false);
-      provider.redo(); // should not throw
-      expect(provider.canRedo, false);
+      expect(state.canRedo, false);
+      notifier.redo(); // should not throw
+      expect(state.canRedo, false);
     });
   });
 
@@ -176,9 +187,9 @@ void main() {
 
   group('Reset without loaded plan', () {
     test('resetToAlgorithm does nothing if no vehicle loaded', () async {
-      await provider.resetToAlgorithm();
-      expect(provider.isLoading, false);
-      expect(provider.error, isNull);
+      await notifier.resetToAlgorithm();
+      expect(state.isLoading, false);
+      expect(state.error, isNull);
     });
   });
 
@@ -188,8 +199,8 @@ void main() {
 
   group('Save without loaded plan', () {
     test('saveLayout does nothing if no vehicle loaded', () async {
-      await provider.saveLayout();
-      expect(provider.saveState, SaveState.saved);
+      await notifier.saveLayout();
+      expect(state.saveState, SaveState.saved);
     });
   });
 
@@ -199,8 +210,8 @@ void main() {
 
   group('Dispose', () {
     test('dispose does not throw', () {
-      final p = LoadPlannerProvider();
-      expect(p.dispose, returnsNormally);
+      final c = ProviderContainer();
+      expect(c.dispose, returnsNormally);
     });
   });
 }

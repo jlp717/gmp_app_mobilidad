@@ -917,6 +917,30 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
         const expenses = await list('EXPENSE');
         const adjustments = await list('ADJUSTMENT');
         const bankDeposits = await list('BANK_DEPOSIT');
+        // REQ-30: el desglose incluye los cobros del dia (movimientos que
+        // alimentan la liquidacion). Misma forma que deriveDaySnapshot: solo
+        // lectura del dia, sin marcar nada como liquidado.
+        const paymentRows = await rows(connection,
+          'SELECT ID, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, CREATED_AT, '
+            + 'CODIGOCLIENTEALBARAN, TIPODOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO '
+            + `FROM ${finance.cobros} `
+            + `WHERE TRIM(CODIGOVENDEDOR) IN (${ownerPlaceholders}) AND DIACOBRO = ? AND MESCOBRO = ? AND ANOCOBRO = ? `
+            + 'ORDER BY ID WITH RS',
+          params);
+        const payments = paymentRows.map((row) => ({
+          id: rowValue(row, 'ID'),
+          amount: money(rowValue(row, 'IMPORTEVENCIMIENTO')),
+          paymentMethod: String(rowValue(row, 'CODIGOFORMAPAGO') || '').trim(),
+          collectedAt: timestamp(rowValue(row, 'CREATED_AT')),
+          codigoCliente: String(rowValue(row, 'CODIGOCLIENTEALBARAN') || '').trim(),
+          tipoDocumento: String(rowValue(row, 'TIPODOCUMENTO') || '').trim(),
+          documento: [
+            String(rowValue(row, 'TIPODOCUMENTO') || '').trim(),
+            String(rowValue(row, 'SERIEDOCUMENTO') || '').trim(),
+            String(rowValue(row, 'TERMINALDOCUMENTO') || '').trim(),
+            String(rowValue(row, 'NUMERODOCUMENTO') || '').trim(),
+          ].filter(Boolean).join(' '),
+        }));
         const closedRows = await rows(connection,
           isShadowLqd(finance)
             ? `SELECT COUNT(DISTINCT TRIM(CODIGOVENDEDOR)) AS CLOSED_COUNT FROM JAVIER.LQD `
@@ -927,7 +951,7 @@ function createRepartidorLiquidacionDb2Repository({ runtime, connectionFactory, 
               + "AND MESLIQUIDACION = ? AND ANOLIQUIDACION = ? AND STATUS = 'CLOSED' WITH RS",
           params);
         const closed = Number(rowValue(first(closedRows), 'CLOSED_COUNT')) === owners.length;
-        return Object.freeze({ closed, expenses, adjustments, bankDeposits });
+        return Object.freeze({ closed, expenses, adjustments, bankDeposits, payments });
       },
       async lockDay({ repartidorId, date }) {
         const { year, month, day } = dateParts(date);

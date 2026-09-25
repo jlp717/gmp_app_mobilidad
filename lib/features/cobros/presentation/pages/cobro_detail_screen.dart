@@ -117,7 +117,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   }
 
   Future<void> _reloadPendientes({bool forceRefresh = true}) async {
-    await _provider.cargarCobrosPendientes(
+    await _notifier.cargarCobrosPendientes(
       widget.codigoCliente,
       tipoDocumento: _tipoDocumento,
       fechaDesde: _formatDate(_fechaDesde),
@@ -223,7 +223,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Future.wait([
         _reloadPendientes(forceRefresh: true),
-        _provider.cargarHistoricoCobros(
+        _notifier.cargarHistoricoCobros(
           widget.codigoCliente,
           vendedorCodes: widget.vendedorCodes,
           forceRefresh: true,
@@ -232,8 +232,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     });
   }
 
-  CobrosProvider get _provider =>
-      ref.read(cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)));
+  CobrosParams get _params => CobrosParams(employeeCode: widget.employeeCode);
+  CobrosNotifier get _notifier =>
+      ref.read(cobrosProvider(_params).notifier);
+  CobrosState get _state => ref.read(cobrosProvider(_params));
 
   Map<String, CobroPendiente> _pendientesById(List<CobroPendiente> pendientes) {
     return {
@@ -251,7 +253,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
   double _calcularTotalACobrar() {
     var total = 0.0;
-    final pendientesById = _payableById(_provider.cobrosPendientes);
+    final pendientesById = _payableById(_state.cobrosPendientes);
     _itemStates.forEach((id, state) {
       final item = pendientesById[id];
       if (item == null) return;
@@ -266,7 +268,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
   /// Valida el importe parcial de un cobro y actualiza errores visuales.
   void _validatePartialAmount(String cobroId, String rawValue) {
-    final cobro = _payableById(_provider.cobrosPendientes)[cobroId];
+    final cobro = _payableById(_state.cobrosPendientes)[cobroId];
     if (cobro == null) {
       _partialErrors[cobroId] = 'Documento no disponible para cobrar';
       setState(() {});
@@ -390,7 +392,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     var exitos = 0;
     var importeExitoso = 0.0;
     final successfulIds = <String>{};
-    final pendientesById = _payableById(_provider.cobrosPendientes);
+    final pendientesById = _payableById(_state.cobrosPendientes);
     final selectedEntries = _itemStates.entries
         .where((entry) => entry.value != 'NONE')
         .toList(growable: false);
@@ -427,7 +429,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           ? TipoModoCobro.normal
           : TipoModoCobro.especial;
 
-      final success = await _provider.registrarCobro(
+      final success = await _notifier.registrarCobro(
         codigoCliente: widget.codigoCliente,
         referencia: cobro.paymentReference,
         importe: importe,
@@ -457,18 +459,18 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       });
       await Future.wait([
         _reloadPendientes(forceRefresh: true),
-        _provider.cargarHistoricoCobros(
+        _notifier.cargarHistoricoCobros(
           widget.codigoCliente,
           vendedorCodes: widget.vendedorCodes,
           forceRefresh: true,
         ),
-        _provider.refreshLoadedPendingSummary(forceRefresh: true),
+        _notifier.refreshLoadedPendingSummary(forceRefresh: true),
       ]);
       if (!mounted) return;
       final retrySelection = nextCobroSelectionAfterSubmit(
         currentSelection: _itemStates,
         successfulIds: successfulIds,
-        latestCobros: _provider.cobrosPendientes,
+        latestCobros: _state.cobrosPendientes,
       );
       setState(() {
         _itemStates
@@ -658,7 +660,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: () async {
               await Future.wait([
-                cobros.cargarCobrosPendientes(
+                _notifier.cargarCobrosPendientes(
                   widget.codigoCliente,
                   tipoDocumento: _tipoDocumento,
                   fechaDesde: _formatDate(_fechaDesde),
@@ -666,7 +668,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   vendedorCodes: widget.vendedorCodes,
                   forceRefresh: true,
                 ),
-                cobros.cargarHistoricoCobros(
+                _notifier.cargarHistoricoCobros(
                   widget.codigoCliente,
                   vendedorCodes: widget.vendedorCodes,
                   forceRefresh: true,
@@ -682,7 +684,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           : RefreshIndicator(
               onRefresh: () async {
                 await Future.wait([
-                  cobros.cargarCobrosPendientes(
+                  _notifier.cargarCobrosPendientes(
                     widget.codigoCliente,
                     tipoDocumento: _tipoDocumento,
                     fechaDesde: _formatDate(_fechaDesde),
@@ -690,7 +692,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                     vendedorCodes: widget.vendedorCodes,
                     forceRefresh: true,
                   ),
-                  cobros.cargarHistoricoCobros(
+                  _notifier.cargarHistoricoCobros(
                     widget.codigoCliente,
                     vendedorCodes: widget.vendedorCodes,
                     forceRefresh: true,

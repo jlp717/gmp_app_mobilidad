@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
@@ -150,14 +151,16 @@ void main() {
       ApiClient.dio.interceptors.add(interceptor);
       addTearDown(() => ApiClient.dio.interceptors.remove(interceptor));
 
-      final provider = BolsaProvider();
-      await provider.load('57', force: true);
-      expect(provider.status?.vendedor, '57');
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(bolsaProvider.notifier);
+      await notifier.load('57', force: true);
+      expect(container.read(bolsaProvider).status?.vendedor, '57');
 
-      await provider.load('ALL', force: true);
+      await notifier.load('ALL', force: true);
 
-      expect(provider.status, isNull);
-      expect(provider.currentVendor, isNull);
+      expect(container.read(bolsaProvider).status, isNull);
+      expect(container.read(bolsaProvider).currentVendor, isNull);
       expect(requestedPaths.where((path) => path.contains('/ALL/')), isEmpty);
     });
   });

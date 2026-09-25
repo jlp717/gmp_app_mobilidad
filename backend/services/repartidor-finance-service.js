@@ -1082,7 +1082,7 @@ async function getDailySummaryLegacyUnused({ repartidorId, date }) {
   });
 
   const totals = firstRow(totalsRows);
-  let saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
+  const saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
   const totalCobrosDia = roundMoney(value(totals, 'TOTAL_COBROS_DIA'));
   const gastos = 0;
 

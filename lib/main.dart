@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
-import 'package:gmp_app_mobilidad/core/di/injection.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_orchestrator.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
@@ -22,7 +21,7 @@ import 'package:gmp_app_mobilidad/core/theme/theme_provider.dart';
 import 'package:gmp_app_mobilidad/core/widgets/premium_route.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/pages/login_page.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/main_shell.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_offline.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -32,7 +31,6 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = false;
-  configureDependencies();
   if (kDebugMode && !bool.hasEnvironment('API_BASE_URL')) {
     ApiConfig.setDevelopment();
   }
@@ -282,7 +280,7 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
 
   Future<void> _flushPendingPedidoDraft() async {
     try {
-      final pedidos = ref.read(pedidosProvider);
+      final pedidos = ref.read(pedidosNotifierProvider.notifier);
       if (!pedidos.isDirty) return;
       final authState = ref.read(authProvider).value;
       final vendedorCodes = authState?.vendedorCodes ?? const <String>[];

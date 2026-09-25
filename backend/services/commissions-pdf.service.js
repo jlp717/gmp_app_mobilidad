@@ -1560,7 +1560,7 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
                     xPos = margin;
                     cols.forEach(col => {
                         let color = COLORS.text;
-                        let align = col.key === 'mes' || col.key === 'obs' ? 'left' : 'right';
+                        const align = col.key === 'mes' || col.key === 'obs' ? 'left' : 'right';
 
                         if (col.key === 'obj' && objective > 0) color = COLORS.objective;
                         if (col.key === 'condor' && condorAmount > 0) color = COLORS.condor;

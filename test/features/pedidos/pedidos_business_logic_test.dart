@@ -8,9 +8,40 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/unit_selector_modal.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart'
+    show
+        normalizePedidoClientCode,
+        promotionsCacheKey,
+        shouldReusePromotionsCache,
+        normalizeConfirmOrderResultForProvider,
+        shouldClearCartAfterConfirmation,
+        orderConfirmationStatusForProvider,
+        isConfirmedOrderResultForProvider;
 import 'package:hive_flutter/hive_flutter.dart';
+
+// Fase3: el ChangeNotifier viejo convive como re-export deprecated; los tests
+// usan el notifier unico via ProviderContainer. Mismos asserts.
+ProviderContainer _newContainer() {
+  final container = ProviderContainer();
+  addTearDown(container.dispose);
+  return container;
+}
+
+PedidosNotifier _newNotifier(
+  ProviderContainer container, {
+  PedidosOrderApi? orderApi,
+  bool refreshAfterConfirm = true,
+}) {
+  final notifier = container.read(pedidosNotifierProvider.notifier);
+  if (orderApi != null) notifier.debugSetOrderApi(orderApi);
+  notifier.debugSetRefreshAfterConfirm(refreshAfterConfirm);
+  return notifier;
+}
+
+Future<void> _flushNotifier() => Future<void>.delayed(Duration.zero);
 
 class _RecordingOrderApi implements PedidosOrderApi {
   int? confirmedOrderId;
@@ -484,8 +515,9 @@ void main() {
       expect(product.minimumPriceForUnit('KILOGRAMOS'), 2);
     });
 
-    test('stores line minimum and cost in the selected sale unit', () {
-      final provider = PedidosProvider();
+    test('stores line minimum and cost in the selected sale unit', () async {
+      final container = _newContainer();
+      final provider = _newNotifier(container);
       provider.setClient('4300010363', 'Cliente test');
 
       provider.addLine(
@@ -503,6 +535,7 @@ void main() {
         'UNIDADES',
         2.5,
       );
+      await _flushNotifier();
 
       final line = provider.lines.single;
       expect(line.precioMinimo, 2);
@@ -515,10 +548,11 @@ void main() {
     });
   });
 
-  group('PedidosProvider stock guard', () {
+  group('PedidosNotifier stock guard', () {
     test('addLine does not mutate cart when requested quantity exceeds stock',
         () {
-      final provider = PedidosProvider();
+      final container = _newContainer();
+      final provider = _newNotifier(container);
       provider.setClient('4300010363', 'Cliente test');
 
       final result = provider.addLine(
@@ -544,8 +578,9 @@ void main() {
       );
     });
 
-    test('addLine can still apply explicit partial when requested', () {
-      final provider = PedidosProvider();
+    test('addLine can still apply explicit partial when requested', () async {
+      final container = _newContainer();
+      final provider = _newNotifier(container);
       provider.setClient('4300010363', 'Cliente test');
       final result = provider.addLine(
         Product(
@@ -561,6 +596,7 @@ void main() {
         10,
         allowPartial: true,
       );
+      await _flushNotifier();
       expect(result, startsWith('PARCIAL:1'));
       expect(provider.lines, hasLength(1));
       expect(provider.lines.single.cantidadEnvases, 2);
@@ -568,8 +604,9 @@ void main() {
 
     test(
         'updateLine rejects dual-field quantities above stock without mutation',
-        () {
-      final provider = PedidosProvider();
+        () async {
+      final container = _newContainer();
+      final provider = _newNotifier(container);
       provider.setClient('4300010363', 'Cliente test');
       final product = Product(
         code: 'DUAL-STOCK-1',
@@ -581,6 +618,7 @@ void main() {
         precioTarifa1: 10,
       );
       provider.addLine(product, 1, 0, 'CAJAS', 10);
+      await _flushNotifier();
       final beforeEnvases = provider.lines.single.cantidadEnvases;
       final beforeUnidades = provider.lines.single.cantidadUnidades;
       final result =
@@ -755,7 +793,8 @@ void main() {
     });
 
     test('setClient stores the trimmed CHAR(10) client code', () {
-      final provider = PedidosProvider();
+      final container = _newContainer();
+      final provider = _newNotifier(container);
       provider.setClient(' 4300009324 ', 'Heladeria');
       expect(provider.clientCode, '4300009324');
     });
@@ -783,8 +822,9 @@ void main() {
 
     test(
       'auto-adds cumulative gift lines when sale quantity reaches threshold',
-      () {
-        final provider = PedidosProvider();
+      () async {
+        final container = _newContainer();
+        final provider = _newNotifier(container);
         provider.setClient('4300010363', 'Cliente test');
         provider.debugSetPromotions([
           PromotionItem(
@@ -814,6 +854,7 @@ void main() {
           'UNIDADES',
           10,
         );
+        await _flushNotifier();
 
         expect(provider.lines.length, 3);
         expect(
@@ -969,11 +1010,13 @@ void main() {
     });
   });
 
-  group('PedidosProvider confirmation API contract', () {
+  group('PedidosNotifier confirmation API contract', () {
     test('forwards selected delivery vehicle assignment to confirmation API',
         () async {
       final api = _RecordingOrderApi();
-      final provider = PedidosProvider(
+      final container = _newContainer();
+      final provider = _newNotifier(
+        container,
         orderApi: api,
         refreshAfterConfirm: false,
       );
@@ -1018,7 +1061,9 @@ void main() {
     test('sends pie discount as field and cobro propio without baking prices',
         () async {
       final api = _RecordingOrderApi();
-      final provider = PedidosProvider(
+      final container = _newContainer();
+      final provider = _newNotifier(
+        container,
         orderApi: api,
         refreshAfterConfirm: false,
       );
@@ -1054,8 +1099,12 @@ void main() {
     test('keeps queued create as a local draft and does not confirm offline',
         () async {
       final api = _QueuedCreateOrderApi();
-      final provider =
-          PedidosProvider(orderApi: api, refreshAfterConfirm: false);
+      final container = _newContainer();
+      final provider = _newNotifier(
+        container,
+        orderApi: api,
+        refreshAfterConfirm: false,
+      );
       provider.setClient('4300010363', 'SUSHI LORCA, S.L.');
       provider.addLine(
         Product(
@@ -1089,8 +1138,12 @@ void main() {
 
     test('queues globally discounted lines for offline confirmation', () async {
       final api = _QueuedCreateOrderApi();
-      final provider =
-          PedidosProvider(orderApi: api, refreshAfterConfirm: false);
+      final container = _newContainer();
+      final provider = _newNotifier(
+        container,
+        orderApi: api,
+        refreshAfterConfirm: false,
+      );
       provider.setClient('4300010363', 'SUSHI LORCA, S.L.');
       provider.addLine(
         Product(
@@ -1122,7 +1175,9 @@ void main() {
     test('guards reentrant confirmation while a save is already in progress',
         () async {
       final api = _BlockingOrderApi();
-      final provider = PedidosProvider(
+      final container = _newContainer();
+      final provider = _newNotifier(
+        container,
         orderApi: api,
         refreshAfterConfirm: false,
       );

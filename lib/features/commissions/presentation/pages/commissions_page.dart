@@ -12,43 +12,24 @@ import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/features/commissions/data/commissions_service.dart';
+import 'package:gmp_app_mobilidad/features/commissions/presentation/widgets/commission_surface.dart';
+import 'package:gmp_app_mobilidad/features/commissions/presentation/widgets/commission_tier_chip.dart';
+import 'package:gmp_app_mobilidad/features/commissions/presentation/widgets/team_table_text.dart';
 import 'package:gmp_app_mobilidad/features/commissions/presentation/widgets/pdf_range_dialog.dart';
 
+/// F3-02: moved to `commission_surface.dart` — thin alias kept so the
+/// 15+ call sites below stay untouched.
 BoxDecoration _commissionSurfaceDecoration({
   Color? color,
   Color? borderColor,
   double borderAlpha = 1,
   double radius = AppTheme.radiusMd,
-}) {
-  final surfaceColor = color ?? AppTheme.raisedSurface;
-  final outlineColor = borderColor ?? AppTheme.borderColor;
-  final hasVisibleSurface = surfaceColor != AppColors.transparent;
-  return BoxDecoration(
-    color: surfaceColor,
-    gradient: hasVisibleSurface
-        ? LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              surfaceColor,
-              AppTheme.softPanel.withValues(alpha: 0.88),
-              outlineColor.withValues(alpha: 0.035),
-            ],
-          )
-        : null,
-    borderRadius: BorderRadius.circular(radius),
-    border: Border.all(color: outlineColor.withValues(alpha: borderAlpha)),
-    boxShadow: hasVisibleSurface
-        ? [
-            BoxShadow(
-              color: AppColors.systemBlack.withValues(alpha: 0.12),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
-            ),
-          ]
-        : null,
-  );
-}
+}) => commissionSurfaceDecoration(
+      color: color,
+      borderColor: borderColor,
+      borderAlpha: borderAlpha,
+      radius: radius,
+    );
 
 class CommissionsPage extends ConsumerStatefulWidget {
   const CommissionsPage({
@@ -2993,41 +2974,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage>
     return names[m - 1];
   }
 
+  // F3-02: visuals live in `CommissionTierChip`; kept as thin wrapper
+  // (currently no callers — dead section removed from the god-file).
   Widget _buildTierChip(String tier, String range, String rate) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppTheme.info.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.info.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppTheme.info.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              tier,
-              style: const TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.info,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '$range → $rate',
-            style: TextStyle(fontSize: 9, color: AppTheme.textSecondary),
-          ),
-        ],
-      ),
-    );
+    return CommissionTierChip(tier: tier, range: range, rate: rate);
   }
 
   Widget _buildAllVendorsTable(List<dynamic> breakdown) {
@@ -3243,25 +3193,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage>
     );
   }
 
-  Widget _teamTableMoney(dynamic value) => _teamTableText(
-        CurrencyFormatter.format((value as num?)?.toDouble() ?? 0),
-        color: AppTheme.textPrimary,
-      );
+  // F3-02: moved to `team_table_text.dart` (`teamTableMoney`/`teamTableText`).
+  Widget _teamTableMoney(dynamic value) => teamTableMoney(value);
 
   Widget _teamTableText(
     String value, {
     Color? color,
     FontWeight fontWeight = FontWeight.w500,
-  }) {
-    return Text(
-      value,
-      style: TextStyle(
-        color: color ?? AppTheme.textSecondary,
-        fontSize: 11,
-        fontWeight: fontWeight,
-      ),
-    );
-  }
+  }) =>
+      teamTableText(value, color: color, fontWeight: fontWeight);
 
   Widget _buildTeamLeadPanel(Map<String, dynamic> team) {
     if (team.isNotEmpty) {

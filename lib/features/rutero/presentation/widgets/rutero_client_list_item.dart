@@ -516,7 +516,96 @@ class RuteroClientListItem extends StatelessWidget {
             ],
           ),
         const SizedBox(height: 6),
+        _buildRouteDaysRow(context),
+        const SizedBox(height: 6),
         _buildSalesRow(context),
+      ],
+    );
+  }
+
+  /// REQ-24 tanda4: badges Ruta/Visita/Reparto con fuente única laclae.js
+  /// (`route`/`visitDaysShort`/`deliveryDaysShort`). Vacío → oculta sin crash.
+  Widget _buildRouteDaysRow(BuildContext context) {
+    final route = (client['route'] ?? client['ruta'] ?? '').toString();
+    var visitDays = (client['visitDaysShort'] ?? '').toString();
+    var deliveryDays = (client['deliveryDaysShort'] ?? '').toString();
+    // Fallback arrays visitDays/deliveryDays (lista clientes usa shorts).
+    if (visitDays.isEmpty) {
+      final raw = client['visitDays'];
+      if (raw is List && raw.isNotEmpty) {
+        visitDays = raw.map((d) => d.toString()).join(',');
+      }
+    }
+    if (deliveryDays.isEmpty) {
+      final raw = client['deliveryDays'];
+      if (raw is List && raw.isNotEmpty) {
+        deliveryDays = raw.map((d) => d.toString()).join(',');
+      }
+    }
+
+    if (route.isEmpty && visitDays.isEmpty && deliveryDays.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    Widget badge({
+      required IconData icon,
+      required String text,
+      required Color color,
+      required String semanticLabel,
+    }) {
+      return Semantics(
+        label: semanticLabel,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.13),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: color.withValues(alpha: 0.22)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 12, color: color),
+              const SizedBox(width: 4),
+              Text(
+                text,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: color,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        if (route.isNotEmpty)
+          badge(
+            icon: Icons.route,
+            text: 'Ruta $route',
+            color: AppTheme.accentIndigo,
+            semanticLabel: 'Ruta $route',
+          ),
+        if (visitDays.isNotEmpty)
+          badge(
+            icon: Icons.calendar_today,
+            text: 'Visita: $visitDays',
+            color: AppTheme.info,
+            semanticLabel: 'Días visita $visitDays',
+          ),
+        if (deliveryDays.isNotEmpty)
+          badge(
+            icon: Icons.local_shipping,
+            text: 'Reparto: $deliveryDays',
+            color: AppTheme.success,
+            semanticLabel: 'Días reparto $deliveryDays',
+          ),
       ],
     );
   }

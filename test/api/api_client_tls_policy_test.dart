@@ -178,6 +178,26 @@ void main() {
       expect(adapter.requestCount, 2);
     });
 
+    test('does not retry canonical receipt GETs when the server returns 504',
+        () async {
+      ApiClient.resetForTesting();
+      final adapter = _GatewayTimeoutAdapter();
+      ApiClient.dio.httpClientAdapter = adapter;
+
+      await expectLater(
+        ApiClient.get(
+          '/repartidor-finanzas/rutero/confirmations/7/receipt',
+          cacheResponse: false,
+          forceRefresh: true,
+          skipRetry: true,
+        ),
+        throwsA(isA<ApiException>()),
+      );
+
+      expect(adapter.requestCount, 1);
+      expect(adapter.skipRetry, isTrue);
+    });
+
     test('does not logout when a pre-login request returns 401 after login',
         () async {
       ApiClient.resetForTesting();
@@ -285,6 +305,31 @@ class _CountingGetAdapter implements HttpClientAdapter {
     return ResponseBody.fromString(
       jsonEncode({'request': requestCount}),
       200,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _GatewayTimeoutAdapter implements HttpClientAdapter {
+  var requestCount = 0;
+  bool? skipRetry;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requestCount++;
+    skipRetry = options.extra['skipRetry'] as bool?;
+    return ResponseBody.fromString(
+      jsonEncode({'success': false, 'code': 'REPARTO_RECEIPT_TIMEOUT'}),
+      504,
       headers: {
         Headers.contentTypeHeader: ['application/json'],
       },

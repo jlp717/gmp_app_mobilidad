@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ruta de reparto</title>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    html, body, #map { margin: 0; height: 100%; width: 100%; background: #0b1220; }
+    .marker {
+      box-sizing: border-box; width: 52px; height: 52px; border-radius: 50%;
+      background: #0b1220; color: #fff; font: 800 22px/1 system-ui, sans-serif;
+      border: 3px solid #fff; box-shadow: 0 3px 10px #0009; cursor: pointer;
+    }
+    .marker.next { border: 5px solid #ffb020; }
+    .marker.active, .marker:focus-visible { outline: 4px solid #38bdf8; outline-offset: 3px; }
+    .maplibregl-popup-content { color: #0b1220; font: 600 14px/1.5 system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="map" aria-label="Mapa de paradas numeradas"></div>
+  <script>
+    const flutter = window.FlutterMapBridge || null;
+    let map = null, markers = [], selectedId = null, popups = [];
+    function post(type, payload) {
+      try { if (flutter && flutter.postMessage) flutter.postMessage(JSON.stringify({ type, ...payload })); } catch (_) {}
+    }
+    function isValidSpain(lat, lng) {
+      return Number.isFinite(lat) && Number.isFinite(lng) && lat >= 27 && lat <= 44 && lng >= -18 && lng <= 5;
+    }
+    // Gaps stay gaps: never draw a fictitious leg through an unmapped stop.
+    function routeSegments(stops) {
+      const features = [];
+      for (let i = 1; i < stops.length; i++) {
+        const a = stops[i - 1], b = stops[i];
+        if (isValidSpain(a.lat, a.lng) && isValidSpain(b.lat, b.lng)) {
+          features.push({ type: 'Feature', properties: { from: i, to: i + 1 },
+            geometry: { type: 'LineString', coordinates: [[a.lng, a.lat], [b.lng, b.lat]] } });
+        }
+      }
+      return { type: 'FeatureCollection', features };
+    }
+    function clearMarkers() {
+      markers.forEach((m) => m.remove()); markers = [];
+      popups.forEach((p) => p.remove()); popups = [];
+    }
+    function fitStops(stops) {
+      const located = stops.filter((s) => isValidSpain(s.lat, s.lng));
+      if (!located.length) return;
+      const bounds = new maplibregl.LngLatBounds([located[0].lng, located[0].lat], [located[0].lng, located[0].lat]);
+      located.forEach((s) => bounds.extend([s.lng, s.lat]));
+      map.fitBounds(bounds, { padding: { top: 200, bottom: 90, left: 65, right: 65 }, maxZoom: 14, pitch: 35, duration: 400 });
+    }
+    function popupContent(stop, index) {
+      const el = document.createElement('div');
+      const lines = [
+        'Parada ' + (index + 1) + ' · ' + (stop.nombreCliente || stop.cliente || ''),
+        stop.next ? 'Siguiente parada' : '',
+        stop.etaLabel ? 'Llegada estimada: ' + stop.etaLabel : '',
+        stop.windowLabel ? 'Horario: ' + stop.windowLabel : '',
+        stop.docLabel || ''
+      ];
+      lines.filter(Boolean).forEach((text) => {
+        const row = document.createElement('div');
+        row.textContent = text;
+        el.appendChild(row);
+      });
+      return el;
+    }
+    function addArrows() {
+      if (map.hasImage('route-arrow')) return;
+      const size = 20, data = new Uint8Array(size * size * 4);
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const head = x >= 9 && x <= 18 - Math.abs(y - 10);
+          const shaft = x >= 2 && x <= 10 && y >= 8 && y <= 12;
+          if (head || shaft) {
+            const at = (y * size + x) * 4;
+            data[at] = 255; data[at + 1] = 255; data[at + 2] = 255; data[at + 3] = 255;
+          }
+        }
+      }
+      map.addImage('route-arrow', { width: size, height: size, data });
+    }
+    function setRoute(payload) {
+      const stops = Array.isArray(payload.stops) ? payload.stops : [];
+      selectedId = payload.selectedId || null;
+      clearMarkers();
+      const overlaps = new Map();
+      stops.forEach((stop) => {
+        if (!isValidSpain(stop.lat, stop.lng)) return;
+        const key = stop.lat + ',' + stop.lng;
+        overlaps.set(key, (overlaps.get(key) || 0) + 1);
+      });
+      const seen = new Map();
+      stops.forEach((stop, index) => {
+        if (!isValidSpain(stop.lat, stop.lng)) return;
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.className = 'marker' + (stop.documentId === selectedId ? ' active' : '') + (stop.next ? ' next' : '');
+        el.textContent = String(index + 1);
+        el.setAttribute('aria-label', 'Parada ' + (index + 1) + ', ' + (stop.nombreCliente || stop.cliente || '') + (stop.next ? ', siguiente' : ''));
+        el.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          selectedId = stop.documentId;
+          window.highlightStop(selectedId);
+          post('markerTap', { documentId: stop.documentId, index });
+          const popup = new maplibregl.Popup({ offset: 32, closeButton: true, maxWidth: '240px' })
+            .setLngLat([stop.lng, stop.lat]).setDOMContent(popupContent(stop, index)).addTo(map);
+          popups.forEach((p) => p.remove()); popups = [popup];
+        });
+        const key = stop.lat + ',' + stop.lng;
+        const ordinal = seen.get(key) || 0;
+        seen.set(key, ordinal + 1);
+        // Same address may have multiple documents; keep every number visible.
+        const offset = [(ordinal - (overlaps.get(key) - 1) / 2) * 58, 0];
+        const marker = new maplibregl.Marker({ element: el, anchor: 'center', offset })
+          .setLngLat([stop.lng, stop.lat]);
+        marker._docId = stop.documentId;
+        marker.addTo(map); markers.push(marker);
+      });
+      const geo = routeSegments(stops);
+      const src = map.getSource('route');
+      if (src) src.setData(geo);
+      else {
+        map.addSource('route', { type: 'geojson', data: geo });
+        map.addLayer({ id: 'route-outline', type: 'line', source: 'route', paint: { 'line-color': '#0b1220', 'line-width': 9 } });
+        map.addLayer({ id: 'route-line', type: 'line', source: 'route', paint: { 'line-color': '#0284c7', 'line-width': 6 } });
+        addArrows();
+        map.addLayer({ id: 'route-direction', type: 'symbol', source: 'route',
+          layout: { 'symbol-placement': 'line', 'symbol-spacing': 90, 'icon-image': 'route-arrow', 'icon-allow-overlap': true, 'icon-rotation-alignment': 'map' } });
+      }
+      fitStops(stops);
+    }
+    function boot() {
+      map = new maplibregl.Map({
+        container: 'map',
+        style: { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] },
+        center: [-2.4637, 36.834], zoom: 10, pitch: 35, bearing: 0, antialias: true
+      });
+      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+      map.on('load', () => post('mapReady', {}));
+      window.setRoute = setRoute;
+      window.highlightStop = function (documentId) {
+        selectedId = documentId;
+        markers.forEach((m) => m.getElement().classList.toggle('active', m._docId === documentId));
+      };
+    }
+    boot();
+  </script>
+</body>
+</html>

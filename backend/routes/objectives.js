@@ -20,7 +20,6 @@ const {
     handleRouteError
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
-const { monthlyTable, isLaclaeMonthlyReady } = require('../services/laclae-monthly');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { redisCache, TTL } = require('../services/redis-cache');
 const { isCacheBypassRequest } = require('../middleware/http-cache');
@@ -53,7 +52,7 @@ const {
     resolveObjectiveSalesTarget,
 } = require('../utils/objectives-source');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260923-monthly-closed';
+const OBJECTIVES_CACHE_VERSION = 'v20260921-live-all-months';
 const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
 const { buildMonthFilterParameterized } = require('../src/utils/dashboardFilters');
 
@@ -328,6 +327,8 @@ function aggregateObjectiveRows(rows) {
 }
 
 async function fetchObjectiveEvolutionRowsByClientScope(vendorCode, uniqueYears) {
+    const normalizedVendor = String(vendorCode || '').trim().toUpperCase();
+    if (!normalizedVendor || normalizedVendor === 'UNK' || normalizedVendor.length > 2) return null;
     const cachedClientCodes = getClientCodesFromCache(vendorCode);
     if (!Array.isArray(cachedClientCodes) || cachedClientCodes.length === 0) return null;
 
@@ -778,8 +779,8 @@ async function overlayOpenMonthFromLiveLaclae(rows, now = getCurrentDate(), vend
             WHERE L.LCAADC = ?
               AND L.LCMMDC = ?
               AND ${LACLAE_SALES_FILTER}
-              AND ((L.LCMMDC < 3 AND L.LCCDVD IN (${vendorPlaceholders}))
-                OR (L.LCMMDC >= 3 AND L.R1_T8CDVD IN (${vendorPlaceholders})))
+              AND ((L.LCMMDC < 3 AND TRIM(L.LCCDVD) IN (${vendorPlaceholders}))
+                OR (L.LCMMDC >= 3 AND TRIM(L.R1_T8CDVD) IN (${vendorPlaceholders})))
             GROUP BY L.LCAADC, L.LCMMDC
         `, [year, month, ...safeVendorCodes, ...safeVendorCodes]);
     }
@@ -803,38 +804,6 @@ async function overlayOpenMonthFromLiveLaclae(rows, now = getCurrentDate(), vend
     return next;
 }
 
-async function fetchClosedMonthsFromMonthly(safeVendorCodes, uniqueYears, now) {
-    const table = monthlyTable();
-    const yearPlaceholders = uniqueYears.map(() => '?').join(',');
-    const openYear = now.getFullYear();
-    const openMonth = now.getMonth() + 1;
-    if (!safeVendorCodes || safeVendorCodes.length === 0) {
-        return queryWithParams(`
-            SELECT ANO AS YEAR, MES AS MONTH,
-                   SUM(SALES) AS SALES, SUM(COST) AS COST,
-                   COUNT(DISTINCT CLIENTE) AS CLIENTS
-              FROM ${table}
-             WHERE ANO IN (${yearPlaceholders})
-               AND NOT (ANO = ? AND MES = ?)
-             GROUP BY ANO, MES
-             ORDER BY YEAR, MONTH
-        `, [...uniqueYears, openYear, openMonth]);
-    }
-    const vendorPlaceholders = safeVendorCodes.map(() => '?').join(',');
-    return queryWithParams(`
-        SELECT ANO AS YEAR, MES AS MONTH,
-               SUM(SALES) AS SALES, SUM(COST) AS COST,
-               COUNT(DISTINCT CLIENTE) AS CLIENTS
-          FROM ${table}
-         WHERE ANO IN (${yearPlaceholders})
-           AND NOT (ANO = ? AND MES = ?)
-           AND ((MES < 3 AND VENDEDOR IN (${vendorPlaceholders}))
-             OR (MES >= 3 AND VENDEDOR_R1 IN (${vendorPlaceholders})))
-         GROUP BY ANO, MES
-         ORDER BY YEAR, MONTH
-    `, [...uniqueYears, openYear, openMonth, ...safeVendorCodes, ...safeVendorCodes]);
-}
-
 async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArray, uniqueYears, options = {}) {
     const forceRefresh = options.forceRefresh === true;
     const now = options.now || getCurrentDate();
@@ -850,12 +819,7 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
             const cachedRows = await redisCache.get('route', rowsKey);
             if (cachedRows) return cachedRows;
         }
-        let rows;
-        if (await isLaclaeMonthlyReady(queryWithParams)) {
-            const closed = await fetchClosedMonthsFromMonthly([], uniqueYears, now);
-            rows = await overlayOpenMonthFromLiveLaclae(closed, now, null);
-        } else {
-            rows = await queryWithParams(`
+        const liveRows = await queryWithParams(`
                 SELECT
                     L.LCAADC as YEAR,
                     L.LCMMDC as MONTH,
@@ -868,7 +832,7 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
                 GROUP BY L.LCAADC, L.LCMMDC
                 ORDER BY YEAR, MONTH
             `, uniqueYears);
-        }
+        const rows = await overlayOpenMonthFromLiveLaclae(liveRows, now, null);
         await redisCache.set('route', rowsKey, rows, 600).catch(() => {});
         return rows;
     }
@@ -889,26 +853,21 @@ async function fetchObjectiveEvolutionRows(effectiveVendorCodes, vendorCodesArra
         if (cachedRows) return cachedRows;
     }
 
-    let rows;
-    if (await isLaclaeMonthlyReady(queryWithParams)) {
-        const closed = await fetchClosedMonthsFromMonthly(safeVendorCodes, uniqueYears, now);
-        rows = await overlayOpenMonthFromLiveLaclae(closed, now, safeVendorCodes);
-    } else {
-        // Fallback live scan. Prefer equality on CHAR vendor cols (no TRIM) for sargability.
-        const vendorPlaceholders = safeVendorCodes.map(() => '?').join(',');
-        rows = await queryWithParams(`
+    // scoped aggregate query avoids per-vendor LACLAE scans for multi-vendor scopes.
+    const vendorPlaceholders = safeVendorCodes.map(() => '?').join(',');
+    const liveRows = await queryWithParams(`
             SELECT L.LCAADC as YEAR, L.LCMMDC as MONTH,
                    SUM(L.LCIMVT) as SALES, SUM(L.LCIMCT) as COST,
                    COUNT(DISTINCT L.LCCDCL) as CLIENTS
               FROM ${comercialErpTable('LACLAE')} L
              WHERE L.LCAADC IN (${yearPlaceholders})
                AND ${LACLAE_SALES_FILTER}
-               AND ((L.LCMMDC < 3 AND L.LCCDVD IN (${vendorPlaceholders}))
-                 OR (L.LCMMDC >= 3 AND L.R1_T8CDVD IN (${vendorPlaceholders})))
+               AND ((L.LCMMDC < 3 AND TRIM(L.LCCDVD) IN (${vendorPlaceholders}))
+                 OR (L.LCMMDC >= 3 AND TRIM(L.R1_T8CDVD) IN (${vendorPlaceholders})))
              GROUP BY L.LCAADC, L.LCMMDC
              ORDER BY YEAR, MONTH
         `, [...uniqueYears, ...safeVendorCodes, ...safeVendorCodes]);
-    }
+    const rows = await overlayOpenMonthFromLiveLaclae(liveRows, now, safeVendorCodes);
     await redisCache.set('route', rowsKey, rows, 600).catch(() => {});
     return rows;
 }
@@ -1065,7 +1024,7 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo objetivos', 500);
+        handleRouteError(error, res, 'Error obteniendo objetivos', 500, { code: 'OBJECTIVES_LIST_ERROR' });
     }
 });
 
@@ -1413,7 +1372,7 @@ router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) 
         if (result.kind === 'busy') return sendFillBusy(res);
         return res.json(result.data);
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo evolución de objetivos', 500);
+        handleRouteError(error, res, 'Error obteniendo evolución de objetivos', 500, { code: 'OBJECTIVES_EVOLUTION_ERROR' });
     }
 });
 
@@ -2606,7 +2565,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo matriz de cliente', 500);
+        handleRouteError(error, res, 'Error obteniendo matriz de cliente', 500, { code: 'OBJECTIVES_MATRIX_ERROR' });
     }
 });
 
@@ -3140,7 +3099,7 @@ async function handleByClientRequest(req, res) {
     } catch (error) {
         logger.error(`Objectives by-client error: ${error.message}`);
         if (!res.headersSent) {
-            handleRouteError(error, res, 'Error obteniendo objetivos por cliente', 500);
+            handleRouteError(error, res, 'Error obteniendo objetivos por cliente', 500, { code: 'OBJECTIVES_BY_CLIENT_ERROR' });
         }
     } finally {
         if (req._byClientFillLock && cacheKey) {

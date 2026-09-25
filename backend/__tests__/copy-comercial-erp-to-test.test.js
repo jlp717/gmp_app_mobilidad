@@ -4,7 +4,7 @@ const {
   refuseErpWrite,
   assertJavierTest,
   commercialCopyJobs,
-} = require('../scripts/copy-comercial-erp-to-test');
+} = require('../scripts/tools/copy-comercial-erp-to-test');
 
 describe('copy-comercial-erp-to-test', () => {
   test('refuses DSEDAC/DSED writes and non-TEST destinations', () => {
@@ -49,13 +49,13 @@ describe('copy-comercial-erp-to-test', () => {
     expect(jobs.some((job) => job.dest === 'JAVIER.TEST_ARO')).toBe(true);
     expect(jobs.some((job) => /PAG|CAC|CODIGOVENDEDOR/.test(job.insertSql))).toBe(true);
     expect(jobs.find((job) => job.dest === 'JAVIER.TEST_CVC').appendSql).toMatch(/NOT EXISTS/);
-    expect(require('../scripts/copy-comercial-erp-to-test').HIT_VENDORS).toEqual(
+    expect(require('../scripts/tools/copy-comercial-erp-to-test').HIT_VENDORS).toEqual(
       expect.arrayContaining(['80', '35', '98']),
     );
   });
 
   test('intersect columns keeps only shared identifiers', () => {
-    const { intersectColumnNames, buildInsertSelectSql } = require('../scripts/copy-comercial-erp-to-test');
+    const { intersectColumnNames, buildInsertSelectSql } = require('../scripts/tools/copy-comercial-erp-to-test');
     expect(intersectColumnNames(['A', 'B'], ['B', 'C'])).toEqual(['B']);
     const sql = buildInsertSelectSql('JAVIER.TEST_LPC', 'DSEDAC.LPC', ['EJERCICIOPEDIDO', 'NUMEROPEDIDO']);
     expect(sql).toBe(

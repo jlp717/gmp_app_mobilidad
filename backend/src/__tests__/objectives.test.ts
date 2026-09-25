@@ -140,8 +140,14 @@ describe('ObjectivesService', () => {
   // ============================================
   describe('getEvolution', () => {
     it('returns monthly evolution data', async () => {
+      // NOTE: mock order must match getEvolution execution order:
+      // 1:activeDays 2:fixedTarget 3:targetConfig 4:LACLAE 5-6:B-sales 7-8:currentClients(+fallback)
       // Mock getVendorActiveDays
       mockQuery.mockResolvedValueOnce([]);
+      // Mock getFixedMonthlyTarget (direct query, no cache)
+      mockQuery.mockResolvedValueOnce([]);
+      // Mock getVendorTargetConfig
+      mockQuery.mockResolvedValueOnce([{ TARGET_PERCENTAGE: 10.0 }]);
       // Mock LACLAE monthly totals
       mockQuery.mockResolvedValueOnce([
         { YEAR: 2026, MONTH: 1, SALES: 10000, COST: 6000, CLIENTS: 15 },
@@ -152,12 +158,9 @@ describe('ObjectivesService', () => {
       // Mock B-sales: uniqueYears=[2026,2025] → 2 calls
       mockQuery.mockResolvedValueOnce([]);  // B-sales 2026
       mockQuery.mockResolvedValueOnce([]);  // B-sales 2025
-      // Mock getVendorCurrentClients (checks missing months)
+      // Mock getVendorCurrentClients (current year + prev-year fallback)
       mockQuery.mockResolvedValueOnce([]);
-      // Mock getFixedMonthlyTarget
       mockQuery.mockResolvedValueOnce([]);
-      // Mock getVendorTargetConfig
-      mockQuery.mockResolvedValueOnce([{ TARGET_PERCENTAGE: 10.0 }]);
 
       const result = await objectivesService.getEvolution({
         vendedorCodes: '5', years: '2026',

@@ -5,14 +5,17 @@
 /// stock warnings, and sale type selector.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
+import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
-import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 typedef OrderPreviewConfirm = Future<dynamic> Function(
   String observaciones, {
@@ -27,7 +30,7 @@ typedef OrderPreviewConfirm = Future<dynamic> Function(
 /// result (Map) if confirmed, null if cancelled or failed.
 Future<dynamic> showOrderPreviewSheet({
   required BuildContext context,
-  required PedidosProvider provider,
+  required PedidosNotifier provider,
   required String vendedorCode,
   required OrderPreviewConfirm onConfirm,
 }) {
@@ -48,7 +51,7 @@ class _OrderPreviewSheet extends StatefulWidget {
     required this.vendedorCode,
     required this.onConfirm,
   });
-  final PedidosProvider provider;
+  final PedidosNotifier provider;
   final String vendedorCode;
   final OrderPreviewConfirm onConfirm;
 
@@ -114,7 +117,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       SizedBox(height: gap),
       _buildTotalsCard(provider, hasDiscount, total, margin),
       SizedBox(height: gap),
-      if (provider.ivaBreakdown.isNotEmpty) _buildIvaBreakdown(provider),
+      if (lines.isNotEmpty) _buildIvaBreakdown(provider),
       SizedBox(height: compact ? 12 : 24),
     ];
 
@@ -154,7 +157,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     );
   }
 
-  Widget _buildHeader(PedidosProvider provider) {
+  Widget _buildHeader(PedidosNotifier provider) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
       decoration: BoxDecoration(
@@ -258,7 +261,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     );
   }
 
-  Widget _buildClientCard(PedidosProvider provider) {
+  Widget _buildClientCard(PedidosNotifier provider) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: AppTheme.glassMorphismPremium(
@@ -711,7 +714,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     int index,
     OrderLine line,
     bool hasDiscount,
-    PedidosProvider provider,
+    PedidosNotifier provider,
   ) {
     // Misma cascada que backend bolsa: dto línea → dto global sobre precio lista.
     final lineFactor = line.lineDiscountPct > 0 && line.lineDiscountPct <= 100
@@ -828,7 +831,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
   }
 
   Widget _buildTotalsCard(
-    PedidosProvider provider,
+    PedidosNotifier provider,
     bool hasDiscount,
     double total,
     double margin,
@@ -877,13 +880,6 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           const SizedBox(height: 4),
           _buildTotalRow('IVA', PedidosFormatters.money(provider.totalIva)),
 
-          if (provider.isMarginVisible) ...[
-            const SizedBox(height: 8),
-            Divider(color: AppTheme.borderColor, height: 1),
-            const SizedBox(height: 8),
-            _buildBolsaPreviewRows(provider),
-          ],
-
           const SizedBox(height: 8),
           Divider(color: AppTheme.borderColor, height: 1),
           const SizedBox(height: 12),
@@ -913,7 +909,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
 
           const SizedBox(height: 10),
 
-          // Margin bar
+          // Margin bar (solo JEFE_VENTAS/ADMIN; bolsa abajo visible ambos roles)
           if (provider.isMarginVisible)
             Row(
               children: [
@@ -949,36 +945,58 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 ),
               ],
             ),
+
+          // Bolsa anclada abajo del todo (COMERCIAL + JEFE; recalcula mismo
+          // frame porque lee provider.estimatedBolsaImpact con _discountFactor
+          // actual en cada build, igual que totales).
+          const SizedBox(height: 8),
+          Divider(color: AppTheme.borderColor, height: 1),
+          const SizedBox(height: 8),
+          _buildBolsaPreviewRows(provider),
         ],
       ),
     );
   }
 
-  Widget _buildBolsaPreviewRows(PedidosProvider provider) {
+  Widget _buildBolsaPreviewRows(PedidosNotifier provider) {
     final impact = provider.estimatedBolsaImpact;
-    return Column(
-      children: [
-        if (impact.acumulacion > 0)
-          _buildTotalRow(
-            'Bolsa generada',
-            '+${PedidosFormatters.money(impact.acumulacion)}',
-            valueColor: AppTheme.success,
-          ),
-        if (impact.consumo > 0) ...[
-          if (impact.acumulacion > 0) const SizedBox(height: 4),
-          _buildTotalRow(
-            'Bolsa usada',
-            '-${PedidosFormatters.money(impact.consumo)}',
-            valueColor: AppTheme.warning,
-          ),
+    return Semantics(
+      label: impact.hasImpact
+          ? 'Bolsa generada ${impact.acumulacion} euros, bolsa usada ${impact.consumo} euros, impacto neto ${impact.neto} euros'
+          : 'Sin impacto en bolsa',
+      child: Column(
+        children: [
+          if (!impact.hasImpact)
+            _buildTotalRow(
+              'Sin impacto en bolsa',
+              PedidosFormatters.money(0),
+              valueColor: AppTheme.textSecondary,
+            ),
+          if (impact.acumulacion > 0)
+            _buildTotalRow(
+              'Bolsa generada',
+              '+${PedidosFormatters.money(impact.acumulacion)}',
+              valueColor: AppTheme.success,
+            ),
+          if (impact.consumo > 0) ...[
+            if (impact.acumulacion > 0) const SizedBox(height: 4),
+            _buildTotalRow(
+              'Bolsa usada',
+              '-${PedidosFormatters.money(impact.consumo)}',
+              valueColor: AppTheme.warning,
+            ),
+          ],
+          if (impact.hasImpact) ...[
+            const SizedBox(height: 4),
+            _buildTotalRow(
+              'Impacto neto bolsa',
+              '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}',
+              valueColor:
+                  impact.neto >= 0 ? AppTheme.success : AppTheme.warning,
+            ),
+          ],
         ],
-        const SizedBox(height: 4),
-        _buildTotalRow(
-          'Impacto neto bolsa',
-          '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}',
-          valueColor: impact.neto >= 0 ? AppTheme.success : AppTheme.warning,
-        ),
-      ],
+      ),
     );
   }
 
@@ -1002,44 +1020,73 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     );
   }
 
-  Widget _buildIvaBreakdown(PedidosProvider provider) {
+  Widget _buildIvaBreakdown(PedidosNotifier provider) {
     final breakdown = provider.ivaBreakdown;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionLabel('DESGLOSE IVA'),
-          const SizedBox(height: 6),
-          ...breakdown.entries.map((e) {
-            final pct = e.key.toString();
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'IVA $pct%',
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 12,
+    // Siempre visible con líneas (aunque sea 1 tipo). Misma fuente que
+    // totalIva (importeVenta × _discountFactor × rate), cuadre ±0,01.
+    final entries = breakdown.entries.toList();
+    final fallbackSingle = entries.isEmpty && provider.lineCount > 0;
+    return Semantics(
+      label: 'Desglose IVA por tipo',
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.raisedSurface.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSectionLabel('DESGLOSE IVA'),
+            const SizedBox(height: 6),
+            if (fallbackSingle)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'IVA 21%',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
+                    Text(
+                      PedidosFormatters.money(provider.totalIva),
+                      style: TextStyle(
+                          color: AppColors.themedWhite70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ...entries.map((e) {
+                final pct = e.key.toString();
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'IVA $pct%',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        PedidosFormatters.money(e.value),
+                        style: TextStyle(
+                            color: AppColors.themedWhite70, fontSize: 12),
+                      ),
+                    ],
                   ),
-                  Text(
-                    PedidosFormatters.money(e.value),
-                    style:
-                        TextStyle(color: AppColors.themedWhite70, fontSize: 12),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
+                );
+              }),
+          ],
+        ),
       ),
     );
   }
@@ -1149,14 +1196,14 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                       child: child,
                     );
                   },
-                  child: SizedBox(
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: _isConfirming ||
-                              _isLoadingDeliveryOptions ||
-                              _confirmSucceeded
-                          ? null
-                          : _handleConfirm,
+                      child: SizedBox(
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          onPressed: _isConfirming ||
+                                  _isLoadingDeliveryOptions ||
+                                  _confirmSucceeded
+                              ? null
+                              : () => _askSecondConfirm(total),
                       icon: _isConfirming
                           ? SizedBox(
                               width: 18,
@@ -1290,6 +1337,13 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
   Future<void> _pickDeliveryDate() async {
     final now = DateTime.now();
     final initial = _selectedDeliveryDate ?? now;
+    // REQ-09: con regla cerrada solo días de allowedDeliveryDays son
+    // elegibles (cero 409 tardío). Sin regla (validated=false o vacío):
+    // picker libre 0-60 días como hoy.
+    final options = _deliveryOptions;
+    final repoDays = options?.allowedDeliveryDays ?? const <String>[];
+    final hasRule = (options?.validated ?? false) && repoDays.isNotEmpty;
+    final allowed = repoDays.map(_normalizeDayName).toSet();
     final picked = await showDatePicker(
       context: context,
       initialDate: initial.isBefore(now) ? now : initial,
@@ -1298,10 +1352,53 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       helpText: 'Fecha reparto',
       confirmText: 'Aceptar',
       cancelText: 'Cancelar',
+      selectableDayPredicate: hasRule
+          ? (date) => allowed.contains(_dayNameForDate(date))
+          : null,
     );
 
     if (picked == null) return;
     await _loadDeliveryOptions(deliveryDate: _formatIsoDate(picked));
+  }
+
+  /// monday..sunday en el mismo vocabulario que allowedDeliveryDays.
+  String _dayNameForDate(DateTime date) {
+    const names = [
+      'lunes',
+      'martes',
+      'miercoles',
+      'jueves',
+      'viernes',
+      'sabado',
+      'domingo',
+    ];
+    return names[date.weekday - 1];
+  }
+
+  String _normalizeDayName(String value) {
+    final clean = value
+        .trim()
+        .toLowerCase()
+        .replaceAll('á', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ú', 'u');
+    if (clean.startsWith('lu')) return 'lunes';
+    if (clean.startsWith('ma')) return 'martes';
+    if (clean.startsWith('mi')) return 'miercoles';
+    if (clean.startsWith('ju')) return 'jueves';
+    if (clean.startsWith('vi')) return 'viernes';
+    if (clean.startsWith('sa')) return 'sabado';
+    if (clean.startsWith('do')) return 'domingo';
+    if (clean == 'l') return 'lunes';
+    if (clean == 'm') return 'martes';
+    if (clean == 'x') return 'miercoles';
+    if (clean == 'j') return 'jueves';
+    if (clean == 'v') return 'viernes';
+    if (clean == 's') return 'sabado';
+    if (clean == 'd') return 'domingo';
+    return clean;
   }
 
   Future<void> _showVehicleSelector() async {
@@ -1345,6 +1442,16 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 final code = (v['code'] ?? '').toString();
                 final desc =
                     (v['matricula'] ?? v['description'] ?? '').toString();
+                final vDriverCode = (v['driverCode'] ?? '').toString();
+                final vDriverName = (v['driverName'] ?? '').toString();
+                final driverLabel = vDriverName.isNotEmpty
+                    ? vDriverName
+                    : (vDriverCode.isNotEmpty ? 'Rep. $vDriverCode' : '');
+                final title = [
+                  if (code.isNotEmpty) code,
+                  if (desc.isNotEmpty) desc,
+                  if (driverLabel.isNotEmpty) driverLabel,
+                ].join(' - ');
                 final isCurrent = code == _deliveryOptions?.vehicleCode;
                 return ListTile(
                   leading: Container(
@@ -1361,7 +1468,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                     ),
                   ),
                   title: Text(
-                    desc.isNotEmpty ? '$code - $desc' : 'Camion $code',
+                    title.isNotEmpty ? title : 'Camion $code',
                     style: TextStyle(
                       color: AppColors.themedWhite,
                       fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
@@ -1389,7 +1496,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                         selectedDeliveryDateFormatted:
                             _deliveryOptions!.selectedDeliveryDateFormatted,
                         vehicleCode: code,
-                        driverCode: _deliveryOptions!.driverCode,
+                        driverCode: vDriverCode,
+                        driverName: vDriverName,
                         vehicleMatricula: desc,
                         vehicleDescription: desc,
                         truckConfidence: 'manual',
@@ -1473,8 +1581,88 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         .replaceFirst('Exception: ', '');
   }
 
+  Future<void> _askSecondConfirm(double total) async {
+    // REQ-17: segundo diálogo anti-toque. Solo [Confirmar] ejecuta
+    // `_handleConfirm` (protegido por `_isConfirming`: sin doble llamada,
+    // `clientRequestId` del provider mantiene idempotencia).
+    if (_isConfirming || _confirmSucceeded) return;
+    final provider = widget.provider;
+    final lines = provider.lineCount;
+    final dateLabel = _selectedDeliveryDate != null
+        ? _formatDateDisplay(_selectedDeliveryDate!)
+        : 'según ruta';
+    final truck = _deliveryOptions?.vehicleCode?.trim() ?? '';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.raisedSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Semantics(
+          header: true,
+          child: Text(
+            'Confirmar pedido',
+            style: TextStyle(
+              color: AppColors.themedWhite,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        content: Semantics(
+          label:
+              'Confirmar pedido ${PedidosFormatters.money(total)}, $lines líneas, fecha $dateLabel${truck.isEmpty ? '' : ', camión $truck'}',
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '¿Confirmar pedido ${PedidosFormatters.money(total)} — '
+                '$lines líneas — $dateLabel'
+                '${truck.isEmpty ? '' : ' — camión $truck'}?',
+                style: TextStyle(
+                  color: AppColors.themedWhite,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (ConnectivityService.instance.currentStatus !=
+                  ConnectivityStatus.online) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Sin conexión: se guardará local y se enviará al recuperar conexión.',
+                  style: TextStyle(
+                    color: AppTheme.warning,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Revisar',
+              style: TextStyle(color: AppColors.themedWhite54),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.success,
+              foregroundColor: AppColors.themedWhite,
+            ),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) await _handleConfirm();
+  }
+
   Future<void> _handleConfirm() async {
-    HapticFeedback.heavyImpact();
+    unawaited(HapticFeedback.heavyImpact());
     setState(() {
       _isConfirming = true;
       _confirmSucceeded = false;
@@ -1500,7 +1688,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           (resultMap['pendingConfirmation'] == true ||
               resultMap['queued'] == true);
       if (isRealSuccess) {
-        HapticFeedback.mediumImpact();
+        unawaited(HapticFeedback.mediumImpact());
         final number = resultMap['numeroPedido']?.toString();
         setState(() {
           _isConfirming = false;
@@ -1513,7 +1701,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         if (!mounted) return;
         Navigator.of(context).pop(result);
       } else if (isPendingSync) {
-        HapticFeedback.mediumImpact();
+        unawaited(HapticFeedback.mediumImpact());
         final message = resultMap['message']?.toString().trim();
         setState(() {
           _isConfirming = false;

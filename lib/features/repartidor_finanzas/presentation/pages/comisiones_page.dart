@@ -1,8 +1,8 @@
 // ignore_for_file: public_member_api_docs
 
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
@@ -12,6 +12,37 @@ import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/providers/repartidor_finanzas_providers.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+
+/// Starts commission-summary requests in small batches so the profile doesn't
+/// occupy every connection in the shared DB2 pool while loading the year.
+Future<List<T>> runBoundedCommissionLoads<T>(
+  List<Future<T> Function()> loaders, {
+  int maxConcurrent = 2,
+}) async {
+  if (maxConcurrent < 1) {
+    throw ArgumentError.value(
+      maxConcurrent,
+      'maxConcurrent',
+      'must be positive',
+    );
+  }
+  if (loaders.isEmpty) return <T>[];
+
+  final results = List<T?>.filled(loaders.length, null);
+  var nextIndex = 0;
+  Future<void> worker() async {
+    while (true) {
+      final index = nextIndex++;
+      if (index >= loaders.length) return;
+      results[index] = await loaders[index]();
+    }
+  }
+
+  final workerCount =
+      maxConcurrent < loaders.length ? maxConcurrent : loaders.length;
+  await Future.wait(List<Future<void>>.generate(workerCount, (_) => worker()));
+  return List<T>.generate(loaders.length, (index) => results[index] as T);
+}
 
 /// Visual surface aligned with comercial `CommissionsPage` cards.
 BoxDecoration _commissionSurfaceDecoration({
@@ -153,14 +184,14 @@ class _RepartidorComisionesFinanzasPageState
       final now = DateTime.now();
       final year = _selectedPeriod.year;
       final currentMonthCursor = DateTime(now.year, now.month);
-      final monthFutures = <Future<_MonthCommissionRow>>[];
+      final monthLoaders = <Future<_MonthCommissionRow> Function()>[];
       for (var month = 1; month <= 12; month++) {
         final from = DateTime(year, month);
         final to = DateTime(year, month + 1, 0);
         final isFuture = from.isAfter(currentMonthCursor);
         if (isFuture) {
-          monthFutures.add(
-            Future.value(
+          monthLoaders.add(
+            () => Future.value(
               _MonthCommissionRow(
                 period: from,
                 isFuture: true,
@@ -176,8 +207,8 @@ class _RepartidorComisionesFinanzasPageState
           );
           continue;
         }
-        monthFutures.add(
-          service
+        monthLoaders.add(
+          () => service
               .getCommissionSummary(
                 repartidorId: widget.repartidorId,
                 from: from,
@@ -193,7 +224,7 @@ class _RepartidorComisionesFinanzasPageState
         );
       }
       final results = await Future.wait<dynamic>([
-        Future.wait(monthFutures),
+        runBoundedCommissionLoads(monthLoaders),
         if (forceRefresh)
           service.getCommissionTiers(forceRefresh: true)
         else

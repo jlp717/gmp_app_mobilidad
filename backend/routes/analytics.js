@@ -98,7 +98,7 @@ router.get('/yoy-comparison', verifyToken, requireVendorQueryScope, async (req, 
 
     } catch (error) {
         logger.error(`YoY error: ${error.message}`);
-        handleRouteError(error, res, 'Error obteniendo comparación', 500);
+        handleRouteError(error, res, 'Error obteniendo comparación', 500, { code: 'ANALYTICS_YOY_ERROR' });
     }
 });
 
@@ -184,7 +184,7 @@ router.get('/top-clients', verifyToken, requireVendorQueryScope, async (req, res
 
     } catch (error) {
         logger.error(`Top clients error: ${error.message} | stack: ${error.stack?.substring(0, 300)}`);
-        handleRouteError(error, res, 'Error top clients', 500);
+        handleRouteError(error, res, 'Error top clients', 500, { code: 'ANALYTICS_TOP_CLIENTS_ERROR' });
     }
 });
 
@@ -234,7 +234,7 @@ router.get('/trends', verifyToken, requireVendorQueryScope, async (req, res) => 
 
     } catch (error) {
         logger.error(`Trends error: ${error.message}`);
-        handleRouteError(error, res, 'Error calculating trends', 500);
+        handleRouteError(error, res, 'Error calculating trends', 500, { code: 'ANALYTICS_TRENDS_ERROR' });
     }
 });
 
@@ -289,7 +289,7 @@ router.get('/top-products', verifyToken, requireVendorQueryScope, async (req, re
         });
     } catch (error) {
         logger.error(`Top Products error: ${error.message} `);
-        handleRouteError(error, res, 'Error obteniendo productos', 500);
+        handleRouteError(error, res, 'Error obteniendo productos', 500, { code: 'ANALYTICS_TOP_PRODUCTS_ERROR' });
     }
 });
 
@@ -359,7 +359,7 @@ router.get('/margins', verifyToken, requireVendorQueryScope, async (req, res) =>
 
     } catch (error) {
         logger.error(`Margins error: ${error.message} `);
-        handleRouteError(error, res, 'Error obteniendo márgenes', 500);
+        handleRouteError(error, res, 'Error obteniendo márgenes', 500, { code: 'ANALYTICS_MARGINS_ERROR' });
     }
 });
 
@@ -541,7 +541,7 @@ router.get('/sales-history', verifyToken, requireVendorQueryScope, async (req, r
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo histórico de ventas', 500);
+        handleRouteError(error, res, 'Error obteniendo histórico de ventas', 500, { code: 'ANALYTICS_SALES_HISTORY_ERROR' });
     }
 });
 
@@ -704,7 +704,7 @@ router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error calculating summary', 500);
+        handleRouteError(error, res, 'Error calculating summary', 500, { code: 'ANALYTICS_SALES_SUMMARY_ERROR' });
     }
 });
 

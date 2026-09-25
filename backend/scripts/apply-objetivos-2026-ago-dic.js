@@ -1,3 +1,4 @@
+// UNCLASSIFIED — do not run without human confirmation. See audit <2026-09-25>.
 /**
  * APPLY: objetivos 2026 Ago-Dic adjustment (Alfonso escalera + ago 2.135M + nov/dic +100k).
  *
