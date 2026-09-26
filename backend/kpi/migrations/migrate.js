@@ -4,6 +4,7 @@
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
+const logger = require('../../middleware/logger');
 
 const pool = new Pool({
   connectionString: process.env.KPI_DATABASE_URL || 'postgresql://kpi_user:kpi_pass@localhost:5432/kpi_glacius',
@@ -38,7 +39,7 @@ async function run(direction = 'up') {
     if (direction === 'up') {
       for (const file of files) {
         if (applied.has(file)) {
-          console.log(`[skip] ${file} ya aplicada`);
+          logger.info(`[skip] ${file} ya aplicada`);
           continue;
         }
         const migration = require(path.join(__dirname, file));
@@ -47,10 +48,10 @@ async function run(direction = 'up') {
           await migration.up(client);
           await client.query('INSERT INTO kpi_migrations (name) VALUES ($1)', [file]);
           await client.query('COMMIT');
-          console.log(`[ok]   ${file} aplicada`);
+          logger.info(`[ok]   ${file} aplicada`);
         } catch (err) {
           await client.query('ROLLBACK');
-          console.error(`[fail] ${file}: ${err.message}`);
+          logger.error(`[fail] ${file}: ${err.message}`);
           throw err;
         }
       }
@@ -63,16 +64,16 @@ async function run(direction = 'up') {
           await migration.down(client);
           await client.query('DELETE FROM kpi_migrations WHERE name = $1', [file]);
           await client.query('COMMIT');
-          console.log(`[ok]   ${file} revertida`);
+          logger.info(`[ok]   ${file} revertida`);
         } catch (err) {
           await client.query('ROLLBACK');
-          console.error(`[fail] ${file}: ${err.message}`);
+          logger.error(`[fail] ${file}: ${err.message}`);
           throw err;
         }
       }
     }
 
-    console.log(`\nMigraciones ${direction} completadas.`);
+    logger.info(`Migraciones ${direction} completadas.`);
   } finally {
     client.release();
     await pool.end();
@@ -81,6 +82,6 @@ async function run(direction = 'up') {
 
 const direction = process.argv[2] || 'up';
 run(direction).catch((err) => {
-  console.error('Error en migración:', err);
+  logger.error('Error en migración:', err);
   process.exit(1);
 });

@@ -6,6 +6,7 @@
 
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
+const logger = require('./logger');
 
 /**
  * Wrap a route handler with automatic caching
@@ -58,7 +59,7 @@ function autoCacheRouter(router, prefix, options = {}) {
     
     // This would require AST transformation to work properly
     // For now, documenting the pattern
-    console.log(`[AutoCache] Would apply cache to router: ${prefix}`);
+    logger.debug(`[AutoCache] Would apply cache to router: ${prefix}`);
     
     return router;
 }

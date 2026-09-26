@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const logger = require('../../middleware/logger');
 
 exports.up = async (pgClient) => {
   const schemaSQL = fs.readFileSync(
@@ -10,7 +11,7 @@ exports.up = async (pgClient) => {
     'utf8'
   );
   await pgClient.query(schemaSQL);
-  console.log('[migration:001] Schema KPI creado correctamente.');
+  logger.info('[migration:001] Schema KPI creado correctamente.');
 };
 
 exports.down = async (pgClient) => {
@@ -20,5 +21,5 @@ exports.down = async (pgClient) => {
     DROP TABLE IF EXISTS kpi_alerts CASCADE;
     DROP TABLE IF EXISTS kpi_loads CASCADE;
   `);
-  console.log('[migration:001] Schema KPI eliminado.');
+  logger.info('[migration:001] Schema KPI eliminado.');
 };
