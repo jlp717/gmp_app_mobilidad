@@ -3,6 +3,9 @@ name: flutter-tests
 on:
   pull_request:
   workflow_dispatch:
+  # H27: E2E con emulador (reactivecircus/android-emulator-runner) en schedule nocturno rama test.
+  schedule:
+    - cron: '0 1 * * *'
 
 jobs:
   unit-widget-tests:
@@ -26,7 +29,8 @@ jobs:
 
   integration-tests:
     # Flujo critico login->rutero->liquidacion. Requiere credenciales staging.
-    if: github.event_name == 'workflow_dispatch'
+    # H27: manual (workflow_dispatch) + nocturno (schedule) sobre rama test.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

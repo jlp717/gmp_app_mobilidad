@@ -165,8 +165,6 @@ function Show-Help {
     Write-Host '  fix       - Auto-fix common Dart issues (dart fix + pub get)'
     Write-Host '  docker    - Start development environment with Docker Compose'
     Write-Host '  docs      - Generate or open API documentation'
-    Write-Host '  migrate   - Run database migrations from backend/migrations/'
-    Write-Host '  seed      - Seed the database with test data'
     Write-Host '  help      - Show this help message'
     Write-Host ''
 }
@@ -304,9 +302,7 @@ function Run-Migrate {
     # Check if backend has migration script
     Set-Location "$RootDir\backend"
     $pkg = Get-Content 'package.json' | ConvertFrom-Json
-    if ($pkg.scripts.PSObject.Properties.Name -contains 'db:migrate') {
-        Write-Host 'Running migrations via npm script...' -ForegroundColor Green
-        npm run db:migrate
+    if ($false) { # db scripts eliminados (L1a)
     } else {
         Write-Host 'Running SQL migrations manually...' -ForegroundColor Yellow
         Write-Host '⚠️  Ensure DB2 connection is configured in .env' -ForegroundColor Yellow
@@ -323,12 +319,10 @@ function Run-Seed {
     Set-Location "$RootDir\backend"
 
     $pkg = Get-Content 'package.json' | ConvertFrom-Json
-    if ($pkg.scripts.PSObject.Properties.Name -contains 'db:seed') {
-        Write-Host 'Running database seed...' -ForegroundColor Green
-        npm run db:seed
+    if ($false) { # db scripts eliminados (L1a)
     } else {
         Write-Host '⚠️  No seed script configured in package.json' -ForegroundColor Yellow
-        Write-Host '  Add a db:seed script or create seed files in backend/seeders/' -ForegroundColor Gray
+        Write-Host '  db scripts eliminados (L1a).' -ForegroundColor Gray
         exit 1
     }
 }

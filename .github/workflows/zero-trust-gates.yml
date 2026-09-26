@@ -15,7 +15,8 @@ permissions:
   checks: write
 
 env:
-  FLUTTER_VERSION: '3.24.0'
+  # H31: versión Flutter unificada a 3.35.6 (era 3.24.0).
+  FLUTTER_VERSION: '3.35.6'
   NODE_VERSION: '20'
   COVERAGE_THRESHOLD: 80
 
@@ -71,7 +72,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: NPM Audit
-        run: cd backend && npm audit --audit-level=high || true
+        # TODO(L8): tolerancia temporal con continue-on-error; endurecer a fallo bloqueante tras baseline.
+        continue-on-error: true
+        run: cd backend && npm audit --audit-level=high
 
   behavior-gate:
     name: "Gate 3: Behavioral Verification"

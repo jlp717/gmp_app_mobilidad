@@ -1,8 +1,8 @@
 # GMP App Mobilidad v4.0.0 — Makefile
-# 
+#
 # Quick commands for development and production
 
-.PHONY: help setup start stop restart logs test build clean flutter-pub build-runner
+.PHONY: help setup start stop restart logs test build clean clean-volumes flutter-pub build-runner
 
 # ─── Help ────────────────────────────────────────────────────────
 help:
@@ -17,6 +17,7 @@ help:
 	@echo "║  make test        - Run all tests                    ║"
 	@echo "║  make build       - Build backend + Flutter           ║"
 	@echo "║  make clean       - Clean build artifacts            ║"
+	@echo "║  make clean-volumes - Remove volumes (confirm)      ║"
 	@echo "║  make flutter-pub - flutter pub get                  ║"
 	@echo "║  make build-runner- Run build_runner                  ║"
 	@echo "║  make health      - Check backend health             ║"
@@ -74,12 +75,17 @@ build:
 	@echo "🔨 Building Flutter APK..."
 	flutter build apk --release
 
-# ─── Clean ──────────────────────────────────────────────────────
+# ─── Clean (build artifacts only, never touches volumes) ────────
 clean:
 	@echo "🧹 Cleaning build artifacts..."
 	cd backend && rm -rf dist
 	rm -rf build/
 	flutter clean
+
+# ─── Clean volumes (destructive: removes Docker volumes) ────────
+clean-volumes:
+	@echo "⚠️  This will run 'docker compose down -v' and DELETE volumes."
+	@printf "Type YES to continue: "; read ans; if [ "$$ans" != "YES" ]; then echo "Aborted."; exit 1; fi
 	docker compose down -v
 
 # ─── Flutter pub get ────────────────────────────────────────────

@@ -9,9 +9,10 @@ on:
   pull_request:
     branches: ['**']
   workflow_dispatch:
+    # H34: skip_tests SOLO válido en workflow_dispatch manual con aprobación; jamás en push/pull_request.
     inputs:
       skip_tests:
-        description: 'Skip test execution'
+        description: 'Skip test execution (manual + aprobación; solo workflow_dispatch)'
         required: false
         default: 'false'
       force_build:
@@ -64,7 +65,12 @@ jobs:
       - name: Determine skip flag
         id: check
         run: |
-          SKIP="${{ github.event.inputs.skip_tests || 'false' }}"
+          # H34: skip_tests solo aplica en workflow_dispatch; en push/PR se fuerza a 'false'.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SKIP="${{ github.event.inputs.skip_tests || 'false' }}"
+          else
+            SKIP="false"
+          fi
           echo "skip_tests=$SKIP" >> "$GITHUB_OUTPUT"
           echo "::notice::Tests will be skipped: $SKIP"
 

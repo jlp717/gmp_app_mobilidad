@@ -20,6 +20,11 @@ class _MemoryJournalStore implements RepartoConfirmationJournalStore {
   }
 }
 
+// Reloj fijo determinista (UTC explicito, independiente de Europe/Madrid):
+// cualquier instante claramente pasado supera siempre la guarda
+// `occurredAt <= now+5min` sin depender de DateTime.now() en el fixture.
+DateTime _fixedOccurredAt() => DateTime.utc(2026, 1, 15, 10, 0, 0);
+
 RepartoConfirmationRequest _emptyPrepaidRequest({
   String repartidorId = '08',
   bool allowEmptyLineas = true,
@@ -28,7 +33,7 @@ RepartoConfirmationRequest _emptyPrepaidRequest({
   return RepartoConfirmationRequest(
     itemId: '2026-A-1-42-C1',
     status: RepartoDeliveryStatus.entregado,
-    occurredAt: DateTime.now().toUtc(),
+    occurredAt: _fixedOccurredAt(),
     lineas: const <RepartoDeliveryLine>[],
     allowEmptyLineas: allowEmptyLineas,
     repartidorId: repartidorId,
@@ -95,7 +100,7 @@ void main() {
     final json = RepartoConfirmationRequest(
       itemId: '2026-P-15-2296-C1',
       status: RepartoDeliveryStatus.entregado,
-      occurredAt: DateTime.now().toUtc().subtract(const Duration(minutes: 5)),
+      occurredAt: _fixedOccurredAt(),
       lineas: const <RepartoDeliveryLine>[
         RepartoDeliveryLine(
           lineaId: '1',
@@ -143,5 +148,32 @@ void main() {
     );
     expect(payment.toJson()['notas'], '');
     expect(payment.toJson().containsKey('notas'), isTrue);
+  });
+
+  test('occurredAt futuro mas alla de la tolerancia se rechaza', () {
+    final signatureId = 'ev_${List<String>.filled(64, 'a').join()}';
+    expect(
+      () => RepartoConfirmationRequest(
+        itemId: '2026-A-1-42-C1',
+        status: RepartoDeliveryStatus.entregado,
+        occurredAt: DateTime.now().toUtc().add(const Duration(minutes: 10)),
+        lineas: const <RepartoDeliveryLine>[],
+        allowEmptyLineas: true,
+        repartidorId: '08',
+        receiver: const RepartoReceiver(
+          nombre: 'Ana',
+          apellidos: 'Prueba',
+          dni: '12345678Z',
+        ),
+        firma: signatureId,
+      ).toJson(),
+      throwsA(
+        isA<RepartoConfirmationValidationException>().having(
+          (e) => e.message,
+          'message',
+          contains('futuro'),
+        ),
+      ),
+    );
   });
 }

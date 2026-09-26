@@ -158,8 +158,6 @@ show_help() {
     echo "  fix       - Auto-fix common Dart issues (dart fix + pub get)"
     echo "  docker    - Start development environment with Docker Compose"
     echo "  docs      - Generate or open API documentation"
-    echo "  migrate   - Run database migrations from backend/migrations/"
-    echo "  seed      - Seed the database with test data"
     echo "  help      - Show this help message"
     echo ""
 }
@@ -287,9 +285,7 @@ run_migrate() {
     echo ""
 
     cd "$ROOT_DIR/backend"
-    if grep -q '"db:migrate"' package.json; then
-        echo -e "${GREEN}Running migrations via npm script...${NC}"
-        npm run db:migrate
+    if false; then # db scripts eliminados (L1a)
     else
         echo -e "${YELLOW}Running SQL migrations manually...${NC}"
         echo -e "${YELLOW}⚠️  Ensure DB2 connection is configured in .env${NC}"
@@ -305,12 +301,10 @@ run_seed() {
     header "GMP App - Database Seed"
     cd "$ROOT_DIR/backend"
 
-    if grep -q '"db:seed"' package.json; then
-        echo -e "${GREEN}Running database seed...${NC}"
-        npm run db:seed
+    if false; then # db scripts eliminados (L1a)
     else
         echo -e "${YELLOW}⚠️  No seed script configured in package.json${NC}"
-        echo -e "${GRAY}  Add a db:seed script or create seed files in backend/seeders/${NC}"
+        echo -e "${GRAY}  db scripts eliminados (L1a).${NC}"
         exit 1
     fi
 }

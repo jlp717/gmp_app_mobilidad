@@ -40,6 +40,10 @@ module.exports = {
         '^.+\\.tsx?$': ['ts-jest', { isolatedModules: true }],
         '^.+\\.[jt]sx?$': 'babel-jest',
     },
+    // L1: collectCoverage stays false on the default run — 277 suites make
+    // global coverage too slow/flaky for CI red/green. The ratchet below
+    // (coverageThreshold) only enforces when coverage IS collected
+    // (npm run test:coverage); ratchet inicial L1, subir en L8.
     collectCoverage: false,
     coverageThreshold: {
         global: {
@@ -51,6 +55,10 @@ module.exports = {
     },
     testTimeout: 30000,
     verbose: true,
+    // L1: forceExit requerido — la suite completa se cuelga sin el
+    // (verificado 2026-09-25: sin forceExit supera 300 s tras pasar los
+    // tests; pool ODBC sin teardown global). Deuda: cerrar pool/teardown
+    // global y re-evaluar. Diagnosticar con npm run test:diagnose.
     forceExit: true,
     detectOpenHandles: false,
 };
