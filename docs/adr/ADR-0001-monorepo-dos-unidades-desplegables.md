@@ -1,4 +1,4 @@
-# 0001 — Monorepo único con dos unidades desplegables (Flutter app + API Express)
+# ADR-0001 — Monorepo único con dos unidades desplegables (Flutter app + API Express)
 
 - Estado: Aceptada (retroactiva)
 - Fecha: 2026-08-25

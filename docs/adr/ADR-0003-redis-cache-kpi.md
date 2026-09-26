@@ -1,4 +1,4 @@
-# 0003 — Redis como capa de caché y KPIs de la API
+# ADR-0003 — Redis como capa de caché y KPIs de la API
 
 - Estado: Aceptada (retroactiva)
 - Fecha: 2026-08-25

@@ -1,4 +1,4 @@
-# ADR-001 — Estrategia de caché Redis GMP
+# ADR-0010 — Estrategia de caché Redis GMP
 
 - Estado: accepted
 - Fecha: 2026-08-26

@@ -1,4 +1,4 @@
-# ADR — Acceso seguro y resiliente a DB2
+# ADR-0012 — Acceso seguro y resiliente a DB2
 
 - Estado: Aceptada
 - Fecha: 2026-08-26

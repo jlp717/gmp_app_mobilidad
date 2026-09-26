@@ -1,4 +1,4 @@
-# 0004 — Esquemas DB2: DSEDAC solo-lectura (producción) vs JAVIER (pruebas/escritura)
+# ADR-0004 — Esquemas DB2: DSEDAC solo-lectura (producción) vs JAVIER (pruebas/escritura)
 
 - Estado: Aceptada (retroactiva)
 - Fecha: 2026-08-25

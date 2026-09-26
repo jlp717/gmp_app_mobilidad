@@ -1,4 +1,4 @@
-﻿# ADR-001 — Vendor-scope canonico
+# ADR-0016 — Vendor-scope canonico
 
 - Estado: Aceptada
 - Fecha: 2026-09-25

@@ -1,4 +1,4 @@
-﻿# ADR-004 — Vendor-col LACLAE: objetivos vs comisiones
+# ADR-0019 — Vendor-col LACLAE: objetivos vs comisiones
 
 - Estado: Aceptada con deuda conocida (ver Matriz)
 - Fecha: 2026-09-25

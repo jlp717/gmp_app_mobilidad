@@ -1,4 +1,4 @@
-# ADR — Dimensionamiento del pool DB2 por proceso
+# ADR-0013 — Dimensionamiento del pool DB2 por proceso
 
 - Estado: Aceptada
 - Fecha: 2026-08-26

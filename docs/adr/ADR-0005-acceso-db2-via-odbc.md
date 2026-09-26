@@ -1,4 +1,4 @@
-# 0005 — Acceso a DB2 mediante ODBC (DSN GMP) en lugar de JDBC/JT400 u ORMs
+# ADR-0005 — Acceso a DB2 mediante ODBC (DSN GMP) en lugar de JDBC/JT400 u ORMs
 
 - Estado: Aceptada (retroactiva)
 - Fecha: 2026-08-25

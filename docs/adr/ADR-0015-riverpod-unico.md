@@ -1,8 +1,8 @@
-# ADR 0002: Riverpod único — Notifier / AsyncNotifier + Provider / FutureProvider
+# ADR-0015: Riverpod único — Notifier / AsyncNotifier + Provider / FutureProvider
 
 - Estado: Aceptado
 - Fecha: 2026-09-25
-- Suplementa (no reescribe): `docs/adr/0001-state-management-riverpod.md`
+- Suplementa (no reescribe): `docs/adr/ADR-0007-state-management-riverpod.md`
 - Task: `gmp-riverpod-unico-test-001` (WS-D, solo docs, cero código)
 
 ## Decisión
@@ -18,7 +18,7 @@ Riverpod es el único framework de estado e inyección para Flutter nuevo:
 
 ## Contexto y antecedentes
 
-- `docs/adr/0001-state-management-riverpod.md`: Riverpod 2.5 único para estado nuevo,
+- `docs/adr/ADR-0007-state-management-riverpod.md`: Riverpod 2.5 único para estado nuevo,
   `ChangeNotifier` congelado, migraciones incrementales sin cambio observable.
 - `docs/performance-baseline.md:172-173`: `get_it` + `injectable` marcados
   "Possibly unused — No `@injectable` annotations found in scanned files".
@@ -88,7 +88,7 @@ Referencias canónicas adicionales (ya Riverpod, no cuentan como legado):
    `state = ...`; registrar `ref.onDispose` para timers/subscripciones/caches
    (patrón `loadPlannerProvider`, `cobrosProvider`).
 5. `ref.watch` solo en `build`/providers derivados; en callbacks usar `ref.read`.
-6. Una feature por PR, sin cambio observable (misma regla de 0001).
+6. Una feature por PR, sin cambio observable (misma regla de ADR-0007).
    Migración de pedidos por fases: carrito → catálogo → órdenes, cada fase
    con tests verdes antes/después.
 7. Sin `get_it`/`injectable` nuevos. `injection.dart` no se importa; su borrado
@@ -112,7 +112,7 @@ Referencias canónicas adicionales (ya Riverpod, no cuentan como legado):
 ## Consecuencias
 
 - PRs nuevos que introduzcan `ChangeNotifierProvider`, `get_it` o
-  `@injectable` se rechazan por este ADR + 0001.
+  `@injectable` se rechazan por este ADR + ADR-0007.
 - Pedidos sigue global sin `autoDispose` hasta su migración; cualquier
   `notifyListeners()` nuevo en ese archivo debe respetar el guard `_disposed`.
 - Limpieza pendiente (fuera de WS-D): `rm lib/core/di/injection.dart`,
@@ -121,7 +121,7 @@ Referencias canónicas adicionales (ya Riverpod, no cuentan como legado):
 
 ## Enlaces exactos
 
-- `docs/adr/0001-state-management-riverpod.md` (base, no reescrita)
+- `docs/adr/ADR-0007-state-management-riverpod.md` (base, no reescrita)
 - `docs/performance-baseline.md:172` (get_it unused)
 - `docs/audits/preprod-2026-06-11/flutter-audit.md:66` (autoDispose) y `:20` (pedidos global)
 - `pubspec.yaml:30,50,79` (Riverpod presente; GetIt ausente)

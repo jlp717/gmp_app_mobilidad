@@ -1,4 +1,4 @@
-# 0008 — Pinning TLS: no activar hasta tener kill switch
+# ADR-0014 — Pinning TLS: no activar hasta tener kill switch
 
 - Estado: Propuesta (recomendación a Javier)
 - Fecha: 2026-09-15

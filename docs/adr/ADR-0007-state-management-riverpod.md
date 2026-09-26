@@ -1,4 +1,4 @@
-# ADR 0001: Riverpod para estado de aplicación
+# ADR-0007: Riverpod para estado de aplicación
 
 ## Decisión
 

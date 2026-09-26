@@ -1,4 +1,4 @@
-# 0002 — PM2 en modo cluster para la API en producción
+# ADR-0002 — PM2 en modo cluster para la API en producción
 
 - Estado: Aceptada (retroactiva)
 - Fecha: 2026-08-25

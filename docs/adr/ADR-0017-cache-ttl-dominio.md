@@ -1,4 +1,4 @@
-﻿# ADR-002 — Cache TTL por dominio
+# ADR-0017 — Cache TTL por dominio
 
 - Estado: Aceptada
 - Fecha: 2026-09-25

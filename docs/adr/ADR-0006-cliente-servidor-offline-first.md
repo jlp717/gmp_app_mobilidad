@@ -1,4 +1,4 @@
-# 0006 — Cliente-servidor estricto: Flutter solo habla con la API; offline-first en cliente
+# ADR-0006 — Cliente-servidor estricto: Flutter solo habla con la API; offline-first en cliente
 
 - Estado: Aceptada (retroactiva)
 - Fecha: 2026-08-25

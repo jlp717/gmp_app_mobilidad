@@ -1,4 +1,4 @@
-# ADR-0001: Versionado de la API por URI
+# ADR-0009: Versionado de la API por URI
 
 - Estado: Aceptado
 - Fecha: 2026-08-26

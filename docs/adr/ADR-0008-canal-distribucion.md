@@ -1,4 +1,4 @@
-# 0007 — Firebase App Distribution como canal primario para Android
+# ADR-0008 — Firebase App Distribution como canal primario para Android
 
 - Estado: Propuesto — pendiente de primera ejecución real
 - Fecha: 2026-08-26
