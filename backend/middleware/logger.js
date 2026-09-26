@@ -1,4 +1,5 @@
 const winston = require('winston');
+const crypto = require('crypto');
 
 // =============================================================================
 // WINSTON LOGGER CONFIGURATION
@@ -35,28 +36,58 @@ const logger = winston.createLogger({
 // =============================================================================
 // SECURE LOGGING HELPERS
 // =============================================================================
-// Loggear sin exponer datos sensibles
-const sanitizeForLog = (data) => {
+// Loggear sin exponer datos sensibles.
+// Recursivo: cubre objetos/arrays anidados sin mutar el original.
+// Solo se comparan NOMBRES de clave (nunca valores) contra la lista sensible.
+const SENSITIVE_KEYS = new Set([
+    'password', 'passwd', 'token', 'secret', 'authorization', 'bearer',
+    'api_key', 'apikey', 'credential', 'credentials',
+    'dni', 'email', 'pin', 'firma',
+]);
+const sanitizeForLog = (data, seen) => {
     if (typeof data !== 'object' || data === null) {
         return data;
     }
-    const sensitive = ['password', 'token', 'secret', 'authorization', 'Bearer', 'api_key', 'apikey', 'credential'];
-    const sanitized = { ...data };
-    for (const key of sensitive) {
-        if (sanitized[key]) {
+    const seenSet = seen || new WeakSet();
+    if (seenSet.has(data)) {
+        return '[CIRCULAR]';
+    }
+    seenSet.add(data);
+    if (Array.isArray(data)) {
+        return data.map((item) => sanitizeForLog(item, seenSet));
+    }
+    const sanitized = {};
+    for (const key of Object.keys(data)) {
+        if (SENSITIVE_KEYS.has(String(key).toLowerCase())) {
             sanitized[key] = '[REDACTED]';
+        } else {
+            sanitized[key] = sanitizeForLog(data[key], seenSet);
         }
     }
     return sanitized;
 };
 
-// Loggear request sin credenciales
+// La IP es dato personal (GDPR): guardarla en claro en logs permite
+// correlacionar usuarios y amplifica una filtracion de logs. Se almacena
+// solo su hash sha256 truncado a 12 chars: basta para correlacionar
+// requests sin conservar la IP reversible.
+const hashIpForLog = (ip) => {
+    if (!ip || typeof ip !== 'string') {
+        return 'unknown';
+    }
+    return crypto.createHash('sha256').update(ip).digest('hex').slice(0, 12);
+};
+
+// Loggear request sin credenciales ni IP en claro (mismo formato de claves).
 const logRequest = (req, message) => {
+    const userAgent = (req && typeof req.get === 'function' && req.get('user-agent'))
+        || (req && req.headers && req.headers['user-agent'])
+        || 'unknown';
     logger.http(message, {
         method: req.method,
         url: req.url,
-        ip: req.ip,
-        userAgent: req.get('user-agent')
+        ip: hashIpForLog(req.ip),
+        userAgent,
     });
 };
 
@@ -81,4 +112,7 @@ const log = {
 
 module.exports = logger;
 module.exports.secureLog = log;
+module.exports.sanitizeForLog = sanitizeForLog;
+module.exports.hashIpForLog = hashIpForLog;
+module.exports.logRequest = logRequest;
 module.exports.NODE_ENV = NODE_ENV;

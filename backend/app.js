@@ -56,6 +56,7 @@ const compression = require('compression');
 const { createCanonicalConfirmationBootstrap } = require('./config/reparto-confirmation-bootstrap');
 const { createRepartidorLiquidacionBootstrap } = require('./config/repartidor-liquidacion-bootstrap');
 const logger = require('./middleware/logger');
+const { serializeError } = require('./middleware/error-serializer');
 const docsRoutes = require('./routes/docs');
 const rateLimit = require('express-rate-limit');
 const { verifyToken, getSessionStoreReadiness } = require('./middleware/auth');
@@ -388,7 +389,9 @@ app.use((err, req, res, next) => {
     logger.warn(`[JSON Parse Error] ${req.method} ${req.path} from ${req.ip}: ${err.message}`);
     return res.status(400).json({
       success: false,
+      code: 'INVALID_JSON',
       error: 'Invalid JSON in request body',
+      requestId: req.requestId || req.headers['x-request-id'] || null,
       hint: 'Ensure Content-Type is application/json and body is valid JSON'
     });
   }
@@ -900,10 +903,12 @@ app.get('/api/optimization/active-sessions', verifyToken, requireOperationalAdmi
 });
 
 // Stable JSON 404 contract for API clients and controller tests.
+// Shape canonico { success:false, code, error, requestId } (aditivo: requestId).
 app.use((req, res) => res.status(404).json({
   success: false,
   code: 'NOT_FOUND',
   error: 'Not found',
+  requestId: req.requestId || req.headers['x-request-id'] || null,
 }));
 
 // ==================== GLOBAL ERROR HANDLERS ====================
@@ -911,7 +916,8 @@ if (Sentry && typeof Sentry.setupExpressErrorHandler === 'function') {
   Sentry.setupExpressErrorHandler(app);
 }
 
-// Enhanced error handler with proper error classification
+// Enhanced error handler: serializacion canonica { success:false, code, error, requestId }.
+// La clasificacion vive en ./middleware/error-serializer (sin importar src/* legacy).
 app.use((err, req, res, next) => {
   // Log full error with stack in development
   if (process.env.NODE_ENV !== 'production') {
@@ -919,38 +925,12 @@ app.use((err, req, res, next) => {
   } else {
     logger.error(`❌ Error: ${err.message}`);
   }
-  
-  // Classify error type
-  let statusCode = 500;
-  let errorMessage = 'Internal Server Error';
-  
-  if (err.name === 'ValidationError' || err.name === 'ZodError') {
-    statusCode = 400;
-    errorMessage = 'Validation failed';
-  } else if (err.name === 'UnauthorizedError') {
-    statusCode = 401;
-    errorMessage = 'Unauthorized';
-  } else if (err.name === 'ForbiddenError') {
-    statusCode = 403;
-    errorMessage = 'Forbidden';
-  } else if (err.name === 'NotFoundError') {
-    statusCode = 404;
-    errorMessage = 'Not found';
-  } else if (err.code === 'DB_CIRCUIT_OPEN' || err.code === 'DB_QUERY_QUEUE_TIMEOUT' || err.code === 'DB_QUERY_TIMEOUT') {
-    statusCode = 503;
-    errorMessage = 'Database temporarily unavailable';
-  } else if (err.code === 'SQLITE_CANTOPEN' || err.message?.includes('database')) {
-    statusCode = 503;
-    errorMessage = 'Database unavailable';
-  }
-  
+
+  const { statusCode, body } = serializeError(err, req);
+
   // Don't leak internal error details in production
   if (!res.headersSent) {
-    res.status(statusCode).json({ 
-      error: errorMessage, 
-      id: req.requestId,
-      ...(process.env.NODE_ENV !== 'production' ? { details: err.message } : {})
-    });
+    res.status(statusCode).json(body);
   }
 });
 

@@ -120,6 +120,7 @@ describe('backend/app controller contracts', () => {
   test('unknown public route returns stable JSON 404', async () => {
     const response = await request(app).get('/health/not-found').set('User-Agent', 'GMP-App/1.0 Dart/3.0');
     expect(response.status).toBe(404);
-    expect(response.body).toEqual({ success: false, code: 'NOT_FOUND', error: 'Not found' });
+    expect(response.body).toMatchObject({ success: false, code: 'NOT_FOUND', error: 'Not found' });
+    expect(typeof response.body.requestId).toBe('string');
   });
 });
