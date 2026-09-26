@@ -152,11 +152,20 @@ function buildPendingSummaryPageDocsCte(rows) {
         seen.add(key);
         docs.push({ client, serie, numero, docKey: serie + '-' + numero });
     }
-    if (docs.length === 0) return '';
+    if (docs.length === 0) return null;
+    // Tier-1: valores bindeados con `?`, jamas interpolados (antes VALUES con
+    // escape manual via db2StringLiteral).
+    const params = [];
     const values = docs
-        .map((doc) => '(' + [doc.client, doc.serie, doc.numero, doc.docKey].map(db2StringLiteral).join(', ') + ')')
+        .map((doc) => {
+            params.push(doc.client, doc.serie, doc.numero, doc.docKey);
+            return '(?, ?, ?, ?)';
+        })
         .join(',\n          ');
-    return 'WITH PAGE_DOCS (CLIENTE, SERIE, NUMERO, DOC_KEY) AS (VALUES\n          ' + values + '\n        )';
+    return {
+        cte: 'WITH PAGE_DOCS (CLIENTE, SERIE, NUMERO, DOC_KEY) AS (VALUES\n          ' + values + '\n        )',
+        params,
+    };
 }
 
 function applyPendingSummaryDocTotals(row, appAdjustments) {
@@ -1298,17 +1307,17 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
         if (pageDocsCte) {
             try {
                 const comercialSql = [
-                    pageDocsCte,
+                    pageDocsCte.cte,
                     'SELECT P.CLIENTE AS CLIENTE,',
                     '       P.DOC_KEY AS REF,',
                     '       COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP',
                     '  FROM PAGE_DOCS P',
                     '  JOIN ' + COBROS_TABLE + ' C',
                     '    ON TRIM(C.CODIGO_CLIENTE) = P.CLIENTE',
-                    '   AND (TRIM(C.REFERENCIA) = P.DOC_KEY OR TRIM(C.REFERENCIA) LIKE ' + db2StringLiteral('%:') + ' || P.DOC_KEY)',
+                    '   AND (TRIM(C.REFERENCIA) = P.DOC_KEY OR TRIM(C.REFERENCIA) LIKE ? || P.DOC_KEY)',
                     ' GROUP BY P.CLIENTE, P.DOC_KEY',
                 ].join('\n');
-                const appRows = await queryWithParams(comercialSql, []);
+                const appRows = await queryWithParams(comercialSql, [...pageDocsCte.params, '%:']);
                 for (const row of appRows || []) {
                     const reference = sanitizeCode(row.REF);
                     const match = reference.match(/([^:]+-\d+)$/);
@@ -1320,7 +1329,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
 
             try {
                 const repartidorSql = [
-                    pageDocsCte,
+                    pageDocsCte.cte,
                     'SELECT P.CLIENTE AS CLIENTE,',
                     '       P.DOC_KEY AS DOC_KEY,',
                     '       COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP',
@@ -1331,7 +1340,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                     '   AND TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) = P.NUMERO',
                     ' GROUP BY P.CLIENTE, P.DOC_KEY',
                 ].join('\n');
-                const repRows = await queryWithParams(repartidorSql, []);
+                const repRows = await queryWithParams(repartidorSql, [...pageDocsCte.params]);
                 for (const row of repRows || []) addAdjustment(row.CLIENTE, row.DOC_KEY, row.TOTAL_REP);
             } catch (error) {
                 logger.warn('[COBROS] App-side REPARTIDOR_COBROS summary subtract skipped: ' + error.message);

@@ -270,6 +270,70 @@ function parseAlbaranRouteIdentity(params, query) {
     return { numero, ejercicio, serie, terminal };
 }
 
+// Tier-1: validacion zod strict en params patron clients.js:147-152.
+// Espeja los parseadores existentes (mismos rangos); el comportamiento
+// valido no cambia, el invalido es 400 tipado antes de tocar DB2.
+let entregasZod = null;
+try {
+    entregasZod = require('zod').z;
+} catch (e) {
+    entregasZod = null;
+}
+const pendientesRepartidorParamSchema = entregasZod
+    ? entregasZod.object({ repartidorId: entregasZod.string().regex(/^[A-Za-z0-9,]{1,500}$/) }).strict()
+    : null;
+const albaranRouteParamSchema = entregasZod
+    ? entregasZod.object({
+        numero: entregasZod.string().regex(/^\d{1,9}$/),
+        ejercicio: entregasZod.string().regex(/^\d{4}$/),
+    }).strict()
+    : null;
+const receiptEntregaParamSchema = entregasZod
+    ? entregasZod.object({ entregaId: entregasZod.string().min(1).max(200) }).strict()
+    : null;
+
+function validatePendientesRepartidor(req, res, next) {
+    if (!pendientesRepartidorParamSchema) {
+        return res.status(500).json({ success: false, code: 'VALIDATOR_UNAVAILABLE', error: 'Validador no disponible' });
+    }
+    const parsed = pendientesRepartidorParamSchema.safeParse({ repartidorId: String(req.params.repartidorId || '') });
+    if (!parsed.success) {
+        // Contrato existente: selector malformado => 422 REPARTIDOR_ID_INVALID.
+        return res.status(422).json({ success: false, code: 'REPARTIDOR_ID_INVALID', error: 'Selector de repartidor invalido' });
+    }
+    next();
+}
+
+function validateAlbaranRouteIdentity(req, res, next) {
+    if (!albaranRouteParamSchema) {
+        return res.status(500).json({ success: false, code: 'VALIDATOR_UNAVAILABLE', error: 'Validador no disponible' });
+    }
+    const parsed = albaranRouteParamSchema.safeParse({
+        numero: String(req.params.numero || ''),
+        ejercicio: String(req.params.ejercicio || ''),
+    });
+    if (!parsed.success) {
+        return res.status(400).json({ success: false, code: 'INVALID_ALBARAN_IDENTITY', error: 'numero, ejercicio, serie o terminal no son validos' });
+    }
+    const numero = parseInt(parsed.data.numero, 10);
+    const ejercicio = parseInt(parsed.data.ejercicio, 10);
+    if (numero < 1 || numero > 999999999 || ejercicio < 1990 || ejercicio > 2100) {
+        return res.status(400).json({ success: false, code: 'INVALID_ALBARAN_IDENTITY', error: 'numero, ejercicio, serie o terminal no son validos' });
+    }
+    next();
+}
+
+function validateReceiptEntregaId(req, res, next) {
+    if (!receiptEntregaParamSchema) {
+        return res.status(500).json({ success: false, code: 'VALIDATOR_UNAVAILABLE', error: 'Validador no disponible' });
+    }
+    const parsed = receiptEntregaParamSchema.safeParse({ entregaId: String(req.params.entregaId || '') });
+    if (!parsed.success) {
+        return res.status(400).json({ success: false, code: 'INVALID_ENTREGA_ID', error: 'Identificador de entrega invalido' });
+    }
+    next();
+}
+
 function sendEntregasUnavailable(res, code, message) {
     res.set('Retry-After', '2');
     return res.status(503).json({
@@ -458,7 +522,7 @@ function getSmartSuggestions(albaranes) {
 // ===================================
 // GET /pendientes/:repartidorId
 // ===================================
-router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
+router.get('/pendientes/:repartidorId', verifyToken, validatePendientesRepartidor, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { date, limit, offset } = req.query;
@@ -1579,7 +1643,7 @@ async function resolveClienteForDetail({ numero, ejercicio, serie, terminal, cli
     return '';
 }
 
-router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
+router.get('/albaran/:numero/:ejercicio', verifyToken, validateAlbaranRouteIdentity, async (req, res) => {
     try {
         const identity = parseAlbaranRouteIdentity(req.params, req.query);
         if (!identity) {
@@ -2005,7 +2069,7 @@ router.all('/receipt/:entregaId', verifyToken, canonicalReceiptEndpointRequired)
 router.all('/receipt/:entregaId/email', verifyToken, canonicalReceiptEndpointRequired);
 router.all('/receipt/:entregaId/whatsapp', verifyToken, canonicalReceiptEndpointRequired);
 
-router.post('/receipt/:entregaId', verifyToken, async (req, res) => {
+router.post('/receipt/:entregaId', verifyToken, validateReceiptEntregaId, async (req, res) => {
     try {
         const deliveryData = await canonicalReceiptProjection(req, req.params.entregaId);
         const { saveReceipt } = require('../app/services/deliveryReceiptService');
@@ -2014,14 +2078,14 @@ router.post('/receipt/:entregaId', verifyToken, async (req, res) => {
     } catch (error) { return sendRepartoError(res, error); }
 });
 
-router.post('/receipt/:entregaId/email', verifyToken, async (req, res) => {
+router.post('/receipt/:entregaId/email', verifyToken, validateReceiptEntregaId, async (req, res) => {
     try {
         await canonicalReceiptProjection(req, req.params.entregaId);
         throw new RepartoHttpError(503, 'CANONICAL_RECIPIENT_UNAVAILABLE', 'No hay un destinatario de correo canÃ³nico disponible');
     } catch (error) { return sendRepartoError(res, error); }
 });
 
-router.post('/receipt/:entregaId/whatsapp', verifyToken, async (req, res) => {
+router.post('/receipt/:entregaId/whatsapp', verifyToken, validateReceiptEntregaId, async (req, res) => {
     try {
         await canonicalReceiptProjection(req, req.params.entregaId);
         throw new RepartoHttpError(503, 'CANONICAL_RECIPIENT_UNAVAILABLE', 'No hay un destinatario de mensajerÃ­a canÃ³nico disponible');

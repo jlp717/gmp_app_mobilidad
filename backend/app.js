@@ -315,6 +315,18 @@ function configuredCorsOrigin() {
     return process.env.CORS_ORIGIN || process.env.CORS_ORIGINS || '';
 }
 
+function isLocalhostOrigin(origin) {
+    // curl/health sin cabecera Origin + mismo origen: permitir.
+    if (!origin) return true;
+    let hostname = '';
+    try {
+        hostname = new URL(origin).hostname.toLowerCase();
+    } catch (_) {
+        return false;
+    }
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+}
+
 function parseCorsOrigin(value) {
     if (process.env.NODE_ENV === 'production') {
         if (!value || value === 'true' || value === '*') {
@@ -322,9 +334,12 @@ function parseCorsOrigin(value) {
         }
         return value.split(',').map(o => o.trim()).filter(Boolean);
     }
-    if (value === 'true' || value === '*') return true;
-    if (value) return value.split(',').map(o => o.trim()).filter(Boolean);
-    return true;
+    // Dev: lista explicita si hay CORS_ORIGIN; por defecto SOLO
+    // localhost/127.0.0.1 (cualquier puerto). Nunca `return true`.
+    if (value && value !== 'true' && value !== '*') {
+        return value.split(',').map(o => o.trim()).filter(Boolean);
+    }
+    return (origin, callback) => callback(null, isLocalhostOrigin(origin));
 }
 
 app.use(cors({

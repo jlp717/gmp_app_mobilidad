@@ -68,11 +68,13 @@ class ApiClient {
   };
 
   /// Whether debug TLS bypass is allowed for a local [host].
+  /// Hard gate: never true in release/profile even if [debugMode] is forced.
   @visibleForTesting
   static bool shouldBypassInvalidCertificateForHost(
     String host, {
     bool debugMode = kDebugMode,
   }) {
+    if (!kDebugMode) return false;
     return debugMode && _debugCertificateBypassHosts.contains(host);
   }
 
@@ -258,12 +260,15 @@ class ApiClient {
       final client = HttpClient()
         ..badCertificateCallback =
             (X509Certificate cert, String host, int port) {
-          // Development/local hosts bypass pinning (debug builds only).
-          if (shouldBypassInvalidCertificateForHost(host)) {
-            if (kDebugMode) {
+          // Hard debug-only gate: in release/profile this block is
+          // unreachable and bypass is impossible, even if the dev host
+          // list is non-empty.
+          if (kDebugMode) {
+            // Development/local hosts bypass pinning (debug builds only).
+            if (shouldBypassInvalidCertificateForHost(host)) {
               debugPrint('[ApiClient] Dev host bypass - no pinning: $host');
+              return true;
             }
-            return true;
           }
 
           // Fail closed: reject unless a configured pin matches. Pins come from

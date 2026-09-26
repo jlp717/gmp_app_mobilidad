@@ -46,6 +46,7 @@ const {
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
 const { CircuitBreaker } = require('../services/circuit-breaker');
+const { assertIdentifier } = require('../utils/sql-identifiers');
 const {
     DEFAULT_PORCENTAJE_MEJORA,
     getAlignedVendorSalesForObjectives,
@@ -1574,38 +1575,38 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         } else {
             // Fallback: load from database (slower)
             try {
-                const famRows = await query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM ${comercialErpTable('FAM')}`, false, false);
+                const famRows = await query(`SELECT CODIGOFAMILIA, DESCRIPCIONFAMILIA FROM ${assertIdentifier(comercialErpTable('FAM'), 'objectives FAM table')}`, false, false);
                 famRows.forEach(r => { familyNames[r.CODIGOFAMILIA?.trim()] = r.DESCRIPCIONFAMILIA?.trim() || r.CODIGOFAMILIA?.trim(); });
 
-                const fi1Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI1')}`, false, false);
+                const fi1Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${assertIdentifier(comercialErpTable('FI1'), 'objectives FI1 table')}`, false, false);
                 fi1Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi1Names[code] = name;
                 });
 
-                const fi2Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI2')}`, false, false);
+                const fi2Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${assertIdentifier(comercialErpTable('FI2'), 'objectives FI2 table')}`, false, false);
                 fi2Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi2Names[code] = name;
                 });
 
-                const fi3Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI3')}`, false, false);
+                const fi3Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${assertIdentifier(comercialErpTable('FI3'), 'objectives FI3 table')}`, false, false);
                 fi3Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi3Names[code] = name;
                 });
 
-                const fi4Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI4')}`, false, false);
+                const fi4Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${assertIdentifier(comercialErpTable('FI4'), 'objectives FI4 table')}`, false, false);
                 fi4Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();
                     if (code) fi4Names[code] = name;
                 });
 
-                const fi5Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${comercialErpTable('FI5')}`, false, false);
+                const fi5Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${assertIdentifier(comercialErpTable('FI5'), 'objectives FI5 table')}`, false, false);
                 fi5Rows.forEach(r => {
                     const code = (r.CODIGOFILTRO || '').toString().trim();
                     const name = (r.DESCRIPCIONFILTRO || '').toString().trim();

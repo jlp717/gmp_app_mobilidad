@@ -36,6 +36,7 @@ const {
     metricsController,
     salesEvolutionController
 } = require('../src/controllers/dashboard.controller');
+const { assertIdentifier } = require('../utils/sql-identifiers');
 
 const DASHBOARD_CACHE_VERSION = 'v20260602-b-sales-all';
 const VOLATILE_CACHE_QUERY_KEYS = new Set(['forcerefresh', 'refresh', '_ts', 't', 'cachebust', 'cachebuster']);
@@ -204,6 +205,15 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
         }
 
         const hierarchy = groupBy.split(',').map(g => g.trim().toLowerCase());
+        // Tier-1: niveles de jerarquia contra whitelist explicita (antes los
+        // desconocidos se ignoraban en silencio).
+        for (const level of hierarchy) {
+          try {
+            assertIdentifier(level, 'dashboard matrix level');
+          } catch (_) {
+            return res.status(400).json({ success: false, code: 'INVALID_GROUP_BY', error: `Nivel de agrupacion invalido: ${String(level).slice(0, 32)}` });
+          }
+        }
         const selectClauses = ['L.LCAADC as YEAR', 'L.LCMMDC as MONTH'];
         const groupClauses = ['L.LCAADC', 'L.LCMMDC'];
 
@@ -265,6 +275,11 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
 
         const artJoinClause = needsArtJoin ? `LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO` : '';
 
+        // Tier-1: rowLimit es entero clampado 1..1000 (resolveMatrixFetchLimit);
+        // fail-closed si algun dia no lo fuera.
+        if (!Number.isSafeInteger(rowLimit) || rowLimit < 1 || rowLimit > 1000) {
+            return res.status(500).json({ success: false, code: 'INVALID_FETCH_LIMIT', error: 'Limite de filas invalido' });
+        }
         const aggregateSQL = `
             SELECT ${selectClauses.join(', ')}
             FROM ${comercialErpTable('LACLAE')} L

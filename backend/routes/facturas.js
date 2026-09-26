@@ -409,6 +409,49 @@ function clampFacturaMonth(value, res) {
     return month;
 }
 
+// Tier-1: validacion zod strict en params patron clients.js:147-152.
+// Serie 1-5 alfanumerica, numero 1-899999, ejercicio 1900-2100.
+// No cambia comportamiento valido (resolveCommercialDocument ya exigia
+// esos rangos); el invalido ahora es 400 con codigo tipado.
+let facturasZod = null;
+try {
+    facturasZod = require('zod').z;
+} catch (e) {
+    facturasZod = null;
+}
+const facturaDocumentParamSchema = facturasZod
+    ? facturasZod.object({
+        serie: facturasZod.string().regex(/^[A-Za-z0-9]{1,5}$/),
+        numero: facturasZod.string().regex(/^\d{1,6}$/),
+        ejercicio: facturasZod.string().regex(/^\d{4}$/),
+    }).strict()
+    : null;
+
+function validateFacturaDocumentParams(req, res, next) {
+    if (!facturaDocumentParamSchema) {
+        return res.status(500).json({ success: false, code: 'VALIDATOR_UNAVAILABLE', error: 'Validador no disponible' });
+    }
+    const parsed = facturaDocumentParamSchema.safeParse({
+        serie: String(req.params.serie || ''),
+        numero: String(req.params.numero || ''),
+        ejercicio: String(req.params.ejercicio || ''),
+    });
+    if (!parsed.success) {
+        return res.status(400).json({ success: false, code: 'INVALID_DOCUMENT_PARAMS', error: 'Parametros de documento invalidos (serie/numero/ejercicio)' });
+    }
+    const numero = parseInt(parsed.data.numero, 10);
+    const ejercicio = parseInt(parsed.data.ejercicio, 10);
+    if (numero <= 0 || numero >= 900000 || ejercicio < 1900 || ejercicio > 2100) {
+        return res.status(400).json({ success: false, code: 'INVALID_DOCUMENT_PARAMS', error: 'Parametros de documento fuera de rango' });
+    }
+    if (req.query.terminal !== undefined && req.query.terminal !== null && req.query.terminal !== '') {
+        if (!/^\d{1,3}$/.test(String(req.query.terminal).trim()) || parseInt(req.query.terminal, 10) > 999) {
+            return res.status(400).json({ success: false, code: 'INVALID_DOCUMENT_PARAMS', error: 'Terminal de albaran invalido' });
+        }
+    }
+    next();
+}
+
 /**
  * GET /api/facturas
  */
@@ -539,7 +582,7 @@ router.get('/summary', verifyToken, async (req, res, next) => {
 /**
  * GET /api/facturas/:serie/:numero/:ejercicio
  */
-router.get('/:serie/:numero/:ejercicio', verifyToken, async (req, res, next) => {
+router.get('/:serie/:numero/:ejercicio', verifyToken, validateFacturaDocumentParams, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio } = req.params;
         const document = await resolveCommercialDocument({
@@ -576,7 +619,7 @@ router.get('/:serie/:numero/:ejercicio', verifyToken, async (req, res, next) => 
 /**
  * GET /api/facturas/:serie/:numero/:ejercicio/pdf
  */
-router.get('/:serie/:numero/:ejercicio/pdf', verifyToken, async (req, res, next) => {
+router.get('/:serie/:numero/:ejercicio/pdf', verifyToken, validateFacturaDocumentParams, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio } = req.params;
         const preview = req.query.preview === 'true';

@@ -14,6 +14,7 @@ const { query, queryWithParams, getPool } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const { sanitizeForSQL, handleRouteError } = require('../utils/common');
+const { assertIdentifier } = require('../utils/sql-identifiers');
 const { parsePage, paginationContract, db2OffsetFetch } = require('../src/utils/pagination');
 const loadPlanner = require('../services/loadPlanner');
 const estimateBoxDimensions = loadPlanner.estimateBoxDimensions;
@@ -109,7 +110,7 @@ async function safeCreateTable(name, ddl) {
     let conn;
     try {
         conn = await pool.connect();
-        await conn.query(`SELECT 1 FROM ${name} FETCH FIRST 1 ROWS ONLY`);
+        await conn.query(`SELECT 1 FROM ${assertIdentifier(name, 'warehouse table')} FETCH FIRST 1 ROWS ONLY`);
         // Table exists — nothing to do
     } catch (probeErr) {
         // Close dirty connection first
@@ -242,7 +243,7 @@ async function initWarehouseTables() {
         let conn;
         try {
             conn = await pool.connect();
-            await conn.query(`SELECT ${ac.col} FROM ${ac.table} FETCH FIRST 1 ROWS ONLY`);
+            await conn.query(`SELECT ${assertIdentifier(ac.col, 'warehouse column')} FROM ${assertIdentifier(ac.table, 'warehouse table')} FETCH FIRST 1 ROWS ONLY`);
         } catch (probeErr) {
             if (conn) await closeQuiet(conn);
             conn = null;

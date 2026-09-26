@@ -21,6 +21,7 @@ const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const { getClientDays } = require('../services/laclae');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
+const { assertIdentifier } = require('../utils/sql-identifiers');
 
 
 function normalizeVendorCode(value) { return String(value || '').trim(); }
@@ -1047,6 +1048,10 @@ router.get('/:code/sales-history', verifyToken, validateSalesHistoryClientCode, 
       }
 
       const groupByClause = familyGroupBy.join(', ');
+      // Tier-1: fragmentos SELECT/GROUP BY contra whitelist explicita.
+      for (const fragment of [...familySelects, ...familyGroupBy]) {
+        assertIdentifier(fragment, 'clients family fragment');
+      }
 
       sales = await queryWithParams(`
         SELECT ${familySelects.join(', ')},
