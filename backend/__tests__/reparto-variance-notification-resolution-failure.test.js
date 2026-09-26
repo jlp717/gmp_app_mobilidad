@@ -21,15 +21,57 @@ const runtimeEnv = {
 };
 
 test('daily digest never sends a partial recipient set when directory resolution throws', async () => {
-  const query = jest.fn(async (sql) => {
-    if (String(sql).includes('SELECT ID, CONFIRMATION_ID')) {
-      return [{
-        ID: 14,
-        DOCUMENT_ID: '2026-A-1-4-C4',
-        REPARTIDOR_ID: '08',
-        COMERCIAL_CODE: '33',
-        PAYLOAD_JSON: '{}',
-      }];
+  const store = new Map([[14, {
+    ID: 14,
+    DOCUMENT_ID: '2026-A-1-4-C4',
+    REPARTIDOR_ID: '08',
+    COMERCIAL_CODE: '33',
+    PAYLOAD_JSON: '{}',
+    STATUS: 'PENDING',
+    DIGEST_INCLUDED: 'N',
+    ERROR: null,
+  }]]);
+  const query = jest.fn(async (sql, params = []) => {
+    const text = String(sql);
+    if (text.includes('SELECT ID, CONFIRMATION_ID')) {
+      return [...store.values()].map((row) => ({ ...row }));
+    }
+    if (text.includes('SELECT STATUS, PAYLOAD_JSON, DIGEST_INCLUDED')) {
+      const row = store.get(Number(params[0]));
+      return row ? [{ ...row }] : [];
+    }
+    if (text.includes('SELECT STATUS, PAYLOAD_JSON') && text.includes("DIGEST_INCLUDED = 'N'")) {
+      const row = store.get(Number(params[0]));
+      return row && row.DIGEST_INCLUDED === 'N' ? [{ ...row }] : [];
+    }
+    if (text.includes('SELECT STATUS, PAYLOAD_JSON')) {
+      const row = store.get(Number(params[0]));
+      return row ? [{ ...row }] : [];
+    }
+    if (text.includes("SET STATUS = 'FAILED', PAYLOAD_JSON = ?")) {
+      const row = store.get(Number(params[1]));
+      if (row && row.STATUS === 'PENDING' && row.DIGEST_INCLUDED === 'N') {
+        row.STATUS = 'FAILED';
+        row.PAYLOAD_JSON = params[0];
+      }
+      return [];
+    }
+    if (text.includes('SET PAYLOAD_JSON = ?') && text.includes('LOCATE(CAST(? AS VARCHAR(64)), PAYLOAD_JSON) = 0')) {
+      const row = store.get(Number(params[1]));
+      if (row && row.DIGEST_INCLUDED === 'N' && !String(row.PAYLOAD_JSON).includes(String(params[3]))) {
+        row.PAYLOAD_JSON = params[0];
+      }
+      return [];
+    }
+    if (text.includes('SET STATUS = ?, DIGEST_INCLUDED = ?')) {
+      const row = store.get(Number(params[4]));
+      if (row && String(row.PAYLOAD_JSON).includes(String(params[5]))) {
+        row.STATUS = params[0];
+        row.DIGEST_INCLUDED = params[1];
+        row.ERROR = params[2];
+        row.PAYLOAD_JSON = params[3];
+      }
+      return [];
     }
     return [];
   });
@@ -50,6 +92,8 @@ test('daily digest never sends a partial recipient set when directory resolution
 
   expect(sendEmail).not.toHaveBeenCalled();
   expect(result).toMatchObject({ sent: 0, items: 1, unresolvedRecipients: 1 });
-  const pendingUpdate = query.mock.calls.find(([sql]) => String(sql).includes('SET ERROR = ?'));
-  expect(pendingUpdate?.[1]).toEqual(['Digest pending: unresolved recipients (1)', 14]);
+  const pendingUpdate = query.mock.calls.find(([sql]) => String(sql).includes('SET STATUS = ?, DIGEST_INCLUDED = ?'));
+  expect(pendingUpdate?.[1]?.[2]).toBe('Digest pending: unresolved recipients (1)');
+  expect(pendingUpdate?.[1]?.[4]).toBe(14);
+  expect(pendingUpdate?.[1]?.[1]).toBe('N');
 });

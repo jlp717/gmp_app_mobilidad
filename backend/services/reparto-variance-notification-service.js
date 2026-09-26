@@ -5,6 +5,7 @@
  * and build the daily digest at 07:00 Europe/Madrid (previous day).
  */
 
+const crypto = require('crypto');
 const { queryWithParams } = require('../config/db');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const logger = require('../middleware/logger');
@@ -280,6 +281,136 @@ async function resolveDocumentClient(documentId, { query = queryWithParams } = {
     return { codigo: '', nombre: '' };
   }
 }
+// The deployed DB2 contract has no PROCESSING status
+// (CHECK STATUS IN ('PENDING','SENT','FAILED') — DDL 039_notification_roles_and_variance.sql).
+// Same mechanism as repartidor-liquidacion-outbox-service.js: a cryptographic
+// claim stored in PAYLOAD_JSON makes a claimed row serve as a fail-closed
+// in-flight marker. Two digest workers racing the same row: exactly one
+// atomic UPDATE wins; the loser re-reads a foreign token and skips without
+// sending. A crashed worker between claim and complete leaves a claimed row
+// that later digests refuse (fail-closed, same trade-off as liquidacion).
+const VARIANCE_DIGEST_CLAIM_KEY = '_varianceDigestClaim';
+const MAX_VARIANCE_DIGEST_PAYLOAD_BYTES = 30000; // PAYLOAD_JSON is CLOB(32K)
+
+function parseVarianceDigestPayload(raw) {
+  if (raw && typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+}
+
+function serializeVarianceDigestPayload(payload) {
+  const serialized = JSON.stringify(payload);
+  return Buffer.byteLength(serialized, 'utf8') <= MAX_VARIANCE_DIGEST_PAYLOAD_BYTES
+    ? serialized
+    : null;
+}
+
+function buildVarianceDigestClaim(rawPayload, token, prevStatus) {
+  const payload = parseVarianceDigestPayload(rawPayload);
+  if (!payload) return null;
+  return serializeVarianceDigestPayload({
+    ...payload,
+    [VARIANCE_DIGEST_CLAIM_KEY]: {
+      token,
+      prevStatus,
+      claimedAt: new Date().toISOString(),
+    },
+  });
+}
+
+function hasVarianceDigestClaim(rawPayload, token = null) {
+  const payload = parseVarianceDigestPayload(rawPayload);
+  const actual = payload?.[VARIANCE_DIGEST_CLAIM_KEY]?.token;
+  return token === null ? Boolean(actual) : String(actual || '') === String(token || '');
+}
+
+/**
+ * Claim one variance outbox row for this worker's digest send.
+ * PENDING rows move PENDING -> FAILED (in-flight marker, no PROCESSING state
+ * exists); FAILED/SENT rows keep their status and only gain the claim marker.
+ * Returns { token, payload, prevStatus, originalPayload } or null when another
+ * worker owns the row (foreign claim) or the payload is unsafe to claim.
+ * Never throws for contention — contention is a skip, not an error.
+ */
+async function claimVarianceOutboxForDigest(id, rawPayload, { query, tables }) {
+  const current = await query(
+    `SELECT STATUS, PAYLOAD_JSON FROM ${tables.varianceOutbox}
+      WHERE ID = ? AND DIGEST_INCLUDED = 'N'
+      FETCH FIRST 1 ROW ONLY`,
+    [id],
+  );
+  if (!current?.length) return null;
+  const prevStatus = String(rowValue(current[0], 'STATUS') || '').toUpperCase();
+  if (!['PENDING', 'FAILED', 'SENT'].includes(prevStatus)) return null;
+  const storedPayload = rowValue(current[0], 'PAYLOAD_JSON');
+  const sourcePayload = storedPayload == null ? rawPayload : storedPayload;
+  if (hasVarianceDigestClaim(sourcePayload)) return null; // in-flight elsewhere
+  const token = crypto.randomBytes(18).toString('base64url');
+  const claimedPayload = buildVarianceDigestClaim(sourcePayload, token, prevStatus);
+  if (!claimedPayload) return null;
+  if (prevStatus === 'PENDING') {
+    await query(
+      `UPDATE ${tables.varianceOutbox}
+          SET STATUS = 'FAILED', PAYLOAD_JSON = ?
+        WHERE ID = ? AND STATUS = 'PENDING' AND DIGEST_INCLUDED = 'N'`,
+      [claimedPayload, id],
+    );
+  } else {
+    await query(
+      `UPDATE ${tables.varianceOutbox}
+          SET PAYLOAD_JSON = ?
+        WHERE ID = ? AND STATUS = ? AND DIGEST_INCLUDED = 'N'
+          AND LOCATE(CAST(? AS VARCHAR(64)), PAYLOAD_JSON) = 0`,
+      [claimedPayload, id, prevStatus, VARIANCE_DIGEST_CLAIM_KEY],
+    );
+  }
+  const verify = await query(
+    `SELECT STATUS, PAYLOAD_JSON FROM ${tables.varianceOutbox}
+      WHERE ID = ?
+      FETCH FIRST 1 ROW ONLY`,
+    [id],
+  );
+  const originalPayload = typeof storedPayload === 'string'
+    ? storedPayload
+    : JSON.stringify(parseVarianceDigestPayload(sourcePayload) || {});
+  return verify?.length && hasVarianceDigestClaim(rowValue(verify[0], 'PAYLOAD_JSON'), token)
+    ? { token, payload: claimedPayload, prevStatus, originalPayload }
+    : null;
+}
+
+/**
+ * Release a digest claim: restore the pre-claim STATUS byte-identically
+ * (originalPayload is the exact pre-claim PAYLOAD_JSON string), set the digest
+ * outcome, and verify ownership via the token. Returns true only when this
+ * worker's token won. Claim lost = skip (never send twice).
+ */
+async function completeClaimedVarianceOutbox(id, claim, { digested, error = null } = {}, { query, tables }) {
+  if (!claim?.token || !claim.prevStatus || typeof claim.originalPayload !== 'string') return false;
+  const safeError = digested ? null : String(error || 'digest delivery failed').slice(0, 500);
+  await query(
+    `UPDATE ${tables.varianceOutbox}
+        SET STATUS = ?, DIGEST_INCLUDED = ?, ERROR = ?, PAYLOAD_JSON = ?
+      WHERE ID = ? AND LOCATE(CAST(? AS VARCHAR(64)), PAYLOAD_JSON) > 0`,
+    [claim.prevStatus, digested ? 'S' : 'N', safeError, claim.originalPayload, id, claim.token],
+  );
+  const verify = await query(
+    `SELECT STATUS, PAYLOAD_JSON, DIGEST_INCLUDED FROM ${tables.varianceOutbox}
+      WHERE ID = ?
+      FETCH FIRST 1 ROW ONLY`,
+    [id],
+  );
+  if (!verify?.length) return false;
+  return String(rowValue(verify[0], 'STATUS') || '').toUpperCase() === claim.prevStatus
+    && String(rowValue(verify[0], 'DIGEST_INCLUDED') || '') === (digested ? 'S' : 'N')
+    && !hasVarianceDigestClaim(rowValue(verify[0], 'PAYLOAD_JSON'));
+}
+
 async function enqueueVarianceOutbox(row, { query = queryWithParams, env = process.env } = {}) {
   const tables = notificationTables(env);
   const sql = `
@@ -707,6 +838,11 @@ async function notifyAfterConfirm({
 /**
  * Daily digest: previous Europe/Madrid day, plus any earlier digest still awaiting
  * a fully successful delivery.
+ *
+ * Concurrency lease (claim+token, same pattern as liquidacion outbox): every
+ * candidate row is claimed before the send; rows owned by another worker are
+ * excluded from this digest and a worker that owns nothing sends nothing.
+ * Single-worker behaviour is unchanged (same rows, same marks, STATUS restored).
  */
 async function sendDailyVarianceDigest({
   query = queryWithParams,
@@ -742,13 +878,33 @@ async function sendDailyVarianceDigest({
     return { sent: 0, items: 0, digestDate };
   }
 
-  const items = rows.map((row) => ({
+  // Lease first, send after: claim every candidate row; the loser of a race
+  // owns nothing and must not send (duplicate digest otherwise).
+  const owned = [];
+  for (const row of rows) {
+    const rowId = rowValue(row, 'ID');
+    if (rowId == null) continue;
+    try {
+      const claim = await claimVarianceOutboxForDigest(rowId, rowValue(row, 'PAYLOAD_JSON'), { query, tables });
+      if (!claim) continue;
+      owned.push({ row, claim });
+    } catch (error) {
+      logger.warn(`[variance] digest claim failed id=${rowId}: ${error.message}`);
+    }
+  }
+  if (!owned.length) {
+    logger.warn('[variance] digest skipped: no outbox rows claimed (another worker owns them)');
+    return { sent: 0, items: rows.length, digestDate, skipped: true, reason: 'outbox_claim_unavailable' };
+  }
+
+  const items = owned.map(({ row, claim }) => ({
     id: rowValue(row, 'ID'),
     documentId: normalizeText(rowValue(row, 'DOCUMENT_ID')),
     repartidorId: normalizeText(rowValue(row, 'REPARTIDOR_ID')),
     comercialCode: normalizeVendorCode(rowValue(row, 'COMERCIAL_CODE')),
     createdAt: normalizeText(rowValue(row, 'CREATED_AT')),
     payload: safeJson(rowValue(row, 'PAYLOAD_JSON')),
+    claim,
   }));
 
   const emails = new Set();
@@ -811,26 +967,21 @@ async function sendDailyVarianceDigest({
   }
   const deliverySummary = redactDeliverySummary(results);
 
-  const ids = items.map((item) => item.id).filter((id) => id != null);
-  if (ids.length) {
-    const placeholders = ids.map(() => '?').join(', ');
-    try {
-      if (deliverySummary.allSucceeded) {
-        await query(
-          `UPDATE ${tables.varianceOutbox} SET DIGEST_INCLUDED = 'S', ERROR = NULL WHERE ID IN (${placeholders})`,
-          ids,
-        );
-      } else {
-        const error = recipientFailureCount > 0
-          ? `Digest pending: unresolved recipients (${recipientFailureCount})`
-          : `Digest pending: ${deliverySummary.sent}/${deliverySummary.attempted} delivered`;
-        await query(
-          `UPDATE ${tables.varianceOutbox} SET ERROR = ? WHERE ID IN (${placeholders})`,
-          [error, ...ids],
-        );
+  // Release each claim with the digest outcome. STATUS returns to its
+  // pre-claim value (digest never changed it); only DIGEST_INCLUDED/ERROR move.
+  if (owned.length) {
+    const digestError = recipientFailureCount > 0
+      ? `Digest pending: unresolved recipients (${recipientFailureCount})`
+      : `Digest pending: ${deliverySummary.sent}/${deliverySummary.attempted} delivered`;
+    for (const { row, claim } of owned) {
+      try {
+        await completeClaimedVarianceOutbox(rowValue(row, 'ID'), claim, {
+          digested: deliverySummary.allSucceeded,
+          error: digestError,
+        }, { query, tables });
+      } catch (error) {
+        logger.error(`[variance] digest complete failed: ${error.message}`);
       }
-    } catch (error) {
-      logger.error(`[variance] digest mark failed: ${error.message}`);
     }
   }
 
@@ -841,6 +992,7 @@ async function sendDailyVarianceDigest({
     digestDate,
     delivery: deliverySummary,
     unresolvedRecipients: recipientFailureCount,
+    claimed: owned.length,
   };
 }
 
@@ -866,4 +1018,7 @@ module.exports = {
   sendDailyVarianceDigest,
   enqueueVarianceOutbox,
   sendVarianceEmail,
+  claimVarianceOutboxForDigest,
+  completeClaimedVarianceOutbox,
+  hasVarianceDigestClaim,
 };

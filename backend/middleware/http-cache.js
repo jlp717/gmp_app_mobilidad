@@ -2,6 +2,55 @@
  * GMP App - HTTP Cache Middleware
  * ================================
  * In-memory caching with TTL, ETag support, and cache invalidation
+ *
+ * CACHE CONTRACT (read-only doc — do NOT change TTLs/invalidation here without
+ * a matching contract test in backend/tests/cache-contract.test.js):
+ *
+ * Layers (three independent TTL namespaces, deliberately NOT unified):
+ *   1. This file: per-process in-memory Map (MAX 50MB / 1MB per entry, LRU-ish
+ *      re-insert on hit). CACHE_TTL = { metrics: 60, clients: 300, products: 600 }
+ *      plus inline family TTLs in cacheMiddleware (evolution/matrix/analytics/
+ *      rutero 300, commissions 900, objectives 180, facturas/pedidos 30).
+ *      Keys are per-auth-scope (getAuthScope) + path + normalized query.
+ *   2. services/redis-cache.js: shared Redis. TTL = { SHORT: 300, MEDIUM: 1800,
+ *      LONG: 86400, REALTIME: 60 } with MONEY/COBROS pinned to REALTIME (60s).
+ *      Namespaces 'route' (route handlers) and 'query' (cachedQuery).
+ *   3. services/query-optimizer.js cachedQuery: Redis 'query' namespace with its
+ *      OWN scale — CACHE_TTL = { SHORT: 60, MEDIUM: 300, LONG: 1800, STATIC: 3600 }.
+ *      Same names, different seconds than layer 2: compare numbers, not names.
+ *
+ * Read order for GET /api/* (app.js: verifyToken -> cacheMiddleware at :770):
+ *   bypass? (forceRefresh/refresh/_ts, no-cache/no-store headers, x-force-refresh)
+ *   -> sensitive/money? no-store, next() (never stored, never served)
+ *   -> family cached()? HIT (ETag/304) or MISS -> handler
+ *   -> handler may use Redis 'route' cache and/or cachedQuery ('query' ns)
+ *   -> DB2. MISS responses are stored unless no-store/error/non-2xx.
+ *
+ * Who invalidates what (no TTL change needed because invalidation is explicit):
+ *   - invalidationMiddleware (app.js:410, all POST/PUT/PATCH/DELETE): drops local
+ *     family prefixes (clients/products/metrics/evolution/matrix/commissions/
+ *     objectives/rutero/cobros/pedidos/facturas) AND publishes to Redis.
+ *   - ensureHttpCacheClusterInvalidation: Redis invalidation events drop local keys.
+ *   - Query layer: invalidateByPrefix / patternFor() — cachedQuery keys live under
+ *     the doubled "query:query:<family>:" prefix; patterns missing it are silent
+ *     no-ops (see patternFor docs in query-optimizer.js).
+ *   - Money writes invalidate 'cobros' (+ query-layer COBROS prefix on mutation).
+ *
+ * Money is ALWAYS no-store at this layer — isMoneyNoStorePath():
+ *   /api/cobros*, *repartidor-finanzas*, *liquidaciones*, *entregas/pendientes*
+ *   -> `Cache-Control: private, no-store`, next(), no X-Cache-Status.
+ * Why: money must never serve a stale HTTP snapshot. The query layer already
+ * holds bounded staleness for money (COBROS_MONEY_TTL = REALTIME 60s,
+ * routes/cobros.js) with explicit invalidation on mutation, and the app-side
+ * portfolio scans are deliberately UNCACHED (routes/cobros.js NOTE) because
+ * cache-assisted money reads proved nondeterministic against legacy-contract
+ * tests. Caching money HERE would multiply the staleness windows
+ * (query TTL x HTTP TTL) and risk cross-scope reads, so this layer opts out
+ * entirely. Same treatment for per-recipient reparto evidence/receipt paths
+ * (isSensitiveRepartoPath) for privacy.
+ * NOTE: /api/repartidor-finanzas mounts BEFORE cacheMiddleware (app.js:762 vs
+ * :770), so its handlers usually never reach this middleware; the money match
+ * stays as defense-in-depth for every money path that does.
  */
 
 const crypto = require('crypto');
