@@ -1,3 +1,4 @@
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'dart:typed_data';
 
@@ -22,6 +23,7 @@ class CanonicalLiquidacionPdfBuilder {
   );
 
   static void _validateClosedSnapshot(RepartidorLiquidacionSnapshot snapshot) {
+    // Legacy validation unchanged: finite + cent-exact wire doubles.
     final values = <double>[
       snapshot.deliveries,
       snapshot.payments,
@@ -59,7 +61,12 @@ class CanonicalLiquidacionPdfBuilder {
       .replaceAll(RegExp(r'[^\x20-\x7e]'), '?');
 
   static String _formatPortableMoney(double value) =>
-      _portablePdfText(_money.format(value)).replaceAll('\u00a0', ' ');
+      _formatPortableMoneyValue(Money.fromDouble(value));
+
+  /// Canonical money formatter for the receipt PDF (render-only doubles).
+  static String _formatPortableMoneyValue(Money value) =>
+      _portablePdfText(_money.format(value.toDouble()))
+          .replaceAll('\u00a0', ' ');
 
   static Future<Uint8List> buildBytes({
     required RepartidorLiquidacionResult liquidacion,
@@ -73,12 +80,14 @@ class CanonicalLiquidacionPdfBuilder {
     }
     final snapshot = liquidacion.snapshot;
     _validateClosedSnapshot(snapshot);
-    final expectedBalance = snapshot.openingBalance +
-        snapshot.payments -
-        snapshot.expenses +
-        snapshot.adjustments -
-        snapshot.bankDeposits;
-    if ((expectedBalance - snapshot.balance).abs() > 0.001) {
+    // Cent-exact cuadre: integer cents instead of binary-float epsilon.
+    // Identical verdict for cent-validated snapshots.
+    final expectedBalance = snapshot.openingBalanceMoney +
+        snapshot.paymentsMoney -
+        snapshot.expensesMoney +
+        snapshot.adjustmentsMoney -
+        snapshot.bankDepositsMoney;
+    if (expectedBalance != snapshot.balanceMoney) {
       throw StateError('La instantanea cerrada no cuadra');
     }
 
@@ -87,7 +96,8 @@ class CanonicalLiquidacionPdfBuilder {
     const primary = PdfColor.fromInt(0xff003d7a);
     const green = PdfColor.fromInt(0xff067a58);
     const light = PdfColor.fromInt(0xffeef6ff);
-    pw.Widget amountRow(String label, double amount, {bool emphasis = false}) =>
+    pw.Widget amountRow(String label, Money amount,
+            {bool emphasis = false}) =>
         pw.Container(
           margin: const pw.EdgeInsets.only(bottom: 6),
           padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -100,7 +110,7 @@ class CanonicalLiquidacionPdfBuilder {
             children: [
               pw.Text(label, style: const pw.TextStyle(fontSize: 10)),
               pw.Text(
-                _formatPortableMoney(amount),
+                _formatPortableMoneyValue(amount),
                 style: pw.TextStyle(
                   fontSize: 11,
                   fontWeight: pw.FontWeight.bold,
@@ -168,12 +178,14 @@ class CanonicalLiquidacionPdfBuilder {
             ),
           ),
           pw.SizedBox(height: 8),
-          amountRow('Saldo inicial', snapshot.openingBalance),
-          amountRow('Cobros cerrados', snapshot.payments),
-          amountRow('Gastos cerrados', snapshot.expenses),
-          amountRow('Ajustes cerrados', snapshot.adjustments),
-          amountRow('Ingresos bancarios cerrados', snapshot.bankDeposits),
-          amountRow('Saldo de cierre', snapshot.balance, emphasis: true),
+          amountRow('Saldo inicial', snapshot.openingBalanceMoney),
+          amountRow('Cobros cerrados', snapshot.paymentsMoney),
+          amountRow('Gastos cerrados', snapshot.expensesMoney),
+          amountRow('Ajustes cerrados', snapshot.adjustmentsMoney),
+          amountRow(
+              'Ingresos bancarios cerrados', snapshot.bankDepositsMoney),
+          amountRow('Saldo de cierre', snapshot.balanceMoney,
+              emphasis: true),
         ],
       ),
     );

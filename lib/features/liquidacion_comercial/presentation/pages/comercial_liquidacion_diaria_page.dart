@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -103,12 +104,14 @@ class _ComercialLiquidacionDiariaPageState
     if (mounted) setState(() {});
   }
 
-  ComercialLiquidacionDraft get _draft => ComercialLiquidacionDraft(
+  ComercialLiquidacionDraft get _draft => ComercialLiquidacionDraft.fromMoney(
         employeeCode: widget.employeeCode,
         date: _sessionDate,
-        expectedTotal: _summary.totalAIngresar,
-        ingresoBanco: _amount(_ingresoBancoController.text),
-        entregado: _amount(_entregadoController.text),
+        // Cent-exact: expected derives from integer cents; inputs parse
+        // through Money (empty maps to zero, legacy UX parity).
+        expectedTotal: _summary.totalAIngresarMoney,
+        ingresoBanco: _amountValue(_ingresoBancoController.text),
+        entregado: _amountValue(_entregadoController.text),
       );
 
   Future<void> _loadRemote() async {
@@ -127,8 +130,11 @@ class _ComercialLiquidacionDiariaPageState
         _isLoadingRemote = false;
         final saved = snapshot.savedDraft;
         if (saved != null && !_hasInput) {
-          _ingresoBancoController.text = saved.ingresoBanco.toStringAsFixed(2);
-          _entregadoController.text = saved.entregado.toStringAsFixed(2);
+          // Wire/render doubles identical via the canonical Money getters.
+          _ingresoBancoController.text =
+              saved.ingresoBancoMoney.toDouble().toStringAsFixed(2);
+          _entregadoController.text =
+              saved.entregadoMoney.toDouble().toStringAsFixed(2);
           _lastSavedAt = saved.date;
         }
       });
@@ -146,8 +152,8 @@ class _ComercialLiquidacionDiariaPageState
       _entregadoController.text.trim().isNotEmpty;
 
   bool get _amountsAreValid =>
-      parseAmount(_ingresoBancoController.text) != null &&
-      parseAmount(_entregadoController.text) != null;
+      parseMoney(_ingresoBancoController.text) != null &&
+      parseMoney(_entregadoController.text) != null;
 
   bool get _canSave => _hasInput && _amountsAreValid && !_isSaving;
 
@@ -1680,7 +1686,10 @@ class _LiquidacionStatus {
   );
 }
 
-double _amount(String value) => parseAmount(value) ?? 0;
+double _amount(String value) => _amountValue(value).toDouble();
+
+/// Canonical money parser for the settlement form (exact cents).
+Money _amountValue(String value) => parseMoney(value) ?? Money.zero;
 
 String _money(double value) => _moneyFormat.format(value);
 

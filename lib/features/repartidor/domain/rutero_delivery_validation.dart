@@ -1,3 +1,4 @@
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_request.dart';
 
 enum RuteroDeliveryTab { products, payment, finalize }
@@ -87,6 +88,10 @@ class RuteroDeliveryValidationInput {
   final bool signatureEmpty;
   final bool hasPersistedSignature;
   final String importeCobradoText;
+  // Legacy wire/render compat: domain math must use the `...Money` getters
+  // below (exact cents). The doubles stay so callers outside this cage
+  // (rutero_detail_modal, rutero_detail_payment, print preview) keep
+  // compiling; toJson-equivalent doubles are unchanged (cent-rounded).
   final double importeTotal;
   final String paymentMethod;
   final String numeroTalon;
@@ -104,12 +109,23 @@ class RuteroDeliveryValidationInput {
   /// Effective ceiling applied to the payment field.
   /// Never exceeds this albarán/factura; CVC leftover above the document
   /// belongs to other effects, not to this stop.
-  double get effectiveMaxCobro {
-    final uncapped =
-        importeMaxCobrable ?? importeDisponibleCobro ?? importeTotal;
-    return capSaldoCobrableAlDocumento(
-      documentAmount: importeTotal,
-      collectableAmount: uncapped,
+  double get effectiveMaxCobro => effectiveMaxCobroMoney.toDouble();
+
+  /// Canonical money views (exact cents). New code must use these.
+  Money get importeTotalMoney => Money.fromDouble(importeTotal);
+  Money get importeDisponibleCobroMoney =>
+      Money.moneyValue(importeDisponibleCobro, fallback: importeTotalMoney);
+  Money? get importeMaxCobrableMoney => importeMaxCobrable == null
+      ? null
+      : Money.fromDouble(importeMaxCobrable!);
+  Money get effectiveMaxCobroMoney {
+    final uncappedMoney =
+        importeMaxCobrableMoney ?? (importeDisponibleCobro == null
+            ? importeTotalMoney
+            : Money.fromDouble(importeDisponibleCobro!));
+    return capSaldoCobrableAlDocumentoMoney(
+      documentAmount: importeTotalMoney,
+      collectableAmount: uncappedMoney,
     );
   }
 
@@ -157,16 +173,32 @@ bool isValidRuteroDniNie(String value) {
 }
 
 /// Caps a CVC/partial collectable to the document being delivered.
+/// Canonical money version: exact cents, no binary-float drift.
+Money capSaldoCobrableAlDocumentoMoney({
+  required Money documentAmount,
+  required Money collectableAmount,
+}) {
+  if (collectableAmount.isZero || collectableAmount.isNegative) {
+    return Money.zero;
+  }
+  if (documentAmount.isZero || documentAmount.isNegative) return Money.zero;
+  return collectableAmount < documentAmount
+      ? collectableAmount
+      : documentAmount;
+}
+
+/// Caps a CVC/partial collectable to the document being delivered.
+///
+/// Legacy `double` compat (callers outside this cage). New code must use
+/// [capSaldoCobrableAlDocumentoMoney]; the `double` comeback is render-only.
 double capSaldoCobrableAlDocumento({
   required double documentAmount,
   required double collectableAmount,
-}) {
-  if (collectableAmount <= 0.004) return 0;
-  if (documentAmount <= 0.004) return 0;
-  return collectableAmount < documentAmount
-      ? double.parse(collectableAmount.toStringAsFixed(2))
-      : double.parse(documentAmount.toStringAsFixed(2));
-}
+}) =>
+    capSaldoCobrableAlDocumentoMoney(
+      documentAmount: Money.fromDouble(documentAmount),
+      collectableAmount: Money.fromDouble(collectableAmount),
+    ).toDouble();
 
 /// One money identity for an albarán across list, sheet, cobro and PDFs.
 ///
@@ -175,16 +207,28 @@ double capSaldoCobrableAlDocumento({
 /// LAC qty×price sum: that is net of VAT and per-line rounded.
 /// After the driver changes delivered qty (or unchecks a line) → live
 /// delivered line sum, which is what liquidación and histórico must persist.
+/// Canonical money version: exact cents, no binary-float drift.
+Money canonicalRuteroDocumentAmountMoney({
+  required Money headerAmount,
+  required Money deliveredLineSum,
+  required bool quantitiesChanged,
+}) {
+  if (!quantitiesChanged) return headerAmount;
+  return deliveredLineSum.isZero ? headerAmount : deliveredLineSum;
+}
+
+/// Legacy `double` compat (callers outside this cage). New code must use
+/// [canonicalRuteroDocumentAmountMoney]; the `double` comeback is render-only.
 double canonicalRuteroDocumentAmount({
   required double headerAmount,
   required double deliveredLineSum,
   required bool quantitiesChanged,
-}) {
-  final header = double.parse(headerAmount.toStringAsFixed(2));
-  if (!quantitiesChanged) return header;
-  final live = double.parse(deliveredLineSum.toStringAsFixed(2));
-  return live.abs() >= 0.005 ? live : header;
-}
+}) =>
+    canonicalRuteroDocumentAmountMoney(
+      headerAmount: Money.fromDouble(headerAmount),
+      deliveredLineSum: Money.fromDouble(deliveredLineSum),
+      quantitiesChanged: quantitiesChanged,
+    ).toDouble();
 
 /// Yellow footer on the Finalizar tab. Empty after a completed delivery so
 /// the driver never sees "Falta: Nombre…" on a stop that already has PDFs.
@@ -250,37 +294,61 @@ String? validateRuteroTalonFields({
   return null;
 }
 
-double? parseRuteroMoney(String value) {
+/// Canonical money parser: ES/international decimal text, exact cents.
+/// Returns `null` for empty/invalid text. New code must use this.
+Money? parseRuteroMoneyValue(String value) {
   final trimmed = value.trim();
-  final normalized = trimmed.contains(',')
-      ? trimmed.replaceAll('.', '').replaceAll(',', '.')
-      : trimmed;
-  if (normalized.isEmpty) return null;
-  final parsed = double.tryParse(normalized);
-  if (parsed == null || parsed.isNaN || parsed.isInfinite) return null;
-  return double.parse(parsed.toStringAsFixed(2));
+  if (trimmed.isEmpty) return null;
+  final parsed = Money.tryParse(trimmed);
+  if (parsed == null) return null;
+  return parsed;
+}
+
+/// Legacy `double` compat (callers outside this cage). New code must use
+/// [parseRuteroMoneyValue]; the `double` comeback is render-only.
+double? parseRuteroMoney(String value) =>
+    parseRuteroMoneyValue(value)?.toDouble();
+
+/// Returns the next automatic payment suggestion only while the current
+/// value still matches the previous suggestion. This lets repeated quantity
+/// edits follow the partial-delivery ceiling without overwriting manual input.
+/// Canonical money version: exact cent comparison, no epsilon drift.
+Money? nextRuteroSuggestedPaymentAmountMoney({
+  required Money? currentAmount,
+  required Money? lastSuggestedAmount,
+  required Money? maximumAmount,
+}) {
+  if (lastSuggestedAmount == null || maximumAmount == null) {
+    return null;
+  }
+  final matchesPreviousSuggestion =
+      currentAmount != null && currentAmount == lastSuggestedAmount;
+  final isEmptyZeroSuggestion =
+      currentAmount == null && lastSuggestedAmount.isZero;
+  if (!matchesPreviousSuggestion && !isEmptyZeroSuggestion) return null;
+  return maximumAmount.isPositive ? maximumAmount : Money.zero;
 }
 
 /// Returns the next automatic payment suggestion only while the current
 /// value still matches the previous suggestion. This lets repeated quantity
 /// edits follow the partial-delivery ceiling without overwriting manual input.
+///
+/// Legacy `double` compat (callers outside this cage). New code must use
+/// [nextRuteroSuggestedPaymentAmountMoney].
 double? nextRuteroSuggestedPaymentAmount({
   required double? currentAmount,
   required double? lastSuggestedAmount,
   required double? maximumAmount,
-}) {
-  if (lastSuggestedAmount == null || maximumAmount == null) {
-    return null;
-  }
-  final matchesPreviousSuggestion = currentAmount != null &&
-      (currentAmount - lastSuggestedAmount).abs() < 0.005;
-  final isEmptyZeroSuggestion =
-      currentAmount == null && lastSuggestedAmount.abs() < 0.005;
-  if (!matchesPreviousSuggestion && !isEmptyZeroSuggestion) return null;
-  return maximumAmount > 0.004
-      ? double.parse(maximumAmount.toStringAsFixed(2))
-      : 0;
-}
+}) =>
+    nextRuteroSuggestedPaymentAmountMoney(
+      currentAmount:
+          currentAmount == null ? null : Money.fromDouble(currentAmount),
+      lastSuggestedAmount: lastSuggestedAmount == null
+          ? null
+          : Money.fromDouble(lastSuggestedAmount),
+      maximumAmount:
+          maximumAmount == null ? null : Money.fromDouble(maximumAmount),
+    )?.toDouble();
 
 /// Collects every visible field error so the sheet can jump to the first
 /// failing tab instead of overwriting with the last check.
@@ -309,7 +377,7 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
     );
     return RuteroDeliveryValidationResult(issues);
   }
-  if (!input.hasItems && input.importeTotal.abs() >= 0.005) {
+  if (!input.hasItems && !input.importeTotalMoney.isZero) {
     issues.add(
       const RuteroFieldIssue(
         tab: RuteroDeliveryTab.products,
@@ -346,8 +414,8 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
       input.status == RepartoDeliveryStatus.entregado ||
           input.status == RepartoDeliveryStatus.parcial;
   final hasKnownCvcBalance = input.importeDisponibleCobro != null;
-  final hasCollectibleBalance =
-      !hasKnownCvcBalance || input.importeDisponibleCobro! > 0.004;
+  final hasCollectibleBalance = !hasKnownCvcBalance ||
+      Money.fromDouble(input.importeDisponibleCobro!).isPositive;
   if (paymentEligibleStatus &&
       input.isUrgent &&
       !input.isPaid &&
@@ -370,8 +438,8 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
       ),
     );
   } else if (input.isPaid) {
-    final importe = parseRuteroMoney(input.importeCobradoText);
-    final hasRealCobro = importe != null && importe > 0.004;
+    final importe = parseRuteroMoneyValue(input.importeCobradoText);
+    final hasRealCobro = importe != null && importe.isPositive;
     final cobroNotes = input.cobroNotas.trim();
     // Observaciones only when there is a real cobro (>0). Credit / Sin cobro
     // must never block with an empty notes field.
@@ -384,7 +452,7 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
         ),
       );
     }
-    if (importe == null || importe <= 0) {
+    if (importe == null || !importe.isPositive) {
       issues.add(
         const RuteroFieldIssue(
           tab: RuteroDeliveryTab.payment,
@@ -393,22 +461,21 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
         ),
       );
     } else {
-      final maxCobro = input.effectiveMaxCobro;
-      final importeCentimos = (importe * 100).round();
-      final maxCobroCentimos = (maxCobro * 100).round();
-      if (importeCentimos > maxCobroCentimos) {
+      final maxCobro = input.effectiveMaxCobroMoney;
+      if (importe > maxCobro) {
         final isPartialCeiling =
             input.status == RepartoDeliveryStatus.parcial &&
-                input.importeMaxCobrable != null &&
+                input.importeMaxCobrableMoney != null &&
                 input.importeDisponibleCobro != null &&
-                input.importeMaxCobrable! < input.importeDisponibleCobro!;
+                input.importeMaxCobrableMoney! <
+                    Money.fromDouble(input.importeDisponibleCobro!);
         issues.add(
           RuteroFieldIssue(
             tab: RuteroDeliveryTab.payment,
             field: 'importe',
             message: isPartialCeiling
                 ? 'En entrega parcial el cobro no puede superar lo '
-                    'entregado (${maxCobro.toStringAsFixed(2).replaceAll(
+                    'entregado (${maxCobro.toDouble().toStringAsFixed(2).replaceAll(
                           '.',
                           ',',
                         )} €).'

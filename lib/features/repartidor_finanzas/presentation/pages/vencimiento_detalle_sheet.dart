@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
@@ -263,6 +264,8 @@ class _VencimientoDetalleSheetState extends State<VencimientoDetalleSheet> {
   }
 
   double _asDouble(Object? value) {
+    // Wire reader (unchanged legacy behavior): render-only doubles.
+    // New domain code must use Money.moneyValue(value) instead.
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
   }
@@ -302,8 +305,20 @@ String formatVencimientoDueDate(DateTime? value) {
 }
 
 /// Importe con coma decimal y símbolo € (espejo de `_money`).
+/// Legacy `double` render compat. New code must use
+/// [formatVencimientoMoneyValue]; the `double` comeback is render-only.
 String formatVencimientoMoney(double value) {
-  final fixed = value.toStringAsFixed(2).replaceAll('.', ',');
+  // Non-finite passthrough preserves legacy render behavior exactly.
+  if (!value.isFinite) {
+    return '${value.toStringAsFixed(2).replaceAll('.', ',')} €';
+  }
+  return formatVencimientoMoneyValue(Money.fromDouble(value));
+}
+
+/// Canonical money formatter: exact cents, no binary-float drift.
+String formatVencimientoMoneyValue(Money value) {
+  final fixed =
+      value.toDouble().toStringAsFixed(2).replaceAll('.', ',');
   return '$fixed €';
 }
 

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/utils/erp_document_label.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
@@ -275,6 +276,9 @@ class EntregaItem {
 
   bool get entregadoCompleto =>
       cantidadEntregada != null && cantidadEntregada! >= cantidadPedida;
+
+  /// Canonical money view (exact cents). Quantities stay `double`.
+  Money get precioUnitarioMoney => Money.fromDouble(precioUnitario);
 }
 
 class IvaBreakdownItem {
@@ -290,6 +294,10 @@ class IvaBreakdownItem {
   final double base;
   final double pct;
   final double iva;
+
+  /// Canonical money views (exact cents). Percentages stay `double`.
+  Money get baseMoney => Money.fromDouble(base);
+  Money get ivaMoney => Money.fromDouble(iva);
 }
 
 class AlbaranEntrega {
@@ -536,6 +544,24 @@ class AlbaranEntrega {
   final String documentoTipo;
 
   bool get isPedidoAnteroom => documentoTipo.toUpperCase() == 'PEDIDO';
+
+  /// Canonical money views (exact cents). Quantities/lat-long stay `double`.
+  Money get importeTotalMoney => Money.fromDouble(importeTotal);
+  Money get importeBrutoMoney => Money.fromDouble(importeBruto);
+  Money get importeNetoMoney => Money.fromDouble(importeNeto);
+  Money get importeIvaMoney => Money.fromDouble(importeIva);
+  Money get lineSumMoney => Money.fromDouble(lineSum);
+  Money? get importeCobradoMoney =>
+      importeCobrado == null ? null : Money.fromDouble(importeCobrado!);
+  Money? get importePendienteCobroMoney => importePendienteCobro == null
+      ? null
+      : Money.fromDouble(importePendienteCobro!);
+  Money? get importeDisponibleCobroMoney => importeDisponibleCobro == null
+      ? null
+      : Money.fromDouble(importeDisponibleCobro!);
+  Money? get importeCvcPendienteMoney => importeCvcPendiente == null
+      ? null
+      : Money.fromDouble(importeCvcPendiente!);
 
   bool get isPendingPrice => pricingState == 'PENDING_PRICE';
   bool get isZeroEmpty => pricingState == 'ZERO_EMPTY';

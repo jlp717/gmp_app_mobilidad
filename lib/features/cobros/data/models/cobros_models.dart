@@ -4,8 +4,9 @@ library;
 
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 
 // Re-export EstadoEntrega from shared location
 export 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
@@ -235,6 +236,12 @@ class CobroPendiente {
   bool get isVencido => estado == EstadoCobro.vencido;
   bool get isPedidoAppProvisional => provisional || tipo == TipoCobro.pedidoApp;
 
+  /// Canonical money views (exact cents). Percentages stay `double`.
+  Money get importeTotalMoney => Money.fromDouble(importeTotal);
+  Money get importePendienteMoney => Money.fromDouble(importePendiente);
+  Money get importeCobradoMoney => Money.fromDouble(importeCobrado);
+  Money get appPaymentAppliedMoney => Money.fromDouble(appPaymentApplied);
+
   String get paymentReference {
     final source = docKey?['source']?.toString().trim().toUpperCase();
     final ref = referencia.trim();
@@ -313,6 +320,13 @@ class CobroHistorico with _$CobroHistorico {
       observaciones: pick('OBSERVACIONES', 'observaciones')?.toString() ?? '',
     );
   }
+}
+
+/// Canonical money view for [CobroHistorico] (exact cents).
+/// Extension (not a class member) so the checked-in `.freezed.dart`
+/// needs no regeneration. New code must use this.
+extension CobroHistoricoMoney on CobroHistorico {
+  Money get importeMoney => Money.fromDouble(importe);
 }
 
 /// Item de un albarán para entrega
@@ -427,6 +441,9 @@ class Albaran {
   double get porcentajeCompletado =>
       totalItems > 0 ? (itemsEntregados / totalItems) : 0;
   bool get completo => itemsEntregados == totalItems && totalItems > 0;
+
+  /// Canonical money view (exact cents). New code must use this.
+  Money get importeTotalMoney => Money.fromDouble(importeTotal);
 }
 
 /// Estado del cliente (moroso, activo, etc)
@@ -463,6 +480,10 @@ class EstadoCliente {
   bool get isActivo => estado == 'ACTIVO';
   bool get isEnRojo => estado == 'EN_ROJO';
   bool get isBloqueado => estado == 'BLOQUEADO';
+
+  /// Canonical money views (exact cents). New code must use these.
+  Money get limiteCreditoMoney => Money.fromDouble(limiteCredito);
+  Money get totalPendienteMoney => Money.fromDouble(totalPendiente);
 
   Color get statusColor {
     switch (estado) {
@@ -529,4 +550,7 @@ class ResumenCobros {
   final bool cobroRiguroso;
   final double porcentajeMinimoCobro;
   final double porcentajeMinimoVendedor;
+
+  /// Canonical money view (exact cents). Percentages stay `double`.
+  Money get totalPendienteResumenMoney => Money.fromDouble(totalPendiente);
 }

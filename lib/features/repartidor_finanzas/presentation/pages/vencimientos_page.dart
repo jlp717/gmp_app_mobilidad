@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_delivery_validation.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_confirm_dialog.dart';
@@ -52,6 +53,10 @@ class VencimientoItem {
   final String tipoDocumento;
   final double importePendiente;
   final JsonMap keys;
+
+  /// Canonical money views (exact cents). New code must use these.
+  Money get importeMoney => Money.fromDouble(importe);
+  Money get importePendienteMoney => Money.fromDouble(importePendiente);
 }
 
 enum VencimientosFiltro {
@@ -78,7 +83,7 @@ bool canCobrarVencimiento(VencimientoItem item, String repartidorId) {
       item.documento.trim().isNotEmpty &&
       item.tipoDocumento.trim().isNotEmpty &&
       item.keys.isNotEmpty &&
-      item.importePendiente > 0;
+      item.importePendienteMoney.isPositive;
 }
 
 List<VencimientoItem> filterVencimientosBySearch(
@@ -589,7 +594,7 @@ class _RepartidorVencimientosPageState
     final todayDate = DateTime(today.year, today.month, today.day);
     final dueDate =
         fecha == null ? null : DateTime(fecha.year, fecha.month, fecha.day);
-    final estado = item.importePendiente <= 0
+    final estado = !item.importePendienteMoney.isPositive
         ? VencimientoEstado.cobrado
         : dueDate == null
             ? VencimientoEstado.sinFecha
@@ -691,7 +696,8 @@ class _RepartidorVencimientosPageState
                       width: double.infinity,
                       child: Semantics(
                         button: true,
-                        label: item.importePendiente < item.importe - 0.004
+                        label:
+                            item.importePendienteMoney < item.importeMoney
                             ? 'Cobrar el resto de ${item.documento}'
                             : 'Cobrar ${item.documento}',
                         child: ElevatedButton.icon(
@@ -707,7 +713,7 @@ class _RepartidorVencimientosPageState
                           },
                           icon: const Icon(Icons.payments),
                           label: Text(
-                            item.importePendiente < item.importe - 0.004
+                            item.importePendienteMoney < item.importeMoney
                                 ? 'Cobrar el resto'
                                 : 'Cobrar',
                           ),
@@ -780,12 +786,12 @@ class _RepartidorVencimientosPageState
           builder: (contentContext, setState) {
             Future<void> submit() async {
               if (saving) return;
-              final amount = parseRuteroMoney(amountController.text);
-              if (amount == null || amount <= 0) {
+              final amount = parseRuteroMoneyValue(amountController.text);
+              if (amount == null || !amount.isPositive) {
                 setState(() => errorText = 'Importe inválido');
                 return;
               }
-              if (amount > item.importePendiente) {
+              if (amount > item.importePendienteMoney) {
                 setState(() => errorText = 'Importe superior al pendiente');
                 return;
               }
@@ -817,7 +823,7 @@ class _RepartidorVencimientosPageState
                 contentContext,
                 title: '¿Estás seguro de registrar este cobro?',
                 message:
-                    'Se cobrará ${amount.toStringAsFixed(2)} € con $methodLabel sobre ${item.documento}.',
+                    'Se cobrará ${_moneyValue(amount)} con $methodLabel sobre ${item.documento}.',
               );
               if (!confirmed || !contentContext.mounted) return;
               setState(() {
@@ -825,6 +831,10 @@ class _RepartidorVencimientosPageState
                 errorText = null;
               });
               final isTalon = isRuteroTalonPaymentMethod(formaPago);
+              // Wire boundary: service payload emits identical doubles.
+              final amountDouble = amount.toDouble();
+              final pendingDouble =
+                  (item.importePendienteMoney - amount).toDouble();
               try {
                 final result = await service.registerVencimientoCobro(
                   repartidorId: repartidorId,
@@ -833,8 +843,8 @@ class _RepartidorVencimientosPageState
                   tipoDocumento: item.tipoDocumento,
                   documento: item.documento,
                   keys: item.keys,
-                  importeCobrado: amount,
-                  importePendiente: item.importePendiente - amount,
+                  importeCobrado: amountDouble,
+                  importePendiente: pendingDouble,
                   formaPago: formaPago,
                   idempotencyToken: idempotencyToken,
                   notas: notesController.text.trim(),
@@ -1503,7 +1513,13 @@ class _EmptyState extends StatelessWidget {
 }
 
 double _total(List<VencimientoItem> items) {
-  return items.fold<double>(0, (sum, item) => sum + item.importe);
+  // Cent-exact accumulation: the wire/render double is unchanged for
+  // cent-rounded data, without binary-float drift on long lists.
+  var total = Money.zero;
+  for (final item in items) {
+    total += item.importeMoney;
+  }
+  return total.toDouble();
 }
 
 Color _statusColor(VencimientoEstado estado) {
@@ -1533,6 +1549,15 @@ String _formatDueDate(DateTime? value) {
 }
 
 String _money(double value) {
-  final fixed = value.toStringAsFixed(2).replaceAll('.', ',');
+  // Non-finite passthrough preserves legacy render behavior exactly.
+  if (!value.isFinite) {
+    return '${value.toStringAsFixed(2).replaceAll('.', ',')} €';
+  }
+  return _moneyValue(Money.fromDouble(value));
+}
+
+/// Canonical money formatter: exact cents, no binary-float drift.
+String _moneyValue(Money value) {
+  final fixed = value.toDouble().toStringAsFixed(2).replaceAll('.', ',');
   return '$fixed €';
 }

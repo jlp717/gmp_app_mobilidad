@@ -1,3 +1,4 @@
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'dart:typed_data';
 
@@ -24,6 +25,10 @@ class LiquidacionPdfBuilder {
     symbol: '€',
     decimalDigits: 2,
   );
+
+  /// Canonical money formatter for the PDF (render-only doubles).
+  static String _moneyValue(Money value) =>
+      _money.format(value.toDouble());
 
   static String gmpNumber(
     String repartidorId,
@@ -90,7 +95,7 @@ class LiquidacionPdfBuilder {
                         c.nombreCliente,
                       c.tipoCobro,
                       c.documento,
-                      _money.format(c.importe),
+                      _moneyValue(c.importeMoney),
                     ],
                   )
                   .toList(),
@@ -119,7 +124,7 @@ class LiquidacionPdfBuilder {
                 borderRadius: pw.BorderRadius.circular(6),
               ),
               child: pw.Text(
-                'Total cobros ${_money.format(summary.totalCobrosDia)}',
+                'Total cobros ${_moneyValue(summary.totalCobrosDiaMoney)}',
                 style: pw.TextStyle(
                   color: PdfColors.white,
                   fontWeight: pw.FontWeight.bold,
@@ -138,15 +143,18 @@ class LiquidacionPdfBuilder {
                   children: [
                     _treasuryRow(
                       'Total efectivo',
-                      summary.totalEfectivo,
+                      summary.totalEfectivoMoney,
                       green: true,
                     ),
-                    _treasuryRow('Total talones', summary.totalCheques),
-                    _treasuryRow('Total tarjeta', summary.totalTarjeta),
-                    _treasuryRow('Total postdatados', summary.totalPostdatados),
+                    _treasuryRow(
+                        'Total talones', summary.totalChequesMoney),
+                    _treasuryRow(
+                        'Total tarjeta', summary.totalTarjetaMoney),
+                    _treasuryRow('Total postdatados',
+                        summary.totalPostdatadosMoney),
                     _treasuryRow(
                       'Total cobros día',
-                      summary.totalCobrosDia,
+                      summary.totalCobrosDiaMoney,
                       green: true,
                     ),
                   ],
@@ -158,16 +166,17 @@ class LiquidacionPdfBuilder {
                   children: [
                     _treasuryRow(
                       'Saldo actual',
-                      summary.saldoActual,
-                      warn: summary.saldoActual < 0,
+                      summary.saldoActualMoney,
+                      warn: summary.saldoActualMoney.isNegative,
                     ),
-                    _treasuryRow('Gastos', summary.gastos),
+                    _treasuryRow('Gastos', summary.gastosMoney),
                     _treasuryRow(
                       'Total a ingresar',
-                      summary.totalAIngresar,
+                      summary.totalAIngresarMoney,
                       green: true,
                     ),
-                    _treasuryRow('Ingreso en banco', summary.ingresoBanco),
+                    _treasuryRow(
+                        'Ingreso en banco', summary.ingresoBancoMoney),
                   ],
                 ),
               ),
@@ -177,11 +186,11 @@ class LiquidacionPdfBuilder {
             pw.SizedBox(height: 16),
             _sectionTitle('Movimientos del día'),
             ...ledger.expenses
-                .map((e) => _row('Gasto · ${e.detail}', e.amount)),
+                .map((e) => _row('Gasto · ${e.detail}', e.amountMoney)),
             ...ledger.bankDeposits
-                .map((e) => _row('Ingreso · ${e.detail}', e.amount)),
+                .map((e) => _row('Ingreso · ${e.detail}', e.amountMoney)),
             ...ledger.adjustments
-                .map((e) => _row('Ajuste · ${e.detail}', e.amount)),
+                .map((e) => _row('Ajuste · ${e.detail}', e.amountMoney)),
           ],
         ],
       ),
@@ -324,7 +333,7 @@ class LiquidacionPdfBuilder {
 
   static pw.Widget _treasuryRow(
     String label,
-    double value, {
+    Money value, {
     bool green = false,
     bool warn = false,
   }) {
@@ -353,7 +362,7 @@ class LiquidacionPdfBuilder {
             style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
           ),
           pw.Text(
-            _money.format(value),
+            _moneyValue(value),
             style: pw.TextStyle(
               fontSize: 11,
               fontWeight: pw.FontWeight.bold,
@@ -381,7 +390,7 @@ class LiquidacionPdfBuilder {
 
   static pw.Widget _row(
     String label,
-    double value, {
+    Money value, {
     bool emphasize = false,
     String? textValue,
   }) {
@@ -403,7 +412,7 @@ class LiquidacionPdfBuilder {
             ),
           ),
           pw.Text(
-            textValue ?? _money.format(value),
+            textValue ?? _moneyValue(value),
             style: pw.TextStyle(
               fontSize: 11,
               fontWeight: emphasize ? pw.FontWeight.bold : pw.FontWeight.normal,

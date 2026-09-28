@@ -1,5 +1,6 @@
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/domain/liquidacion_domain.dart';
 import 'package:intl/intl.dart';
 
@@ -47,9 +48,11 @@ class ComercialLiquidacionService {
       {
         'vendedor': vendors,
         'fecha': fecha,
-        'ingresoBanco': draft.ingresoBanco,
-        'entregado': draft.entregado,
-        'expectedTotal': draft.expectedTotal,
+        // Wire boundary: identical doubles via the canonical Money getters.
+        'ingresoBanco': draft.ingresoBancoMoney.toDouble(),
+        'entregado': draft.entregadoMoney.toDouble(),
+        'expectedTotal': draft.expectedTotalMoney.toDouble(),
+        // ignore: deprecated_member_use_from_same_package
         'idempotencyToken': 'liq-$vendors-$fecha-${draft.registrado}',
       },
     );
@@ -77,13 +80,15 @@ class ComercialLiquidacionService {
         .map((code) => code.trim())
         .where((code) => code.isNotEmpty)
         .join(',');
+    final amountMoney = Money.fromDouble(amount);
     final body = await ApiClient.post(
       '/comercial-liquidacion/devoluciones',
       {
         'vendedor': vendors,
         'fecha': fecha,
         'cliente': clientCode,
-        'importe': amount,
+        // Wire boundary: identical double via the canonical Money value.
+        'importe': amountMoney.toDouble(),
         'documentoOrigen': documentoOrigen,
         'yaCobrada': yaCobrada,
         if (formaPago != null && formaPago.isNotEmpty) 'formaPago': formaPago,
@@ -149,16 +154,21 @@ class ComercialLiquidacionDailySnapshot {
         const <String, dynamic>{};
     return ComercialLiquidacionDailySnapshot(
       date: json['date']?.toString(),
-      summary: ComercialLiquidacionSummary(
-        totalEfectivo: _num(summaryJson['totalEfectivo']),
-        totalCheques: _num(summaryJson['totalCheques']),
-        totalPostdatados: _num(summaryJson['totalPostdatados']),
-        saldoActual: _num(summaryJson['saldoActual']),
+      // Canonical Money construction with byte-identical wire semantics:
+      // Money.fromDouble(_num(...)) preserves the legacy number parsing
+      // exactly; domain math downstream runs in integer cents.
+      summary: ComercialLiquidacionSummary.fromMoney(
+        totalEfectivo: Money.fromDouble(_num(summaryJson['totalEfectivo'])),
+        totalCheques: Money.fromDouble(_num(summaryJson['totalCheques'])),
+        totalPostdatados:
+            Money.fromDouble(_num(summaryJson['totalPostdatados'])),
+        saldoActual: Money.fromDouble(_num(summaryJson['saldoActual'])),
         devolucionesYaCobradas:
-            _num(summaryJson['devolucionesYaCobradas']).abs(),
+            Money.fromDouble(_num(summaryJson['devolucionesYaCobradas']))
+                .abs(),
         totalAIngresar: summaryJson['totalAIngresar'] == null
             ? null
-            : _num(summaryJson['totalAIngresar']),
+            : Money.fromDouble(_num(summaryJson['totalAIngresar'])),
         source: (summaryJson['source'] ?? 'COBROS').toString(),
         porcentajeMinimoVendedor: _num(
           minimoJson['porcentajeMinimoVendedor'] ??
@@ -172,15 +182,18 @@ class ComercialLiquidacionDailySnapshot {
           .toList(),
       savedDraft: savedJson == null
           ? null
-          : ComercialLiquidacionDraft(
+          : ComercialLiquidacionDraft.fromMoney(
               employeeCode: (savedJson['vendedor'] ?? '').toString(),
               date: DateTime.tryParse(savedJson['date']?.toString() ?? '') ??
                   DateTime.now(),
-              expectedTotal: _num(
-                savedJson['totalEsperado'] ?? savedJson['totalAIngresar'],
+              expectedTotal: Money.fromDouble(
+                _num(
+                  savedJson['totalEsperado'] ?? savedJson['totalAIngresar'],
+                ),
               ),
-              ingresoBanco: _num(savedJson['ingresoBanco']),
-              entregado: _num(savedJson['entregado']),
+              ingresoBanco:
+                  Money.fromDouble(_num(savedJson['ingresoBanco'])),
+              entregado: Money.fromDouble(_num(savedJson['entregado'])),
             ),
     );
   }
@@ -199,10 +212,10 @@ class ComercialLiquidacionDailySnapshot {
 
   /// Parses one return row from the API.
   static ComercialDevolucionItem itemFromJson(Map<String, dynamic> item) {
-    return ComercialDevolucionItem(
+    return ComercialDevolucionItem.fromMoney(
       documento: (item['documento'] ?? '').toString(),
       cliente: (item['cliente'] ?? '').toString(),
-      amount: _num(item['amount']),
+      amount: Money.fromDouble(_num(item['amount'])),
       date: item['date']?.toString(),
       vendedor: (item['vendedor'] ?? '').toString(),
       yaCobrada:

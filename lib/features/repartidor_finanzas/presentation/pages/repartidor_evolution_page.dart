@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -226,17 +227,18 @@ class _HeaderSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = evolution.fold<double>(
-      0,
-      (sum, item) => sum + item.totalSales,
-    );
+    // Cent-exact accumulation: identical render doubles for cent data.
+    var total = Money.zero;
+    for (final item in evolution) {
+      total += item.totalSalesMoney;
+    }
     final growth = evolution.length > 1 ? _growth(evolution) : null;
     return Row(
       children: [
         Expanded(
           child: _SummaryCard(
             title: 'Cobros del periodo',
-            value: CurrencyFormatter.formatWhole(total),
+            value: CurrencyFormatter.formatWhole(total.toDouble()),
             icon: Icons.analytics,
             color: AppTheme.info,
           ),
@@ -513,7 +515,7 @@ class _ProductTile extends StatelessWidget {
           style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
         ),
         trailing: Text(
-          CurrencyFormatter.formatWhole(product.totalSales),
+          CurrencyFormatter.formatWhole(product.totalSalesMoney.toDouble()),
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             color: AppTheme.success,

@@ -5,6 +5,7 @@
 library;
 
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 
 part 'bolsa_models.freezed.dart';
 part 'bolsa_models.g.dart';
@@ -82,6 +83,19 @@ class BolsaStatus {
     if (acumulado <= 0) return false;
     return saldoDisponible / acumulado < 0.10;
   }
+
+  /// Canonical money views (exact cents). Percentages stay `double`.
+  Money get limiteImporteMoney => Money.fromDouble(limiteImporte);
+  Money get saldoDisponibleMoney => Money.fromDouble(saldoDisponible);
+  Money get consumidoMoney => Money.fromDouble(consumido);
+  Money get acumuladoMoney => Money.fromDouble(acumulado);
+  Money get presupuestoPeriodoMoney {
+    if (limiteImporteMoney.isPositive) return limiteImporteMoney;
+    final inferred = saldoDisponibleMoney + consumidoMoney - acumuladoMoney;
+    if (inferred.isPositive) return inferred;
+    return acumuladoMoney.isPositive ? acumuladoMoney : Money.zero;
+  }
+  Money get netoPeriodoMoney => acumuladoMoney - consumidoMoney;
 }
 
 /// Tipo de movimiento de bolsa.
@@ -253,6 +267,28 @@ class BolsaMovimiento {
 
   /// Importe con signo: positivo si acumulación, negativo si consumo.
   double get importeFirmado => tipo.isCredit ? importe : -importe;
+
+  /// Canonical money views (exact cents). Quantities stay `double`.
+  Money get importeMoney => Money.fromDouble(importe);
+  Money get saldoAnteriorMoney => Money.fromDouble(saldoAnterior);
+  Money get saldoPosteriorMoney => Money.fromDouble(saldoPosterior);
+  Money? get precioMinimoCongeladoMoney => precioMinimoCongelado == null
+      ? null
+      : Money.fromDouble(precioMinimoCongelado!);
+  Money? get precioVentaMoney =>
+      precioVenta == null ? null : Money.fromDouble(precioVenta!);
+
+  /// Canonical signed amount: exact cents, no binary-float drift.
+  Money get importeFirmadoMoney =>
+      tipo.isCredit ? importeMoney : -importeMoney;
+
+  /// Canonical balance delta (posterior − anterior), exact cents.
+  Money get variacionSaldoMoney => saldoPosteriorMoney - saldoAnteriorMoney;
+
+  /// Canonical mismatch check: exact cent comparison (±0,01 tolerance
+  /// subsumed by cent equality for cent-rounded data).
+  bool get hasSaldoMismatchExact =>
+      (variacionSaldoMoney - importeFirmadoMoney).cents.abs() > 1;
 
   /// Variación real de saldo (posterior − anterior). Debe coincidir con
   /// [importeFirmado] ±0,01; si no, el movimiento se marca "revisar" (REQ-15).

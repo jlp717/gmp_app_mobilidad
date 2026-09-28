@@ -10,6 +10,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/repartidor_finanzas_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
@@ -81,8 +82,8 @@ class _RepartidorMonthlySummaryBarState
     }
   }
 
-  String _fmtMoney(num? v) {
-    final value = (v ?? 0).toDouble();
+  String _fmtMoney(Money v) {
+    final value = v.toDouble();
     return '${value.toStringAsFixed(0).replaceAllMapped(
           RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
           (m) => '${m[1]}.',
@@ -118,9 +119,9 @@ class _RepartidorMonthlySummaryBarState
     final data = _data;
     if (data == null || data.isEmpty) return const SizedBox.shrink();
 
-    final totalCobrado = data.totalCobrado;
-    final totalLiquidado = data.totalLiquidado;
-    final saldoPendiente = data.saldoPendiente;
+    final totalCobrado = data.totalCobradoMoney;
+    final totalLiquidado = data.totalLiquidadoMoney;
+    final saldoPendiente = data.saldoPendienteMoney;
     final numLiq = data.liquidacionesCount;
 
     const meses = [
@@ -220,7 +221,7 @@ class _RepartidorMonthlySummaryBarState
                 child: _kpi(
                   'Pendiente',
                   _fmtMoney(saldoPendiente),
-                  saldoPendiente > 0 ? AppTheme.warning : AppTheme.success,
+                  saldoPendiente.isPositive ? AppTheme.warning : AppTheme.success,
                 ),
               ),
             ],

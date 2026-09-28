@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
@@ -16,7 +17,20 @@ abstract final class LiquidacionBrand {
 }
 
 String formatLiquidacionMoney(double value, {bool withSymbol = true}) {
-  final fixed = value.toStringAsFixed(2).replaceAll('.', ',');
+  // Non-finite passthrough preserves legacy render behavior exactly.
+  if (!value.isFinite) {
+    final fixed = value.toStringAsFixed(2).replaceAll('.', ',');
+    return withSymbol ? '$fixed €' : fixed;
+  }
+  return formatLiquidacionMoneyValue(
+    Money.fromDouble(value),
+    withSymbol: withSymbol,
+  );
+}
+
+/// Canonical money formatter: exact cents, no binary-float drift.
+String formatLiquidacionMoneyValue(Money value, {bool withSymbol = true}) {
+  final fixed = value.toDouble().toStringAsFixed(2).replaceAll('.', ',');
   return withSymbol ? '$fixed €' : fixed;
 }
 
@@ -92,7 +106,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
               const SizedBox(height: 10),
               cobrosPanel,
               const SizedBox(height: 10),
-              _LiquidacionTotalStrip(amount: summary.totalCobrosDia),
+              _LiquidacionTotalStrip(amount: summary.totalCobrosDiaMoney),
               const SizedBox(height: 24),
               const _LiquidacionSectionHeading(
                 icon: Icons.account_balance_wallet_outlined,
@@ -130,10 +144,13 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
               ValueListenableBuilder<TextEditingValue>(
                 valueListenable: ingresoBancoController,
                 builder: (context, value, _) {
-                  final ingreso = _parseEuro(value.text);
-                  final diff = summary.totalAIngresar - ingreso;
+                  // Input parse keeps legacy behavior; the cuadre math below
+                  // runs in exact cents.
+                  final ingreso =
+                      Money.fromDouble(_parseEuro(value.text));
+                  final diff = summary.totalAIngresarMoney - ingreso;
                   return _LiquidacionCuadreBanner(
-                    totalAIngresar: summary.totalAIngresar,
+                    totalAIngresar: summary.totalAIngresarMoney,
                     ingresoBanco: ingreso,
                     diff: diff,
                   );
@@ -461,7 +478,7 @@ class LiquidacionCobrosTable extends StatelessWidget {
                     DataCell(Text(cobro.documento)),
                     DataCell(
                       Text(
-                        formatLiquidacionMoney(cobro.importe),
+                        formatLiquidacionMoneyValue(cobro.importeMoney),
                         style: const TextStyle(
                           fontWeight: FontWeight.w800,
                           color: LiquidacionBrand.greenDark,
@@ -481,7 +498,7 @@ class LiquidacionCobrosTable extends StatelessWidget {
 class _LiquidacionTotalStrip extends StatelessWidget {
   const _LiquidacionTotalStrip({required this.amount});
 
-  final double amount;
+  final Money amount;
 
   @override
   Widget build(BuildContext context) {
@@ -504,7 +521,7 @@ class _LiquidacionTotalStrip extends StatelessWidget {
             ),
           ),
           Text(
-            formatLiquidacionMoney(amount),
+            formatLiquidacionMoneyValue(amount),
             style: TextStyle(
               color: AppColors.themedWhite,
               fontWeight: FontWeight.w800,
@@ -532,35 +549,35 @@ class _LiquidacionTreasuryFields {
         children: [
           _TreasuryMetricCard(
             label: 'Total Efectivo',
-            value: summary.totalEfectivo,
+            value: summary.totalEfectivoMoney,
             accent: LiquidacionBrand.greenDark,
           ),
           const SizedBox(height: 8),
           _TreasuryMetricCard(
             label: 'Total Talones',
-            value: summary.totalCheques,
+            value: summary.totalChequesMoney,
           ),
           const SizedBox(height: 8),
           _TreasuryMetricCard(
             label: 'Total Tarjeta',
-            value: summary.totalTarjeta,
+            value: summary.totalTarjetaMoney,
           ),
           const SizedBox(height: 8),
           _TreasuryMetricCard(
             label: 'Total Postdatados',
-            value: summary.totalPostdatados,
+            value: summary.totalPostdatadosMoney,
           ),
           const SizedBox(height: 8),
           _TreasuryMetricCard(
             label: 'Total Cobros Día',
-            value: summary.totalCobrosDia,
+            value: summary.totalCobrosDiaMoney,
             accent: LiquidacionBrand.greenDark,
             emphasized: true,
           ),
           const SizedBox(height: 8),
           _TreasuryMetricCard(
             label: 'Total repartido',
-            value: summary.entregado,
+            value: summary.entregadoMoney,
           ),
         ],
       );
@@ -569,25 +586,31 @@ class _LiquidacionTreasuryFields {
         children: [
           _TreasuryMetricCard(
             label: 'Saldo actual',
-            value: summary.saldoActual,
-            accent: summary.saldoActual < 0 ? AppColors.error : null,
+            value: summary.saldoActualMoney,
+            accent: summary.saldoActualMoney.isNegative
+                ? AppColors.error
+                : null,
           ),
           const SizedBox(height: 8),
           _TreasuryMetricCard(
             label: 'Deuda pendiente',
-            value: summary.deudaPendiente,
-            accent: summary.deudaPendiente > 0 ? AppColors.error : null,
+            value: summary.deudaPendienteMoney,
+            accent: summary.deudaPendienteMoney.isPositive
+                ? AppColors.error
+                : null,
           ),
           const SizedBox(height: 8),
-          _TreasuryMetricCard(label: 'Gastos', value: summary.gastos),
-          if (summary.ajustes != 0) ...[
+          _TreasuryMetricCard(
+              label: 'Gastos', value: summary.gastosMoney),
+          if (!summary.ajustesMoney.isZero) ...[
             const SizedBox(height: 8),
-            _TreasuryMetricCard(label: 'Ajustes', value: summary.ajustes),
+            _TreasuryMetricCard(
+                label: 'Ajustes', value: summary.ajustesMoney),
           ],
           const SizedBox(height: 8),
           _TreasuryMetricCard(
             label: 'Total a ingresar',
-            value: summary.totalAIngresar,
+            value: summary.totalAIngresarMoney,
             accent: LiquidacionBrand.greenDark,
             emphasized: true,
           ),
@@ -609,7 +632,7 @@ class _TreasuryMetricCard extends StatelessWidget {
   });
 
   final String label;
-  final double value;
+  final Money value;
   final Color? accent;
   final bool emphasized;
 
@@ -632,7 +655,7 @@ class _TreasuryMetricCard extends StatelessWidget {
             ),
           ),
           Text(
-            formatLiquidacionMoney(value, withSymbol: false),
+            formatLiquidacionMoneyValue(value, withSymbol: false),
             style: TextStyle(
               color: color,
               fontWeight: FontWeight.w800,
@@ -726,17 +749,17 @@ class _LiquidacionCuadreBanner extends StatelessWidget {
     required this.diff,
   });
 
-  final double totalAIngresar;
-  final double ingresoBanco;
-  final double diff;
+  final Money totalAIngresar;
+  final Money ingresoBanco;
+  final Money diff;
 
   @override
   Widget build(BuildContext context) {
-    final balanced = diff.abs() < 0.01;
+    final balanced = diff.isZero;
     final color = balanced ? LiquidacionBrand.greenDark : AppColors.warning;
     final label = balanced
         ? 'Cuadrada'
-        : 'Descuadre ${formatLiquidacionMoney(diff.abs())}';
+        : 'Descuadre ${formatLiquidacionMoneyValue(diff.abs())}';
 
     return RepartidorExecutivePanel(
       accentColor: color,
@@ -761,8 +784,8 @@ class _LiquidacionCuadreBanner extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'A ingresar ${formatLiquidacionMoney(totalAIngresar)} · '
-                  'Banco ${formatLiquidacionMoney(ingresoBanco)}',
+                  'A ingresar ${formatLiquidacionMoneyValue(totalAIngresar)} · '
+                  'Banco ${formatLiquidacionMoneyValue(ingresoBanco)}',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 11,

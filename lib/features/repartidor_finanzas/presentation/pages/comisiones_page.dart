@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
@@ -459,10 +460,12 @@ class _Content extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalTarget = summary.deliveredAmount;
-    final totalActual = summary.collectedAmount;
-    final overallCompliance =
-        totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0.0;
+    // Cent-exact sources: render doubles below derive from integer cents.
+    final totalTarget = summary.deliveredAmountMoney;
+    final totalActual = summary.collectedAmountMoney;
+    final overallCompliance = totalTarget.isZero
+        ? 0.0
+        : (totalActual.toDouble() / totalTarget.toDouble()) * 100;
     final isOnRhythm = overallCompliance >= 100;
 
     return Expanded(
@@ -470,9 +473,9 @@ class _Content extends StatelessWidget {
         children: [
           _SummaryCards(
             period: now,
-            totalTarget: totalTarget,
-            totalActual: totalActual,
-            commission: summary.commission,
+            totalTarget: totalTarget.toDouble(),
+            totalActual: totalActual.toDouble(),
+            commission: summary.commissionMoney.toDouble(),
             overallCompliance: overallCompliance,
             isOnRhythm: isOnRhythm,
             collectedPct: summary.collectedPct,
@@ -515,10 +518,11 @@ class _Content extends StatelessWidget {
           ? AppTheme.textTertiary
           : (isPositive ? AppTheme.success : AppTheme.error);
       final textOpacity = isFuture ? 0.45 : 1.0;
-      final thresholdAmount = appliedTier?.thresholdAmount ??
+      final thresholdAmount = appliedTier?.thresholdAmountMoney ??
           (firstTier == null
-              ? 0.0
-              : summary.deliveredAmount * (firstTier.thresholdPct / 100));
+              ? Money.zero
+              : summary.deliveredAmountMoney *
+                  (firstTier.thresholdPct / 100));
       final tierText = appliedTier == null
           ? '-'
           : 'F$tierIndex > '
@@ -548,7 +552,8 @@ class _Content extends StatelessWidget {
             Text(
               isFuture
                   ? '-'
-                  : CurrencyFormatter.format(summary.deliveredAmount),
+                  : CurrencyFormatter.format(
+                      summary.deliveredAmountMoney.toDouble()),
               style: TextStyle(
                 color: AppTheme.textPrimary.withValues(alpha: textOpacity),
                 fontSize: 10,
@@ -559,7 +564,8 @@ class _Content extends StatelessWidget {
             Text(
               isFuture
                   ? '-'
-                  : CurrencyFormatter.format(summary.collectedAmount),
+                  : CurrencyFormatter.format(
+                      summary.collectedAmountMoney.toDouble()),
               style: TextStyle(
                 color: color,
                 fontWeight: FontWeight.bold,
@@ -606,7 +612,10 @@ class _Content extends StatelessWidget {
           ),
           DataCell(
             Text(
-              isFuture ? '-' : CurrencyFormatter.format(summary.commission),
+              isFuture
+                  ? '-'
+                  : CurrencyFormatter.format(
+                      summary.commissionMoney.toDouble()),
               style: TextStyle(
                 color: isFuture ? AppTheme.textTertiary : AppTheme.success,
                 fontWeight: FontWeight.bold,
@@ -625,7 +634,7 @@ class _Content extends StatelessWidget {
           ),
           DataCell(
             Text(
-              isFuture ? '-' : CurrencyFormatter.format(thresholdAmount),
+              isFuture ? '-' : CurrencyFormatter.format(thresholdAmount.toDouble()),
               style: TextStyle(
                 color: AppTheme.textSecondary.withValues(alpha: textOpacity),
                 fontSize: 9,
@@ -636,7 +645,8 @@ class _Content extends StatelessWidget {
             Text(
               isFuture || appliedTier == null
                   ? '-'
-                  : CurrencyFormatter.format(appliedTier.excess),
+                  : CurrencyFormatter.format(
+                      appliedTier.excessMoney.toDouble()),
               style: TextStyle(
                 color: isFuture
                     ? AppTheme.textTertiary

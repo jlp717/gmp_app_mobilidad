@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
@@ -227,7 +228,9 @@ class _RepartidorLiquidacionDiariaPageState
     final closedCard =
         _closedResult ?? (closed ? _placeholderClosedResult(summary) : null);
     if (!_seededClassicFields) {
-      _ingresoBancoController.text = _classicMoney(summary.ingresoBanco);
+      // Cent-exact seed: identical text for cent-rounded wire data.
+      _ingresoBancoController.text =
+          _classicMoneyValue(summary.ingresoBancoMoney);
       _seededClassicFields = true;
     }
     final gmpRef = LiquidacionPdfBuilder.gmpNumber(
@@ -295,7 +298,15 @@ class _RepartidorLiquidacionDiariaPageState
     return double.tryParse(normalized) ?? 0;
   }
 
-  String _classicMoney(double value) => value.toStringAsFixed(2);
+  String _classicMoney(double value) {
+    // Non-finite passthrough preserves legacy behavior exactly.
+    if (!value.isFinite) return value.toStringAsFixed(2);
+    return _classicMoneyValue(Money.fromDouble(value));
+  }
+
+  /// Canonical money seed: exact cents, no binary-float drift.
+  String _classicMoneyValue(Money value) =>
+      value.toDouble().toStringAsFixed(2);
 
   bool _canUseOfflinePdfFallback(Object error) =>
       error is ApiException && error.statusCode == 0;

@@ -1,17 +1,26 @@
 import 'dart:math';
 
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_delivery_validation.dart';
 
 /// Document-scoped ceiling for rutero cobro (never above this albarán).
-double effectiveDocumentCollectable(AlbaranEntrega albaran) {
-  final saldo = albaran.importeDisponibleCobro ?? 0;
-  return capSaldoCobrableAlDocumento(
-    documentAmount: albaran.importeTotal,
-    collectableAmount: saldo,
+/// Canonical money version: exact cents, no binary-float drift.
+Money effectiveDocumentCollectableMoney(AlbaranEntrega albaran) {
+  return capSaldoCobrableAlDocumentoMoney(
+    documentAmount: albaran.importeTotalMoney,
+    collectableAmount:
+        albaran.importeDisponibleCobroMoney ?? Money.zero,
   );
 }
+
+/// Document-scoped ceiling for rutero cobro (never above this albarán).
+///
+/// Legacy `double` compat (callers outside this cage). New code must use
+/// [effectiveDocumentCollectableMoney].
+double effectiveDocumentCollectable(AlbaranEntrega albaran) =>
+    effectiveDocumentCollectableMoney(albaran).toDouble();
 
 /// Document identity required by POST /repartidor-finanzas/cobros.
 class RuteroStandaloneCobroKeys {
@@ -89,28 +98,46 @@ RuteroStandaloneCobroKeys? cobroKeysFromAlbaran(AlbaranEntrega albaran) {
   );
 }
 
-String? validateRuteroStandaloneCobroAmount({
-  required double? amount,
-  required double maxCollectable,
+/// Canonical money version: exact cent comparison, no epsilon drift.
+String? validateRuteroStandaloneCobroAmountMoney({
+  required Money? amount,
+  required Money maxCollectable,
 }) {
-  if (amount == null || amount <= 0) {
+  if (amount == null || !amount.isPositive) {
     return 'Indica el importe cobrado.';
   }
-  final amountCents = (amount * 100).round();
-  final maxCents = (maxCollectable * 100).round();
-  if (amountCents > maxCents) {
+  if (amount > maxCollectable) {
     return 'El cobro no puede superar el saldo cobrable de este documento.';
   }
   return null;
 }
 
+String? validateRuteroStandaloneCobroAmount({
+  required double? amount,
+  required double maxCollectable,
+}) =>
+    validateRuteroStandaloneCobroAmountMoney(
+      amount: amount == null ? null : Money.fromDouble(amount),
+      maxCollectable: Money.fromDouble(maxCollectable),
+    );
+
+/// Canonical money version: exact cents, no binary-float drift.
+Money remainingCollectableAfterMoney({
+  required Money currentAvailable,
+  required Money collected,
+}) {
+  final remaining = currentAvailable - collected;
+  return remaining.isPositive ? remaining : Money.zero;
+}
+
 double remainingCollectableAfter({
   required double currentAvailable,
   required double collected,
-}) {
-  final remaining = ((currentAvailable - collected) * 100).round() / 100;
-  return remaining < 0.005 ? 0 : remaining;
-}
+}) =>
+    remainingCollectableAfterMoney(
+      currentAvailable: Money.fromDouble(currentAvailable),
+      collected: Money.fromDouble(collected),
+    ).toDouble();
 
 String createRuteroStandaloneCobroIdempotencyToken(
   String repartidorId,
@@ -159,10 +186,12 @@ Map<String, dynamic> buildRuteroStandaloneCobroPayload({
   }
   // importePendiente is advisory: backend overwrites it with the document-capped
   // remainder. Send the same ceiling GET already exposed so old APIs stay aligned.
-  final pending = remainingCollectableAfter(
-    currentAvailable: effectiveDocumentCollectable(albaran),
-    collected: importeCobrado,
-  );
+  // Cent-exact: the pending remainder is computed in integer cents; the wire
+  // doubles are unchanged (backend N/N-1 compat).
+  final pending = remainingCollectableAfterMoney(
+    currentAvailable: effectiveDocumentCollectableMoney(albaran),
+    collected: Money.fromDouble(importeCobrado),
+  ).toDouble();
   final trimmedNotes = notas?.trim() ?? '';
   return <String, dynamic>{
     'entregaId': albaran.id,
@@ -194,5 +223,9 @@ Map<String, dynamic> buildRuteroStandaloneCobroPayload({
       'nombreBanco': nombreBanco!.trim(),
   };
 }
+
+/// Canonical money parser. New code must use this.
+Money? parseStandaloneCobroMoneyValue(String value) =>
+    parseRuteroMoneyValue(value);
 
 double? parseStandaloneCobroMoney(String value) => parseRuteroMoney(value);

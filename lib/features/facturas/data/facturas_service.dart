@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/utils/erp_document_label.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
@@ -119,6 +120,11 @@ class Factura {
   bool get isFactura => documentType == FacturaDocumentType.factura;
   String get tipoLabel => documentType.label;
 
+  /// Canonical money views (exact cents). New code must use these.
+  Money get totalMoney => Money.fromDouble(total);
+  Money get baseMoney => Money.fromDouble(base);
+  Money get ivaMoney => Money.fromDouble(iva);
+
   String get numeroFormateado => formatErpDocumentLabel(
         serie: serie,
         terminal: terminal,
@@ -218,6 +224,9 @@ class FacturaHeader {
         terminal: terminal,
         numero: numero,
       );
+
+  /// Canonical money view (exact cents). New code must use this.
+  Money get headerTotalMoney => Money.fromDouble(total);
 }
 
 class FacturaBase {
@@ -239,6 +248,10 @@ class FacturaBase {
   final double base;
   final double pct;
   final double iva;
+
+  /// Canonical money views (exact cents). Percentages stay `double`.
+  Money get baseMoney => Money.fromDouble(base);
+  Money get ivaMoney => Money.fromDouble(iva);
 }
 
 class FacturaLine {
@@ -275,6 +288,11 @@ class FacturaLine {
   final double precio;
   final double importe;
   final double descuento;
+
+  /// Canonical money views (exact cents). Quantities stay `double`.
+  Money get precioMoney => Money.fromDouble(precio);
+  Money get importeMoney => Money.fromDouble(importe);
+  Money get descuentoMoney => Money.fromDouble(descuento);
 }
 
 /// Summary model
@@ -290,16 +308,18 @@ class FacturaSummary {
   });
 
   factory FacturaSummary.fromDocuments(List<Factura> documents) {
-    var totalBase = 0.0;
-    var totalIva = 0.0;
-    var totalImporte = 0.0;
+    // Cent-exact accumulation: identical doubles for cent-rounded data,
+    // without binary-float drift on long lists.
+    var totalBase = Money.zero;
+    var totalIva = Money.zero;
+    var totalImporte = Money.zero;
     var totalFacturasEmitidas = 0;
     var totalAlbaranes = 0;
 
     for (final document in documents) {
-      totalBase += document.base;
-      totalIva += document.iva;
-      totalImporte += document.total;
+      totalBase += document.baseMoney;
+      totalIva += document.ivaMoney;
+      totalImporte += document.totalMoney;
       if (document.isAlbaran) {
         totalAlbaranes += 1;
       } else {
@@ -313,9 +333,9 @@ class FacturaSummary {
       totalDocumentos: totalDocumentos,
       totalFacturasEmitidas: totalFacturasEmitidas,
       totalAlbaranes: totalAlbaranes,
-      totalImporte: totalImporte,
-      totalBase: totalBase,
-      totalIva: totalIva,
+      totalImporte: totalImporte.toDouble(),
+      totalBase: totalBase.toDouble(),
+      totalIva: totalIva.toDouble(),
     );
   }
 
@@ -352,6 +372,11 @@ class FacturaSummary {
   final double totalImporte;
   final double totalBase;
   final double totalIva;
+
+  /// Canonical money views (exact cents). New code must use these.
+  Money get totalImporteMoney => Money.fromDouble(totalImporte);
+  Money get totalBaseMoney => Money.fromDouble(totalBase);
+  Money get totalIvaMoney => Money.fromDouble(totalIva);
 }
 
 /// Service class for facturas API calls

@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
@@ -942,6 +943,13 @@ class RepartidorFinanzasService {
       return int.tryParse(value?.toString() ?? '') ?? fallback;
     }
 
+    // Wire boundary: payload doubles are cent-normalized through Money so
+    // the JSON numbers stay identical to the legacy format (backend N/N-1).
+    final cobradoMoney = Money.fromDouble(importeCobrado);
+    final pendienteMoney = Money.fromDouble(
+      importePendiente < 0 ? 0 : importePendiente,
+    );
+
     return {
       'codigoCliente': codigoCliente,
       'nombreCliente': nombreCliente,
@@ -955,8 +963,8 @@ class RepartidorFinanzasService {
       'numeroDocumento': keyInt('numeroDocumento'),
       'xdeDocumento': keyInt('xdeDocumento', 1),
       'dexDocumento': keyInt('dexDocumento', 1),
-      'importeCobrado': importeCobrado,
-      'importePendiente': importePendiente < 0 ? 0 : importePendiente,
+      'importeCobrado': cobradoMoney.toDouble(),
+      'importePendiente': pendienteMoney.toDouble(),
       'formaPago': formaPago,
       'pantallaOrigen': 'VENCIMIENTOS',
       'idempotencyToken': idempotencyToken,
