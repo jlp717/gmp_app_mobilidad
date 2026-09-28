@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/domain/liquidacion_domain.dart';
 
 void main() {
@@ -84,8 +85,7 @@ void main() {
     });
   });
 
-  group('classifyLiquidacionStatus', () {
-    test('returns each status kind', () {
+  group('classifyLiquidacionStatus', () {    test('returns each status kind', () {
       final balanced = draft();
       final mismatch = draft(entregado: 20);
 
@@ -121,6 +121,96 @@ void main() {
         ),
         LiquidacionStatusKind.invalid,
       );
+    });
+  });
+
+  group('parseMoney (canonical)', () {
+    test('parses ES formats, maps empty to zero, rejects invalid', () {
+      expect(parseMoney('1234,56'), Money.fromCents(123456));
+      expect(parseMoney('1.234,56'), Money.fromCents(123456));
+      expect(parseMoney('1,234.56'), Money.fromCents(123456));
+      expect(parseMoney(''), Money.zero);
+      expect(parseMoney('   '), Money.zero);
+      expect(parseMoney('abc'), isNull);
+      expect(parseMoney('-5'), isNull);
+      expect(parseMoney('0'), Money.zero);
+    });
+
+    test('legacy parseAmount stays behavior-identical (compat)', () {
+      // ignore: deprecated_member_use
+      expect(parseAmount('1.234,56'), 1234.56);
+      // ignore: deprecated_member_use
+      expect(parseAmount(''), 0);
+      // ignore: deprecated_member_use
+      expect(parseAmount('abc'), isNull);
+    });
+  });
+
+  group('Money draft/summary/devolucion', () {
+    test('fromMoney computes registrado/diferencia in exact cents', () {
+      final draft = ComercialLiquidacionDraft.fromMoney(
+        employeeCode: '57',
+        date: date,
+        expectedTotal: Money.fromCents(10000),
+        ingresoBanco: Money.fromCents(6000),
+        entregado: Money.fromCents(3999),
+      );
+
+      expect(draft.registradoMoney, Money.fromCents(9999));
+      expect(draft.diferenciaMoney, Money.fromCents(1));
+      expect(draft.isBalancedExact, isFalse);
+
+      final balanced = ComercialLiquidacionDraft.fromMoney(
+        employeeCode: '57',
+        date: date,
+        expectedTotal: Money.fromDouble(100),
+        ingresoBanco: Money.fromDouble(60),
+        entregado: Money.fromDouble(40),
+      );
+      expect(balanced.diferenciaMoney, Money.zero);
+      expect(balanced.isBalancedExact, isTrue);
+    });
+
+    test('kills the 39.99 float-drift edge: exact cent math', () {
+      // Legacy double: 100 - (60 + 39.99) = 0.009999999999990905.
+      final draft = ComercialLiquidacionDraft.fromMoney(
+        employeeCode: '57',
+        date: date,
+        expectedTotal: Money.tryParse('100')!,
+        ingresoBanco: Money.tryParse('60')!,
+        entregado: Money.tryParse('39,99')!,
+      );
+      expect(draft.diferenciaMoney, Money.fromCents(1));
+      expect(draft.isBalancedExact, isFalse);
+    });
+
+    test('summary fromMoney derives total and exposes Money views', () {
+      final summary = ComercialLiquidacionSummary.fromMoney(
+        totalEfectivo: Money.fromDouble(10),
+        totalCheques: Money.fromDouble(20),
+        totalPostdatados: Money.fromDouble(30),
+        saldoActual: Money.fromDouble(40),
+      );
+      expect(summary.totalAIngresarMoney, Money.fromCents(10000));
+      expect(summary.totalEfectivoMoney, Money.fromCents(1000));
+      // Wire compat: legacy doubles unchanged.
+      // ignore: deprecated_member_use
+      expect(summary.totalAIngresar, 100);
+
+      final overridden = ComercialLiquidacionSummary.fromMoney(
+        totalEfectivo: Money.fromDouble(10),
+        totalAIngresar: Money.fromDouble(75),
+      );
+      expect(overridden.totalAIngresarMoney, Money.fromCents(7500));
+    });
+
+    test('devolucion fromMoney keeps signed amount in cents', () {
+      final item = ComercialDevolucionItem.fromMoney(
+        documento: 'P-2-1',
+        cliente: 'C1',
+        amount: Money.tryParse('-1.000,50')!,
+      );
+      expect(item.amountMoney, Money.fromCents(-100050));
     });
   });
 }

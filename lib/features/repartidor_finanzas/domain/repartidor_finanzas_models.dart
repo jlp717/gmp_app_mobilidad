@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 
 typedef JsonMap = Map<String, dynamic>;
 
@@ -81,7 +82,8 @@ String buildLiquidacionEntryFingerprint(
     repartidorId.trim(),
     date,
     entryType.trim().toLowerCase(),
-    amount.toStringAsFixed(2),
+    // Cent-exact normalization: identical output for cent values, no drift.
+    Money.fromDouble(amount).toDouble().toStringAsFixed(2),
     detail.trim(),
     observation?.trim() ?? '',
   ]);
@@ -171,6 +173,9 @@ class RepartidorMonthlyLiquidacion {
   final String idempotencyToken;
   final String date;
   final double totalLiquidado;
+
+  /// Canonical money view (exact cents). New code must use this.
+  Money get totalLiquidadoMoney => Money.fromDouble(totalLiquidado);
 }
 
 class RepartidorMonthlySummary {
@@ -213,6 +218,11 @@ class RepartidorMonthlySummary {
   final int cobrosCount;
   final int liquidacionesCount;
   final List<RepartidorMonthlyLiquidacion> liquidaciones;
+
+  /// Canonical money views (exact cents). New code must use these.
+  Money get totalCobradoMoney => Money.fromDouble(totalCobrado);
+  Money get totalLiquidadoMoney => Money.fromDouble(totalLiquidado);
+  Money get saldoPendienteMoney => Money.fromDouble(saldoPendiente);
 
   bool get isEmpty =>
       totalCobrado == 0 &&
@@ -344,6 +354,11 @@ class ClientCollectionSnapshot {
   final String paymentType;
   final int numDocuments;
 
+  /// Canonical money views (exact cents). Percentages stay `double`.
+  Money get collectableMoney => Money.fromDouble(collectable);
+  Money get collectedMoney => Money.fromDouble(collected);
+  Money get commissionMoney => Money.fromDouble(commission);
+
   JsonMap toJson() => {
         'clientId': clientId,
         'clientName': clientName,
@@ -416,6 +431,11 @@ class RepartidorCollectionSummary {
   final int clientCount;
   final List<ClientCollectionSnapshot> clients;
 
+  /// Canonical money views (exact cents). Percentages stay `double`.
+  Money get totalCollectableMoney => Money.fromDouble(totalCollectable);
+  Money get totalCollectedMoney => Money.fromDouble(totalCollected);
+  Money get totalCommissionMoney => Money.fromDouble(totalCommission);
+
   JsonMap toJson() => {
         'repartidorId': repartidorId,
         'period': period.toJson(),
@@ -452,6 +472,10 @@ class DailyCollectionSnapshot {
   final String date;
   final double collectable;
   final double collected;
+
+  /// Canonical money views (exact cents). New code must use these.
+  Money get collectableMoney => Money.fromDouble(collectable);
+  Money get collectedMoney => Money.fromDouble(collected);
 
   JsonMap toJson() => {
         'day': day,
@@ -495,6 +519,9 @@ class RepartidorHistoryClient {
   final String? lastVisit;
   final String? repCode;
   final String? repName;
+
+  /// Canonical money view (exact cents). New code must use this.
+  Money get totalAmountMoney => Money.fromDouble(totalAmount);
 
   JsonMap toJson() => {
         'id': id,
@@ -593,6 +620,10 @@ class RepartidorHistoryDocument {
   final bool hasLegacySignature;
   final String? legacyDate;
 
+  /// Canonical money views (exact cents). New code must use these.
+  Money get amountMoney => Money.fromDouble(amount);
+  Money get pendingMoney => Money.fromDouble(pending);
+
   JsonMap toJson() => {
         'id': id,
         'type': type,
@@ -651,6 +682,10 @@ class RepartidorMonthlyObjective {
   final double percentage;
   final bool thresholdMet;
 
+  /// Canonical money views (exact cents). Percentages stay `double`.
+  Money get collectableMoney => Money.fromDouble(collectable);
+  Money get collectedMoney => Money.fromDouble(collected);
+
   JsonMap toJson() => {
         'month': month,
         'year': year,
@@ -695,6 +730,10 @@ class RepartidorObjectiveBreakdownNode {
   final double percentage;
   final List<RepartidorObjectiveBreakdownNode> children;
 
+  /// Canonical money views (exact cents). Percentages stay `double`.
+  Money get salesMoney => Money.fromDouble(sales);
+  Money get objectiveMoney => Money.fromDouble(objective);
+
   JsonMap toJson() => {
         'id': id,
         'name': name,
@@ -725,19 +764,21 @@ class RepartidorObjectiveTotals {
   factory RepartidorObjectiveTotals.fromClients(
     Iterable<RepartidorObjectiveClient> clients,
   ) {
-    var sales = 0.0;
-    var cost = 0.0;
+    var sales = Money.zero;
+    var cost = Money.zero;
     var units = 0.0;
     for (final client in clients) {
-      sales += client.totalSales;
-      cost += client.totalCost;
+      sales += client.totalSalesMoney;
+      cost += client.totalCostMoney;
       units += client.totalUnits;
     }
     return RepartidorObjectiveTotals(
-      sales: sales,
-      cost: cost,
+      sales: sales.toDouble(),
+      cost: cost.toDouble(),
       units: units,
-      margin: sales == 0 ? 0 : (sales - cost) / sales * 100,
+      margin: sales.isZero
+          ? 0
+          : (sales - cost).toDouble() / sales.toDouble() * 100,
     );
   }
 
@@ -745,6 +786,10 @@ class RepartidorObjectiveTotals {
   final double cost;
   final double units;
   final double margin;
+
+  /// Canonical money views (exact cents). Units/margin stay `double`.
+  Money get salesMoney => Money.fromDouble(sales);
+  Money get costMoney => Money.fromDouble(cost);
 
   JsonMap toJson() => {
         'sales': sales,
@@ -805,6 +850,10 @@ class RepartidorObjectiveProduct {
   final double totalUnits;
   final Map<int, double> monthlyData;
 
+  /// Canonical money views (exact cents). Units stay `double`.
+  Money get totalSalesMoney => Money.fromDouble(totalSales);
+  Money get totalCostMoney => Money.fromDouble(totalCost);
+
   JsonMap toJson() => {
         'code': code,
         'name': name,
@@ -854,6 +903,10 @@ class RepartidorObjectiveFamily {
   final List<RepartidorObjectiveFamily> children;
   final List<RepartidorObjectiveProduct> products;
 
+  /// Canonical money views (exact cents). Units stay `double`.
+  Money get totalSalesMoney => Money.fromDouble(totalSales);
+  Money get totalCostMoney => Money.fromDouble(totalCost);
+
   JsonMap toJson() => {
         'code': code,
         'name': name,
@@ -899,6 +952,10 @@ class RepartidorObjectiveClient {
   final int productCount;
   final double margin;
   final List<RepartidorObjectiveFamily> families;
+
+  /// Canonical money views (exact cents). Units/margin stay `double`.
+  Money get totalSalesMoney => Money.fromDouble(totalSales);
+  Money get totalCostMoney => Money.fromDouble(totalCost);
 
   JsonMap toJson() => {
         'code': code,
@@ -1108,6 +1165,9 @@ class DeliverySummaryDay {
   final int pending;
   final double amount;
 
+  /// Canonical money view (exact cents). New code must use this.
+  Money get amountMoney => Money.fromDouble(amount);
+
   JsonMap toJson() => {
         'date': date,
         'total': total,
@@ -1143,6 +1203,9 @@ class RepartidorDeliverySummary {
   final int pending;
   final double amount;
   final List<DeliverySummaryDay> daily;
+
+  /// Canonical money view (exact cents). New code must use this.
+  Money get amountMoney => Money.fromDouble(amount);
 
   JsonMap toJson() => {
         'summary': {
@@ -1265,6 +1328,11 @@ class RepartidorCobroDia {
   final double cobrado;
   final double pendiente;
 
+  /// Canonical money views (exact cents). New code must use these.
+  Money get importeMoney => Money.fromDouble(importe);
+  Money get cobradoMoney => Money.fromDouble(cobrado);
+  Money get pendienteMoney => Money.fromDouble(pendiente);
+
   /// True si este cobro puede anularse desde la UI (tiene token).
   bool get canBeReversed =>
       idempotencyToken != null && idempotencyToken!.isNotEmpty;
@@ -1358,6 +1426,20 @@ class RepartidorDailySummary {
   /// Capability autorizada explícitamente por el backend. Fail-closed.
   final bool canReverseCobros;
   final List<RepartidorCobroDia> cobros;
+
+  /// Canonical money views (exact cents). New code must use these.
+  Money get totalEfectivoMoney => Money.fromDouble(totalEfectivo);
+  Money get totalChequesMoney => Money.fromDouble(totalCheques);
+  Money get totalTarjetaMoney => Money.fromDouble(totalTarjeta);
+  Money get totalPostdatadosMoney => Money.fromDouble(totalPostdatados);
+  Money get saldoActualMoney => Money.fromDouble(saldoActual);
+  Money get totalCobrosDiaMoney => Money.fromDouble(totalCobrosDia);
+  Money get gastosMoney => Money.fromDouble(gastos);
+  Money get totalAIngresarMoney => Money.fromDouble(totalAIngresar);
+  Money get ingresoBancoMoney => Money.fromDouble(ingresoBanco);
+  Money get entregadoMoney => Money.fromDouble(entregado);
+  Money get deudaPendienteMoney => Money.fromDouble(deudaPendiente);
+  Money get ajustesMoney => Money.fromDouble(ajustes);
 }
 
 class RepartidorVencimiento {
@@ -1399,6 +1481,10 @@ class RepartidorVencimiento {
   final double importe;
   final double importePendiente;
   final JsonMap keys;
+
+  /// Canonical money views (exact cents). New code must use these.
+  Money get importeMoney => Money.fromDouble(importe);
+  Money get importePendienteMoney => Money.fromDouble(importePendiente);
 
   DateTime? get dueDate {
     final parsed = DateTime.tryParse(fechaVencimiento);
@@ -1479,6 +1565,16 @@ class RepartidorLiquidacionSnapshot {
   final double pending;
   final double openingBalance;
   final double balance;
+
+  /// Canonical money views (exact cents). New code must use these.
+  Money get deliveriesMoney => Money.fromDouble(deliveries);
+  Money get paymentsMoney => Money.fromDouble(payments);
+  Money get expensesMoney => Money.fromDouble(expenses);
+  Money get adjustmentsMoney => Money.fromDouble(adjustments);
+  Money get bankDepositsMoney => Money.fromDouble(bankDeposits);
+  Money get pendingMoney => Money.fromDouble(pending);
+  Money get openingBalanceMoney => Money.fromDouble(openingBalance);
+  Money get balanceMoney => Money.fromDouble(balance);
 }
 
 class RepartidorLiquidacionResult {
@@ -1729,6 +1825,9 @@ class RepartidorLiquidacionEntry {
   final String detail;
   final String createdAt;
   final String? observation;
+
+  /// Canonical money view (exact cents). New code must use this.
+  Money get amountMoney => Money.fromDouble(amount);
 }
 
 class RepartidorLiquidacionEntryResult {
@@ -1907,11 +2006,11 @@ class RepartidorLiquidacionLedger {
     final expensesTotal = total('expenses');
     final adjustmentsTotal = total('adjustments');
     final bankDepositsTotal = total('bankDeposits');
-    double sum(List<RepartidorLiquidacionEntry> entries) => entries.fold(
-          0,
-          (value, entry) => value + entry.amount,
+    Money sum(List<RepartidorLiquidacionEntry> entries) => entries.fold(
+          Money.zero,
+          (value, entry) => value + entry.amountMoney,
         );
-    bool matches(double left, double right) => (left - right).abs() < 0.000001;
+    bool matches(Money left, Money right) => left == right;
     final computedExpenses = sum(expenses);
     final computedAdjustments = sum(adjustments);
     final computedDeposits = sum(bankDeposits);
@@ -1920,15 +2019,24 @@ class RepartidorLiquidacionLedger {
       expenses: expenses,
       adjustments: adjustments,
       bankDeposits: bankDeposits,
-      expensesTotal: matches(computedExpenses, expensesTotal)
+      expensesTotal: matches(
+        computedExpenses,
+        Money.fromDouble(expensesTotal),
+      )
           ? expensesTotal
-          : computedExpenses,
-      adjustmentsTotal: matches(computedAdjustments, adjustmentsTotal)
+          : computedExpenses.toDouble(),
+      adjustmentsTotal: matches(
+        computedAdjustments,
+        Money.fromDouble(adjustmentsTotal),
+      )
           ? adjustmentsTotal
-          : computedAdjustments,
-      bankDepositsTotal: matches(computedDeposits, bankDepositsTotal)
+          : computedAdjustments.toDouble(),
+      bankDepositsTotal: matches(
+        computedDeposits,
+        Money.fromDouble(bankDepositsTotal),
+      )
           ? bankDepositsTotal
-          : computedDeposits,
+          : computedDeposits.toDouble(),
     );
   }
 
@@ -1939,6 +2047,11 @@ class RepartidorLiquidacionLedger {
   final double expensesTotal;
   final double adjustmentsTotal;
   final double bankDepositsTotal;
+
+  /// Canonical money views (exact cents). New code must use these.
+  Money get expensesTotalMoney => Money.fromDouble(expensesTotal);
+  Money get adjustmentsTotalMoney => Money.fromDouble(adjustmentsTotal);
+  Money get bankDepositsTotalMoney => Money.fromDouble(bankDepositsTotal);
 }
 
 class RepartidorCommissionTier {
@@ -1993,6 +2106,11 @@ class RepartidorCommissionReachedTier {
   final double thresholdAmount;
   final double excess;
   final double commission;
+
+  /// Canonical money views (exact cents). Percentages stay `double`.
+  Money get thresholdAmountMoney => Money.fromDouble(thresholdAmount);
+  Money get excessMoney => Money.fromDouble(excess);
+  Money get commissionMoney => Money.fromDouble(commission);
 }
 
 class RepartidorCommissionSummary {
@@ -2030,6 +2148,11 @@ class RepartidorCommissionSummary {
   final double commission;
   final List<RepartidorCommissionTier> tiers;
   final List<RepartidorCommissionReachedTier> reached;
+
+  /// Canonical money views (exact cents). Percentages stay `double`.
+  Money get deliveredAmountMoney => Money.fromDouble(deliveredAmount);
+  Money get collectedAmountMoney => Money.fromDouble(collectedAmount);
+  Money get commissionMoney => Money.fromDouble(commission);
 }
 
 num _requiredFiniteNumber(JsonMap json, String key) {
@@ -2071,6 +2194,9 @@ class RepartidorEvolutionPoint {
   final double totalSales;
   final int numCobros;
 
+  /// Canonical money view (exact cents). New code must use this.
+  Money get totalSalesMoney => Money.fromDouble(totalSales);
+
   String get monthLabel => period.split('-').last;
 }
 
@@ -2102,6 +2228,9 @@ class RepartidorTopProduct {
   final String name;
   final double totalUnits;
   final double totalSales;
+
+  /// Canonical money view (exact cents). Units stay `double`.
+  Money get totalSalesMoney => Money.fromDouble(totalSales);
 }
 
 class RepartidorEvolutionData {

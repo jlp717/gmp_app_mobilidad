@@ -1,29 +1,35 @@
 const express = require('express');
-const { createHash } = require('crypto');
 const router = express.Router();
 const logger = require('../middleware/logger');
-const { queryWithParams } = require('../config/db');
-const { cachedQuery } = require('../services/query-optimizer');
-const { TTL } = require('../services/redis-cache');
-const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
-const {
-    getCurrentDate,
-    getVendorColumn,
-    formatCurrency,
-    MIN_YEAR,
-    LACLAE_SALES_FILTER,
-    sanitizeForSQL,
-    handleRouteError,
-    sargableDocumentDateBound,
-} = require('../utils/common');
+const { handleRouteError } = require('../utils/common');
 const { verifyToken } = require('../middleware/auth');
 const { authorizeVendorScope, isFinancialRole, requireVendorQueryScope } = require('../middleware/vendor-scope');
-const { buildVendedorFilterParameterized } = require('../src/utils/dashboardFilters');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
+const analyticsService = require('../services/analytics-service');
 
-function asTrimmedText(value) {
-    if (value == null) return '';
-    return String(value).trim();
+// DI composition: la ruta aporta el mapeo fisico de tablas (test/isolated_test
+// incluido) y el service/repo ejecutan sobre el. Uso genuino de
+// comercialErpTable en la capa de ruta.
+function analyticsTables() {
+    return {
+        LACLAE: comercialErpTable('LACLAE'),
+        CLI: comercialErpTable('CLI'),
+        LINDTO: comercialErpTable('LINDTO'),
+        ART: comercialErpTable('ART'),
+        ARTX: comercialErpTable('ARTX'),
+        LAC: comercialErpTable('LAC'),
+    };
+}
+
+function serviceError(res, error, fallbackMessage, fallbackCode) {
+    if (error && error.status) {
+        return res.status(error.status).json({
+            success: false,
+            code: error.code || fallbackCode,
+            error: error.message,
+        });
+    }
+    handleRouteError(error, res, fallbackMessage, 500, { code: fallbackCode });
 }
 
 // =============================================================================
@@ -32,73 +38,13 @@ function asTrimmedText(value) {
 router.get('/yoy-comparison', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes, year, month } = req.query;
-        const currentYear = parseInt(year) || getCurrentDate().getFullYear();
-        const monthNum = month ? parseInt(month, 10) : 0;
-        const monthFilter = monthNum >= 1 && monthNum <= 12 ? 'AND L.LCMMDC = ?' : '';
-        const monthParams = monthNum >= 1 && monthNum <= 12 ? [monthNum] : [];
-        const vendorFilter = buildVendedorFilterParameterized(
-            vendedorCodes,
-            'L',
-            getVendorColumn(currentYear, monthNum || undefined),
-        );
-        const cacheKeyBase = `analytics:yoy:${currentYear}:${month || 'all'}:${vendedorCodes}`;
-
-        const getData = (yr) => {
-            const sql = `
-          SELECT 
-            SUM(L.LCIMVT) as sales, 
-            SUM(L.LCIMVT - L.LCIMCT) as margin,
-            COUNT(DISTINCT L.LCCDCL) as clients
-          FROM ${comercialErpTable('LACLAE')} L 
-          WHERE L.LCAADC = ? AND ${LACLAE_SALES_FILTER} ${monthFilter} ${vendorFilter.filter}
-        `;
-            return cachedQuery(queryWithParams, sql, {
-                cacheKey: `${cacheKeyBase}:${yr}`,
-                ttl: TTL.LONG,
-            }, [yr, ...monthParams, ...vendorFilter.params]);
-        };
-
-
-        const lastYr = currentYear - 1;
-        const [currRows, prevRows] = await Promise.all([
-            getData(currentYear),
-            getData(lastYr)
-        ]);
-        const curr = currRows[0] || {};
-        const prev = prevRows[0] || {};
-
-        const currSales = parseFloat(curr.SALES) || 0;
-        const prevSales = parseFloat(prev.SALES) || 0;
-        const currMargin = parseFloat(curr.MARGIN) || 0;
-        const prevMargin = parseFloat(prev.MARGIN) || 0;
-
-        const calcGrowth = (curr, prev) => prev && prev !== 0 ? ((curr - prev) / prev) * 100 : 0;
-
-        res.json({
-            currentYear: {
-                year: currentYear,
-                sales: formatCurrency(currSales),
-                margin: formatCurrency(currMargin),
-                boxes: 0
-            },
-            lastYear: {
-                year: lastYr,
-                sales: formatCurrency(prevSales),
-                margin: formatCurrency(prevMargin),
-                boxes: 0
-            },
-            currentPeriod: { year: currentYear, sales: formatCurrency(currSales) },
-            previousPeriod: { year: lastYr, sales: formatCurrency(prevSales) },
-            growth: {
-                salesPercent: Math.round(calcGrowth(currSales, prevSales) * 10) / 10,
-                salesGrowth: Math.round(calcGrowth(currSales, prevSales) * 10) / 10,
-                marginPercent: Math.round(calcGrowth(currMargin, prevMargin) * 10) / 10
-            }
-        });
-
+        res.json(await analyticsService.getYoyComparison(
+            { vendedorCodes, year, month },
+            { tables: analyticsTables() },
+        ));
     } catch (error) {
         logger.error(`YoY error: ${error.message}`);
-        handleRouteError(error, res, 'Error obteniendo comparación', 500, { code: 'ANALYTICS_YOY_ERROR' });
+        serviceError(res, error, 'Error obteniendo comparación', 'ANALYTICS_YOY_ERROR');
     }
 });
 
@@ -108,83 +54,13 @@ router.get('/yoy-comparison', verifyToken, requireVendorQueryScope, async (req, 
 router.get('/top-clients', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes, year, month, limit = 10 } = req.query;
-        const yearNum = year ? parseInt(year, 10) : 0;
-        const monthNum = month ? parseInt(month, 10) : 0;
-        const dateParams = [];
-        let dateFilter = '';
-        if (yearNum) {
-            dateFilter += ' AND L.LCAADC = ?';
-            dateParams.push(yearNum);
-        }
-        if (monthNum >= 1 && monthNum <= 12) {
-            dateFilter += ' AND L.LCMMDC = ?';
-            dateParams.push(monthNum);
-        }
-        const vendorFilter = buildVendedorFilterParameterized(
-            vendedorCodes,
-            'L',
-            getVendorColumn(yearNum || undefined, monthNum || undefined),
-        );
-
-        const safeLimit = parseInt(limit, 10) || 10;
-        const sql = `
-      SELECT
-        T.code,
-        T.totalSales,
-        T.transactions,
-        COALESCE(
-          NULLIF(TRIM(C.NOMBREALTERNATIVO), ''),
-          TRIM(C.NOMBRECLIENTE),
-          'Cliente ' || TRIM(T.code)
-        ) as name,
-        TRIM(C.POBLACION) as city
-      FROM (
-        SELECT
-          L.LCCDCL as code,
-          SUM(L.LCIMVT) as totalSales,
-          COUNT(*) as transactions
-        FROM ${comercialErpTable('LACLAE')} L
-        WHERE ${LACLAE_SALES_FILTER} ${dateFilter} ${vendorFilter.filter}
-        GROUP BY L.LCCDCL
-        ORDER BY totalSales DESC
-        FETCH FIRST ${safeLimit} ROWS ONLY
-      ) T
-      LEFT JOIN ${comercialErpTable('CLI')} C ON C.CODIGOCLIENTE = T.code
-      ORDER BY T.totalSales DESC
-    `;
-
-        const now = getCurrentDate();
-        const yearMeta = historicalYearsCacheMeta([year || now.getFullYear()], now);
-        const cacheKey = `analytics:top_clients:${yearMeta.bucket}:${year || 'current'}:${month || 'all'}:${vendedorCodes || 'ALL'}:${limit}`;
-        const topClients = await cachedQuery(queryWithParams, sql, {
-            cacheKey,
-            ttl: yearMeta.ttl,
-        }, [...dateParams, ...vendorFilter.params]);
-
-        if (!Array.isArray(topClients) || topClients.length === 0) {
-            return res.json({ clients: [] });
-        }
-
-        const enhancedClients = topClients
-            .map(c => {
-                const code = (c.CODE ?? c.code ?? '').toString().trim();
-                if (!code) return null;
-
-                return {
-                    code,
-                    name: (c.NAME ?? c.name ?? '').toString().trim() || `Cliente ${code}`,
-                    city: (c.CITY ?? c.city ?? '').toString().trim(),
-                    totalSales: formatCurrency(c.TOTALSALES ?? c.totalSales ?? 0),
-                    year: year || new Date().getFullYear()
-                };
-            })
-            .filter(Boolean);
-
-        res.json({ clients: enhancedClients });
-
+        res.json(await analyticsService.getTopClients(
+            { vendedorCodes, year, month, limit },
+            { tables: analyticsTables() },
+        ));
     } catch (error) {
         logger.error(`Top clients error: ${error.message} | stack: ${error.stack?.substring(0, 300)}`);
-        handleRouteError(error, res, 'Error top clients', 500, { code: 'ANALYTICS_TOP_CLIENTS_ERROR' });
+        serviceError(res, error, 'Error top clients', 'ANALYTICS_TOP_CLIENTS_ERROR');
     }
 });
 
@@ -194,47 +70,13 @@ router.get('/top-clients', verifyToken, requireVendorQueryScope, async (req, res
 router.get('/trends', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes } = req.query;
-        const vendorFilter = buildVendedorFilterParameterized(
-            vendedorCodes,
-            'L',
-            getVendorColumn(),
-        );
-
-        // Get last 6 months from LACLAE
-        const sql = `
-      SELECT L.LCAADC as year, L.LCMMDC as month, SUM(L.LCIMVT) as sales
-      FROM ${comercialErpTable('LACLAE')} L
-      WHERE L.LCAADC >= ? AND ${LACLAE_SALES_FILTER} ${vendorFilter.filter}
-      GROUP BY L.LCAADC, L.LCMMDC
-      ORDER BY L.LCAADC DESC, L.LCMMDC DESC
-      FETCH FIRST 6 ROWS ONLY
-    `;
-        const history = await cachedQuery(queryWithParams, sql, {
-            cacheKey: `analytics:trends:${vendedorCodes}`,
-            ttl: TTL.LONG,
-        }, [MIN_YEAR, ...vendorFilter.params]);
-
-        // Simple prediction logic
-        let trend = 'stable';
-        const sales = history.map(h => parseFloat(h.SALES)).reverse(); // Chronological order
-        if (sales.length >= 2) {
-            if (sales[sales.length - 1] > sales[0] * 1.1) trend = 'upward';
-            else if (sales[sales.length - 1] < sales[0] * 0.9) trend = 'downward';
-        }
-
-        // Generate basic predictions
-        const lastMonth = sales.length > 0 ? sales[sales.length - 1] : 0;
-        const predictions = [
-            { period: 'Next +1', predictedSales: lastMonth * (trend === 'upward' ? 1.05 : 0.95), confidence: 0.75 },
-            { period: 'Next +2', predictedSales: lastMonth * (trend === 'upward' ? 1.10 : 0.90), confidence: 0.60 },
-            { period: 'Next +3', predictedSales: lastMonth * (trend === 'upward' ? 1.15 : 0.85), confidence: 0.45 }
-        ];
-
-        res.json({ trend, predictions });
-
+        res.json(await analyticsService.getTrends(
+            { vendedorCodes },
+            { tables: analyticsTables() },
+        ));
     } catch (error) {
         logger.error(`Trends error: ${error.message}`);
-        handleRouteError(error, res, 'Error calculating trends', 500, { code: 'ANALYTICS_TRENDS_ERROR' });
+        serviceError(res, error, 'Error calculating trends', 'ANALYTICS_TRENDS_ERROR');
     }
 });
 
@@ -244,52 +86,13 @@ router.get('/trends', verifyToken, requireVendorQueryScope, async (req, res) => 
 router.get('/top-products', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes, limit = 20 } = req.query;
-        const now = getCurrentDate();
-        const year = parseInt(req.query.year, 10) || now.getFullYear();
-        const vendorFilter = buildVendedorFilterParameterized(vendedorCodes, 'L', 'CODIGOVENDEDOR');
-        const safeLimit = parseInt(limit, 10) || 20;
-
-        const sql = `
-      SELECT L.CODIGOARTICULO as code,
-  COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION), 'Producto ' || TRIM(L.CODIGOARTICULO)) as name,
-  A.CODIGOMARCA as brand,
-  A.CODIGOFAMILIA as family,
-  SUM(L.IMPORTEVENTA) as totalSales,
-  SUM(L.IMPORTEMARGENREAL) as totalMargin,
-  SUM(L.CANTIDADENVASES) as totalBoxes,
-  SUM(L.CANTIDADUNIDADES) as totalUnits,
-  COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) as numClients
-      FROM ${comercialErpTable('LINDTO')} L
-      LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      WHERE L.ANODOCUMENTO = ? ${vendorFilter.filter}
-      GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, A.CODIGOMARCA, A.CODIGOFAMILIA
-      ORDER BY totalSales DESC
-      FETCH FIRST ${safeLimit} ROWS ONLY
-    `;
-
-        const products = await cachedQuery(queryWithParams, sql, {
-            cacheKey: `analytics:top_products:${year}:${vendedorCodes}:${limit}`,
-            ttl: TTL.MEDIUM,
-        }, [year, ...vendorFilter.params]);
-
-        res.json({
-            year,
-            products: products.map(p => ({
-                code: p.CODE?.trim(),
-                name: p.NAME?.trim(),
-                brand: p.BRAND?.trim(),
-                family: p.FAMILY?.trim(),
-                totalSales: formatCurrency(p.TOTALSALES),
-                totalMargin: formatCurrency(p.TOTALMARGIN),
-                marginPercent: p.TOTALSALES > 0 ? Math.round((p.TOTALMARGIN / p.TOTALSALES) * 1000) / 10 : 0,
-                totalBoxes: parseInt(p.TOTALBOXES) || 0,
-                totalUnits: parseInt(p.TOTALUNITS) || 0,
-                numClients: parseInt(p.NUMCLIENTS) || 0
-            }))
-        });
+        res.json(await analyticsService.getTopProducts(
+            { vendedorCodes, limit, year: req.query.year },
+            { tables: analyticsTables() },
+        ));
     } catch (error) {
         logger.error(`Top Products error: ${error.message} `);
-        handleRouteError(error, res, 'Error obteniendo productos', 500, { code: 'ANALYTICS_TOP_PRODUCTS_ERROR' });
+        serviceError(res, error, 'Error obteniendo productos', 'ANALYTICS_TOP_PRODUCTS_ERROR');
     }
 });
 
@@ -299,67 +102,13 @@ router.get('/top-products', verifyToken, requireVendorQueryScope, async (req, re
 router.get('/margins', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes } = req.query;
-        const now = getCurrentDate();
-        const year = parseInt(req.query.year, 10) || now.getFullYear();
-        const vendorFilter = buildVendedorFilterParameterized(vendedorCodes, '', 'CODIGOVENDEDOR');
-        const vendorFilterAliased = buildVendedorFilterParameterized(vendedorCodes, 'L', 'CODIGOVENDEDOR');
-
-        const cacheKey = `analytics:margins:${year}:${vendedorCodes}`;
-
-        // Monthly margin evolution
-        const monthlySql = `
-      SELECT MESDOCUMENTO as month,
-  SUM(IMPORTEVENTA) as sales,
-  SUM(IMPORTEMARGENREAL) as margin
-      FROM ${comercialErpTable('LINDTO')}
-      WHERE ANODOCUMENTO = ? ${vendorFilter.filter}
-      GROUP BY MESDOCUMENTO
-      ORDER BY MESDOCUMENTO
-  `;
-
-        // Margin by product family
-        const familySql = `
-      SELECT COALESCE(A.CODIGOFAMILIA, 'SIN FAM') as family,
-  SUM(L.IMPORTEVENTA) as sales,
-  SUM(L.IMPORTEMARGENREAL) as margin
-      FROM ${comercialErpTable('LINDTO')} L
-      LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      WHERE L.ANODOCUMENTO = ? ${vendorFilterAliased.filter}
-      GROUP BY A.CODIGOFAMILIA
-      ORDER BY sales DESC
-      FETCH FIRST 10 ROWS ONLY
-    `;
-
-        const [monthlyMargins, familyMargins] = await Promise.all([
-            cachedQuery(queryWithParams, monthlySql, {
-                cacheKey: `${cacheKey}:monthly`,
-                ttl: TTL.MEDIUM,
-            }, [year, ...vendorFilter.params]),
-            cachedQuery(queryWithParams, familySql, {
-                cacheKey: `${cacheKey}:family`,
-                ttl: TTL.MEDIUM,
-            }, [year, ...vendorFilterAliased.params]),
-        ]);
-
-        res.json({
-            year,
-            monthlyMargins: monthlyMargins.map(m => ({
-                month: m.MONTH,
-                sales: formatCurrency(m.SALES),
-                margin: formatCurrency(m.MARGIN),
-                marginPercent: m.SALES > 0 ? Math.round((m.MARGIN / m.SALES) * 1000) / 10 : 0
-            })),
-            familyMargins: familyMargins.map(f => ({
-                family: f.FAMILY?.trim() || 'Sin familia',
-                sales: formatCurrency(f.SALES),
-                margin: formatCurrency(f.MARGIN),
-                marginPercent: f.SALES > 0 ? Math.round((f.MARGIN / f.SALES) * 1000) / 10 : 0
-            }))
-        });
-
+        res.json(await analyticsService.getMargins(
+            { vendedorCodes, year: req.query.year },
+            { tables: analyticsTables() },
+        ));
     } catch (error) {
         logger.error(`Margins error: ${error.message} `);
-        handleRouteError(error, res, 'Error obteniendo márgenes', 500, { code: 'ANALYTICS_MARGINS_ERROR' });
+        serviceError(res, error, 'Error obteniendo márgenes', 'ANALYTICS_MARGINS_ERROR');
     }
 });
 
@@ -376,7 +125,7 @@ router.get('/sales-history', verifyToken, requireVendorQueryScope, async (req, r
             startDate,
             endDate,
             limit = 100,
-            offset = 0
+            offset = 0,
         } = req.query;
 
         const rawVendor = String(vendedorCodes || '').trim();
@@ -404,144 +153,21 @@ router.get('/sales-history', verifyToken, requireVendorQueryScope, async (req, r
             });
         }
 
-        const vendorFilter = buildVendedorFilterParameterized(
-            requestedScope === 'ALL' ? 'ALL' : requestedScope.join(','),
-            'L',
-            'CODIGOVENDEDOR',
-        );
-        let whereClause = `WHERE 1=1 ${vendorFilter.filter}`;
-        const whereParams = [...vendorFilter.params];
-
-        // Filter by Client - safe interpolation
-        if (clientCode) {
-            const safeClientCode = clientCode.trim().replace(/[^a-zA-Z0-9]/g, '');
-            whereClause += ' AND L.CODIGOCLIENTEALBARAN = ?';
-            whereParams.push(safeClientCode);
-        }
-
-        // Filter by Product (Code or Description) or Batch/Reference - safe interpolation
-        if (productSearch) {
-            const safeTerm = sanitizeForSQL(productSearch.toUpperCase().trim()).replace(/[%_\\]/g, '');
-            whereClause += ' AND (UPPER(L.DESCRIPCION) LIKE ? OR L.CODIGOARTICULO LIKE ? OR CHAR(L.REFERENCIADOCUMENTO) LIKE ?)';
-            const searchPattern = `%${safeTerm}%`;
-            whereParams.push(searchPattern, searchPattern, searchPattern);
-        }
-
-        // Filter by Date Range (YYYY-MM-DD), sargable on ANO/MES/DIA.
-        if (startDate) {
-            const startBound = sargableDocumentDateBound('gte', startDate);
-            if (!startBound) {
-                return res.status(400).json({
-                    success: false,
-                    code: 'INVALID_DATE',
-                    error: 'startDate debe ser YYYY-MM-DD',
-                });
-            }
-            whereClause += ` AND ${startBound.sql}`;
-            whereParams.push(...startBound.params);
-        }
-
-        if (endDate) {
-            const endBound = sargableDocumentDateBound('lte', endDate);
-            if (!endBound) {
-                return res.status(400).json({
-                    success: false,
-                    code: 'INVALID_DATE',
-                    error: 'endDate debe ser YYYY-MM-DD',
-                });
-            }
-            whereClause += ` AND ${endBound.sql}`;
-            whereParams.push(...endBound.params);
-        } else {
-            whereClause += ' AND L.ANODOCUMENTO >= ?';
-            whereParams.push(MIN_YEAR);
-        }
-
-        // Construct query - FIX: JOIN with ART and ARTX to get subfamily/FI codes
-        // Previously missing JOINs caused FI3/FI4 subfamilies to appear as 'General'
-        const querySql = `
-      SELECT 
-        L.ANODOCUMENTO as year, 
-        L.MESDOCUMENTO as month, 
-        L.DIADOCUMENTO as day,
-        L.CODIGOCLIENTEALBARAN as clientCode,
-        L.CODIGOARTICULO as productCode,
-        L.DESCRIPCION as productName,
-        L.IMPORTEVENTA as total,
-        L.PRECIOVENTA as price,
-        L.CANTIDADUNIDADES as quantity,
-        L.CODIGOLOTE as lote,
-        L.REFERENCIADOCUMENTO as ref,
-        L.NUMERODOCUMENTO as invoice,
-        COALESCE(A.CODIGOFAMILIA, '') as family,
-        COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as subfamily,
-        COALESCE(TRIM(AX.FILTRO01), '') as fi1,
-        COALESCE(TRIM(AX.FILTRO02), '') as fi2,
-        COALESCE(TRIM(AX.FILTRO03), '') as fi3,
-        COALESCE(TRIM(AX.FILTRO04), '') as fi4,
-        COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as fi5
-      FROM ${comercialErpTable('LAC')} L
-      LEFT JOIN ${comercialErpTable('ART')} A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      LEFT JOIN ${comercialErpTable('ARTX')} AX ON L.CODIGOARTICULO = AX.CODIGOARTICULO
-      ${whereClause}
-      ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
-      OFFSET ${parseInt(offset)} ROWS
-      FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `;
-
-        // Hash the effective SQL, all binds and authenticated scope. Unlike a
-        // delimited key, this cannot confuse search/client values or pagination.
-        // No raw identity or search data is exposed in cache logs.
-        const cacheKey = `analytics:sales-history:v2:${createHash('sha256')
-            .update(JSON.stringify([
-                req.user?.id ?? req.user?.code ?? null,
-                req.user?.company ?? null,
-                req.user?.role ?? null,
-                req.user?.vendorCodes ?? [],
-                req.user?.vendedorCodes ?? [],
-                querySql,
-                whereParams,
-            ]))
-            .digest('hex')}`;
-        const rows = await cachedQuery(queryWithParams, querySql, {
-            cacheKey,
-            // 5-minute normal TTL; retain the helper's existing stale fallback.
-            ttl: TTL.SHORT,
-            queryType: 'sales-history',
-        }, whereParams);
-
-        // Format for frontend
-        const formattedRows = rows.map(r => ({
-            date: `${r.YEAR}-${String(r.MONTH).padStart(2, '0')}-${String(r.DAY).padStart(2, '0')}`,
-            year: r.YEAR,
-            month: r.MONTH,
-            clientCode: asTrimmedText(r.CLIENTCODE),
-            productCode: asTrimmedText(r.PRODUCTCODE),
-            productName: asTrimmedText(r.PRODUCTNAME),
-            price: formatCurrency(r.PRICE),
-            quantity: parseFloat(r.QUANTITY) || 0,
-            total: formatCurrency(r.TOTAL),
-            lote: asTrimmedText(r.LOTE),
-            ref: asTrimmedText(r.REF),
-            invoice: asTrimmedText(r.INVOICE),
-            family: asTrimmedText(r.FAMILY),
-            subfamily: asTrimmedText(r.SUBFAMILY) || 'General',
-            fi1: asTrimmedText(r.FI1),
-            fi2: asTrimmedText(r.FI2),
-            fi3: asTrimmedText(r.FI3),
-            fi4: asTrimmedText(r.FI4),
-            fi5: asTrimmedText(r.FI5)
-        }));
-
-        res.json({
-            rows: formattedRows,
-            count: formattedRows.length,
-            limit: parseInt(limit),
-            offset: parseInt(offset)
-        });
-
+        res.json(await analyticsService.getSalesHistory(
+            {
+                requestedScope,
+                clientCode,
+                productSearch,
+                startDate,
+                endDate,
+                limit,
+                offset,
+                user: req.user,
+            },
+            { tables: analyticsTables() },
+        ));
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo histórico de ventas', 500, { code: 'ANALYTICS_SALES_HISTORY_ERROR' });
+        serviceError(res, error, 'Error obteniendo histórico de ventas', 'ANALYTICS_SALES_HISTORY_ERROR');
     }
 });
 
@@ -552,159 +178,12 @@ router.get('/sales-history', verifyToken, requireVendorQueryScope, async (req, r
 router.get('/sales-history/summary', verifyToken, requireVendorQueryScope, async (req, res) => {
     try {
         const { vendedorCodes, clientCode, productSearch, startDate, endDate } = req.query;
-
-        // Build filters for LACLAE table
-        const LACLAE_FILTER = `L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC') AND L.LCCLLN IN ('AB', 'VT') AND L.LCSRAB NOT IN ('N', 'Z')`;
-
-        const vendorFilter = buildVendedorFilterParameterized(vendedorCodes, 'L', 'LCCDVD');
-
-        const extraParams = [];
-        const clientFilter = clientCode ? 'AND L.LCCDCL = ?' : '';
-        if (clientCode) extraParams.push(String(clientCode).trim());
-        const searchFilter = productSearch
-            ? 'AND (UPPER(L.LCDESC) LIKE UPPER(?) OR TRIM(L.LCCDRF) LIKE ?)'
-            : '';
-        if (productSearch) {
-            const like = `%${String(productSearch).trim()}%`;
-            extraParams.push(like, like);
-        }
-
-        // Helper to query LACLAE
-        const getStats = async (year) => {
-            const queryStr = `
-                SELECT 
-                    SUM(L.LCIMVT) as sales,
-                    SUM(L.LCIMVT - L.LCIMCT) as margin,
-                    SUM(L.LCCTUD) as units,
-                    COUNT(DISTINCT TRIM(L.LCCDRF)) as product_count
-                FROM ${comercialErpTable('LACLAE')} L
-                WHERE ${LACLAE_FILTER}
-                  AND L.LCAADC = ?
-                  ${vendorFilter.filter}
-                  ${clientFilter}
-                  ${searchFilter}
-            `;
-            const result = await queryWithParams(queryStr, [year, ...vendorFilter.params, ...extraParams]);
-            return result[0] || {};
-        };
-
-        // Helper for Year Breakdown
-        const getYearBreakdown = async (startYear, endYear) => {
-            const queryStr = `
-                SELECT 
-                    L.LCAADC as year,
-                    SUM(L.LCIMVT) as sales,
-                    SUM(L.LCIMVT - L.LCIMCT) as margin,
-                    SUM(L.LCCTUD) as units
-                FROM ${comercialErpTable('LACLAE')} L
-                WHERE ${LACLAE_FILTER}
-                  AND L.LCAADC BETWEEN ? AND ?
-                  ${vendorFilter.filter}
-                  ${clientFilter}
-                  ${searchFilter}
-                GROUP BY L.LCAADC
-                ORDER BY L.LCAADC DESC
-            `;
-            return await queryWithParams(queryStr, [startYear, endYear, ...vendorFilter.params, ...extraParams]);
-        };
-
-        // Helper for Monthly Breakdown (Current vs Last Year)
-        const getMonthlyBreakdown = async (year, prevYear) => {
-            // Get Monthly data for BOTH years
-            const queryStr = `
-                SELECT 
-                    L.LCAADC as year,
-                    L.LCMMDC as month,
-                    SUM(L.LCIMVT) as sales
-                FROM ${comercialErpTable('LACLAE')} L
-                WHERE ${LACLAE_FILTER}
-                  AND L.LCAADC IN (?, ?)
-                  ${vendorFilter.filter}
-                  ${clientFilter}
-                  ${searchFilter}
-                GROUP BY L.LCAADC, L.LCMMDC
-                ORDER BY L.LCMMDC
-            `;
-            const rows = await queryWithParams(queryStr, [year, prevYear, ...vendorFilter.params, ...extraParams]);
-
-            // Merge rows into Month objects
-            const months = {};
-            for (let i = 1; i <= 12; i++) months[i] = { month: i, current: 0, previous: 0 };
-
-            rows.forEach(r => {
-                const m = r.MONTH;
-                if (!months[m]) return;
-                if (r.YEAR === year) months[m].current = parseFloat(r.SALES || 0);
-                if (r.YEAR === prevYear) months[m].previous = parseFloat(r.SALES || 0);
-            });
-
-            return Object.values(months);
-        };
-
-        // --- Determine years ---
-        const now = new Date();
-        const currentYear = startDate ? parseInt(startDate.substring(0, 4)) : now.getFullYear();
-        const previousYear = currentYear - 1;
-
-        // Execute parallel queries
-        const [curr, prev, breakdown, monthlyBreakdown] = await Promise.all([
-            getStats(currentYear),
-            getStats(previousYear),
-            getYearBreakdown(previousYear, currentYear),
-            getMonthlyBreakdown(currentYear, previousYear)
-        ]);
-
-        const currSales = parseFloat(curr.SALES || 0);
-        const prevSales = parseFloat(prev.SALES || 0);
-        const currMarginAbs = parseFloat(curr.MARGIN || 0);
-        const prevMarginAbs = parseFloat(prev.MARGIN || 0);
-        const currUnits = parseFloat(curr.UNITS || 0);
-        const prevUnits = parseFloat(prev.UNITS || 0);
-        const currProducts = parseInt(curr.PRODUCT_COUNT || 0);
-        const prevProducts = parseInt(prev.PRODUCT_COUNT || 0);
-
-        // Calculate margin as percentage: (margin / sales) * 100
-        const currMargin = currSales > 0 ? (currMarginAbs / currSales) * 100 : 0;
-        const prevMargin = prevSales > 0 ? (prevMarginAbs / prevSales) * 100 : 0;
-
-        // Determine if client is NEW (no sales in entire previous year)
-        const isNewClient = prevSales < 0.01 && currSales > 0;
-
-        const calcGrowth = (c, p) => (p && p !== 0) ? ((c - p) / p) * 100 : (c > 0 ? 100 : 0);
-
-        res.json({
-            isNewClient,
-            current: {
-                sales: currSales,
-                margin: currMargin,
-                units: currUnits,
-                productCount: currProducts,
-                label: `${currentYear}`
-            },
-            previous: {
-                sales: prevSales,
-                margin: prevMargin,
-                units: prevUnits,
-                productCount: prevProducts,
-                label: `${previousYear}`
-            },
-            growth: {
-                sales: calcGrowth(currSales, prevSales),
-                margin: currMargin - prevMargin, // Difference in percentage points
-                units: calcGrowth(currUnits, prevUnits),
-                productCount: calcGrowth(currProducts, prevProducts)
-            },
-            breakdown: breakdown.map(b => ({
-                year: b.YEAR,
-                sales: parseFloat(b.SALES || 0),
-                margin: parseFloat(b.MARGIN || 0),
-                units: parseFloat(b.UNITS || 0)
-            })),
-            monthlyBreakdown: monthlyBreakdown // array of { month, current, previous }
-        });
-
+        res.json(await analyticsService.getSalesHistorySummary(
+            { vendedorCodes, clientCode, productSearch, startDate, endDate },
+            { tables: analyticsTables() },
+        ));
     } catch (error) {
-        handleRouteError(error, res, 'Error calculating summary', 500, { code: 'ANALYTICS_SALES_SUMMARY_ERROR' });
+        serviceError(res, error, 'Error calculating summary', 'ANALYTICS_SALES_SUMMARY_ERROR');
     }
 });
 
