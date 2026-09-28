@@ -8,6 +8,12 @@ describe('objectives by-client route contracts', () => {
     path.join(__dirname, '..', 'routes', 'objectives.js'),
     'utf8',
   );
+  // Tanda 2 (DIP): queries y construccion del payload en service+repo;
+  // la ruta conserva auth, cotas, breaker, cache y fill-lock.
+  const serviceSource = fs.readFileSync(
+    path.join(__dirname, '..', 'services', 'objectives-service.js'),
+    'utf8',
+  );
 
   test('commercial objectives helper routes require authentication', () => {
     expect(source).toMatch(/router\.get\('\/populations',\s*verifyToken,/);
@@ -22,15 +28,16 @@ describe('objectives by-client route contracts', () => {
   });
 
   test('by-client omits full-year LCMMDC IN so the year predicate stays sargable', () => {
-    expect(source).toContain('buildMonthFilterParameterized');
-    expect(source).toContain('monthPred.filter');
+    expect(serviceSource).toContain('buildMonthFilterParameterized');
+    expect(serviceSource).toContain('monthPred.filter');
   });
 
   test('by-client avoids giant DB2 IN clauses and batches per-client lookups', () => {
-    expect(source).toContain('BY_CLIENT_MAX_CLIENT_CODE_IN_PARAMS');
-    expect(source).toContain('using vendor-filter SQL instead of giant IN clause');
-    expect(source).toContain('BY_CLIENT_CODE_BATCH_SIZE');
-    expect(source).toContain('mapChunksWithConcurrency');
+    expect(serviceSource).toContain('BY_CLIENT_MAX_CLIENT_CODE_IN_PARAMS');
+    expect(serviceSource).toContain('using vendor-filter SQL instead of giant IN clause');
+    expect(serviceSource).toContain('BY_CLIENT_CODE_BATCH_SIZE');
+    expect(serviceSource).toContain('mapChunksWithConcurrency');
+    expect(serviceSource).not.toContain('L.LCCDCL IN (${retrievedCodesParams.map(() =>');
     expect(source).not.toContain('L.LCCDCL IN (${retrievedCodesParams.map(() =>');
   });
 
@@ -47,9 +54,18 @@ describe('objectives by-client route contracts', () => {
   });
 
   test('populations and by-client read CLI via comercialErpTable, not DSEDAC.CLI', () => {
-    expect(source).toMatch(/comercialErpTable\('CLI'\)/);
+    // Tanda 2 (DIP): las lecturas CLI viven en repositories/objectives-repository.js.
+    const repoSource = fs.readFileSync(
+      path.join(__dirname, '..', 'repositories', 'objectives-repository.js'),
+      'utf8',
+    );
+    expect(repoSource).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(repoSource).not.toMatch(/FROM DSEDAC\.CLI/);
+    expect(repoSource).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
     expect(source).not.toMatch(/FROM DSEDAC\.CLI/);
     expect(source).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
+    expect(serviceSource).not.toMatch(/FROM DSEDAC\.CLI/);
+    expect(serviceSource).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
   });
 
   test('ALL evolution and by-client cannot read the snapshot-derived monthly rollup', () => {

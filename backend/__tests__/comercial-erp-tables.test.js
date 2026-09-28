@@ -115,7 +115,11 @@ describe('comercial ERP table mapping', () => {
     expect(ruteroRepo).toMatch(/comercialErpTable\('CLI'\)/);
     expect(ruteroRepo).not.toMatch(/FROM DSED\.LACLAE/);
     const objectives = fs.readFileSync(path.join(__dirname, '../routes/objectives.js'), 'utf8');
-    expect(objectives).toMatch(/comercialErpTable\('CLI'\)/);
+    // Tanda 2 (DIP): las lecturas CLI viven en repositories/objectives-repository.js.
+    const objectivesRepo = fs.readFileSync(path.join(__dirname, '../repositories/objectives-repository.js'), 'utf8');
+    expect(objectivesRepo).toMatch(/comercialErpTable\('CLI'\)/);
+    expect(objectivesRepo).not.toMatch(/FROM DSEDAC\.CLI/);
+    expect(objectivesRepo).not.toMatch(/LEFT JOIN DSEDAC\.CLI/);
     expect(objectives).toMatch(/comercialErpTable\('LACLAE'\)/);
     expect(objectives).toMatch(/overlayOpenMonthFromLiveLaclae/);
     expect(objectives).toMatch(/isCacheBypassRequest/);

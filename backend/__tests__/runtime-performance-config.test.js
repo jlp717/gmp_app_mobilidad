@@ -114,28 +114,35 @@ describe('runtime performance configuration', () => {
   });
 
   test('commissions single-vendor uses client scope while batch query avoids CASE predicates', () => {
+    // Tanda 2 (DIP): el batch layer vive en services/commissions-service.js;
+    // la ruta solo valida/delega. Se protege lo mismo en la nueva ubicacion
+    // mas la delegacion en ruta.
+    const serviceSource = fs.readFileSync(path.join(backendRoot, 'services/commissions-service.js'), 'utf8');
     const source = fs.readFileSync(path.join(backendRoot, 'routes/commissions.js'), 'utf8');
-    const calculateVendorDataBlock = source.slice(
-      source.indexOf('async function calculateVendorData'),
-      source.indexOf('async function getCurrentPaymentSnapshot'),
+    const calculateVendorDataBlock = serviceSource.slice(
+      serviceSource.indexOf('async function calculateVendorData'),
+      serviceSource.indexOf('async function getCurrentPaymentSnapshot'),
     );
 
-    expect(source).toMatch(/fetchSingleVendorCommissionSalesRows/);
-    expect(source).toMatch(/salesFallbackPromise/);
-    expect(source).toMatch(/Normal commission\/objective views must use client scope/);
-    expect(source).not.toMatch(/SELECT S\.VENDOR_CODE/);
-    expect(source).not.toMatch(/TRIM\(\$\{vendorColExpr\}\) IN/);
-    expect(source).toMatch(/batchFetchVendorDataChunked/);
-    expect(source).toMatch(/COMMISSION_ALL_VENDOR_CHUNK_SIZE/);
-    expect(source).toMatch(/returning stale cached summary/);
-    expect(source).toMatch(/getCommissionSalesRowsFromClientCache/);
-    expect(source).toMatch(/getCommissionSalesRowsByClientScopeForVendors/);
-    expect(source).toMatch(/sales-by-client-scope:GROUP/);
-    expect(source).toMatch(/sales-by-client-scope/);
-    expect(source).toMatch(/previousMarDecVendorCol/);
+    expect(serviceSource).toMatch(/fetchSingleVendorCommissionSalesRows/);
+    expect(serviceSource).toMatch(/salesFallbackPromise/);
+    expect(serviceSource).toMatch(/Normal commission\/objective views must use client scope/);
+    expect(serviceSource).not.toMatch(/SELECT S\.VENDOR_CODE/);
+    expect(serviceSource).not.toMatch(/TRIM\(\$\{vendorColExpr\}\) IN/);
+    expect(serviceSource).toMatch(/batchFetchVendorDataChunked/);
+    expect(serviceSource).toMatch(/COMMISSION_ALL_VENDOR_CHUNK_SIZE/);
+    expect(serviceSource).toMatch(/getCommissionSalesRowsFromClientCache/);
+    expect(serviceSource).toMatch(/getCommissionSalesRowsByClientScopeForVendors/);
+    expect(serviceSource).toMatch(/sales-by-client-scope:GROUP/);
+    expect(serviceSource).toMatch(/sales-by-client-scope/);
+    expect(serviceSource).toMatch(/previousMarDecVendorCol/);
     expect(calculateVendorDataBlock).toMatch(/const safeVendorCodes = getCodeVariants\(vendedorCode\)/);
     expect(calculateVendorDataBlock).toMatch(/usedClientScopeSalesRows/);
     expect(calculateVendorDataBlock).not.toMatch(/buildCommissionVendorFilter\(vendedorCode, safeYear, 'L'\)/);
+    // La ruta delega y conserva el fallback a cache stale.
+    expect(source).toMatch(/batchFetchVendorDataChunked/);
+    expect(source).toMatch(/calculateVendorData/);
+    expect(source).toMatch(/returning stale cached summary/);
   });
 
   test('DDD clients list paginates cached client codes before LACLAE enrichment', () => {
