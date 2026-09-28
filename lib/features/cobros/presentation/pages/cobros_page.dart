@@ -8,6 +8,8 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
+import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
+import 'package:gmp_app_mobilidad/core/widgets/offline_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
@@ -368,6 +370,15 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
     final cobros = ref.read(
       cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)),
     );
+    // Offline-first (patron pedidos): solo el slice de status para no
+    // reconstruir la pagina en cada emision del AsyncValue.
+    final connectivityStatus = ref.watch(
+      connectivityStatusProvider.select(
+        (async) => async.value ?? ConnectivityStatus.online,
+      ),
+    );
+    final isOfflineView =
+        connectivityStatus != ConnectivityStatus.online;
 
     return Scaffold(
       backgroundColor: AppColors.transparent,
@@ -383,11 +394,31 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                 isJefeVentas: widget.isJefeVentas,
                 forceShow: widget.forceShowVendorSelector,
               ),
+              // Offline-first (patron pedidos_page: OfflineBanner reactivo
+              // + estado vacio offline con reintento en espanol).
+              OfflineBanner(
+                onRetry: () {
+                  unawaited(_onRefresh());
+                },
+              ),
               // Loading state para pendingSummary
               if (_isLoadingSummary && cobros.pendingSummary.isEmpty)
                 const Expanded(
                   child: Center(
                     child: ModernLoading(message: 'Cargando cobros…'),
+                  ),
+                )
+              else if (isOfflineView &&
+                  cobros.pendingSummary.isEmpty &&
+                  _loadError == null)
+                Expanded(
+                  child: OfflineStateWidget(
+                    message: 'Sin conexión',
+                    detail:
+                        'No se pudieron cargar los cobros. Se mostrarán los últimos datos guardados al reconectar.',
+                    onRetry: () {
+                      unawaited(_onRefresh());
+                    },
                   ),
                 )
               else if (_loadError != null)
@@ -608,7 +639,12 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
             final selected = _estadoFilter == f.value;
             return Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: FilterChip(
+              child: Semantics(
+                label: 'Filtrar cobros por estado: ${f.label}',
+                button: true,
+                selected: selected,
+                enabled: true,
+                child: FilterChip(
                 avatar: Icon(
                   f.icon,
                   size: 16,
@@ -630,6 +666,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                       ? f.color.withValues(alpha: 0.6)
                       : AppColors.themedWhite.withValues(alpha: 0.1),
                 ),
+                ),
               ),
             );
           }).toList(),
@@ -647,35 +684,50 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
         runSpacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          OutlinedButton.icon(
-            onPressed: () => _pickSummaryDate(isDesde: true),
-            icon: const Icon(Icons.calendar_today, size: 16),
-            label: Text(
-              _summaryFechaDesde == null
-                  ? 'Vence desde'
-                  : DateFormat('dd/MM/yy').format(_summaryFechaDesde!),
+          Semantics(
+            label: 'Filtrar cobros por fecha de vencimiento desde',
+            button: true,
+            enabled: true,
+            child: OutlinedButton.icon(
+              onPressed: () => _pickSummaryDate(isDesde: true),
+              icon: const Icon(Icons.calendar_today, size: 16),
+              label: Text(
+                _summaryFechaDesde == null
+                    ? 'Vence desde'
+                    : DateFormat('dd/MM/yy').format(_summaryFechaDesde!),
+              ),
             ),
           ),
-          OutlinedButton.icon(
-            onPressed: () => _pickSummaryDate(isDesde: false),
-            icon: const Icon(Icons.event, size: 16),
-            label: Text(
-              _summaryFechaHasta == null
-                  ? 'Vence hasta'
-                  : DateFormat('dd/MM/yy').format(_summaryFechaHasta!),
+          Semantics(
+            label: 'Filtrar cobros por fecha de vencimiento hasta',
+            button: true,
+            enabled: true,
+            child: OutlinedButton.icon(
+              onPressed: () => _pickSummaryDate(isDesde: false),
+              icon: const Icon(Icons.event, size: 16),
+              label: Text(
+                _summaryFechaHasta == null
+                    ? 'Vence hasta'
+                    : DateFormat('dd/MM/yy').format(_summaryFechaHasta!),
+              ),
             ),
           ),
           if (hasPeriod)
-            TextButton.icon(
-              onPressed: () async {
-                setState(() {
-                  _summaryFechaDesde = null;
-                  _summaryFechaHasta = null;
-                });
-                await _loadPendingSummary(forceRefresh: true);
-              },
-              icon: const Icon(Icons.clear, size: 16),
-              label: const Text('Limpiar periodo'),
+            Semantics(
+              label: 'Limpiar periodo de vencimiento de cobros',
+              button: true,
+              enabled: true,
+              child: TextButton.icon(
+                onPressed: () async {
+                  setState(() {
+                    _summaryFechaDesde = null;
+                    _summaryFechaHasta = null;
+                  });
+                  await _loadPendingSummary(forceRefresh: true);
+                },
+                icon: const Icon(Icons.clear, size: 16),
+                label: const Text('Limpiar periodo'),
+              ),
             ),
         ],
       ),
@@ -740,10 +792,14 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          TextField(
-            controller: _searchController,
-            onChanged: _onSearchChanged,
-            style: TextStyle(color: AppColors.themedWhite),
+          Semantics(
+            label: 'Buscar cobros por nombre, código o NIF',
+            textField: true,
+            enabled: true,
+            child: TextField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              style: TextStyle(color: AppColors.themedWhite),
             decoration: InputDecoration(
               hintText: 'Buscar por nombre, código, NIF...',
               hintStyle: TextStyle(
@@ -781,6 +837,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                       ),
                     )
                   : null,
+            ),
             ),
           ),
           const SizedBox(height: 10),
@@ -857,21 +914,27 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
             ],
             if (isFiltering) ...[
               const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  _searchController.clear();
-                  setState(() {
-                    _estadoFilter = 'pendiente';
-                    _summaryFechaDesde = null;
-                    _summaryFechaHasta = null;
-                  });
-                  await _loadPendingSummary(forceRefresh: true);
-                },
-                icon: const Icon(Icons.clear_all, size: 16),
-                label: const Text('Limpiar filtros'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.info,
-                  side: BorderSide(color: AppTheme.info.withValues(alpha: 0.3)),
+              Semantics(
+                label: 'Limpiar filtros de cobros',
+                button: true,
+                enabled: true,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    _searchController.clear();
+                    setState(() {
+                      _estadoFilter = 'pendiente';
+                      _summaryFechaDesde = null;
+                      _summaryFechaHasta = null;
+                    });
+                    await _loadPendingSummary(forceRefresh: true);
+                  },
+                  icon: const Icon(Icons.clear_all, size: 16),
+                  label: const Text('Limpiar filtros'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.info,
+                    side:
+                        BorderSide(color: AppTheme.info.withValues(alpha: 0.3)),
+                  ),
                 ),
               ),
             ],

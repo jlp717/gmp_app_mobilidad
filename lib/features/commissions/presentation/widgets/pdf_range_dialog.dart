@@ -442,16 +442,21 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.clear,
-                        color: AppTheme.textSecondary,
-                        size: 18,
+                    Semantics(
+                      label: 'Limpiar selección de meses del informe',
+                      button: true,
+                      enabled: true,
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.clear,
+                          color: AppTheme.textSecondary,
+                          size: 18,
+                        ),
+                        onPressed: _clearAll,
+                        tooltip: 'Limpiar selección',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
-                      onPressed: _clearAll,
-                      tooltip: 'Limpiar selección',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
                     ),
                   ],
                 ),
@@ -492,14 +497,23 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
       ),
       actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       actions: [
-        TextButton(
-          onPressed: _isLoading ? null : () => Navigator.pop(context),
-          child: const Text(
-            'CANCELAR',
-            style: TextStyle(color: AppTheme.error, fontSize: 13),
+        Semantics(
+          label: 'Cancelar generación del informe PDF',
+          button: true,
+          enabled: !_isLoading,
+          child: TextButton(
+            onPressed: _isLoading ? null : () => Navigator.pop(context),
+            child: const Text(
+              'CANCELAR',
+              style: TextStyle(color: AppTheme.error, fontSize: 13),
+            ),
           ),
         ),
-        ElevatedButton(
+        Semantics(
+          label: 'Generar informe PDF de comisiones',
+          button: true,
+          enabled: !_isLoading,
+          child: ElevatedButton(
           onPressed: _isLoading ? null : _generatePdf,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.success,
@@ -523,6 +537,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                     fontSize: 13,
                   ),
                 ),
+          ),
         ),
       ],
     );
@@ -548,7 +563,11 @@ class _QuickActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return Semantics(
+      label: 'Seleccionar $label para el informe PDF',
+      button: true,
+      enabled: true,
+      child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
       child: Container(
@@ -566,6 +585,7 @@ class _QuickActionButton extends StatelessWidget {
             fontWeight: FontWeight.w500,
           ),
         ),
+      ),
       ),
     );
   }

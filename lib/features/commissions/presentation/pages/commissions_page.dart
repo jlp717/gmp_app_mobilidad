@@ -2304,7 +2304,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage>
                 if (canPay &&
                     !isAllMode &&
                     !((_data?['isExcluded'] as bool?) ?? false))
-                  IconButton(
+                  Semantics(
+                    label: 'Registrar pago de comisión del vendedor',
+                    button: true,
+                    enabled: true,
+                    child: IconButton(
                     icon: const Icon(
                       Icons.payment_rounded,
                       color: AppTheme.info,
@@ -2327,37 +2331,50 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage>
                       grandTotal,
                     ),
                     tooltip: 'Registrar Pago',
+                    ),
                   ),
                 if (isCommissionReportAuthorized) // ERP-authorized PDF report
-                  IconButton(
-                    icon: const Icon(
-                      Icons.picture_as_pdf_rounded,
-                      color: AppTheme.success,
-                      size: 28,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppTheme.success.withValues(alpha: 0.1),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                        side: BorderSide(
-                          color: AppTheme.success.withValues(alpha: 0.24),
+                  Semantics(
+                    label: 'Generar informe PDF de comisiones',
+                    button: true,
+                    enabled: true,
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.picture_as_pdf_rounded,
+                        color: AppTheme.success,
+                        size: 28,
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor:
+                            AppTheme.success.withValues(alpha: 0.1),
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                          side: BorderSide(
+                            color: AppTheme.success.withValues(alpha: 0.24),
+                          ),
                         ),
                       ),
-                    ),
-                    onPressed: showPdfDialog,
-                    tooltip: 'Generar Informe PDF',
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.info_outline, color: AppTheme.info),
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppTheme.softPanel,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      side: BorderSide(color: AppTheme.borderColor),
+                      onPressed: showPdfDialog,
+                      tooltip: 'Generar Informe PDF',
                     ),
                   ),
-                  onPressed: _showExplanationModal,
-                  tooltip: 'Explicación cálculo',
+                Semantics(
+                  label: 'Ver explicación del cálculo de comisiones',
+                  button: true,
+                  enabled: true,
+                  child: IconButton(
+                    icon: const Icon(Icons.info_outline, color: AppTheme.info),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.softPanel,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        side: BorderSide(color: AppTheme.borderColor),
+                      ),
+                    ),
+                    onPressed: _showExplanationModal,
+                    tooltip: 'Explicación cálculo',
+                  ),
                 ),
               ],
             ),
@@ -3387,9 +3404,15 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
       child: Column(
         children: [
           // HEADER (always visible) - tap to expand/collapse
-          InkWell(
-            onTap: () => setState(() => _isExpanded = !_isExpanded),
-            borderRadius: BorderRadius.circular(8),
+          Semantics(
+            label: _isExpanded
+                ? 'Contraer detalle del vendedor $vendorName'
+                : 'Ver detalle del vendedor $vendorName',
+            button: true,
+            enabled: true,
+            child: InkWell(
+              onTap: () => setState(() => _isExpanded = !_isExpanded),
+              borderRadius: BorderRadius.circular(8),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: _commissionSurfaceDecoration(
@@ -3516,17 +3539,23 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                     if (widget.canPay)
                       Padding(
                         padding: const EdgeInsets.only(left: 8),
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.payment_rounded,
-                            color: AppTheme.info,
-                            size: 22,
+                        child: Semantics(
+                          label:
+                              'Pagar comisión del vendedor $vendorCode',
+                          button: true,
+                          enabled: true,
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.payment_rounded,
+                              color: AppTheme.info,
+                              size: 22,
+                            ),
+                            onPressed: () =>
+                                widget.onPay?.call(vendorCode, vendorName),
+                            tooltip: 'Pagar',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
                           ),
-                          onPressed: () =>
-                              widget.onPay?.call(vendorCode, vendorName),
-                          tooltip: 'Pagar',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
                         ),
                       ),
                   ] else
@@ -3539,6 +3568,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                     ),
                 ],
               ),
+            ),
             ),
           ),
 
