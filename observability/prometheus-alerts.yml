@@ -1,0 +1,55 @@
+# GMP API — reglas de alerta Prometheus (sugeridas, conservadoras).
+# SLI latencia: p95 <= 500ms (auditoria) como warning, nunca critical.
+# Metricas usadas: SOLO las que expone backend/middleware/prometheus-metrics.js
+# via job gmp-api (/metrics) + `up` estandar de Prometheus:
+#   up, http_requests_total{method,path,status},
+#   http_request_duration_ms_bucket/sum/count, odbc_pool_utilization,
+#   odbc_pool_connections{state}. Nada inventado.
+# NOTA cableado: pendiente anadir `rule_files: ['prometheus-alerts.yml']`
+# en observability/prometheus.yml al desplegar (fuera de jaula de este lote).
+
+groups:
+  - name: gmp-api
+    interval: 15s
+    rules:
+      - alert: GmpApiDown
+        expr: up{job="gmp-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'API GMP caida'
+          description: 'El job gmp-api lleva 2 minutos con up==0. Revisar PM2 gmp-api en 192.168.1.230 y /api/ready.'
+
+      - alert: GmpApiP95LatenciaAlta
+        # Buckets en ms (durationBuckets*1000); umbral 500ms = SLI propuesto.
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_ms_bucket[5m]))) > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Latencia p95 sobre el SLI'
+          description: 'p95 > 500ms durante 5 minutos (SLI p95 <=500ms). Warning, no critical. Revisar endpoints lentos y DB2.'
+
+      - alert: GmpApiTasa5xxAlta
+        # Label status lo emite el middleware (method/path/status).
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Tasa 5xx sobre el 1%'
+          description: 'Mas del 1% de respuestas 5xx durante 5 minutos. Revisar logs del backend y errores DB2.'
+
+      - alert: OdbcPoolSaturado
+        # Solo se emite cuando el pool ODBC esta inicializado; sin serie no dispara.
+        expr: odbc_pool_utilization > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Pool ODBC DB2 saturado'
+          description: 'Utilizacion del pool ODBC >90% durante 5 minutos. Revisar carga DB2 y dimension del pool.'

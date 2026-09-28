@@ -7,6 +7,12 @@
  *
  * Fully guarded: if @opentelemetry/* is not installed or OTEL_ENABLED!=='true',
  * every export degrades to a no-op so the API never breaks on deploy day.
+ *
+ * ESTADO (lote observabilidad H38): tracing distribuido APLAZADO hasta
+ * desplegar el colector OTLP (stack observability/ aun no desplegado en
+ * .230). Instalar 2+ deps pesadas @opentelemetry/* sin colector = codigo
+ * muerto; cuando el colector exista, instalar deps + OTEL_ENABLED=true.
+ * Solo se toca este comentario; exports (withDbSpan, isStarted) intactos.
  */
 
 const ENABLED = process.env.OTEL_ENABLED === 'true';

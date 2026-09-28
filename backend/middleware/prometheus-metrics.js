@@ -337,6 +337,26 @@ function recordCacheAccess(hit, size = 0) {
 }
 
 /**
+ * Escape a Prometheus label value (text exposition format 0.0.4):
+ * backslash -> \\, double quote -> \", newline -> \n
+ */
+function escapeLabelValue(value) {
+    return String(value)
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n');
+}
+
+/**
+ * Format a labels object as Prometheus exposition: k="v",k="v"
+ */
+function formatPrometheusLabels(labels = {}) {
+    return Object.entries(labels)
+        .map(([k, v]) => `${k}="${escapeLabelValue(v)}"`)
+        .join(',');
+}
+
+/**
  * Get metrics in Prometheus format
  */
 function getPrometheusMetrics() {
@@ -361,8 +381,14 @@ function getPrometheusMetrics() {
     lines.push('# HELP http_requests_total Total HTTP requests');
     lines.push('# TYPE http_requests_total counter');
     for (const [key, value] of metrics.httpRequestsTotal) {
-        const labels = key.replace(/[{}]/g, '').replace(/"/g, '');
-        lines.push(`http_requests_total{${labels}} ${value}`);
+        const jsonPart = key.slice('http_requests_total'.length);
+        let labelsObj = {};
+        try {
+            labelsObj = JSON.parse(jsonPart);
+        } catch (_) {
+            labelsObj = {};
+        }
+        lines.push(`http_requests_total{${formatPrometheusLabels(labelsObj)}} ${value}`);
     }
 
     // HTTP request duration
@@ -495,7 +521,7 @@ function metricsHandler(req, res) {
     if (format === 'json') {
         res.json(getJsonMetrics());
     } else {
-        res.set('Content-Type', 'text/plain; charset=utf-8');
+        res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
         res.send(getPrometheusMetrics());
     }
 }

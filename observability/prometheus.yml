@@ -4,6 +4,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - 'prometheus-alerts.yml'
+
 scrape_configs:
   - job_name: gmp-api
     metrics_path: /metrics
