@@ -1,4 +1,4 @@
-# ADRs GMP — índice
+﻿# ADRs GMP — índice
 
 Esquema único `ADR-NNNN`, orden cronológico por fecha de creación (más antigua = 0001).
 Renumerado 2026-09-26 (auditoría Tier-1 P12): solo nombres + índice + links internos.
@@ -25,6 +25,17 @@ Contenido de decisiones intacto. H1 de cada fichero = número nuevo.
 | ADR-0017 | Caché TTL por dominio | 2026-09-25 | Aceptada | TTL por dominio; dinero sin caché HTTP; ETag barato. |
 | ADR-0018 | Evolution live sin rollup snapshot | 2026-09-25 | Aceptada | Evolución de objetivos en vivo; mes abierto no se congela a snapshot. |
 | ADR-0019 | Vendor-col LACLAE: objetivos vs comisiones | 2026-09-25 | Aceptada con deuda conocida | Objetivos = `R1_T8CDVD`, comisiones = `LCCDVD`. |
+| ADR-0020 | Dinero en centimos (Money int64) | 2026-09-28 | Aceptado | Money int64 aditivo, serializacion identica, swap incremental. |
+| ADR-0021 | Shape de error API canonico | 2026-09-28 | Aceptado | success-false-code-error-requestId, 5xx opacos. |
+| ADR-0022 | Sentry obligatorio en prod (fail-fast) | 2026-09-28 | Aceptado | Sin DSN el arranque falla a proposito. |
+| ADR-0023 | Runtime C5 CommonJS | 2026-09-28 | Aceptado | Solo CommonJS; src TS parcialmente zombie (22 borrados). |
+| ADR-0024 | Idempotency autodispose | 2026-09-28 | Aceptado | Tokens en store static fuera del notifier. |
+| ADR-0025 | Engines Node 20 (se mantiene) | 2026-09-28 | Aceptado | Prod v20.19.6; bump 24 con servidor. |
+| ADR-0026 | OTEL aplazado | 2026-09-28 | Aceptado | Sin colector no hay tracing; logs+requestId cubren. |
+| ADR-0027 | i18n YAGNI | 2026-09-28 | Aceptado | ES-only B2B, sin ARB. |
+| ADR-0028 | Batch N+1 rutero | 2026-09-28 | Aceptado | Chunks 100, rollback all-or-nothing. |
+| ADR-0029 | ESLint ratchet | 2026-09-28 | Aceptado | Strict regulada + legacy warn. |
+| ADR-0030 | Outbox claim variance | 2026-09-28 | Aceptado | Paridad con liquidacion. |
 
 \* Fecha de ADR-0011 = primer commit que la añade (contenido no leído por bloqueo de secretos).
 
