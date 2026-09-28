@@ -330,3 +330,8 @@ uploads/
 logs/
 skills/caveman-*
 # Nota dedup: *.log/.env/.idea/ solo en su primer bloque (no duplicar abajo).
+
+# Artefactos build locales (Tier-1 P11: entraron al historial en 0d0d806; el purge del historial requiere force-push coordinado con Javier, NO hacerlo solo)
+*.aab
+build-local-*/
+build-before-external-*/
