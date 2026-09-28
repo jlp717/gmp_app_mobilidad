@@ -1,9 +1,8 @@
 // catalog-aux.js — split verbatim de services/pedidos/index.js (lote 2026-09-28): rutero-confirmados, pricing de cliente y alias de compatibilidad.
 // Contenido movido tal cual, sin cambios de logica. index.js actua como fachada.
 const { queryWithParams } = require('../../config/db');
-const { db2AppTable } = require('../../utils/db2-schemas');
 const { comercialErpTable } = require('../../utils/comercial-erp-tables');
-const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
+const { PEDIDOS_CAB_TABLE } = require('./_shared');
 async function getConfirmedPedidosForRutero({ repartidorIds, day, month, year }) {
     const ids = [...new Set((repartidorIds || [])
         .map((id) => String(id || '').trim())

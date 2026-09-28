@@ -13,7 +13,7 @@ const {
     applyPctToAmount,
     isCobroPropio,
 } = require('./discounts');
-const { roundPrice, trimString, OrderStateError, MAX_ORDER_LINES, DB2_BULK_INSERT_CHUNK_SIZE, STOCK_RESERVE_BULK_INSERT_CHUNK_SIZE, ORDER_TRANSITIONS, numberValue, integerValue, truncate } = require('./_shared');
+const { roundPrice, trimString, OrderStateError, MAX_ORDER_LINES, DB2_BULK_INSERT_CHUNK_SIZE, STOCK_RESERVE_BULK_INSERT_CHUNK_SIZE, ORDER_TRANSITIONS, numberValue, integerValue, truncate, ERP_SCHEMA, PEDIDOS_CAB_TABLE, PEDIDOS_LIN_TABLE, PEDIDOS_SEQ_TABLE, PEDIDOS_STOCK_RESERVE_TABLE, DRAFT_STOCK_RESERVATION_HOURS, DRAFT_STOCK_RESERVATION_STATES_SQL, ACTIVE_STOCK_RESERVATION_CONDITION } = require('./_shared');
 const orderLifecycle = require('./order-lifecycle');
 const promotions = require('./promotions');
 const catalogAux = require('./catalog-aux');
@@ -32,14 +32,8 @@ const {
 } = require('../../utils/db2-identifiers');
 const {
     db2AppTable,
-    getDb2WriteSchema,
     assertMoneyFitsWriteSchema,
 } = require('../../utils/db2-schemas');
-const ERP_SCHEMA = getDb2WriteSchema();
-const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
-const PEDIDOS_LIN_TABLE = db2AppTable('PEDIDOS_LIN');
-const PEDIDOS_SEQ_TABLE = db2AppTable('PEDIDOS_SEQ');
-const PEDIDOS_STOCK_RESERVE_TABLE = db2AppTable('PEDIDOS_STOCK_RESERVE');
 const PRICING_CONFIG_SCHEMA = 'JAVIER';
 const BOLSA_PRODUCT_PRICE_TABLE = `${PRICING_CONFIG_SCHEMA}.BOLSA_PRODUCTO_PRECIO`;
 const { comercialErpTable } = require('../../utils/comercial-erp-tables');
@@ -51,21 +45,9 @@ const {
 const CLIENT_SPECIAL_PRICE_TABLE = comercialErpTable('PES');
 const CLIENT_UNIT_AMOUNT_PROMO_TABLE = comercialErpTable('PPU');
 // App stock reserves are JAVIER-only (G2: no DSEDAC DML literals in deployable services).
+// (SELECT_ORDER_VENDOR_FOR_AUTH_SQL era orphan sin uso aqui: single-source en ./_shared, consumida por order-states.)
 const DELETE_STOCK_RESERVE_BY_PEDIDO_SQL =
     `DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`;
-const DRAFT_STOCK_RESERVATION_HOURS = 24;
-const DRAFT_STOCK_RESERVATION_STATES_SQL = "'BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION', 'CONFIRMANDO'";
-const ACTIVE_STOCK_RESERVATION_CONDITION = `
-(
-    TRIM(C.ESTADO) = 'CONFIRMADO'
-    OR (
-        TRIM(C.ESTADO) IN (${DRAFT_STOCK_RESERVATION_STATES_SQL})
-        AND SR.CREATED_AT >= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS
-    )
-)`;
-const SELECT_ORDER_VENDOR_FOR_AUTH_SQL = ERP_SCHEMA === 'DSEDAC'
-    ? 'SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR, TRIM(CODIGOCLIENTEALBARAN) AS CODIGOCLIENTE FROM DSEDAC.PEDIDOS_CAB WHERE ID = ?'
-    : `SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR, TRIM(COALESCE(NULLIF(CODIGOCLIENTE, ''), CODIGOCLIENTEALBARAN)) AS CODIGOCLIENTE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`;
 const logger = require('../../middleware/logger');
 const { cachedQuery, invalidateOnMutation, patternFor } = require('../query-optimizer');
 const { redisCache, TTL, deleteCachePattern } = require('../redis-cache');

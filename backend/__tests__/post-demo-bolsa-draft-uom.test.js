@@ -134,7 +134,7 @@ describe('purgeExpiredDraftReservations export', () => {
     );
     expect(source).toMatch(/async function purgeExpiredDraftReservations/);
     expect(source).toMatch(/purgeExpiredDraftReservations,/);
-    expect(source).toMatch(/DRAFT_STOCK_RESERVATION_HOURS = 24/);
+    expect(require('../services/pedidos/_shared').DRAFT_STOCK_RESERVATION_HOURS).toBe(24);
   });
 });
 

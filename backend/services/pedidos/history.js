@@ -1,24 +1,11 @@
 // history.js — split verbatim de services/pedidos/index.js (lote 2026-09-28): pdf-datos, historiales de producto y busqueda con stock.
 // Contenido movido tal cual, sin cambios de logica. index.js actua como fachada.
 const { queryWithParams } = require('../../config/db');
-const { db2AppTable } = require('../../utils/db2-schemas');
 const { comercialErpTable } = require('../../utils/comercial-erp-tables');
 const logger = require('../../middleware/logger');
 const { cachedQuery } = require('../query-optimizer');
 const { TTL } = require('../redis-cache');
-const { truncate, roundPrice } = require('./_shared');
-const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
-const PEDIDOS_STOCK_RESERVE_TABLE = db2AppTable('PEDIDOS_STOCK_RESERVE');
-const DRAFT_STOCK_RESERVATION_HOURS = 24;
-const DRAFT_STOCK_RESERVATION_STATES_SQL = "'BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION', 'CONFIRMANDO'";
-const ACTIVE_STOCK_RESERVATION_CONDITION = `
-(
-    TRIM(C.ESTADO) = 'CONFIRMADO'
-    OR (
-        TRIM(C.ESTADO) IN (${DRAFT_STOCK_RESERVATION_STATES_SQL})
-        AND SR.CREATED_AT >= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS
-    )
-)`;
+const { truncate, roundPrice, PEDIDOS_CAB_TABLE, PEDIDOS_STOCK_RESERVE_TABLE, ACTIVE_STOCK_RESERVATION_CONDITION } = require('./_shared');
 async function generateOrderPdf(orderId) {
     const { getOrderDetail } = require('./index'); // puente split: def vive en index
     const detail = await getOrderDetail(orderId);
