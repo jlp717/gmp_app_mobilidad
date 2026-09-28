@@ -13,6 +13,8 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/dialogs/delete_l
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_line_tile.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_preview_sheet.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_helpers.dart'
+    as helpers;
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 double _resolveLineDiscountPct({
@@ -1610,8 +1612,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       return true;
     }
 
-    if (!isConfirmedOrderResultForProvider(result)) {
-      final status = orderConfirmationStatusForProvider(result);
+    if (!helpers.isConfirmedOrderResultForProvider(result)) {
+      final status = helpers.orderConfirmationStatusForProvider(result);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

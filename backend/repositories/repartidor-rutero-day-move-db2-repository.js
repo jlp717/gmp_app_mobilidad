@@ -7,6 +7,11 @@ const { resolveRepartoRuntime, TABLE_MAPPINGS } = require('../config/reparto-run
 const IDENTIFIER_RE = /^[A-Z][A-Z0-9_]*\.[A-Z][A-Z0-9_]*$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_DOCUMENTS_PER_MOVE = 100;
+// Tier-1 N+1 write fix: multi-row INSERT chunk size. 8 params/row
+// (CURRENT TIMESTAMP is not a param) -> 100 rows = 800 params,
+// well below ODBC/DB2 param limits, while collapsing up to 100
+// per-doc INSERT round-trips into 1 statement per chunk.
+const DAY_MOVE_INSERT_CHUNK_ROWS = 100;
 
 class RuteroDayMoveUnavailableError extends Error {
   constructor(code = 'RUTERO_DAY_MOVE_UNAVAILABLE', message = 'El cambio de día no está habilitado') {
@@ -269,24 +274,36 @@ async function moveDocuments({
         WHERE REPARTIDOR_ID = ? AND WEEK_START = ? AND DOCUMENT_ID IN (${idPlaceholders})`,
       [repartidorId, input.weekStart, ...ids],
     );
-    for (let index = 0; index < input.docs.length; index += 1) {
-      const doc = input.docs[index];
-      await execute(
-        `INSERT INTO ${tables.override}
+    // Batch multi-row INSERT: one statement per chunk of 100 rows.
+    // Txn + LOCK TABLEs above are conserved; any chunk failure rolls back
+    // the whole move, preserving the previous all-or-nothing semantics.
+    {
+      const author = String(updatedBy || '').trim().slice(0, 40) || null;
+      for (let index = 0; index < input.docs.length; index += DAY_MOVE_INSERT_CHUNK_ROWS) {
+        const slice = input.docs.slice(index, index + DAY_MOVE_INSERT_CHUNK_ROWS);
+        const placeholders = slice.map(() => '(?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP, ?)').join(', ');
+        const params = [];
+        for (let offset = 0; offset < slice.length; offset += 1) {
+          const doc = slice[offset];
+          params.push(
+            repartidorId,
+            input.weekStart,
+            doc.documentId,
+            sourceDate,
+            targetDate,
+            position + index + offset,
+            (previousVersions.get(doc.documentId) || 0) + 1,
+            author,
+          );
+        }
+        await execute(
+          `INSERT INTO ${tables.override}
           (REPARTIDOR_ID, WEEK_START, DOCUMENT_ID, SOURCE_DATE, TARGET_DATE,
            TARGET_POSITION, VERSION, UPDATED_AT, UPDATED_BY)
-         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP, ?)`,
-        [
-          repartidorId,
-          input.weekStart,
-          doc.documentId,
-          sourceDate,
-          targetDate,
-          position + index,
-          (previousVersions.get(doc.documentId) || 0) + 1,
-          String(updatedBy || '').trim().slice(0, 40) || null,
-        ],
-      );
+         VALUES ${placeholders}`,
+          params,
+        );
+      }
     }
     await execute(
       `INSERT INTO ${tables.requests}

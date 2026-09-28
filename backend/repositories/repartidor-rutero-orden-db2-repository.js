@@ -42,6 +42,11 @@ class RuteroOrderReadTimeoutError extends Error {
 }
 
 const ORDER_READ_TIMEOUT_MS = 8000;
+// Tier-1 N+1 write fix: multi-row INSERT chunk size. 6 params/row
+// (CURRENT TIMESTAMP is not a param) -> 100 rows = 600 params,
+// well below ODBC/DB2 param limits (~2000+), while collapsing ~50
+// round-trips (txn + LOCK TABLE conserved) into 1 statement per chunk.
+const RUTERO_ORDEN_INSERT_CHUNK_ROWS = 100;
 const ORDER_READ_SQL = 'SELECT DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY'
   + ' FROM %TABLE% WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ?'
   + ' ORDER BY ORDEN ASC, DOCUMENT_ID ASC WITH UR';
@@ -121,7 +126,21 @@ async function replaceOrder(repartidorId, fechaRuta, orden, updatedBy, baseRevis
     const before = await execute(`SELECT DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY FROM ${table} WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ? ORDER BY ORDEN ASC, DOCUMENT_ID ASC`, [repartidorId, fechaRuta]);
     if (revisionForRows(before) !== baseRevision) throw new RuteroOrderConflictError();
     await execute(`DELETE FROM ${table} WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ?`, [repartidorId, fechaRuta]);
-    for (const row of orden) await execute(`INSERT INTO ${table} (REPARTIDOR_ID, FECHA_RUTA, DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY) VALUES (?, ?, ?, ?, ?, CURRENT TIMESTAMP, ?)`, [repartidorId, fechaRuta, row.documentId, row.cliente, row.posicion, String(updatedBy || '').slice(0, 40) || null]);
+    // Batch multi-row INSERT: one statement per chunk of 100 rows.
+    // Txn + LOCK TABLE above are conserved; rollback on any chunk failure
+    // preserves the previous all-or-nothing semantics.
+    if (orden.length > 0) {
+      const author = String(updatedBy || '').slice(0, 40) || null;
+      for (let i = 0; i < orden.length; i += RUTERO_ORDEN_INSERT_CHUNK_ROWS) {
+        const slice = orden.slice(i, i + RUTERO_ORDEN_INSERT_CHUNK_ROWS);
+        const placeholders = slice.map(() => '(?, ?, ?, ?, ?, CURRENT TIMESTAMP, ?)').join(', ');
+        const params = [];
+        for (const row of slice) {
+          params.push(repartidorId, fechaRuta, row.documentId, row.cliente, row.posicion, author);
+        }
+        await execute(`INSERT INTO ${table} (REPARTIDOR_ID, FECHA_RUTA, DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY) VALUES ${placeholders}`, params);
+      }
+    }
     const saved = await execute(`SELECT DOCUMENT_ID, CLIENTE_CODIGO, ORDEN, UPDATED_AT, UPDATED_BY FROM ${table} WHERE REPARTIDOR_ID = ? AND FECHA_RUTA = ? ORDER BY ORDEN ASC, DOCUMENT_ID ASC`, [repartidorId, fechaRuta]);
     await connection.commit();
     return { orden: orderFromRows(saved), revision: revisionForRows(saved) };

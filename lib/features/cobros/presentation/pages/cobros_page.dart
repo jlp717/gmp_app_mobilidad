@@ -16,6 +16,74 @@ import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobro_detai
 import 'package:gmp_app_mobilidad/features/cobros/providers/cobros_provider.dart';
 import 'package:intl/intl.dart';
 
+/// Single source of truth for the visible cobros client list (merge ERP
+/// pendingSummary with the commercial's found clients + estado filter +
+/// sort by total desc). Shared by [_CobrosPageState] (legacy callers) and
+/// [_CobrosClientsSection] so filter logic never drifts between the two.
+List<Map<String, dynamic>> _filterCobrosVisible({
+  required Map<String, Map<String, dynamic>> pendingSummary,
+  required List<Map<String, dynamic>> foundClients,
+  required String searchQuery,
+  required String estadoFilter,
+}) {
+  if (searchQuery.isNotEmpty || pendingSummary.isEmpty) {
+    return foundClients;
+  }
+
+  // Merge foundClients con pendingSummary para tener nombres reales de CLI
+  // cuando un cliente tiene deuda ERP pero no esta en la lista del comercial.
+  final byCode = <String, Map<String, dynamic>>{};
+  for (final client in foundClients) {
+    final code =
+        (client['code'] ?? client['codigoCliente'] ?? client['codigo'] ?? '')
+            .toString()
+            .trim();
+    if (code.isNotEmpty) byCode[code] = client;
+  }
+
+  final entries = pendingSummary.entries.where((entry) {
+    final total = (entry.value['total'] as num?)?.toDouble() ?? 0;
+    final vencido = (entry.value['vencido'] as num?)?.toDouble() ?? 0;
+    final estado =
+        vencido > 0 ? 'vencido' : (total > 0 ? 'pendiente' : 'aldia');
+    switch (estadoFilter) {
+      case 'vencido':
+        return estado == 'vencido';
+      case 'pendiente':
+        return estado == 'pendiente' || estado == 'vencido';
+      case 'aldia':
+        return estado == 'aldia';
+      case 'todos':
+      default:
+        return true;
+    }
+  }).toList()
+    ..sort((a, b) {
+      final aTotal = (a.value['total'] as num?)?.toDouble() ?? 0;
+      final bTotal = (b.value['total'] as num?)?.toDouble() ?? 0;
+      return bTotal.compareTo(aTotal);
+    });
+
+  return entries.map((entry) {
+    final existing = byCode[entry.key] ?? const <String, dynamic>{};
+    // Prioridad de nombre: lista de clientes > nombre desde CLI (API) > fallback
+    final apiName = (entry.value['nombre'] as String?)?.trim();
+    final name = (existing['name'] ??
+            existing['nombre'] ??
+            existing['nombreCliente'] ??
+            apiName ??
+            'Cliente ${entry.key}')
+        .toString();
+    return {
+      ...existing,
+      'code': entry.key,
+      'name': name,
+      // Flag para saber si el cliente viene solo de CVC (no es cliente del comercial)
+      'fromErpDebt': existing.isEmpty && apiName != null,
+    };
+  }).toList();
+}
+
 class CobrosPage extends ConsumerStatefulWidget {
   const CobrosPage({
     required this.employeeCode,
@@ -288,7 +356,10 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    // Watch pendingSummary to trigger rebuilds only when pending data changes
+    // PERF: this page watches only the pendingSummary slice for the header
+    // summary. The heavy client list (filter + merge + sort + scroll) lives
+    // in _CobrosClientsSection with its own select() watch, so list updates
+    // no longer rebuild the whole 1126-line page scaffold.
     ref.watch(
       cobrosProvider(CobrosParams(employeeCode: widget.employeeCode))
           .select((s) => s.pendingSummary),
@@ -297,8 +368,6 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
     final cobros = ref.read(
       cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)),
     );
-    final visibleClients = _visibleClients(cobros);
-    final search = _searchController.text.trim();
 
     return Scaffold(
       backgroundColor: AppColors.transparent,
@@ -337,59 +406,16 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                 _buildSearchArea(),
                 _buildEstadoFilterChips(),
                 Expanded(
-                  child: visibleClients.isEmpty && !_isSearchingClients
-                      ? _buildNoClientsState(cobros, search)
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            final cols =
-                                Responsive.denseListCrossAxisCount(context);
-                            final gap = Responsive.denseListSpacing(context);
-                            final compact = Responsive.useCompactTiles(context);
-
-                            if (cols <= 1) {
-                              return ListView.builder(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: compact ? 10 : 16,
-                                ),
-                                // PERF: fixed extent + 1-screen cache for dense
-                                // landscape cobros without scroll layout thrash.
-                                itemExtent: compact ? 88 : 104,
-                                cacheExtent: MediaQuery.sizeOf(context).height,
-                                addAutomaticKeepAlives: false,
-                                itemCount: visibleClients.length,
-                                itemBuilder: (context, index) {
-                                  return _buildClientCobroCard(
-                                    visibleClients[index],
-                                    compact: compact,
-                                  );
-                                },
-                              );
-                            }
-
-                            return GridView.builder(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: gap + 4,
-                                vertical: 4,
-                              ),
-                              cacheExtent: MediaQuery.sizeOf(context).height,
-                              addAutomaticKeepAlives: false,
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: cols,
-                                mainAxisExtent: compact ? 88 : 104,
-                                mainAxisSpacing: gap,
-                                crossAxisSpacing: gap,
-                              ),
-                              itemCount: visibleClients.length,
-                              itemBuilder: (context, index) {
-                                return _buildClientCobroCard(
-                                  visibleClients[index],
-                                  compact: true,
-                                );
-                              },
-                            );
-                          },
-                        ),
+                  child: _CobrosClientsSection(
+                    params:
+                        CobrosParams(employeeCode: widget.employeeCode),
+                    foundClients: _foundClients,
+                    estadoFilter: _estadoFilter,
+                    searchQuery: _searchController.text.trim(),
+                    isSearching: _isSearchingClients,
+                    cardBuilder: _buildClientCobroCard,
+                    emptyBuilder: _buildNoClientsState,
+                  ),
                 ),
               ],
             ],
@@ -397,66 +423,6 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
         ),
       ),
     );
-  }
-
-  List<Map<String, dynamic>> _visibleClients(CobrosState cobros) {
-    final search = _searchController.text.trim();
-    if (search.isNotEmpty || cobros.pendingSummary.isEmpty) {
-      return _foundClients;
-    }
-
-    // Merge foundClients con pendingSummary para tener nombres reales de CLI
-    // cuando un cliente tiene deuda ERP pero no esta en la lista del comercial.
-    final byCode = <String, Map<String, dynamic>>{};
-    for (final client in _foundClients) {
-      final code =
-          (client['code'] ?? client['codigoCliente'] ?? client['codigo'] ?? '')
-              .toString()
-              .trim();
-      if (code.isNotEmpty) byCode[code] = client;
-    }
-
-    final entries = cobros.pendingSummary.entries.where((entry) {
-      final total = (entry.value['total'] as num?)?.toDouble() ?? 0;
-      final vencido = (entry.value['vencido'] as num?)?.toDouble() ?? 0;
-      final estado =
-          vencido > 0 ? 'vencido' : (total > 0 ? 'pendiente' : 'aldia');
-      switch (_estadoFilter) {
-        case 'vencido':
-          return estado == 'vencido';
-        case 'pendiente':
-          return estado == 'pendiente' || estado == 'vencido';
-        case 'aldia':
-          return estado == 'aldia';
-        case 'todos':
-        default:
-          return true;
-      }
-    }).toList()
-      ..sort((a, b) {
-        final aTotal = (a.value['total'] as num?)?.toDouble() ?? 0;
-        final bTotal = (b.value['total'] as num?)?.toDouble() ?? 0;
-        return bTotal.compareTo(aTotal);
-      });
-
-    return entries.map((entry) {
-      final existing = byCode[entry.key] ?? const <String, dynamic>{};
-      // Prioridad de nombre: lista de clientes > nombre desde CLI (API) > fallback
-      final apiName = (entry.value['nombre'] as String?)?.trim();
-      final name = (existing['name'] ??
-              existing['nombre'] ??
-              existing['nombreCliente'] ??
-              apiName ??
-              'Cliente ${entry.key}')
-          .toString();
-      return {
-        ...existing,
-        'code': entry.key,
-        'name': name,
-        // Flag para saber si el cliente viene solo de CVC (no es cliente del comercial)
-        'fromErpDebt': existing.isEmpty && apiName != null,
-      };
-    }).toList();
   }
 
   /// Card resumen agregada en la cabecera: total pendiente, total vencido,
@@ -1166,4 +1132,87 @@ class _FilterDef {
   final String label;
   final IconData icon;
   final Color color;
+}
+
+/// PERF: lista de clientes con su propio `select()` watch sobre
+/// `pendingSummary`. Aisla el filtrado/merge/sort y el scroll del rebuild
+/// de la pagina completa (header + summary + search + chips).
+class _CobrosClientsSection extends ConsumerWidget {
+  const _CobrosClientsSection({
+    required this.params,
+    required this.foundClients,
+    required this.estadoFilter,
+    required this.searchQuery,
+    required this.isSearching,
+    required this.cardBuilder,
+    required this.emptyBuilder,
+  });
+
+  final CobrosParams params;
+  final List<Map<String, dynamic>> foundClients;
+  final String estadoFilter;
+  final String searchQuery;
+  final bool isSearching;
+  final Widget Function(Map<String, dynamic> client, {required bool compact})
+      cardBuilder;
+  final Widget Function(CobrosState state, String query) emptyBuilder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pendingSummary = ref.watch(
+      cobrosProvider(params).select((s) => s.pendingSummary),
+    );
+    final visible = _filterCobrosVisible(
+      pendingSummary: pendingSummary,
+      foundClients: foundClients,
+      searchQuery: searchQuery,
+      estadoFilter: estadoFilter,
+    );
+    if (visible.isEmpty && !isSearching) {
+      return emptyBuilder(ref.read(cobrosProvider(params)), searchQuery);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cols = Responsive.denseListCrossAxisCount(context);
+        final gap = Responsive.denseListSpacing(context);
+        final compact = Responsive.useCompactTiles(context);
+
+        if (cols <= 1) {
+          return ListView.builder(
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 10 : 16,
+            ),
+            // PERF: fixed extent + 1-screen cache for dense
+            // landscape cobros without scroll layout thrash.
+            itemExtent: compact ? 88 : 104,
+            cacheExtent: MediaQuery.sizeOf(context).height,
+            addAutomaticKeepAlives: false,
+            itemCount: visible.length,
+            itemBuilder: (context, index) {
+              return cardBuilder(visible[index], compact: compact);
+            },
+          );
+        }
+
+        return GridView.builder(
+          padding: EdgeInsets.symmetric(
+            horizontal: gap + 4,
+            vertical: 4,
+          ),
+          cacheExtent: MediaQuery.sizeOf(context).height,
+          addAutomaticKeepAlives: false,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            mainAxisExtent: compact ? 88 : 104,
+            mainAxisSpacing: gap,
+            crossAxisSpacing: gap,
+          ),
+          itemCount: visible.length,
+          itemBuilder: (context, index) {
+            return cardBuilder(visible[index], compact: true);
+          },
+        );
+      },
+    );
+  }
 }

@@ -165,9 +165,15 @@ class _RepartidorLiquidacionDiariaPageState
     // The canonical ledger endpoint accepts one numeric repartidor only.
     // Aggregate manager summaries remain read-only and must not issue an
     // invalid structured-ledger request.
-    final asyncLedger = widget.repartidorId.contains(',')
+    // PERF: the page watches only the ledger CLOSED status (String? slice).
+    // The full ledger AsyncValue is owned by _LiquidacionLedgerSection so
+    // ledger loading/error/data transitions no longer rebuild the form.
+    final ledgerStatus = widget.repartidorId.contains(',')
         ? null
-        : ref.watch(repartidorLiquidacionLedgerProvider(ledgerArgs));
+        : ref.watch(
+            repartidorLiquidacionLedgerProvider(ledgerArgs)
+                .select((v) => v.valueOrNull?.status),
+          );
 
     return Scaffold(
       backgroundColor: AppColors.inkSurface,
@@ -182,7 +188,11 @@ class _RepartidorLiquidacionDiariaPageState
                   color: AppColors.info,
                 ),
               Expanded(
-                child: _buildForm(summary, asyncLedger, ledgerArgs),
+                child: _buildForm(
+                  summary,
+                  ledgerStatus,
+                  widget.repartidorId.contains(',') ? null : ledgerArgs,
+                ),
               ),
             ],
           );
@@ -206,11 +216,11 @@ class _RepartidorLiquidacionDiariaPageState
 
   Widget _buildForm(
     RepartidorDailySummary summary,
-    AsyncValue<RepartidorLiquidacionLedger>? asyncLedger,
-    LiquidacionLedgerArgs ledgerArgs,
+    String? ledgerStatus,
+    LiquidacionLedgerArgs? ledgerArgs,
   ) {
-    final isAggregate = widget.repartidorId.contains(',');
-    final ledgerClosed = asyncLedger?.valueOrNull?.status == 'CLOSED';
+    final isAggregate = ledgerArgs == null;
+    final ledgerClosed = ledgerStatus == 'CLOSED';
     _rememberLedgerClosed(ledgerClosed);
     final closed =
         _closedResult != null || ledgerClosed || _knownClosedFromLedger;
@@ -239,7 +249,7 @@ class _RepartidorLiquidacionDiariaPageState
       onBack: Navigator.of(context).canPop()
           ? () => Navigator.of(context).pop()
           : null,
-      onSave: () => _save(summary, asyncLedger?.valueOrNull),
+      onSave: () => _save(summary, ledgerClosed),
       onExpense: () => unawaited(_showEntryDialog(_EntryKind.expense)),
       onBankDeposit: () => unawaited(_showEntryDialog(_EntryKind.bankDeposit)),
       onAdjustment: () => unawaited(_showEntryDialog(_EntryKind.adjustment)),
@@ -273,31 +283,9 @@ class _RepartidorLiquidacionDiariaPageState
               ),
               useErpTable: true,
             ),
-      ledgerPanel: asyncLedger?.when(
-        data: (ledger) => _LiquidacionLedgerPanel(
-          ledger: AsyncValue.data(ledger),
-          onRetry: () => ref.invalidate(
-            repartidorLiquidacionLedgerProvider(ledgerArgs),
-          ),
-        ),
-        loading: () => const RepartidorExecutivePanel(
-          accentColor: AppColors.info,
-          child: Padding(
-            padding: EdgeInsets.all(12),
-            child: LinearProgressIndicator(color: AppColors.info),
-          ),
-        ),
-        error: (error, _) => RepartidorExecutivePanel(
-          accentColor: AppColors.error,
-          child: Text(
-            financeErrorMessage(
-              error,
-              'No se pudo cargar el desglose de liquidación.',
-            ),
-            style: const TextStyle(color: AppColors.error),
-          ),
-        ),
-      ),
+      ledgerPanel: ledgerArgs == null
+          ? null
+          : _LiquidacionLedgerSection(ledgerArgs: ledgerArgs),
     );
   }
 
@@ -516,12 +504,12 @@ class _RepartidorLiquidacionDiariaPageState
 
   Future<void> _save(
     RepartidorDailySummary summary,
-    RepartidorLiquidacionLedger? ledger,
+    bool ledgerClosed,
   ) async {
     if (_saving) return;
     // Presence, not cash/balance: card payments also belong to the period.
     // A known closed day may still need to retrieve its immutable replay.
-    final recoveringClose = ledger?.status == 'CLOSED';
+    final recoveringClose = ledgerClosed;
     if (!recoveringClose &&
         summary.cobros.isEmpty &&
         summary.cobrosCount <= 0) {
@@ -612,7 +600,7 @@ class _RepartidorLiquidacionDiariaPageState
           error,
           'No se pudo cerrar la liquidacion. Puedes reintentar.',
         ),
-        onRetry: () => _save(summary, ledger),
+        onRetry: () => _save(summary, recoveringClose),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -957,6 +945,45 @@ class _LiquidacionEntryDialogState extends State<_LiquidacionEntryDialog> {
           ),
         ],
       );
+}
+
+/// PERF: ledger panel with its own full-family watch. Ledger
+/// loading/error/data transitions rebuild only this section, not the
+/// whole liquidation form owned by the page's summary watch.
+class _LiquidacionLedgerSection extends ConsumerWidget {
+  const _LiquidacionLedgerSection({required this.ledgerArgs});
+  final LiquidacionLedgerArgs ledgerArgs;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncLedger =
+        ref.watch(repartidorLiquidacionLedgerProvider(ledgerArgs));
+    return asyncLedger.when(
+      data: (ledger) => _LiquidacionLedgerPanel(
+        ledger: AsyncValue.data(ledger),
+        onRetry: () => ref.invalidate(
+          repartidorLiquidacionLedgerProvider(ledgerArgs),
+        ),
+      ),
+      loading: () => const RepartidorExecutivePanel(
+        accentColor: AppColors.info,
+        child: Padding(
+          padding: EdgeInsets.all(12),
+          child: LinearProgressIndicator(color: AppColors.info),
+        ),
+      ),
+      error: (error, _) => RepartidorExecutivePanel(
+        accentColor: AppColors.error,
+        child: Text(
+          financeErrorMessage(
+            error,
+            'No se pudo cargar el desglose de liquidación.',
+          ),
+          style: const TextStyle(color: AppColors.error),
+        ),
+      ),
+    );
+  }
 }
 
 class _LiquidacionLedgerPanel extends StatelessWidget {

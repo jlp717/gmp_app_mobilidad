@@ -15,6 +15,8 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_helpers.dart'
+    as helpers;
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 
 typedef OrderPreviewConfirm = Future<dynamic> Function(
@@ -1682,8 +1684,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       );
       if (!mounted) return;
       final resultMap = result is Map<String, dynamic> ? result : null;
-      final isRealSuccess =
-          resultMap != null && isConfirmedOrderResultForProvider(resultMap);
+      final isRealSuccess = resultMap != null &&
+          helpers.isConfirmedOrderResultForProvider(resultMap);
       final isPendingSync = resultMap != null &&
           (resultMap['pendingConfirmation'] == true ||
               resultMap['queued'] == true);
@@ -1716,7 +1718,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       } else if (resultMap != null) {
         // Resultado bloqueado por stock o no confirmado: NO mostrar éxito
         // ni cerrar el diálogo (el flujo de alternativas se abre encima).
-        final status = orderConfirmationStatusForProvider(resultMap);
+        final status = helpers.orderConfirmationStatusForProvider(resultMap);
         final message = resultMap['message']?.toString().trim();
         setState(() {
           _isConfirming = false;

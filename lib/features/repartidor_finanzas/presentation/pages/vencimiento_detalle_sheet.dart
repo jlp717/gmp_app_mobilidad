@@ -4,6 +4,7 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repar
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/vencimientos_page.dart';
+import 'package:intl/intl.dart';
 
 class VencimientoDetalleSheet extends StatefulWidget {
   const VencimientoDetalleSheet({
@@ -264,5 +265,101 @@ class _VencimientoDetalleSheetState extends State<VencimientoDetalleSheet> {
   double _asDouble(Object? value) {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+}
+
+// ── Reimplante mínimo: helpers que el sheet consumía y fueron eliminados ──
+// Espejan vencimientos_page.dart (_statusColor/_statusLabel/_formatDueDate/
+// _money + _DocumentTypePill/_StatusPill). Mismo estilo, sin cambio de UI.
+
+/// Etiqueta de cobro en mayúsculas (el sheet compara 'COBRADO'/'VENCIDO').
+String collectionStatusLabel(VencimientoItem item) {
+  return switch (item.estado) {
+    VencimientoEstado.vencido => 'VENCIDO',
+    VencimientoEstado.hoy => 'HOY',
+    VencimientoEstado.proximo => 'PRÓXIMO',
+    VencimientoEstado.sinFecha => 'SIN FECHA VÁLIDA',
+    VencimientoEstado.cobrado => 'COBRADO',
+  };
+}
+
+/// Color por estado de vencimiento (espejo de `_statusColor`).
+Color vencimientoStatusColor(VencimientoEstado estado) {
+  return switch (estado) {
+    VencimientoEstado.vencido => AppTheme.error,
+    VencimientoEstado.hoy => AppTheme.warning,
+    VencimientoEstado.proximo => AppTheme.info,
+    VencimientoEstado.sinFecha => AppTheme.textTertiary,
+    VencimientoEstado.cobrado => AppTheme.success,
+  };
+}
+
+/// Fecha de vencimiento dd/MM/yyyy (espejo de `_formatDueDate`).
+String formatVencimientoDueDate(DateTime? value) {
+  return value == null
+      ? 'Sin fecha válida'
+      : DateFormat('dd/MM/yyyy').format(value);
+}
+
+/// Importe con coma decimal y símbolo € (espejo de `_money`).
+String formatVencimientoMoney(double value) {
+  final fixed = value.toStringAsFixed(2).replaceAll('.', ',');
+  return '$fixed €';
+}
+
+/// Pill de tipo de documento (espejo de `_DocumentTypePill`).
+class VencimientoTypePill extends StatelessWidget {
+  const VencimientoTypePill({super.key, required this.tipoDocumento});
+
+  final String tipoDocumento;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppTheme.info.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        documentTypeLabel(tipoDocumento),
+        style: const TextStyle(
+          color: AppTheme.info,
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+/// Pill de estado de cobro (espejo de `_StatusPill`).
+class VencimientoStatusPill extends StatelessWidget {
+  const VencimientoStatusPill({
+    super.key,
+    required this.label,
+    required this.color,
+  });
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
   }
 }

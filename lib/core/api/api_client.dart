@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
@@ -1447,6 +1448,7 @@ class _RetryInterceptor extends Interceptor {
   }
 
   Duration _retryDelayFor(DioException err) {
+    // Server directive wins whenever present (capped to avoid stampedes).
     final status = err.response?.statusCode;
     if (status == 502 || status == 503 || status == 504) {
       final retryAfter = err.response?.headers.value('retry-after');
@@ -1455,7 +1457,16 @@ class _RetryInterceptor extends Interceptor {
         return Duration(seconds: seconds > 30 ? 30 : seconds);
       }
     }
-    return _retryDelay;
+    // Exponential backoff with jitter: base 1s, factor 2, max 30s,
+    // jitter ±25%. Attempt index comes from the in-flight extra so the
+    // retry policy (_shouldRetry: what is retried) stays untouched.
+    final attempt = err.requestOptions.extra['retryCount'] as int? ?? 0;
+    final baseMs = _retryDelay.inMilliseconds;
+    final shifted = attempt.clamp(0, 5);
+    var delayMs = baseMs * (1 << shifted);
+    if (delayMs > 30000) delayMs = 30000;
+    final jitter = 0.75 + Random().nextDouble() * 0.5;
+    return Duration(milliseconds: (delayMs * jitter).round());
   }
 }
 

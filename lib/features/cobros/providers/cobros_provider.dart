@@ -306,8 +306,16 @@ class CobrosState {
 // Notifier (family by CobrosParams)
 // ============================================================
 
-class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
-  final Map<String, String> _pendingCobroIdempotencyTokens = {};
+class CobrosNotifier
+    extends AutoDisposeFamilyNotifier<CobrosState, CobrosParams> {
+  // Tokens fuera de la instancia: el notifier es autoDispose (ciclo 1) y el
+  // dispose limpiaba el mapa rompiendo idempotencia ante reintento/sheet
+  // reconstruido. Static sobrevive al dispose; la clave incluye actor+
+  // documento+importe+pago+modo+rol asi que no colisiona entre params.
+  // Sin leak: registrarCobro elimina la entrada en exito y en error no
+  // reintentable; solo se conserva ante timeout/5xx para reutilizar token.
+  static final Map<String, String> _pendingCobroIdempotencyTokens = {};
+  bool _disposed = false;
 
   /// Exposed for tests/diagnostics: number of in-flight idempotency tokens.
   int get pendingIdempotencyTokenCount =>
@@ -315,7 +323,9 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
 
   @override
   CobrosState build(CobrosParams arg) {
-    ref.onDispose(_pendingCobroIdempotencyTokens.clear);
+    ref.onDispose(() {
+      _disposed = true;
+    });
     return CobrosState(
       employeeCode: arg.employeeCode,
       isRepartidor: arg.isRepartidor,
@@ -381,7 +391,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
     // REQ-32: el perfil comercial sin modo reparto no llama a entregas
     // (el backend exige rol reparto, 403). Usa cobrosPendientesComercial.
     if (!state.isRepartidor) {
-      if (!ref.mounted) return;
+      if (_disposed) return;
       state = state.copyWith(
         error: 'Disponible solo en modo reparto. Usa tus cobros pendientes.',
       );
@@ -394,7 +404,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         cacheKey: 'entregas:pendientes:${state.employeeCode}:default',
         cacheTTL: const Duration(minutes: 2),
       );
-      if (!ref.mounted) return;
+      if (_disposed) return;
       if (response['success'] == true) {
         final items = (response['albaranes'] as List<dynamic>?)
                 ?.map((e) => Albaran.fromJson(e as Map<String, dynamic>))
@@ -407,10 +417,10 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         );
       }
     } catch (e) {
-      if (!ref.mounted) return;
+      if (_disposed) return;
       state = state.copyWith(error: 'Error de conexión: $e');
     } finally {
-      if (!ref.mounted) return;
+      if (_disposed) return;
       state = state.copyWith(isLoading: false);
     }
   }
@@ -418,7 +428,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
   Future<void> cargarDetalleAlbaran(int numeroAlbaran, int ejercicio) async {
     // REQ-32: comercial sin modo reparto no llama a entregas/albaran.
     if (!state.isRepartidor) {
-      if (!ref.mounted) return;
+      if (_disposed) return;
       state = state.copyWith(
         error: 'Disponible solo en modo reparto. Usa tus cobros pendientes.',
       );
@@ -431,7 +441,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         cacheKey: 'entregas:albaran:$numeroAlbaran:$ejercicio',
         cacheTTL: const Duration(minutes: 2),
       );
-      if (!ref.mounted) return;
+      if (_disposed) return;
       if (response['success'] == true && response['albaran'] != null) {
         state = state.copyWith(
           albaranActual:
@@ -439,10 +449,10 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         );
       }
     } catch (e) {
-      if (!ref.mounted) return;
+      if (_disposed) return;
       state = state.copyWith(error: 'Error cargando albarán: $e');
     } finally {
-      if (!ref.mounted) return;
+      if (_disposed) return;
       state = state.copyWith(isLoading: false);
     }
   }
@@ -455,7 +465,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
     double? latitud,
     double? longitud,
   }) async {
-    if (!ref.mounted) return false;
+    if (_disposed) return false;
     state = state.copyWith(
       error:
           'Endpoint retirado (410). Usa el flujo canónico de confirmación de entrega.',
@@ -464,7 +474,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
   }
 
   Future<bool> registrarFirma(String entregaId, String base64Firma) async {
-    if (!ref.mounted) return false;
+    if (_disposed) return false;
     state = state.copyWith(
       error:
           'Endpoint retirado (410). La firma se sube por el flujo canónico de evidencias.',
@@ -489,7 +499,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
     String albaranId, {
     String? observaciones,
   }) async {
-    if (!ref.mounted) return false;
+    if (_disposed) return false;
     state = state.copyWith(
       error:
           'Endpoint retirado (410). Completa la entrega desde el detalle canónico del rutero.',
@@ -508,7 +518,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
     String? fechaDesde,
     String? fechaHasta,
   }) async {
-    if (!ref.mounted) return;
+    if (_disposed) return;
     state = state.copyWith(isLoading: true, error: null);
     try {
       String baseEndpoint;
@@ -548,7 +558,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         forceRefresh: forceRefresh,
         allowStale: false,
       );
-      if (!ref.mounted) return;
+      if (_disposed) return;
       if (response['success'] == true) {
         final raw = response['summary'] as Map<String, dynamic>? ?? {};
         final summary =
@@ -601,10 +611,10 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         );
       }
     } catch (e) {
-      if (!ref.mounted) return;
+      if (_disposed) return;
       state = state.copyWith(error: 'Error de conexión: $e');
     } finally {
-      if (!ref.mounted) return;
+      if (_disposed) return;
       state = state.copyWith(isLoading: false);
     }
   }
@@ -617,7 +627,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
     String? vendedorCodes,
     bool forceRefresh = false,
   }) async {
-    if (!ref.mounted) return;
+    if (_disposed) return;
     state = state.copyWith(isLoading: true, error: null);
     try {
       final params = <String, String>{};
@@ -644,7 +654,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         forceRefresh: forceRefresh,
         allowStale: false,
       );
-      if (!ref.mounted) return;
+      if (_disposed) return;
       if (response['success'] == true) {
         final payload = response['pendientes'] is Map
             ? Map<String, dynamic>.from(response['pendientes'] as Map)
@@ -667,10 +677,10 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         );
       }
     } catch (e) {
-      if (!ref.mounted) return;
+      if (_disposed) return;
       state = state.copyWith(error: 'Error cargando cobros: $e');
     } finally {
-      if (!ref.mounted) return;
+      if (_disposed) return;
       state = state.copyWith(isLoading: false);
     }
   }
@@ -738,7 +748,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         forceRefresh: forceRefresh,
         maxStale: const Duration(minutes: 10),
       );
-      if (!ref.mounted) return;
+      if (_disposed) return;
       if (response['success'] == true) {
         final list = response['historico'] as List? ?? [];
         state = state.copyWith(
@@ -775,7 +785,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         forceRefresh: forceRefresh,
         allowStale: false,
       );
-      if (!ref.mounted) return;
+      if (_disposed) return;
       if (response['success'] == true && response['estadoCliente'] != null) {
         state = state.copyWith(
           estadoClienteActual: EstadoCliente.fromJson(
@@ -785,7 +795,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
       }
     } catch (e) {
       debugPrint('[CobrosProvider] verificarEstadoCliente error: $e');
-      if (!ref.mounted) return;
+      if (_disposed) return;
       state = state.copyWith(estadoClienteActual: null);
     }
   }
@@ -835,7 +845,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
     // Observaciones obligatorias solo si hay cobro real (importe > 0).
     // En crédito/sin cobro no se bloquea; nunca se envía notas:null.
     if (paymentObservations.isEmpty && importe > 0.004) {
-      if (!ref.mounted) return false;
+      if (_disposed) return false;
       state = state.copyWith(
         error: 'Indica las observaciones del cobro antes de confirmar',
       );
@@ -875,7 +885,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         'observaciones': paymentObservations,
         'idempotencyToken': idempotencyToken,
       });
-      if (!ref.mounted) return response['success'] == true;
+      if (_disposed) return response['success'] == true;
       if (response['success'] == true) {
         await CacheService.invalidateByPrefix(
           'cobros:pendientes:$codigoCliente',
@@ -888,7 +898,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
         await CacheService.invalidateByPrefix('repartidor:liquidacion');
         await CacheService.invalidateByPrefix('repartidor_finanzas');
         await CacheService.invalidateByPrefix('liquidacion');
-        if (!ref.mounted) return true;
+        if (_disposed) return true;
         // Emite al instante para que la liquidación suba sin esperar recarga.
         state = state.copyWith();
         if (reloadAfter) {
@@ -908,7 +918,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
       if (!_shouldKeepCobroRetryToken(e)) {
         _pendingCobroIdempotencyTokens.remove(attemptKey);
       }
-      if (!ref.mounted) return false;
+      if (_disposed) return false;
       state = state.copyWith(error: 'Error registrando cobro: $e');
       return false;
     }
@@ -934,7 +944,7 @@ class CobrosNotifier extends FamilyNotifier<CobrosState, CobrosParams> {
   }
 
   void limpiarDatos() {
-    if (!ref.mounted) return;
+    if (_disposed) return;
     state = CobrosState(
       employeeCode: state.employeeCode,
       isRepartidor: state.isRepartidor,

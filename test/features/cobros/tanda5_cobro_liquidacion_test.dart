@@ -80,7 +80,7 @@ void main() {
     var notifications = 0;
     container.listen<CobrosState>(
       cobrosProvider(params),
-      (_, _) => notifications++,
+      (_, __) => notifications++,
     );
 
     final ok = await notifier.registrarCobro(
@@ -108,7 +108,7 @@ void main() {
     var notifications = 0;
     container.listen<CobrosState>(
       cobrosProvider(params),
-      (_, _) => notifications++,
+      (_, __) => notifications++,
     );
 
     expect(await pay(notifier, 100), isTrue);

@@ -180,3 +180,31 @@ double ruteroMaxDeliverableQuantity(num ordered) {
   final cap = base * 10;
   return cap > 9999 ? 9999 : cap;
 }
+
+/// Driver-facing "qty + unit" label (e.g. '5,75 kg', '2 cajas', '1 ud').
+///
+/// Composes [formatRuteroQuantity] with [ruteroQuantityUnitLabel]: an empty
+/// [unit] with packed [bultos] reads as boxes; an empty unit with a
+/// fractional qty reads as kg (carne a peso); otherwise plain pieces with
+/// singular/plural ('1 ud' vs '3 uds', '1 caja' vs '2 cajas').
+String ruteroQuantityWithUnit({
+  required num quantity,
+  required String unit,
+  num? bultos,
+}) {
+  var label = ruteroQuantityUnitLabel(unit, quantity: quantity);
+  if (label.isEmpty) {
+    if ((bultos ?? 0).toDouble() > 0.0001) {
+      label = 'cajas';
+    } else {
+      label = quantity.toDouble().abs() == 1 ? 'ud' : 'uds';
+    }
+  } else if (quantity.toDouble().abs() == 1) {
+    if (label == 'uds') {
+      label = 'ud';
+    } else if (label == 'cajas') {
+      label = 'caja';
+    }
+  }
+  return '${formatRuteroQuantity(quantity)} $label';
+}

@@ -30,6 +30,12 @@ const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
 // Fallback a 60 para mocks legacy sin TTL.REALTIME. No tocar logica de dinero.
 const COBROS_MONEY_TTL = TTL.REALTIME || 60;
 
+// Tier-1 listados sin limite: safety cap para los portfolio scans de
+// getAppSideCobrosByDocForVendorScope (GROUP BY agregados, sin paginacion
+// por endpoint porque el grandTotal necesita la cartera completa).
+// N=50000 cubre carteras reales (decenas de miles de grupos max) e impide
+// un GROUP BY planetario sin filtro si el vendor scope llegase vacio.
+const APP_SIDE_PORTFOLIO_SAFETY_LIMIT = 50000;
 // CTR / contra-reembolso: cobro en manos del repartidor, no del comercial.
 const FORMAS_PAGO_REPARTIDOR = ['01', 'CO', 'CTR', 'EF'];
 
@@ -230,6 +236,7 @@ async function getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams) {
             vendorClause,
             ' )',
             ' GROUP BY TRIM(C.CODIGO_CLIENTE), TRIM(C.REFERENCIA)',
+            ` FETCH FIRST ${APP_SIDE_PORTFOLIO_SAFETY_LIMIT} ROWS ONLY`,
         ].join('\n');
         const appRows = await runQuery(comercialSql, vendorParams);
         for (const row of appRows || []) {
@@ -259,6 +266,7 @@ async function getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams) {
             vendorClause,
             ' )',
             ' GROUP BY TRIM(R.CODIGOCLIENTEALBARAN), TRIM(R.SERIEDOCUMENTO), TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))',
+            ` FETCH FIRST ${APP_SIDE_PORTFOLIO_SAFETY_LIMIT} ROWS ONLY`,
         ].join('\n');
         const repRows = await runQuery(repartidorSql, vendorParams);
         for (const row of repRows || []) {

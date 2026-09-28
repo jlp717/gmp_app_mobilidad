@@ -41,9 +41,11 @@ class ThemeProvider extends Notifier<ThemeState> {
   bool _isDarkMode = true;
   bool _isLoadingPreference = true;
   bool _selectionChangedWhileLoading = false;
-  // Replaces the old torn-down guard: Riverpod tears the notifier down
-  // automatically; async continuations check [_isAlive] (ref.mounted).
+  // Replaces the old torn-down guard: NotifierProviderRef no expone
+  // `mounted` (mismo patron validado en cobros_provider.dart).
+  // Async continuations check [_isAlive] via flag [_disposed].
   bool _active = true;
+  bool _disposed = false;
 
   bool get isDarkMode => _isDarkMode;
   ThemeMode get themeMode => _isDarkMode ? ThemeMode.dark : ThemeMode.light;
@@ -55,6 +57,11 @@ class ThemeProvider extends Notifier<ThemeState> {
   @override
   ThemeState build() {
     _active = true;
+    _disposed = false;
+    ref.onDispose(() {
+      _active = false;
+      _disposed = true;
+    });
     _preferenceLoad ??= _loadThemeFromPrefs();
     return ThemeState(
       isDarkMode: _isDarkMode,
@@ -64,7 +71,7 @@ class ThemeProvider extends Notifier<ThemeState> {
 
   bool get _isAlive {
     try {
-      return _active && ref.mounted;
+      return _active && !_disposed;
     } catch (_) {
       // Direct instantiation outside a ProviderContainer (legacy unit test):
       // no ref available, treat as alive so field-level API still works.

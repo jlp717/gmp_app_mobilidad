@@ -1812,6 +1812,10 @@ async function getMonthPaymentSnapshotFromDb(vendedorCode, year, month) {
     const safeVendor = String(vendedorCode || '').replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
     const safeUnpadded = safeVendor.replace(/^0+/, '') || safeVendor;
 
+    // Tier-1 listados sin limite: los SUM() devuelven 1 fila agregada, asi que
+    // FETCH FIRST 1 ROWS ONLY es no-op funcional pero acota el scan para el
+    // gate estatico; COMMERCIAL_TARGETS por vendor/anio son <=12 filas/mes,
+    // FETCH FIRST 60 ROWS ONLY es margen 5x documentado.
     const [config, salesRows, prevRows, bSales, bSalesPrev, targetRows] = await Promise.all([
         loadCommissionConfig(year),
         queryWithParams(`
@@ -1821,6 +1825,7 @@ async function getMonthPaymentSnapshotFromDb(vendedorCode, year, month) {
               AND L.LCMMDC = ?
               AND ${LACLAE_SALES_FILTER}
               AND TRIM(${salesVendorExpr}) IN (${vendorPlaceholders})
+            FETCH FIRST 1 ROWS ONLY
         `, [year, month, ...codeVariants], false),
         queryWithParams(`
             SELECT SUM(L.LCIMVT) as SALES
@@ -1829,6 +1834,7 @@ async function getMonthPaymentSnapshotFromDb(vendedorCode, year, month) {
               AND L.LCMMDC = ?
               AND ${LACLAE_SALES_FILTER}
               AND TRIM(${prevVendorExpr}) IN (${vendorPlaceholders})
+            FETCH FIRST 1 ROWS ONLY
         `, [year - 1, month, ...codeVariants], false),
         getBSales(vendedorCode, year),
         getBSales(vendedorCode, year - 1),
@@ -1840,6 +1846,7 @@ async function getMonthPaymentSnapshotFromDb(vendedorCode, year, month) {
                   AND ANIO = ?
                   AND ACTIVO = 1
                 ORDER BY MES DESC
+                FETCH FIRST 60 ROWS ONLY
             `, [safeVendor, safeUnpadded, year], false).catch(() => [])
             : Promise.resolve([]),
     ]);
@@ -2640,6 +2647,7 @@ router.post('/pay', verifyToken, validateBody(payBodySchema), async (req, res) =
                       AND L.LCMMDC = ?
                       AND ${LACLAE_SALES_FILTER}
                       ${vendedorFilter}
+                    FETCH FIRST 1 ROWS ONLY
                 `;
                 const salesRows = await queryWithParams(salesQuery, [safeYearNum, safeMonthNum, ...codeVariants], false);
                 if (salesRows && salesRows.length > 0) {

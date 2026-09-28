@@ -489,6 +489,10 @@ class PedidosNotifier extends Notifier<PedidosState> {
   int _ordersLoadGeneration = 0;
   int _clientBalanceLoadGeneration = 0;
   CancelToken? _productsCancelToken;
+  // Guard post-dispose (mismo patron validado en cobros_provider.dart):
+  // NotifierProviderRef no expone `mounted`; el flag se arma en build()
+  // y se marca en onDispose. Los async gaps chequean !_disposed.
+  bool _disposed = false;
 
   // Req #9 (port tramo 105-111): OrderApi inyectable para testabilidad.
   PedidosOrderApi _orderApi = const PedidosServiceOrderApi();
@@ -503,7 +507,9 @@ class PedidosNotifier extends Notifier<PedidosState> {
 
   @override
   PedidosState build() {
+    _disposed = false;
     ref.onDispose(() {
+      _disposed = true;
       _productsCancelToken?.cancel('pedidos notifier disposed');
     });
     return const PedidosState();
@@ -525,7 +531,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
   /// Equivalente al viejo `_notify`: agrupa cambios rápidos en un microtask.
   /// En Notifier, asignar `state` ya notifica; el debounce evita rebuilds.
   void _setState(PedidosState next, {bool immediate = false}) {
-    if (!ref.mounted) return;
+    if (_disposed) return;
     if (immediate) {
       _pendingState = null;
       _notifyScheduled = false;
@@ -537,7 +543,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
     _notifyScheduled = true;
     Future.microtask(() {
       _notifyScheduled = false;
-      if (!ref.mounted) return;
+      if (_disposed) return;
       final pending = _pendingState;
       _pendingState = null;
       if (pending != null) state = pending;
@@ -1936,7 +1942,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
     final effectiveForceRefresh = forceRefresh && canRefreshFromNetwork;
     if (effectiveForceRefresh) {
       await PedidosService.invalidateOrderCaches();
-      if (generation == _ordersLoadGeneration && ref.mounted) {
+      if (generation == _ordersLoadGeneration && !_disposed) {
         _setState(state.copyWith(orders: const []), immediate: true);
       }
     }
@@ -2012,7 +2018,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
     final effectiveForceRefresh = forceRefresh && canRefreshFromNetwork;
     if (effectiveForceRefresh) {
       await CacheService.invalidateByPrefix('pedidos:stats:');
-      if (ref.mounted) {
+      if (!_disposed) {
         _setState(
           state.copyWith(
             orderStats: OrderStats(
@@ -2284,7 +2290,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
 
     try {
       final balance = await PedidosService.getClientBalance(code);
-      if (!ref.mounted || generation != _clientBalanceLoadGeneration) return;
+      if (_disposed || generation != _clientBalanceLoadGeneration) return;
       if ((state.clientCode ?? '').trim() != code) return;
       _setState(
         state.copyWith(
@@ -2303,7 +2309,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
         immediate: true,
       );
     } catch (e) {
-      if (!ref.mounted || generation != _clientBalanceLoadGeneration) return;
+      if (_disposed || generation != _clientBalanceLoadGeneration) return;
       _setState(
         state.copyWith(
           clientBalance: const {},

@@ -7,7 +7,9 @@ void main() {
   late ProviderContainer container;
   late LoadPlannerProvider notifier;
 
-  LoadPlannerState get state => container.read(loadPlannerProvider);
+  // Getter local no permitido dentro de main(): funcion de lectura fresca.
+  // (API real: NotifierProvider<LoadPlannerProvider, LoadPlannerState>.)
+  LoadPlannerState readState() => container.read(loadPlannerProvider);
 
   setUp(() {
     container = ProviderContainer();
@@ -24,21 +26,21 @@ void main() {
 
   group('Initial state', () {
     test('has empty collections and defaults', () {
-      expect(state.placedBoxes, isEmpty);
-      expect(state.overflowBoxes, isEmpty);
-      expect(state.metrics, isNull);
-      expect(state.truck, isNull);
-      expect(state.viewMode, ViewMode.perspective);
-      expect(state.colorMode, ColorMode.product);
-      expect(state.selectedBoxIndex, isNull);
-      expect(state.dragState, isNull);
-      expect(state.isLoading, false);
-      expect(state.error, isNull);
-      expect(state.saveState, SaveState.saved);
-      expect(state.hasManualChanges, false);
-      expect(state.canUndo, false);
-      expect(state.canRedo, false);
-      expect(state.excludedOrders, isEmpty);
+      expect(readState().placedBoxes, isEmpty);
+      expect(readState().overflowBoxes, isEmpty);
+      expect(readState().metrics, isNull);
+      expect(readState().truck, isNull);
+      expect(readState().viewMode, ViewMode.perspective);
+      expect(readState().colorMode, ColorMode.product);
+      expect(readState().selectedBoxIndex, isNull);
+      expect(readState().dragState, isNull);
+      expect(readState().isLoading, false);
+      expect(readState().error, isNull);
+      expect(readState().saveState, SaveState.saved);
+      expect(readState().hasManualChanges, false);
+      expect(readState().canUndo, false);
+      expect(readState().canRedo, false);
+      expect(readState().excludedOrders, isEmpty);
     });
   });
 
@@ -55,7 +57,7 @@ void main() {
       );
       notifier.selectBox(3);
 
-      expect(state.selectedBoxIndex, 3);
+      expect(readState().selectedBoxIndex, 3);
       expect(notifyCount, 1);
     });
 
@@ -64,7 +66,7 @@ void main() {
         ..selectBox(5)
         ..selectBox(null);
 
-      expect(state.selectedBoxIndex, isNull);
+      expect(readState().selectedBoxIndex, isNull);
     });
 
     test('clearSelection clears selected index', () {
@@ -72,7 +74,7 @@ void main() {
         ..selectBox(2)
         ..clearSelection();
 
-      expect(state.selectedBoxIndex, isNull);
+      expect(readState().selectedBoxIndex, isNull);
     });
   });
 
@@ -89,13 +91,13 @@ void main() {
       );
       notifier.setViewMode(ViewMode.top);
 
-      expect(state.viewMode, ViewMode.top);
+      expect(readState().viewMode, ViewMode.top);
       expect(notifyCount, 1);
     });
 
     test('setViewMode to front', () {
       notifier.setViewMode(ViewMode.front);
-      expect(state.viewMode, ViewMode.front);
+      expect(readState().viewMode, ViewMode.front);
     });
   });
 
@@ -108,14 +110,14 @@ void main() {
       );
       notifier.setColorMode(ColorMode.client);
 
-      expect(state.colorMode, ColorMode.client);
+      expect(readState().colorMode, ColorMode.client);
       expect(notifyCount, 1);
     });
 
     test('all color modes can be set', () {
       for (final mode in ColorMode.values) {
         notifier.setColorMode(mode);
-        expect(state.colorMode, mode);
+        expect(readState().colorMode, mode);
       }
     });
   });
@@ -127,29 +129,29 @@ void main() {
   group('Drag on empty state', () {
     test('startDrag with invalid index does nothing', () {
       notifier.startDrag(-1);
-      expect(state.dragState, isNull);
+      expect(readState().dragState, isNull);
 
       notifier.startDrag(0); // no boxes
-      expect(state.dragState, isNull);
+      expect(readState().dragState, isNull);
 
       notifier.startDrag(100);
-      expect(state.dragState, isNull);
+      expect(readState().dragState, isNull);
     });
 
     test('updateDragPosition does nothing without active drag', () {
       // Should not throw
       notifier.updateDragPosition(10, 20);
-      expect(state.dragState, isNull);
+      expect(readState().dragState, isNull);
     });
 
     test('endDrag does nothing without active drag', () {
       notifier.endDrag();
-      expect(state.dragState, isNull);
+      expect(readState().dragState, isNull);
     });
 
     test('cancelDrag does nothing without active drag', () {
       notifier.cancelDrag();
-      expect(state.dragState, isNull);
+      expect(readState().dragState, isNull);
     });
   });
 
@@ -159,7 +161,7 @@ void main() {
 
   group('Client summaries', () {
     test('returns empty list when no boxes', () {
-      expect(state.clientSummaries, isEmpty);
+      expect(readState().clientSummaries, isEmpty);
     });
   });
 
@@ -169,15 +171,15 @@ void main() {
 
   group('Undo/Redo on empty state', () {
     test('undo does nothing when stack is empty', () {
-      expect(state.canUndo, false);
+      expect(readState().canUndo, false);
       notifier.undo(); // should not throw
-      expect(state.canUndo, false);
+      expect(readState().canUndo, false);
     });
 
     test('redo does nothing when stack is empty', () {
-      expect(state.canRedo, false);
+      expect(readState().canRedo, false);
       notifier.redo(); // should not throw
-      expect(state.canRedo, false);
+      expect(readState().canRedo, false);
     });
   });
 
@@ -188,8 +190,8 @@ void main() {
   group('Reset without loaded plan', () {
     test('resetToAlgorithm does nothing if no vehicle loaded', () async {
       await notifier.resetToAlgorithm();
-      expect(state.isLoading, false);
-      expect(state.error, isNull);
+      expect(readState().isLoading, false);
+      expect(readState().error, isNull);
     });
   });
 
@@ -200,7 +202,7 @@ void main() {
   group('Save without loaded plan', () {
     test('saveLayout does nothing if no vehicle loaded', () async {
       await notifier.saveLayout();
-      expect(state.saveState, SaveState.saved);
+      expect(readState().saveState, SaveState.saved);
     });
   });
 
