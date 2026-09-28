@@ -21,7 +21,7 @@ const COMM_CONFIG_SELECT_SQL = [
     'FETCH FIRST 1 ROWS ONLY',
 ].join(' ');
 
-async function fetchExcludedVendorCodes(db = { query }) {
+function fetchExcludedVendorCodes(db = { query }) {
     return db.query(`
             SELECT TRIM(CODIGOVENDEDOR) as CODE
             FROM JAVIER.COMMISSION_EXCEPTIONS
@@ -29,16 +29,16 @@ async function fetchExcludedVendorCodes(db = { query }) {
         `, false, false);
 }
 
-async function fetchCommissionConfig(year, db = { queryWithParams }) {
+function fetchCommissionConfig(year, db = { queryWithParams }) {
     return db.queryWithParams(
         COMM_CONFIG_SELECT_SQL,
-        [parseInt(year)],
+        [parseInt(year, 10)],
         false,
         false,
     );
 }
 
-async function fetchVendorPaymentRows(safeVCode, safeNCode, year, db = { queryWithParams }) {
+function fetchVendorPaymentRows(safeVCode, safeNCode, year, db = { queryWithParams }) {
     return db.queryWithParams(`
             SELECT
                 MES,
@@ -52,10 +52,10 @@ async function fetchVendorPaymentRows(safeVCode, safeNCode, year, db = { queryWi
             WHERE (VENDEDOR_CODIGO = ? OR VENDEDOR_CODIGO = ?)
               AND ANIO = ?
             ORDER BY MES, FECHA_PAGO
-        `, [safeVCode, safeNCode, parseInt(year)], false, false);
+        `, [safeVCode, safeNCode, parseInt(year, 10)], false, false);
 }
 
-async function deleteMonthPayments(year, month, codeVariants, db = { queryWithParams }) {
+function deleteMonthPayments(year, month, codeVariants, db = { queryWithParams }) {
     const placeholders = codeVariants.map(() => '?').join(',');
     return db.queryWithParams(`
         DELETE FROM JAVIER.COMMISSION_PAYMENTS
@@ -65,7 +65,7 @@ async function deleteMonthPayments(year, month, codeVariants, db = { queryWithPa
     `, [parseInt(year, 10), parseInt(month, 10), ...codeVariants], false, false);
 }
 
-async function insertCommissionPayment({
+function insertCommissionPayment({
     vendorCode, year, month, ventaComision, objetivoMes, ventasSobreObjetivo,
     comisionGenerada, importePagado, observaciones, creadoPor,
 }, db = { queryWithParams }) {
@@ -76,7 +76,7 @@ async function insertCommissionPayment({
                 `, [vendorCode, year, month, ventaComision, objetivoMes, ventasSobreObjetivo, comisionGenerada, importePagado, observaciones, creadoPor]);
 }
 
-async function fetchSnapshotAll(year, monthList, db = { queryWithParams }) {
+function fetchSnapshotAll(year, monthList, db = { queryWithParams }) {
     const monthPlaceholders = monthList.map(() => '?').join(',');
     return db.queryWithParams(`
                 SELECT TRIM(VENDEDOR_CODIGO) as VENDEDOR_CODIGO, MES, VENTAS_REAL,
@@ -87,7 +87,7 @@ async function fetchSnapshotAll(year, monthList, db = { queryWithParams }) {
             `, [year, ...monthList], false, false);
 }
 
-async function fetchSnapshotScoped(year, monthList, safeCodes, db = { queryWithParams }) {
+function fetchSnapshotScoped(year, monthList, safeCodes, db = { queryWithParams }) {
     const monthPlaceholders = monthList.map(() => '?').join(',');
     const codePlaceholders = safeCodes.map(() => '?').join(',');
     return db.queryWithParams(`
@@ -100,7 +100,7 @@ async function fetchSnapshotScoped(year, monthList, safeCodes, db = { queryWithP
             `, [year, ...monthList, ...safeCodes], false, false);
 }
 
-async function fetchSnapshotCoverage(year, monthList, db = { queryWithParams }) {
+function fetchSnapshotCoverage(year, monthList, db = { queryWithParams }) {
     const monthPlaceholders = monthList.map(() => '?').join(',');
     return db.queryWithParams(`
                 SELECT DISTINCT MES
@@ -110,7 +110,7 @@ async function fetchSnapshotCoverage(year, monthList, db = { queryWithParams }) 
             `, [year, ...monthList], false, false);
 }
 
-async function fetchMonthLacSales(year, month, vendorExpr, codeVariants, db = { queryWithParams }) {
+function fetchMonthLacSales(year, month, vendorExpr, codeVariants, db = { queryWithParams }) {
     const vendorPlaceholders = codeVariants.map(() => '?').join(',');
     return db.queryWithParams(`
             SELECT SUM(L.LCIMVT) as SALES
@@ -123,7 +123,7 @@ async function fetchMonthLacSales(year, month, vendorExpr, codeVariants, db = { 
         `, [year, month, ...codeVariants], false);
 }
 
-async function fetchMonthCommercialTargets(safeVendor, safeUnpadded, year, db = { queryWithParams }) {
+function fetchMonthCommercialTargets(safeVendor, safeUnpadded, year, db = { queryWithParams }) {
     // Tier-1 listados sin limite: COMMERCIAL_TARGETS por vendor/anio son <=12
     // filas/mes, FETCH FIRST 60 ROWS ONLY es margen 5x documentado.
     return db.queryWithParams(`
@@ -137,7 +137,7 @@ async function fetchMonthCommercialTargets(safeVendor, safeUnpadded, year, db = 
             `, [safeVendor, safeUnpadded, year], false);
 }
 
-async function fetchPayFallbackSales(year, month, vendorFilterClause, codeVariants, db = { queryWithParams }) {
+function fetchPayFallbackSales(year, month, vendorFilterClause, codeVariants, db = { queryWithParams }) {
     return db.queryWithParams(`
                     SELECT SUM(L.LCIMVT) as SALES
                     FROM ${comercialErpTable('LACLAE')} L

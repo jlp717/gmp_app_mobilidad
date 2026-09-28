@@ -54,7 +54,7 @@ function yoySql(tables, monthFilter, vendorFilterClause) {
         `;
 }
 
-async function fetchYoyYear({ year, monthParams, vendorParams, monthFilter, vendorFilterClause, cacheKeyBase, tables }, deps) {
+function fetchYoyYear({ year, monthParams, vendorParams, monthFilter, vendorFilterClause, cacheKeyBase, tables }, deps) {
     const { queryWithParams: qwp, cachedQuery: cq, TTL: ttl } = defaultDeps(deps);
     return cq(qwp, yoySql(tables, monthFilter, vendorFilterClause), {
         cacheKey: `${cacheKeyBase}:${year}`,
@@ -91,7 +91,7 @@ function topClientsSql(tables, dateFilter, vendorFilterClause, safeLimit) {
     `;
 }
 
-async function fetchTopClients({ sql, params, cacheKey, ttl }, deps) {
+function fetchTopClients({ sql, params, cacheKey, ttl }, deps) {
     const { queryWithParams: qwp, cachedQuery: cq } = defaultDeps(deps);
     return cq(qwp, sql, { cacheKey, ttl }, params);
 }
@@ -108,7 +108,7 @@ function trendsSql(tables, vendorFilterClause) {
     `;
 }
 
-async function fetchTrends({ vendorParams, vendorFilterClause, cacheKey, tables }, deps) {
+function fetchTrends({ vendorParams, vendorFilterClause, cacheKey, tables }, deps) {
     const { queryWithParams: qwp, cachedQuery: cq, TTL: ttl } = defaultDeps(deps);
     return cq(qwp, trendsSql(tables, vendorFilterClause), {
         cacheKey,
@@ -137,7 +137,7 @@ function topProductsSql(tables, vendorFilterClause, safeLimit) {
     `;
 }
 
-async function fetchTopProducts({ year, vendorParams, vendorFilterClause, cacheKey, ttl, safeLimit, tables }, deps) {
+function fetchTopProducts({ year, vendorParams, vendorFilterClause, cacheKey, ttl, safeLimit, tables }, deps) {
     const { queryWithParams: qwp, cachedQuery: cq } = defaultDeps(deps);
     return cq(qwp, topProductsSql(tables, vendorFilterClause, safeLimit), {
         cacheKey,
@@ -173,7 +173,7 @@ function marginsFamilySql(tables, vendorFilterClause) {
     `;
 }
 
-async function fetchMargins({ year, vendorParams, vendorAliasedParams, vendorFilterClause, vendorAliasedClause, cacheKey, ttl, tables }, deps) {
+function fetchMargins({ year, vendorParams, vendorAliasedParams, vendorFilterClause, vendorAliasedClause, cacheKey, ttl, tables }, deps) {
     const { queryWithParams: qwp, cachedQuery: cq } = defaultDeps(deps);
     return Promise.all([
         cq(qwp, marginsMonthlySql(tables, vendorFilterClause), {
@@ -215,12 +215,12 @@ function salesHistorySql(tables, whereClause, offset, limit) {
       LEFT JOIN ${t.ARTX} AX ON L.CODIGOARTICULO = AX.CODIGOARTICULO
       ${whereClause}
       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
-      OFFSET ${parseInt(offset)} ROWS
-      FETCH FIRST ${parseInt(limit)} ROWS ONLY
+      OFFSET ${parseInt(offset, 10)} ROWS
+      FETCH FIRST ${parseInt(limit, 10)} ROWS ONLY
     `;
 }
 
-async function fetchSalesHistory({ whereClause, whereParams, offset, limit, cacheKey, ttl, queryType, tables }, deps) {
+function fetchSalesHistory({ whereClause, whereParams, offset, limit, cacheKey, ttl, queryType, tables }, deps) {
     const { queryWithParams: qwp, cachedQuery: cq } = defaultDeps(deps);
     return cq(qwp, salesHistorySql(tables, whereClause, offset, limit), {
         cacheKey,
@@ -296,7 +296,7 @@ async function fetchSalesSummaryStats({ year, vendorParams, extraParams, vendorF
     return result[0] || {};
 }
 
-async function fetchSalesSummaryYearBreakdown({ startYear, endYear, vendorParams, extraParams, vendorFilterClause, clientFilter, searchFilter, tables }, deps) {
+function fetchSalesSummaryYearBreakdown({ startYear, endYear, vendorParams, extraParams, vendorFilterClause, clientFilter, searchFilter, tables }, deps) {
     const { queryWithParams: qwp } = defaultDeps(deps);
     return qwp(
         salesSummaryYearBreakdownSql(tables, vendorFilterClause, clientFilter, searchFilter),
@@ -304,7 +304,7 @@ async function fetchSalesSummaryYearBreakdown({ startYear, endYear, vendorParams
     );
 }
 
-async function fetchSalesSummaryMonthlyBreakdown({ year, prevYear, vendorParams, extraParams, vendorFilterClause, clientFilter, searchFilter, tables }, deps) {
+function fetchSalesSummaryMonthlyBreakdown({ year, prevYear, vendorParams, extraParams, vendorFilterClause, clientFilter, searchFilter, tables }, deps) {
     const { queryWithParams: qwp } = defaultDeps(deps);
     return qwp(
         salesSummaryMonthlyBreakdownSql(tables, vendorFilterClause, clientFilter, searchFilter),

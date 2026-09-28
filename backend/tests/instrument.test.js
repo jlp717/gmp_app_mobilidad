@@ -24,7 +24,6 @@ function loadFresh({ nodeEnv, sentryDsn }) {
   } else {
     process.env.SENTRY_DSN = sentryDsn;
   }
-  // eslint-disable-next-line global-require
   return require(INSTRUMENT_PATH);
 }
 

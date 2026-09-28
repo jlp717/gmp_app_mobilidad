@@ -10,7 +10,7 @@ let Sentry = null;
 
 try {
   Sentry = require('@sentry/node');
-} catch (_) {
+} catch {
   Sentry = null;
 }
 

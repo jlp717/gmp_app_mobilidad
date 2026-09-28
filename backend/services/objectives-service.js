@@ -114,7 +114,7 @@ async function getClientsMonthlySales(clientCodes, year) {
         monthlyMap[r.MONTH] = {
             sales: parseFloat(r.SALES) || 0,
             cost: parseFloat(r.COST) || 0,
-            clients: parseInt(r.CLIENTS) || 0,
+            clients: parseInt(r.CLIENTS, 10) || 0,
         };
     });
 
@@ -214,7 +214,7 @@ async function addBSalesToRows(rows, vendorCodesArray, uniqueYears) {
             const value = parseFloat(amount) || 0;
             if (value === 0) continue;
 
-            const m = parseInt(month);
+            const m = parseInt(month, 10);
             const existingRow = rowsByYearMonth.get(`${yr}:${m}`);
             if (existingRow) {
                 existingRow.SALES = (parseFloat(existingRow.SALES) || 0) + value;
@@ -382,7 +382,7 @@ async function getGlobalObjectiveBaselineMonthly(year) {
     const prevYearMonthlySales = {};
     let combinedPrevTotal = 0;
     for (let m = 1; m <= 12; m++) {
-        const row = rows.find((r) => r.YEAR == prevYear && r.MONTH == m);
+        const row = rows.find((r) => Number(r.YEAR) === prevYear && Number(r.MONTH) === m);
         const sales = row ? parseFloat(row.SALES) || 0 : 0;
         prevYearMonthlySales[m] = sales;
         combinedPrevTotal += sales;
@@ -444,7 +444,7 @@ async function applyConfiguredObjectiveRebalances(year, monthlyTargets, vendorCo
     return applyMonthlyObjectiveRebalances(monthlyTargets, year, { allocationFactorsByMonth });
 }
 
-async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
+async function buildVendorObjectiveTargets(vendorCode, yearsArray) {
     const currentYear = Math.max(...yearsArray);
     const uniqueYears = [...new Set([...yearsArray, ...yearsArray.map((y) => y - 1)])];
     const vendedorFilter = buildBoundLaclaeVendorFilter(vendorCode, 'L');
@@ -455,7 +455,7 @@ async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
 
     let inheritedMonthlySales = {};
     const prevYear = currentYear - 1;
-    const monthsWithData = rows.filter((r) => r.YEAR == prevYear).map((r) => r.MONTH);
+    const monthsWithData = rows.filter((r) => Number(r.YEAR) === prevYear).map((r) => Number(r.MONTH));
     const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter((m) => !monthsWithData.includes(m));
 
     if (missingMonths.length > 0) {
@@ -476,8 +476,8 @@ async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
         const prevYearMonthlySales = {};
 
         for (let m = 1; m <= 12; m++) {
-            const row = rows.find((r) => r.YEAR == year && r.MONTH == m);
-            const prevRow = rows.find((r) => r.YEAR == (year - 1) && r.MONTH == m);
+            const row = rows.find((r) => Number(r.YEAR) === year && Number(r.MONTH) === m);
+            const prevRow = rows.find((r) => Number(r.YEAR) === (year - 1) && Number(r.MONTH) === m);
             const ownPrevSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
 
             if (ownPrevSales === 0 && inheritedMonthlySales[m]) {
@@ -558,8 +558,8 @@ function mergeVendorObjectiveTargets(targetSets, yearsArray) {
 // =============================================================================
 async function getObjectivesSummary({ vendedorCodes, year, month }) {
     const now = getCurrentDate();
-    const targetYear = parseInt(year) || now.getFullYear();
-    const targetMonth = parseInt(month) || (now.getMonth() + 1);
+    const targetYear = parseInt(year, 10) || now.getFullYear();
+    const targetMonth = parseInt(month, 10) || (now.getMonth() + 1);
     const vendedorFilter = buildBoundVendorFilter(vendedorCodes, 'CODIGOVENDEDOR');
 
     // 1. Get Target Configuration (Global % increase)
@@ -642,8 +642,8 @@ async function getObjectivesSummary({ vendedorCodes, year, month }) {
     marginObjective = marginObjective || (marginLast * (1 + targetPct / 100));
     const marginProgress = marginObjective > 0 ? (marginCurrent / marginObjective) * 100 : 0;
 
-    const clientsCurrent = parseInt(curr.CLIENTS) || 0;
-    const clientsLast = parseInt(last.CLIENTS) || 0;
+    const clientsCurrent = parseInt(curr.CLIENTS, 10) || 0;
+    const clientsLast = parseInt(last.CLIENTS, 10) || 0;
     const clientsObjective = Math.ceil(clientsLast * 1.05); // Clients usually fixed 5% or similar
     const clientsProgress = clientsObjective > 0 ? (clientsCurrent / clientsObjective) * 100 : 0;
 

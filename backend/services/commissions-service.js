@@ -24,7 +24,7 @@ const {
     getBSales,
 } = require('../utils/common');
 const { resolveCommissionTarget } = require('../utils/commission-snapshot');
-const { redisCache, TTL, invalidateCachePattern } = require('./redis-cache');
+const { invalidateCachePattern } = require('./redis-cache');
 const repo = require('../repositories/commissions-repository');
 
 // FIX #1: Dynamic excluded vendors - loaded from DB with safety fallback
@@ -89,7 +89,7 @@ const COMMISSIONS_CACHE_VERSION = 'v20260714-payment-record-pdf';
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
  * Keeps proRatedTarget / workingDays so OBJ. ACUM. and rhythm columns work in Flutter.
  */
-function aggregateScopedTeamMonths(vendorResults, selectedYear, config) {
+function aggregateScopedTeamMonths(vendorResults, selectedYear, _config) {
     const now = getCurrentDate();
     const months = [];
     for (let m = 1; m <= 12; m++) {
@@ -237,7 +237,7 @@ async function invalidateCommissionPaymentCaches(vendorCode, year) {
  */
 async function getVendorCurrentClients(vendorCode, currentYear) {
     const safeCode = vendorCode.replace(/[^a-zA-Z0-9]/g, '');
-    const safeYear = parseInt(currentYear);
+    const safeYear = parseInt(currentYear, 10);
     const col = getCommissionVendorColumnExpr('L', 'objective');
     const codeVariants = getCodeVariants(safeCode);
     const placeholders = codeVariants.map(() => '?').join(',');
@@ -284,7 +284,7 @@ async function getClientsMonthlySales(clientCodes, year) {
           AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
-    `, [...safeCodes, parseInt(year)], false);
+    `, [...safeCodes, parseInt(year, 10)], false);
 
     // Build map: month -> total sales
     const monthlyMap = {};
@@ -429,7 +429,7 @@ async function getVendorSalesSnapshot(vendorCodes, year) {
         const snapshotMap = {};
 
         (coverageRows || rows).forEach((r) => {
-            const mes = parseInt(r.MES);
+            const mes = parseInt(r.MES, 10);
             if (!Number.isNaN(mes)) monthsWithData.add(mes);
         });
 
@@ -438,7 +438,7 @@ async function getVendorSalesSnapshot(vendorCodes, year) {
             // Normalize: strip leading zeros so '02' === '2'. Keep both forms as keys
             // to handle whatever format the rest of the code uses.
             const normalizedCode = rawCode.replace(/^0+/, '') || rawCode;
-            const mes = parseInt(r.MES);
+            const mes = parseInt(r.MES, 10);
 
             const entry = {
                 ventasTotales: parseFloat(r.VENTAS_REAL) || 0,
@@ -589,7 +589,6 @@ async function loadCommissionConfig(year) {
 async function getMonthPaymentSnapshotFromDb(vendedorCode, year, month) {
     const codeVariants = getCodeVariants(vendedorCode);
     if (codeVariants.length === 0) return null;
-    const vendorPlaceholders = codeVariants.map(() => '?').join(',');
     const salesVendorExpr = getCommissionActualVendorColumnExprForMonth(year, month, 'L');
     const prevVendorExpr = getCommissionActualVendorColumnExprForMonth(year - 1, month, 'L');
     const safeVendor = String(vendedorCode || '').replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
@@ -639,8 +638,8 @@ async function getMonthPaymentSnapshotFromDb(vendedorCode, year, month) {
  * por columna vendor historica + B-sales. Movido verbatim del handler.
  */
 async function capturePayFallbackSales(vendedorCode, year, month) {
-    const safeYearNum = parseInt(year);
-    const safeMonthNum = parseInt(month);
+    const safeYearNum = parseInt(year, 10);
+    const safeMonthNum = parseInt(month, 10);
     const salesVendorExpr = getCommissionActualVendorColumnExprForMonth(safeYearNum, safeMonthNum, 'L');
     const codeVariants = getCodeVariants(vendedorCode);
     const vendorPlaceholders = codeVariants.map(() => '?').join(',');
@@ -665,7 +664,7 @@ async function capturePayFallbackSales(vendedorCode, year, month) {
     return ventaComision;
 }
 
-async function insertCommissionPayment({
+function insertCommissionPayment({
     vendorCode, year, month, ventaComision, objetivoMes, ventasSobreObjetivo,
     comisionGenerada, importePagado, observaciones, creadoPor,
 }) {

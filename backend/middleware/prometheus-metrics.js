@@ -5,7 +5,6 @@
  */
 
 const crypto = require('crypto');
-const logger = require('./logger');
 
 class CircularBuffer {
     constructor(size) {
@@ -251,7 +250,6 @@ function calculatePercentiles(values, percentiles = [50, 90, 95, 99]) {
  */
 function prometheusMetrics(req, res, next) {
     startPeriodicCleanup();
-    const startTime = Date.now();
     const startHrTime = process.hrtime();
 
     // Track request
@@ -271,7 +269,6 @@ function prometheusMetrics(req, res, next) {
         }
 
         // Record metrics
-        const duration = (Date.now() - startTime) / 1000; // seconds
         const hrDuration = process.hrtime(startHrTime);
         const durationMs = hrDuration[0] * 1000 + hrDuration[1] / 1e6;
 
@@ -385,7 +382,7 @@ function getPrometheusMetrics() {
         let labelsObj = {};
         try {
             labelsObj = JSON.parse(jsonPart);
-        } catch (_) {
+        } catch {
             labelsObj = {};
         }
         lines.push(`http_requests_total{${formatPrometheusLabels(labelsObj)}} ${value}`);
@@ -464,7 +461,7 @@ function getPrometheusMetrics() {
         lines.push('odbc_pool_connections{state=' + Q + 'active' + Q + '} ' + active);
         lines.push('odbc_pool_connections{state=' + Q + 'idle' + Q + '} ' + (Number(pm.idle) || 0));
         lines.push('odbc_pool_connections{state=' + Q + 'total' + Q + '} ' + (Number(pm.total) || 0));
-    } catch (_) { /* pool not initialized yet */ }
+    } catch { /* pool not initialized yet */ }
     // Active connections
     lines.push('# HELP http_active_connections Active HTTP connections');
     lines.push('# TYPE http_active_connections gauge');

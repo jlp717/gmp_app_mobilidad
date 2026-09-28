@@ -14,7 +14,7 @@ const { query, queryWithParams } = require('../middleware/db-timing');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { LACLAE_SALES_FILTER } = require('../utils/common');
 
-async function fetchObjectiveVendorClients(vendorCode, col, year, db = { queryWithParams }) {
+function fetchObjectiveVendorClients(vendorCode, col, year, db = { queryWithParams }) {
     return db.queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM ${comercialErpTable('LACLAE')} L
@@ -24,7 +24,7 @@ async function fetchObjectiveVendorClients(vendorCode, col, year, db = { queryWi
     `, [vendorCode, year], false);
 }
 
-async function fetchClientsMonthlySales(safeCodes, year, db = { queryWithParams }) {
+function fetchClientsMonthlySales(safeCodes, year, db = { queryWithParams }) {
     return db.queryWithParams(`
         SELECT
             L.LCMMDC as MONTH,
@@ -39,7 +39,7 @@ async function fetchClientsMonthlySales(safeCodes, year, db = { queryWithParams 
     `, [...safeCodes, year], false);
 }
 
-async function fetchObjConfigExplicit(codeVariants, db = { queryWithParams }) {
+function fetchObjConfigExplicit(codeVariants, db = { queryWithParams }) {
     const placeholders = codeVariants.map(() => '?').join(',');
     return db.queryWithParams(`
             SELECT TARGET_PERCENTAGE
@@ -50,7 +50,7 @@ async function fetchObjConfigExplicit(codeVariants, db = { queryWithParams }) {
         `, codeVariants, false);
 }
 
-async function fetchObjConfigVendor(codeVariants, db = { queryWithParams }) {
+function fetchObjConfigVendor(codeVariants, db = { queryWithParams }) {
     const placeholders = codeVariants.map(() => '?').join(',');
     return db.queryWithParams(`
             SELECT TARGET_PERCENTAGE, COUNT(*) as CNT
@@ -62,7 +62,7 @@ async function fetchObjConfigVendor(codeVariants, db = { queryWithParams }) {
         `, codeVariants, false);
 }
 
-async function fetchObjConfigGlobal(db = { queryWithParams }) {
+function fetchObjConfigGlobal(db = { queryWithParams }) {
     return db.queryWithParams(`
             SELECT TARGET_PERCENTAGE
             FROM JAVIER.OBJ_CONFIG
@@ -72,7 +72,7 @@ async function fetchObjConfigGlobal(db = { queryWithParams }) {
         `, [], false);
 }
 
-async function fetchFixedMonthlyTarget(codeVariants, year, month, db = { queryWithParams }) {
+function fetchFixedMonthlyTarget(codeVariants, year, month, db = { queryWithParams }) {
     const placeholders = codeVariants.map(() => '?').join(',');
     return db.queryWithParams(`
             SELECT IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, MES
@@ -88,7 +88,7 @@ async function fetchFixedMonthlyTarget(codeVariants, year, month, db = { queryWi
         `, [...codeVariants, year, month, month], false);
 }
 
-async function fetchExactMonthlyTargets(codeVariants, year, db = { queryWithParams }) {
+function fetchExactMonthlyTargets(codeVariants, year, db = { queryWithParams }) {
     const placeholders = codeVariants.map(() => '?').join(',');
     return db.queryWithParams(`
             SELECT MES, IMPORTE_OBJETIVO
@@ -101,7 +101,7 @@ async function fetchExactMonthlyTargets(codeVariants, year, db = { queryWithPara
         `, [...codeVariants, year], false);
 }
 
-async function fetchGlobalPinnedMonthlyTargets(year, db = { queryWithParams }) {
+function fetchGlobalPinnedMonthlyTargets(year, db = { queryWithParams }) {
     return db.queryWithParams(`
             SELECT MES, SUM(IMPORTE_OBJETIVO) as TOTAL
             FROM JAVIER.COMMERCIAL_TARGETS
@@ -111,7 +111,7 @@ async function fetchGlobalPinnedMonthlyTargets(year, db = { queryWithParams }) {
         `, [year], false);
 }
 
-async function fetchScopedPinnedMonthlyTargets(year, allVariants, db = { queryWithParams }) {
+function fetchScopedPinnedMonthlyTargets(year, allVariants, db = { queryWithParams }) {
     const ph = allVariants.map(() => '?').join(',');
     return db.queryWithParams(`
             SELECT MES, SUM(IMPORTE_OBJETIVO) as TOTAL
@@ -123,7 +123,7 @@ async function fetchScopedPinnedMonthlyTargets(year, allVariants, db = { queryWi
         `, [year, ...allVariants], false);
 }
 
-async function fetchFixedMonthlyObjectiveTargets(codeVariants, year, db = { queryWithParams }) {
+function fetchFixedMonthlyObjectiveTargets(codeVariants, year, db = { queryWithParams }) {
     const placeholders = codeVariants.map(() => '?').join(',');
     return db.queryWithParams(`
             SELECT IMPORTE_OBJETIVO, MES
@@ -135,7 +135,7 @@ async function fetchFixedMonthlyObjectiveTargets(codeVariants, year, db = { quer
         `, [...codeVariants, year], false);
 }
 
-async function fetchGlobalBaselinePrevYear(prevYear, db = { queryWithParams }) {
+function fetchGlobalBaselinePrevYear(prevYear, db = { queryWithParams }) {
     return db.queryWithParams(`
         SELECT
             L.LCAADC as YEAR,
@@ -150,7 +150,7 @@ async function fetchGlobalBaselinePrevYear(prevYear, db = { queryWithParams }) {
     `, [prevYear], false);
 }
 
-async function fetchVendorEvolutionRows(uniqueYears, clause, params, db = { queryWithParams }) {
+function fetchVendorEvolutionRows(uniqueYears, clause, params, db = { queryWithParams }) {
     return db.queryWithParams(`
         SELECT
             L.LCAADC as YEAR,
@@ -166,7 +166,7 @@ async function fetchVendorEvolutionRows(uniqueYears, clause, params, db = { quer
     `, [...uniqueYears, ...params], false);
 }
 
-async function fetchCofcQuota(quotaField, db = { query }) {
+function fetchCofcQuota(quotaField, db = { query }) {
     return db.query(`
           SELECT COALESCE(SUM(${quotaField}), 0) as quota
           FROM ${comercialErpTable('COFC')}
@@ -174,7 +174,7 @@ async function fetchCofcQuota(quotaField, db = { query }) {
         `, false);
 }
 
-async function fetchCmvObjective(code, db = { queryWithParams }) {
+function fetchCmvObjective(code, db = { queryWithParams }) {
     return db.queryWithParams(`
                     SELECT COALESCE(IMPORTEOBJETIVO, 0) as objetivo,
                            COALESCE(PORCENTAJEOBJETIVO, 0) as porcentaje
@@ -183,7 +183,7 @@ async function fetchCmvObjective(code, db = { queryWithParams }) {
                 `, [code], false);
 }
 
-async function fetchLacMonthMargin(year, month, clause, params, db = { queryWithParams }) {
+function fetchLacMonthMargin(year, month, clause, params, db = { queryWithParams }) {
     return db.queryWithParams(`
                 SELECT
                     COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
@@ -193,7 +193,7 @@ async function fetchLacMonthMargin(year, month, clause, params, db = { queryWith
             `, [year, month, ...params]);
 }
 
-async function fetchLacMonthSales(year, month, clause, params, db = { queryWithParams }) {
+function fetchLacMonthSales(year, month, clause, params, db = { queryWithParams }) {
     return db.queryWithParams(`
                 SELECT
                     COALESCE(SUM(IMPORTEVENTA), 0) as sales,

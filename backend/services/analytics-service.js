@@ -17,7 +17,6 @@ const {
     getVendorColumn,
     formatCurrency,
     MIN_YEAR,
-    LACLAE_SALES_FILTER,
     sanitizeForSQL,
     sargableDocumentDateBound,
 } = require('../utils/common');
@@ -44,7 +43,7 @@ function inputError(code, message) {
 
 async function getYoyComparison({ vendedorCodes, year, month }, deps = {}) {
     const tables = deps.tables || repo.resolveTables();
-    const currentYear = parseInt(year) || getCurrentDate().getFullYear();
+    const currentYear = parseInt(year, 10) || getCurrentDate().getFullYear();
     const monthNum = month ? parseInt(month, 10) : 0;
     const monthFilter = monthNum >= 1 && monthNum <= 12 ? 'AND L.LCMMDC = ?' : '';
     const monthParams = monthNum >= 1 && monthNum <= 12 ? [monthNum] : [];
@@ -217,9 +216,9 @@ async function getTopProducts({ vendedorCodes, limit = 20, year: rawYear }, deps
             totalSales: formatCurrency(p.TOTALSALES),
             totalMargin: formatCurrency(p.TOTALMARGIN),
             marginPercent: p.TOTALSALES > 0 ? Math.round((p.TOTALMARGIN / p.TOTALSALES) * 1000) / 10 : 0,
-            totalBoxes: parseInt(p.TOTALBOXES) || 0,
-            totalUnits: parseInt(p.TOTALUNITS) || 0,
-            numClients: parseInt(p.NUMCLIENTS) || 0,
+            totalBoxes: parseInt(p.TOTALBOXES, 10) || 0,
+            totalUnits: parseInt(p.TOTALUNITS, 10) || 0,
+            numClients: parseInt(p.NUMCLIENTS, 10) || 0,
         })),
     };
 }
@@ -364,12 +363,12 @@ async function getSalesHistory({
     return {
         rows: formattedRows,
         count: formattedRows.length,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
+        limit: parseInt(limit, 10),
+        offset: parseInt(offset, 10),
     };
 }
 
-async function getSalesHistorySummary({ vendedorCodes, clientCode, productSearch, startDate, endDate }, deps = {}) {
+async function getSalesHistorySummary({ vendedorCodes, clientCode, productSearch, startDate }, deps = {}) {
     const tables = deps.tables || repo.resolveTables();
     const vendorFilter = buildVendedorFilterParameterized(vendedorCodes, 'L', 'LCCDVD');
 
@@ -385,7 +384,7 @@ async function getSalesHistorySummary({ vendedorCodes, clientCode, productSearch
     }
 
     // Helper to query LACLAE
-    const getStats = async (year) => repo.fetchSalesSummaryStats({
+    const getStats = (year) => repo.fetchSalesSummaryStats({
         year,
         vendorParams: vendorFilter.params,
         extraParams,
@@ -396,7 +395,7 @@ async function getSalesHistorySummary({ vendedorCodes, clientCode, productSearch
     }, deps);
 
     // Helper for Year Breakdown
-    const getYearBreakdown = async (startYear, endYear) => repo.fetchSalesSummaryYearBreakdown({
+    const getYearBreakdown = (startYear, endYear) => repo.fetchSalesSummaryYearBreakdown({
         startYear,
         endYear,
         vendorParams: vendorFilter.params,
@@ -436,7 +435,7 @@ async function getSalesHistorySummary({ vendedorCodes, clientCode, productSearch
 
     // --- Determine years ---
     const now = new Date();
-    const currentYear = startDate ? parseInt(startDate.substring(0, 4)) : now.getFullYear();
+    const currentYear = startDate ? parseInt(startDate.substring(0, 4), 10) : now.getFullYear();
     const previousYear = currentYear - 1;
 
     // Execute parallel queries
@@ -453,8 +452,8 @@ async function getSalesHistorySummary({ vendedorCodes, clientCode, productSearch
     const prevMarginAbs = parseFloat(prev.MARGIN || 0);
     const currUnits = parseFloat(curr.UNITS || 0);
     const prevUnits = parseFloat(prev.UNITS || 0);
-    const currProducts = parseInt(curr.PRODUCT_COUNT || 0);
-    const prevProducts = parseInt(prev.PRODUCT_COUNT || 0);
+    const currProducts = parseInt(curr.PRODUCT_COUNT || 0, 10);
+    const prevProducts = parseInt(prev.PRODUCT_COUNT || 0, 10);
 
     // Calculate margin as percentage: (margin / sales) * 100
     const currMargin = currSales > 0 ? (currMarginAbs / currSales) * 100 : 0;
