@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const cluster = require('cluster');
 const dotenv = require('dotenv');
 
 function candidateEnvFiles() {
@@ -98,6 +99,28 @@ function overlayRepartoFlags(parsed) {
   }
 }
 
+function isMultiProcessRuntime() {
+  if (cluster.isWorker) return true;
+
+  const execMode = String(process.env.PM2_EXEC_MODE || '').trim().toLowerCase();
+  if (execMode === 'cluster') return true;
+
+  const requestedInstances = String(process.env.PM2_INSTANCES || '').trim().toLowerCase();
+  if (requestedInstances === 'max') return true;
+
+  const instanceCount = Number.parseInt(requestedInstances, 10);
+  return Number.isFinite(instanceCount) && instanceCount > 1;
+}
+
+function enforceSharedAuthSessionStore() {
+  if (!isMultiProcessRuntime()) return false;
+
+  // Local memory is process-scoped. A different cluster worker would reject
+  // the login's session as revoked, so all workers must use the shared store.
+  process.env.AUTH_SESSION_STORE_MODE = 'redis';
+  return true;
+}
+
 function loadEnv(baseDir = process.cwd()) {
   for (const envFile of candidateEnvFiles()) {
     const fullPath = path.isAbsolute(envFile)
@@ -108,10 +131,12 @@ function loadEnv(baseDir = process.cwd()) {
     dotenv.config({ path: fullPath });
     // Stale PM2 fail-closed flags must not hide isolated_test from backend/.env.
     overlayRepartoFlags(parsed);
+    enforceSharedAuthSessionStore();
     enforceCommercialSessionTtlFloor();
     process.env.GMP_LOADED_ENV_FILE = fullPath;
     return fullPath;
   }
+  enforceSharedAuthSessionStore();
   enforceCommercialSessionTtlFloor();
   return null;
 }
@@ -119,6 +144,7 @@ function loadEnv(baseDir = process.cwd()) {
 module.exports = {
   loadEnv,
   overlayRepartoFlags,
+  enforceSharedAuthSessionStore,
   enforceCommercialSessionTtlFloor,
   parseTtlMs,
 };

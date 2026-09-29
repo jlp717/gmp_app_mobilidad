@@ -283,6 +283,26 @@ test('production mode requires Redis and never falls back to the local map', asy
   expect(store.sessions.size).toBe(0);
 });
 
+test('explicit Redis mode in staging fails closed when Redis is unavailable', async () => {
+  const store = createAuthClaimsSessionStore({
+    mode: 'redis',
+    production: false,
+    getRedisClient: () => null,
+    verifyRefreshToken,
+    refreshTtlMs: REFRESH_TTL_MS,
+  });
+
+  await expect(store.readiness()).resolves.toEqual({
+    ready: false,
+    required: true,
+    mode: 'redis',
+    shared: true,
+    code: 'AUTH_SESSION_STORE_UNAVAILABLE',
+  });
+  await expect(store.register(sessionInput())).rejects.toBeInstanceOf(AuthSessionStoreError);
+  expect(store.sessions.size).toBe(0);
+});
+
 test('two simulated workers share Redis state and preserve atomic rotation', async () => {
   const client = createRedisDouble();
   const options = {

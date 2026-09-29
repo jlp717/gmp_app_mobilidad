@@ -5,6 +5,8 @@ const path = require('path');
 
 describe('runtime performance configuration', () => {
   const backendRoot = path.join(__dirname, '..');
+  const originalAuthSessionStoreMode = process.env.AUTH_SESSION_STORE_MODE;
+  const originalPm2ExecMode = process.env.PM2_EXEC_MODE;
 
   function readPedidosImplementation() {
     return [
@@ -27,6 +29,10 @@ describe('runtime performance configuration', () => {
     delete process.env.DB_TOTAL_QUERY_CONCURRENCY;
     delete process.env.DB_POOL_MAX;
     delete process.env.DB_QUERY_CONCURRENCY;
+    if (originalAuthSessionStoreMode === undefined) delete process.env.AUTH_SESSION_STORE_MODE;
+    else process.env.AUTH_SESSION_STORE_MODE = originalAuthSessionStoreMode;
+    if (originalPm2ExecMode === undefined) delete process.env.PM2_EXEC_MODE;
+    else process.env.PM2_EXEC_MODE = originalPm2ExecMode;
   });
 
   test('PM2 defaults to 8 cluster workers with 128 libuv threads and 512 MB old-space', () => {
@@ -35,6 +41,7 @@ describe('runtime performance configuration', () => {
 
     expect(app.instances).toBe('8');
     expect(app.exec_mode).toBe('cluster');
+    expect(app.env.AUTH_SESSION_STORE_MODE).toBe('redis');
     expect(app.env.UV_THREADPOOL_SIZE).toBe('128');
     expect(app.env.NODE_OPTIONS).toBe('--max-old-space-size=512');
     expect(app.env.HTTP_REQUEST_TIMEOUT_MS).toBe('30000');
@@ -46,6 +53,20 @@ describe('runtime performance configuration', () => {
     expect(app.max_restarts).toBe(50);
     expect(app.restart_delay).toBe(1000);
     expect(app.exp_backoff_restart_delay).toBe(500);
+  });
+
+  test('single-process PM2 preserves the memory session-store default', () => {
+    process.env.PM2_INSTANCES = '1';
+    process.env.PM2_EXEC_MODE = 'fork';
+    delete process.env.AUTH_SESSION_STORE_MODE;
+    jest.resetModules();
+
+    const config = require('../ecosystem.config');
+    const app = config.apps.find((entry) => entry.name === 'gmp-api');
+
+    expect(app.instances).toBe('1');
+    expect(app.exec_mode).toBe('fork');
+    expect(app.env.AUTH_SESSION_STORE_MODE).toBe('memory');
   });
 
   test('DB layer contains slow-query logging, circuit breaker, and request context hooks', () => {

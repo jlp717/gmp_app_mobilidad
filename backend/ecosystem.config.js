@@ -23,6 +23,7 @@ const defaultDbConcurrency = isMultiInstance
 const defaultThreadPoolSize = '128';
 const defaultOldSpaceMb = '512';
 const defaultExecMode = process.env.PM2_EXEC_MODE || (isMultiInstance ? 'cluster' : 'fork');
+const requiresSharedAuthSessionStore = isMultiInstance || defaultExecMode === 'cluster';
 
 // Session product floor: commercial tablets must survive a full workday without
 // re-login. auth.js reads these env vars (defaults there remain 15m/7d for
@@ -44,6 +45,9 @@ const runtimePerformanceEnv = {
     HTTP_REQUEST_TIMEOUT_MS: process.env.HTTP_REQUEST_TIMEOUT_MS || '30000',
     PM2_INSTANCES: requestedInstances,
     PM2_EXEC_MODE: defaultExecMode,
+    AUTH_SESSION_STORE_MODE: requiresSharedAuthSessionStore
+        ? 'redis'
+        : (process.env.AUTH_SESSION_STORE_MODE || 'memory'),
     DB_TOTAL_CONNECTION_BUDGET: String(totalDbConnectionBudget),
     DB_TOTAL_QUERY_CONCURRENCY: String(totalDbConcurrencyBudget),
     DB_POOL_MIN: process.env.DB_POOL_MIN || (isMultiInstance ? '1' : '5'),
