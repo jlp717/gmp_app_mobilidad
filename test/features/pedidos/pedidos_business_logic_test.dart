@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
@@ -21,6 +22,7 @@ import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.da
         orderConfirmationStatusForProvider,
         isConfirmedOrderResultForProvider;
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Fase3: el ChangeNotifier viejo convive como re-export deprecated; los tests
 // usan el notifier unico via ProviderContainer. Mismos asserts.
@@ -189,9 +191,33 @@ class _QueuedCreateOrderApi implements PedidosOrderApi {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  const secureStorageChannel =
+      MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+  final secureValues = <String, String>{};
   late Directory hiveDir;
 
   setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, (call) async {
+      final args = Map<String, dynamic>.from(call.arguments as Map);
+      final key = args['key'] as String?;
+
+      switch (call.method) {
+        case 'write':
+          secureValues[key!] = args['value'] as String;
+          return null;
+        case 'read':
+          return secureValues[key];
+        case 'delete':
+          secureValues.remove(key);
+          return null;
+        case 'deleteAll':
+          secureValues.clear();
+          return null;
+      }
+      return null;
+    });
     hiveDir =
         await Directory.systemTemp.createTemp('pedidos_offline_service_test_');
     Hive.init(hiveDir.path);
@@ -206,6 +232,8 @@ void main() {
 
   tearDownAll(() async {
     await Hive.close();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, null);
     if (await hiveDir.exists()) {
       await hiveDir.delete(recursive: true);
     }
@@ -1033,6 +1061,7 @@ void main() {
         'CAJAS',
         10,
       );
+      await _flushNotifier();
 
       final result = await provider.confirmOrder(
         '57',
@@ -1080,8 +1109,10 @@ void main() {
         'CAJAS',
         20,
       );
+      await _flushNotifier();
       provider.setGlobalDiscount(10);
       provider.updateLine(0, lineDiscountPct: 5);
+      await _flushNotifier();
 
       final result = await provider.confirmOrder(
         '57',
@@ -1118,6 +1149,7 @@ void main() {
         'CAJAS',
         10,
       );
+      await _flushNotifier();
 
       final result = await provider.confirmOrder('57');
 
@@ -1157,7 +1189,9 @@ void main() {
         'CAJAS',
         20,
       );
+      await _flushNotifier();
       provider.setGlobalDiscount(10);
+      await _flushNotifier();
 
       final result = await provider.confirmOrder('57');
       final pending = PedidosOfflineService.getPendingSyncs().single as Map;
@@ -1194,12 +1228,13 @@ void main() {
         'CAJAS',
         10,
       );
+      await _flushNotifier();
 
       final first = provider.confirmOrder('57');
       for (var attempt = 0;
-          attempt < 10 && api.createOrderCalls == 0;
+          attempt < 100 && api.createOrderCalls == 0;
           attempt++) {
-        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(const Duration(milliseconds: 1));
       }
       expect(api.createOrderCalls, 1);
 

@@ -253,6 +253,9 @@ class _RepartidorLiquidacionDiariaPageState
           ? () => Navigator.of(context).pop()
           : null,
       onSave: () => _save(summary, ledgerClosed),
+      onRecoverClosed: ledgerClosed && _closedResult == null
+          ? () => unawaited(_save(summary, true))
+          : null,
       onExpense: () => unawaited(_showEntryDialog(_EntryKind.expense)),
       onBankDeposit: () => unawaited(_showEntryDialog(_EntryKind.bankDeposit)),
       onAdjustment: () => unawaited(_showEntryDialog(_EntryKind.adjustment)),
@@ -305,8 +308,7 @@ class _RepartidorLiquidacionDiariaPageState
   }
 
   /// Canonical money seed: exact cents, no binary-float drift.
-  String _classicMoneyValue(Money value) =>
-      value.toDouble().toStringAsFixed(2);
+  String _classicMoneyValue(Money value) => value.toDouble().toStringAsFixed(2);
 
   bool _canUseOfflinePdfFallback(Object error) =>
       error is ApiException && error.statusCode == 0;
@@ -553,17 +555,23 @@ class _RepartidorLiquidacionDiariaPageState
     }
     final confirmed = await confirmRepartidorAction(
       context,
-      title: '¿Estás seguro de enviar la liquidación diaria?',
-      message:
-          'Se grabará el cierre del día y se enviará el correo de liquidación.',
-      confirmLabel: 'Sí, grabar',
+      title: recoveringClose
+          ? '¿Recuperar la liquidación cerrada?'
+          : '¿Estás seguro de enviar la liquidación diaria?',
+      message: recoveringClose
+          ? 'Se consultará el cierre existente y se recuperará su PDF. '
+              'No se volverán a registrar movimientos ni el ingreso bancario.'
+          : 'Se grabará el cierre del día y se enviará el correo de liquidación.',
+      confirmLabel: recoveringClose ? 'Sí, recuperar' : 'Sí, grabar',
     );
     if (!confirmed || !mounted) return;
     setState(() => _saving = true);
 
     final modal = AsyncOperationModal.show(
       context,
-      text: 'Grabando liquidacion...',
+      text: recoveringClose
+          ? 'Recuperando liquidacion cerrada...'
+          : 'Grabando liquidacion...',
     );
 
     try {

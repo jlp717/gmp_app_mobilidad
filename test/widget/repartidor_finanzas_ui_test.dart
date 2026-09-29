@@ -9,6 +9,28 @@ import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/page
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/providers/repartidor_finanzas_providers.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+List<Override> _dailySummaryOverrides({
+  required String repartidorId,
+  required DateTime date,
+  required RepartidorDailySummary summary,
+}) {
+  return [
+    for (final forceRefresh in const [false, true])
+      repartidorDailySummaryProvider(
+        (
+          repartidorId: repartidorId,
+          date: date,
+          forceRefresh: forceRefresh,
+        ),
+      ).overrideWith((ref) async => summary),
+  ];
+}
+
+Future<void> _drainSoftRefreshTimer(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 12));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUpAll(() async {
     await initializeDateFormatting('es_ES');
@@ -35,10 +57,31 @@ void main() {
       (tester) async {
     final now = DateTime.now();
     final date = DateTime(now.year, now.month, now.day);
-    final args = (
+    final summary = RepartidorDailySummary(
       repartidorId: '94',
-      date: date,
-      forceRefresh: true,
+      date: '2026-04-24',
+      totalEfectivo: 222.79,
+      totalCheques: 0,
+      totalTarjeta: 0,
+      totalPostdatados: 0,
+      saldoActual: 4.81,
+      totalCobrosDia: 222.79,
+      gastos: 0,
+      totalAIngresar: 227.60,
+      cobrosCount: 2,
+      cobros: const [
+        RepartidorCobroDia(
+          fecha: '2026-04-24',
+          codigoCliente: '4300001119',
+          nombreCliente: 'CARNICERIA MECA',
+          tipoCobro: 'E',
+          tipoDocumento: 'FAC',
+          documento: 'FAC-001',
+          importe: 100,
+          cobrado: 100,
+          pendiente: 0,
+        ),
+      ],
     );
 
     await tester.pumpWidget(
@@ -48,33 +91,10 @@ void main() {
           showMonthlySummary: false,
         ),
         overrides: [
-          repartidorDailySummaryProvider(args).overrideWith(
-            (ref) async => RepartidorDailySummary(
-              repartidorId: '94',
-              date: '2026-04-24',
-              totalEfectivo: 222.79,
-              totalCheques: 0,
-              totalTarjeta: 0,
-              totalPostdatados: 0,
-              saldoActual: 4.81,
-              totalCobrosDia: 222.79,
-              gastos: 0,
-              totalAIngresar: 227.60,
-              cobrosCount: 2,
-              cobros: const [
-                RepartidorCobroDia(
-                  fecha: '2026-04-24',
-                  codigoCliente: '4300001119',
-                  nombreCliente: 'CARNICERIA MECA',
-                  tipoCobro: 'E',
-                  tipoDocumento: 'FAC',
-                  documento: 'FAC-001',
-                  importe: 100,
-                  cobrado: 100,
-                  pendiente: 0,
-                ),
-              ],
-            ),
+          ..._dailySummaryOverrides(
+            repartidorId: '94',
+            date: date,
+            summary: summary,
           ),
           repartidorLiquidacionLedgerProvider(
             (
@@ -97,6 +117,7 @@ void main() {
     expect(find.text('TOTAL'), findsOneWidget);
     expect(find.text('Cerrar día y grabar liquidación'), findsOneWidget);
     expect(find.text('Cliente'), findsWidgets);
+    await _drainSoftRefreshTimer(tester);
   });
 
   testWidgets('liquidacion diaria validates required money fields',
@@ -108,10 +129,18 @@ void main() {
 
     final now = DateTime.now();
     final date = DateTime(now.year, now.month, now.day);
-    final args = (
+    final summary = RepartidorDailySummary(
       repartidorId: '94',
-      date: date,
-      forceRefresh: true,
+      date: '2026-04-24',
+      totalEfectivo: 0,
+      totalCheques: 0,
+      totalTarjeta: 0,
+      totalPostdatados: 0,
+      saldoActual: 0,
+      totalCobrosDia: 0,
+      gastos: 0,
+      totalAIngresar: 0,
+      cobrosCount: 0,
     );
 
     await tester.pumpWidget(
@@ -121,20 +150,10 @@ void main() {
           showMonthlySummary: false,
         ),
         overrides: [
-          repartidorDailySummaryProvider(args).overrideWith(
-            (ref) async => RepartidorDailySummary(
-              repartidorId: '94',
-              date: '2026-04-24',
-              totalEfectivo: 0,
-              totalCheques: 0,
-              totalTarjeta: 0,
-              totalPostdatados: 0,
-              saldoActual: 0,
-              totalCobrosDia: 0,
-              gastos: 0,
-              totalAIngresar: 0,
-              cobrosCount: 0,
-            ),
+          ..._dailySummaryOverrides(
+            repartidorId: '94',
+            date: date,
+            summary: summary,
           ),
           repartidorLiquidacionLedgerProvider(
             (
@@ -155,36 +174,35 @@ void main() {
 
     expect(find.textContaining('importe positivo'), findsOneWidget);
     expect(find.text('Este campo es obligatorio.'), findsOneWidget);
+    await _drainSoftRefreshTimer(tester);
   });
 
   testWidgets('liquidacion diaria renders aggregate readonly totals',
       (tester) async {
     final now = DateTime.now();
     final date = DateTime(now.year, now.month, now.day);
-    final args = (
+    final summary = RepartidorDailySummary(
       repartidorId: '94,95',
-      date: date,
-      forceRefresh: true,
+      date: '2026-04-24',
+      totalEfectivo: 300,
+      totalCheques: 0,
+      totalTarjeta: 50,
+      totalPostdatados: 0,
+      saldoActual: 25,
+      totalCobrosDia: 350,
+      gastos: 0,
+      totalAIngresar: 375,
+      cobrosCount: 3,
     );
 
     await tester.pumpWidget(
       wrap(
         const RepartidorLiquidacionDiariaPage(repartidorId: '94,95'),
         overrides: [
-          repartidorDailySummaryProvider(args).overrideWith(
-            (ref) async => RepartidorDailySummary(
-              repartidorId: '94,95',
-              date: '2026-04-24',
-              totalEfectivo: 300,
-              totalCheques: 0,
-              totalTarjeta: 50,
-              totalPostdatados: 0,
-              saldoActual: 25,
-              totalCobrosDia: 350,
-              gastos: 0,
-              totalAIngresar: 375,
-              cobrosCount: 3,
-            ),
+          ..._dailySummaryOverrides(
+            repartidorId: '94,95',
+            date: date,
+            summary: summary,
           ),
         ],
       ),

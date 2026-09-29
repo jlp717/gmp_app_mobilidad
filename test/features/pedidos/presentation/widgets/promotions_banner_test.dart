@@ -7,6 +7,11 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/promotio
 void main() {
   testWidgets('pinta ofertas en el flujo de pedido cuando hay promociones',
       (tester) async {
+    tester.view.physicalSize = const Size(600, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final promotions = [
       PromotionItem(
         code: 'ART1',
@@ -44,6 +49,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Ofertas activas (2)'), findsOneWidget);
+    await tester.tap(find.text('Ofertas activas (2)'));
+    await tester.pumpAndSettle();
     expect(find.text('Migas de bacalao'), findsOneWidget);
     expect(find.text('Anillas de calamar'), findsOneWidget);
     expect(find.text('Ofertas activas (0)'), findsNothing);

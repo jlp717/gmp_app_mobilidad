@@ -13,6 +13,28 @@ import 'package:intl/date_symbol_data_local.dart';
 const _noCobrosMessage = 'No se puede cerrar la liquidación: '
     'no hay cobros en el periodo seleccionado.';
 
+List<Override> _dailySummaryOverrides({
+  required String repartidorId,
+  required DateTime date,
+  required RepartidorDailySummary summary,
+}) {
+  return [
+    for (final forceRefresh in const [false, true])
+      repartidorDailySummaryProvider(
+        (
+          repartidorId: repartidorId,
+          date: date,
+          forceRefresh: forceRefresh,
+        ),
+      ).overrideWith((ref) async => summary),
+  ];
+}
+
+Future<void> _drainSoftRefreshTimer(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 12));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUpAll(() => initializeDateFormatting('es_ES'));
 
@@ -48,6 +70,7 @@ void main() {
       expect(find.text('Grabando liquidacion...'), findsNothing);
       expect(actions.closeTokens, isEmpty);
       expect(actions.depositCalls, 0);
+      await _drainSoftRefreshTimer(tester);
     });
   }
 
@@ -63,6 +86,8 @@ void main() {
       );
       await tester.tap(find.text('Cerrar día y grabar liquidación'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Sí, grabar'));
+      await tester.pumpAndSettle();
 
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
@@ -72,6 +97,7 @@ void main() {
       expect(actions.depositCalls, 0);
       expect(find.text('Cerrar día y grabar liquidación'), findsNothing);
       expect(find.byTooltip('Ver PDF'), findsOneWidget);
+      await _drainSoftRefreshTimer(tester);
     });
   }
 
@@ -79,15 +105,36 @@ void main() {
       'closed ledger retrieves replay without cobros or another deposit',
       (tester) async {
     final actions = _RecordingLiquidacionActions(isReplay: true);
-    await _pumpPage(tester, actions, closedLedger: true, ingresoBanco: 20);
-    await tester.tap(find.text('Cerrar día y grabar liquidación'));
+    await _pumpPage(
+      tester,
+      actions,
+      closedLedger: true,
+      ingresoBanco: 20,
+    );
+    await tester.tap(find.byKey(const Key('liquidacion-recover-closed')));
+    await tester.pumpAndSettle();
+    expect(find.text('¿Recuperar la liquidación cerrada?'), findsOneWidget);
+    await tester.tap(find.text('Sí, recuperar'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
     expect(actions.closeTokens, hasLength(1));
+    final now = DateTime.now();
+    expect(
+      actions.closeTokens.single,
+      buildLiquidacionIdempotencyToken(
+        '94',
+        DateTime(now.year, now.month, now.day),
+      ),
+    );
     expect(actions.depositCalls, 0);
     expect(find.text(_noCobrosMessage), findsNothing);
+    expect(actions.pdfCalls, 1);
     expect(find.byTooltip('Ver PDF'), findsOneWidget);
+    await tester.tap(find.byTooltip('Ver PDF'));
+    await tester.pumpAndSettle();
+    expect(actions.pdfCalls, 2);
+    await _drainSoftRefreshTimer(tester);
   });
 }
 
@@ -119,31 +166,28 @@ Future<void> _pumpPage(
   final now = DateTime.now();
   final date = DateTime(now.year, now.month, now.day);
   final hasCobros = count > 0 || cobros.isNotEmpty;
+  final summary = RepartidorDailySummary(
+    repartidorId: '94',
+    date: date.toIso8601String().substring(0, 10),
+    totalEfectivo: 0,
+    totalCheques: 0,
+    totalTarjeta: hasCobros ? 25 : 0,
+    totalPostdatados: 0,
+    saldoActual: openingBalance,
+    totalCobrosDia: hasCobros ? 25 : 0,
+    gastos: 0,
+    totalAIngresar: openingBalance,
+    ingresoBanco: ingresoBanco,
+    cobrosCount: count,
+    cobros: cobros,
+  );
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        repartidorDailySummaryProvider(
-          (
-            repartidorId: '94',
-            date: date,
-            forceRefresh: true,
-          ),
-        ).overrideWith(
-          (ref) async => RepartidorDailySummary(
-            repartidorId: '94',
-            date: date.toIso8601String().substring(0, 10),
-            totalEfectivo: 0,
-            totalCheques: 0,
-            totalTarjeta: hasCobros ? 25 : 0,
-            totalPostdatados: 0,
-            saldoActual: openingBalance,
-            totalCobrosDia: hasCobros ? 25 : 0,
-            gastos: 0,
-            totalAIngresar: openingBalance,
-            ingresoBanco: ingresoBanco,
-            cobrosCount: count,
-            cobros: cobros,
-          ),
+        ..._dailySummaryOverrides(
+          repartidorId: '94',
+          date: date,
+          summary: summary,
         ),
         repartidorLiquidacionLedgerProvider((repartidorId: '94', date: date))
             .overrideWith(
@@ -168,7 +212,13 @@ Future<void> _pumpPage(
     ),
   );
   await tester.pumpAndSettle();
-  await tester.ensureVisible(find.text('Cerrar día y grabar liquidación'));
+  await tester.ensureVisible(
+    find.text(
+      closedLedger
+          ? 'Recuperar cierre y PDF'
+          : 'Cerrar día y grabar liquidación',
+    ),
+  );
 }
 
 class _RecordingLiquidacionActions extends Fake
@@ -178,6 +228,7 @@ class _RecordingLiquidacionActions extends Fake
   final bool isReplay;
   final closeTokens = <String>[];
   int depositCalls = 0;
+  int pdfCalls = 0;
 
   @override
   Future<RepartidorLiquidacionResult> close({
@@ -214,6 +265,7 @@ class _RecordingLiquidacionActions extends Fake
     required RepartidorLiquidacionResult liquidacion,
     required String idempotencyToken,
   }) async {
+    pdfCalls++;
     // PDF rendering is covered separately; no network or platform I/O here.
     throw ApiException('PDF unavailable in this fixture', statusCode: 503);
   }

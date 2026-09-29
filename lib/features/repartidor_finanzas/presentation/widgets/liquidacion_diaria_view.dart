@@ -50,6 +50,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
     required this.closedResult,
     required this.onBack,
     required this.onSave,
+    this.onRecoverClosed,
     required this.onExpense,
     required this.onBankDeposit,
     required this.onAdjustment,
@@ -74,6 +75,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
   final RepartidorLiquidacionResult? closedResult;
   final VoidCallback? onBack;
   final VoidCallback onSave;
+  final VoidCallback? onRecoverClosed;
   final VoidCallback onExpense;
   final VoidCallback onBankDeposit;
   final VoidCallback onAdjustment;
@@ -146,8 +148,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
                 builder: (context, value, _) {
                   // Input parse keeps legacy behavior; the cuadre math below
                   // runs in exact cents.
-                  final ingreso =
-                      Money.fromDouble(_parseEuro(value.text));
+                  final ingreso = Money.fromDouble(_parseEuro(value.text));
                   final diff = summary.totalAIngresarMoney - ingreso;
                   return _LiquidacionCuadreBanner(
                     totalAIngresar: summary.totalAIngresarMoney,
@@ -187,6 +188,7 @@ class LiquidacionDiariaScreen extends ConsumerWidget {
             isSaving: isSaving,
             isClosed: isClosed,
             onPressed: onSave,
+            onRecoverClosed: onRecoverClosed,
           ),
       ],
     );
@@ -587,25 +589,21 @@ class _LiquidacionTreasuryFields {
           _TreasuryMetricCard(
             label: 'Saldo actual',
             value: summary.saldoActualMoney,
-            accent: summary.saldoActualMoney.isNegative
-                ? AppColors.error
-                : null,
+            accent:
+                summary.saldoActualMoney.isNegative ? AppColors.error : null,
           ),
           const SizedBox(height: 8),
           _TreasuryMetricCard(
             label: 'Deuda pendiente',
             value: summary.deudaPendienteMoney,
-            accent: summary.deudaPendienteMoney.isPositive
-                ? AppColors.error
-                : null,
+            accent:
+                summary.deudaPendienteMoney.isPositive ? AppColors.error : null,
           ),
           const SizedBox(height: 8),
-          _TreasuryMetricCard(
-              label: 'Gastos', value: summary.gastosMoney),
+          _TreasuryMetricCard(label: 'Gastos', value: summary.gastosMoney),
           if (!summary.ajustesMoney.isZero) ...[
             const SizedBox(height: 8),
-            _TreasuryMetricCard(
-                label: 'Ajustes', value: summary.ajustesMoney),
+            _TreasuryMetricCard(label: 'Ajustes', value: summary.ajustesMoney),
           ],
           const SizedBox(height: 8),
           _TreasuryMetricCard(
@@ -986,11 +984,13 @@ class _LiquidacionCloseBar extends StatelessWidget {
     required this.isSaving,
     required this.isClosed,
     required this.onPressed,
+    this.onRecoverClosed,
   });
 
   final bool isSaving;
   final bool isClosed;
   final VoidCallback onPressed;
+  final VoidCallback? onRecoverClosed;
 
   @override
   Widget build(BuildContext context) {
@@ -1009,7 +1009,14 @@ class _LiquidacionCloseBar extends StatelessWidget {
         width: double.infinity,
         height: 52,
         child: ElevatedButton.icon(
-          onPressed: isSaving || isClosed ? null : onPressed,
+          key: isClosed && onRecoverClosed != null
+              ? const Key('liquidacion-recover-closed')
+              : null,
+          onPressed: isSaving
+              ? null
+              : isClosed
+                  ? onRecoverClosed
+                  : onPressed,
           style: ElevatedButton.styleFrom(
             backgroundColor: LiquidacionBrand.greenDark,
             foregroundColor: AppColors.themedWhite,
@@ -1028,10 +1035,18 @@ class _LiquidacionCloseBar extends StatelessWidget {
                     color: AppColors.themedWhite,
                   ),
                 )
-              : Icon(isClosed ? Icons.lock_rounded : Icons.lock_open_rounded),
+              : Icon(
+                  isClosed && onRecoverClosed != null
+                      ? Icons.restore_rounded
+                      : isClosed
+                          ? Icons.lock_rounded
+                          : Icons.lock_open_rounded,
+                ),
           label: Text(
             isClosed
-                ? 'Liquidación cerrada'
+                ? onRecoverClosed != null
+                    ? 'Recuperar cierre y PDF'
+                    : 'Liquidación cerrada'
                 : 'Cerrar día y grabar liquidación',
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
           ),
