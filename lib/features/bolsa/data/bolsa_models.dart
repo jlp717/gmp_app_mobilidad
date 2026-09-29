@@ -1,3 +1,7 @@
+// Freezed maps JsonKey annotations on factory parameters to generated fields.
+// The analyzer does not see that code generation target and reports false positives.
+// ignore_for_file: invalid_annotation_target
+
 /// Bolsa Comercial Models (Req #3)
 /// =================================
 /// Modelos de datos para la Bolsa Comercial: saldo mensual del vendedor
@@ -95,6 +99,7 @@ class BolsaStatus {
     if (inferred.isPositive) return inferred;
     return acumuladoMoney.isPositive ? acumuladoMoney : Money.zero;
   }
+
   Money get netoPeriodoMoney => acumuladoMoney - consumidoMoney;
 }
 
@@ -279,8 +284,7 @@ class BolsaMovimiento {
       precioVenta == null ? null : Money.fromDouble(precioVenta!);
 
   /// Canonical signed amount: exact cents, no binary-float drift.
-  Money get importeFirmadoMoney =>
-      tipo.isCredit ? importeMoney : -importeMoney;
+  Money get importeFirmadoMoney => tipo.isCredit ? importeMoney : -importeMoney;
 
   /// Canonical balance delta (posterior − anterior), exact cents.
   Money get variacionSaldoMoney => saldoPosteriorMoney - saldoAnteriorMoney;
@@ -297,8 +301,7 @@ class BolsaMovimiento {
 
   /// True si el descuadre supera la tolerancia ±0,01 (backend loguea
   /// `BOLSA_SALDO_MISMATCH` con `idempotencyKey` en el mismo caso).
-  bool get hasSaldoMismatch =>
-      (variacionSaldo - importeFirmado).abs() > 0.01;
+  bool get hasSaldoMismatch => (variacionSaldo - importeFirmado).abs() > 0.01;
 
   /// Motivo legible de la variación para comercial/jefe (REQ-15).
   /// Nunca expone margen: solo artículo, cantidades y efecto en saldo.
@@ -327,7 +330,8 @@ class BolsaMovimiento {
 
   String _qtyConUnidad() {
     final q = cantidad!;
-    final base = q == q.roundToDouble() ? q.toStringAsFixed(0) : q.toStringAsFixed(2);
+    final base =
+        q == q.roundToDouble() ? q.toStringAsFixed(0) : q.toStringAsFixed(2);
     final unit = unidadMedida?.trim() ?? '';
     return unit.isEmpty ? base : '$base $unit';
   }

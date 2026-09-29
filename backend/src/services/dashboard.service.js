@@ -6,8 +6,9 @@ const { TTL, redisCache } = require('../../services/redis-cache');
 const { beginRouteFill, endRouteFill } = require('../../services/route-cache-stampede');
 const { buildVendedorFilterParameterized } = require('../utils/dashboardFilters');
 const { comercialErpTable } = require('../../utils/comercial-erp-tables');
+const { getMadridDateParts } = require('../utils/dashboard-date');
 
-const DASHBOARD_CACHE_VERSION = 'v20260929-sales-today-gross';
+const DASHBOARD_CACHE_VERSION = 'v20260929-sales-today-gross-alert-v2';
 const CLOSED_YEAR_TTL_SECONDS = 7 * 24 * 3600;
 const OPEN_MONTH_TTL_SECONDS = 10 * 60;
 
@@ -24,7 +25,7 @@ function assertVendorScope(vendedorCodes) {
 }
 
 function historicalYearsCacheMeta(years, now = getCurrentDate()) {
-    const nowYear = now.getFullYear();
+    const nowYear = getMadridDateParts(now).year;
     const list = (Array.isArray(years) ? years : [years])
         .map((year) => parseInt(year, 10))
         .filter((year) => Number.isFinite(year));
@@ -53,24 +54,27 @@ class DashboardService {
     }
 
     /** Paso 1: resolver periodo efectivo y claves de cache. */
-    _resolvePeriod(vendedorCodes, yearRaw, monthRaw) {
-        const now = this._clock();
-        const year = parseInt(yearRaw) || now.getFullYear();
-        const month = parseInt(monthRaw) || (now.getMonth() + 1);
+    _resolvePeriod(vendedorCodes, yearRaw, monthRaw, asOf = this._clock()) {
+        const now = asOf instanceof Date ? new Date(asOf.getTime()) : new Date(asOf);
+        const madrid = getMadridDateParts(now);
+        const year = parseInt(yearRaw) || madrid.year;
+        const month = parseInt(monthRaw) || madrid.month;
         const cacheKey = `dashboard:metrics:${DASHBOARD_CACHE_VERSION}:${year}:${month || 'all'}:${isCompanyWideVendorScope(vendedorCodes) ? 'ALL' : vendedorCodes}`;
         const isAllVendors = isCompanyWideVendorScope(vendedorCodes);
-        const isCurrentPeriod = year === now.getFullYear() && month === (now.getMonth() + 1);
+        const isCurrentPeriod = year === madrid.year && month === madrid.month;
         const todayKey = isCurrentPeriod
-            ? `${year}-${String(month).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+            ? madrid.dateKey
             : null;
         const currentMeta = historicalYearsCacheMeta([year], now);
         const prevMeta = historicalYearsCacheMeta([year - 1], now);
         return {
             now,
+            madrid,
             year,
             month,
             cacheKey,
             isAllVendors,
+            isCurrentPeriod,
             currentTTL: currentMeta.ttl,
             prevTTL: prevMeta.ttl,
             todayCacheKey: todayKey ? `${cacheKey}:today:${todayKey}` : null,
@@ -112,7 +116,7 @@ class DashboardService {
 
     /** Paso 3: ventas de hoy (solo si el periodo solicitado es el actual). */
     async _computeTodaySales(ctx, vendorFilter, vendorParams) {
-        if (!(ctx.year === ctx.now.getFullYear() && ctx.month === (ctx.now.getMonth() + 1))) {
+        if (!ctx.isCurrentPeriod) {
             return {
                 todaySales: 0,
                 todaySalesGross: 0,
@@ -141,7 +145,7 @@ class DashboardService {
                 FROM ${comercialErpTable('LACLAE')} L
                 WHERE L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC = ? ${vendorFilter}
         `;
-        const params = [ctx.year, ctx.month, ctx.now.getDate(), ...vendorParams];
+        const params = [ctx.year, ctx.month, ctx.madrid.day, ...vendorParams];
         const rows = await this._repo.fetchPeriodAggregate(todayDataSql, params, ctx.todayCacheKey, TTL.SHORT);
         const td = rows[0] || {};
         const todaySalesGross = parseFloat(td.SALES ?? td.sales) || 0;
@@ -196,7 +200,7 @@ class DashboardService {
     }
 
     /** Paso 6: construir payload final con variaciones y tendencias. */
-    _buildMetricsPayload(period, curr, last, salesTotals, todayInfo) {
+    _buildMetricsPayload(period, curr, last, salesTotals, todayInfo, todayContractDate) {
         const calcVar = (currVal, prev) => prev && prev !== 0 ? ((currVal - prev) / prev) * 100 : 0;
         const growthPercent = calcVar(salesTotals.currentSales, salesTotals.lastSales);
         return {
@@ -217,6 +221,7 @@ class DashboardService {
             todayDocumentsFiltered: todayInfo.todayDocumentsFiltered,
             todayClients: todayInfo.todayClients,
             todayClientsFiltered: todayInfo.todayClientsFiltered,
+            todayContractDate,
             lastMonthSales: salesTotals.lastSales,
             growthPercent: Math.round(growthPercent * 10) / 10,
             sales: {
@@ -246,9 +251,9 @@ class DashboardService {
      * KPIs del periodo con comparativa mes anterior y ventas B.
      * @returns {Promise<{payload:Object, fromCache:boolean, cacheScope:string}>}
      */
-    async getMetrics(vendedorCodes, { year, month }, { forceRefresh = false } = {}) {
+    async getMetrics(vendedorCodes, { year, month }, { forceRefresh = false, asOf } = {}) {
         assertVendorScope(vendedorCodes);
-        const ctx = this._resolvePeriod(vendedorCodes, year, month);
+        const ctx = this._resolvePeriod(vendedorCodes, year, month, asOf || this._clock());
 
         if (!forceRefresh) {
             const cachedResponse = await this._cache.get('dashboard', ctx.responseCacheKey);
@@ -288,6 +293,7 @@ class DashboardService {
                 last,
                 salesTotals,
                 todayInfo,
+                ctx.isCurrentPeriod ? ctx.madrid.dateKey : null,
             );
 
             await this._cache.set('dashboard', ctx.responseCacheKey, payload, ctx.currentTTL);
@@ -297,6 +303,32 @@ class DashboardService {
         }
     }
 
+    /** Canon DB2 independiente y sin cache para la alerta de discrepancia. */
+    async getTodayGrossAudit(vendedorCodes, asOf) {
+        assertVendorScope(vendedorCodes);
+        if (!isCompanyWideVendorScope(vendedorCodes)) {
+            const error = new Error('DASHBOARD_AUDIT_SCOPE_FORBIDDEN');
+            error.statusCode = 403;
+            error.code = 'DASHBOARD_AUDIT_SCOPE_FORBIDDEN';
+            throw error;
+        }
+        const madrid = getMadridDateParts(asOf || this._clock());
+        const documentKey = `L.LCSBAB || DIGITS(L.LCYEAB) || L.LCSRAB || DIGITS(L.LCTRAB) || DIGITS(L.LCNRAB)`;
+        const sql = `
+          SELECT COALESCE(SUM(L.LCIMVT), 0) AS sales,
+                 COUNT(DISTINCT ${documentKey}) AS documents
+          FROM ${comercialErpTable('LACLAE')} L
+          WHERE L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC = ?
+        `;
+        const rows = await this._repo.fetchDailyGrossAudit(sql, [madrid.year, madrid.month, madrid.day]);
+        const row = rows?.[0] || {};
+        return {
+            date: madrid.dateKey,
+            sales: Number(row.SALES ?? row.sales ?? 0),
+            documents: Number(row.DOCUMENTS ?? row.documents ?? 0),
+        };
+    }
+
     /**
      * Evolucion de ventas mensual/semanal.
      * @returns {Promise<Array<Object>>} filas de evolucion ya limitadas a `months`
@@ -304,19 +336,20 @@ class DashboardService {
     async getSalesEvolution(vendedorCodes, { years, granularity = 'month', upToToday = 'false', months = 36 } = {}) {
         assertVendorScope(vendedorCodes);
         const now = getCurrentDate();
+        const madrid = getMadridDateParts(now);
         const selectedYears = years
             ? years.split(',').map(y => parseInt(y.trim()))
-            : [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
+            : [madrid.year, madrid.year - 1, madrid.year - 2];
 
         const yearsFilter = `AND L.LCAADC IN (${selectedYears.map(() => '?').join(',')})`;
         const vendorResult = buildVendedorFilterParameterized(vendedorCodes, 'L');
         let dateFilter = '';
         let dateParams = [];
         if (upToToday === 'true') {
-            const currentMonth = now.getMonth() + 1;
-            const currentDay = now.getDate();
+            const currentMonth = madrid.month;
+            const currentDay = madrid.day;
             dateFilter = `AND (L.LCAADC < ? OR (L.LCAADC = ? AND L.LCMMDC < ?) OR (L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC <= ?))`;
-            dateParams = [now.getFullYear(), now.getFullYear(), currentMonth, now.getFullYear(), currentMonth, currentDay];
+            dateParams = [madrid.year, madrid.year, currentMonth, madrid.year, currentMonth, currentDay];
         }
 
         const yearMeta = historicalYearsCacheMeta(selectedYears, now);

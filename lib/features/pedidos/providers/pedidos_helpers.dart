@@ -6,23 +6,18 @@
 /// puras testeables.
 library;
 
-import 'package:flutter/foundation.dart';
-
 /// CHAR(10) client codes come padded from DB2; the PMR lookup casts to CHAR(10).
-@visibleForTesting
 String normalizePedidoClientCode(String? raw) {
   final trimmed = (raw ?? '').trim();
   if (trimmed.isEmpty) return '';
   return trimmed.length <= 10 ? trimmed : trimmed.substring(0, 10);
 }
 
-@visibleForTesting
 String promotionsCacheKey(String clientCode, String vendedorCodes) {
   return 'pedidos:promotions:${normalizePedidoClientCode(clientCode)}:${vendedorCodes.trim()}';
 }
 
 /// Mirror of GET /pedidos/promotions: never reuse a cached empty list.
-@visibleForTesting
 bool shouldReusePromotionsCache(Object? cached) {
   if (cached is! Map) return false;
   final list = cached['promotions'];

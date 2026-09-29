@@ -19,7 +19,6 @@ import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.da
         shouldReusePromotionsCache,
         normalizeConfirmOrderResultForProvider,
         shouldClearCartAfterConfirmation,
-        orderConfirmationStatusForProvider,
         isConfirmedOrderResultForProvider;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';

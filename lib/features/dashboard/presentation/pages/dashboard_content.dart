@@ -23,6 +23,7 @@ import 'package:gmp_app_mobilidad/core/widgets/multi_select_dialog.dart';
 // Step 1420 lines 10 & 11 were both SmartSyncHeader.
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
 import 'package:gmp_app_mobilidad/features/dashboard/domain/dashboard_load_policy.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/domain/utils/sales_today_metric_selector.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/dashboard_chart_factory.dart'; // Add factory import
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/hierarchy_section.dart'; // New import
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/hierarchy_selector.dart';
@@ -1426,16 +1427,12 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
 
     final totalSales = _safeDouble(_kpiData!['totalSales']);
     final uniqueClients = _safeInt(_kpiData!['uniqueClients']);
-    final hasGrossTodayMetrics = _kpiData!.containsKey('todaySalesGross') &&
-        _kpiData!.containsKey('todayDocumentsGross');
-    final todaySales = _safeDouble(
-      _kpiData![hasGrossTodayMetrics ? 'todaySalesGross' : 'todaySales'],
-    );
+    final todayMetric = selectSalesTodayMetric(_kpiData!);
+    final hasGrossTodayMetrics = todayMetric.usesGross;
+    final todaySales = todayMetric.amount;
     final todaySalesFiltered = _safeDouble(_kpiData!['todaySalesFiltered']);
     final todaySalesGap = _safeDouble(_kpiData!['todaySalesGap']);
-    final todayOrders = _safeInt(
-      _kpiData![hasGrossTodayMetrics ? 'todayDocumentsGross' : 'totalOrders'],
-    );
+    final todayOrders = todayMetric.documents;
     final totalMargin = _safeDouble(_kpiData!['totalMargin']);
     final growthPercent = _safeDouble(_kpiData!['growthPercent']);
     final lastMonthSales = _safeDouble(_kpiData!['lastMonthSales']);

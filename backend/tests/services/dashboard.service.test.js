@@ -64,7 +64,7 @@ describe('DashboardService.getMetrics', () => {
             'margin', 'period', 'sales', 'todayClients', 'todayClientsFiltered',
             'todayDocumentsFiltered', 'todayDocumentsGross', 'todayOrders',
             'todayOrdersFiltered', 'todaySales', 'todaySalesFiltered',
-            'todaySalesGap', 'todaySalesGross', 'totalBoxes',
+            'todaySalesGap', 'todaySalesGross', 'todayContractDate', 'totalBoxes',
             'totalMargin', 'totalOrders', 'totalSales', 'uniqueClients',
         ].sort());
         expect(payload.sales.trend).toBe('up');
@@ -152,6 +152,7 @@ describe('DashboardService canonico Ventas Hoy 29/09/2026', () => {
         expect(payload.todayDocumentsFiltered).toBe(326);
         expect(payload.todayClients).toBe(255);
         expect(payload.todayClientsFiltered).toBe(241);
+        expect(payload.todayContractDate).toBe('2026-09-29');
         expect(payload.uniqueClients).toBe(241);
         expect(payload.avgOrderValue).toBeCloseTo(48928.95 / 312, 2); // legacy semantics
         // El WHERE exterior aplica fecha y ámbito vendedor; las métricas
@@ -209,6 +210,34 @@ describe('DashboardService canonico Ventas Hoy 29/09/2026', () => {
         expect(day29.todayCacheKey).not.toBe(day30.todayCacheKey);
         expect(day29.responseCacheKey).toContain(':day:2026-09-29');
         expect(day30.todayCacheKey).toContain(':today:2026-09-30');
+    });
+
+    test('consulta el canon bruto diario directamente, parametrizado y sin filtro legacy', async () => {
+        const repo = makeRepo({
+            fetchDailyGrossAudit: jest.fn(async () => [{ SALES: '57442.76', DOCUMENTS: '346' }]),
+        });
+        const svc = new DashboardService({
+            repository: repo,
+            cache: makeCache(),
+            clock: () => new Date('2026-09-29T12:00:00.000Z'),
+        });
+        await expect(svc.getTodayGrossAudit('ALL')).resolves.toEqual({
+            date: '2026-09-29', sales: 57442.76, documents: 346,
+        });
+        const [sql, params] = repo.fetchDailyGrossAudit.mock.calls[0];
+        expect(sql).toContain('COALESCE(SUM(L.LCIMVT), 0)');
+        expect(sql).toContain('COUNT(DISTINCT L.LCSBAB');
+        expect(sql).not.toContain("TPDC = 'LAC'");
+        expect(params).toEqual([2026, 9, 29]);
+    });
+
+    test('rechaza auditoría para un ámbito distinto de ALL', async () => {
+        const repo = makeRepo({ fetchDailyGrossAudit: jest.fn() });
+        const svc = new DashboardService({ repository: repo, cache: makeCache() });
+        await expect(svc.getTodayGrossAudit('18', new Date())).rejects.toMatchObject({
+            code: 'DASHBOARD_AUDIT_SCOPE_FORBIDDEN', statusCode: 403,
+        });
+        expect(repo.fetchDailyGrossAudit).not.toHaveBeenCalled();
     });
 });
 

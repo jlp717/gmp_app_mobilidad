@@ -6,6 +6,7 @@ const {
   composeProductEmailDispatch,
   buildRepartoMessageId,
   redactDeliverySummary,
+  resolveSalesAlertEmailDelivery,
 } = require('../services/reparto-email-delivery-policy');
 
 describe('reparto email delivery policy', () => {
@@ -163,5 +164,80 @@ describe('reparto email delivery policy', () => {
     expect(dispatch.smtpCc).toEqual(['carlos@empresa.com', 'javier@empresa.com']);
     expect(dispatch.redirected).toBe(false);
     expect(dispatch.intendedCc).toContain('carlos@empresa.com');
+  });
+
+  describe('sales discrepancy alert delivery', () => {
+    const productRecipient = 'javier.lacal.pelegrin@gmail.com';
+
+    test('delivers directly only with all three production flags', () => {
+      expect(resolveSalesAlertEmailDelivery({
+        recipient: productRecipient,
+        env: {
+          NODE_ENV: 'production',
+          REPARTO_ENVIRONMENT: 'production',
+          REPARTO_TABLE_SET: 'production',
+        },
+      })).toEqual({
+        intendedRecipient: productRecipient,
+        effectiveRecipient: productRecipient,
+        redirected: false,
+        policy: 'sales_alert_production_direct',
+      });
+    });
+
+    test.each([
+      [{ NODE_ENV: 'production', REPARTO_ENVIRONMENT: 'staging', REPARTO_TABLE_SET: 'production' }],
+      [{ NODE_ENV: 'test', REPARTO_ENVIRONMENT: 'production', REPARTO_TABLE_SET: 'production' }],
+      [{ NODE_ENV: 'production', REPARTO_ENVIRONMENT: 'production', REPARTO_TABLE_SET: 'testmovil' }],
+      [{}],
+    ])('fails closed outside production when a test sink is missing (%j)', (env) => {
+      expect(() => resolveSalesAlertEmailDelivery({ recipient: productRecipient, env }))
+        .toThrow(expect.objectContaining({ code: 'SALES_ALERT_TEST_SINK_UNSAFE' }));
+    });
+
+    test('uses an allowlisted non-product sink in staging', () => {
+      expect(resolveSalesAlertEmailDelivery({
+        recipient: productRecipient,
+        env: {
+          NODE_ENV: 'production',
+          REPARTO_ENVIRONMENT: 'staging',
+          REPARTO_TABLE_SET: 'testmovil',
+          REPARTO_EMAIL_TEST_SINK: 'sales-alert@example.test',
+          REPARTO_EMAIL_TEST_ALLOWLIST: 'sales-alert@example.test',
+        },
+      })).toMatchObject({
+        effectiveRecipient: 'sales-alert@example.test',
+        redirected: true,
+        policy: 'sales_alert_test_sink',
+      });
+    });
+
+    test('isolated_test never sends to product even if product is allowlisted', () => {
+      expect(resolveSalesAlertEmailDelivery({
+        recipient: productRecipient,
+        env: {
+          NODE_ENV: 'production',
+          REPARTO_ENVIRONMENT: 'staging',
+          REPARTO_TABLE_SET: 'isolated_test',
+          REPARTO_EMAIL_TEST_ALLOWLIST: productRecipient,
+        },
+      })).toMatchObject({
+        effectiveRecipient: 'reparto-test@localhost',
+        redirected: true,
+      });
+    });
+
+    test('rejects product recipient reused as a sink', () => {
+      expect(() => resolveSalesAlertEmailDelivery({
+        recipient: productRecipient,
+        env: {
+          NODE_ENV: 'test',
+          REPARTO_ENVIRONMENT: 'test',
+          REPARTO_TABLE_SET: 'testmovil',
+          REPARTO_EMAIL_TEST_SINK: productRecipient,
+          REPARTO_EMAIL_TEST_ALLOWLIST: productRecipient,
+        },
+      })).toThrow(expect.objectContaining({ code: 'SALES_ALERT_TEST_SINK_UNSAFE' }));
+    });
   });
 });

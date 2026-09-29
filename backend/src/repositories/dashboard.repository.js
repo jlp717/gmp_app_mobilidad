@@ -24,6 +24,11 @@ class DashboardRepository {
         return this._cachedQuery(this._queryWithParams, sql, cacheKey, ttl, params);
     }
 
+    /** Lectura independiente, parametrizada y sin cache para auditar Ventas Hoy. */
+    fetchDailyGrossAudit(sql, params) {
+        return this._queryWithParams(sql, params);
+    }
+
     /** Ventas B por vendedor: acceso via BSalesRepository (SQL+cache ahi). */
     fetchBSalesByVendor(year, vendorScope) {
         const { bSalesRepository } = require('./bSales.repository');

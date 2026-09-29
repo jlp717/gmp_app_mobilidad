@@ -54,6 +54,57 @@ function shouldSkipSmtpForIsolatedTest(email, env = process.env) {
     || normalized.endsWith('.localhost');
 }
 
+function isUnambiguousProduction(env) {
+  return String(env?.NODE_ENV || '').trim().toLowerCase() === 'production'
+    && String(env?.REPARTO_ENVIRONMENT || '').trim().toLowerCase() === 'production'
+    && String(env?.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'production';
+}
+
+function isNonProductTestSink(email) {
+  const normalized = normalizeEmail(email);
+  return Boolean(normalized) && (
+    normalized.endsWith('.test')
+    || normalized.endsWith('@localhost')
+    || normalized.endsWith('.localhost')
+  );
+}
+
+/** Strict routing for automated sales discrepancy alerts. */
+function resolveSalesAlertEmailDelivery({ recipient, env = process.env } = {}) {
+  const productRecipient = normalizeEmail(recipient);
+  if (!productRecipient) {
+    throw new RepartoEmailDeliveryPolicyError(
+      'El destinatario de la alerta de ventas no es válido',
+      'SALES_ALERT_RECIPIENT_INVALID',
+      422,
+    );
+  }
+  if (isUnambiguousProduction(env)) {
+    return {
+      intendedRecipient: productRecipient,
+      effectiveRecipient: productRecipient,
+      redirected: false,
+      policy: 'sales_alert_production_direct',
+    };
+  }
+
+  const allowlist = testAllowlist(env);
+  const sink = testSink(env);
+  if (!sink || sink === productRecipient || !isNonProductTestSink(sink) || !allowlist.includes(sink)) {
+    throw new RepartoEmailDeliveryPolicyError(
+      'La alerta de ventas fuera de producción requiere un sink de test permitido',
+      'SALES_ALERT_TEST_SINK_UNSAFE',
+      503,
+    );
+  }
+  return {
+    intendedRecipient: productRecipient,
+    effectiveRecipient: sink,
+    redirected: true,
+    policy: isIsolatedTest(env) ? 'sales_alert_isolated_test_sink' : 'sales_alert_test_sink',
+  };
+}
+
 /**
  * Resolves effective SMTP recipients. isolated_test always requires an explicit
  * allowlist/sink. This is deliberately fail-closed so a missing PM2 flag cannot
@@ -234,6 +285,8 @@ module.exports = {
   normalizeEmail,
   uniqueEmails,
   shouldSkipSmtpForIsolatedTest,
+  resolveSalesAlertEmailDelivery,
+  isUnambiguousProduction,
   isIsolatedTest,
   ISOLATED_TEST_DEFAULT_EMAIL,
 };
