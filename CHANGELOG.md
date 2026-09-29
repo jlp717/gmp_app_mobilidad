@@ -12,5 +12,10 @@ Formato Keep a Changelog. Rama de trabajo: `test`.
 - L6 rendimiento: rebuilds con `select`, batch anti N+1, retry con backoff, cero errores en analyze.
 - L7 UX: Semantics en cobros/commissions + estado offline en cobros.
 - L8 dominio: Money en céntimos + split de pedidos + routes que delegan en services.
+- B-P1-3 split pedidos hojas ≤500 + consts single-source (4789f03).
+- B-P1-2 tanda 2 batch/matrix/by-client a services (302e542).
+- B-P1-1 núcleo Money aditivo + paridad (8185f6f).
+- B-P1-4 top-3 lint a strict 0/0 (1bbde97).
+- B-P1-5 coverage ratchet 57/47/56/59 medido 59.5/49.3/64.4/61.4 (5f5b0df).
 
 Histórico previo en tags del repo.

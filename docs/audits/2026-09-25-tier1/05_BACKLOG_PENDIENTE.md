@@ -4,19 +4,27 @@
 
 | ID | Pendiente | Justificación |
 |---|---|---|
-| B-P0-1 | Fijar `SENTRY_DSN` en servidor prod ANTES del próximo deploy | L10 fail-fast tumba el arranque sin DSN. Sin código. |
+| B-P0-1 | Fijar `SENTRY_DSN` en servidor prod ANTES del próximo deploy | SSH inalcanzable x2 el 2026-09-28. Javier debe confirmar DSN. L10 fail-fast tumba arranque sin DSN. |
 | B-P0-2 | Validación legal GDPR (bases, plazos, DPD, texto a receptores) por asesoría | Propuesta pendiente; antes de borrar nada. |
 
-## P1
+## P1 (pendiente restante)
 
 | ID | Pendiente | Justificación |
 |---|---|---|
-| B-P1-1 | Money swap total | Lista exacta L8a: ~45 campos models, 9 liquidación, consumidores presentation/data, validación rutero 17 hits, entregas/facturas/cobros/bolsa. |
-| B-P1-2 | Batch layer commissions + `/matrix` + `/by-client` a services | Tanda 2 L8c. |
-| B-P1-3 | Split pedidos refinamiento (≤500, dedup consts, DIP config/db, stubs con impl real) | — |
-| B-P1-4 | Conversión lint nº1: `repartidor-history-routes` (91 warns), `routes/objectives` (83), `services/pedidos/index` (79) | — |
-| B-P1-5 | Coverage ratchet (`collectCoverage` + thresholds por encima de 32/25/31/33) + cazar handles (`test:diagnose`) + teardown pool ODBC | — |
-| B-P1-6 | Verificar PDFs/firma/tracking en dispositivo → decidir `MANAGE_EXTERNAL_STORAGE` y background location | — |
+| B-P1-1-futuro | Swap total de tipos Money en widgets | Núcleo aditivo hecho. Swap total rompería widgets fuera de jaula. Futuro. |
+| B-P1-6 | Verificar PDFs/firma/tracking en dispositivo → decidir `MANAGE_EXTERNAL_STORAGE` y background location | Requiere dispositivo físico. |
+
+## Completado post-Fase 3 (2026-09-28)
+
+| ID | Completado | Commit |
+|---|---|---|
+| B-P1-3 | Split pedidos: hojas ≤500 + consts single-source | 4789f03 |
+| B-P1-2 | Tanda 2: batch layer commissions + `/matrix` + `/by-client` a services | 302e542 |
+| B-P1-1 | Núcleo Money aditivo + paridad | 8185f6f |
+| B-P1-4 | Top-3 lint a strict 0/0 | 1bbde97 |
+| B-P1-5 | Coverage ratchet 57/47/56/59, medido 59.5/49.3/64.4/61.4 | 5f5b0df |
+
+Cobertura medida real post-Fase 3: 59.5/49.3/64.4/61.4 sobre ratchet 57/47/56/59.
 
 ## P2
 
