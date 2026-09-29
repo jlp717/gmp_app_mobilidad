@@ -6,32 +6,20 @@ const logger = require('../middleware/logger');
 const { queryWithParams } = require('../middleware/db-timing');
 const {
     getCurrentDate,
-    buildBoundVendorFilter,
-    getVendorColumn,
     MIN_YEAR,
-    LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
-    getBSalesByVendor,
     lookupClientAssignedVendorCodes,
-    aggregateBSalesByMonth,
     sanitizeForSQL,
-    sanitizeCodeList,
     handleRouteError
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
-const { redisCache, TTL } = require('../services/redis-cache');
+const { redisCache } = require('../services/redis-cache');
 const { isCacheBypassRequest } = require('../middleware/http-cache');
 const { beginRouteFill, endRouteFill, sendFillBusy } = require('../services/route-cache-stampede');
 const {
-    isCommercial80User,
-    resolveAllModeVendorCodesString,
-} = require('../services/team-commission.service');
-const {
     applyHybridMonthlyObjectives,
     computeSeasonalWeightTargets,
-    applyMonthlyObjectiveRebalances,
-    hasObjectiveMonthlyRebalances,
     getAnnualObjectiveAdjustment,
     sumMonthlyObjectives,
 } = require('./objectives-hybrid-helpers');
@@ -45,21 +33,14 @@ const {
     getVendorCurrentClients,
     getClientsMonthlySales,
     getVendorTargetConfig,
-    getVendorCodeVariants,
     parseVendorCodes,
     scopeVendorCodesForUser,
     addBSalesToRows,
     aggregateObjectiveRows,
-    getFixedMonthlyObjectiveTarget,
     getExactMonthlyTargets,
     getGlobalPinnedMonthlyTargets,
     getScopedPinnedMonthlyTargets,
-    getFixedMonthlyObjectiveTargets,
-    getGlobalObjectiveBaselineMonthly,
-    buildObjectiveRebalanceAllocationFactors,
     applyConfiguredObjectiveRebalances,
-    buildVendorObjectiveTargets,
-    mergeVendorObjectiveTargets,
     getObjectivesSummary,
     // Tanda 2 (DIP): queries de matrix/populations/by-client en service+repo.
     getMatrixContactAndNotes,
@@ -71,11 +52,6 @@ const {
 // (metadataCache + assertIdentifier + buildMonthFilterParameterized viven en
 // services/objectives-service.js + repositories/objectives-repository.js.)
 const { CircuitBreaker } = require('../services/circuit-breaker');
-const {
-    DEFAULT_PORCENTAJE_MEJORA,
-    getAlignedVendorSalesForObjectives,
-    resolveObjectiveSalesTarget,
-} = require('../utils/objectives-source');
 
 const OBJECTIVES_CACHE_VERSION = 'v20260921-live-all-months';
 const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
@@ -98,9 +74,6 @@ const objectivesByClientBreaker = new CircuitBreaker({
 });
 const BY_CLIENT_DEFAULT_LIMIT = 100;
 const BY_CLIENT_MAX_LIMIT = 250;
-const BY_CLIENT_MAX_CLIENT_CODE_IN_PARAMS = 200;
-const BY_CLIENT_CODE_BATCH_SIZE = 40;
-const BY_CLIENT_BATCH_CONCURRENCY = 4;
 
 // (Implementacion movida a services/objectives-service.js: clampByClientLimit,
 // chunkArray, mapChunksWithConcurrency. Las cotas quedan pinnadas aqui por
@@ -138,7 +111,7 @@ async function fetchObjectiveEvolutionRowsByClientScope(vendorCode, uniqueYears)
     const yearPlaceholders = uniqueYears.map(() => '?').join(',');
     const chunkSize = 250;
     const chunks = chunkArray(safeClientCodes, chunkSize);
-    const chunkRows = await mapChunksWithConcurrency(chunks, 3, async (chunk) => {
+    const chunkRows = await mapChunksWithConcurrency(chunks, 3, (chunk) => {
         const clientPlaceholders = chunk.map(() => '?').join(',');
         return queryWithParams(`
             SELECT
@@ -349,7 +322,6 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
         // Include previous years for dynamic objective calculation
         const allYears = [...yearsArray, ...yearsArray.map(y => y - 1)];
         const uniqueYears = [...new Set(allYears)];
-        const yearsFilter = uniqueYears.join(',');
         const vendorCodesArray = parseVendorCodes(effectiveVendorCodes);
 
         // Get Active Days for calculating pace
@@ -406,7 +378,7 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
             const currentYear = Math.max(...yearsArray);
             const prevYear = currentYear - 1;
 
-            const monthsWithData = rows.filter(r => r.YEAR == prevYear).map(r => r.MONTH);
+            const monthsWithData = rows.filter((r) => Number(r.YEAR) === prevYear).map((r) => r.MONTH);
             const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(m => !monthsWithData.includes(m));
 
             if (missingMonths.length > 0) {
@@ -481,10 +453,10 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
             const prevYearMonthlySales = {};
 
             for (let m = 1; m <= 12; m++) {
-                const row = rows.find(r => r.YEAR == year && r.MONTH == m); // Loose equality
-                const prevRow = rows.find(r => r.YEAR == (year - 1) && r.MONTH == m);
+                const row = rows.find((r) => Number(r.YEAR) === year && Number(r.MONTH) === m);
+                const prevRow = rows.find((r) => Number(r.YEAR) === (year - 1) && Number(r.MONTH) === m);
 
-                let ownPrevSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
+                const ownPrevSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
 
                 // Use inherited sales when vendor has no own sales for this month
                 if (ownPrevSales === 0 && inheritedMonthlySales[m]) {
@@ -502,7 +474,7 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
             const combinedPrevTotal = prevYearTotal + inheritedTotal;
 
             // FIXED TARGET OVERRIDE: Use fixed target if available, otherwise calculate from previous year
-            let annualObjective, monthlyObjective;
+            let annualObjective;
 
             const fixedTargetsForYear = fixedTargetsByYear[year] || {};
             const hasFixedTargetsForYear = Object.keys(fixedTargetsForYear).length > 0;
@@ -511,7 +483,6 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
 
             if (multiVendorTargets) {
                 annualObjective = multiVendorTargets.annualObjectiveByYear[year] || 0;
-                monthlyObjective = annualObjective / 12;
             } else if (hasFixedTargetsForYear && combinedPrevTotal > 0) {
                 // Hybrid: pinned months (e.g. May 1.41M) + remainder on other months.
                 // JEFE ALL applies the 2026 -100k general cut; single-vendor pins do not.
@@ -525,7 +496,6 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
                 );
                 seasonalTargets = hybrid.monthly;
                 annualObjective = hybrid.annual;
-                monthlyObjective = annualObjective / 12;
             } else {
                 const growthFactor = 1 + (targetPct / 100);
                 let rawAnnual = combinedPrevTotal > 0
@@ -535,7 +505,6 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
                     rawAnnual = Math.max(0, rawAnnual + getAnnualObjectiveAdjustment(year));
                 }
                 annualObjective = rawAnnual;
-                monthlyObjective = annualObjective / 12;
             }
 
             // Seasonal weights (skipped when hybrid/multi already set seasonalTargets)
@@ -559,7 +528,6 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
                         }
                     }
                     annualObjective = seasonalAnnual;
-                    monthlyObjective = annualObjective / 12;
                 }
             }
 
@@ -571,18 +539,16 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
                     allocationVendorCode,
                 );
                 annualObjective = sumMonthlyObjectives(seasonalTargets);
-                monthlyObjective = annualObjective / 12;
             }
 
             yearlyData[year] = [];
 
             for (let m = 1; m <= 12; m++) {
-                const row = rows.find(r => r.YEAR == year && r.MONTH == m);
-                const prevRow = rows.find(r => r.YEAR == (year - 1) && r.MONTH == m);
+                const row = rows.find((r) => Number(r.YEAR) === year && Number(r.MONTH) === m);
 
                 const sales = row ? parseFloat(row.SALES) || 0 : 0;
                 const cost = row ? parseFloat(row.COST) || 0 : 0;
-                const clients = row ? parseInt(row.CLIENTS) || 0 : 0;
+                const clients = row ? parseInt(row.CLIENTS, 10) || 0 : 0;
 
                 // SEASONAL OBJECTIVE with INHERITED support:
                 let seasonalObjective = 0;
@@ -610,13 +576,13 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
 
                 yearlyData[year].push({
                     month: m,
-                    sales: sales,
-                    cost: cost,
+                    sales,
+                    cost,
                     margin: sales - cost,
-                    clients: clients,
+                    clients,
                     objective: seasonalObjective,
                     workingDays: totalWorkingDays,
-                    daysPassed: daysPassed
+                    daysPassed
                 });
             }
 
@@ -625,7 +591,7 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
                 totalSales: data.reduce((sum, m) => sum + m.sales, 0),
                 totalCost: data.reduce((sum, m) => sum + m.cost, 0),
                 totalMargin: data.reduce((sum, m) => sum + m.margin, 0),
-                annualObjective: annualObjective
+                annualObjective
             };
         }
 
@@ -683,10 +649,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
             productCode, productName, familyCode, subfamilyCode,
             // NEW: FI filters
             fi1, fi2, fi3, fi4, fi5,
-            // NEW: Family grouping
-            groupByFamily = '0'
         } = req.query;
-        const familyLevel = parseInt(groupByFamily) || 0;
 
         if (!clientCode) {
             return res.status(400).json({ error: 'clientCode is required' });
@@ -709,15 +672,14 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         }
 
         // Parse years and range
-        const yearsArray = years ? years.split(',').map(y => parseInt(y.trim())).filter(y => y >= 2015) : [new Date().getFullYear()];
-        const monthStart = parseInt(startMonth);
-        const monthEnd = parseInt(endMonth);
+        const yearsArray = years ? years.split(',').map((y) => parseInt(y.trim(), 10)).filter((y) => y >= 2015) : [new Date().getFullYear()];
+        const monthStart = parseInt(startMonth, 10);
+        const monthEnd = parseInt(endMonth, 10);
 
         // Determine years to fetch (include previous year for YoY if needed)
         const allYearsToFetch = new Set(yearsArray);
-        yearsArray.forEach(y => allYearsToFetch.add(y - 1));
+        yearsArray.forEach((y) => allYearsToFetch.add(y - 1));
         const uniqueYears = Array.from(allYearsToFetch);
-        const yearsFilter = uniqueYears.join(',');
 
         // --- NEW: Client Contact & Observations (service+repo; queries verbatim) ---
         const { contactInfo, editableNotes } = await getMatrixContactAndNotes(clientCode);
@@ -744,34 +706,26 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
             filterParams.push(subfamilyCode.trim());
         }
 
-        let needsArtxJoin = false;
         if (fi1 && fi1.trim()) {
             filterConditions += ` AND TRIM(AX.FILTRO01) = ?`;
             filterParams.push(fi1.trim());
-            needsArtxJoin = true;
         }
         if (fi2 && fi2.trim()) {
             filterConditions += ` AND TRIM(AX.FILTRO02) = ?`;
             filterParams.push(fi2.trim());
-            needsArtxJoin = true;
         }
         if (fi3 && fi3.trim()) {
             filterConditions += ` AND TRIM(AX.FILTRO03) = ?`;
             filterParams.push(fi3.trim());
-            needsArtxJoin = true;
         }
         if (fi4 && fi4.trim()) {
             filterConditions += ` AND TRIM(AX.FILTRO04) = ?`;
             filterParams.push(fi4.trim());
-            needsArtxJoin = true;
         }
         if (fi5 && fi5.trim()) {
             filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = ?`;
             filterParams.push(fi5.trim());
         }
-
-        // Build ARTX join if needed
-        const artxJoin = needsArtxJoin ? `LEFT JOIN ${comercialErpTable('ARTX')} AX ON L.LCCDRF = AX.CODIGOARTICULO` : '';
 
         // Get product purchases for this client - USING DSED.LACLAE (which has data for all clients including PUA)
         // Query verbatim en services/objectives-service.js + repositories/objectives-repository.js.
@@ -857,8 +811,8 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         };
         const formatByYearFromMonthly = (monthlyData) => {
             const stats = createYearStats();
-            Object.keys(monthlyData || {}).forEach(yearStr => {
-                const year = parseInt(yearStr);
+            Object.keys(monthlyData || {}).forEach((yearStr) => {
+                const year = parseInt(yearStr, 10);
                 if (!isSelectedYear(year)) return;
                 Object.values(monthlyData[yearStr] || {}).forEach(mData => {
                     addToYearStats(stats, year, mData.sales || 0, mData.cost || 0, mData.units || 0);
@@ -922,14 +876,14 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
             const prodCode = row.PRODUCT_CODE?.trim() || '';
             const prodName = row.PRODUCT_NAME?.trim() || 'Sin nombre';
             const unitType = row.UNIT_TYPE?.trim() || 'UDS';
-            const year = parseInt(row.YEAR);
-            const month = parseInt(row.MONTH);
+            const year = parseInt(row.YEAR, 10);
+            const month = parseInt(row.MONTH, 10);
             const sales = parseFloat(row.SALES) || 0;
             const cost = parseFloat(row.COST) || 0;
             const units = parseFloat(row.UNITS) || 0;
 
-            const hasSpecialPrice = parseInt(row.HAS_SPECIAL_PRICE) > 0;
-            const hasDiscount = parseInt(row.HAS_DISCOUNT) > 0;
+            const hasSpecialPrice = parseInt(row.HAS_SPECIAL_PRICE, 10) > 0;
+            const hasDiscount = parseInt(row.HAS_DISCOUNT, 10) > 0;
             const avgDiscountPct = parseFloat(row.AVG_DISCOUNT_PCT) || 0;
             const avgDiscountEur = parseFloat(row.AVG_DISCOUNT_EUR) || 0;
 
@@ -1060,7 +1014,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
                     subfamily.products.set(prodCode, {
                         productCode: prodCode,
                         productName: prodName,
-                        unitType: unitType,
+                        unitType,
                         totalSales: 0, totalCost: 0, totalUnits: 0,
                         prevYearSales: 0, prevYearCost: 0, prevYearUnits: 0,
                         hasDiscount: false, hasSpecialPrice: false,
@@ -1229,8 +1183,8 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
                     fi4Level.products.set(prodCode, {
                         code: prodCode,
                         name: prodName,
-                        unitType: unitType,
-                        fi5Code: fi5Code,
+                        unitType,
+                        fi5Code,
                         fi5Name: fi5Names[fi5Code] || fi5Code,
                         totalSales: 0, totalCost: 0, totalUnits: 0,
                         prevYearSales: 0, prevYearCost: 0, prevYearUnits: 0,
@@ -1266,7 +1220,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         const getSalesForKey = (keyCode, filterFn) => {
             let total = 0;
             rows.forEach(r => {
-                if (filterFn(r) && isPrevYear(parseInt(r.YEAR))) {
+                if (filterFn(r) && isPrevYear(parseInt(r.YEAR, 10))) {
                     total += (parseFloat(r.SALES) || 0);
                 }
             });
@@ -1290,7 +1244,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
                 units: val.currentUnits,
                 prevSales: val.prevSales,
                 yoyVariation: variation !== null ? parseFloat(variation.toFixed(1)) : null,
-                yoyTrend: yoyTrend,
+                yoyTrend,
                 byYear: formatYearStats(val.byYear)
             };
         });
@@ -1318,8 +1272,8 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
                     for (let m = 1; m <= 12; m++) {
                         flatMonthly[m.toString()] = { selectedSales: 0, selectedUnits: 0, selectedCost: 0, prevSales: 0, prevUnits: 0, prevCost: 0, byYear: createYearStats() };
                     }
-                    Object.keys(p.monthlyData).forEach(yearStr => {
-                        const y = parseInt(yearStr);
+                    Object.keys(p.monthlyData).forEach((yearStr) => {
+                        const y = parseInt(yearStr, 10);
                         const mData = p.monthlyData[yearStr];
                         Object.keys(mData).forEach(mStr => {
                             if (isSelectedYear(y)) {
@@ -1428,8 +1382,8 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
             for (let m = 1; m <= 12; m++) {
                 flatMonthly[m.toString()] = { selectedSales: 0, selectedUnits: 0, selectedCost: 0, prevSales: 0, prevUnits: 0, prevCost: 0, byYear: createYearStats() };
             }
-            Object.keys(monthlyData).forEach(yearStr => {
-                const y = parseInt(yearStr);
+            Object.keys(monthlyData).forEach((yearStr) => {
+                const y = parseInt(yearStr, 10);
                 const mData = monthlyData[yearStr];
                 Object.keys(mData).forEach(mStr => {
                     if (isSelectedYear(y)) {
@@ -1532,30 +1486,18 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
                 const marginPercent2 = fi2.totalSales > 0 ? (margin2 / fi2.totalSales) * 100 : 0;
                 const prevMargin2 = fi2.prevYearSales - fi2.prevYearCost;
                 const variation2 = fi2.prevYearSales > 0 ? ((fi2.totalSales - fi2.prevYearSales) / fi2.prevYearSales) * 100 : 0;
-                let yoy2 = 'neutral';
-                if (fi2.prevYearSales === 0 && fi2.totalSales > 0) yoy2 = 'new';
-                else if (variation2 > 5) yoy2 = 'up';
-                else if (variation2 < -5) yoy2 = 'down';
 
                 const children2 = Array.from(fi2.children.values()).map(fi3 => {
                     const margin3 = fi3.totalSales - fi3.totalCost;
                     const marginPercent3 = fi3.totalSales > 0 ? (margin3 / fi3.totalSales) * 100 : 0;
                     const prevMargin3 = fi3.prevYearSales - fi3.prevYearCost;
                     const variation3 = fi3.prevYearSales > 0 ? ((fi3.totalSales - fi3.prevYearSales) / fi3.prevYearSales) * 100 : 0;
-                    let yoy3 = 'neutral';
-                    if (fi3.prevYearSales === 0 && fi3.totalSales > 0) yoy3 = 'new';
-                    else if (variation3 > 5) yoy3 = 'up';
-                    else if (variation3 < -5) yoy3 = 'down';
 
                     const children3 = Array.from(fi3.children.values()).map(fi4 => {
                         const margin4 = fi4.totalSales - fi4.totalCost;
                         const marginPercent4 = fi4.totalSales > 0 ? (margin4 / fi4.totalSales) * 100 : 0;
                         const prevMargin4 = fi4.prevYearSales - fi4.prevYearCost;
                         const variation4 = fi4.prevYearSales > 0 ? ((fi4.totalSales - fi4.prevYearSales) / fi4.prevYearSales) * 100 : 0;
-                        let yoy4 = 'neutral';
-                        if (fi4.prevYearSales === 0 && fi4.totalSales > 0) yoy4 = 'new';
-                        else if (variation4 > 5) yoy4 = 'up';
-                        else if (variation4 < -5) yoy4 = 'down';
 
                         const products = Array.from(fi4.products.values())
                             .map(formatFiProduct)
@@ -1638,10 +1580,6 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
 
             const prevMargin1 = fi1.prevYearSales - fi1.prevYearCost;
             const variation1 = fi1.prevYearSales > 0 ? ((fi1.totalSales - fi1.prevYearSales) / fi1.prevYearSales) * 100 : 0;
-            let yoy1 = 'neutral';
-            if (fi1.prevYearSales === 0 && fi1.totalSales > 0) yoy1 = 'new';
-            else if (variation1 > 5) yoy1 = 'up';
-            else if (variation1 < -5) yoy1 = 'down';
             const byYear1 = formatByYearFromMonthly(fi1.monthlyData || {});
             const comparison1 = buildYearComparison(byYear1);
 
@@ -1925,5 +1863,11 @@ module.exports.buildEvolutionRouteCacheKey = buildEvolutionRouteCacheKey;
 module.exports.fillEvolutionRouteCacheForAll = fillEvolutionRouteCacheForAll;
 module.exports.OBJECTIVES_CACHE_VERSION = OBJECTIVES_CACHE_VERSION;
 module.exports.overlayOpenMonthFromLiveLaclae = overlayOpenMonthFromLiveLaclae;
+// Cotas by-client pinnadas por contrato de ruta (objectives_by_client_contracts);
+// la implementacion vive en services/objectives-service.js (clampByClientLimit).
+module.exports.BY_CLIENT_ROUTE_LIMITS = {
+    BY_CLIENT_DEFAULT_LIMIT,
+    BY_CLIENT_MAX_LIMIT,
+};
 
 module.exports.getObjectivesEvolutionCached = getObjectivesEvolutionCached;

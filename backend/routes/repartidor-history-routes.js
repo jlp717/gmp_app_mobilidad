@@ -6,114 +6,25 @@
  * - Historical deliveries and signatures
  */
 
-const express = require('express');
-const router = express.Router();
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
 const logger = require('../middleware/logger');
-const { sanitizeCodeListForParams, sanitizeForSQL } = require('../utils/common');
 const repartidorDb = require('../repositories/repartidor-route-db2-repository');
 const { generateInvoicePDF } = require('../app/services/pdfService');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
-const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
 const { redisCache, TTL } = require('../services/redis-cache');
-const whatsappGateway = require('../services/whatsappGatewayService');
-const {
-    RepartoEmailDeliveryPolicyError,
-    resolveRepartoEmailDelivery,
-    buildRepartoMessageId,
-} = require('../services/reparto-email-delivery-policy');
-const {
-    verifyToken,
-    requireJefeVentas: importedRequireJefeVentas,
-} = require('../middleware/auth');
+const { verifyToken } = require('../middleware/auth');
 
-// Keep the router fail-closed when a reduced integration harness (or a
-// partially loaded auth module) omits the privileged middleware. Production
-// auth always supplies the real guard; the fallback only prevents Express
-// from mounting a route with an undefined callback.
-const requireJefeVentas = typeof importedRequireJefeVentas === 'function'
-    ? importedRequireJefeVentas
-    : (_req, res) => res.status(503).json({
-        success: false,
-        code: 'AUTH_GUARD_UNAVAILABLE',
-        error: 'El guard de autorizacion no esta disponible',
-    });
-const { CircuitBreaker: RepartidorCircuitBreaker } = require('../services/circuit-breaker');
-
-const repartidorBreaker = new RepartidorCircuitBreaker({
-    name: 'repartidor',
-    failureThreshold: 3,
-    successThreshold: 2,
-    timeout: 10000
-});
 const REPARTIDOR_PDF_CACHE_VERSION = 'v3';
 const REPARTIDOR_DOCUMENT_PDF_CACHE_TTL = Number(TTL?.REALTIME) || 60;
-const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptService');
-const trackingRepo = require('../repositories/repartidor-rutero-tracking-db2-repository');
-const facturasService = require('../services/facturas.service');
-const pdfService = require('../services/pdf.service');
-
-const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
-const ruteroOrderWorkflow = require('../services/repartidor-rutero-order-workflow');
-const {
-  optimizeRoutePackage,
-  annotateRouteTimeline,
-  resolveDepartureMinute,
-  normalizeOrigin,
-} = require('../services/repartidor-rutero-route-optimizer');
-const {
-  parseRouteDate,
-  normalizeOptimizeStopsPayload,
-  preferredStartMinute,
-  buildWindowLabel,
-  isClosedOnDate,
-  formatMinuteLabel,
-} = require('../services/repartidor-rutero-orden-service');
-
-const REPARTIDOR_READ_PAGE_MAX = 100;
-const REPARTIDOR_PDF_REQUEST_TIMEOUT_MS = Math.min(
-    120000,
-    Math.max(5000, Number.parseInt(process.env.REPARTIDOR_PDF_REQUEST_TIMEOUT_MS || '30000', 10) || 30000),
-);
-
 const {
     configureRepartidorPdfTimeout,
-    normalizedRole,
-    isRepartoPrivileged,
-    canonicalRepartidorCode,
-    authorizeSingleRepartidorId,
     sendRouteError,
     parseBoundedInt,
-    parseRuteroOrigin,
-    parseRuteroDepartureMinute,
     parseIsoDate,
     parsePagination,
     authorizedRepartidorIds,
-    parseAlbaranOwnershipKey,
-    parseInvoiceOwnershipKey,
-    resolveAlbaranOwners,
-    resolveInvoiceOwners,
-    resolveDeliveryOwners,
-    rawRepartidorId,
-    hintedRepartidorId,
-    uniqueActorCodes,
-    normalizeVendorCode,
-    actorVendorCodes,
-    vendorCodesIntersect,
-    authorizeResolvedOwner,
-    documentOwnershipGuard,
-    prevalidateStrictDocumentOwner,
-    strictRepartoDocumentOwner,
-    albaranQueryOwnership,
-    albaranParamOwnership,
-    invoiceParamOwnership,
-    documentBodyOwnership,
-    validateDocumentEmailRequest,
-    deliveryOwnership,
-    legacySignatureOwnership,
-    canonicalRepartoMutationRequired
 } = require('./repartidor-route-context');
 
 const REPARTIDOR_CONFIG = {
@@ -228,9 +139,9 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             const importe = overrides.amount !== undefined ? overrides.amount : rawAmount;
             const status = computeRowStatus(row);
             const hasFirmaPath = !!referenceRow.FIRMA_PATH;
-            const numFactura = parseInt(row.NUMEROFACTURA) || 0;
+            const numFactura = parseInt(row.NUMEROFACTURA, 10) || 0;
             const serieFactura = (row.SERIEFACTURA || '').trim();
-            const ejercicioFactura = parseInt(row.EJERCICIOFACTURA) || 0;
+            const ejercicioFactura = parseInt(row.EJERCICIOFACTURA, 10) || 0;
             const isFactura = numFactura > 0;
             const legacyNombre = (referenceRow.LEGACY_FIRMA_NOMBRE || '').trim();
             const hasLegacySig = legacyNombre.length > 0;
@@ -324,10 +235,10 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
         const facturaGroups = new Map(); // facturaKey -> [rows]
         const noFacturaRows = [];
         uniqueRows.forEach(row => {
-            const numFactura = parseInt(row.NUMEROFACTURA) || 0;
+            const numFactura = parseInt(row.NUMEROFACTURA, 10) || 0;
             if (numFactura > 0) {
                 const serieF = (row.SERIEFACTURA || '').trim();
-                const ejercicioF = parseInt(row.EJERCICIOFACTURA) || 0;
+                const ejercicioF = parseInt(row.EJERCICIOFACTURA, 10) || 0;
                 const subempresa = String(row.SUBEMPRESAALBARAN || '').trim();
                 const fKey = `F-${subempresa}-${ejercicioF}-${serieF}-${numFactura}`;
                 if (!facturaGroups.has(fKey)) {
@@ -407,7 +318,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
 
             documents.push(buildDocument(primaryRow, {
                 type: 'factura',
-                number: parseInt(primaryRow.NUMEROFACTURA),
+                number: parseInt(primaryRow.NUMEROFACTURA, 10),
                 amount: totalAmount,
                 status: bestStatus,
                 pendingAvailability: pendingAvailable ? 'AVAILABLE' : 'UNAVAILABLE',
@@ -508,7 +419,7 @@ router.get('/history/objectives/:repartidorId', verifyToken, async (req, res) =>
             objectives
         });
 
-    } catch (_error) {
+    } catch {
         logger.error('[REPARTIDOR] Error in history/objectives');
         sendRouteError(res, 503, 'REPARTIDOR_OBJECTIVES_FAILED');
     }
@@ -531,8 +442,6 @@ router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, 
         if (paginationError) return sendRouteError(res, 422, paginationError);
         const repartidorIdList = authorizedRepartidorIds(req, res, repartidorId);
         if (!repartidorIdList) return;
-
-        const repartidorKey = repartidorIdList.join(',');
 
         logger.info(`[REPARTIDOR] Objectives detail for ${repartidorId}, year ${selectedYear}${clientId ? `, client ${clientId}` : ''}`);
 
@@ -606,7 +515,7 @@ router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, 
             const pCode = (row.PRODUCT_CODE || '').trim();
             const pName = (row.PRODUCT_NAME || '').trim() || 'Sin nombre';
             const unitType = (row.UNIT_TYPE || '').trim();
-            const month = parseInt(row.MONTH);
+            const month = parseInt(row.MONTH, 10);
             const sales = parseFloat(row.SALES) || 0;
             const cost = parseFloat(row.COST) || 0;
             const units = parseFloat(row.UNITS) || 0;
@@ -764,7 +673,7 @@ router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, 
             }
         });
 
-    } catch (_error) {
+    } catch {
         logger.error('[REPARTIDOR] Error in objectives-detail');
         sendRouteError(res, 503, 'REPARTIDOR_OBJECTIVES_DETAIL_FAILED');
     }
@@ -851,7 +760,7 @@ router.get('/history/signature', verifyToken, async (req, res) => {
                 if (!firmaBase64) {
                     logger.warn(`[REPARTIDOR] Signature file not found for path: ${firmaPath} — tried: ${pathsToTry.join(', ')}`);
                 }
-            } catch (e) {
+            } catch {
                 logger.warn('[REPARTIDOR] Stored signature read failed');
             }
         }
@@ -878,7 +787,7 @@ router.get('/history/signature', verifyToken, async (req, res) => {
                     signatureSource = signatureSource || 'CANONICAL_CONFIRMATION';
                 }
             }
-        } catch (_error) {
+        } catch {
             logger.warn('[REPARTIDOR] Canonical confirmation signature lookup failed');
         }
 
@@ -954,7 +863,7 @@ router.get('/history/signature', verifyToken, async (req, res) => {
             } : null
         });
 
-    } catch (error) {
+    } catch {
         logger.error('[REPARTIDOR] History signature request failed');
         sendRouteError(res, 503, 'REPARTIDOR_SIGNATURE_FAILED');
     }
@@ -990,7 +899,7 @@ router.get('/debug/signatures', verifyToken, async (req, res) => {
             signatures,
             note: 'These are albaranes with actual Base64 signatures in CACFIRMAS'
         });
-    } catch (error) {
+    } catch {
         logger.error('[REPARTIDOR] Debug signatures failed');
         sendRouteError(res, 503, 'DEBUG_SIGNATURES_FAILED');
     }
@@ -1017,7 +926,6 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
         // This prevents future pre-loaded albaranes from inflating the % entrega
         const now = new Date();
         const isCurrentPeriod = selectedYear === now.getFullYear() && selectedMonth === (now.getMonth() + 1);
-        const dayFilter = isCurrentPeriod ? `AND OPP.DIAREPARTO <= ?` : '';
         const dayFilterParams = isCurrentPeriod ? [now.getDate()] : [];
 
         logger.info(`[REPARTIDOR] Delivery summary for ${repartidorId}, ${selectedMonth}/${selectedYear}${isCurrentPeriod ? ` (capped to day ${now.getDate()})` : ''}`);
@@ -1032,10 +940,10 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
         let totalAlbaranes = 0, totalEntregados = 0, totalNoEntregados = 0, totalParciales = 0, totalImporte = 0;
 
         const daily = rows.map(row => {
-            const albs = parseInt(row.TOTAL_ALBARANES) || 0;
-            const ent = parseInt(row.ENTREGADOS) || 0;
-            const noEnt = parseInt(row.NO_ENTREGADOS) || 0;
-            const parc = parseInt(row.PARCIALES) || 0;
+            const albs = parseInt(row.TOTAL_ALBARANES, 10) || 0;
+            const ent = parseInt(row.ENTREGADOS, 10) || 0;
+            const noEnt = parseInt(row.NO_ENTREGADOS, 10) || 0;
+            const parc = parseInt(row.PARCIALES, 10) || 0;
             const imp = parseFloat(row.IMPORTE_TOTAL) || 0;
             if ([albs, ent, noEnt, parc].some((value) => value < 0) || ent + noEnt + parc > albs) {
                 throw new Error('delivery status invariant violated');
@@ -1078,7 +986,7 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
             daily
         });
 
-    } catch (_error) {
+    } catch {
         logger.error('[REPARTIDOR] Error in delivery-summary');
         sendRouteError(res, 503, 'REPARTIDOR_DELIVERY_SUMMARY_FAILED');
     }
@@ -1092,9 +1000,9 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
     configureRepartidorPdfTimeout(req, res);
     try {
         const { year, terminal, number } = req.params;
-        const parsedYear = parseInt(year);
-        const parsedTerminal = parseInt(terminal);
-        const parsedNumber = parseInt(number);
+        const parsedYear = parseInt(year, 10);
+        const parsedTerminal = parseInt(terminal, 10);
+        const parsedNumber = parseInt(number, 10);
         if (!parsedYear || !parsedNumber) {
             return res.status(400).json({ success: false, error: 'Parámetros year/number/terminal inválidos' });
         }
@@ -1124,7 +1032,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                 if (cached?.pdfBase64 && cached.fileName) {
                     return sendPdf(Buffer.from(cached.pdfBase64, 'base64'), cached.fileName);
                 }
-            } catch (_cacheError) {
+            } catch {
                 logger.warn('[PDF] Albaran cache read unavailable');
             }
         }
@@ -1166,7 +1074,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
             if (!hasCacBreakdown && ivaRows.length > 0) {
                 header.IVA_BREAKDOWN = ivaRows[0];
             }
-        } catch (e) {
+        } catch {
             logger.warn('[PDF] Albaran IVA lookup failed');
         }
 
@@ -1199,7 +1107,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                     }
                 }
             }
-        } catch (e) {
+        } catch {
             logger.warn('[PDF] Albaran stored signature lookup failed');
         }
 
@@ -1214,7 +1122,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                     signatureSource = 'REPARTIDOR_FIRMAS';
                     logger.info(`[PDF] Using signature from REPARTIDOR_FIRMAS`);
                 }
-            } catch (e) {
+            } catch {
                 logger.warn('[PDF] Albaran app signature lookup failed');
             }
         }
@@ -1239,8 +1147,8 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                     signatureSource = 'CANONICAL_CONFIRMATION';
                 }
             }
-        } catch (e) {
-            logger.warn('[PDF] Canonical confirmation signature lookup failed');
+            } catch {
+                logger.warn('[PDF] Canonical confirmation signature lookup failed');
         }
 
         // Step 3c: Try CACFIRMAS (legacy ERP signatures) as last resort
@@ -1254,7 +1162,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                     signatureSource = 'CACFIRMAS';
                     logger.info(`[PDF] Using legacy signature from CACFIRMAS`);
                 }
-            } catch (e) {
+            } catch {
                 logger.warn('[PDF] Albaran legacy signature lookup failed');
             }
         }
@@ -1280,13 +1188,13 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                     pdfBase64: buffer.toString('base64'),
                     fileName: safeFilename,
                 }, REPARTIDOR_DOCUMENT_PDF_CACHE_TTL);
-            } catch (_cacheError) {
+            } catch {
                 logger.warn('[PDF] Albaran cache write unavailable');
             }
         }
         return sendPdf(buffer, safeFilename);
 
-    } catch (e) {
+    } catch {
         logger.error('[PDF] Albaran generation failed');
         sendRouteError(res, 503, 'DOCUMENT_PDF_FAILED');
     }

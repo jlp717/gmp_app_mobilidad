@@ -455,15 +455,6 @@ function resolveIvaFromLine(line = {}, fallbackCode = '2') {
     return resolveIvaFromCodigo(fallbackCode);
 }
 
-/**
- * Sanitize a string for safe SQL interpolation (only used where
- * parameterized queries are not possible, e.g. dynamic IN lists).
- */
-function sanitize(val) {
-    if (val == null) return '';
-    return String(val).replace(/'/g, "''");
-}
-
 async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
     const cleanClient = trimString(clientCode);
     const cleanVendor = trimString(vendedorCode).split(',')[0].substring(0, 2);
@@ -643,7 +634,7 @@ async function invalidatePedidosStockCache(reasonTag = '') {
     }
 }
 
-async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDate, routeCode }) {
+async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDate: _deliveryDate, routeCode }) {
     const cleanClient = trimString(clientCode);
     const cleanVendor = trimString(vendedorCode).split(',')[0].substring(0, 2);
     const explicitRouteCode = trimString(routeCode).substring(0, 10);
@@ -1209,7 +1200,7 @@ async function withPedidosTransaction(callback) {
     } finally {
         try {
             await conn.close();
-        } catch (_) {
+        } catch {
             // ignore close errors
         }
     }
@@ -1267,7 +1258,7 @@ function isRetriableCpcExportError(err) {
     return codes.some((code) => code === -913 || code === -803 || code === -911);
 }
 
-function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode }) {
+function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType: _saleType, userId: _userId, vehicleCode: _vehicleCode, driverCode: _driverCode }) {
     const docDay = integerValue(header.DIADOCUMENTO) || new Date().getDate();
     const docMonth = integerValue(header.MESDOCUMENTO) || new Date().getMonth() + 1;
     const docYear = integerValue(header.ANODOCUMENTO) || integerValue(header.EJERCICIO) || new Date().getFullYear();
@@ -1318,7 +1309,7 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
     };
 }
 
-function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType, userId }) {
+function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan: _deliveryPlan, routeCode, saleType, userId: _userId }) {
     const docDay = integerValue(header.DIADOCUMENTO) || new Date().getDate();
     const docMonth = integerValue(header.MESDOCUMENTO) || new Date().getMonth() + 1;
     const docYear = integerValue(header.ANODOCUMENTO) || integerValue(header.EJERCICIO) || new Date().getFullYear();
@@ -1375,7 +1366,7 @@ function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, r
     };
 }
 
-function buildDsedacOcpcInsert({ target, header, systemRef, userId }) {
+function buildDsedacOcpcInsert({ target, header, systemRef, userId: _userId }) {
     const chunks = splitFixedText(header.OBSERVACIONES, 120, 10);
     if (chunks.every(chunk => !trimString(chunk))) return null;
 
@@ -1402,7 +1393,7 @@ function buildDsedacOcpcInsert({ target, header, systemRef, userId }) {
     };
 }
 
-async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode }) {
+function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode }) {
     const target = {
         ...getPedidosConfirmationTarget(),
         terminal: resolvePedidoTerminal(header.CODIGOVENDEDOR, userId),
@@ -1572,7 +1563,7 @@ function buildReservationLinesFromCreateContexts(lineContexts) {
 }
 
 async function refreshDraftStockReservation(orderId, executor = (sql, params) => queryWithParams(sql, params, false)) {
-    const id = parseInt(orderId);
+    const id = parseInt(orderId, 10);
     if (isNaN(id)) throw new Error('Invalid orderId');
     const lines = await executor(
         `SELECT TRIM(L.CODIGOARTICULO) AS CODIGOARTICULO,
@@ -1665,14 +1656,14 @@ async function initPedidosTables() {
                 logger.info(`[PEDIDOS] Added missing ${col.name} column to ${targetSchema}.${targetTable}`);
             } catch (colErr) {
                 logger.warn(`[PEDIDOS] Could not add ${col.name} column to ${targetTable}: ${colErr.message}`);
-                try { await conn.close(); } catch (_) { /* ignore */ }
+                try { await conn.close(); } catch { /* ignore */ }
                 conn = await pool.connect();
             }
         }
     } catch (err) {
         logger.error(`[PEDIDOS] Table init error: ${err.message}`);
     } finally {
-        if (conn) try { await conn.close(); } catch (_) { /* ignore */ }
+        if (conn) try { await conn.close(); } catch { /* ignore */ }
     }
 }
 
@@ -1922,7 +1913,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
         const products = rows.map(r => {
             const salesTY = parseFloat(r.SALESTHISYEAR) || 0;
             const salesPY = parseFloat(r.SALESPREVYEAR) || 0;
-            const hasPurchased = parseInt(r.HASPURCHASED) || 0;
+            const hasPurchased = parseInt(r.HASPURCHASED, 10) || 0;
 
             // Determine unit type clarity for UI
             let unitType = 'unidad'; // default
@@ -1940,8 +1931,8 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
                 brand: (r.BRAND || '').trim(),
                 family: (r.FAMILY || '').trim(),
                 ean: (r.EAN || '').trim(),
-                unitsPerBox: unitsPerBox,
-                unitsFraction: unitsFraction,
+                unitsPerBox,
+                unitsFraction,
                 unitsRetractil: parseFloat(r.UNITSRETRACTIL) || 0,
                 unitMeasure: (r.UNITMEASURE || '').trim(),
                 weight: parseFloat(r.WEIGHT) || 0,
@@ -1956,7 +1947,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
                 ...resolveIvaFromCodigo((r.CODIGOIVA || '2').toString().trim()),
                 formato: (r.FORMATO || '').trim(),
                 productoPesado: (r.PRODUCTOPESADO || '').trim() === 'S',
-                unitType: unitType,
+                unitType,
                 // Purchase analytics for ordering + badges
                 salesThisYear: salesTY,
                 salesPrevYear: salesPY,
@@ -2136,8 +2127,8 @@ async function getProductDetailRaw(code, clientCode) {
             unidadPale: parseFloat(raw.UNIDADPALE) || 0,
             unidadFilaPale: parseFloat(raw.UNIDADFILAPALE) || 0,
             fechaAlta: raw.ANOALTA > 0 ? `${String(raw.DIAALTA || 1).padStart(2, '0')}/${String(raw.MESALTA || 1).padStart(2, '0')}/${raw.ANOALTA}` : null,
-            anoBaja: parseInt(raw.ANOBAJA) || 0,
-            mesBaja: parseInt(raw.MESBAJA) || 0,
+            anoBaja: parseInt(raw.ANOBAJA, 10) || 0,
+            mesBaja: parseInt(raw.MESBAJA, 10) || 0,
         };
 
         product.tariffs = (tariffRows || []).map(t => {
@@ -2147,7 +2138,7 @@ async function getProductDetailRaw(code, clientCode) {
                 description: (t.TARIFADESC || '').trim(),
                 price,
                 precioUnitario: product.unitsPerBox > 1
-                    ? +(price / product.unitsPerBox).toFixed(4)
+                    ? Number((price / product.unitsPerBox).toFixed(4))
                     : price,
             };
         });
@@ -2160,7 +2151,7 @@ async function getProductDetailRaw(code, clientCode) {
         }));
 
         // Expose stockEnvases/stockUnidades at root level (almacen 1 = default)
-        const mainStock = stockRows?.find(s => parseInt(s.CODIGOALMACEN) === 1);
+        const mainStock = stockRows?.find((s) => Number(s.CODIGOALMACEN) === 1);
         product.stockEnvases = mainStock ? (parseFloat(mainStock.ENVASES) || 0) : 0;
         product.stockUnidades = mainStock ? (parseFloat(mainStock.UNIDADES) || 0) : 0;
 
@@ -2204,7 +2195,7 @@ async function getProductDetailRaw(code, clientCode) {
                     FETCH FIRST 1 ROW ONLY`;
                 const cliRows = await queryWithParams(cliTarifaSql, [trimClient]);
                 clientTarifaCode = cliRows && cliRows.length > 0
-                    ? parseInt(cliRows[0].CODIGOTARIFA) || 1
+                    ? parseInt(cliRows[0].CODIGOTARIFA, 10) || 1
                     : 1;
                 logger.info(`[PEDIDOS] getProductDetail stage=TARIFA_CLIENTE found tariff=${clientTarifaCode} time=${Date.now() - ct0}ms`);
             }
@@ -2237,7 +2228,7 @@ async function getProductDetailRaw(code, clientCode) {
 
 async function getStock(code, almacen = 1, options = {}) {
     // Real stock minus confirmed reservations and live draft reservations.
-    const excludedPedidoId = parseInt(options.excludePedidoId);
+    const excludedPedidoId = parseInt(options.excludePedidoId, 10);
     const excludeCurrentPedidoSql = Number.isInteger(excludedPedidoId) && excludedPedidoId > 0
         ? 'AND SR.PEDIDO_ID <> ?'
         : '';
@@ -2291,7 +2282,7 @@ async function getStockBatch(codes, almacen = 1, options = {}) {
     const uniqueCodes = [...new Set((codes || []).map(code => truncate(code, 10)).filter(Boolean))];
     const stockByCode = new Map(uniqueCodes.map(code => [code, { envases: 0, unidades: 0 }]));
     if (uniqueCodes.length === 0) return stockByCode;
-    const excludedPedidoId = parseInt(options.excludePedidoId);
+    const excludedPedidoId = parseInt(options.excludePedidoId, 10);
     const excludeCurrentPedidoSql = Number.isInteger(excludedPedidoId) && excludedPedidoId > 0
         ? 'AND SR.PEDIDO_ID <> ?'
         : '';
@@ -2379,7 +2370,7 @@ async function updateAndReadNextOrderNumber(ejercicio) {
     return rows?.[0]?.ULTIMO_NUMERO ? integerValue(rows[0].ULTIMO_NUMERO) : null;
 }
 
-async function getNextOrderNumber(ejercicio) {
+function getNextOrderNumber(ejercicio) {
     return withOrderSequenceLock(async () => {
         const atomicValue = await tryAtomicNextOrderNumber(ejercicio);
         if (atomicValue) return atomicValue;
@@ -2751,6 +2742,7 @@ async function createOrder({
     formaPago,
     observaciones = '',
     descuentoGlobal = 0,
+    globalDiscountPct,
     lines = [],
     origen = 'A',
     idempotencyKey,
@@ -2798,7 +2790,7 @@ async function createOrder({
     const effectiveAlmacen = integerValue(almacen) || 1;
     const effectiveDescuentoGlobal = parseGlobalDiscountPct({
         descuentoGlobal,
-        globalDiscountPct: arguments[0] && arguments[0].globalDiscountPct,
+        globalDiscountPct,
     });
 
     const normalizedIdempotencyKey = idempotencyKey
@@ -2946,10 +2938,10 @@ async function createOrder({
                 codigoIva: iva.codigoIva,
                 ivaRate: iva.ivaRate,
             };
-        let cantidadEnvases = parseFloat(line.cantidadEnvases) || 0;
-        let cantidadUnidades = parseFloat(line.cantidadUnidades) || parseFloat(line.cantidad) || 0;
-        let unidadesCaja = parseFloat(line.unidadesCaja) || 1;
-        let unidadMedida = line.unidadMedida || 'CAJAS';
+        const cantidadEnvases = parseFloat(line.cantidadEnvases) || 0;
+        const cantidadUnidades = parseFloat(line.cantidadUnidades) || parseFloat(line.cantidad) || 0;
+        const unidadesCaja = parseFloat(line.unidadesCaja) || 1;
+        const unidadMedida = line.unidadMedida || 'CAJAS';
         const descuentoLinea = parseLineDiscountPct(line);
         const precio = resolveServerLineUnitPrice({
             clientTariff,
@@ -3239,9 +3231,9 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
     if (dateFrom) {
         const df = String(dateFrom).replace(/-/g, '');
         if (df.length === 8) {
-            const y = parseInt(df.substring(0, 4));
-            const m = parseInt(df.substring(4, 6));
-            const d = parseInt(df.substring(6, 8));
+            const y = parseInt(df.substring(0, 4), 10);
+            const m = parseInt(df.substring(4, 6), 10);
+            const d = parseInt(df.substring(6, 8), 10);
             sql += ` AND (C.ANODOCUMENTO > ? OR (C.ANODOCUMENTO = ? AND C.MESDOCUMENTO > ?) OR (C.ANODOCUMENTO = ? AND C.MESDOCUMENTO = ? AND C.DIADOCUMENTO >= ?))`;
             params.push(y, y, m, y, m, d);
         }
@@ -3249,9 +3241,9 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
     if (dateTo) {
         const dt = String(dateTo).replace(/-/g, '');
         if (dt.length === 8) {
-            const y = parseInt(dt.substring(0, 4));
-            const m = parseInt(dt.substring(4, 6));
-            const d = parseInt(dt.substring(6, 8));
+            const y = parseInt(dt.substring(0, 4), 10);
+            const m = parseInt(dt.substring(4, 6), 10);
+            const d = parseInt(dt.substring(6, 8), 10);
             sql += ` AND (C.ANODOCUMENTO < ? OR (C.ANODOCUMENTO = ? AND C.MESDOCUMENTO < ?) OR (C.ANODOCUMENTO = ? AND C.MESDOCUMENTO = ? AND C.DIADOCUMENTO <= ?))`;
             params.push(y, y, m, y, m, d);
         }
@@ -3261,10 +3253,10 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
     if (!dateFrom && !dateTo) {
         const currentYear = year || new Date().getFullYear();
         sql += ` AND C.EJERCICIO = ?`;
-        params.push(parseInt(currentYear));
+        params.push(parseInt(currentYear, 10));
         if (month) {
             sql += ` AND C.MESDOCUMENTO = ?`;
-            params.push(parseInt(month));
+            params.push(parseInt(month, 10));
         }
     }
 
@@ -3328,7 +3320,6 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             const hora = r.HORADOCUMENTO ? String(r.HORADOCUMENTO).padStart(6, '0') : '000000';
             const hh = hora.substring(0, 2);
             const mm = hora.substring(2, 4);
-            const numPedido = String(r.NUMEROPEDIDO).padStart(6, '0');
             const fechaReparto = r.FECHAREPARTO ? parseDeliveryDate(r.FECHAREPARTO) : null;
             const localNumeroPedidoFormatted = formatPedidoNumeroAcisa(r.SERIEPEDIDO, r.TERMINAL ?? r.TERMINALPEDIDO, r.NUMEROPEDIDO);
             const hasSystemRef = integerValue(r.SYSTEM_NUMEROPEDIDO) > 0;
@@ -3369,15 +3360,15 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
                 origen: r.ORIGEN,
                 fechaReparto: fechaReparto?.iso || '',
                 fechaRepartoFormatted: fechaReparto ? formatDateDisplay(fechaReparto.iso) : '',
-                diaReparto: parseInt(r.DIAREPARTO) || 0,
-                mesReparto: parseInt(r.MESREPARTO) || 0,
-                anoReparto: parseInt(r.ANOREPARTO) || 0,
+                diaReparto: parseInt(r.DIAREPARTO, 10) || 0,
+                mesReparto: parseInt(r.MESREPARTO, 10) || 0,
+                anoReparto: parseInt(r.ANOREPARTO, 10) || 0,
                 repartidorCode: r.CODIGOREPARTIDOR || '',
                 vehicleCode: r.CODIGOVEHICULO || '',
                 ruta: r.RUTA || '',
                 diasReparto: r.DIASREPARTO || '',
                 repartoValidado: (r.REPARTO_VALIDADO_SN || '').trim() === 'S',
-                lineCount: parseInt(r.LINE_COUNT) || 0,
+                lineCount: parseInt(r.LINE_COUNT, 10) || 0,
                 bolsaGenerada: (parseInt(r.BOLSA_MOV_COUNT, 10) || 0) > 0,
                 bolsaNeto: roundMoney(parseFloat(r.BOLSA_NETO) || 0),
                 createdAt: r.CREATED_AT,
@@ -3406,7 +3397,7 @@ async function hasErpColumn(schema, table, column) {
             false,
         );
         return Array.isArray(rows) && rows.length > 0;
-    } catch (_) {
+    } catch {
         return false;
     }
 }
@@ -3465,7 +3456,7 @@ function mapBolsaMovementRow(row) {
                 `[BOLSA_SALDO_MISMATCH] id=${row.ID} idempotencyKey=${String(row.IDEMPOTENCY_KEY || '').trim() || 'n/a'} ` +
                 `anterior=${saldoAnterior} posterior=${saldoPosterior} importe=${importe} tipo=${tipo}`,
             );
-        } catch (_) { /* never break read path */ }
+        } catch { /* never break read path */ }
     }
     return {
         id: row.ID,
@@ -3534,7 +3525,7 @@ function summarizeLineBolsaMovements(movements) {
 }
 
 async function getOrderDetail(orderId, options = {}) {
-    const id = parseInt(orderId);
+    const id = parseInt(orderId, 10);
     if (isNaN(id)) throw new Error('Invalid orderId');
     const includeBolsa = options.includeBolsa !== false;
 
@@ -3646,9 +3637,9 @@ async function getOrderDetail(orderId, options = {}) {
                 observaciones: cab.OBSERVACIONES,
                 fechaReparto: fechaReparto?.iso || '',
                 fechaRepartoFormatted: fechaReparto ? formatDateDisplay(fechaReparto.iso) : '',
-                diaReparto: parseInt(cab.DIAREPARTO) || 0,
-                mesReparto: parseInt(cab.MESREPARTO) || 0,
-                anoReparto: parseInt(cab.ANOREPARTO) || 0,
+                diaReparto: parseInt(cab.DIAREPARTO, 10) || 0,
+                mesReparto: parseInt(cab.MESREPARTO, 10) || 0,
+                anoReparto: parseInt(cab.ANOREPARTO, 10) || 0,
                 repartidorCode: cab.CODIGOREPARTIDOR || '',
                 vehicleCode: cab.CODIGOVEHICULO || '',
                 ruta: cab.RUTA || '',
@@ -3758,7 +3749,7 @@ function assertPrecioWithinClientTariff({ precioVenta, tariffPrice, userRole, ar
 // ============================================================================
 
 async function addOrderLine(pedidoId, lineData) {
-    const id = parseInt(pedidoId);
+    const id = parseInt(pedidoId, 10);
     if (isNaN(id)) throw new Error('Invalid pedidoId');
 
     const codigoArticulo = trimString(lineData.codigoArticulo);
@@ -3844,7 +3835,7 @@ async function updateOrderLine(lineId, {
     descuentoLinea,
     lineDiscountPct,
 }) {
-    const id = parseInt(lineId);
+    const id = parseInt(lineId, 10);
     if (isNaN(id)) throw new Error('Invalid lineId');
 
     if (claseLinea !== undefined && !['VT', 'SC'].includes(claseLinea)) {
@@ -3919,8 +3910,8 @@ async function updateOrderLine(lineId, {
 }
 
 async function deleteOrderLine(lineId, pedidoId) {
-    const lid = parseInt(lineId);
-    const pid = parseInt(pedidoId);
+    const lid = parseInt(lineId, 10);
+    const pid = parseInt(pedidoId, 10);
     if (isNaN(lid) || isNaN(pid)) throw new Error('Invalid lineId or pedidoId');
 
     await assertOrderEditable(pid);
@@ -3950,7 +3941,7 @@ async function deleteOrderLine(lineId, pedidoId) {
 // ============================================================================
 
 async function recalculateOrderTotals(pedidoId) {
-    const id = parseInt(pedidoId);
+    const id = parseInt(pedidoId, 10);
     
     const rows = await queryWithParams(
         `SELECT 
@@ -4026,7 +4017,7 @@ async function recalculateOrderTotals(pedidoId) {
 // ============================================================================
 
 async function confirmOrder(orderId, saleType, options = {}) {
-    const id = parseInt(orderId);
+    const id = parseInt(orderId, 10);
     const effectiveForceConfirm = isAuthorizedForceConfirm(options);
     if (options.forceConfirm === true && !effectiveForceConfirm) {
         logger.warn(`[PEDIDOS] forceConfirm ignored for order #${id}: missing server-side admin override, role, or audit reason`);
@@ -4283,7 +4274,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     // P0-C: BLOCK confirmation if stock would go negative (unless force-approved)
     if (stockWarnings.length > 0 && !effectiveForceConfirm) {
         // Fetch similar products for out-of-stock items
-        let alternatives = [];
+        const alternatives = [];
         for (const code of outOfStockProducts.slice(0, 5)) {
             try {
                 const similar = await getSimilarProducts(code);
@@ -4407,7 +4398,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             userId: options.userId || 'SYSTEM'
         };
         logger.info(`[AUDIT] âœ… ORDER_CONFIRMED #${id} | Client:${auditEntry.clientCode} | Total:${auditEntry.total} | Lines:${lines.length}`);
-    } catch (auditErr) { /* silent */ }
+    } catch { /* silent */ }
 
     // P0-BOLSA: Persist ledger after confirmation. Blocking: no silent success on write failure.
     const consumoAmount = Number(options._bolsaConsumo || 0);
@@ -4561,7 +4552,7 @@ async function purgeExpiredDraftReservations({ limit = 50 } = {}) {
 }
 
 async function cancelOrder(orderId, options = {}) {
-    const id = parseInt(orderId);
+    const id = parseInt(orderId, 10);
     if (isNaN(id)) throw new Error('Invalid orderId');
 
     const currentRows = await queryWithParams(
@@ -4640,7 +4631,7 @@ async function cancelOrder(orderId, options = {}) {
 
     try {
         logger.info(`[AUDIT] ORDER_DRAFT_DELETED #${id} | Client:${currentRows[0].CODIGOCLIENTE || '?'} | Total:${currentRows[0].IMPORTETOTAL || 0} | By:${options.userId || 'SYSTEM'}`);
-    } catch (auditErr) { /* silent */ }
+    } catch { /* silent */ }
 
     return { id, deleted: true, estado: 'BORRADOR' };
 }
@@ -4649,7 +4640,7 @@ async function cancelOrder(orderId, options = {}) {
 // ============================================================================
 
 async function updateOrderStatus(orderId, newStatus, options = {}) {
-    const id = parseInt(orderId);
+    const id = parseInt(orderId, 10);
     if (isNaN(id)) throw new Error('Invalid orderId');
 
     const rawRequestedStatus = trimString(newStatus).toUpperCase();
@@ -4703,7 +4694,7 @@ async function updateOrderStatus(orderId, newStatus, options = {}) {
     // AUD: Audit log
     try {
         logger.info(`[AUDIT] ðŸ”„ ORDER_STATUS_CHANGED #${id} | ${orderBefore?.header?.estado || '?'} -> ${status} | By:${options.userId || 'SYSTEM'}`);
-    } catch (auditErr) { /* silent */ }
+    } catch { /* silent */ }
 
     return getOrderDetail(id);
 }
@@ -4734,9 +4725,9 @@ async function getOrderStats(vendedorCodes, dateFrom, dateTo) {
     if (dateFrom) {
         const df = String(dateFrom).replace(/-/g, '');
         if (df.length === 8) {
-            const y = parseInt(df.substring(0, 4));
-            const m = parseInt(df.substring(4, 6));
-            const d = parseInt(df.substring(6, 8));
+            const y = parseInt(df.substring(0, 4), 10);
+            const m = parseInt(df.substring(4, 6), 10);
+            const d = parseInt(df.substring(6, 8), 10);
             whereParts.push('(ANODOCUMENTO > ? OR (ANODOCUMENTO = ? AND MESDOCUMENTO > ?) OR (ANODOCUMENTO = ? AND MESDOCUMENTO = ? AND DIADOCUMENTO >= ?))');
             params.push(y, y, m, y, m, d);
             hasDateBounds = true;
@@ -4745,9 +4736,9 @@ async function getOrderStats(vendedorCodes, dateFrom, dateTo) {
     if (dateTo) {
         const dt = String(dateTo).replace(/-/g, '');
         if (dt.length === 8) {
-            const y = parseInt(dt.substring(0, 4));
-            const m = parseInt(dt.substring(4, 6));
-            const d = parseInt(dt.substring(6, 8));
+            const y = parseInt(dt.substring(0, 4), 10);
+            const m = parseInt(dt.substring(4, 6), 10);
+            const d = parseInt(dt.substring(6, 8), 10);
             whereParts.push('(ANODOCUMENTO < ? OR (ANODOCUMENTO = ? AND MESDOCUMENTO < ?) OR (ANODOCUMENTO = ? AND MESDOCUMENTO = ? AND DIADOCUMENTO <= ?))');
             params.push(y, y, m, y, m, d);
             hasDateBounds = true;
@@ -4805,24 +4796,24 @@ async function getOrderStats(vendedorCodes, dateFrom, dateTo) {
         const byStatus = {};
         for (const s of (statusRows || [])) {
             const status = publicOrderStatus(s.ESTADO);
-            byStatus[status] = (byStatus[status] || 0) + (parseInt(s.CNT) || 0);
+            byStatus[status] = (byStatus[status] || 0) + (parseInt(s.CNT, 10) || 0);
         }
 
         const dailyTrend = (trendRows || []).map(r => ({
             date: `${String(r.Y).padStart(4, '0')}-${String(r.M).padStart(2, '0')}-${String(r.D).padStart(2, '0')}`,
-            orders: parseInt(r.ORDERS) || 0,
+            orders: parseInt(r.ORDERS, 10) || 0,
             amount: parseFloat(r.AMOUNT) || 0,
         })).reverse();
 
         const topClients = (topRows || []).map(r => ({
             code: (r.CODE || '').trim(),
             name: (r.NAME || '').trim(),
-            orders: parseInt(r.ORDERS) || 0,
+            orders: parseInt(r.ORDERS, 10) || 0,
             amount: parseFloat(r.AMOUNT) || 0,
         }));
 
         return {
-            totalOrders: parseInt(stats.TOTALORDERS) || 0,
+            totalOrders: parseInt(stats.TOTALORDERS, 10) || 0,
             totalAmount: parseFloat(stats.TOTALAMOUNT) || 0,
             totalBase: parseFloat(stats.TOTALBASE) || 0,
             totalIva: parseFloat(stats.TOTALIVA) || 0,
@@ -4843,7 +4834,7 @@ async function getOrderStats(vendedorCodes, dateFrom, dateTo) {
 // ============================================================================
 
 async function getOrderAlbaran(orderId) {
-    const id = parseInt(orderId);
+    const id = parseInt(orderId, 10);
     if (isNaN(id)) throw new Error('Invalid orderId');
 
     const orderRows = await queryWithParams(
@@ -5167,22 +5158,22 @@ async function getOrderAnalytics(vendedorCodes) {
             monthly: monthly.map(r => ({
                 year: r.year || r.YEAR,
                 month: r.month || r.MONTH,
-                orderCount: parseInt(r.orderCount || r.ORDERCOUNT) || 0,
+                orderCount: parseInt(r.orderCount || r.ORDERCOUNT, 10) || 0,
                 totalRevenue: parseFloat(r.totalRevenue || r.TOTALREVENUE) || 0,
                 totalMargin: parseFloat(r.totalMargin || r.TOTALMARGIN) || 0,
                 avgOrderValue: parseFloat(r.avgOrderValue || r.AVGORDERVALUE) || 0,
-                uniqueClients: parseInt(r.uniqueClients || r.UNIQUECLIENTS) || 0,
+                uniqueClients: parseInt(r.uniqueClients || r.UNIQUECLIENTS, 10) || 0,
             })),
             topProducts: topProducts.map(r => ({
                 code: (r.code || r.CODE || '').trim(),
                 name: (r.name || r.NAME || '').trim(),
                 totalSales: parseFloat(r.totalSales || r.TOTALSALES) || 0,
                 totalEnvases: parseFloat(r.totalEnvases || r.TOTALENVASES) || 0,
-                lineCount: parseInt(r.lineCount || r.LINECOUNT) || 0,
+                lineCount: parseInt(r.lineCount || r.LINECOUNT, 10) || 0,
             })),
             statusDistribution: statusDist.reduce((acc, r) => {
                 const status = canonicalOrderStatus(r.status || r.STATUS);
-                acc[status] = (acc[status] || 0) + (parseInt(r.count || r.COUNT) || 0);
+                acc[status] = (acc[status] || 0) + (parseInt(r.count || r.COUNT, 10) || 0);
                 return acc;
             }, {}),
         };

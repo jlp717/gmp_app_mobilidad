@@ -133,6 +133,9 @@ module.exports = [
   {
     files: [
       'backend/routes/comercial-liquidacion.js',
+      'backend/routes/repartidor-history-routes.js',
+      'backend/routes/objectives.js',
+      'backend/services/pedidos/index.js',
       'backend/middleware/error-serializer.js',
       'backend/middleware/prometheus-metrics.js',
       'backend/middleware/logger.js',
