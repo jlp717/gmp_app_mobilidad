@@ -45,12 +45,19 @@ module.exports = {
     // (coverageThreshold) only enforces when coverage IS collected
     // (npm run test:coverage); ratchet inicial L1, subir en L8.
     collectCoverage: false,
+    // RATCHET B-P1-5: umbrales iniciales 2026-09-29; subir progresivamente.
+    // Medido full 2026-09-29 (collect routes/services/repositories/middleware/utils):
+    // Stmts 59.52 / Branch 49.3 / Funcs 64.36 / Lines 61.41 => regla floor - 2.
+    // Excepcion senior: functions 62 fallaba en subconjunto local
+    // (tests/instrument+error-serializer da 58.82% funcs); se fija en 56
+    // (floor(subset) - 2) para no romper local. Resto aplica regla strict.
+    // collectCoverage sigue false por defecto; el threshold solo muerde con --coverage.
     coverageThreshold: {
         global: {
-            statements: 32,
-            branches: 25,
-            functions: 31,
-            lines: 33,
+            statements: 57,
+            branches: 47,
+            functions: 56,
+            lines: 59,
         },
     },
     testTimeout: 30000,
