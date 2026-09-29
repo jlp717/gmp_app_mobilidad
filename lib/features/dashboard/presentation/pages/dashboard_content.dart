@@ -1425,9 +1425,17 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     if (_kpiData == null) return const SizedBox();
 
     final totalSales = _safeDouble(_kpiData!['totalSales']);
-    final totalOrders = _safeInt(_kpiData!['totalOrders']);
     final uniqueClients = _safeInt(_kpiData!['uniqueClients']);
-    final todaySales = _safeDouble(_kpiData!['todaySales']);
+    final hasGrossTodayMetrics = _kpiData!.containsKey('todaySalesGross') &&
+        _kpiData!.containsKey('todayDocumentsGross');
+    final todaySales = _safeDouble(
+      _kpiData![hasGrossTodayMetrics ? 'todaySalesGross' : 'todaySales'],
+    );
+    final todaySalesFiltered = _safeDouble(_kpiData!['todaySalesFiltered']);
+    final todaySalesGap = _safeDouble(_kpiData!['todaySalesGap']);
+    final todayOrders = _safeInt(
+      _kpiData![hasGrossTodayMetrics ? 'todayDocumentsGross' : 'totalOrders'],
+    );
     final totalMargin = _safeDouble(_kpiData!['totalMargin']);
     final growthPercent = _safeDouble(_kpiData!['growthPercent']);
     final lastMonthSales = _safeDouble(_kpiData!['lastMonthSales']);
@@ -1506,18 +1514,26 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   width: cardWidth,
                 ),
                 _buildKPICard(
-                  'Ventas Hoy',
+                  hasGrossTodayMetrics ? 'Ventas hoy · bruto' : 'Ventas Hoy',
                   CurrencyFormatter.format(todaySales),
                   Icons.today,
                   AppTheme.accentAmber,
                   width: cardWidth,
+                  subtitle: _kpiData!.containsKey('todaySalesFiltered')
+                      ? 'App: ${CurrencyFormatter.format(todaySalesFiltered)}\n'
+                          'Diferencia: ${CurrencyFormatter.format(todaySalesGap)}'
+                      : 'Desglose de filtro no disponible',
                 ),
                 _buildKPICard(
-                  'Pedidos Hoy',
-                  totalOrders.toString(),
+                  hasGrossTodayMetrics ? 'Documentos hoy' : 'Pedidos Hoy',
+                  todayOrders.toString(),
                   Icons.shopping_cart,
                   AppTheme.info,
                   width: cardWidth,
+                  subtitle: hasGrossTodayMetrics &&
+                          _kpiData!.containsKey('todayDocumentsFiltered')
+                      ? 'Filtro app: ${_safeInt(_kpiData!['todayDocumentsFiltered'])}'
+                      : null,
                 ),
                 _buildKPICard(
                   'Crec. Interanual',
@@ -1636,6 +1652,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                 color: AppColors.themedWhite.withValues(alpha: 0.44),
                 fontSize: 9,
               ),
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ],

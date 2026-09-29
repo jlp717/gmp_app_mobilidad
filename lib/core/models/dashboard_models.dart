@@ -15,6 +15,14 @@ class DashboardMetrics extends Equatable {
     required this.growthPercent,
     required this.year,
     required this.month,
+    this.todaySalesGross = 0,
+    this.todaySalesFiltered = 0,
+    this.todaySalesGap = 0,
+    this.todayOrdersFiltered = 0,
+    this.todayDocumentsGross = 0,
+    this.todayDocumentsFiltered = 0,
+    this.todayClients = 0,
+    this.todayClientsFiltered = 0,
   });
 
   factory DashboardMetrics.fromJson(Map<String, dynamic> json) {
@@ -27,7 +35,18 @@ class DashboardMetrics extends Equatable {
       avgOrderValue: (json['avgOrderValue'] as num?)?.toDouble() ?? 0.0,
       totalMargin: (json['totalMargin'] as num?)?.toDouble() ?? 0.0,
       todaySales: (json['todaySales'] as num?)?.toDouble() ?? 0.0,
+      todaySalesGross: (json['todaySalesGross'] as num?)?.toDouble() ?? 0.0,
+      todaySalesFiltered:
+          (json['todaySalesFiltered'] as num?)?.toDouble() ?? 0.0,
+      todaySalesGap: (json['todaySalesGap'] as num?)?.toDouble() ?? 0.0,
       todayOrders: (json['todayOrders'] as num?)?.toInt() ?? 0,
+      todayOrdersFiltered: (json['todayOrdersFiltered'] as num?)?.toInt() ?? 0,
+      todayDocumentsGross: (json['todayDocumentsGross'] as num?)?.toInt() ?? 0,
+      todayDocumentsFiltered:
+          (json['todayDocumentsFiltered'] as num?)?.toInt() ?? 0,
+      todayClients: (json['todayClients'] as num?)?.toInt() ?? 0,
+      todayClientsFiltered:
+          (json['todayClientsFiltered'] as num?)?.toInt() ?? 0,
       lastMonthSales: (json['lastMonthSales'] as num?)?.toDouble() ?? 0.0,
       growthPercent: (json['growthPercent'] as num?)?.toDouble() ?? 0.0,
       year: period?['year'] as int? ?? DateTime.now().year,
@@ -41,7 +60,15 @@ class DashboardMetrics extends Equatable {
   final double avgOrderValue;
   final double totalMargin;
   final double todaySales;
+  final double todaySalesGross;
+  final double todaySalesFiltered;
+  final double todaySalesGap;
   final int todayOrders;
+  final int todayOrdersFiltered;
+  final int todayDocumentsGross;
+  final int todayDocumentsFiltered;
+  final int todayClients;
+  final int todayClientsFiltered;
   final double lastMonthSales;
   final double growthPercent;
   final int year;
@@ -59,7 +86,15 @@ class DashboardMetrics extends Equatable {
         avgOrderValue,
         totalMargin,
         todaySales,
+        todaySalesGross,
+        todaySalesFiltered,
+        todaySalesGap,
         todayOrders,
+        todayOrdersFiltered,
+        todayDocumentsGross,
+        todayDocumentsFiltered,
+        todayClients,
+        todayClientsFiltered,
         lastMonthSales,
         growthPercent,
         year,

@@ -42,7 +42,18 @@ void main() {
           'mes': {'totalDocumentos': 8, 'totalImporte': 40},
         },
         'bolsa': {'saldoDisponible': 120, 'consumido': 10, 'acumulado': 130},
-        'metrics': {'todaySales': 99, 'todayOrders': 4, 'uniqueClients': 3},
+        'metrics': {
+          'todaySales': 80,
+          'todaySalesGross': 99,
+          'todaySalesFiltered': 80,
+          'todaySalesGap': 19,
+          'todayOrders': 3,
+          'todayDocumentsGross': 4,
+          'todayDocumentsFiltered': 3,
+          'todayClients': 2,
+          'uniqueClients': 3,
+          'totalMargin': 30,
+        },
         'topClients': [
           {'name': 'Top 1'},
         ],
@@ -63,6 +74,33 @@ void main() {
     expect(snapshot.invoices?.todayAmount, 10.5);
     expect(snapshot.bolsa?.available, 120);
     expect(snapshot.salesDay?.sales, 99);
+    expect(snapshot.salesDay?.filteredSales, 80);
+    expect(snapshot.salesDay?.salesGap, 19);
+    expect(snapshot.salesDay?.orders, 4);
+    expect(snapshot.salesDay?.filteredOrders, 3);
+    expect(snapshot.salesDay?.clients, 2);
+    expect(snapshot.salesDay?.margin, 0);
     expect(snapshot.salesDay?.topClientNames, ['Top 1']);
+  });
+
+  test('preserves valid zero daily values instead of monthly fallbacks', () {
+    final snapshot = NotificationBackendSnapshotMapper.map(
+      body: {
+        'orders': <String, dynamic>{},
+        'metrics': {'todaySales': 0, 'todayOrders': 0},
+        'stats': {'totalAmount': 240, 'totalOrders': 6},
+      },
+      profile: const NotificationUserProfile(
+        userCode: '80',
+        role: 'COMERCIAL',
+        isJefeVentas: false,
+        vendorCodes: ['80'],
+      ),
+      localOrders: const OrderReminderSnapshot(),
+      now: DateTime(2026, 9, 14),
+    );
+
+    expect(snapshot.salesDay?.sales, 0);
+    expect(snapshot.salesDay?.orders, 0);
   });
 }

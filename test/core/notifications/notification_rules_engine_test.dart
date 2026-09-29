@@ -135,7 +135,10 @@ void main() {
         orders: const OrderReminderSnapshot(),
         salesDay: const SalesDayNotificationSnapshot(
           sales: 1350,
+          filteredSales: 1000,
+          salesGap: 350,
           orders: 4,
+          filteredOrders: 3,
           topClientNames: ['Cliente Top'],
         ),
         rutero: RuteroNotificationSnapshot(
@@ -160,7 +163,23 @@ void main() {
               (item) => item.category == AppNotificationCategory.dailySummary,
             )
             .body,
-        contains('4 pedido'),
+        contains('4 documento'),
+      );
+      expect(
+        notifications
+            .firstWhere(
+              (item) => item.category == AppNotificationCategory.dailySummary,
+            )
+            .body,
+        contains('Filtro app:'),
+      );
+      expect(
+        notifications
+            .firstWhere(
+              (item) => item.category == AppNotificationCategory.dailySummary,
+            )
+            .body,
+        contains('diferencia:'),
       );
     });
 

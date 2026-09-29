@@ -474,14 +474,20 @@ class BolsaNotificationSnapshot {
 class SalesDayNotificationSnapshot {
   const SalesDayNotificationSnapshot({
     this.sales = 0,
+    this.filteredSales,
+    this.salesGap,
     this.orders = 0,
+    this.filteredOrders,
     this.clients = 0,
     this.margin = 0,
     this.topClientNames = const <String>[],
   });
 
   final double sales;
+  final double? filteredSales;
+  final double? salesGap;
   final int orders;
+  final int? filteredOrders;
   final int clients;
   final double margin;
   final List<String> topClientNames;

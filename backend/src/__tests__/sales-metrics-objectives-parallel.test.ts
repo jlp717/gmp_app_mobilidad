@@ -363,7 +363,11 @@ describe('dashboard.service.js — paralelizacion + vendor ALL + binding', () =>
 
     resolvers[0]([{ SALES: '1000', MARGIN: '300', BOXES: '50', ACTIVECLIENTS: '12' }]);
     resolvers[1]([{ SALES: '800', MARGIN: '200', BOXES: '40' }]);
-    resolvers[2]([{ SALES: '120', ORDERS: '4' }]);
+    resolvers[2]([{
+      SALES: '120', FILTEREDSALES: '120', DOCUMENTS: '4',
+      FILTEREDDOCUMENTS: '4', LEGACYFILTEREDORDERS: '4',
+      CLIENTS: '3', FILTEREDCLIENTS: '3',
+    }]);
     const { payload } = await pending;
     expect(payload.todaySales).toBe(120);
     expect(payload.totalOrders).toBe(4);

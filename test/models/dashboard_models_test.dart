@@ -12,7 +12,15 @@ void main() {
         'avgOrderValue': 366.75,
         'totalMargin': 18250.25,
         'todaySales': 4520.00,
+        'todaySalesGross': 5000.00,
+        'todaySalesFiltered': 4200.00,
+        'todaySalesGap': 320.00,
         'todayOrders': 12,
+        'todayOrdersFiltered': 10,
+        'todayDocumentsGross': 14,
+        'todayDocumentsFiltered': 11,
+        'todayClients': 9,
+        'todayClientsFiltered': 8,
         'lastMonthSales': 115000.00,
         'growthPercent': 9.1,
         'period': {'year': 2025, 'month': 3},
@@ -27,7 +35,15 @@ void main() {
       expect(metrics.avgOrderValue, 366.75);
       expect(metrics.totalMargin, 18250.25);
       expect(metrics.todaySales, 4520.00);
+      expect(metrics.todaySalesGross, 5000.00);
+      expect(metrics.todaySalesFiltered, 4200.00);
+      expect(metrics.todaySalesGap, 320.00);
       expect(metrics.todayOrders, 12);
+      expect(metrics.todayOrdersFiltered, 10);
+      expect(metrics.todayDocumentsGross, 14);
+      expect(metrics.todayDocumentsFiltered, 11);
+      expect(metrics.todayClients, 9);
+      expect(metrics.todayClientsFiltered, 8);
       expect(metrics.lastMonthSales, 115000.00);
       expect(metrics.growthPercent, 9.1);
       expect(metrics.year, 2025);

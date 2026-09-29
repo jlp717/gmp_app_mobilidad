@@ -7,12 +7,20 @@ const { beginRouteFill, endRouteFill } = require('../../services/route-cache-sta
 const { buildVendedorFilterParameterized } = require('../utils/dashboardFilters');
 const { comercialErpTable } = require('../../utils/comercial-erp-tables');
 
-const DASHBOARD_CACHE_VERSION = 'v20260914-hist-ttl';
+const DASHBOARD_CACHE_VERSION = 'v20260929-sales-today-gross';
 const CLOSED_YEAR_TTL_SECONDS = 7 * 24 * 3600;
 const OPEN_MONTH_TTL_SECONDS = 10 * 60;
 
 function isCompanyWideVendorScope(vendedorCodes) {
-    return !vendedorCodes || String(vendedorCodes).trim().toUpperCase() === 'ALL';
+    return typeof vendedorCodes === 'string' && vendedorCodes.trim().toUpperCase() === 'ALL';
+}
+
+function assertVendorScope(vendedorCodes) {
+    if (typeof vendedorCodes === 'string' && vendedorCodes.trim().length > 0) return;
+    const error = new Error('DASHBOARD_VENDOR_SCOPE_REQUIRED');
+    error.statusCode = 403;
+    error.code = 'DASHBOARD_VENDOR_SCOPE_REQUIRED';
+    throw error;
 }
 
 function historicalYearsCacheMeta(years, now = getCurrentDate()) {
@@ -38,18 +46,23 @@ class DashboardService {
      * @param {import('../repositories/dashboard.repository').DashboardRepository} deps.repository
      * @param {object} [deps.cache] contrato {TTL,get,set}
      */
-    constructor({ repository, cache }) {
+    constructor({ repository, cache, clock = getCurrentDate }) {
         this._repo = repository;
         this._cache = cache; // { TTL, get, set }
+        this._clock = clock;
     }
 
     /** Paso 1: resolver periodo efectivo y claves de cache. */
     _resolvePeriod(vendedorCodes, yearRaw, monthRaw) {
-        const now = getCurrentDate();
+        const now = this._clock();
         const year = parseInt(yearRaw) || now.getFullYear();
         const month = parseInt(monthRaw) || (now.getMonth() + 1);
         const cacheKey = `dashboard:metrics:${DASHBOARD_CACHE_VERSION}:${year}:${month || 'all'}:${isCompanyWideVendorScope(vendedorCodes) ? 'ALL' : vendedorCodes}`;
         const isAllVendors = isCompanyWideVendorScope(vendedorCodes);
+        const isCurrentPeriod = year === now.getFullYear() && month === (now.getMonth() + 1);
+        const todayKey = isCurrentPeriod
+            ? `${year}-${String(month).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+            : null;
         const currentMeta = historicalYearsCacheMeta([year], now);
         const prevMeta = historicalYearsCacheMeta([year - 1], now);
         return {
@@ -60,7 +73,8 @@ class DashboardService {
             isAllVendors,
             currentTTL: currentMeta.ttl,
             prevTTL: prevMeta.ttl,
-            responseCacheKey: `${cacheKey}:response`,
+            todayCacheKey: todayKey ? `${cacheKey}:today:${todayKey}` : null,
+            responseCacheKey: `${cacheKey}:response${todayKey ? `:day:${todayKey}` : ''}`,
             cacheScope: vendedorCodes || 'ALL',
         };
     }
@@ -76,10 +90,7 @@ class DashboardService {
           FROM ${comercialErpTable('LACLAE')} L
           WHERE L.LCAADC = ?
             AND L.LCMMDC = ?
-            AND L.TPDC = 'LAC'
-            AND L.LCTPVT IN ('CC', 'VC')
-            AND L.LCCLLN IN ('AB', 'VT')
-            AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
+            AND ${LACLAE_SALES_FILTER}
             ${vendorFilter}
         `;
         const lastDataSql = `
@@ -102,19 +113,52 @@ class DashboardService {
     /** Paso 3: ventas de hoy (solo si el periodo solicitado es el actual). */
     async _computeTodaySales(ctx, vendorFilter, vendorParams) {
         if (!(ctx.year === ctx.now.getFullYear() && ctx.month === (ctx.now.getMonth() + 1))) {
-            return { todaySales: 0, todayOrders: 0 };
+            return {
+                todaySales: 0,
+                todaySalesGross: 0,
+                todaySalesFiltered: 0,
+                todaySalesGap: 0,
+                todayOrders: 0,
+                todayOrdersFiltered: 0,
+                todayDocumentsGross: 0,
+                todayDocumentsFiltered: 0,
+                todayClients: 0,
+                todayClientsFiltered: 0,
+            };
         }
+        // Ventas Hoy conserva el bruto documental. El equivalente del filtro
+        // histórico queda separado para que la diferencia sea auditable.
+        const documentKey = `L.LCSBAB || DIGITS(L.LCYEAB) || L.LCSRAB || DIGITS(L.LCTRAB) || DIGITS(L.LCNRAB)`;
         const todayDataSql = `
-                SELECT COALESCE(SUM(L.LCIMVT), 0) as sales, COUNT(DISTINCT L.LCNRAB) as orders
+                SELECT
+                  COALESCE(SUM(L.LCIMVT), 0) as sales,
+                  COALESCE(SUM(CASE WHEN ${LACLAE_SALES_FILTER} THEN L.LCIMVT ELSE 0 END), 0) as filteredSales,
+                  COUNT(DISTINCT ${documentKey}) as documents,
+                  COUNT(DISTINCT CASE WHEN ${LACLAE_SALES_FILTER} THEN ${documentKey} END) as filteredDocuments,
+                  COUNT(DISTINCT CASE WHEN ${LACLAE_SALES_FILTER} THEN L.LCNRAB END) as legacyFilteredOrders,
+                  COUNT(DISTINCT L.LCCDCL) as clients,
+                  COUNT(DISTINCT CASE WHEN ${LACLAE_SALES_FILTER} THEN L.LCCDCL END) as filteredClients
                 FROM ${comercialErpTable('LACLAE')} L
-                WHERE L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC = ? AND ${LACLAE_SALES_FILTER} ${vendorFilter}
+                WHERE L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC = ? ${vendorFilter}
         `;
         const params = [ctx.year, ctx.month, ctx.now.getDate(), ...vendorParams];
-        const rows = await this._repo.fetchPeriodAggregate(todayDataSql, params, `${ctx.cacheKey}:today`, TTL.SHORT);
+        const rows = await this._repo.fetchPeriodAggregate(todayDataSql, params, ctx.todayCacheKey, TTL.SHORT);
         const td = rows[0] || {};
+        const todaySalesGross = parseFloat(td.SALES ?? td.sales) || 0;
+        const todaySalesFiltered = parseFloat(td.FILTEREDSALES ?? td.filteredSales) || 0;
         return {
-            todaySales: parseFloat(td.SALES ?? td.sales) || 0,
-            todayOrders: parseInt(td.ORDERS ?? td.orders) || 0,
+            // Keep legacy fields on their original filter/count semantics so
+            // already-installed app versions remain compatible.
+            todaySales: todaySalesFiltered,
+            todaySalesGross,
+            todaySalesFiltered,
+            todaySalesGap: Number((todaySalesGross - todaySalesFiltered).toFixed(2)),
+            todayOrders: parseInt(td.LEGACYFILTEREDORDERS ?? td.legacyFilteredOrders) || 0,
+            todayOrdersFiltered: parseInt(td.LEGACYFILTEREDORDERS ?? td.legacyFilteredOrders) || 0,
+            todayDocumentsGross: parseInt(td.DOCUMENTS ?? td.documents) || 0,
+            todayDocumentsFiltered: parseInt(td.FILTEREDDOCUMENTS ?? td.filteredDocuments) || 0,
+            todayClients: parseInt(td.CLIENTS ?? td.clients) || 0,
+            todayClientsFiltered: parseInt(td.FILTEREDCLIENTS ?? td.filteredClients) || 0,
         };
     }
 
@@ -164,7 +208,15 @@ class DashboardService {
             uniqueClients: parseInt(curr.ACTIVECLIENTS) || 0,
             avgOrderValue: todayInfo.todayOrders > 0 ? todayInfo.todaySales / todayInfo.todayOrders : 0,
             todaySales: todayInfo.todaySales,
+            todaySalesGross: todayInfo.todaySalesGross,
+            todaySalesFiltered: todayInfo.todaySalesFiltered,
+            todaySalesGap: todayInfo.todaySalesGap,
             todayOrders: todayInfo.todayOrders,
+            todayOrdersFiltered: todayInfo.todayOrdersFiltered,
+            todayDocumentsGross: todayInfo.todayDocumentsGross,
+            todayDocumentsFiltered: todayInfo.todayDocumentsFiltered,
+            todayClients: todayInfo.todayClients,
+            todayClientsFiltered: todayInfo.todayClientsFiltered,
             lastMonthSales: salesTotals.lastSales,
             growthPercent: Math.round(growthPercent * 10) / 10,
             sales: {
@@ -195,6 +247,7 @@ class DashboardService {
      * @returns {Promise<{payload:Object, fromCache:boolean, cacheScope:string}>}
      */
     async getMetrics(vendedorCodes, { year, month }, { forceRefresh = false } = {}) {
+        assertVendorScope(vendedorCodes);
         const ctx = this._resolvePeriod(vendedorCodes, year, month);
 
         if (!forceRefresh) {
@@ -249,6 +302,7 @@ class DashboardService {
      * @returns {Promise<Array<Object>>} filas de evolucion ya limitadas a `months`
      */
     async getSalesEvolution(vendedorCodes, { years, granularity = 'month', upToToday = 'false', months = 36 } = {}) {
+        assertVendorScope(vendedorCodes);
         const now = getCurrentDate();
         const selectedYears = years
             ? years.split(',').map(y => parseInt(y.trim()))

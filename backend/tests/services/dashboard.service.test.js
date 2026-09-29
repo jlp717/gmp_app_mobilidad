@@ -40,7 +40,11 @@ describe('DashboardService.getMetrics', () => {
             fetchPeriodAggregate: jest.fn()
                 .mockResolvedValueOnce([{ SALES: '1000', MARGIN: '300', BOXES: '50', ACTIVECLIENTS: '12' }])
                 .mockResolvedValueOnce([{ SALES: '800', MARGIN: '200', BOXES: '40' }])
-                .mockResolvedValue([{ SALES: '120', ORDERS: '4' }]),
+                .mockResolvedValue([{
+                    SALES: '120', FILTEREDSALES: '120', DOCUMENTS: '4',
+                    FILTEREDDOCUMENTS: '4', LEGACYFILTEREDORDERS: '4',
+                    CLIENTS: '3', FILTEREDCLIENTS: '3',
+                }]),
             fetchBSalesByVendor: jest.fn()
                 .mockResolvedValueOnce({ V1: { [M]: 100 } })
                 .mockResolvedValueOnce({ V1: { [M]: 50 } }),
@@ -57,7 +61,10 @@ describe('DashboardService.getMetrics', () => {
         expect(payload.growthPercent).toBe(Math.round(((1100 - 850) / 850) * 100 * 10) / 10);
         expect(Object.keys(payload).sort()).toEqual([
             'avgOrderValue', 'boxes', 'clients', 'growthPercent', 'lastMonthSales',
-            'margin', 'period', 'sales', 'todayOrders', 'todaySales', 'totalBoxes',
+            'margin', 'period', 'sales', 'todayClients', 'todayClientsFiltered',
+            'todayDocumentsFiltered', 'todayDocumentsGross', 'todayOrders',
+            'todayOrdersFiltered', 'todaySales', 'todaySalesFiltered',
+            'todaySalesGap', 'todaySalesGross', 'totalBoxes',
             'totalMargin', 'totalOrders', 'totalSales', 'uniqueClients',
         ].sort());
         expect(payload.sales.trend).toBe('up');
@@ -111,6 +118,97 @@ describe('DashboardService.getMetrics', () => {
         expect(ttls[0]).toBe(10 * 60);
         expect(ttls[1]).toBe(7 * 24 * 3600);
         expect(cache.set.mock.calls[0][3]).toBe(10 * 60);
+    });
+});
+
+describe('DashboardService canonico Ventas Hoy 29/09/2026', () => {
+    test('Ventas Hoy separa bruto, filtro histórico, gap y documento completo para la fecha verificada', async () => {
+        const NOW = new Date(2026, 8, 29, 12, 0, 0);
+        const Y = 2026;
+        const M = 9;
+        const repo = makeRepo({
+            fetchPeriodAggregate: jest.fn()
+                .mockResolvedValueOnce([{ SALES: '2500000', MARGIN: '120000', BOXES: '9000', ACTIVECLIENTS: '241' }])
+                .mockResolvedValueOnce([{ SALES: '2200000', MARGIN: '100000', BOXES: '8000' }])
+                .mockResolvedValueOnce([{
+                    SALES: '57442.76', FILTEREDSALES: '48928.95',
+                    DOCUMENTS: '346', FILTEREDDOCUMENTS: '326',
+                    LEGACYFILTEREDORDERS: '312',
+                    CLIENTS: '255', FILTEREDCLIENTS: '241',
+                }]),
+            fetchBSalesByVendor: jest.fn(async () => ({})),
+        });
+        const svc = new DashboardService({ repository: repo, cache: makeCache(), clock: () => new Date(NOW) });
+        const { payload } = await svc.getMetrics('ALL', { year: String(Y), month: String(M) }, {});
+        expect(payload.todaySales).toBeCloseTo(48928.95, 2); // legacy app-filter field
+        expect(payload.todaySalesGross).toBeCloseTo(57442.76, 2);
+        expect(payload.todaySalesFiltered).toBeCloseTo(48928.95, 2);
+        expect(payload.todaySalesGap).toBe(8513.81);
+        expect(payload.totalSales).toBe(2500000); // agregado mensual; independiente del canon diario
+        expect(payload.totalOrders).toBe(312); // legacy app count remains unchanged
+        expect(payload.todayOrders).toBe(312);
+        expect(payload.todayOrdersFiltered).toBe(312); // legacy order count stays compatible
+        expect(payload.todayDocumentsGross).toBe(346); // full composite document key
+        expect(payload.todayDocumentsFiltered).toBe(326);
+        expect(payload.todayClients).toBe(255);
+        expect(payload.todayClientsFiltered).toBe(241);
+        expect(payload.uniqueClients).toBe(241);
+        expect(payload.avgOrderValue).toBeCloseTo(48928.95 / 312, 2); // legacy semantics
+        // El WHERE exterior aplica fecha y ámbito vendedor; las métricas
+        // filtradas preservan por separado el universo histórico de ventas.
+        const todaySql = repo.fetchPeriodAggregate.mock.calls[2][0];
+        expect(todaySql).toMatch(/SUM\(L\.LCIMVT\), 0\) as sales/);
+        expect(todaySql).toMatch(/SUM\(CASE WHEN L\.TPDC = 'LAC'/);
+        expect(todaySql).toMatch(/COUNT\(DISTINCT CASE WHEN L\.TPDC = 'LAC'/);
+        expect(todaySql).toMatch(/COUNT\(DISTINCT L\.LCSBAB \|\| DIGITS\(L\.LCYEAB\) \|\| L\.LCSRAB \|\| DIGITS\(L\.LCTRAB\) \|\| DIGITS\(L\.LCNRAB\)\) as documents/);
+        expect(todaySql).toMatch(/COUNT\(DISTINCT CASE WHEN L\.TPDC = 'LAC'[\s\S]*?THEN L\.LCNRAB END\) as legacyFilteredOrders/);
+        expect(todaySql).not.toMatch(/WHERE[\s\S]*AND L\.TPDC = 'LAC'/);
+        expect(todaySql).not.toContain('L.LCCDVD IN'); // explicit manager ALL
+        expect(repo.fetchPeriodAggregate.mock.calls[2][1]).toEqual([Y, M, 29]);
+        const currSql = repo.fetchPeriodAggregate.mock.calls[0][0];
+        const prevSql = repo.fetchPeriodAggregate.mock.calls[1][0];
+        expect(currSql).toContain("AND L.TPDC = 'LAC'");
+        expect(prevSql).toContain("AND L.TPDC = 'LAC'");
+        expect(currSql).toMatch(/COUNT\(DISTINCT L\.LCCDCL\)/);
+    });
+
+    test('el ámbito comercial se enlaza por vendedor que vendió en el agregado bruto', async () => {
+        const NOW = new Date(2026, 8, 29, 12, 0, 0);
+        const repo = makeRepo({
+            fetchPeriodAggregate: jest.fn()
+                .mockResolvedValueOnce([{ SALES: '1000' }])
+                .mockResolvedValueOnce([{ SALES: '900' }])
+                .mockResolvedValueOnce([{ SALES: '500', DOCUMENTS: '2' }]),
+            fetchBSalesByVendor: jest.fn(async () => ({})),
+        });
+        const svc = new DashboardService({ repository: repo, cache: makeCache(), clock: () => new Date(NOW) });
+        await svc.getMetrics('V1', { year: '2026', month: '9' }, {});
+        const todayCall = repo.fetchPeriodAggregate.mock.calls[2];
+        expect(todayCall[0]).toContain('AND L.LCCDVD IN (?)');
+        expect(todayCall[1]).toEqual([2026, 9, 29, 'V1']);
+    });
+
+    test.each([undefined, null, '', '   '])('rechaza ámbito ausente o vacío sin consultar DB2 (%s)', async (scope) => {
+        const repo = makeRepo();
+        const svc = new DashboardService({ repository: repo, cache: makeCache() });
+        await expect(svc.getMetrics(scope, { year: '2026', month: '9' }, {})).rejects.toMatchObject({
+            statusCode: 403,
+            code: 'DASHBOARD_VENDOR_SCOPE_REQUIRED',
+        });
+        expect(repo.fetchPeriodAggregate).not.toHaveBeenCalled();
+    });
+
+    test('separa la caché de respuesta y ventas de hoy por fecha documental', () => {
+        const day29 = new DashboardService({
+            repository: makeRepo(), cache: makeCache(), clock: () => new Date(2026, 8, 29, 12),
+        })._resolvePeriod('V1', '2026', '9');
+        const day30 = new DashboardService({
+            repository: makeRepo(), cache: makeCache(), clock: () => new Date(2026, 8, 30, 12),
+        })._resolvePeriod('V1', '2026', '9');
+        expect(day29.responseCacheKey).not.toBe(day30.responseCacheKey);
+        expect(day29.todayCacheKey).not.toBe(day30.todayCacheKey);
+        expect(day29.responseCacheKey).toContain(':day:2026-09-29');
+        expect(day30.todayCacheKey).toContain(':today:2026-09-30');
     });
 });
 

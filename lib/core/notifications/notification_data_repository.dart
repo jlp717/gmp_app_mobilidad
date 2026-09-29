@@ -661,13 +661,34 @@ class NotificationDataRepository {
           .where((name) => name.trim().isNotEmpty)
           .take(3)
           .toList(growable: false);
-      final dashboardSales = _toDouble(metrics['todaySales']);
-      final dashboardOrders = _toInt(metrics['todayOrders']);
+      final dashboardSales = _toDouble(
+        metrics.containsKey('todaySalesGross')
+            ? metrics['todaySalesGross']
+            : metrics['todaySales'],
+      );
+      final dashboardOrders = _toInt(
+        metrics.containsKey('todayDocumentsGross')
+            ? metrics['todayDocumentsGross']
+            : metrics['todayOrders'],
+      );
       return SalesDayNotificationSnapshot(
-        sales: dashboardSales > 0 ? dashboardSales : stats?.totalAmount ?? 0,
-        orders: dashboardOrders > 0 ? dashboardOrders : stats?.totalOrders ?? 0,
-        clients: _toInt(metrics['uniqueClients']),
-        margin: _toDouble(metrics['totalMargin']),
+        sales: metrics.containsKey('todaySales')
+            ? dashboardSales
+            : stats?.totalAmount ?? 0,
+        filteredSales: metrics.containsKey('todaySalesFiltered')
+            ? _toDouble(metrics['todaySalesFiltered'])
+            : null,
+        salesGap: metrics.containsKey('todaySalesGap')
+            ? _toDouble(metrics['todaySalesGap'])
+            : null,
+        orders: metrics.containsKey('todayOrders')
+            ? dashboardOrders
+            : stats?.totalOrders ?? 0,
+        filteredOrders: metrics.containsKey('todayDocumentsFiltered')
+            ? _toInt(metrics['todayDocumentsFiltered'])
+            : null,
+        clients: _toInt(metrics['todayClients']),
+        margin: _toDouble(metrics['todayMargin']),
         topClientNames: clients,
       );
     } catch (e) {
@@ -1043,19 +1064,33 @@ class NotificationBackendSnapshotMapper {
         .take(3)
         .toList(growable: false);
     final dashboardSales = NotificationDataRepository._toDouble(
-      metrics['todaySales'],
+      metrics.containsKey('todaySalesGross')
+          ? metrics['todaySalesGross']
+          : metrics['todaySales'],
     );
-    final dashboardOrders =
-        NotificationDataRepository._toInt(metrics['todayOrders']);
+    final dashboardOrders = NotificationDataRepository._toInt(
+      metrics.containsKey('todayDocumentsGross')
+          ? metrics['todayDocumentsGross']
+          : metrics['todayOrders'],
+    );
     return SalesDayNotificationSnapshot(
-      sales: dashboardSales > 0
+      sales: metrics.containsKey('todaySales')
           ? dashboardSales
           : NotificationDataRepository._toDouble(stats['totalAmount']),
-      orders: dashboardOrders > 0
+      filteredSales: metrics.containsKey('todaySalesFiltered')
+          ? NotificationDataRepository._toDouble(metrics['todaySalesFiltered'])
+          : null,
+      salesGap: metrics.containsKey('todaySalesGap')
+          ? NotificationDataRepository._toDouble(metrics['todaySalesGap'])
+          : null,
+      orders: metrics.containsKey('todayOrders')
           ? dashboardOrders
           : NotificationDataRepository._toInt(stats['totalOrders']),
-      clients: NotificationDataRepository._toInt(metrics['uniqueClients']),
-      margin: NotificationDataRepository._toDouble(metrics['totalMargin']),
+      filteredOrders: metrics.containsKey('todayDocumentsFiltered')
+          ? NotificationDataRepository._toInt(metrics['todayDocumentsFiltered'])
+          : null,
+      clients: NotificationDataRepository._toInt(metrics['todayClients']),
+      margin: NotificationDataRepository._toDouble(metrics['todayMargin']),
       topClientNames: names,
     );
   }

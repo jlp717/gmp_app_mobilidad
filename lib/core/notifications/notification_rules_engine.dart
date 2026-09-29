@@ -346,7 +346,11 @@ class NotificationRuleEngine {
         category: AppNotificationCategory.dailySummary,
         title: 'Resumen comercial del dia',
         body: [
-          '${sales.orders} pedido(s), ${_money(sales.sales)} vendidos.',
+          '${sales.orders} documento(s), ${_money(sales.sales)} brutos.',
+          if (sales.filteredOrders != null)
+            'Filtro app: ${sales.filteredOrders} documento(s).',
+          if (sales.filteredSales != null)
+            'Filtro app: ${_money(sales.filteredSales!)}; diferencia: ${_moneyPrecise(sales.salesGap ?? sales.sales - sales.filteredSales!)}.',
           if (rutero != null && rutero.clientCount > 0)
             'Ruta: ${rutero.clientCount} cliente(s).',
           if (sales.topClientNames.isNotEmpty)
@@ -509,6 +513,14 @@ class NotificationRuleEngine {
       locale: 'es_ES',
       symbol: 'EUR',
       decimalDigits: 0,
+    ).format(value);
+  }
+
+  static String _moneyPrecise(double value) {
+    return NumberFormat.currency(
+      locale: 'es_ES',
+      symbol: 'EUR',
+      decimalDigits: 2,
     ).format(value);
   }
 }
