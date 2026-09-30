@@ -103,19 +103,50 @@ async function getPedidosPendientesSyncThreshold(vendedorCode) {
     }
 }
 
+const PEDIDOS_ROUTE_CACHE_VERSION_NS = 'meta';
+const PEDIDOS_ROUTE_CACHE_VERSION_KEY = 'pedidos:route:ver';
+
+async function getPedidosRouteCacheVersion() {
+    try {
+        if (!redisCache || typeof redisCache.getRemote !== 'function') return '0';
+        const remote = await redisCache.getRemote(PEDIDOS_ROUTE_CACHE_VERSION_NS, PEDIDOS_ROUTE_CACHE_VERSION_KEY);
+        if (remote != null && remote !== '') return String(remote);
+        const local = await redisCache.get(PEDIDOS_ROUTE_CACHE_VERSION_NS, PEDIDOS_ROUTE_CACHE_VERSION_KEY);
+        return local == null || local === '' ? '0' : String(local);
+    } catch (_err) {
+        return '0';
+    }
+}
+
+async function bumpPedidosRouteCacheVersion(reasonTag = '') {
+    try {
+        if (redisCache && typeof redisCache.incrementVersion === 'function') {
+            await redisCache.incrementVersion(
+                PEDIDOS_ROUTE_CACHE_VERSION_NS,
+                PEDIDOS_ROUTE_CACHE_VERSION_KEY,
+                TTL.LONG || 1800,
+            );
+            logger.info(`[PEDIDOS] Route cache version bump${reasonTag ? ` (${reasonTag})` : ''}`);
+            return;
+        }
+    } catch (err) {
+        logger.warn(`[PEDIDOS] Route cache version bump failed${reasonTag ? ` (${reasonTag})` : ''}: ${err.message}`);
+    }
+}
+
 async function invalidateRuteroCachesAfterPedido(vendedorCode) {
     try {
         const code = String(vendedorCode || '').trim();
-        // orders:v3 (CPC) + orders:app (PEDIDOS_CAB overlay TEST) share family
-        // patternFor('rutero:orders:*') → query:query:rutero:orders:*
+        // Single SCAN family for compound order-status v4 (+ legacy v3/app:* keys).
+        // patternFor('rutero:orders', 2) → query:query:rutero:orders:*
         const patterns = [
-            patternFor('rutero:orders:v3', 2),
-            patternFor('rutero:orders:app:v1', 3),
-            patternFor('rutero:orders:app:v2', 3),
+            patternFor('rutero:orders', 2),
             'query:rutero:day:payload:v4:*',
         ];
         if (code) {
             const normalized = code.replace(/^0+/, '') || code;
+            // Prefer scoped day-payload deletes when vendor known (narrower than *).
+            patterns.length = 1; // keep orders family only
             patterns.push(
                 `query:rutero:day:payload:v4:scope:${normalized}:primary:*`,
                 `query:rutero:day:payload:v4:scope:${code}:primary:*`,
@@ -626,6 +657,9 @@ async function getClientOrderDefaults(clientCode) {
 
 async function invalidatePedidosStockCache(reasonTag = '') {
     try {
+        // Version bump invalidates route-namespace catalog keys without SCAN.
+        await bumpPedidosRouteCacheVersion(reasonTag || 'stock');
+        // One SCAN for cachedQuery keys under query:query:pedidos:* (not multi-pattern).
         if (redisCache && typeof redisCache.invalidatePattern === 'function') {
             await redisCache.invalidatePattern('query:query:pedidos:*');
         }
@@ -707,7 +741,7 @@ async function getDeliveryOptions({ clientCode, vendedorCode, deliveryDate }) {
     const cleanClient = trimString(clientCode).substring(0, 10);
     const cleanVendor = trimString(vendedorCode).split(',')[0].substring(0, 2);
     const cleanDate = deliveryDate ? trimString(deliveryDate).substring(0, 10) : '';
-    const cacheKey = `pedidos:delivery-options:${cleanClient}:${cleanVendor}:${cleanDate || 'next'}`;
+    const cacheKey = `pedidos:delivery-options:${await getPedidosRouteCacheVersion()}:${cleanClient}:${cleanVendor}:${cleanDate || 'next'}`;
     const cached = await redisCache.get('route', cacheKey);
     if (cached) return cached;
 
@@ -1764,7 +1798,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
     const normalizedSortBy = String(sortBy || 'purchases').toLowerCase().trim();
     const normalizedSortOrder = String(sortOrder || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
     const rankOrderClause = buildCatalogRankOrderClause(normalizedSortBy, normalizedSortOrder);
-    const resultCacheKey = `pedidos:products_final_v3:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${includeIva ? 'iva' : 'net'}:${normalizedSortBy}:${normalizedSortOrder}:${onlyStock ? 'stock' : 'all'}`;
+    const resultCacheKey = `pedidos:products_final_v3:${await getPedidosRouteCacheVersion()}:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${includeIva ? 'iva' : 'net'}:${normalizedSortBy}:${normalizedSortOrder}:${onlyStock ? 'stock' : 'all'}`;
     const cachedProducts = await redisCache.get('route', resultCacheKey);
     if (cachedProducts) return cachedProducts;
 
@@ -1901,7 +1935,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
 
     const finalParams = [...historyParams, ...params, offset, offset + limit, clientCodeTrimmed];
 
-    const cacheKey = `pedidos:products_v2:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${normalizedSortBy}:${normalizedSortOrder}:${onlyStock ? 'stock' : 'all'}`;
+    const cacheKey = `pedidos:products_v2:${await getPedidosRouteCacheVersion()}:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${normalizedSortBy}:${normalizedSortOrder}:${onlyStock ? 'stock' : 'all'}`;
 
     try {
         const rows = await cachedQuery(
@@ -4680,11 +4714,10 @@ async function updateOrderStatus(orderId, newStatus, options = {}) {
         [status, id], false
     );
 
-    // Invalidate cache
+    // Invalidate cache — version bump for route keys + one SCAN for query:pedidos
     try {
+        await bumpPedidosRouteCacheVersion('order_status');
         if (redisCache && typeof redisCache.invalidatePattern === 'function') {
-            // Las claves de cachedQuery viven bajo "gmp:query:query:pedidos:..."
-            // (namespace "query" + prefijo "query" del CacheKeyGenerator).
             await redisCache.invalidatePattern('query:query:pedidos:*');
         }
     } catch (e) {
@@ -5230,6 +5263,8 @@ module.exports = {
     getActivePromotions: promotions.getActivePromotionsV2,
     checkDraftAccumulation: orderLifecycle.checkDraftAccumulation,
     getPedidosPendientesSyncThreshold,
+    invalidateRuteroCachesAfterPedido,
+    invalidatePedidosStockCache,
     getClientBalance: discovery.getClientBalance,
     cloneOrder: discovery.cloneOrder,
     getComplementaryProducts: similarity.getComplementaryProducts,

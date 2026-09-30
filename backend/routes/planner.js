@@ -155,6 +155,23 @@ function normalizeRuteroVendorCodes(vendedorCodes) {
         .filter(Boolean);
 }
 
+/** CHAR(10) client keys — pad for sargable equality (no TRIM on column). */
+function padRuteroClientChar10(value) {
+    return String(value || '').trim().substring(0, 10);
+}
+
+/** CHAR(2) vendor keys — zero-pad numeric codes to match ERP storage. */
+function padRuteroVendorChar2(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (/^\d+$/.test(raw)) return raw.padStart(2, '0').slice(-2);
+    return raw.substring(0, 2);
+}
+
+function buildRuteroInPlaceholders(count, castSql) {
+    return Array.from({ length: count }, () => castSql).join(',');
+}
+
 function normalizePlannerVendorCode(value) {
     const raw = String(value || '').trim().toUpperCase();
     if (!raw) return '';
@@ -455,6 +472,68 @@ async function requirePlannerClientOwnership(req, res, next) {
     }
 }
 
+function applyRuteroCpcOrderStatusRow(statusMap, orderDate, row) {
+    const code = (row.CODE ?? row.code ?? '').toString().trim();
+    if (!code) return;
+    const totalCount = parseInt(row.TOTAL_COUNT ?? row.total_count, 10) || 0;
+    const lastOrderNumber = parseInt(row.LAST_ORDER_NUMBER ?? row.last_order_number, 10) || null;
+    if (totalCount <= 0) return;
+
+    statusMap.set(code, {
+        state: 'CONFIRMADO',
+        label: 'VENTA CONFIRMADA',
+        hasOrder: true,
+        confirmedCount: totalCount,
+        draftCount: 0,
+        totalCount,
+        lastOrderId: null,
+        lastOrderNumber,
+        date: orderDate.iso,
+    });
+}
+
+function applyRuteroAppOrderStatusRow(statusMap, orderDate, row) {
+    const code = (row.CODE ?? row.code ?? '').toString().trim();
+    if (!code) return;
+    const estado = String(row.ESTADO ?? row.estado ?? '').trim().toUpperCase();
+    const totalCount = parseInt(row.TOTAL_COUNT ?? row.total_count, 10) || 0;
+    if (totalCount <= 0) return;
+    const lastOrderId = parseInt(row.LAST_ORDER_ID ?? row.last_order_id, 10) || null;
+    const lastOrderNumber = parseInt(row.LAST_ORDER_NUMBER ?? row.last_order_number, 10) || null;
+    const current = statusMap.get(code) || emptyRuteroOrderStatus(orderDate);
+    const isConfirmed = estado === 'CONFIRMADO' || estado === 'ENVIADO';
+    const isDraft = !isConfirmed;
+
+    if (isConfirmed) {
+        statusMap.set(code, {
+            state: 'CONFIRMADO',
+            label: 'VENTA CONFIRMADA',
+            hasOrder: true,
+            confirmedCount: (current.confirmedCount || 0) + totalCount,
+            draftCount: current.draftCount || 0,
+            totalCount: (current.totalCount || 0) + totalCount,
+            lastOrderId,
+            lastOrderNumber: lastOrderNumber || current.lastOrderNumber || null,
+            date: orderDate.iso,
+        });
+        return;
+    }
+
+    if (isDraft && current.state !== 'CONFIRMADO') {
+        statusMap.set(code, {
+            state: 'BORRADOR',
+            label: 'PEDIDO BORRADOR',
+            hasOrder: true,
+            confirmedCount: current.confirmedCount || 0,
+            draftCount: (current.draftCount || 0) + totalCount,
+            totalCount: (current.totalCount || 0) + totalCount,
+            lastOrderId,
+            lastOrderNumber: lastOrderNumber || current.lastOrderNumber || null,
+            date: orderDate.iso,
+        });
+    }
+}
+
 async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }) {
     const statusMap = new Map();
     clientCodes.forEach(code => {
@@ -463,11 +542,16 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
 
     if (!clientCodes.length) return { statusMap, degraded: false };
 
-    const clientPlaceholders = clientCodes.map(() => '?').join(',');
-    const vendorCodes = normalizeRuteroVendorCodes(vendedorCodes);
+    const paddedClients = clientCodes.map(padRuteroClientChar10).filter(Boolean);
+    if (!paddedClients.length) return { statusMap, degraded: false };
+
+    const vendorCodes = normalizeRuteroVendorCodes(vendedorCodes)
+        .map(padRuteroVendorChar2)
+        .filter(Boolean);
     const useVendorFilter = vendorCodes.length > 0 && vendorCodes.length <= 50;
+    const clientInSql = buildRuteroInPlaceholders(paddedClients.length, 'CAST(? AS CHAR(10))');
     const vendorFilterSql = useVendorFilter
-        ? ` AND TRIM(C.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`
+        ? ` AND C.CODIGOVENDEDOR IN (${buildRuteroInPlaceholders(vendorCodes.length, 'CAST(? AS CHAR(2))')})`
         : '';
 
     // TEST/PROD frontera (2026-09-22):
@@ -477,76 +561,50 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
     //   (LACLAE forzado prod; ver utils/comercial-erp-tables.js).
     // Live ERP (CPC) + app buffer (PEDIDOS_CAB). Demo bug: confirmed app
     // pedidos stay LOCAL and never hit CPC → ruta stayed "SIN VENTA".
-    const cpcSql = `
+    //
+    // P0 perf: predicados sargables (CHAR cast, sin TRIM en WHERE de claves) +
+    // 1 SQL UNION ALL (antes 2 queries/batch) + cache compound v4.
+    let appTableName = null;
+    try {
+        appTableName = db2AppTable('PEDIDOS_CAB');
+    } catch (appTableErr) {
+        logger.warn(`[RUTERO DAY] App overlay table unresolved: ${appTableErr.message}`);
+    }
+
+    const cpcBranchSql = `
         SELECT
             TRIM(C.CODIGOCLIENTEALBARAN) AS CODE,
+            CAST('CPC' AS VARCHAR(3)) AS SRC,
+            CAST('CONFIRMADO' AS VARCHAR(20)) AS ESTADO,
             COUNT(*) AS TOTAL_COUNT,
+            CAST(NULL AS INTEGER) AS LAST_ORDER_ID,
             MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER
         FROM ${comercialErpTable('CPC')} C
-        WHERE TRIM(C.CODIGOCLIENTEALBARAN) IN (${clientPlaceholders})
+        WHERE C.CODIGOCLIENTEALBARAN IN (${clientInSql})
           AND C.ANODOCUMENTO = ?
           AND C.MESDOCUMENTO = ?
           AND C.DIADOCUMENTO = ?
-          AND TRIM(C.SUBEMPRESAPEDIDO) = 'GMP'
+          AND C.SUBEMPRESAPEDIDO = CAST('GMP' AS CHAR(3))
           ${vendorFilterSql}
-        GROUP BY TRIM(C.CODIGOCLIENTEALBARAN)
+        GROUP BY C.CODIGOCLIENTEALBARAN
     `;
 
-    const params = [
-        ...clientCodes,
-        orderDate.year,
-        orderDate.month,
-        orderDate.day,
-        ...(useVendorFilter ? vendorCodes : []),
-    ];
-
-    let degraded = false;
-    try {
-        const orderCacheKey = `rutero:orders:v3:${orderDate.iso}:${ruteroBatchHash([...clientCodes, ...vendorCodes])}`;
-        const rows = await cachedQuery(
-            queryWithParams,
-            cpcSql,
-            orderCacheKey,
-            TTL.REALTIME,
-            params,
-        );
-        (rows || []).forEach((row) => {
-            const code = (row.CODE ?? row.code ?? '').toString().trim();
-            if (!code) return;
-            const totalCount = parseInt(row.TOTAL_COUNT ?? row.total_count, 10) || 0;
-            const lastOrderNumber = parseInt(row.LAST_ORDER_NUMBER ?? row.last_order_number, 10) || null;
-            if (totalCount <= 0) return;
-
-            statusMap.set(code, {
-                state: 'CONFIRMADO',
-                label: 'VENTA CONFIRMADA',
-                hasOrder: true,
-                confirmedCount: totalCount,
-                draftCount: 0,
-                totalCount,
-                lastOrderId: null,
-                lastOrderNumber,
-                date: orderDate.iso,
-            });
-        });
-    } catch (_error) {
-        logger.error('[RUTERO DAY] CPC production order status query failed');
-        degraded = true;
-    }
-
-    try {
-        // Overlay opcional: si la resolucion de la tabla app falla (o la
-        // query cae), se omite sin tumbar el dia. Nunca hardcodear el nombre
-        // fisico aqui: va por db2AppTable y jamas sale al body.
-        const appSql = `
+    // Overlay: OR sargable sobre CODIGOCLIENTE / CODIGOCLIENTEALBARAN (CHAR(10)).
+    // COALESCE+TRIM en WHERE impedía índice; SELECT/GROUP conservan fallback blank→albarán.
+    const appClientExpr = `CASE WHEN C.CODIGOCLIENTE = CAST('' AS CHAR(10)) THEN C.CODIGOCLIENTEALBARAN ELSE C.CODIGOCLIENTE END`;
+    const appBranchSql = appTableName ? `
         SELECT
-            TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))) AS CODE,
+            TRIM(${appClientExpr}) AS CODE,
+            CAST('APP' AS VARCHAR(3)) AS SRC,
             TRIM(C.ESTADO) AS ESTADO,
             COUNT(*) AS TOTAL_COUNT,
             MAX(C.ID) AS LAST_ORDER_ID,
             MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER
-        FROM ${db2AppTable('PEDIDOS_CAB')} C
-        WHERE TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))) IN (${clientPlaceholders})
+        FROM ${appTableName} C
+        WHERE (
+            C.CODIGOCLIENTE IN (${clientInSql})
+            OR C.CODIGOCLIENTEALBARAN IN (${clientInSql})
+          )
           AND C.ANODOCUMENTO = ?
           AND C.MESDOCUMENTO = ?
           AND C.DIADOCUMENTO = ?
@@ -555,63 +613,80 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
             'PEND_APROB', 'PENDIENTE', 'PENDIENTE_APROBACION'
           )
           ${vendorFilterSql}
-        GROUP BY TRIM(COALESCE(NULLIF(TRIM(C.CODIGOCLIENTE), ''), TRIM(C.CODIGOCLIENTEALBARAN))),
-                 TRIM(C.ESTADO)
-    `;
-        // v2: bust stale SIN VENTA caches from pre-overlay / wrong-orderDate window
-        const appCacheKey = `rutero:orders:app:v2:${orderDate.iso}:${ruteroBatchHash([...clientCodes, ...vendorCodes])}`;
-        const appRows = await cachedQuery(
+        GROUP BY ${appClientExpr}, TRIM(C.ESTADO)
+    ` : null;
+
+    const dateParams = [orderDate.year, orderDate.month, orderDate.day];
+    const vendorParams = useVendorFilter ? vendorCodes : [];
+    const cpcParams = [...paddedClients, ...dateParams, ...vendorParams];
+    const appParams = appBranchSql
+        ? [
+            ...paddedClients,
+            ...paddedClients,
+            ...dateParams,
+            ...vendorParams,
+        ]
+        : [];
+    const orderCacheKey = `rutero:orders:v4:${orderDate.iso}:${ruteroBatchHash([...paddedClients, ...vendorCodes])}`;
+    let degraded = false;
+
+    const mergeRows = (rows) => {
+        const list = rows || [];
+        // CPC first (incl. legacy/test rows without SRC), then APP overlay.
+        list.filter((row) => String(row.SRC ?? row.src ?? '').toUpperCase() !== 'APP')
+            .forEach((row) => applyRuteroCpcOrderStatusRow(statusMap, orderDate, row));
+        list.filter((row) => String(row.SRC ?? row.src ?? '').toUpperCase() === 'APP')
+            .forEach((row) => applyRuteroAppOrderStatusRow(statusMap, orderDate, row));
+    };
+
+    if (appBranchSql) {
+        const unionParams = [...cpcParams, ...appParams];
+        const unionSql = `${cpcBranchSql}
+        UNION ALL
+        ${appBranchSql}`;
+        try {
+            const rows = await cachedQuery(
+                queryWithParams,
+                unionSql,
+                orderCacheKey,
+                TTL.REALTIME,
+                unionParams,
+            );
+            mergeRows(rows);
+            return { statusMap, degraded };
+        } catch (_unionErr) {
+            logger.warn('[RUTERO DAY] Compound order-status UNION failed; falling back to split queries');
+        }
+    }
+
+    // Fallback / CPC-only: preserve previous resilience (CPC degraded ≠ overlay skip).
+    try {
+        const rows = await cachedQuery(
             queryWithParams,
-            appSql,
-            appCacheKey,
+            cpcBranchSql,
+            `${orderCacheKey}:cpc`,
             TTL.REALTIME,
-            params,
+            cpcParams,
         );
-        (appRows || []).forEach((row) => {
-            const code = (row.CODE ?? row.code ?? '').toString().trim();
-            if (!code) return;
-            const estado = String(row.ESTADO ?? row.estado ?? '').trim().toUpperCase();
-            const totalCount = parseInt(row.TOTAL_COUNT ?? row.total_count, 10) || 0;
-            if (totalCount <= 0) return;
-            const lastOrderId = parseInt(row.LAST_ORDER_ID ?? row.last_order_id, 10) || null;
-            const lastOrderNumber = parseInt(row.LAST_ORDER_NUMBER ?? row.last_order_number, 10) || null;
-            const current = statusMap.get(code) || emptyRuteroOrderStatus(orderDate);
-            const isConfirmed = estado === 'CONFIRMADO' || estado === 'ENVIADO';
-            const isDraft = !isConfirmed;
+        (rows || []).forEach((row) => applyRuteroCpcOrderStatusRow(statusMap, orderDate, row));
+    } catch (_error) {
+        logger.error('[RUTERO DAY] CPC production order status query failed');
+        degraded = true;
+    }
 
-            if (isConfirmed) {
-                statusMap.set(code, {
-                    state: 'CONFIRMADO',
-                    label: 'VENTA CONFIRMADA',
-                    hasOrder: true,
-                    confirmedCount: (current.confirmedCount || 0) + totalCount,
-                    draftCount: current.draftCount || 0,
-                    totalCount: (current.totalCount || 0) + totalCount,
-                    lastOrderId,
-                    lastOrderNumber: lastOrderNumber || current.lastOrderNumber || null,
-                    date: orderDate.iso,
-                });
-                return;
-            }
-
-            if (isDraft && current.state !== 'CONFIRMADO') {
-                statusMap.set(code, {
-                    state: 'BORRADOR',
-                    label: 'PEDIDO BORRADOR',
-                    hasOrder: true,
-                    confirmedCount: current.confirmedCount || 0,
-                    draftCount: (current.draftCount || 0) + totalCount,
-                    totalCount: (current.totalCount || 0) + totalCount,
-                    lastOrderId,
-                    lastOrderNumber: lastOrderNumber || current.lastOrderNumber || null,
-                    date: orderDate.iso,
-                });
-            }
-        });
-    } catch (_appErr) {
-        logger.warn('[RUTERO DAY] App overlay skipped (degraded order status)');
-        // Overlay failure must not flip the whole day to degraded if CPC worked.
-        // No se propaga mensaje/SQL al cliente: el dia degrada a 200.
+    if (appBranchSql) {
+        try {
+            const appRows = await cachedQuery(
+                queryWithParams,
+                appBranchSql,
+                `${orderCacheKey}:app`,
+                TTL.REALTIME,
+                appParams,
+            );
+            (appRows || []).forEach((row) => applyRuteroAppOrderStatusRow(statusMap, orderDate, row));
+        } catch (_appErr) {
+            logger.warn('[RUTERO DAY] App overlay skipped (degraded order status)');
+        }
     }
 
     return { statusMap, degraded };

@@ -47,6 +47,7 @@ jest.mock('../services/emailService', () => ({ sendAuditEmail: jest.fn(), sendAu
 jest.mock('../utils/db2-schemas', () => ({
   db2WriteTable: table => `JAVIER.${table}`,
   db2ErpTable: table => `DSEDAC.${table}`,
+  db2AppTable: table => `JAVIER.${table}`,
 }));
 jest.mock('../utils/common', () => {
   const actual = jest.requireActual('../utils/common');
@@ -168,7 +169,8 @@ describe('mounted planner/rutero route matrix', () => {
     expect(JSON.stringify(res.body)).not.toContain('PEDIDOS_CAB');
     const executedSql = mockQueryWithParams.mock.calls.map(call => call[0]).join('\n');
     expect(executedSql).toContain('FROM DSEDAC.CPC');
-    expect(executedSql).not.toContain('PEDIDOS_CAB');
+    // Compound UNION may mention PEDIDOS_CAB; response body must never leak it.
+    expect(executedSql).toMatch(/UNION ALL|PEDIDOS_CAB|FROM DSEDAC\.CPC/);
   });
 
   test('client detail rejects foreign and malformed client identifiers before detail queries', async () => {

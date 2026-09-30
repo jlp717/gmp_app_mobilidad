@@ -248,7 +248,12 @@ function resolveRequestTimeoutMs(req) {
     originalUrl.includes('/objectives/by-client') ||
     originalUrl.includes('/commissions/summary') ||
     originalUrl.includes('/cobros/pending-summary') ||
-    originalUrl.includes('/rutero/day')
+    originalUrl.includes('/rutero/day') ||
+    originalUrl.includes('/rutero/week') ||
+    originalUrl.includes('/entregas/pendientes') ||
+    originalUrl.includes('/pedidos/products') ||
+    originalUrl.includes('/warehouse/articles') ||
+    originalUrl.includes('/cobros/pendientes')
   ) {
     return HTTP_REPORT_TIMEOUT_MS;
   }

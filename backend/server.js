@@ -41,6 +41,18 @@ if (!allowedBindHosts.has(BIND_HOST)) {
   throw new Error('GMP_BIND_HOST must be an explicit local or wildcard address');
 }
 const HTTP_REQUEST_TIMEOUT_MS = parseInt(process.env.HTTP_REQUEST_TIMEOUT_MS, 10) || 30000;
+const HTTP_REPORT_TIMEOUT_MS = parseInt(process.env.HTTP_REPORT_TIMEOUT_MS, 10) || 60000;
+const HTTP_HISTORY_TIMEOUT_MS = parseInt(process.env.HTTP_HISTORY_TIMEOUT_MS, 10) || 90000;
+const HTTP_PDF_TIMEOUT_MS = parseInt(process.env.HTTP_PDF_TIMEOUT_MS, 10) || 180000;
+// Socket-level timeout must cover the longest per-route middleware budget
+// (PDF/history/report). A 30s server.requestTimeout was cutting sync/list
+// routes mid-flight and surfacing as Cloudflare/proxy 504.
+const HTTP_SERVER_SOCKET_TIMEOUT_MS = Math.max(
+  HTTP_REQUEST_TIMEOUT_MS,
+  HTTP_REPORT_TIMEOUT_MS,
+  HTTP_HISTORY_TIMEOUT_MS,
+  HTTP_PDF_TIMEOUT_MS,
+);
 const canonicalLiquidacionBootstrap = app.locals.canonicalLiquidacionBootstrap;
 let runtimeMonitoringTimer = null;
 let eventLoopDelay = null;
@@ -103,8 +115,8 @@ async function startServer() {
       logger.warn(`Pedidos draft purge scheduler unavailable: ${error.message}`);
     }
   });
-  server.requestTimeout = HTTP_REQUEST_TIMEOUT_MS;
-  server.headersTimeout = Math.min(65000, HTTP_REQUEST_TIMEOUT_MS + 5000);
+  server.requestTimeout = HTTP_SERVER_SOCKET_TIMEOUT_MS;
+  server.headersTimeout = Math.max(65000, HTTP_SERVER_SOCKET_TIMEOUT_MS + 5000);
   // Keep-alive must stay strictly below headersTimeout (Node requirement).
   // 60s (or 5s under the headers cap) stops per-request TCP/TLS re-handshakes
   // through the Cloudflare tunnel that the previous 5s default forced.

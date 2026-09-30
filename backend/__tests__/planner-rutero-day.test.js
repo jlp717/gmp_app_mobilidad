@@ -171,7 +171,10 @@ describe('Planner rutero/day route', () => {
 
     const orderStatusQueries = executedSql.filter(sql => sql.includes('FROM DSEDAC.CPC'));
     expect(orderStatusQueries).toHaveLength(1);
-    expect(orderStatusQueries[0]).toContain('GROUP BY TRIM(C.CODIGOCLIENTEALBARAN)');
+    expect(orderStatusQueries[0]).toContain('UNION ALL');
+    expect(orderStatusQueries[0]).toMatch(/C\.CODIGOCLIENTEALBARAN IN \(CAST\(\? AS CHAR\(10\)\)/);
+    expect(orderStatusQueries[0]).not.toMatch(/WHERE[\s\S]*TRIM\(C\.CODIGOCLIENTEALBARAN\)/);
+    expect(orderStatusQueries[0]).toContain('GROUP BY C.CODIGOCLIENTEALBARAN');
     expect(executedSql.some(sql =>
       /FROM\s+(JAVIER\.)?(TEST_)?PEDIDOS_CAB/i.test(sql) || sql.includes('PEDIDOS_CAB'),
     )).toBe(true);
@@ -192,11 +195,24 @@ describe('Planner rutero/day route', () => {
         ];
       }
       if (sql.includes('FROM JAVIER.RUTERO_CONFIG')) return [];
+      if (sql.includes('UNION ALL') && /PEDIDOS_CAB/i.test(sql)) {
+        return [
+          {
+            CODE: '4300000001',
+            SRC: 'APP',
+            ESTADO: 'CONFIRMADO',
+            TOTAL_COUNT: 1,
+            LAST_ORDER_ID: 99,
+            LAST_ORDER_NUMBER: 42,
+          },
+        ];
+      }
       if (sql.includes('FROM DSEDAC.CPC') || sql.includes('FROM JAVIER.TEST_CPC')) return [];
       if (/PEDIDOS_CAB/i.test(sql)) {
         return [
           {
             CODE: '4300000001',
+            SRC: 'APP',
             ESTADO: 'CONFIRMADO',
             TOTAL_COUNT: 1,
             LAST_ORDER_ID: 99,
@@ -238,10 +254,21 @@ describe('Planner rutero/day route', () => {
         }];
       }
       if (sql.includes('FROM JAVIER.RUTERO_CONFIG')) return [];
+      if (sql.includes('UNION ALL') && /PEDIDOS_CAB/i.test(sql)) {
+        return [{
+          CODE: '4300000001',
+          SRC: 'APP',
+          ESTADO: 'CONFIRMADO',
+          TOTAL_COUNT: 1,
+          LAST_ORDER_ID: 75,
+          LAST_ORDER_NUMBER: 7,
+        }];
+      }
       if (sql.includes('FROM DSEDAC.CPC')) return [];
       if (/PEDIDOS_CAB/i.test(sql)) {
         return [{
           CODE: '4300000001',
+          SRC: 'APP',
           ESTADO: 'CONFIRMADO',
           TOTAL_COUNT: 1,
           LAST_ORDER_ID: 75,

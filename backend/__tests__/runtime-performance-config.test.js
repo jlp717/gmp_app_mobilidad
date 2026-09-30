@@ -306,4 +306,17 @@ describe('runtime performance configuration', () => {
     expect(source).toMatch(/CODIGOCLIENTEALBARAN = CAST\(\? AS CHAR\(10\)\)/);
     expect(source).not.toMatch(/groupedRows\.length > 0 && adjustmentVendorCodes\.length > 0/);
   });
+
+  test('request timeout budgets cover sync-heavy list routes and socket ceiling', () => {
+    const appSource = fs.readFileSync(path.join(backendRoot, 'app.js'), 'utf8');
+    const serverSource = fs.readFileSync(path.join(backendRoot, 'server.js'), 'utf8');
+
+    expect(appSource).toMatch(/\/entregas\/pendientes/);
+    expect(appSource).toMatch(/\/rutero\/week/);
+    expect(appSource).toMatch(/\/pedidos\/products/);
+    expect(appSource).toMatch(/HTTP_REPORT_TIMEOUT_MS/);
+    expect(serverSource).toMatch(/HTTP_SERVER_SOCKET_TIMEOUT_MS/);
+    expect(serverSource).toMatch(/server\.requestTimeout = HTTP_SERVER_SOCKET_TIMEOUT_MS/);
+    expect(serverSource).not.toMatch(/server\.requestTimeout = HTTP_REQUEST_TIMEOUT_MS/);
+  });
 });
