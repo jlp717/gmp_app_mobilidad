@@ -10,66 +10,11 @@
  * requires directos (patron actual del repo por tiempo).
  */
 
-const { spawn } = require('child_process');
-const path = require('path');
 const { query, queryWithParams } = require('../middleware/db-timing');
 const logger = require('../middleware/logger');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
-const { LACLAE_SALES_FILTER } = require('../utils/common');
+const { LACLAE_SALES_FILTER, parseCommaSeparatedYears } = require('../utils/common');
 const { assertIdentifier } = require('../utils/sql-identifiers');
-
-// El proceso de la API (pool ODBC ya usado) devuelve SQLSTATE 22003 en esta
-// sentencia. Un proceso nuevo, el mismo que usa el resto de scripts, la resuelve.
-function queryMatrixInChild(sql, params) {
-    return new Promise((resolve, reject) => {
-        const child = spawn(process.execPath, [path.join(__dirname, '../scripts/matrix-product-child.js')], {
-            cwd: path.join(__dirname, '..'),
-            env: {
-                PATH: process.env.PATH,
-                HOME: process.env.HOME || '/home/gmp',
-                USER: process.env.USER || 'gmp',
-                LANG: 'C',
-                LC_ALL: 'C',
-                NODE_ENV: process.env.NODE_ENV || 'staging',
-            },
-            stdio: ['pipe', 'pipe', 'pipe'],
-        });
-        const out = [];
-        const err = [];
-        const timer = setTimeout(() => {
-            child.kill();
-            reject(new Error('matrix query timed out'));
-        }, 20000);
-        child.stdout.on('data', (chunk) => out.push(chunk));
-        child.stderr.on('data', (chunk) => err.push(chunk));
-        child.on('error', (error) => {
-            clearTimeout(timer);
-            reject(error);
-        });
-        child.on('close', (code) => {
-            clearTimeout(timer);
-            if (code !== 0) {
-                const error = new Error(Buffer.concat(err).toString('utf8').slice(0, 300) || 'matrix query failed');
-                error.matrixSql = 'matrix product rows';
-                reject(error);
-                return;
-            }
-            try {
-                const text = Buffer.concat(out).toString('utf8');
-                const line = text.split('\n').map((entry) => entry.trim()).reverse().find((entry) => entry.startsWith('['));
-                resolve(JSON.parse(line || text));
-            } catch (parseError) {
-                reject(parseError);
-            }
-        });
-        child.stdin.end(JSON.stringify({ sql, params }));
-    });
-}
-
-async function queryMatrixRows(db, sql, params) {
-    if (!db || db.queryWithParams !== queryWithParams) return db.queryWithParams(sql, params);
-    return queryMatrixInChild(sql, params);
-}
 
 function fetchObjectiveVendorClients(vendorCode, col, year, db = { queryWithParams }) {
     return db.queryWithParams(`
@@ -280,11 +225,11 @@ function fetchMatrixNotes(clientCode, db = { queryWithParams }) {
 }
 
 async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, monthEnd, filterConditions, filterParams, db = { queryWithParams }) {
-    // Agrega LACLAE sola, en DECFLOAT, y luego une el artículo.
-    // SUM/AVG de DECIMAL revienta con SQLSTATE 22003 (precisión o desbordamiento
-    // al cruzar ART/ARTX) y la evolución de pedidos responde 500 para cualquier rol.
+    // Un año por marcador. Si los años llegan pegados (202620252024) el driver
+    // responde SQLSTATE 22003 en la columna del año.
     const salesFilter = LACLAE_SALES_FILTER.replace(/L\./g, 'S.');
-    const yearMarks = uniqueYears.map(() => '?').join(',');
+    const years = parseCommaSeparatedYears(uniqueYears);
+    const yearMarks = years.map(() => '?').join(',');
     const plainSql = `
             SELECT
                 TRIM(S.LCCDRF) AS PRODUCT_CODE,
@@ -318,7 +263,7 @@ async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, month
             FETCH FIRST 1000 ROWS ONLY
         `;
     try {
-        const rows = await queryMatrixRows(db, plainSql, [clientCode, ...uniqueYears, monthStart, monthEnd]);
+        const rows = await db.queryWithParams(plainSql, [String(clientCode), ...years, monthStart, monthEnd]);
         return attachMatrixArticleFields(rows, db);
     } catch (error) {
         error.matrixSql = 'matrix product rows';

@@ -212,6 +212,26 @@ const LAC_SERIEALBARAN_FILTER = `L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')`;
  * @param {string} value - The value to sanitize
  * @returns {string} Sanitized value safe for SQL
  */
+function parseCommaSeparatedYears(years, options = {}) {
+    const minYear = options.minYear || 2015;
+    const maxYear = options.maxYear || 2100;
+    const fallbackYear = options.fallbackYear || new Date().getFullYear();
+    const source = Array.isArray(years) ? years.join(',') : String(years ?? '');
+    const found = [];
+    for (const token of source.split(/[,\s]+/)) {
+        const digits = token.replace(/\D/g, '');
+        if (!digits) continue;
+        const chunks = digits.length > 4 && digits.length % 4 === 0
+            ? digits.match(/\d{4}/g)
+            : [digits];
+        for (const chunk of chunks) {
+            const year = parseInt(chunk, 10);
+            if (year >= minYear && year <= maxYear) found.push(year);
+        }
+    }
+    return found.length ? [...new Set(found)] : [fallbackYear];
+}
+
 function sanitizeForSQL(value) {
     if (value === null || value === undefined) return '';
     // Allowlist: alphanumerics + Spanish diacritics (incl. ü/Ü for words like
@@ -858,6 +878,7 @@ module.exports = {
     parseSalesVendorCodes,
     getSalesVendorCodeVariants,
     normalizeSalesVendorCode,
+    parseCommaSeparatedYears,
     sanitizeForSQL,
     sanitizeCodeList,
     sanitizeCodeListForParams,

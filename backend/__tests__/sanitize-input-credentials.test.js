@@ -42,4 +42,12 @@ describe('sanitizeInput credential passthrough (contract)', () => {
         const out = run({ password: 12345, count: 7, flag: true });
         expect(out).toEqual({ password: 12345, count: 7, flag: true });
     });
+
+    it('keeps commas in query lists and still strips quotes', () => {
+        const req = { body: {}, query: { years: '2026,2025,2024', vendedorCodes: "72,73'; DROP", name: "o'brien" } };
+        sanitizeInput(req, {}, () => {});
+        expect(req.query.years).toBe('2026,2025,2024');
+        expect(req.query.vendedorCodes).toBe('72,73 DROP');
+        expect(req.query.name).toBe('obrien');
+    });
 });

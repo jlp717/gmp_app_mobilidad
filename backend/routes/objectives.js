@@ -9,6 +9,7 @@ const {
     MIN_YEAR,
     LACLAE_SALES_FILTER,
     lookupClientAssignedVendorCodes,
+    parseCommaSeparatedYears,
     sanitizeForSQL,
     handleRouteError
 } = require('../utils/common');
@@ -672,7 +673,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         }
 
         // Parse years and range
-        const yearsArray = years ? years.split(',').map((y) => parseInt(y.trim(), 10)).filter((y) => y >= 2015) : [new Date().getFullYear()];
+        const yearsArray = parseCommaSeparatedYears(years);
         const monthStart = parseInt(startMonth, 10);
         const monthEnd = parseInt(endMonth, 10);
 

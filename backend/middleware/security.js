@@ -531,6 +531,15 @@ function sanitizeFreeText(value) {
     return String(value).replace(/\r?\n/g, ' ').trim();
 }
 
+// Listas de la query (años, vendedores) viajan separadas por comas y luego
+// parametrizadas. sanitizeForSQL quita la coma: "2026,2025,2024" pasaba a
+// 202620252024 y el ODBC devolvía SQLSTATE 22003 en la evolución del cliente.
+function sanitizeQueryValue(value) {
+    if (typeof value !== 'string') return value;
+    if (!value.includes(',')) return sanitizeForSQL(value);
+    return value.split(',').map((part) => sanitizeForSQL(part)).join(',');
+}
+
 exports.sanitizeInput = (req, res, next) => {
     if (req.body && typeof req.body === 'object') {
         const sanitize = (obj) => {
@@ -567,7 +576,7 @@ exports.sanitizeInput = (req, res, next) => {
     if (req.query && typeof req.query === 'object') {
         const sanitizedQuery = {};
         for (const [key, value] of Object.entries(req.query)) {
-            sanitizedQuery[key] = typeof value === 'string' ? sanitizeForSQL(value) : value;
+            sanitizedQuery[key] = sanitizeQueryValue(value);
         }
         req.query = sanitizedQuery;
     }
