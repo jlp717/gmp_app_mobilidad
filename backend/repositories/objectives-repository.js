@@ -310,19 +310,71 @@ async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, month
         }
         const detail = (error.odbcErrors || []).map((entry) => `${entry.state}:${entry.code}:${entry.message || ''}`).join(' | ').slice(0, 300);
         logger.error(`[MATRIX] precise aggregate overflow, retrying plain sums ${detail}`);
-        const plainSql = preciseSql
-            .replace(
-                /CAST\(SUM\(CAST\(S\.LCIMVT AS DECFLOAT\(34\)\)\) AS DOUBLE\) AS SALES,\s*CAST\(SUM\(CAST\(S\.LCIMCT AS DECFLOAT\(34\)\)\) AS DOUBLE\) AS COST,\s*CAST\(SUM\(CAST\(S\.LCCTUD AS DECFLOAT\(34\)\)\) AS DOUBLE\) AS UNITS,[\s\S]*?AS AVG_BASE_TARIFF/,
-                `SUM(S.LCIMVT) AS SALES,
-                    SUM(S.LCIMCT) AS COST,
-                    SUM(S.LCCTUD) AS UNITS,
-                    CAST(0 AS INTEGER) AS HAS_SPECIAL_PRICE,
-                    CAST(0 AS INTEGER) AS HAS_DISCOUNT,
-                    CAST(NULL AS DECIMAL(15,2)) AS AVG_DISCOUNT_PCT,
-                    CAST(NULL AS DECIMAL(15,2)) AS AVG_CLIENT_TARIFF,
-                    CAST(NULL AS DECIMAL(15,2)) AS AVG_BASE_TARIFF`,
-            );
-        return db.queryWithParams(plainSql, params);
+        const yearMarks = uniqueYears.map(() => '?').join(',');
+        const plainSql = `
+            SELECT
+                TRIM(S.LCCDRF) AS PRODUCT_CODE,
+                COALESCE(MAX(TRIM(S.LCDESC)), '') AS PRODUCT_NAME,
+                CAST('SIN_FAM' AS VARCHAR(20)) AS FAMILY_CODE,
+                CAST('General' AS VARCHAR(20)) AS SUBFAMILY_CODE,
+                CAST('UDS' AS VARCHAR(5)) AS UNIT_TYPE,
+                S.LCAADC AS YEAR,
+                S.LCMMDC AS MONTH,
+                CAST(SUM(S.LCIMVT) AS DOUBLE) AS SALES,
+                CAST(SUM(S.LCIMCT) AS DOUBLE) AS COST,
+                CAST(SUM(S.LCCTUD) AS DOUBLE) AS UNITS,
+                CAST(0 AS INTEGER) AS HAS_SPECIAL_PRICE,
+                CAST(0 AS INTEGER) AS HAS_DISCOUNT,
+                CAST(NULL AS DECIMAL(15,2)) AS AVG_DISCOUNT_PCT,
+                CAST(NULL AS DECIMAL(15,2)) AS AVG_DISCOUNT_EUR,
+                CAST(NULL AS DECIMAL(15,2)) AS AVG_CLIENT_TARIFF,
+                CAST(NULL AS DECIMAL(15,2)) AS AVG_BASE_TARIFF,
+                CAST('' AS VARCHAR(12)) AS FI1_CODE,
+                CAST('' AS VARCHAR(12)) AS FI2_CODE,
+                CAST('' AS VARCHAR(12)) AS FI3_CODE,
+                CAST('' AS VARCHAR(12)) AS FI4_CODE,
+                CAST('' AS VARCHAR(20)) AS FI5_CODE
+            FROM ${comercialErpTable('LACLAE')} S
+            WHERE S.LCCDCL = CAST(? AS CHAR(10))
+              AND S.LCAADC IN (${yearMarks})
+              AND S.LCMMDC BETWEEN ? AND ?
+              AND ${salesFilter}
+            GROUP BY S.LCCDRF, S.LCAADC, S.LCMMDC
+            ORDER BY SALES DESC
+            FETCH FIRST 1000 ROWS ONLY
+        `;
+        const plainParams = [clientCode, ...uniqueYears, monthStart, monthEnd];
+        const rows = await db.queryWithParams(plainSql, plainParams);
+        return attachMatrixArticleFields(rows, db);
+    }
+}
+
+async function attachMatrixArticleFields(rows, db) {
+    const codes = [...new Set((rows || []).map((row) => String(row.PRODUCT_CODE || '').trim()).filter(Boolean))].slice(0, 200);
+    if (!codes.length) return rows || [];
+    try {
+        const artRows = await db.queryWithParams(
+            `SELECT CODIGOARTICULO, DESCRIPCIONARTICULO, CODIGOFAMILIA, CODIGOSUBFAMILIA, UNIDADMEDIDA, CODIGOSECCIONLARGA
+               FROM ${comercialErpTable('ART')}
+              WHERE CODIGOARTICULO IN (${codes.map(() => '?').join(',')})`,
+            codes,
+        );
+        const byCode = new Map((artRows || []).map((art) => [String(art.CODIGOARTICULO || '').trim(), art]));
+        return rows.map((row) => {
+            const art = byCode.get(String(row.PRODUCT_CODE || '').trim());
+            if (!art) return row;
+            return {
+                ...row,
+                PRODUCT_NAME: String(art.DESCRIPCIONARTICULO || '').trim() || row.PRODUCT_NAME,
+                FAMILY_CODE: String(art.CODIGOFAMILIA || '').trim() || row.FAMILY_CODE,
+                SUBFAMILY_CODE: String(art.CODIGOSUBFAMILIA || '').trim() || row.SUBFAMILY_CODE,
+                UNIT_TYPE: String(art.UNIDADMEDIDA || '').trim() || row.UNIT_TYPE,
+                FI5_CODE: String(art.CODIGOSECCIONLARGA || '').trim() || row.FI5_CODE,
+            };
+        });
+    } catch (artError) {
+        logger.warn(`[MATRIX] article lookup skipped ${artError.message}`);
+        return rows || [];
     }
 }
 

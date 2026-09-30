@@ -48,6 +48,6 @@ test('matrix retries plain sums when the precise aggregate overflows', async () 
 
     const rows = await fetchMatrixProductRows('4300000362', [2026], 1, 12, '', [], db);
     expect(rows).toHaveLength(1);
-    expect(calls[1]).toContain('SUM(S.LCIMVT) AS SALES');
+    expect(calls[1]).toContain('CAST(SUM(S.LCIMVT) AS DOUBLE) AS SALES');
     expect(calls[1]).not.toContain('DECFLOAT');
 });
