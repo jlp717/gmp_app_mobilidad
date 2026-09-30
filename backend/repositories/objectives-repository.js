@@ -24,7 +24,14 @@ function queryMatrixInChild(sql, params) {
     return new Promise((resolve, reject) => {
         const child = spawn(process.execPath, [path.join(__dirname, '../scripts/matrix-product-child.js')], {
             cwd: path.join(__dirname, '..'),
-            env: process.env,
+            env: {
+                PATH: process.env.PATH,
+                HOME: process.env.HOME || '/home/gmp',
+                USER: process.env.USER || 'gmp',
+                LANG: 'C',
+                LC_ALL: 'C',
+                NODE_ENV: process.env.NODE_ENV || 'staging',
+            },
             stdio: ['pipe', 'pipe', 'pipe'],
         });
         const out = [];
