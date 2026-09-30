@@ -11,6 +11,7 @@
  */
 
 const { query, queryWithParams } = require('../middleware/db-timing');
+const logger = require('../middleware/logger');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { LACLAE_SALES_FILTER } = require('../utils/common');
 const { assertIdentifier } = require('../utils/sql-identifiers');
@@ -223,12 +224,13 @@ function fetchMatrixNotes(clientCode, db = { queryWithParams }) {
             `, [clientCode], false);
 }
 
-function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, monthEnd, filterConditions, filterParams, db = { queryWithParams }) {
+async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, monthEnd, filterConditions, filterParams, db = { queryWithParams }) {
     // Agrega LACLAE sola, en DECFLOAT, y luego une el artículo.
     // SUM/AVG de DECIMAL revienta con SQLSTATE 22003 (precisión o desbordamiento
     // al cruzar ART/ARTX) y la evolución de pedidos responde 500 para cualquier rol.
     const salesFilter = LACLAE_SALES_FILTER.replace(/L\./g, 'S.');
-    return db.queryWithParams(`
+    const params = [clientCode, ...uniqueYears, monthStart, monthEnd, ...filterParams];
+    const preciseSql = `
             SELECT
                 L.LCCDRF as PRODUCT_CODE,
                 COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), L.LCDESC) as PRODUCT_NAME,
@@ -297,10 +299,31 @@ function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, monthEnd, f
               ${filterConditions}
             ORDER BY L.SALES DESC
             FETCH FIRST 1000 ROWS ONLY
-        `, [clientCode, ...uniqueYears, monthStart, monthEnd, ...filterParams]).catch((error) => {
+        `;
+    try {
+        return await db.queryWithParams(preciseSql, params);
+    } catch (error) {
+        const overflow = (error?.odbcErrors || []).some((entry) => entry.state === '22003');
+        if (!overflow) {
             error.matrixSql = 'matrix product rows';
             throw error;
-        });
+        }
+        const detail = (error.odbcErrors || []).map((entry) => `${entry.state}:${entry.code}:${entry.message || ''}`).join(' | ').slice(0, 300);
+        logger.error(`[MATRIX] precise aggregate overflow, retrying plain sums ${detail}`);
+        const plainSql = preciseSql
+            .replace(
+                /CAST\(SUM\(CAST\(S\.LCIMVT AS DECFLOAT\(34\)\)\) AS DOUBLE\) AS SALES,\s*CAST\(SUM\(CAST\(S\.LCIMCT AS DECFLOAT\(34\)\)\) AS DOUBLE\) AS COST,\s*CAST\(SUM\(CAST\(S\.LCCTUD AS DECFLOAT\(34\)\)\) AS DOUBLE\) AS UNITS,[\s\S]*?AS AVG_BASE_TARIFF/,
+                `SUM(S.LCIMVT) AS SALES,
+                    SUM(S.LCIMCT) AS COST,
+                    SUM(S.LCCTUD) AS UNITS,
+                    CAST(0 AS INTEGER) AS HAS_SPECIAL_PRICE,
+                    CAST(0 AS INTEGER) AS HAS_DISCOUNT,
+                    CAST(NULL AS DECIMAL(15,2)) AS AVG_DISCOUNT_PCT,
+                    CAST(NULL AS DECIMAL(15,2)) AS AVG_CLIENT_TARIFF,
+                    CAST(NULL AS DECIMAL(15,2)) AS AVG_BASE_TARIFF`,
+            );
+        return db.queryWithParams(plainSql, params);
+    }
 }
 
 function fetchMatrixFamilyNames(db = { query }) {

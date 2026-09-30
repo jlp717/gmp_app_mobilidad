@@ -31,3 +31,23 @@ test('matrix sales aggregate in decfloat before the article join', async () => {
     expect(calls[0].params).toContain(2023);
     expect(calls[0].params[calls[0].params.length - 1]).toBe('%X%');
 });
+
+test('matrix retries plain sums when the precise aggregate overflows', async () => {
+    const calls = [];
+    const db = {
+        queryWithParams: async (sql) => {
+            calls.push(sql);
+            if (calls.length === 1) {
+                const error = new Error('overflow');
+                error.odbcErrors = [{ state: '22003', code: -802, message: 'overflow' }];
+                throw error;
+            }
+            return [{ PRODUCT_CODE: 'A' }];
+        },
+    };
+
+    const rows = await fetchMatrixProductRows('4300000362', [2026], 1, 12, '', [], db);
+    expect(rows).toHaveLength(1);
+    expect(calls[1]).toContain('SUM(S.LCIMVT) AS SALES');
+    expect(calls[1]).not.toContain('DECFLOAT');
+});
