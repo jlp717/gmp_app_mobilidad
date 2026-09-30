@@ -10,44 +10,56 @@
  * requires directos (patron actual del repo por tiempo).
  */
 
+const { spawn } = require('child_process');
+const path = require('path');
 const { query, queryWithParams } = require('../middleware/db-timing');
 const logger = require('../middleware/logger');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { LACLAE_SALES_FILTER } = require('../utils/common');
 const { assertIdentifier } = require('../utils/sql-identifiers');
 
-function matrixConnectionString() {
-    const uid = process.env.ODBC_UID;
-    const pwd = process.env.ODBC_PWD;
-    if (!uid || !pwd) return null;
-    const dsn = process.env.ODBC_DSN || 'GMP';
-    return `DSN=${dsn};UID=${uid};PWD=${pwd};NAM=1;CCSID=1208;CMPTDM=1;LONGDATACOMPAT=1;DBQ=${dsn};`;
+// El proceso de la API (pool ODBC ya usado) devuelve SQLSTATE 22003 en esta
+// sentencia. Un proceso nuevo, el mismo que usa el resto de scripts, la resuelve.
+function queryMatrixInChild(sql, params) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [path.join(__dirname, '../scripts/matrix-product-child.js')], {
+            cwd: path.join(__dirname, '..'),
+            env: process.env,
+            stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        const out = [];
+        const err = [];
+        const timer = setTimeout(() => {
+            child.kill();
+            reject(new Error('matrix query timed out'));
+        }, 20000);
+        child.stdout.on('data', (chunk) => out.push(chunk));
+        child.stderr.on('data', (chunk) => err.push(chunk));
+        child.on('error', (error) => {
+            clearTimeout(timer);
+            reject(error);
+        });
+        child.on('close', (code) => {
+            clearTimeout(timer);
+            if (code !== 0) {
+                const error = new Error(Buffer.concat(err).toString('utf8').slice(0, 300) || 'matrix query failed');
+                error.matrixSql = 'matrix product rows';
+                reject(error);
+                return;
+            }
+            try {
+                resolve(JSON.parse(Buffer.concat(out).toString('utf8')));
+            } catch (parseError) {
+                reject(parseError);
+            }
+        });
+        child.stdin.end(JSON.stringify({ sql, params }));
+    });
 }
 
-// Esta sentencia devuelve SQLSTATE 22003 en las conexiones del pool de la API
-// y responde bien en una conexión nueva. Se abre y se cierra por petición.
 async function queryMatrixRows(db, sql, params) {
     if (!db || db.queryWithParams !== queryWithParams) return db.queryWithParams(sql, params);
-    const connectionString = matrixConnectionString();
-    if (!connectionString) return db.queryWithParams(sql, params);
-    const odbc = require('odbc');
-    const connection = await odbc.connect(connectionString);
-    try {
-        const rows = await connection.query(sql, params);
-        if (!Array.isArray(rows)) return rows;
-        for (const row of rows) {
-            if (!row || typeof row !== 'object') continue;
-            for (const key of Object.keys(row)) {
-                const upper = key.toUpperCase();
-                const lower = key.toLowerCase();
-                if (!(upper in row)) row[upper] = row[key];
-                if (!(lower in row)) row[lower] = row[key];
-            }
-        }
-        return rows;
-    } finally {
-        try { await connection.close(); } catch (_closeError) { /* la query ya respondió */ }
-    }
+    return queryMatrixInChild(sql, params);
 }
 
 function fetchObjectiveVendorClients(vendorCode, col, year, db = { queryWithParams }) {
