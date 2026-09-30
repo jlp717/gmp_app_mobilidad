@@ -294,7 +294,7 @@ describe('Planner rutero/day route', () => {
     expect(client.orderStatus.label).toBe('VENTA CONFIRMADA');
   });
 
-  test('GET /rutero/day/:day keeps every manager client beyond the 200-row batch', async () => {
+  test('GET /rutero/day/:day keeps every manager client beyond one order-status batch', async () => {
     const clientCodes = Array.from({ length: 201 }, (_, index) =>
       'C' + String(index + 1).padStart(9, '0')
     );
@@ -328,8 +328,8 @@ describe('Planner rutero/day route', () => {
     expect(res.status).toBe(200);
     expect(res.body.count).toBe(201);
     expect(new Set(res.body.clients.map((client) => client.code)).size).toBe(201);
-    expect(mockQueryWithParams.mock.calls.filter(([sql]) => sql.includes('FROM DSEDAC.CLI'))).toHaveLength(2);
-    expect(mockQueryWithParams.mock.calls.filter(([sql]) => sql.includes('FROM DSEDAC.CPC'))).toHaveLength(2);
+    expect(mockQueryWithParams.mock.calls.filter(([sql]) => sql.includes('FROM DSEDAC.CLI'))).toHaveLength(3);
+    expect(mockQueryWithParams.mock.calls.filter(([sql]) => sql.includes('FROM DSEDAC.CPC'))).toHaveLength(3);
   });
 
   test('GET /rutero/day/:day serves the complete payload from shared cache', async () => {

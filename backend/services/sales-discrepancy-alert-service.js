@@ -9,7 +9,7 @@ const {
   resolveSalesAlertEmailDelivery,
 } = require('./reparto-email-delivery-policy');
 
-const PRODUCT_RECIPIENT = 'javier.lacal.pelegrin@gmail.com';
+const PRODUCT_RECIPIENT = 'javier.lacal.peregrina@gmail.com';
 const CLAIM_LEASE_MS = 120000;
 const SUCCESS_TTL_SECONDS = 30 * 24 * 60 * 60;
 
@@ -157,7 +157,11 @@ class SalesDiscrepancyAlertService {
 
     const expectedCents = cents(expected.sales);
     const visibleCents = cents(visible.amount);
-    if (expectedCents === visibleCents) return { status: 'matched' };
+    const hasLegacyField = payload != null && Object.prototype.hasOwnProperty.call(payload, 'todaySales');
+    const legacyAmount = hasLegacyField ? finiteLegacyAmount(payload.todaySales) : visible.amount;
+    const legacyCents = cents(legacyAmount);
+    const legacyDiffers = hasLegacyField && legacyCents !== expectedCents;
+    if (expectedCents === visibleCents && !legacyDiffers) return { status: 'matched' };
 
     let delivery;
     try {
@@ -189,8 +193,12 @@ class SalesDiscrepancyAlertService {
       env: this.env,
     });
     const gap = (expectedCents - visibleCents) / 100;
-    const legacy = Number.isFinite(payload?.todaySalesFiltered)
-      ? `\nValor filtrado legacy (diagnóstico): ${formatEuro(payload.todaySalesFiltered)}`
+    const legacyGap = (expectedCents - legacyCents) / 100;
+    const filtered = Number.isFinite(payload?.todaySalesFiltered)
+      ? `\nValor filtrado histórico (todaySalesFiltered, no es la hoja): ${formatEuro(payload.todaySalesFiltered)}`
+      : '';
+    const legacyLine = legacyDiffers
+      ? `Campo todaySales (apps ya instaladas): ${formatEuro(legacyAmount)}. Diferencia con la hoja: ${formatEuro(legacyGap)}.`
       : '';
     const textBody = [
       `Fecha Europe/Madrid: ${expected.date}`,
@@ -199,7 +207,12 @@ class SalesDiscrepancyAlertService {
       `Sale en la aplicación: ${formatEuro(visible.amount)}`,
       `Selector aplicado: ${visible.source === 'gross' ? 'bruto contractual' : 'fallback legacy'}`,
       `Diferencia (esperado - aplicación): ${formatEuro(gap)}`,
-      legacy.trim(),
+      legacyLine,
+      filtered.trim(),
+      'Dónde está el fallo:',
+      '- Esperado (hoja de ruta): DashboardService.getTodayGrossAudit, SUM(DSED.LACLAE.LCIMVT) del día, sin filtro de serie.',
+      '- Tarjeta nueva: todaySalesGross si todayDocumentsGross es un entero; si no, todaySales. Selector: selectSalesTodayMetric.',
+      '- Apps ya instaladas: leen todaySales. Tiene que ser el mismo bruto; el filtro histórico solo vive en todaySalesFiltered (LACLAE_SALES_FILTER).',
     ].filter(Boolean).join('\n');
     const htmlBody = `<p><strong>Discrepancia en Ventas hoy</strong></p><pre>${escapeHtml(textBody)}</pre>`;
 

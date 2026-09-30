@@ -167,7 +167,7 @@ describe('reparto email delivery policy', () => {
   });
 
   describe('sales discrepancy alert delivery', () => {
-    const productRecipient = 'javier.lacal.pelegrin@gmail.com';
+    const productRecipient = 'javier.lacal.peregrina@gmail.com';
 
     test('delivers directly only with all three production flags', () => {
       expect(resolveSalesAlertEmailDelivery({

@@ -93,10 +93,34 @@ describe('SalesDiscrepancyAlertService', () => {
     const result = await ctx.service.audit({
       scope: 'ALL',
       asOf: AS_OF,
-      payload: { ...PAYLOAD, todaySalesGross: 57442.76, todayDocumentsGross: 346 },
+      payload: {
+        ...PAYLOAD,
+        todaySales: 57442.76,
+        todaySalesGross: 57442.76,
+        todayDocumentsGross: 346,
+      },
     });
     expect(result).toEqual({ status: 'matched' });
     expect(ctx.emailSender).not.toHaveBeenCalled();
+  });
+
+  test('alerts when installed apps still read a filtered todaySales', async () => {
+    const ctx = makeService({ expected: 57442.76 });
+    const result = await ctx.service.audit({
+      scope: 'ALL',
+      asOf: AS_OF,
+      payload: {
+        ...PAYLOAD,
+        todaySales: 48928.95,
+        todaySalesGross: 57442.76,
+        todayDocumentsGross: 346,
+      },
+    });
+    expect(result).toEqual({ status: 'sent', redirected: false });
+    const mail = ctx.emailSender.mock.calls[0][0];
+    expect(mail.to).toBe('javier.lacal.peregrina@gmail.com');
+    expect(mail.textBody).toContain('Campo todaySales');
+    expect(mail.textBody).toContain('getTodayGrossAudit');
   });
 
   test('skips commercial scope before DB2', async () => {
@@ -177,11 +201,12 @@ describe('SalesDiscrepancyAlertService', () => {
     await expect(ctx.service.audit({ scope: 'ALL', payload: PAYLOAD, asOf: AS_OF }))
       .resolves.toEqual({ status: 'sent', redirected: false });
     const mail = ctx.emailSender.mock.calls[0][0];
-    expect(mail.to).toBe('javier.lacal.pelegrin@gmail.com');
+    expect(mail.to).toBe('javier.lacal.peregrina@gmail.com');
     expect(mail.textBody).toContain('Debería salir realmente: 57.442,76');
     expect(mail.textBody).toContain('Sale en la aplicación: 48.928,95');
     expect(mail.textBody).toContain('Diferencia (esperado - aplicación): 8513,81');
-    expect(mail.textBody).toContain('Valor filtrado legacy (diagnóstico): 48.928,95');
+    expect(mail.textBody).toContain('Valor filtrado histórico (todaySalesFiltered, no es la hoja): 48.928,95');
+    expect(mail.textBody).toContain('getTodayGrossAudit');
     expect(mail.messageId).toMatch(/^<gmp-reparto-sales-discrepancy-/);
   });
 
@@ -191,7 +216,7 @@ describe('SalesDiscrepancyAlertService', () => {
         NODE_ENV: 'production',
         REPARTO_ENVIRONMENT: 'staging',
         REPARTO_TABLE_SET: 'isolated_test',
-        REPARTO_EMAIL_TEST_ALLOWLIST: 'javier.lacal.pelegrin@gmail.com',
+        REPARTO_EMAIL_TEST_ALLOWLIST: 'javier.lacal.peregrina@gmail.com',
       },
     });
     await ctx.service.audit({ scope: 'ALL', payload: PAYLOAD, asOf: AS_OF });

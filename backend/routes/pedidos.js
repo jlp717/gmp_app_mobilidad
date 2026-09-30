@@ -292,11 +292,14 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
     if (!client) {
         return { ok: false, status: 400, body: pedidoForbiddenBody('INVALID_CLIENT', 'clientCode invalido') };
     }
-    const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
+    let vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
+    const context = getPedidoUserContext(req);
+    if (!vendorScope.ok && context.isManager && context.visibleVendorCodes.length > 0) {
+        vendorScope = { ok: true, codes: context.visibleVendorCodes };
+    }
     if (!vendorScope.ok) {
         return { ok: false, status: 403, body: pedidoForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error) };
     }
-    const context = getPedidoUserContext(req);
     const broadManagerScope = context.isManager
         && (vendorScope.codes.length === 0 || vendorScope.codes.length > BROAD_PEDIDO_VENDOR_SCOPE_THRESHOLD);
     if (broadManagerScope) {
@@ -631,6 +634,13 @@ router.get('/families/detailed', async (req, res) => {
 router.get('/draft-status/:vendedorCode', async (req, res) => {
     try {
         const code = String(req.params.vendedorCode || '').trim();
+        if (code.toUpperCase() === 'ALL') {
+            const context = getPedidoUserContext(req);
+            if (!context.isManager) {
+                return res.status(403).json(pedidoForbiddenBody('FORBIDDEN_VENDOR', 'COMERCIAL solo puede consultar su vendedor'));
+            }
+            return res.json({ success: true, warning: false, drafts: [], count: 0, threshold: 0 });
+        }
         const vendorAccess = authorizePedidoVendorCode(req, code, 'consultar');
         if (!vendorAccess.ok) {
             return res.status(vendorAccess.status).json(vendorAccess.body);

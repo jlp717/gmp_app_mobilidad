@@ -150,7 +150,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         prov.setClient(widget.initialClientCode!, widget.initialClientName!);
         prov.loadRecommendations(
           clientCode: widget.initialClientCode!,
-          vendedorCode: widget.employeeCode,
+          vendedorCode: _vendedorCodes,
         );
         prov.loadClientBalance(widget.initialClientCode!);
       }
@@ -1626,7 +1626,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                   unawaited(
                     prov.loadRecommendations(
                       clientCode: result['code']!,
-                      vendedorCode: widget.employeeCode,
+                      vendedorCode: _vendedorCodes,
                     ),
                   );
                   unawaited(prov.loadClientBalance(result['code']!));

@@ -1686,7 +1686,11 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         });
 
     } catch (error) {
-        handleRouteError(error, res, 'Error obteniendo matriz de cliente', 500, { code: 'OBJECTIVES_MATRIX_ERROR' });
+        const odbcState = (error?.odbcErrors || []).map((entry) => entry.state).find(Boolean);
+        const code = odbcState === '22003'
+            ? 'OBJECTIVES_MATRIX_NUMERIC_OVERFLOW'
+            : 'OBJECTIVES_MATRIX_ERROR';
+        handleRouteError(error, res, 'Error obteniendo matriz de cliente', 500, { code });
     }
 });
 

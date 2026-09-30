@@ -151,9 +151,9 @@ class DashboardService {
         const todaySalesGross = parseFloat(td.SALES ?? td.sales) || 0;
         const todaySalesFiltered = parseFloat(td.FILTEREDSALES ?? td.filteredSales) || 0;
         return {
-            // Keep legacy fields on their original filter/count semantics so
-            // already-installed app versions remain compatible.
-            todaySales: todaySalesFiltered,
+            // Las apps ya instaladas leen todaySales. La hoja de ruta es el
+            // bruto documental; el filtro histórico queda en todaySalesFiltered.
+            todaySales: todaySalesGross,
             todaySalesGross,
             todaySalesFiltered,
             todaySalesGap: Number((todaySalesGross - todaySalesFiltered).toFixed(2)),

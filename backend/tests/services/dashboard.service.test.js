@@ -140,7 +140,7 @@ describe('DashboardService canonico Ventas Hoy 29/09/2026', () => {
         });
         const svc = new DashboardService({ repository: repo, cache: makeCache(), clock: () => new Date(NOW) });
         const { payload } = await svc.getMetrics('ALL', { year: String(Y), month: String(M) }, {});
-        expect(payload.todaySales).toBeCloseTo(48928.95, 2); // legacy app-filter field
+        expect(payload.todaySales).toBeCloseTo(57442.76, 2); // campo que pintan las apps ya instaladas
         expect(payload.todaySalesGross).toBeCloseTo(57442.76, 2);
         expect(payload.todaySalesFiltered).toBeCloseTo(48928.95, 2);
         expect(payload.todaySalesGap).toBe(8513.81);
@@ -154,7 +154,7 @@ describe('DashboardService canonico Ventas Hoy 29/09/2026', () => {
         expect(payload.todayClientsFiltered).toBe(241);
         expect(payload.todayContractDate).toBe('2026-09-29');
         expect(payload.uniqueClients).toBe(241);
-        expect(payload.avgOrderValue).toBeCloseTo(48928.95 / 312, 2); // legacy semantics
+        expect(payload.avgOrderValue).toBeCloseTo(57442.76 / 312, 2);
         // El WHERE exterior aplica fecha y ámbito vendedor; las métricas
         // filtradas preservan por separado el universo histórico de ventas.
         const todaySql = repo.fetchPeriodAggregate.mock.calls[2][0];

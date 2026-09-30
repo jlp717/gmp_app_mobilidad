@@ -17,12 +17,19 @@ void main() {
 
     test('does not expose server diagnostics or SQL details', () {
       final message = clientMatrixErrorMessage(
-        ApiException('SQLSTATE 22003 SELECT secret_bind', statusCode: 500),
+        ApiException(
+          'SQLSTATE 22003 SELECT secret_bind',
+          statusCode: 500,
+          code: 'OBJECTIVES_MATRIX_ERROR',
+        ),
       );
 
       expect(message, contains('servicio'));
+      expect(message, contains('OBJECTIVES_MATRIX_ERROR'));
+      expect(message, contains('HTTP 500'));
       expect(message, isNot(contains('22003')));
       expect(message, isNot(contains('secret_bind')));
+      expect(message, isNot(contains('SELECT')));
     });
 
     test('maps transport and unknown errors without exposing internals', () {

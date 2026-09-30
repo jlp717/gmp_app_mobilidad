@@ -44,7 +44,12 @@ const RUTERO_WEEKDAY_INDEX = {
     domingo: 6
 };
 const ORDER_STATUS_EMPTY_LABEL = 'SIN VENTA';
-const RUTERO_DAY_BATCH_SIZE = 200;
+// UNION ALL de estado de pedido liga 3 IN del mismo lote (CPC + cliente +
+// albarán). Con 200 clientes son 606 marcadores y el ODBC IBM i falla al
+// preparar (HY000 -122). Ese fallo se clasifica como corte de conexión,
+// recrea el pool y abre el circuito: la evolución de pedidos (GET /matrix)
+// pasa a 500/503. 70 clientes → 216 marcadores, por debajo de ese límite.
+const RUTERO_DAY_BATCH_SIZE = 70;
 const RUTERO_DAY_CACHE_TTL = TTL.REALTIME;
 const RUTERO_DAY_BATCH_CONCURRENCY = Math.max(
     1,
