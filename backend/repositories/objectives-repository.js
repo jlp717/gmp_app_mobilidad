@@ -224,40 +224,74 @@ function fetchMatrixNotes(clientCode, db = { queryWithParams }) {
 }
 
 function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, monthEnd, filterConditions, filterParams, db = { queryWithParams }) {
+    // Agrega LACLAE sola, en DECFLOAT, y luego une el artículo.
+    // SUM/AVG de DECIMAL revienta con SQLSTATE 22003 (precisión o desbordamiento
+    // al cruzar ART/ARTX) y la evolución de pedidos responde 500 para cualquier rol.
+    const salesFilter = LACLAE_SALES_FILTER.replace(/L\./g, 'S.');
     return db.queryWithParams(`
             SELECT
                 L.LCCDRF as PRODUCT_CODE,
-                COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.LCDESC)) as PRODUCT_NAME,
+                COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), L.LCDESC) as PRODUCT_NAME,
                 COALESCE(A.CODIGOFAMILIA, 'SIN_FAM') as FAMILY_CODE,
                 COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as SUBFAMILY_CODE,
                 COALESCE(TRIM(A.UNIDADMEDIDA), 'UDS') as UNIT_TYPE,
-                L.LCAADC as YEAR,
-                L.LCMMDC as MONTH,
-                SUM(CAST(L.LCIMVT AS DECIMAL(15,2))) as SALES,
-                SUM(CAST(L.LCIMCT AS DECIMAL(15,2))) as COST,
-                SUM(CAST(L.LCCTUD AS DECIMAL(15,5))) as UNITS,
-                SUM(CAST(CASE WHEN L.LCPRTC <> 0 AND L.LCPRT1 <> 0
-                    AND L.LCPRTC <> L.LCPRT1 THEN 1 ELSE 0 END AS DECIMAL(10,0))) as HAS_SPECIAL_PRICE,
-                SUM(CAST(CASE WHEN L.LCPJDT <> 0 THEN 1 ELSE 0 END AS DECIMAL(10,0))) as HAS_DISCOUNT,
-                AVG(CAST(CASE WHEN L.LCPJDT <> 0 THEN L.LCPJDT ELSE NULL END AS DECIMAL(15,2))) as AVG_DISCOUNT_PCT,
+                L.YEAR as YEAR,
+                L.MONTH as MONTH,
+                L.SALES as SALES,
+                L.COST as COST,
+                L.UNITS as UNITS,
+                L.HAS_SPECIAL_PRICE as HAS_SPECIAL_PRICE,
+                L.HAS_DISCOUNT as HAS_DISCOUNT,
+                L.AVG_DISCOUNT_PCT as AVG_DISCOUNT_PCT,
                 CAST(NULL AS DECIMAL(10,2)) as AVG_DISCOUNT_EUR,
-                AVG(CAST(L.LCPRTC AS DECIMAL(15,4))) as AVG_CLIENT_TARIFF,
-                AVG(CAST(L.LCPRT1 AS DECIMAL(15,4))) as AVG_BASE_TARIFF,
+                L.AVG_CLIENT_TARIFF as AVG_CLIENT_TARIFF,
+                L.AVG_BASE_TARIFF as AVG_BASE_TARIFF,
                 COALESCE(TRIM(AX.FILTRO01), '') as FI1_CODE,
                 COALESCE(TRIM(AX.FILTRO02), '') as FI2_CODE,
                 COALESCE(TRIM(AX.FILTRO03), '') as FI3_CODE,
                 COALESCE(TRIM(AX.FILTRO04), '') as FI4_CODE,
                 COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as FI5_CODE
-            FROM ${comercialErpTable('LACLAE')} L
-            LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
-            LEFT JOIN ${comercialErpTable('ARTX')} AX ON L.LCCDRF = AX.CODIGOARTICULO
-            WHERE L.LCCDCL = ?
-              AND L.LCAADC IN(${uniqueYears.map(() => '?').join(',')})
-              AND L.LCMMDC BETWEEN ? AND ?
-              AND ${LACLAE_SALES_FILTER}
+            FROM (
+                SELECT
+                    S.LCCDRF AS LCCDRF,
+                    COALESCE(MAX(TRIM(S.LCDESC)), '') AS LCDESC,
+                    S.LCAADC AS YEAR,
+                    S.LCMMDC AS MONTH,
+                    CAST(SUM(CAST(S.LCIMVT AS DECFLOAT(34))) AS DECIMAL(15,2)) AS SALES,
+                    CAST(SUM(CAST(S.LCIMCT AS DECFLOAT(34))) AS DECIMAL(15,2)) AS COST,
+                    CAST(SUM(CAST(S.LCCTUD AS DECFLOAT(34))) AS DECIMAL(15,5)) AS UNITS,
+                    CAST(SUM(CASE WHEN S.LCPRTC <> 0 AND S.LCPRT1 <> 0 AND S.LCPRTC <> S.LCPRT1 THEN 1 ELSE 0 END) AS DECIMAL(10,0)) AS HAS_SPECIAL_PRICE,
+                    CAST(SUM(CASE WHEN S.LCPJDT <> 0 THEN 1 ELSE 0 END) AS DECIMAL(10,0)) AS HAS_DISCOUNT,
+                    CAST(AVG(CASE WHEN S.LCPJDT <> 0 THEN CAST(S.LCPJDT AS DECFLOAT(34)) ELSE NULL END) AS DECIMAL(15,2)) AS AVG_DISCOUNT_PCT,
+                    CAST(AVG(CAST(S.LCPRTC AS DECFLOAT(34))) AS DECIMAL(15,4)) AS AVG_CLIENT_TARIFF,
+                    CAST(AVG(CAST(S.LCPRT1 AS DECFLOAT(34))) AS DECIMAL(15,4)) AS AVG_BASE_TARIFF
+                FROM ${comercialErpTable('LACLAE')} S
+                WHERE S.LCCDCL = ?
+                  AND S.LCAADC IN (${uniqueYears.map(() => '?').join(',')})
+                  AND S.LCMMDC BETWEEN ? AND ?
+                  AND ${salesFilter}
+                GROUP BY S.LCCDRF, S.LCAADC, S.LCMMDC
+            ) L
+            LEFT JOIN LATERAL (
+                SELECT
+                    DESCRIPCIONARTICULO,
+                    CODIGOFAMILIA,
+                    CODIGOSUBFAMILIA,
+                    UNIDADMEDIDA,
+                    CODIGOSECCIONLARGA
+                FROM ${comercialErpTable('ART')} A
+                WHERE A.CODIGOARTICULO = L.LCCDRF
+                FETCH FIRST 1 ROW ONLY
+            ) A ON 1 = 1
+            LEFT JOIN LATERAL (
+                SELECT FILTRO01, FILTRO02, FILTRO03, FILTRO04
+                FROM ${comercialErpTable('ARTX')} AX
+                WHERE AX.CODIGOARTICULO = L.LCCDRF
+                FETCH FIRST 1 ROW ONLY
+            ) AX ON 1 = 1
+            WHERE 1 = 1
               ${filterConditions}
-            GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
-            ORDER BY SALES DESC
+            ORDER BY L.SALES DESC
             FETCH FIRST 1000 ROWS ONLY
         `, [clientCode, ...uniqueYears, monthStart, monthEnd, ...filterParams]);
 }

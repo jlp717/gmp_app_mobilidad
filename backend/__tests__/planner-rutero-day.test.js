@@ -328,8 +328,8 @@ describe('Planner rutero/day route', () => {
     expect(res.status).toBe(200);
     expect(res.body.count).toBe(201);
     expect(new Set(res.body.clients.map((client) => client.code)).size).toBe(201);
-    expect(mockQueryWithParams.mock.calls.filter(([sql]) => sql.includes('FROM DSEDAC.CLI'))).toHaveLength(3);
-    expect(mockQueryWithParams.mock.calls.filter(([sql]) => sql.includes('FROM DSEDAC.CPC'))).toHaveLength(3);
+    expect(mockQueryWithParams.mock.calls.filter(([sql]) => sql.includes('FROM DSEDAC.CLI'))).toHaveLength(7);
+    expect(mockQueryWithParams.mock.calls.filter(([sql]) => sql.includes('FROM DSEDAC.CPC'))).toHaveLength(7);
   });
 
   test('GET /rutero/day/:day serves the complete payload from shared cache', async () => {

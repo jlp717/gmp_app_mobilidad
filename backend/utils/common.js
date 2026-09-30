@@ -437,29 +437,60 @@ function buildLaclaeBoundedClientCodesSql(vendorCodes, params = []) {
 const _clientAssignedVendorCache = new Map();
 const CLIENT_ASSIGNED_VENDOR_TTL_MS = 60000;
 
-async function lookupClientAssignedVendorCodes(clientCode) {
+function vendorCodesFromRows(rows) {
+    return (rows || [])
+        .map((row) => String(row.VENDOR_CODE || row.vendor_code || '').trim())
+        .filter(Boolean);
+}
+
+async function lookupClientPortfolioVendorCode(clientCode) {
+    const rows = await queryWithParams(
+        `SELECT TRIM(CLP.VENDEDORCOMERCIAL) AS VENDOR_CODE
+           FROM ${comercialErpTable('CLP')} CLP
+          WHERE CLP.CODIGOCLIENTE = CAST(? AS CHAR(10))
+            AND CLP.VENDEDORCOMERCIAL IS NOT NULL
+            AND TRIM(CLP.VENDEDORCOMERCIAL) <> ''`,
+        [clientCode],
+    );
+    return vendorCodesFromRows(rows);
+}
+
+async function lookupClientAssignedVendorCodes(clientCode, earlyAllowCodes) {
     const client = String(clientCode || '').trim().substring(0, 10);
     if (!client) return [];
     const cached = _clientAssignedVendorCache.get(client);
     if (cached && cached.expiresAt > Date.now()) {
         return cached.codes.slice();
     }
+    const allow = Array.isArray(earlyAllowCodes)
+        ? earlyAllowCodes.map((code) => normalizeCode(code)).filter(Boolean)
+        : [];
+    if (allow.length > 0) {
+        const portfolioCodes = await lookupClientPortfolioVendorCode(client);
+        if (portfolioCodes.some((code) => allow.includes(normalizeCode(code)))) {
+            // La ficha ya autoriza. No se cachea: el histórico puede traer más vendedores.
+            return portfolioCodes;
+        }
+    }
+    // Igualdad sargable: TRIM(LCCDCL) recorría el histórico del cliente (5-10 s)
+    // antes de poder pintar la evolución.
+    const clientKey = `CAST(? AS CHAR(10))`;
     const laclaeVendorSelects = VENDOR_COLUMN === 'LCCDVD'
         ? `SELECT LAC.LCCDVD AS VENDOR_CODE
                FROM ${comercialErpTable('LACLAE')} LAC
-              WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
+              WHERE LAC.LCCDCL = ${clientKey}
                 AND LAC.LCAADC >= ?
                 AND LAC.TPDC = 'LAC'`
         : `SELECT LAC.LCCDVD AS VENDOR_CODE
                FROM ${comercialErpTable('LACLAE')} LAC
-              WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
+              WHERE LAC.LCCDCL = ${clientKey}
                 AND LAC.LCAADC >= ?
                 AND LAC.LCMMDC < ${TRANSITION_MONTH}
                 AND LAC.TPDC = 'LAC'
              UNION
              SELECT LAC.${VENDOR_COLUMN} AS VENDOR_CODE
                FROM ${comercialErpTable('LACLAE')} LAC
-              WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
+              WHERE LAC.LCCDCL = ${clientKey}
                 AND LAC.LCAADC >= ?
                 AND LAC.LCMMDC >= ${TRANSITION_MONTH}
                 AND LAC.TPDC = 'LAC'`;
@@ -471,16 +502,14 @@ async function lookupClientAssignedVendorCodes(clientCode) {
            FROM (
              SELECT TRIM(CLP.VENDEDORCOMERCIAL) AS VENDOR_CODE
                FROM ${comercialErpTable('CLP')} CLP
-              WHERE TRIM(CLP.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
+              WHERE CLP.CODIGOCLIENTE = CAST(? AS CHAR(10))
              UNION
              ${laclaeVendorSelects}
            ) V
           WHERE VENDOR_CODE IS NOT NULL AND TRIM(VENDOR_CODE) <> ''`,
         [client, ...laclaeParams],
     );
-    const codes = (rows || [])
-        .map((row) => String(row.VENDOR_CODE || row.vendor_code || '').trim())
-        .filter(Boolean);
+    const codes = vendorCodesFromRows(rows);
     _clientAssignedVendorCache.set(client, {
         codes,
         expiresAt: Date.now() + CLIENT_ASSIGNED_VENDOR_TTL_MS,

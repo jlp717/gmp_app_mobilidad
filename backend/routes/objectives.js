@@ -665,7 +665,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         }
         if (!resolvedScope.literalAll) {
             const visible = resolvedScope.codes.map(normalizeCode);
-            const assigned = await lookupClientAssignedVendorCodes(clientCode);
+            const assigned = await lookupClientAssignedVendorCodes(clientCode, visible);
             if (!visible.length || !assigned.some(code => visible.includes(normalizeCode(code)))) {
                 return res.status(403).json({ success: false, code: 'FORBIDDEN_CLIENT_VENDOR', error: 'Cliente fuera del alcance comercial' });
             }
