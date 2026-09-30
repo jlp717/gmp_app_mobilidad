@@ -16,6 +16,40 @@ const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { LACLAE_SALES_FILTER } = require('../utils/common');
 const { assertIdentifier } = require('../utils/sql-identifiers');
 
+function matrixConnectionString() {
+    const uid = process.env.ODBC_UID;
+    const pwd = process.env.ODBC_PWD;
+    if (!uid || !pwd) return null;
+    const dsn = process.env.ODBC_DSN || 'GMP';
+    return `DSN=${dsn};UID=${uid};PWD=${pwd};NAM=1;CCSID=1208;CMPTDM=1;LONGDATACOMPAT=1;DBQ=${dsn};`;
+}
+
+// Esta sentencia devuelve SQLSTATE 22003 en las conexiones del pool de la API
+// y responde bien en una conexión nueva. Se abre y se cierra por petición.
+async function queryMatrixRows(db, sql, params) {
+    if (!db || db.queryWithParams !== queryWithParams) return db.queryWithParams(sql, params);
+    const connectionString = matrixConnectionString();
+    if (!connectionString) return db.queryWithParams(sql, params);
+    const odbc = require('odbc');
+    const connection = await odbc.connect(connectionString);
+    try {
+        const rows = await connection.query(sql, params);
+        if (!Array.isArray(rows)) return rows;
+        for (const row of rows) {
+            if (!row || typeof row !== 'object') continue;
+            for (const key of Object.keys(row)) {
+                const upper = key.toUpperCase();
+                const lower = key.toLowerCase();
+                if (!(upper in row)) row[upper] = row[key];
+                if (!(lower in row)) row[lower] = row[key];
+            }
+        }
+        return rows;
+    } finally {
+        try { await connection.close(); } catch (_closeError) { /* la query ya respondió */ }
+    }
+}
+
 function fetchObjectiveVendorClients(vendorCode, col, year, db = { queryWithParams }) {
     return db.queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
@@ -263,7 +297,7 @@ async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, month
             FETCH FIRST 1000 ROWS ONLY
         `;
     try {
-        const rows = await db.queryWithParams(plainSql, [clientCode, ...uniqueYears, monthStart, monthEnd]);
+        const rows = await queryMatrixRows(db, plainSql, [clientCode, ...uniqueYears, monthStart, monthEnd]);
         return attachMatrixArticleFields(rows, db);
     } catch (error) {
         error.matrixSql = 'matrix product rows';
