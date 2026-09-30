@@ -23,7 +23,7 @@ test('matrix sales aggregate in decfloat before the article join', async () => {
 
     expect(calls).toHaveLength(1);
     const sql = calls[0].sql;
-    expect(sql).toContain('DECFLOAT(34)');
+    expect(sql).toContain('AS DOUBLE');
     expect(sql).not.toMatch(/SUM\(S\.LCIMVT\)/);
     expect(sql).not.toMatch(/SUM\(L\.LCIMVT\)/);
     expect(sql.indexOf('GROUP BY S.LCCDRF')).toBeLessThan(sql.indexOf('LEFT JOIN LATERAL'));

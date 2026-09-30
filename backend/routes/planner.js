@@ -636,36 +636,10 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
     const orderCacheKey = `rutero:orders:v4:${orderDate.iso}:${ruteroBatchHash([...paddedClients, ...vendorCodes])}`;
     let degraded = false;
 
-    const mergeRows = (rows) => {
-        const list = rows || [];
-        // CPC first (incl. legacy/test rows without SRC), then APP overlay.
-        list.filter((row) => String(row.SRC ?? row.src ?? '').toUpperCase() !== 'APP')
-            .forEach((row) => applyRuteroCpcOrderStatusRow(statusMap, orderDate, row));
-        list.filter((row) => String(row.SRC ?? row.src ?? '').toUpperCase() === 'APP')
-            .forEach((row) => applyRuteroAppOrderStatusRow(statusMap, orderDate, row));
-    };
-
-    if (appBranchSql) {
-        const unionParams = [...cpcParams, ...appParams];
-        const unionSql = `${cpcBranchSql}
-        UNION ALL
-        ${appBranchSql}`;
-        try {
-            const rows = await cachedQuery(
-                queryWithParams,
-                unionSql,
-                orderCacheKey,
-                TTL.REALTIME,
-                unionParams,
-            );
-            mergeRows(rows);
-            return { statusMap, degraded };
-        } catch (_unionErr) {
-            logger.warn('[RUTERO DAY] Compound order-status UNION failed; falling back to split queries');
-        }
-    }
-
-    // Fallback / CPC-only: preserve previous resilience (CPC degraded ≠ overlay skip).
+    // CPC y el overlay van en dos sentencias. Juntarlas en un UNION ALL
+    // (96 marcadores con un lote de 30) falla al preparar en el pool real
+    // (HY000 -122). db.js lo trata como corte de conexión, abre el circuito
+    // y la evolución de pedidos, e incluso el login, pasan a 500/503.
     try {
         const rows = await cachedQuery(
             queryWithParams,

@@ -171,7 +171,7 @@ describe('Planner rutero/day route', () => {
 
     const orderStatusQueries = executedSql.filter(sql => sql.includes('FROM DSEDAC.CPC'));
     expect(orderStatusQueries).toHaveLength(1);
-    expect(orderStatusQueries[0]).toContain('UNION ALL');
+    expect(orderStatusQueries[0]).not.toContain('UNION ALL');
     expect(orderStatusQueries[0]).toMatch(/C\.CODIGOCLIENTEALBARAN IN \(CAST\(\? AS CHAR\(10\)\)/);
     expect(orderStatusQueries[0]).not.toMatch(/WHERE[\s\S]*TRIM\(C\.CODIGOCLIENTEALBARAN\)/);
     expect(orderStatusQueries[0]).toContain('GROUP BY C.CODIGOCLIENTEALBARAN');

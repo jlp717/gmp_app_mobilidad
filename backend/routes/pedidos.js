@@ -1333,7 +1333,8 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
 
         const monthlyQuery = `
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
-                   SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS
+                   CAST(SUM(CAST(L.LCIMVT AS DECFLOAT(34))) AS DOUBLE) AS SALES,
+                   CAST(SUM(CAST(L.LCCTUD AS DECFLOAT(34))) AS DOUBLE) AS UNITS
             FROM ${comercialErpTable('LACLAE')} L
             WHERE L.LCCDCL = CAST(? AS CHAR(10)) AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
@@ -1346,7 +1347,8 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
 
         const topProductsQuery = `
             SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
-                   SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS
+                   CAST(SUM(CAST(L.LCIMVT AS DECFLOAT(34))) AS DOUBLE) AS TOTAL_SALES,
+                   CAST(SUM(CAST(L.LCCTUD AS DECFLOAT(34))) AS DOUBLE) AS TOTAL_UNITS
             FROM ${comercialErpTable('LACLAE')} L
             LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE L.LCCDCL = CAST(? AS CHAR(10)) AND L.LCAADC >= ?
@@ -1361,7 +1363,8 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
         const returnsQuery = `
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
                    TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME,
-                   SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT
+                   CAST(SUM(CAST(L.LCCTUD AS DECFLOAT(34))) AS DOUBLE) AS UNITS,
+                   CAST(SUM(CAST(L.LCIMVT AS DECFLOAT(34))) AS DOUBLE) AS AMOUNT
             FROM ${comercialErpTable('LACLAE')} L
             LEFT JOIN ${comercialErpTable('ART')} A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE L.LCCDCL = CAST(? AS CHAR(10)) AND L.LCAADC >= ?
