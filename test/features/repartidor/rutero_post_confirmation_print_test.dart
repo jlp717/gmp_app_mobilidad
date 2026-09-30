@@ -21,6 +21,7 @@ void main() {
     );
 
     await printStarted.future.timeout(const Duration(milliseconds: 100));
+    await Future<void>.delayed(Duration.zero);
     expect(shareCalls, 1);
   });
 
@@ -38,6 +39,26 @@ void main() {
 
     await Future<void>.delayed(Duration.zero);
     expect(shareCalls, 1);
+  });
+
+  test('compartir recibo no bloquea el retorno de post-confirm', () async {
+    final shareStarted = Completer<void>();
+    final shareNeverCompletes = Completer<void>();
+    final effectsDone = Completer<void>();
+
+    unawaited(
+      runRuteroPostConfirmationEffects(
+        shouldPrint: false,
+        printTicket: () async {},
+        shareReceipt: () {
+          shareStarted.complete();
+          return shareNeverCompletes.future;
+        },
+      ).then((_) => effectsDone.complete()),
+    );
+
+    await shareStarted.future.timeout(const Duration(milliseconds: 100));
+    await effectsDone.future.timeout(const Duration(milliseconds: 100));
   });
 
   test('la recarga posterior al acuse no bloquea el resultado terminal',

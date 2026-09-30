@@ -14,6 +14,9 @@ import 'package:gmp_app_mobilidad/core/widgets/fi_filters_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
+import 'package:gmp_app_mobilidad/features/objectives/domain/utils/client_matrix_error_message.dart';
+import 'package:gmp_app_mobilidad/features/objectives/domain/utils/client_matrix_vendor_cache_scope.dart';
+import 'package:gmp_app_mobilidad/features/objectives/presentation/widgets/client_matrix_error_state.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/presentation/widgets/sales_summary_header.dart';
 import 'package:path_provider/path_provider.dart';
@@ -137,7 +140,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       ? _selectedYearsDesc.join(',')
       : DateTime.now().year.toString();
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool forceRefresh = false}) async {
     final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
@@ -145,6 +148,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     });
 
     try {
+      final vendorCacheScope =
+          clientMatrixVendorCacheScope(widget.vendedorCodes);
       final response = await ApiClient.get(
         ApiConfig.clientMatrix,
         queryParameters: {
@@ -165,21 +170,23 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           if (_fiFilters.fi5 != null) 'fi5': _fiFilters.fi5,
           'includeYoY': 'true',
         },
-        cacheKey: [
-          'client-matrix-advanced',
-          widget.clientCode,
-          _yearsParam,
-          _startMonth,
-          _endMonth,
-          _productCodeSearch,
-          _productNameSearch,
-          _fiFilters.fi1 ?? '',
-          _fiFilters.fi2 ?? '',
-          _fiFilters.fi3 ?? '',
-          _fiFilters.fi4 ?? '',
-          _fiFilters.fi5 ?? '',
-        ].join(':'),
+        cacheKey: clientMatrixCacheKey(
+          clientCode: widget.clientCode,
+          vendorScope: vendorCacheScope,
+          years: _yearsParam,
+          startMonth: _startMonth,
+          endMonth: _endMonth,
+          productCode: _productCodeSearch,
+          productName: _productNameSearch,
+          fi1: _fiFilters.fi1 ?? '',
+          fi2: _fiFilters.fi2 ?? '',
+          fi3: _fiFilters.fi3 ?? '',
+          fi4: _fiFilters.fi4 ?? '',
+          fi5: _fiFilters.fi5 ?? '',
+        ),
         cacheTTL: CacheService.defaultTTL,
+        cacheResponse: vendorCacheScope != null,
+        forceRefresh: forceRefresh || vendorCacheScope == null,
       );
 
       if (!mounted || generation != _loadGeneration) return;
@@ -231,9 +238,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     } catch (e) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _error = e.toString();
+        _error = clientMatrixErrorMessage(e);
         _isLoading = false;
       });
+      final diagnostic = e is ApiException
+          ? 'status=${e.statusCode}, code=${e.code ?? 'none'}'
+          : e.runtimeType.toString();
+      debugPrint('Client matrix request failed ($diagnostic)');
     }
   }
 
@@ -261,13 +272,19 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     if (cols <= 1) {
       return ListView.builder(
         padding: EdgeInsets.all(compact ? 2 : 4),
+        cacheExtent: MediaQuery.sizeOf(context).height,
+        addAutomaticKeepAlives: false,
         itemCount: products.length,
-        itemBuilder: (context, index) => _buildFiProduct(products[index]),
+        itemBuilder: (context, index) => RepaintBoundary(
+          child: _buildFiProduct(products[index]),
+        ),
       );
     }
 
     return GridView.builder(
       padding: EdgeInsets.all(compact ? 2 : 4),
+      cacheExtent: MediaQuery.sizeOf(context).height,
+      addAutomaticKeepAlives: false,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: cols,
         mainAxisExtent: compact ? 72 : 88,
@@ -275,7 +292,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         crossAxisSpacing: gap,
       ),
       itemCount: products.length,
-      itemBuilder: (context, index) => _buildFiProduct(products[index]),
+      itemBuilder: (context, index) => RepaintBoundary(
+        child: _buildFiProduct(products[index]),
+      ),
     );
   }
 
@@ -484,7 +503,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh, size: 20),
-            onPressed: _loadData,
+            onPressed: () => _loadData(forceRefresh: true),
           ),
         ],
       ),
@@ -1382,15 +1401,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   Widget _buildError() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline, size: 40, color: AppTheme.error),
-          const SizedBox(height: 8),
-          ElevatedButton(onPressed: _loadData, child: const Text('Reintentar')),
-        ],
-      ),
+    return ClientMatrixErrorState(
+      message: _error ?? 'No se pudo cargar la evolución del cliente.',
+      onRetry: () => _loadData(forceRefresh: true),
     );
   }
 

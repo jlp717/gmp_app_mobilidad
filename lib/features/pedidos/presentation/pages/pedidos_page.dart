@@ -30,6 +30,7 @@ import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/widgets/offline_state_widget.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/domain/catalog_product_sort.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/domain/utils/client_evolution_error_message.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/dialogs/client_search_dialog.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/promotions_list_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
@@ -254,7 +255,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               .read(pedidosNotifierProvider.notifier)
               .loadOrderStats(vendedorCodes: _vendedorCodes),
         );
-        unawaited(_loadOrdersWithFilters(ref.read(pedidosNotifierProvider.notifier)));
+        unawaited(
+            _loadOrdersWithFilters(ref.read(pedidosNotifierProvider.notifier)));
         if (_ruteroClientData.isEmpty) {
           unawaited(_loadRuteroClientData());
         }
@@ -410,7 +412,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         final localPending = PedidosOfflineService.pendingSyncCount;
         final count = pending > 0 ? pending : localPending;
         if (count <= 0) return const SizedBox.shrink();
-        final threshold = ref.read(pedidosNotifierProvider.notifier).draftAutoSendThreshold;
+        final threshold =
+            ref.read(pedidosNotifierProvider.notifier).draftAutoSendThreshold;
         final detail = threshold > 0
             ? '$count pendiente(s) de enviar (umbral auto-envío: $threshold).'
             : '$count pedido(s) pendiente(s) de enviar al recuperar conexión.';
@@ -472,10 +475,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     // Req #8: refrescar estado de borradores acumulados y notificar al usuario
     // si supera el umbral. Se hace por vendedor primario (primer código
     // concreto; ALL nunca es un vendedor y se salta).
-    final firstVendor = codes
-        .split(',')
-        .map((c) => c.trim())
-        .firstWhere(
+    final firstVendor = codes.split(',').map((c) => c.trim()).firstWhere(
           (c) => c.isNotEmpty && c.toUpperCase() != 'ALL',
           orElse: () => '',
         );
@@ -850,8 +850,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           if (_tabController.index == 1)
             Consumer(
               builder: (ctx, ref, _) {
-                final isLoading =
-                    ref.watch(pedidosNotifierProvider.select((p) => p.isLoadingOrders));
+                final isLoading = ref.watch(
+                    pedidosNotifierProvider.select((p) => p.isLoadingOrders));
                 return IconButton(
                   icon: isLoading
                       ? const SizedBox(
@@ -912,15 +912,13 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               if (promoCount == 0) {
                 return Semantics(
                   button: true,
-                  label:
-                      'Sin promociones activas para este cliente hoy',
+                  label: 'Sin promociones activas para este cliente hoy',
                   child: IconButton(
                     icon: Icon(
                       Icons.local_offer_outlined,
                       color: AppTheme.textTertiary,
                     ),
-                    tooltip:
-                        'Sin promociones activas para este cliente hoy',
+                    tooltip: 'Sin promociones activas para este cliente hoy',
                     onPressed: () {
                       final prov = ref.read(pedidosNotifierProvider.notifier);
                       Navigator.push(
@@ -1062,7 +1060,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     ),
                     tooltip: 'Guardar como borrador manual',
                     onPressed: () async {
-                      await ref.read(pedidosNotifierProvider.notifier).saveDraft(
+                      await ref
+                          .read(pedidosNotifierProvider.notifier)
+                          .saveDraft(
                             _vendedorCodes,
                           );
                       if (mounted) {
@@ -1099,8 +1099,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                       color: AppTheme.textSecondary,
                     ),
                     tooltip: 'Borradores guardados',
-                    onPressed: () =>
-                        _showDraftsDialog(ref.read(pedidosNotifierProvider.notifier)),
+                    onPressed: () => _showDraftsDialog(
+                        ref.read(pedidosNotifierProvider.notifier)),
                   ),
                   if (count > 0)
                     Positioned(
@@ -1219,7 +1219,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   // ── TAB 1: Nuevo Pedido ──
 
   Widget _buildNuevoPedidoTab() {
-    final hasClient = ref.watch(pedidosNotifierProvider.select((p) => p.hasClient));
+    final hasClient =
+        ref.watch(pedidosNotifierProvider.select((p) => p.hasClient));
     // Tablet portrait / mid-width: full-width catalog + cart FAB/sheet (mobile).
     // Wide screens only: side-by-side catalog + persistent cart.
     if (Responsive.usePedidosSplitCart(context)) {
@@ -1229,8 +1230,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   Widget _buildTabletLayout() {
-    final hasClient = ref.watch(pedidosNotifierProvider.select((p) => p.hasClient));
-    final hasLines = ref.watch(pedidosNotifierProvider.select((p) => p.hasLines));
+    final hasClient =
+        ref.watch(pedidosNotifierProvider.select((p) => p.hasClient));
+    final hasLines =
+        ref.watch(pedidosNotifierProvider.select((p) => p.hasLines));
     return Padding(
       padding: const EdgeInsets.all(14),
       child: Row(
@@ -1267,7 +1270,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   Widget _buildPhoneLayout(bool hasClient) {
-    final lineCount = ref.watch(pedidosNotifierProvider.select((p) => p.lines.length));
+    final lineCount =
+        ref.watch(pedidosNotifierProvider.select((p) => p.lines.length));
     final cartTotal = ref.watch(
       pedidosNotifierProvider.select(
         (p) => p.globalDiscountPct > 0 ? p.totalConDescuento : p.totalImporte,
@@ -1421,11 +1425,34 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   Widget _buildCatalogPanel() {
+    // PERF: watch only catalog-relevant slices. Unrelated notifier churn
+    // (orders list, auto-save ticks) must not rebuild the product grid.
     final catalog = ref.watch(pedidosNotifierProvider.select(
       (p) => (
         hasClient: p.hasClient,
         promoCount: p.activePromotionsList.length,
         clientCode: p.clientCode,
+        productsLength: p.products.length,
+        isLoadingProducts: p.isLoadingProducts,
+        productSearch: p.productSearch,
+        catalogSort: p.catalogSort,
+        linesFingerprint: Object.hashAll(
+          p.lines.map(
+            (l) => Object.hash(
+              l.codigoArticulo,
+              l.cantidadEnvases,
+              l.cantidadUnidades,
+              l.unidadMedida,
+            ),
+          ),
+        ),
+        favoritesLen: p.favoriteProductCodes.length,
+        isMarginVisible: p.isMarginVisible,
+        hasMoreProducts: p.hasMoreProducts,
+        complementaryLen: p.complementaryProducts.length,
+        historyLen: p.clientHistory.length,
+        similarLen: p.similarClients.length,
+        error: p.error,
       ),
     ));
     final provider = ref.read(pedidosNotifierProvider.notifier);
@@ -1867,6 +1894,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               cartUnit.isEmpty ? 'CAJAS' : lineInCart.unidadMedida,
             );
       return ProductCard(
+        key: ValueKey<String>('pc-${product.code}'),
         product: product,
         onTap: () => _onProductTap(product),
         isFavorite: provider.isFavorite(product.code),
@@ -2244,9 +2272,12 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   // == TAB 3: Evolución (historial de compras del cliente) ==
 
   Widget _buildEvolucionTab() {
-    final hasClient = ref.watch(pedidosNotifierProvider.select((p) => p.hasClient));
-    final clientCode = ref.watch(pedidosNotifierProvider.select((p) => p.clientCode));
-    final clientName = ref.watch(pedidosNotifierProvider.select((p) => p.clientName));
+    final hasClient =
+        ref.watch(pedidosNotifierProvider.select((p) => p.hasClient));
+    final clientCode =
+        ref.watch(pedidosNotifierProvider.select((p) => p.clientCode));
+    final clientName =
+        ref.watch(pedidosNotifierProvider.select((p) => p.clientName));
     final resolvedCode =
         (hasClient ? clientCode : widget.initialClientCode)?.trim();
     final resolvedName = hasClient
@@ -2310,7 +2341,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   // == TAB 4: Devoluciones ==
 
   Widget _buildDevolucionesTab() {
-    final hasClient = ref.watch(pedidosNotifierProvider.select((p) => p.hasClient));
+    final hasClient =
+        ref.watch(pedidosNotifierProvider.select((p) => p.hasClient));
     final clientCodeRaw =
         ref.watch(pedidosNotifierProvider.select((p) => p.clientCode));
     if (!hasClient) {
@@ -2335,7 +2367,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
         if (snapshot.hasError) {
           return _buildDevolucionesError(
-            snapshot.error.toString(),
+            clientEvolutionErrorMessage(
+              snapshot.error ?? StateError('Unknown client evolution error'),
+            ),
             clientCode,
             vendorCodes,
           );
@@ -3009,16 +3043,16 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         // Grid solo en landscape (denseListCrossAxisCount ya devuelve 1 en
         // portrait; aquí se refuerza explícito para tablet 600-999).
         final isPortrait = !Responsive.isLandscape(context);
-        final cols = isPortrait
-            ? 1
-            : Responsive.denseListCrossAxisCount(context);
-        final compact = isPortrait ? false : Responsive.useCompactTiles(context);
+        final cols =
+            isPortrait ? 1 : Responsive.denseListCrossAxisCount(context);
+        final compact =
+            isPortrait ? false : Responsive.useCompactTiles(context);
         final gap = Responsive.denseListSpacing(context);
 
         if (cols <= 1) {
           // PERF: watch margin once — not per OrderCard itemBuilder call.
-          final marginVisible =
-              ref.watch(pedidosNotifierProvider.select((p) => p.isMarginVisible));
+          final marginVisible = ref
+              .watch(pedidosNotifierProvider.select((p) => p.isMarginVisible));
           return ListView.builder(
             padding: EdgeInsets.only(bottom: compact ? 8 : 16),
             cacheExtent: MediaQuery.sizeOf(context).height,
@@ -3365,8 +3399,11 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
     if ((confirm ?? false) && mounted) {
       try {
-        await ref.read(pedidosNotifierProvider.notifier).deleteDraftOrder(order.id);
-        await _loadOrdersWithFilters(ref.read(pedidosNotifierProvider.notifier));
+        await ref
+            .read(pedidosNotifierProvider.notifier)
+            .deleteDraftOrder(order.id);
+        await _loadOrdersWithFilters(
+            ref.read(pedidosNotifierProvider.notifier));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
