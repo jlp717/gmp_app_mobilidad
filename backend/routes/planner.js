@@ -597,8 +597,6 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
 
     // Overlay: OR sargable sobre CODIGOCLIENTE / CODIGOCLIENTEALBARAN (CHAR(10)).
     // COALESCE+TRIM en WHERE impedía índice; SELECT/GROUP conservan fallback blank→albarán.
-    const appClientExpr = `CASE WHEN C.CODIGOCLIENTE = CAST('' AS CHAR(10)) THEN C.CODIGOCLIENTEALBARAN ELSE C.CODIGOCLIENTE END`;
-
     const dateParams = [orderDate.year, orderDate.month, orderDate.day];
     const vendorParams = useVendorFilter ? vendorCodes : [];
     const cpcParams = [...paddedClients, ...dateParams, ...vendorParams];
@@ -624,29 +622,17 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
     }
 
     if (appTableName && paddedClients.length) {
-        // El overlay con dos IN de 30 clientes son 63 marcadores y el ODBC
-        // del pool real falla al preparar (HY000 -122). Eso abre el circuito
-        // y la evolución de pedidos responde 500. Lotes de 8 → 19 marcadores.
-        const overlayChunk = 8;
-        for (let offset = 0; offset < paddedClients.length; offset += overlayChunk) {
-            const chunk = paddedClients.slice(offset, offset + overlayChunk);
-            const chunkIn = buildRuteroInPlaceholders(chunk.length, 'CAST(? AS CHAR(10))');
-            const chunkVendorSql = useVendorFilter
-                ? ` AND C.CODIGOVENDEDOR IN (${buildRuteroInPlaceholders(vendorCodes.length, 'CAST(? AS CHAR(2))')})`
-                : '';
-            const chunkSql = `
-                SELECT
-                    TRIM(${appClientExpr}) AS CODE,
+        // El CASE del overlay (aunque sea un lote de 8, 19 marcadores) no
+        // prepara en el pool de PM2: HY000 -122 abre el circuito y la
+        // evolución de pedidos responde 500. Dos IN simples, como el CPC,
+        // que sí prepara.
+        const overlaySelect = `
                     CAST('APP' AS VARCHAR(3)) AS SRC,
                     TRIM(C.ESTADO) AS ESTADO,
                     COUNT(*) AS TOTAL_COUNT,
                     MAX(C.ID) AS LAST_ORDER_ID,
-                    MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER
-                FROM ${appTableName} C
-                WHERE (
-                    C.CODIGOCLIENTE IN (${chunkIn})
-                    OR C.CODIGOCLIENTEALBARAN IN (${chunkIn})
-                  )
+                    MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER`;
+        const overlayDates = `
                   AND C.ANODOCUMENTO = ?
                   AND C.MESDOCUMENTO = ?
                   AND C.DIADOCUMENTO = ?
@@ -654,17 +640,39 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
                     'CONFIRMADO', 'ENVIADO', 'BORRADOR', 'CONFIRMANDO',
                     'PEND_APROB', 'PENDIENTE', 'PENDIENTE_APROBACION'
                   )
-                  ${chunkVendorSql}
-                GROUP BY ${appClientExpr}, TRIM(C.ESTADO)
-            `;
-            const chunkParams = [...chunk, ...chunk, ...dateParams, ...vendorParams];
+                  ${vendorFilterSql}`;
+        const overlayParams = [...paddedClients, ...dateParams, ...vendorParams];
+        const overlays = [
+            {
+                suffix: 'cli',
+                sql: `
+                SELECT TRIM(C.CODIGOCLIENTE) AS CODE, ${overlaySelect}
+                FROM ${appTableName} C
+                WHERE C.CODIGOCLIENTE IN (${clientInSql})
+                  ${overlayDates}
+                GROUP BY C.CODIGOCLIENTE, TRIM(C.ESTADO)
+            `,
+            },
+            {
+                suffix: 'alb',
+                sql: `
+                SELECT TRIM(C.CODIGOCLIENTEALBARAN) AS CODE, ${overlaySelect}
+                FROM ${appTableName} C
+                WHERE C.CODIGOCLIENTE = CAST('' AS CHAR(10))
+                  AND C.CODIGOCLIENTEALBARAN IN (${clientInSql})
+                  ${overlayDates}
+                GROUP BY C.CODIGOCLIENTEALBARAN, TRIM(C.ESTADO)
+            `,
+            },
+        ];
+        for (const overlay of overlays) {
             try {
                 const appRows = await cachedQuery(
                     queryWithParams,
-                    chunkSql,
-                    `${orderCacheKey}:app:${offset}`,
+                    overlay.sql,
+                    `${orderCacheKey}:app:${overlay.suffix}`,
                     TTL.REALTIME,
-                    chunkParams,
+                    overlayParams,
                 );
                 (appRows || []).forEach((row) => applyRuteroAppOrderStatusRow(statusMap, orderDate, row));
             } catch (_appErr) {
