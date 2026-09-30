@@ -64,10 +64,12 @@ Future<void> runRuteroPostConfirmationEffects({
   required Future<void> Function() printTicket,
   required Future<void> Function() shareReceipt,
 }) async {
+  // PERF: print + document picker must never stall the confirmation UX
+  // (PDF generation can take 60–90s). Both are fire-and-forget best-effort.
   if (shouldPrint) {
     unawaited(Future<void>.sync(printTicket).catchError((Object _) {}));
   }
-  await shareReceipt();
+  unawaited(Future<void>.sync(shareReceipt).catchError((Object _) {}));
 }
 
 /// Starts non-critical read invalidation after the server has durably accepted
@@ -2400,10 +2402,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           '_journalIdempotencyKey': prepared.idempotencyKey,
         },
         // Idempotency token is stable in the journal, so a transient response
-        // loss can be retried without creating a second delivery/cobro.
-        // Client slightly above backend 30s so a 504 JSON arrives before Dio.
+        // loss can be retried by the driver without creating a second
+        // delivery/cobro. maxRetries:0 avoids Dio auto-retry on 504 (~40s+40s).
         receiveTimeout: const Duration(seconds: 40),
-        maxRetries: 1,
+        maxRetries: 0,
       );
       if (response['queued'] == true) {
         SyncQueueService.confirmDeliveryReconciler ??=

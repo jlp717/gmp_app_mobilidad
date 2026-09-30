@@ -10,6 +10,7 @@ import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/futuristic_week_navigator.dart';
@@ -355,8 +356,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         backgroundColor: AppTheme.raisedSurface,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          // PERF: ~1 screen of cache for delivery cards (variable height).
-          cacheExtent: 600,
+          // PERF: ~1.5 screens of cache so landscape dense lists scroll without
+          // jank when cards enter the viewport.
+          cacheExtent: MediaQuery.sizeOf(context).height * 1.5,
           slivers: [
             // HEADER (COMPACT)
             SliverToBoxAdapter(
@@ -1088,6 +1090,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
 
 /// EARS-11: pending/failed offline operations indicator with counter and
 /// access to the sync status sheet. Hidden while the queue is empty.
+/// Shows live drain progress so the chip never looks "frozen" during sync.
 class _PendingSyncChip extends StatelessWidget {
   const _PendingSyncChip();
 
@@ -1101,45 +1104,94 @@ class _PendingSyncChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: OfflineSyncNotifier.pendingCount,
-      builder: (context, pending, _) {
+    return ValueListenableBuilder<OfflineSyncProgress?>(
+      valueListenable: OfflineSyncBridge.progress,
+      builder: (context, syncProgress, _) {
         return ValueListenableBuilder<int>(
-          valueListenable: OfflineSyncNotifier.failedCount,
-          builder: (context, failed, _) {
-            if (pending <= 0 && failed <= 0) return const SizedBox.shrink();
-            final hasFailures = failed > 0;
-            return Semantics(
-              button: true,
-              label: 'Sincronización: $pending pendientes, $failed con error',
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ActionChip(
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    avatar: Icon(
-                      hasFailures
-                          ? Icons.error_outline
-                          : Icons.cloud_upload_outlined,
-                      size: 18,
-                      color: hasFailures ? AppTheme.error : AppTheme.warning,
-                    ),
-                    label: Text(
-                      hasFailures
-                          ? '$pending pendientes · $failed con error'
-                          : '$pending pendientes de sincronizar',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: hasFailures ? AppTheme.error : AppTheme.warning,
+          valueListenable: OfflineSyncNotifier.pendingCount,
+          builder: (context, pending, _) {
+            return ValueListenableBuilder<int>(
+              valueListenable: OfflineSyncNotifier.failedCount,
+              builder: (context, failed, _) {
+                final draining = syncProgress != null;
+                if (!draining && pending <= 0 && failed <= 0) {
+                  return const SizedBox.shrink();
+                }
+                final hasFailures = failed > 0;
+                final label = draining
+                    ? (syncProgress.message)
+                    : hasFailures
+                        ? '$pending pendientes · $failed con error'
+                        : '$pending pendientes de sincronizar';
+                return Semantics(
+                  button: true,
+                  label: draining
+                      ? 'Sincronizando: ${syncProgress.message}'
+                      : 'Sincronización: $pending pendientes, $failed con error',
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ActionChip(
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            avatar: draining
+                                ? SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      value: syncProgress.fraction,
+                                      color: AppTheme.info,
+                                    ),
+                                  )
+                                : Icon(
+                                    hasFailures
+                                        ? Icons.error_outline
+                                        : Icons.cloud_upload_outlined,
+                                    size: 18,
+                                    color: hasFailures
+                                        ? AppTheme.error
+                                        : AppTheme.warning,
+                                  ),
+                            label: Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: draining
+                                    ? AppTheme.info
+                                    : hasFailures
+                                        ? AppTheme.error
+                                        : AppTheme.warning,
+                              ),
+                            ),
+                            onPressed: () => _openSheet(context),
+                          ),
+                          if (draining && syncProgress.fraction != null) ...[
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              width: 220,
+                              child: LinearProgressIndicator(
+                                value: syncProgress.fraction,
+                                minHeight: 2,
+                                color: AppTheme.info,
+                                backgroundColor:
+                                    AppTheme.info.withValues(alpha: 0.15),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    onPressed: () => _openSheet(context),
                   ),
-                ),
-              ),
+                );
+              },
             );
           },
         );

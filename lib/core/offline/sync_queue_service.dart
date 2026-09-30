@@ -114,6 +114,19 @@ class SyncQueueService {
   SyncQueueService._();
   static const String _boxName = 'sync_queue';
   static const int _maxAttempts = SyncMutationPolicy.defaultMaxAttempts;
+
+  /// Independent ops of the same type drain concurrently (idempotent keys).
+  /// Cross-type groups also run in parallel so wall-clock ≈ max(type buckets).
+  /// Keep ≤3 to avoid DB2 stampede.
+  static const int defaultMaxConcurrentPerType = 3;
+
+  /// Slightly above backend confirm 30s so a 504 JSON arrives before Dio aborts.
+  static const Duration drainReceiveTimeout = Duration(seconds: 40);
+  static const Duration drainSendTimeout = Duration(seconds: 40);
+
+  /// Drain owns retry/backoff — never let Dio re-hit 504 (felt as ~70–80s).
+  static const int drainMaxRetries = 0;
+
   static const Duration _maxAge =
       Duration(days: 7); // Stale operations require manual review.
   static const String _anonymousScope = 'anonymous';
@@ -212,7 +225,15 @@ class SyncQueueService {
 
   /// Process queue with strong server-acceptance verification.
   /// Never silently drops: dequeue only on verified success / idempotent 409.
-  Future<SyncProcessResult> processAllWithResult() async {
+  ///
+  /// PERF: eligible ops are drained by type in parallel pools (up to
+  /// [defaultMaxConcurrentPerType] workers per type). Different types run
+  /// concurrently so N mixed pending ≈ ceil(N_type / concurrency) round-trips,
+  /// not sum(N).
+  Future<SyncProcessResult> processAllWithResult({
+    int maxConcurrentPerType = defaultMaxConcurrentPerType,
+    void Function(int done, int total)? onProgress,
+  }) async {
     final ops = pending;
     if (ops.isEmpty) {
       return SyncProcessResult(
@@ -225,8 +246,11 @@ class SyncQueueService {
     var successCount = 0;
     var skippedBackoff = 0;
     var processed = 0;
+    var eligibleTotal = 0;
     final now = DateTime.now();
+    final concurrency = maxConcurrentPerType.clamp(1, 8);
 
+    final eligibleByType = <String, List<SyncOperation>>{};
     for (final op in ops) {
       if (op.isFailed) {
         debugPrint(
@@ -246,6 +270,11 @@ class SyncQueueService {
         continue;
       }
 
+      eligibleByType.putIfAbsent(op.type, () => <SyncOperation>[]).add(op);
+      eligibleTotal++;
+    }
+
+    Future<void> processOne(SyncOperation op) async {
       final startedAt = DateTime.now();
       int? httpStatus;
       try {
@@ -303,12 +332,7 @@ class SyncQueueService {
               error: 'idempotent_conflict:${apiError.code}',
             );
             debugPrint('[SyncQueue] Idempotent 409 accepted: ${op.type}');
-            // PERF: yield so sync progress / animations keep painting.
-            processed++;
-            if (processed % 2 == 0) {
-              await Future<void>.delayed(Duration.zero);
-            }
-            continue;
+            return;
           }
         }
 
@@ -346,13 +370,38 @@ class SyncQueueService {
           success: false,
           error: op.lastError,
         );
-      }
-      // PERF: mutations stay sequential (ordering/idempotency) but yield every
-      // 2 ops so the UI isolate can paint progress instead of freezing.
-      processed++;
-      if (processed % 2 == 0) {
+      } finally {
+        // Yield every op so progress / animations keep painting under load.
+        processed++;
+        onProgress?.call(processed, eligibleTotal);
         await Future<void>.delayed(Duration.zero);
       }
+    }
+
+    Future<void> drainType(List<SyncOperation> typeOps) async {
+      var nextIndex = 0;
+      Future<void> worker() async {
+        while (true) {
+          if (nextIndex >= typeOps.length) return;
+          final claim = nextIndex;
+          nextIndex = claim + 1;
+          await processOne(typeOps[claim]);
+        }
+      }
+
+      final workers = concurrency.clamp(1, typeOps.length);
+      await Future.wait(List.generate(workers, (_) => worker()));
+    }
+
+    if (eligibleByType.isNotEmpty) {
+      debugPrint(
+        '[SyncQueue] Parallel drain types=${eligibleByType.keys.join(",")} '
+        'concurrency=$concurrency timeout=${drainReceiveTimeout.inSeconds}s '
+        'maxRetries=$drainMaxRetries',
+      );
+      await Future.wait(
+        eligibleByType.values.map(drainType),
+      );
     }
 
     return SyncProcessResult(
@@ -425,7 +474,11 @@ class SyncQueueService {
       final options = Options(
         headers:
             op.headers == null ? null : Map<String, String>.from(op.headers!),
+        receiveTimeout: drainReceiveTimeout,
+        sendTimeout: drainSendTimeout,
         extra: <String, dynamic>{
+          // Queue backoff owns retries — avoid Dio 504 double-hit (~80s feel).
+          'maxRetries': drainMaxRetries,
           if (op.type == 'confirm_delivery' ||
               op.type == 'register_cobro' ||
               (op.headers?.containsKey('Idempotency-Key') ?? false))

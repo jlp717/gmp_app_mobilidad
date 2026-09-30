@@ -86,21 +86,26 @@ class OfflineSyncBridge {
 
       await Future.wait<void>([
         () async {
-          _setProgress(
-            const OfflineSyncProgress(
-              phase: 'queue',
-              message: 'Enviando entregas y cobros…',
-              fraction: 0.15,
-            ),
+          queue = await SyncQueueService.instance.processAllWithResult(
+            onProgress: (done, total) {
+              if (total <= 0) return;
+              final fraction = 0.1 + (0.55 * (done / total));
+              _setProgress(
+                OfflineSyncProgress(
+                  phase: 'queue',
+                  message: 'Enviando entregas y cobros ($done/$total)…',
+                  fraction: fraction.clamp(0.1, 0.65),
+                ),
+              );
+            },
           );
-          queue = await SyncQueueService.instance.processAllWithResult();
         }(),
         () async {
           _setProgress(
             const OfflineSyncProgress(
               phase: 'pedidos',
               message: 'Enviando pedidos offline…',
-              fraction: 0.2,
+              fraction: 0.25,
             ),
           );
           await PedidosOfflineService.init();
