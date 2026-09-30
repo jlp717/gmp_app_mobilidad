@@ -5,6 +5,7 @@ library;
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/performance/scroll_cache_extent.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
@@ -253,9 +254,14 @@ class _ArticlesPageState extends State<ArticlesPage>
                               child: ListView.builder(
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 12),
+                                cacheExtent: denseScrollCacheExtent(
+                                  MediaQuery.sizeOf(context).height,
+                                ),
+                                addAutomaticKeepAlives: false,
                                 itemCount: _articles.length,
-                                itemBuilder: (_, i) =>
-                                    _articleCard(_articles[i]),
+                                itemBuilder: (_, i) => RepaintBoundary(
+                                  child: _articleCard(_articles[i]),
+                                ),
                               ),
                             ),
             ),

@@ -6,6 +6,7 @@ import 'package:gmp_app_mobilidad/core/cache/fresh_fetch.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/performance/scroll_cache_extent.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
@@ -2938,15 +2939,58 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               final gap = Responsive.denseListSpacing(context);
               final compact = Responsive.useCompactTiles(context);
 
+              final cacheExtent = denseScrollCacheExtent(
+                MediaQuery.sizeOf(context).height,
+              );
+
               if (cols <= 1) {
                 return ListView.builder(
                   padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12),
+                  cacheExtent: cacheExtent,
+                  addAutomaticKeepAlives: false,
                   itemCount: filteredClients.length,
                   itemBuilder: (context, index) {
                     final client = filteredClients[index];
-                    return _ClientCard(
+                    return RepaintBoundary(
+                      child: _ClientCard(
+                        client: client,
+                        compact: compact,
+                        showMargin: widget.isJefeVentas,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EnhancedClientMatrixPage(
+                              clientCode: (client['code'] as String?) ?? '',
+                              clientName:
+                                  (client['name'] as String?) ?? 'Cliente',
+                              isJefeVentas: widget.isJefeVentas,
+                              vendedorCodes: _activeVendedorCode,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }
+
+              return GridView.builder(
+                padding: EdgeInsets.symmetric(horizontal: gap + 2, vertical: 4),
+                cacheExtent: cacheExtent,
+                addAutomaticKeepAlives: false,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: cols,
+                  mainAxisExtent: compact ? 132 : 160,
+                  mainAxisSpacing: gap,
+                  crossAxisSpacing: gap,
+                ),
+                itemCount: filteredClients.length,
+                itemBuilder: (context, index) {
+                  final client = filteredClients[index];
+                  return RepaintBoundary(
+                    child: _ClientCard(
                       client: client,
-                      compact: compact,
+                      compact: true,
                       showMargin: widget.isJefeVentas,
                       onTap: () => Navigator.push(
                         context,
@@ -2958,36 +3002,6 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                             isJefeVentas: widget.isJefeVentas,
                             vendedorCodes: _activeVendedorCode,
                           ),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              }
-
-              return GridView.builder(
-                padding: EdgeInsets.symmetric(horizontal: gap + 2, vertical: 4),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: cols,
-                  mainAxisExtent: compact ? 132 : 160,
-                  mainAxisSpacing: gap,
-                  crossAxisSpacing: gap,
-                ),
-                itemCount: filteredClients.length,
-                itemBuilder: (context, index) {
-                  final client = filteredClients[index];
-                  return _ClientCard(
-                    client: client,
-                    compact: true,
-                    showMargin: widget.isJefeVentas,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => EnhancedClientMatrixPage(
-                          clientCode: (client['code'] as String?) ?? '',
-                          clientName: (client['name'] as String?) ?? 'Cliente',
-                          isJefeVentas: widget.isJefeVentas,
-                          vendedorCodes: _activeVendedorCode,
                         ),
                       ),
                     ),

@@ -3,6 +3,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:gmp_app_mobilidad/core/performance/scroll_cache_extent.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/application/load_planner_provider.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
@@ -479,15 +480,19 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 4),
+      cacheExtent: denseScrollCacheExtent(MediaQuery.sizeOf(context).height),
+      addAutomaticKeepAlives: false,
       itemCount: summaries.length,
       itemBuilder: (_, i) {
         final s = summaries[i];
-        return _ClientRow(
-          summary: s,
-          truck: planner.truck,
-          onExclude: () => ref
-              .read(loadPlannerProvider.notifier)
-              .excludeByClient(s.clientCode),
+        return RepaintBoundary(
+          child: _ClientRow(
+            summary: s,
+            truck: planner.truck,
+            onExclude: () => ref
+                .read(loadPlannerProvider.notifier)
+                .excludeByClient(s.clientCode),
+          ),
         );
       },
     );
@@ -530,6 +535,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 4),
+      cacheExtent: denseScrollCacheExtent(MediaQuery.sizeOf(context).height),
+      addAutomaticKeepAlives: false,
       itemCount: orders.length,
       itemBuilder: (_, i) {
         final entry = orders[i];
@@ -537,20 +544,22 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
         final firstBox = entry.value.first;
         final totalWeight = entry.value.fold<double>(0, (s, b) => s + b.weight);
 
-        return _OrderRow(
-          orderNumber: entry.key,
-          label: firstBox.label,
-          clientCode: firstBox.clientCode,
-          boxCount: entry.value.length,
-          totalWeight: totalWeight,
-          isExcluded: isExcluded,
-          onToggle: () {
-            if (isExcluded) {
-              ref.read(loadPlannerProvider.notifier).includeOrder(entry.key);
-            } else {
-              ref.read(loadPlannerProvider.notifier).excludeOrder(entry.key);
-            }
-          },
+        return RepaintBoundary(
+          child: _OrderRow(
+            orderNumber: entry.key,
+            label: firstBox.label,
+            clientCode: firstBox.clientCode,
+            boxCount: entry.value.length,
+            totalWeight: totalWeight,
+            isExcluded: isExcluded,
+            onToggle: () {
+              if (isExcluded) {
+                ref.read(loadPlannerProvider.notifier).includeOrder(entry.key);
+              } else {
+                ref.read(loadPlannerProvider.notifier).excludeOrder(entry.key);
+              }
+            },
+          ),
         );
       },
     );
@@ -575,36 +584,40 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 4),
+      cacheExtent: denseScrollCacheExtent(MediaQuery.sizeOf(context).height),
+      addAutomaticKeepAlives: false,
       itemCount: overflow.length,
       itemBuilder: (_, i) {
         final box = overflow[i];
-        return ListTile(
-          dense: true,
-          leading: Icon(
-            Icons.warning_rounded,
-            size: 16,
-            color: AppTheme.error.withValues(alpha: 0.7),
-          ),
-          title: Text(
-            box.label,
-            style: TextStyle(
-              fontSize: 12,
-              color: AppTheme.textSecondary,
+        return RepaintBoundary(
+          child: ListTile(
+            dense: true,
+            leading: Icon(
+              Icons.warning_rounded,
+              size: 16,
+              color: AppTheme.error.withValues(alpha: 0.7),
             ),
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Text(
-            '${box.weight.toStringAsFixed(1)} kg  |  ${box.clientCode}',
-            style: TextStyle(
-              fontSize: 10,
-              color: AppTheme.textTertiary,
+            title: Text(
+              box.label,
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          trailing: Text(
-            '#${box.orderNumber}',
-            style: TextStyle(
-              fontSize: 10,
-              color: AppTheme.textTertiary,
+            subtitle: Text(
+              '${box.weight.toStringAsFixed(1)} kg  |  ${box.clientCode}',
+              style: TextStyle(
+                fontSize: 10,
+                color: AppTheme.textTertiary,
+              ),
+            ),
+            trailing: Text(
+              '#${box.orderNumber}',
+              style: TextStyle(
+                fontSize: 10,
+                color: AppTheme.textTertiary,
+              ),
             ),
           ),
         );
