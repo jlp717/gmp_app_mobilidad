@@ -1686,6 +1686,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         });
 
     } catch (error) {
+        if (error?.matrixSql) logger.error(`[MATRIX SQL] ${error.matrixSql}`);
         const odbcState = (error?.odbcErrors || []).map((entry) => entry.state).find(Boolean);
         const code = odbcState === '22003'
             ? 'OBJECTIVES_MATRIX_NUMERIC_OVERFLOW'

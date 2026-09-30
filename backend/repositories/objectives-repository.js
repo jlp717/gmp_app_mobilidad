@@ -212,7 +212,7 @@ function fetchLacMonthSales(year, month, clause, params, db = { queryWithParams 
 function fetchMatrixContact(clientCode, db = { queryWithParams }) {
     return db.queryWithParams(`
                 SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2
-                FROM ${comercialErpTable('CLI')} WHERE CODIGOCLIENTE = ? FETCH FIRST 1 ROWS ONLY
+                FROM ${comercialErpTable('CLI')} WHERE CODIGOCLIENTE = CAST(? AS CHAR(10)) FETCH FIRST 1 ROWS ONLY
             `, [clientCode]);
 }
 
@@ -270,7 +270,7 @@ function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, monthEnd, f
                     CAST(AVG(CAST(S.LCPRTC AS DECFLOAT(34))) AS DOUBLE) AS AVG_CLIENT_TARIFF,
                     CAST(AVG(CAST(S.LCPRT1 AS DECFLOAT(34))) AS DOUBLE) AS AVG_BASE_TARIFF
                 FROM ${comercialErpTable('LACLAE')} S
-                WHERE S.LCCDCL = ?
+                WHERE S.LCCDCL = CAST(? AS CHAR(10))
                   AND S.LCAADC IN (${uniqueYears.map(() => '?').join(',')})
                   AND S.LCMMDC BETWEEN ? AND ?
                   AND ${salesFilter}
@@ -297,7 +297,10 @@ function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, monthEnd, f
               ${filterConditions}
             ORDER BY L.SALES DESC
             FETCH FIRST 1000 ROWS ONLY
-        `, [clientCode, ...uniqueYears, monthStart, monthEnd, ...filterParams]);
+        `, [clientCode, ...uniqueYears, monthStart, monthEnd, ...filterParams]).catch((error) => {
+            error.matrixSql = 'matrix product rows';
+            throw error;
+        });
 }
 
 function fetchMatrixFamilyNames(db = { query }) {

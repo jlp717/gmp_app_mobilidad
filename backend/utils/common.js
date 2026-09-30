@@ -455,6 +455,11 @@ async function lookupClientPortfolioVendorCode(clientCode) {
     return vendorCodesFromRows(rows);
 }
 
+function normalizeCode(value) {
+    const raw = String(value || '').trim().toUpperCase();
+    return raw.replace(/^0+/, '') || raw;
+}
+
 async function lookupClientAssignedVendorCodes(clientCode, earlyAllowCodes) {
     const client = String(clientCode || '').trim().substring(0, 10);
     if (!client) return [];
