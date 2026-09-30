@@ -16,45 +16,6 @@ const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { LACLAE_SALES_FILTER } = require('../utils/common');
 const { assertIdentifier } = require('../utils/sql-identifiers');
 
-function freshMatrixConnectionString() {
-    const uid = process.env.ODBC_UID;
-    const pwd = process.env.ODBC_PWD;
-    if (!uid || !pwd) return null;
-    const dsn = process.env.ODBC_DSN || 'GMP';
-    return `DSN=${dsn};UID=${uid};PWD=${pwd};NAM=1;CCSID=1208;`;
-}
-
-function withBothKeyCases(rows) {
-    if (!Array.isArray(rows)) return rows;
-    for (const row of rows) {
-        if (!row || typeof row !== 'object') continue;
-        for (const key of Object.keys(row)) {
-            const upper = key.toUpperCase();
-            const lower = key.toLowerCase();
-            if (upper !== key && !(upper in row)) row[upper] = row[key];
-            if (lower !== key && !(lower in row)) row[lower] = row[key];
-        }
-    }
-    return rows;
-}
-
-// El pool largo de la API devuelve SQLSTATE 22003 en esta sentencia aunque
-// una conexión nueva la ejecuta bien. La evolución abre la suya y la cierra.
-async function queryMatrixRows(db, sql, params) {
-    if (!db || db.queryWithParams !== queryWithParams) {
-        return db.queryWithParams(sql, params);
-    }
-    const connectionString = freshMatrixConnectionString();
-    if (!connectionString) return db.queryWithParams(sql, params);
-    const odbc = require('odbc');
-    const connection = await odbc.connect(connectionString);
-    try {
-        return withBothKeyCases(await connection.query(sql, params));
-    } finally {
-        try { await connection.close(); } catch (_closeError) { /* la query ya respondió */ }
-    }
-}
-
 function fetchObjectiveVendorClients(vendorCode, col, year, db = { queryWithParams }) {
     return db.queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
@@ -268,87 +229,8 @@ async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, month
     // SUM/AVG de DECIMAL revienta con SQLSTATE 22003 (precisión o desbordamiento
     // al cruzar ART/ARTX) y la evolución de pedidos responde 500 para cualquier rol.
     const salesFilter = LACLAE_SALES_FILTER.replace(/L\./g, 'S.');
-    const params = [clientCode, ...uniqueYears, monthStart, monthEnd, ...filterParams];
-    const preciseSql = `
-            SELECT
-                L.LCCDRF as PRODUCT_CODE,
-                COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), L.LCDESC) as PRODUCT_NAME,
-                COALESCE(A.CODIGOFAMILIA, 'SIN_FAM') as FAMILY_CODE,
-                COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as SUBFAMILY_CODE,
-                COALESCE(TRIM(A.UNIDADMEDIDA), 'UDS') as UNIT_TYPE,
-                L.YEAR as YEAR,
-                L.MONTH as MONTH,
-                L.SALES as SALES,
-                L.COST as COST,
-                L.UNITS as UNITS,
-                L.HAS_SPECIAL_PRICE as HAS_SPECIAL_PRICE,
-                L.HAS_DISCOUNT as HAS_DISCOUNT,
-                L.AVG_DISCOUNT_PCT as AVG_DISCOUNT_PCT,
-                CAST(NULL AS DECIMAL(10,2)) as AVG_DISCOUNT_EUR,
-                L.AVG_CLIENT_TARIFF as AVG_CLIENT_TARIFF,
-                L.AVG_BASE_TARIFF as AVG_BASE_TARIFF,
-                COALESCE(TRIM(AX.FILTRO01), '') as FI1_CODE,
-                COALESCE(TRIM(AX.FILTRO02), '') as FI2_CODE,
-                COALESCE(TRIM(AX.FILTRO03), '') as FI3_CODE,
-                COALESCE(TRIM(AX.FILTRO04), '') as FI4_CODE,
-                COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as FI5_CODE
-            FROM (
-                SELECT
-                    S.LCCDRF AS LCCDRF,
-                    COALESCE(MAX(TRIM(S.LCDESC)), '') AS LCDESC,
-                    S.LCAADC AS YEAR,
-                    S.LCMMDC AS MONTH,
-                    SUM(S.LCIMVT) AS SALES,
-                    SUM(S.LCIMCT) AS COST,
-                    SUM(S.LCCTUD) AS UNITS,
-                    SUM(CASE
-                        WHEN S.LCPRTC <> 0 AND S.LCPRT1 <> 0 AND S.LCPRTC <> S.LCPRT1
-                        THEN 1 ELSE 0 END) AS HAS_SPECIAL_PRICE,
-                    SUM(CASE WHEN S.LCPJDT <> 0 THEN 1 ELSE 0 END) AS HAS_DISCOUNT,
-                    AVG(CASE WHEN S.LCPJDT <> 0 THEN S.LCPJDT ELSE NULL END) AS AVG_DISCOUNT_PCT,
-                    AVG(S.LCPRTC) AS AVG_CLIENT_TARIFF,
-                    AVG(S.LCPRT1) AS AVG_BASE_TARIFF
-                FROM ${comercialErpTable('LACLAE')} S
-                WHERE S.LCCDCL = CAST(? AS CHAR(10))
-                  AND S.LCAADC IN (${uniqueYears.map(() => '?').join(',')})
-                  AND S.LCMMDC BETWEEN ? AND ?
-                  AND ${salesFilter}
-                GROUP BY S.LCCDRF, S.LCAADC, S.LCMMDC
-            ) L
-            LEFT JOIN LATERAL (
-                SELECT
-                    DESCRIPCIONARTICULO,
-                    CODIGOFAMILIA,
-                    CODIGOSUBFAMILIA,
-                    UNIDADMEDIDA,
-                    CODIGOSECCIONLARGA
-                FROM ${comercialErpTable('ART')} A
-                WHERE A.CODIGOARTICULO = L.LCCDRF
-                FETCH FIRST 1 ROW ONLY
-            ) A ON 1 = 1
-            LEFT JOIN LATERAL (
-                SELECT FILTRO01, FILTRO02, FILTRO03, FILTRO04
-                FROM ${comercialErpTable('ARTX')} AX
-                WHERE AX.CODIGOARTICULO = L.LCCDRF
-                FETCH FIRST 1 ROW ONLY
-            ) AX ON 1 = 1
-            WHERE 1 = 1
-              ${filterConditions}
-            ORDER BY L.SALES DESC
-            FETCH FIRST 1000 ROWS ONLY
-        `;
-    try {
-        return await queryMatrixRows(db, preciseSql, params);
-    } catch (error) {
-        const overflow = (error?.odbcErrors || []).some((entry) => entry.state === '22003');
-        if (!overflow) {
-            error.matrixSql = 'matrix product rows';
-            throw error;
-        }
-        const detail = (error.odbcErrors || []).map((entry) => `${entry.state}:${entry.code}:${entry.message || ''}`).join(' | ').slice(0, 300);
-        logger.error(`[MATRIX] precise aggregate overflow, retrying plain sums ${detail}`);
-        const yearMarks = uniqueYears.map(() => '?').join(',');
-        const plainSql = `
+    const yearMarks = uniqueYears.map(() => '?').join(',');
+    const plainSql = `
             SELECT
                 TRIM(S.LCCDRF) AS PRODUCT_CODE,
                 COALESCE(MAX(TRIM(S.LCDESC)), '') AS PRODUCT_NAME,
@@ -357,9 +239,9 @@ async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, month
                 CAST('UDS' AS VARCHAR(5)) AS UNIT_TYPE,
                 S.LCAADC AS YEAR,
                 S.LCMMDC AS MONTH,
-                CAST(SUM(S.LCIMVT) AS DECIMAL(31,2)) AS SALES,
-                CAST(SUM(S.LCIMCT) AS DECIMAL(31,2)) AS COST,
-                CAST(SUM(S.LCCTUD) AS DECIMAL(31,2)) AS UNITS,
+                SUM(S.LCIMVT) AS SALES,
+                SUM(S.LCIMCT) AS COST,
+                SUM(S.LCCTUD) AS UNITS,
                 CAST(0 AS INTEGER) AS HAS_SPECIAL_PRICE,
                 CAST(0 AS INTEGER) AS HAS_DISCOUNT,
                 CAST(NULL AS DECIMAL(15,2)) AS AVG_DISCOUNT_PCT,
@@ -380,9 +262,12 @@ async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, month
             ORDER BY SALES DESC
             FETCH FIRST 1000 ROWS ONLY
         `;
-        const plainParams = [clientCode, ...uniqueYears, monthStart, monthEnd];
-        const rows = await queryMatrixRows(db, plainSql, plainParams);
+    try {
+        const rows = await db.queryWithParams(plainSql, [clientCode, ...uniqueYears, monthStart, monthEnd]);
         return attachMatrixArticleFields(rows, db);
+    } catch (error) {
+        error.matrixSql = 'matrix product rows';
+        throw error;
     }
 }
 
