@@ -23,8 +23,8 @@ test('matrix sales aggregate in decfloat before the article join', async () => {
 
     expect(calls).toHaveLength(1);
     const sql = calls[0].sql;
-    expect(sql).toContain('AS DOUBLE');
-    expect(sql).not.toMatch(/SUM\(S\.LCIMVT\)/);
+    expect(sql).not.toContain('AS DOUBLE');
+    expect(sql).toContain('SUM(S.LCIMVT) AS SALES');
     expect(sql).not.toMatch(/SUM\(L\.LCIMVT\)/);
     expect(sql.indexOf('GROUP BY S.LCCDRF')).toBeLessThan(sql.indexOf('LEFT JOIN LATERAL'));
     expect(calls[0].params[0]).toBe('4300007540');
@@ -48,6 +48,6 @@ test('matrix retries plain sums when the precise aggregate overflows', async () 
 
     const rows = await fetchMatrixProductRows('4300000362', [2026], 1, 12, '', [], db);
     expect(rows).toHaveLength(1);
-    expect(calls[1]).toContain('CAST(SUM(S.LCIMVT) AS DOUBLE) AS SALES');
+    expect(calls[1]).toContain('CAST(SUM(S.LCIMVT) AS DECIMAL(31,2)) AS SALES');
     expect(calls[1]).not.toContain('DECFLOAT');
 });

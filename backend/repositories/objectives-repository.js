@@ -259,18 +259,16 @@ async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, month
                     COALESCE(MAX(TRIM(S.LCDESC)), '') AS LCDESC,
                     S.LCAADC AS YEAR,
                     S.LCMMDC AS MONTH,
-                    CAST(SUM(CAST(S.LCIMVT AS DECFLOAT(34))) AS DOUBLE) AS SALES,
-                    CAST(SUM(CAST(S.LCIMCT AS DECFLOAT(34))) AS DOUBLE) AS COST,
-                    CAST(SUM(CAST(S.LCCTUD AS DECFLOAT(34))) AS DOUBLE) AS UNITS,
-                    CAST(SUM(CASE
-                        WHEN CAST(S.LCPRTC AS DECFLOAT(34)) <> 0
-                         AND CAST(S.LCPRT1 AS DECFLOAT(34)) <> 0
-                         AND CAST(S.LCPRTC AS DECFLOAT(34)) <> CAST(S.LCPRT1 AS DECFLOAT(34))
-                        THEN 1 ELSE 0 END) AS DOUBLE) AS HAS_SPECIAL_PRICE,
-                    CAST(SUM(CASE WHEN CAST(S.LCPJDT AS DECFLOAT(34)) <> 0 THEN 1 ELSE 0 END) AS DOUBLE) AS HAS_DISCOUNT,
-                    CAST(AVG(CASE WHEN CAST(S.LCPJDT AS DECFLOAT(34)) <> 0 THEN CAST(S.LCPJDT AS DECFLOAT(34)) ELSE NULL END) AS DOUBLE) AS AVG_DISCOUNT_PCT,
-                    CAST(AVG(CAST(S.LCPRTC AS DECFLOAT(34))) AS DOUBLE) AS AVG_CLIENT_TARIFF,
-                    CAST(AVG(CAST(S.LCPRT1 AS DECFLOAT(34))) AS DOUBLE) AS AVG_BASE_TARIFF
+                    SUM(S.LCIMVT) AS SALES,
+                    SUM(S.LCIMCT) AS COST,
+                    SUM(S.LCCTUD) AS UNITS,
+                    SUM(CASE
+                        WHEN S.LCPRTC <> 0 AND S.LCPRT1 <> 0 AND S.LCPRTC <> S.LCPRT1
+                        THEN 1 ELSE 0 END) AS HAS_SPECIAL_PRICE,
+                    SUM(CASE WHEN S.LCPJDT <> 0 THEN 1 ELSE 0 END) AS HAS_DISCOUNT,
+                    AVG(CASE WHEN S.LCPJDT <> 0 THEN S.LCPJDT ELSE NULL END) AS AVG_DISCOUNT_PCT,
+                    AVG(S.LCPRTC) AS AVG_CLIENT_TARIFF,
+                    AVG(S.LCPRT1) AS AVG_BASE_TARIFF
                 FROM ${comercialErpTable('LACLAE')} S
                 WHERE S.LCCDCL = CAST(? AS CHAR(10))
                   AND S.LCAADC IN (${uniqueYears.map(() => '?').join(',')})
@@ -320,9 +318,9 @@ async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, month
                 CAST('UDS' AS VARCHAR(5)) AS UNIT_TYPE,
                 S.LCAADC AS YEAR,
                 S.LCMMDC AS MONTH,
-                CAST(SUM(S.LCIMVT) AS DOUBLE) AS SALES,
-                CAST(SUM(S.LCIMCT) AS DOUBLE) AS COST,
-                CAST(SUM(S.LCCTUD) AS DOUBLE) AS UNITS,
+                CAST(SUM(S.LCIMVT) AS DECIMAL(31,2)) AS SALES,
+                CAST(SUM(S.LCIMCT) AS DECIMAL(31,2)) AS COST,
+                CAST(SUM(S.LCCTUD) AS DECIMAL(31,2)) AS UNITS,
                 CAST(0 AS INTEGER) AS HAS_SPECIAL_PRICE,
                 CAST(0 AS INTEGER) AS HAS_DISCOUNT,
                 CAST(NULL AS DECIMAL(15,2)) AS AVG_DISCOUNT_PCT,
