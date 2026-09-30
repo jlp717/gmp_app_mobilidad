@@ -16,6 +16,45 @@ const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { LACLAE_SALES_FILTER } = require('../utils/common');
 const { assertIdentifier } = require('../utils/sql-identifiers');
 
+function freshMatrixConnectionString() {
+    const uid = process.env.ODBC_UID;
+    const pwd = process.env.ODBC_PWD;
+    if (!uid || !pwd) return null;
+    const dsn = process.env.ODBC_DSN || 'GMP';
+    return `DSN=${dsn};UID=${uid};PWD=${pwd};NAM=1;CCSID=1208;`;
+}
+
+function withBothKeyCases(rows) {
+    if (!Array.isArray(rows)) return rows;
+    for (const row of rows) {
+        if (!row || typeof row !== 'object') continue;
+        for (const key of Object.keys(row)) {
+            const upper = key.toUpperCase();
+            const lower = key.toLowerCase();
+            if (upper !== key && !(upper in row)) row[upper] = row[key];
+            if (lower !== key && !(lower in row)) row[lower] = row[key];
+        }
+    }
+    return rows;
+}
+
+// El pool largo de la API devuelve SQLSTATE 22003 en esta sentencia aunque
+// una conexión nueva la ejecuta bien. La evolución abre la suya y la cierra.
+async function queryMatrixRows(db, sql, params) {
+    if (!db || db.queryWithParams !== queryWithParams) {
+        return db.queryWithParams(sql, params);
+    }
+    const connectionString = freshMatrixConnectionString();
+    if (!connectionString) return db.queryWithParams(sql, params);
+    const odbc = require('odbc');
+    const connection = await odbc.connect(connectionString);
+    try {
+        return withBothKeyCases(await connection.query(sql, params));
+    } finally {
+        try { await connection.close(); } catch (_closeError) { /* la query ya respondió */ }
+    }
+}
+
 function fetchObjectiveVendorClients(vendorCode, col, year, db = { queryWithParams }) {
     return db.queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
@@ -299,7 +338,7 @@ async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, month
             FETCH FIRST 1000 ROWS ONLY
         `;
     try {
-        return await db.queryWithParams(preciseSql, params);
+        return await queryMatrixRows(db, preciseSql, params);
     } catch (error) {
         const overflow = (error?.odbcErrors || []).some((entry) => entry.state === '22003');
         if (!overflow) {
@@ -342,7 +381,7 @@ async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, month
             FETCH FIRST 1000 ROWS ONLY
         `;
         const plainParams = [clientCode, ...uniqueYears, monthStart, monthEnd];
-        const rows = await db.queryWithParams(plainSql, plainParams);
+        const rows = await queryMatrixRows(db, plainSql, plainParams);
         return attachMatrixArticleFields(rows, db);
     }
 }
