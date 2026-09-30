@@ -55,7 +55,9 @@ function queryMatrixInChild(sql, params) {
                 return;
             }
             try {
-                resolve(JSON.parse(Buffer.concat(out).toString('utf8')));
+                const text = Buffer.concat(out).toString('utf8');
+                const line = text.split('\n').map((entry) => entry.trim()).reverse().find((entry) => entry.startsWith('['));
+                resolve(JSON.parse(line || text));
             } catch (parseError) {
                 reject(parseError);
             }
