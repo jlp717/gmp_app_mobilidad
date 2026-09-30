@@ -598,41 +598,10 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
     // Overlay: OR sargable sobre CODIGOCLIENTE / CODIGOCLIENTEALBARAN (CHAR(10)).
     // COALESCE+TRIM en WHERE impedía índice; SELECT/GROUP conservan fallback blank→albarán.
     const appClientExpr = `CASE WHEN C.CODIGOCLIENTE = CAST('' AS CHAR(10)) THEN C.CODIGOCLIENTEALBARAN ELSE C.CODIGOCLIENTE END`;
-    const appBranchSql = appTableName ? `
-        SELECT
-            TRIM(${appClientExpr}) AS CODE,
-            CAST('APP' AS VARCHAR(3)) AS SRC,
-            TRIM(C.ESTADO) AS ESTADO,
-            COUNT(*) AS TOTAL_COUNT,
-            MAX(C.ID) AS LAST_ORDER_ID,
-            MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER
-        FROM ${appTableName} C
-        WHERE (
-            C.CODIGOCLIENTE IN (${clientInSql})
-            OR C.CODIGOCLIENTEALBARAN IN (${clientInSql})
-          )
-          AND C.ANODOCUMENTO = ?
-          AND C.MESDOCUMENTO = ?
-          AND C.DIADOCUMENTO = ?
-          AND TRIM(C.ESTADO) IN (
-            'CONFIRMADO', 'ENVIADO', 'BORRADOR', 'CONFIRMANDO',
-            'PEND_APROB', 'PENDIENTE', 'PENDIENTE_APROBACION'
-          )
-          ${vendorFilterSql}
-        GROUP BY ${appClientExpr}, TRIM(C.ESTADO)
-    ` : null;
 
     const dateParams = [orderDate.year, orderDate.month, orderDate.day];
     const vendorParams = useVendorFilter ? vendorCodes : [];
     const cpcParams = [...paddedClients, ...dateParams, ...vendorParams];
-    const appParams = appBranchSql
-        ? [
-            ...paddedClients,
-            ...paddedClients,
-            ...dateParams,
-            ...vendorParams,
-        ]
-        : [];
     const orderCacheKey = `rutero:orders:v4:${orderDate.iso}:${ruteroBatchHash([...paddedClients, ...vendorCodes])}`;
     let degraded = false;
 
@@ -654,18 +623,54 @@ async function getRuteroOrderStatusMap(clientCodes, { vendedorCodes, orderDate }
         degraded = true;
     }
 
-    if (appBranchSql) {
-        try {
-            const appRows = await cachedQuery(
-                queryWithParams,
-                appBranchSql,
-                `${orderCacheKey}:app`,
-                TTL.REALTIME,
-                appParams,
-            );
-            (appRows || []).forEach((row) => applyRuteroAppOrderStatusRow(statusMap, orderDate, row));
-        } catch (_appErr) {
-            logger.warn('[RUTERO DAY] App overlay skipped (degraded order status)');
+    if (appTableName && paddedClients.length) {
+        // El overlay con dos IN de 30 clientes son 63 marcadores y el ODBC
+        // del pool real falla al preparar (HY000 -122). Eso abre el circuito
+        // y la evolución de pedidos responde 500. Lotes de 8 → 19 marcadores.
+        const overlayChunk = 8;
+        for (let offset = 0; offset < paddedClients.length; offset += overlayChunk) {
+            const chunk = paddedClients.slice(offset, offset + overlayChunk);
+            const chunkIn = buildRuteroInPlaceholders(chunk.length, 'CAST(? AS CHAR(10))');
+            const chunkVendorSql = useVendorFilter
+                ? ` AND C.CODIGOVENDEDOR IN (${buildRuteroInPlaceholders(vendorCodes.length, 'CAST(? AS CHAR(2))')})`
+                : '';
+            const chunkSql = `
+                SELECT
+                    TRIM(${appClientExpr}) AS CODE,
+                    CAST('APP' AS VARCHAR(3)) AS SRC,
+                    TRIM(C.ESTADO) AS ESTADO,
+                    COUNT(*) AS TOTAL_COUNT,
+                    MAX(C.ID) AS LAST_ORDER_ID,
+                    MAX(C.NUMEROPEDIDO) AS LAST_ORDER_NUMBER
+                FROM ${appTableName} C
+                WHERE (
+                    C.CODIGOCLIENTE IN (${chunkIn})
+                    OR C.CODIGOCLIENTEALBARAN IN (${chunkIn})
+                  )
+                  AND C.ANODOCUMENTO = ?
+                  AND C.MESDOCUMENTO = ?
+                  AND C.DIADOCUMENTO = ?
+                  AND TRIM(C.ESTADO) IN (
+                    'CONFIRMADO', 'ENVIADO', 'BORRADOR', 'CONFIRMANDO',
+                    'PEND_APROB', 'PENDIENTE', 'PENDIENTE_APROBACION'
+                  )
+                  ${chunkVendorSql}
+                GROUP BY ${appClientExpr}, TRIM(C.ESTADO)
+            `;
+            const chunkParams = [...chunk, ...chunk, ...dateParams, ...vendorParams];
+            try {
+                const appRows = await cachedQuery(
+                    queryWithParams,
+                    chunkSql,
+                    `${orderCacheKey}:app:${offset}`,
+                    TTL.REALTIME,
+                    chunkParams,
+                );
+                (appRows || []).forEach((row) => applyRuteroAppOrderStatusRow(statusMap, orderDate, row));
+            } catch (_appErr) {
+                logger.warn('[RUTERO DAY] App overlay skipped (degraded order status)');
+                break;
+            }
         }
     }
 
