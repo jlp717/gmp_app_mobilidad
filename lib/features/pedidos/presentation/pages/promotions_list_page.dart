@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -11,12 +12,16 @@ class PromotionsListPage extends StatefulWidget {
     required this.promotions,
     required this.onProductTap,
     super.key,
+    this.clientCode,
+    this.vendedorCodes,
     this.onAddGift,
     this.hasStockResolver,
     this.qtyInOrderResolver,
   });
   final List<PromotionItem> promotions;
   final Future<void> Function(String code, String name) onProductTap;
+  final String? clientCode;
+  final String? vendedorCodes;
   final Future<String?> Function(String code, String name, double qty)?
       onAddGift;
   final bool? Function(String code)? hasStockResolver;
@@ -29,15 +34,71 @@ class PromotionsListPage extends StatefulWidget {
 class _PromotionsListPageState extends State<PromotionsListPage> {
   String _search = '';
   String _typeFilter = 'TODAS';
+  String _statusFilter = 'TODAS';
   bool _onlyWithStock = false;
   bool _showFilters = true;
+  bool _loadingHistory = false;
+  String? _historyError;
+  late List<PromotionItem> _promotions;
+
+  @override
+  void initState() {
+    super.initState();
+    _promotions = List<PromotionItem>.from(widget.promotions);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadHistory();
+    });
+  }
+
+  Future<void> _loadHistory() async {
+    final clientCode = (widget.clientCode ?? '').trim();
+    if (clientCode.isEmpty) return;
+    setState(() {
+      _loadingHistory = true;
+      _historyError = null;
+    });
+    try {
+      final response = await ApiClient.get(
+        '/pedidos/promotions',
+        queryParameters: {
+          'clientCode': clientCode,
+          'includeHistory': '1',
+          if ((widget.vendedorCodes ?? '').trim().isNotEmpty)
+            'vendedorCodes': widget.vendedorCodes!.trim(),
+        },
+        cacheResponse: false,
+        forceRefresh: true,
+      );
+      final active = _readPromos(response['promotions']);
+      final history = _readPromos(response['history']);
+      if (!mounted) return;
+      setState(() {
+        _promotions = [...active, ...history];
+        _loadingHistory = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingHistory = false;
+        _historyError = 'No se pudieron cargar las promociones antiguas';
+      });
+    }
+  }
+
+  List<PromotionItem> _readPromos(Object? raw) {
+    final list = raw is List ? raw : const [];
+    return list
+        .whereType<Map>()
+        .map((item) => PromotionItem.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final groups = _buildGroups(widget.promotions);
+    final groups = _buildGroups(_promotions);
     final filtered = groups.where(_groupMatchesFilters).toList()
       ..sort((a, b) {
-        // GIFT promos first (more valuable), then by item count
+        if (a.active != b.active) return a.active ? -1 : 1;
         if (a.promoType != b.promoType) {
           return a.promoType == 'GIFT' ? -1 : 1;
         }
@@ -46,8 +107,8 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
         return a.promoDesc.compareTo(b.promoDesc);
       });
 
-    final totalPromos = groups.length;
-    final visiblePromos = filtered.length;
+    final nuevas = groups.where((group) => group.active).length;
+    final antiguas = groups.length - nuevas;
 
     // REQ-31 audit codigo (sin capturas dispositivo): Scaffold/AppBar opacos
     // alpha 1.0 via themedSurface (light=surface FFFFFFFF, dark=darkSurfaceLayer).
@@ -69,7 +130,9 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                '$visiblePromos${visiblePromos < totalPromos ? '/$totalPromos' : ''}',
+                antiguas > 0
+                    ? '$nuevas nuevas · $antiguas antiguas'
+                    : '$nuevas nuevas',
                 style: const TextStyle(
                   color: AppTheme.success,
                   fontSize: 12,
@@ -94,10 +157,25 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
       ),
       body: Column(
         children: [
+          if (_loadingHistory) const LinearProgressIndicator(minHeight: 2),
+          if (_historyError != null)
+            MaterialBanner(
+              content: Text(_historyError!),
+              leading: const Icon(Icons.warning_amber_rounded),
+              backgroundColor: AppColors.themedRaisedSurface,
+              actions: [
+                TextButton(
+                  onPressed: _loadHistory,
+                  child: const Text('Reintentar'),
+                ),
+              ],
+            ),
           if (_showFilters) _buildFilters(),
           Expanded(
             child: filtered.isEmpty
-                ? _buildEmptyState()
+                ? (_loadingHistory && _promotions.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : _buildEmptyState())
                 : LayoutBuilder(
                     builder: (context, constraints) {
                       final cols = Responsive.denseListCrossAxisCount(context);
@@ -136,11 +214,11 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
   }
 
   Widget _buildEmptyState() {
-    final hasAnyPromos = widget.promotions.isNotEmpty;
+    final hasAnyPromos = _promotions.isNotEmpty;
     return Semantics(
       label: hasAnyPromos
           ? 'No hay promociones con esos filtros'
-          : 'Sin promociones activas para este cliente hoy',
+          : 'Sin promociones vigentes ni antiguas para este cliente',
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -156,8 +234,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
               Text(
                 hasAnyPromos
                     ? 'No hay promociones con esos filtros'
-                    // REQ-25 tanda4: literal vacío informativo (nunca badge 0).
-                    : 'Sin promociones activas para este cliente hoy',
+                    : 'Sin promociones vigentes ni antiguas para este cliente',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 16,
@@ -169,7 +246,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
               Text(
                 hasAnyPromos
                     ? 'Prueba a cambiar los filtros o la busqueda'
-                    : 'Las promociones apareceran aqui cuando esten disponibles',
+                    : 'Cuando haya ofertas vigentes o antiguas de este cliente, apareceran aqui',
                 style: TextStyle(
                   color: AppTheme.textTertiary,
                   fontSize: 13,
@@ -183,6 +260,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     setState(() {
                       _search = '';
                       _typeFilter = 'TODAS';
+                      _statusFilter = 'TODAS';
                       _onlyWithStock = false;
                     });
                   },
@@ -235,6 +313,17 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
+                _buildStatusChip('TODAS', 'Vigentes y antiguas'),
+                const SizedBox(width: 6),
+                _buildStatusChip('VIGENTES', 'Vigentes'),
+                const SizedBox(width: 6),
+                _buildStatusChip('NO_VIGENTES', 'No vigentes'),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 20,
+                  child: VerticalDivider(width: 1, color: AppTheme.borderColor),
+                ),
+                const SizedBox(width: 8),
                 _buildTypeChip('TODAS', 'Todas', Icons.filter_list),
                 const SizedBox(width: 6),
                 _buildTypeChip('GIFT', 'Regalo', Icons.card_giftcard),
@@ -276,6 +365,26 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
     );
   }
 
+  Widget _buildStatusChip(String value, String label) {
+    final selected = _statusFilter == value;
+    final color = value == 'NO_VIGENTES' ? AppTheme.warning : AppTheme.success;
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      selectedColor: color.withValues(alpha: 0.2),
+      backgroundColor: AppTheme.softPanel,
+      labelStyle: TextStyle(
+        color: selected ? color : AppTheme.textSecondary,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+      side: BorderSide(color: selected ? color : AppTheme.borderColor),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      onSelected: (_) => setState(() => _statusFilter = value),
+    );
+  }
+
   Widget _buildTypeChip(String value, String label, IconData icon) {
     final selected = _typeFilter == value;
     return FilterChip(
@@ -313,274 +422,299 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
     final first = group.items.first;
     final hasProducts = group.items.any((i) => i.code.isNotEmpty);
 
-    return Card(
-      color: AppTheme.softPanel,
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: accentColor.withValues(alpha: 0.35)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: hasProducts
-            ? () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => PromotionDetailPage(
-                      promoType: group.promoType,
-                      promoCode: group.promoCode,
-                      promoDesc: group.promoDesc,
-                      dateFrom: group.dateFrom,
-                      dateTo: group.dateTo,
-                      minQty: group.minQty,
-                      giftQty: group.giftQty,
-                      cumulative: group.cumulative,
-                      items: group.items,
-                      onProductTap: widget.onProductTap,
-                      onAddGift: widget.onAddGift,
-                      hasStockResolver: widget.hasStockResolver,
-                      qtyInOrderResolver: widget.qtyInOrderResolver,
-                      giftSelectionLocked: group.hasFixedGift,
-                    ),
-                  ),
-                );
-              }
-            : null,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header row
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      isGift ? Icons.card_giftcard : Icons.local_offer,
-                      color: accentColor,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          group.promoDesc.isNotEmpty
-                              ? group.promoDesc
-                              : (isGift
-                                  ? 'Promocion regalo'
-                                  : 'Promocion precio'),
-                          style: TextStyle(
-                            color: accentColor,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (group.promoCode.isNotEmpty)
-                          Text(
-                            group.promoCode,
-                            style: TextStyle(
-                              color: AppTheme.textTertiary,
-                              fontSize: 11,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      isGift ? 'REGALO' : 'PRECIO',
-                      style: TextStyle(
-                        color: accentColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
+    final statusColor =
+        group.active ? AppTheme.success : AppTheme.textSecondary;
+    return Opacity(
+      opacity: group.active ? 1 : 0.62,
+      child: Card(
+        color: AppTheme.softPanel,
+        margin: const EdgeInsets.only(bottom: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: (group.active ? accentColor : AppTheme.borderColor)
+                .withValues(alpha: 0.35),
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: hasProducts
+              ? () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => PromotionDetailPage(
+                        promoType: group.promoType,
+                        promoCode: group.promoCode,
+                        promoDesc: group.promoDesc,
+                        dateFrom: group.dateFrom,
+                        dateTo: group.dateTo,
+                        minQty: group.minQty,
+                        giftQty: group.giftQty,
+                        cumulative: group.cumulative,
+                        items: group.items,
+                        onProductTap: widget.onProductTap,
+                        onAddGift: group.active ? widget.onAddGift : null,
+                        hasStockResolver: widget.hasStockResolver,
+                        qtyInOrderResolver: widget.qtyInOrderResolver,
+                        giftSelectionLocked: group.hasFixedGift,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              // Promo details
-              if (isGift && first.minQty > 0)
-                _buildDetailRow(
-                  icon: Icons.shopping_basket,
-                  label:
-                      'Compra ${first.minQty.toInt()}, lleva ${(first.minQty + first.giftQty).toInt()}',
-                  color: AppTheme.accentIndigo,
-                  suffix: first.cumulative ? '(acumulable)' : null,
-                ),
-              if (!isGift)
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 6,
+                  );
+                }
+              : null,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header row
+                Row(
                   children: [
-                    _buildDetailRow(
-                      icon: Icons.attach_money,
-                      label:
-                          'Oferta: ${PedidosFormatters.money(group.promoPrice, decimals: 3)}',
-                      color: AppTheme.success,
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        isGift ? Icons.card_giftcard : Icons.local_offer,
+                        color: accentColor,
+                        size: 18,
+                      ),
                     ),
-                    if (group.regularPrice > 0)
-                      _buildDetailRow(
-                        icon: Icons.price_change,
-                        label:
-                            'Tarifa: ${PedidosFormatters.money(group.regularPrice, decimals: 3)}',
-                        color: AppTheme.textSecondary,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            group.promoDesc.isNotEmpty
+                                ? group.promoDesc
+                                : (isGift
+                                    ? 'Promocion regalo'
+                                    : 'Promocion precio'),
+                            style: TextStyle(
+                              color: accentColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (group.promoCode.isNotEmpty)
+                            Text(
+                              group.promoCode,
+                              style: TextStyle(
+                                color: AppTheme.textTertiary,
+                                fontSize: 11,
+                              ),
+                            ),
+                        ],
                       ),
-                    if (group.discountPct > 0)
-                      _buildDetailRow(
-                        icon: Icons.trending_down,
-                        label:
-                            '-${PedidosFormatters.number(group.discountPct, decimals: 1)}%',
-                        color: AppTheme.success,
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
                       ),
+                      child: Text(
+                        group.active ? 'Vigente' : 'No vigente',
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        isGift ? 'REGALO' : 'PRECIO',
+                        style: TextStyle(
+                          color: accentColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-              const SizedBox(height: 8),
-              // Footer info
-              Row(
-                children: [
-                  Icon(
-                    Icons.inventory_2_outlined,
-                    size: 14,
-                    color: AppTheme.textTertiary,
+                const SizedBox(height: 10),
+                // Promo details
+                if (isGift && first.minQty > 0)
+                  _buildDetailRow(
+                    icon: Icons.shopping_basket,
+                    label:
+                        'Compra ${first.minQty.toInt()}, lleva ${(first.minQty + first.giftQty).toInt()}',
+                    color: AppTheme.accentIndigo,
+                    suffix: first.cumulative ? '(acumulable)' : null,
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${group.items.length} producto(s)',
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 12,
-                    ),
+                if (!isGift)
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 6,
+                    children: [
+                      _buildDetailRow(
+                        icon: Icons.attach_money,
+                        label:
+                            'Oferta: ${PedidosFormatters.money(group.promoPrice, decimals: 3)}',
+                        color: AppTheme.success,
+                      ),
+                      if (group.regularPrice > 0)
+                        _buildDetailRow(
+                          icon: Icons.price_change,
+                          label:
+                              'Tarifa: ${PedidosFormatters.money(group.regularPrice, decimals: 3)}',
+                          color: AppTheme.textSecondary,
+                        ),
+                      if (group.discountPct > 0)
+                        _buildDetailRow(
+                          icon: Icons.trending_down,
+                          label:
+                              '-${PedidosFormatters.number(group.discountPct, decimals: 1)}%',
+                          color: AppTheme.success,
+                        ),
+                    ],
                   ),
-                  const Spacer(),
-                  if (group.dateTo.isNotEmpty && group.dateTo != '0/0/0') ...[
+                const SizedBox(height: 8),
+                // Footer info
+                Row(
+                  children: [
                     Icon(
-                      Icons.calendar_today,
-                      size: 12,
+                      Icons.inventory_2_outlined,
+                      size: 14,
                       color: AppTheme.textTertiary,
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'Hasta ${group.dateTo}',
+                      '${group.items.length} producto(s)',
                       style: TextStyle(
-                        color: AppTheme.textTertiary,
-                        fontSize: 11,
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
                       ),
                     ),
-                  ],
-                ],
-              ),
-              // Product chips (if has products)
-              if (hasProducts) ...[
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    ...group.items.take(8).map((item) {
-                      final hasStock =
-                          widget.hasStockResolver?.call(item.code) ??
-                              item.hasStock;
-                      final stockColor = hasStock == true
-                          ? AppTheme.success
-                          : hasStock == false
-                              ? AppTheme.error
-                              : AppTheme.textTertiary;
-
-                      return ActionChip(
-                        onPressed: () =>
-                            widget.onProductTap(item.code, item.name),
-                        backgroundColor: AppTheme.raisedSurface,
-                        side: BorderSide(
-                          color: stockColor.withValues(alpha: 0.45),
-                        ),
-                        avatar: Icon(
-                          hasStock == true
-                              ? Icons.inventory_2_outlined
-                              : Icons.inventory_2,
-                          size: 14,
-                          color: stockColor,
-                        ),
-                        label: Text(
-                          '${item.code} · ${item.name}',
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 11,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      );
-                    }),
-                    if (group.items.length > 8)
-                      Chip(
-                        backgroundColor: AppTheme.raisedSurface,
-                        side: BorderSide(color: AppTheme.borderColor),
-                        label: Text(
-                          '+${group.items.length - 8} mas',
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 11,
-                          ),
+                    const Spacer(),
+                    if (group.dateTo.isNotEmpty && group.dateTo != '0/0/0') ...[
+                      Icon(
+                        Icons.calendar_today,
+                        size: 12,
+                        color: AppTheme.textTertiary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Hasta ${group.dateTo}',
+                        style: TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 11,
                         ),
                       ),
+                    ],
                   ],
                 ),
-              ],
-              // CTA button
-              if (hasProducts) ...[
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: accentColor.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Ver detalle',
-                          style: TextStyle(
-                            color: accentColor,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                // Product chips (if has products)
+                if (hasProducts) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      ...group.items.take(8).map((item) {
+                        final hasStock =
+                            widget.hasStockResolver?.call(item.code) ??
+                                item.hasStock;
+                        final stockColor = hasStock == true
+                            ? AppTheme.success
+                            : hasStock == false
+                                ? AppTheme.error
+                                : AppTheme.textTertiary;
+
+                        return ActionChip(
+                          onPressed: () =>
+                              widget.onProductTap(item.code, item.name),
+                          backgroundColor: AppTheme.raisedSurface,
+                          side: BorderSide(
+                            color: stockColor.withValues(alpha: 0.45),
+                          ),
+                          avatar: Icon(
+                            hasStock == true
+                                ? Icons.inventory_2_outlined
+                                : Icons.inventory_2,
+                            size: 14,
+                            color: stockColor,
+                          ),
+                          label: Text(
+                            '${item.code} · ${item.name}',
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 11,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }),
+                      if (group.items.length > 8)
+                        Chip(
+                          backgroundColor: AppTheme.raisedSurface,
+                          side: BorderSide(color: AppTheme.borderColor),
+                          label: Text(
+                            '+${group.items.length - 8} mas',
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.arrow_forward_ios,
-                          size: 10,
-                          color: accentColor,
+                    ],
+                  ),
+                ],
+                // CTA button
+                if (hasProducts) ...[
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: accentColor.withValues(alpha: 0.3),
                         ),
-                      ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Ver detalle',
+                            style: TextStyle(
+                              color: accentColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.arrow_forward_ios,
+                            size: 10,
+                            color: accentColor,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -641,6 +775,8 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
   }
 
   bool _groupMatchesFilters(_PromotionGroup group) {
+    if (_statusFilter == 'VIGENTES' && !group.active) return false;
+    if (_statusFilter == 'NO_VIGENTES' && group.active) return false;
     if (_typeFilter != 'TODAS' && group.promoType != _typeFilter) {
       return false;
     }
@@ -685,6 +821,7 @@ class _PromotionGroup {
   double get minQty => items.first.minQty;
   double get giftQty => items.first.giftQty;
   bool get cumulative => items.first.cumulative;
+  bool get active => items.any((item) => item.active);
 
   /// Regalo fijado por promoción (mismo producto o SKU explícito).
   bool get hasFixedGift =>

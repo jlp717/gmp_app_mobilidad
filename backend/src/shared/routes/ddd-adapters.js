@@ -862,23 +862,30 @@ function createPedidosRoutes() {
       if (!trimmedClient) return res.status(400).json({ success: false, error: 'clientCode cannot be empty' });
       const clientAccess = await authorizePedidoClientScope(req, trimmedClient, vendedorCodes, 'consultar promociones para');
       if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
+      const includeHistory = req.query.includeHistory === '1' || req.query.includeHistory === 'true';
       const scopedVendedorCodes = authorizedVendorCodesOrOriginal(clientAccess, vendedorCodes);
 
-      const cacheKey = `ddd:promotions:v3:${clientAccess.clientCode}:${scopedVendedorCodes}`;
+      const cacheKey = `ddd:promotions:v4:${clientAccess.clientCode}:${scopedVendedorCodes}:${includeHistory ? 'all' : 'active'}`;
       if (!isForceRefreshRequest(req)) {
         const cached = await cache.get(cacheKey);
-        if (cached && Array.isArray(cached.promotions) && cached.promotions.length > 0) {
+        const cachedHistory = Array.isArray(cached?.history) ? cached.history : [];
+        if (cached && Array.isArray(cached.promotions) && (cached.promotions.length > 0 || cachedHistory.length > 0)) {
           return res.json(cached);
         }
       }
       const result = await repo.getPromotions({
         clientCode: clientAccess.clientCode,
-        vendedorCodes: scopedVendedorCodes
+        vendedorCodes: scopedVendedorCodes,
+        includeHistory,
       });
-      const promotions = Array.isArray(result) ? result : [];
-      logger.info(`[DDD-PEDIDOS] Promotions for ${trimmedClient}: ${promotions.length} found`);
-      const payload = { success: true, promotions };
-      if (promotions.length > 0) {
+      const promotions = Array.isArray(result)
+        ? result
+        : (Array.isArray(result?.promotions) ? result.promotions : []);
+      const history = Array.isArray(result?.history) ? result.history : [];
+      const newCount = Number.isInteger(result?.newCount) ? result.newCount : promotions.length;
+      logger.info(`[DDD-PEDIDOS] Promotions for ${trimmedClient}: nuevas=${newCount} antiguas=${history.length}`);
+      const payload = { success: true, promotions, history, newCount };
+      if (promotions.length > 0 || history.length > 0) {
         await cache.set(cacheKey, payload, TTL_MS.PROMOTIONS);
       }
       return res.json(payload);

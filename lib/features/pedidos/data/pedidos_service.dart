@@ -719,6 +719,7 @@ class PromotionItem {
     this.productCode = '',
     this.isGlobal = false,
     this.noGiftBought = false,
+    this.active = true,
   });
 
   factory PromotionItem.fromJson(Map<String, dynamic> json) {
@@ -761,6 +762,7 @@ class PromotionItem {
       productCode: (json['productCode'] ?? '').toString().trim(),
       isGlobal: _toBool(json['isGlobal']),
       noGiftBought: _toBool(json['noGiftBought']),
+      active: json.containsKey('active') ? _toBool(json['active']) : true,
     );
   }
   final String code;
@@ -780,6 +782,7 @@ class PromotionItem {
   final String productCode;
   final bool isGlobal;
   final bool noGiftBought;
+  final bool active;
 
   bool get hasSaving => regularPrice > 0 && promoPrice < regularPrice;
   double get savingPct =>
@@ -1147,9 +1150,10 @@ class OrderLine {
     if (lineDiscountPct > 0 && lineDiscountPct <= 100) {
       effective = precioVenta * (1 - (lineDiscountPct / 100));
     }
-    final factor = (globalFactor.isFinite && globalFactor > 0 && globalFactor <= 1)
-        ? globalFactor
-        : 1.0;
+    final factor =
+        (globalFactor.isFinite && globalFactor > 0 && globalFactor <= 1)
+            ? globalFactor
+            : 1.0;
     if (factor < 1) effective = effective * factor;
     return bolsaToMoney(effective);
   }
@@ -1171,9 +1175,10 @@ class OrderLine {
     if (referencePrice <= 0 || qty <= 0) {
       return const OrderBolsaImpact();
     }
-    final factor = (globalFactor.isFinite && globalFactor > 0 && globalFactor <= 1)
-        ? globalFactor
-        : 1.0;
+    final factor =
+        (globalFactor.isFinite && globalFactor > 0 && globalFactor <= 1)
+            ? globalFactor
+            : 1.0;
     final saleUnit = bolsaEffectiveUnitPrice(factor);
     final diff = bolsaToMoney((saleUnit - referencePrice) * qty);
     if (diff > 0) {

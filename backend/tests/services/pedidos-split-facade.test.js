@@ -4,8 +4,8 @@
  * Contrato de fachada del split backend/services/pedidos (lote 2026-09-28).
  * index.js re-exporta implementaciones movidas verbatim a _shared,
  * order-lifecycle, promotions, catalog-aux, discovery, similarity e history.
- * Sin cambios de comportamiento: superficie de 72 claves + identidad por
- * referencia con cada modulo + stubs historicos resolviendo.
+ * Sin cambios de comportamiento en las claves previas: superficie de 75 claves
+ * (getClientPromotionCatalog suma el catalogo vigentes + no vigentes).
  */
 
 const EXPECTED_KEYS = [
@@ -19,6 +19,7 @@ const EXPECTED_KEYS = [
     'effectiveMinPriceFromRow', 'ensurePedidoIdempotencyKeyFromRequest',
     'extractIdempotencyKeyFromRequest', 'generateOrderPdf',
     'generatePedidoIdempotencyKey', 'getActivePromotions',
+    'getClientPromotionCatalog',
     'getAvailableVehicles', 'getBrands', 'getClientBalance',
     'getClientPricing', 'getComplementaryProducts',
     'getConfirmedPedidosForRutero', 'getDeliveryOptions', 'getFamilies',
@@ -29,7 +30,8 @@ const EXPECTED_KEYS = [
     'getProductBrands', 'getProductDetail', 'getProductFamilies',
     'getProductHistory', 'getProductPriceHistory', 'getProductStock',
     'getProducts', 'getRecommendations', 'getSimilarProducts', 'getStock',
-    'getStockBatch', 'initPedidosTables', 'isGiftLine',
+    'getStockBatch', 'initPedidosTables', 'invalidatePedidosStockCache',
+    'invalidateRuteroCachesAfterPedido', 'isGiftLine',
     'isOrderTransitionAllowed', 'normalizePedidoIdempotencyKey',
     'normalizePedidoSaleType', 'normalizeSearchTerm', 'pedidosBreaker',
     'purgeExpiredDraftReservations', 'resolveIvaFromCodigo',
@@ -71,7 +73,7 @@ function loadAll() {
 }
 
 describe('pedidos split facade (index re-exporta modulos)', () => {
-    test('superficie de 72 claves intacta y definida', () => {
+    test('superficie de 75 claves intacta y definida', () => {
         const { index } = loadAll();
         expect(Object.keys(index).sort()).toEqual([...EXPECTED_KEYS].sort());
         for (const k of EXPECTED_KEYS) {
@@ -88,6 +90,7 @@ describe('pedidos split facade (index re-exporta modulos)', () => {
         expect(m.index.searchProducts).toBe(m.catalogAux.searchProducts);
         expect(m.index.getClientPricing).toBe(m.catalogAux.getClientPricing);
         expect(m.index.getActivePromotions).toBe(m.promotions.getActivePromotionsV2);
+        expect(m.index.getClientPromotionCatalog).toBe(m.promotions.getClientPromotionCatalogV2);
         expect(m.index.checkDraftAccumulation).toBe(m.lifecycle.checkDraftAccumulation);
         expect(m.index.getOrderVendorForAuth).toBe(m.lifecycle.getOrderVendorForAuth);
         expect(m.index.normalizePedidoSaleType).toBe(m.lifecycle.normalizePedidoSaleType);

@@ -5261,6 +5261,7 @@ module.exports = {
     getProductFamilies: catalogAux.getProductFamilies,
     getProductBrands: catalogAux.getProductBrands,
     getActivePromotions: promotions.getActivePromotionsV2,
+    getClientPromotionCatalog: promotions.getClientPromotionCatalogV2,
     checkDraftAccumulation: orderLifecycle.checkDraftAccumulation,
     getPedidosPendientesSyncThreshold,
     invalidateRuteroCachesAfterPedido,

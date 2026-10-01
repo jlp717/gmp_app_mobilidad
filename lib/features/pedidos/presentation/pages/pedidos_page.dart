@@ -905,119 +905,27 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 );
               }
               final promos = prov.promos;
-              // REQ-25 tanda4: cero real distingue de error/carga.
-              // Vacío sin error → icono sin badge engañoso (tooltip claro);
-              // error → retry (rama anterior); carga → provider skeleton.
               final promoCount = promos.length;
-              if (promoCount == 0) {
-                return Semantics(
-                  button: true,
-                  label: 'Sin promociones activas para este cliente hoy',
-                  child: IconButton(
-                    icon: Icon(
-                      Icons.local_offer_outlined,
-                      color: AppTheme.textTertiary,
-                    ),
-                    tooltip: 'Sin promociones activas para este cliente hoy',
-                    onPressed: () {
-                      final prov = ref.read(pedidosNotifierProvider.notifier);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => PromotionsListPage(
-                            promotions: promos,
-                            onProductTap: (code, name) =>
-                                _openProductByCode(code, fallbackName: name),
-                            onAddGift: _addGiftPromotionLine,
-                            hasStockResolver: (code) {
-                              for (final p in prov.products) {
-                                if (p.code == code) return p.hasStock;
-                              }
-                              return null;
-                            },
-                            qtyInOrderResolver: (code) {
-                              for (final line in prov.lines) {
-                                if (line.codigoArticulo == code) {
-                                  return line.cantidadEnvases > 0
-                                      ? line.cantidadEnvases
-                                      : line.cantidadUnidades;
-                                }
-                              }
-                              return 0;
-                            },
-                          ),
-                        ),
-                      );
-                    },
+              return Semantics(
+                button: true,
+                label:
+                    '$promoCount promociones nuevas. Ver vigentes y no vigentes',
+                child: TextButton(
+                  onPressed: () => _openPromotionsList(promos),
+                  style: TextButton.styleFrom(
+                    foregroundColor: promoCount > 0
+                        ? AppTheme.accentIndigo
+                        : AppTheme.textSecondary,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                   ),
-                );
-              }
-              return Stack(
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.local_offer_outlined,
-                      color: AppTheme.accentIndigo,
-                    ),
-                    tooltip: 'Ver Promociones',
-                    onPressed: () {
-                      // Full state read on demand — closures need products
-                      // and lines only when the user actually opens the page.
-                      final prov = ref.read(pedidosNotifierProvider.notifier);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => PromotionsListPage(
-                            promotions: promos,
-                            onProductTap: (code, name) =>
-                                _openProductByCode(code, fallbackName: name),
-                            onAddGift: _addGiftPromotionLine,
-                            hasStockResolver: (code) {
-                              for (final p in prov.products) {
-                                if (p.code == code) return p.hasStock;
-                              }
-                              for (final promo in promos) {
-                                if (promo.code == code) {
-                                  return promo.hasStock;
-                                }
-                              }
-                              return null;
-                            },
-                            qtyInOrderResolver: (code) {
-                              for (final line in prov.lines) {
-                                if (line.codigoArticulo == code) {
-                                  return line.cantidadEnvases > 0
-                                      ? line.cantidadEnvases
-                                      : line.cantidadUnidades;
-                                }
-                              }
-                              return 0;
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: AppTheme.accentIndigo,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        '$promoCount',
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                  child: Text(
+                    '$promoCount nuevas',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
                     ),
                   ),
-                ],
+                ),
               );
             },
           ),
@@ -1397,6 +1305,42 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  void _openPromotionsList(List<PromotionItem> promos) {
+    final prov = ref.read(pedidosNotifierProvider.notifier);
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => PromotionsListPage(
+          promotions: promos,
+          clientCode: prov.clientCode,
+          vendedorCodes: _vendedorCodes,
+          onProductTap: (code, name) =>
+              _openProductByCode(code, fallbackName: name),
+          onAddGift: _addGiftPromotionLine,
+          hasStockResolver: (code) {
+            for (final p in prov.products) {
+              if (p.code == code) return p.hasStock;
+            }
+            for (final promo in promos) {
+              if (promo.code == code) return promo.hasStock;
+            }
+            return null;
+          },
+          qtyInOrderResolver: (code) {
+            for (final line in prov.lines) {
+              if (line.codigoArticulo == code) {
+                return line.cantidadEnvases > 0
+                    ? line.cantidadEnvases
+                    : line.cantidadUnidades;
+              }
+            }
+            return 0;
+          },
+        ),
       ),
     );
   }

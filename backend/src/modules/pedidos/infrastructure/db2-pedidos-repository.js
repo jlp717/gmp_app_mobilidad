@@ -39,10 +39,11 @@ class Db2PedidosRepository extends PedidosRepository {
     return product;
   }
 
-  async getPromotions({ clientCode, vendedorCodes }) {
+  async getPromotions({ clientCode, vendedorCodes, includeHistory = false }) {
     // Delegate to legacy service which has correct field mapping and
     // queries both CPESL1 (price promos) and PMRL1/PMPL1 (gift promos)
     const pedidosService = require('../../../../services/pedidos.service');
+    if (includeHistory) return pedidosService.getClientPromotionCatalog(clientCode);
     return await pedidosService.getActivePromotions(clientCode);
   }
 

@@ -13,6 +13,7 @@ module.exports = {
     getProductFamilies: impl.getProductFamilies,
     getProductBrands: impl.getProductBrands,
     getActivePromotions: impl.getActivePromotions,
+    getClientPromotionCatalog: impl.getClientPromotionCatalog,
     getActivePromotionsPMR: impl.getActivePromotionsPMR,
     getActivePromotionsV2: impl.getActivePromotionsV2,
     getClientTariffsForLines: impl.getClientTariffsForLines,

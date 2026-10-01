@@ -972,7 +972,41 @@ describe('DDD pedidos route contracts', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.promotions).toEqual([]);
+    expect(res.body.history).toEqual([]);
     expect(mockCache.set).not.toHaveBeenCalled();
+  });
+
+  test('GET /promotions includeHistory returns history and caches it', async () => {
+    mockPedidosRepo.getPromotions.mockResolvedValue({
+      promotions: [{ promoCode: 'NEW', active: true }],
+      history: [{ promoCode: 'OLD', active: false }],
+      newCount: 1,
+    });
+    mockCache.get.mockResolvedValue(null);
+
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '35',
+      code: '35',
+      role: 'COMERCIAL',
+    }))
+      .get('/promotions')
+      .query({ clientCode: '4300009324', vendedorCodes: '35', includeHistory: '1' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.newCount).toBe(1);
+    expect(res.body.promotions).toHaveLength(1);
+    expect(res.body.history).toHaveLength(1);
+    expect(mockPedidosRepo.getPromotions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientCode: '4300009324',
+        includeHistory: true,
+      }),
+    );
+    expect(mockCache.set).toHaveBeenCalledWith(
+      expect.stringContaining(':all'),
+      expect.objectContaining({ newCount: 1 }),
+      expect.any(Number),
+    );
   });
 });
 

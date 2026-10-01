@@ -70,4 +70,53 @@ describe('REQ-25 promos backend (TEST-only mocks)', () => {
             infos.some((m) => /total filas=3/i.test(m) && /vigentes hoy=0/i.test(m)),
         ).toBe(true);
     });
+
+    test('catalogo: vigente en promotions y caducada en history', async () => {
+        const year = new Date().getFullYear();
+        const { svc, queryWithParams } = loadService({
+            sysColumnsByTable: {
+                PMR: [{ COLUMN_NAME: 'CODIGOPROMOCIONREGALO' }],
+            },
+            promoRows: [
+                {
+                    PROMO_CODE: 'NEW1',
+                    PROMO_NAME: 'Nueva',
+                    ANOINICIO: year,
+                    MESINICIO: 1,
+                    DIAINICIO: 1,
+                    ANOFIN: 0,
+                    MESFIN: 0,
+                    DIAFIN: 0,
+                },
+                {
+                    PROMO_CODE: 'OLD1',
+                    PROMO_NAME: 'Antigua',
+                    ANOINICIO: year - 2,
+                    MESINICIO: 1,
+                    DIAINICIO: 1,
+                    ANOFIN: year - 1,
+                    MESFIN: 1,
+                    DIAFIN: 1,
+                },
+            ],
+            countTotal: 2,
+        });
+
+        const catalog = await svc.getClientPromotionCatalog('4300000362');
+        expect(catalog.newCount).toBe(1);
+        expect(catalog.promotions.map((p) => p.promoCode)).toEqual(['NEW1']);
+        expect(catalog.promotions[0].active).toBe(true);
+        expect(catalog.history.map((p) => p.promoCode)).toEqual(['OLD1']);
+        expect(catalog.history[0].active).toBe(false);
+
+        const activeOnly = await svc.getActivePromotions('4300000362');
+        expect(activeOnly.map((p) => p.promoCode)).toEqual(['NEW1']);
+
+        const pmrCalls = queryWithParams.mock.calls.filter((call) =>
+            String(call[0] || '').includes('CODIGOPROMOCIONREGALO'),
+        );
+        expect(String(pmrCalls[0][0])).not.toContain('ANOFIN * 10000');
+        expect(String(pmrCalls[0][0])).toContain('ANOINICIO');
+        expect(String(pmrCalls[1][0])).toContain('ANOFIN');
+    });
 });

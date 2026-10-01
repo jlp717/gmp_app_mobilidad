@@ -971,8 +971,20 @@ router.get('/promotions', async (req, res) => {
             return res.status(clientAccess.status).json(clientAccess.body);
         }
         
-        const promotions = await pedidosService.getActivePromotions(clientAccess.clientCode);
-        res.json({ success: true, promotions });
+        const includeHistory = req.query.includeHistory === '1' || req.query.includeHistory === 'true';
+        const catalog = includeHistory
+            ? await pedidosService.getClientPromotionCatalog(clientAccess.clientCode)
+            : {
+                promotions: await pedidosService.getActivePromotions(clientAccess.clientCode),
+                history: [],
+            };
+        const promotions = catalog.promotions || [];
+        res.json({
+            success: true,
+            promotions,
+            history: catalog.history || [],
+            newCount: catalog.newCount ?? promotions.length,
+        });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /promotions: ${error.message}`);
         res.status(500).json({ success: false, error: 'Error obteniendo promociones', code: 'PROMOTIONS_ERROR' });

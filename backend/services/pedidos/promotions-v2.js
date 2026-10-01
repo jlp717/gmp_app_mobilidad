@@ -36,7 +36,23 @@ async function detectPromoSourcesV2() {
     return _promoSourcesV2;
 }
 
-async function getActivePromotionsV2(clientCode) {
+function ymdParts(year, month, day) {
+    const y = parseInt(year, 10) || 0;
+    if (y <= 0) return 0;
+    return y * 10000 + (parseInt(month, 10) || 1) * 100 + (parseInt(day, 10) || 1);
+}
+
+function promotionWindowActive(startYmd, endYmd, today) {
+    const started = !startYmd || startYmd <= today;
+    const open = !endYmd || endYmd >= today;
+    return started && open;
+}
+
+function todayYmd(now = new Date()) {
+    return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+}
+
+async function getActivePromotionsV2(clientCode, options = {}) {
     try {
         const trimmedClientCode = String(clientCode || '').trim();
         if (!trimmedClientCode) return [];
@@ -44,31 +60,41 @@ async function getActivePromotionsV2(clientCode) {
         const sources = await detectPromoSourcesV2();
         if (!sources || sources.size === 0) return [];
 
-        const now = new Date();
-        const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+        const includeHistory = options.includeHistory === true;
+        const today = todayYmd();
         const promotions = [];
 
         if (sources.has('PMR')) {
             promotions.push(...await getActiveGiftPromotionsV2(trimmedClientCode, today, {
                 hasClientAssignments: sources.has('PMRC'),
                 hasProductLines: sources.has('PMP'),
+                includeHistory,
             }));
         }
         if (sources.has('CPES')) {
-            promotions.push(...await getActiveSpecialPricePromotionsV2(trimmedClientCode, today));
+            promotions.push(...await getActiveSpecialPricePromotionsV2(trimmedClientCode, today, { includeHistory }));
         }
         if (sources.has('PRD')) {
-            promotions.push(...await getActivePrdPromotionsV2(today, sources.get('PRD') || new Set()));
+            promotions.push(...await getActivePrdPromotionsV2(today, sources.get('PRD') || new Set(), { includeHistory }));
         }
 
-        return dedupePromotionItemsV2(promotions);
+        const unique = dedupePromotionItemsV2(promotions);
+        if (includeHistory) return unique;
+        return unique.filter((item) => item.active !== false);
     } catch (error) {
         logger.warn('[PEDIDOS] getActivePromotions error (returning []): ' + error.message);
         return [];
     }
 }
 
-async function getActivePrdPromotionsV2(today, cols) {
+async function getClientPromotionCatalogV2(clientCode) {
+    const all = await getActivePromotionsV2(clientCode, { includeHistory: true });
+    const promotions = all.filter((item) => item.active !== false);
+    const history = all.filter((item) => item.active === false);
+    return { promotions, history, newCount: promotions.length };
+}
+
+async function getActivePrdPromotionsV2(today, cols, options = {}) {
     try {
         const promotionsTable = promotionsQualifiedTable('PRD');
         const has = (col) => cols.has(col);
@@ -86,6 +112,7 @@ async function getActivePrdPromotionsV2(today, cols) {
         const colMesHasta = has('MESHASTA') ? 'P.MESHASTA' : '12';
         const colAnoHasta = has('ANOHASTA') ? 'P.ANOHASTA' : '9999';
         const hasDateRange = has('ANOHASTA') && has('ANODESDE');
+        const includeHistory = options.includeHistory === true;
         const sql = `
             SELECT ${colArticulo} AS CODIGOARTICULO,
                    ${colDescrip} AS DESCRIPCION,
@@ -107,13 +134,16 @@ async function getActivePrdPromotionsV2(today, cols) {
             LEFT JOIN ${comercialErpTable('ART')} A ON ${colArticulo} = A.CODIGOARTICULO
             LEFT JOIN ${comercialErpTable('ARO')} AR ON ${colArticulo} = AR.CODIGOARTICULO AND AR.CODIGOALMACEN = 1
             ${hasDateRange
-              ? `WHERE (${colAnoHasta} * 10000 + ${colMesHasta} * 100 + ${colDiaHasta}) >= ?
-                   AND (${colAnoDesde} * 10000 + ${colMesDesde} * 100 + ${colDiaDesde}) <= ?`
+              ? (includeHistory
+                ? `WHERE (${colAnoDesde} * 10000 + ${colMesDesde} * 100 + ${colDiaDesde}) <= ?
+                   ORDER BY (${colAnoHasta} * 10000 + ${colMesHasta} * 100 + ${colDiaHasta}) DESC`
+                : `WHERE (${colAnoHasta} * 10000 + ${colMesHasta} * 100 + ${colDiaHasta}) >= ?
+                   AND (${colAnoDesde} * 10000 + ${colMesDesde} * 100 + ${colDiaDesde}) <= ?`)
               : ''}
-            FETCH FIRST 200 ROWS ONLY
+            FETCH FIRST ${includeHistory ? 400 : 200} ROWS ONLY
         `;
         const rows = hasDateRange
-            ? await queryWithParams(sql, [today, today])
+            ? await queryWithParams(sql, includeHistory ? [today] : [today, today])
             : await queryWithParams(sql, [], []);
         // REQ-25 tanda4: log total/vigentes (TEST-only observable, sin cambio
         // de logica: rows ya viene filtrada por vigencia en el WHERE).
@@ -142,6 +172,13 @@ async function getActivePrdPromotionsV2(today, cols) {
             stackable: String(r.ACUMULABLESN || '').trim() === 'S',
             stockEnvases: parseFloat(r.STOCK_ENVASES) || 0,
             stockUnidades: parseFloat(r.STOCK_UNIDADES) || 0,
+            active: hasDateRange
+                ? promotionWindowActive(
+                    ymdParts(r.ANODESDE, r.MESDESDE, r.DIADESDE),
+                    ymdParts(r.ANOHASTA, r.MESHASTA, r.DIAHASTA),
+                    today,
+                )
+                : true,
         }));
     } catch (error) {
         logger.warn('[PEDIDOS] getActivePrdPromotionsV2 error (returning []): ' + error.message);
@@ -151,6 +188,10 @@ async function getActivePrdPromotionsV2(today, cols) {
 
 async function getActiveGiftPromotionsV2(clientCode, today, options = {}) {
     const rows = [];
+    const includeHistory = options.includeHistory === true;
+    const endClause = includeHistory
+        ? ''
+        : 'AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)';
     const directSql = `
         SELECT
             TRIM(P.CODIGOPROMOCIONREGALO) AS PROMO_CODE,
@@ -178,11 +219,12 @@ async function getActiveGiftPromotionsV2(clientCode, today, options = {}) {
         FROM ${comercialErpTable('PMR')} P
         WHERE P.CODIGOCLIENTE = CAST(? AS CHAR(10))
           AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
-          AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
-        FETCH FIRST 200 ROWS ONLY
+          ${endClause}
+        ${includeHistory ? 'ORDER BY CASE WHEN P.ANOFIN = 0 THEN 1 ELSE 0 END DESC, P.ANOFIN DESC, P.MESFIN DESC, P.DIAFIN DESC' : ''}
+        FETCH FIRST ${includeHistory ? 400 : 200} ROWS ONLY
     `;
     try {
-        rows.push(...(await queryWithParams(directSql, [clientCode, today, today]) || []));
+        rows.push(...(await queryWithParams(directSql, includeHistory ? [clientCode, today] : [clientCode, today, today]) || []));
     } catch (e) {
         logger.warn(`[PEDIDOS] Query promociones PMR directas fallo: ${e.message}`);
     }
@@ -229,22 +271,26 @@ async function getActiveGiftPromotionsV2(clientCode, today, options = {}) {
             ) S ON S.CODE = TRIM(G.CODIGOARTICULO)
             WHERE C.CODIGOCLIENTE = CAST(? AS CHAR(10))
               AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
-              AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
+              ${endClause}
             ORDER BY TRIM(P.CODIGOPROMOCIONREGALO), G.ORDEN, TRIM(G.CODIGOARTICULO)
-            FETCH FIRST 500 ROWS ONLY
+            FETCH FIRST ${includeHistory ? 800 : 500} ROWS ONLY
         `;
         try {
-            rows.push(...(await queryWithParams(assignedSql, [clientCode, today, today]) || []));
+            rows.push(...(await queryWithParams(assignedSql, includeHistory ? [clientCode, today] : [clientCode, today, today]) || []));
         } catch (e) {
             logger.warn(`[PEDIDOS] Query promociones PMRC/PMP fallo: ${e.message}`);
         }
     }
 
     logger.info(`[PEDIDOS] Promociones regalo PMR/PMRC para cliente=${clientCode}, hoy=${today}: ${rows.length} fila(s)`);
-    return buildGiftPromotionItemsV2(rows);
+    return buildGiftPromotionItemsV2(rows, today);
 }
 
-async function getActiveSpecialPricePromotionsV2(clientCode, today) {
+async function getActiveSpecialPricePromotionsV2(clientCode, today, options = {}) {
+    const includeHistory = options.includeHistory === true;
+    const endClause = includeHistory
+        ? ''
+        : 'AND (C.ANOFINAL = 0 OR (C.ANOFINAL * 10000 + C.MESFINAL * 100 + C.DIAFINAL) >= ?)';
     const sql = `
         SELECT
             TRIM(C.CODIGOARTICULO) AS PRODUCT_CODE,
@@ -270,12 +316,12 @@ async function getActiveSpecialPricePromotionsV2(clientCode, today) {
         WHERE C.CODIGOCLIENTE = CAST(? AS CHAR(10))
           AND TRIM(COALESCE(C.CODIGOARTICULO, '')) <> ''
           AND (C.ANOINICIO = 0 OR (C.ANOINICIO * 10000 + C.MESINICIO * 100 + C.DIAINICIO) <= ?)
-          AND (C.ANOFINAL = 0 OR (C.ANOFINAL * 10000 + C.MESFINAL * 100 + C.DIAFINAL) >= ?)
+          ${endClause}
         ORDER BY TRIM(C.CODIGOARTICULO), C.SECUENCIA
-        FETCH FIRST 300 ROWS ONLY
+        FETCH FIRST ${includeHistory ? 500 : 300} ROWS ONLY
     `;
     try {
-        const rows = await queryWithParams(sql, [clientCode, today, today]);
+        const rows = await queryWithParams(sql, includeHistory ? [clientCode, today] : [clientCode, today, today]);
         logger.info(`[PEDIDOS] Promociones CPES para cliente=${clientCode}, hoy=${today}: ${rows?.length || 0} fila(s)`);
         return (rows || []).map((r) => {
             const productCode = trimString(r.PRODUCT_CODE);
@@ -298,6 +344,11 @@ async function getActiveSpecialPricePromotionsV2(clientCode, today) {
                 stackable: false,
                 stockEnvases: parseFloat(r.STOCK_ENVASES) || 0,
                 stockUnidades: parseFloat(r.STOCK_UNIDADES) || 0,
+                active: promotionWindowActive(
+                    ymdParts(r.ANOINICIO, r.MESINICIO, r.DIAINICIO),
+                    ymdParts(r.ANOFINAL, r.MESFINAL, r.DIAFINAL),
+                    today,
+                ),
             };
         });
     } catch (e) {
@@ -306,7 +357,7 @@ async function getActiveSpecialPricePromotionsV2(clientCode, today) {
     }
 }
 
-function buildGiftPromotionItemsV2(rows) {
+function buildGiftPromotionItemsV2(rows, today = todayYmd()) {
     const byPromo = new Map();
     const items = [];
     for (const r of rows || []) {
@@ -343,6 +394,11 @@ function buildGiftPromotionItemsV2(rows) {
             productMinQty: parseFloat(r.PRODUCT_MIN_ENVASES) || parseFloat(r.PRODUCT_MIN_UNIDADES) || 0,
             productMaxQty: parseFloat(r.PRODUCT_MAX_ENVASES) || parseFloat(r.PRODUCT_MAX_UNIDADES) || 0,
             order: parseInt(r.PRODUCT_ORDER) || 0,
+            active: promotionWindowActive(
+                ymdParts(r.ANOINICIO, r.MESINICIO, r.DIAINICIO),
+                ymdParts(r.ANOFIN, r.MESFIN, r.DIAFIN),
+                today,
+            ),
         };
         items.push(item);
         if (!byPromo.has(promoCode)) byPromo.set(promoCode, new Set());
@@ -387,6 +443,8 @@ function dedupePromotionItemsV2(promotions) {
 module.exports = {
     detectPromoSourcesV2,
     getActivePromotionsV2,
+    getClientPromotionCatalogV2,
+    promotionWindowActive,
     getActivePrdPromotionsV2,
     getActiveGiftPromotionsV2,
     getActiveSpecialPricePromotionsV2,

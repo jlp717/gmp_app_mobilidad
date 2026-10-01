@@ -85,7 +85,8 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
         if (mounted) setState(() => _isLoading = false);
         return;
       }
-      final cacheKey = helpers.promotionsCacheKey(clientCode, provider.vendedorCodes);
+      final cacheKey =
+          helpers.promotionsCacheKey(clientCode, provider.vendedorCodes);
       final cached = CacheService.get<Object?>(cacheKey);
       final reuseCache = helpers.shouldReusePromotionsCache(cached);
       final Map<String, dynamic> response;
@@ -186,9 +187,7 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
               child: TextButton(
                 onPressed: () {
                   if (widget.promotions != null) {
-                    ref
-                        .read(pedidosNotifierProvider.notifier)
-                        .loadPromotions();
+                    ref.read(pedidosNotifierProvider.notifier).loadPromotions();
                   } else {
                     _retry();
                   }
@@ -211,8 +210,8 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
           child: Semantics(
             button: true,
             label: _isExpanded
-                ? 'Ocultar ofertas activas'
-                : 'Mostrar ofertas activas',
+                ? 'Ocultar ${_promotions.length} promociones nuevas'
+                : 'Mostrar ${_promotions.length} promociones nuevas',
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               child: Row(
@@ -237,7 +236,7 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          'Ofertas activas (${_promotions.length})',
+                          '${_promotions.length} nuevas',
                           style: TextStyle(
                             color: AppTheme.success,
                             fontWeight: FontWeight.w600,
