@@ -14,6 +14,7 @@ const REQUIRED_EVIDENCE_COLUMNS = Object.freeze([
   'EVIDENCE_ID', 'DOCUMENT_ID', 'REPARTIDOR_ID', 'EVIDENCE_KIND',
   'STORAGE_REFERENCE', 'MIME_TYPE', 'CONTENT_SHA256', 'CONTENT_BYTES',
   'CONTENT_BLOB', 'STATUS', 'CREATED_AT', 'LINKED_AT', 'EXPIRES_AT',
+  'CAPTURED_AT', 'DEVICE_ID',
 ]);
 
 class RepartoEvidenceRepositoryError extends RepartoPersistenceError {
@@ -444,11 +445,15 @@ function createRepartoEvidenceDb2Repository({
             active = false;
             return { evidenceId: record.evidenceId, created: false, idempotent: true };
           }
+          const capturedAt = db2Timestamp(record.capturedAt || stagedAt, 'capturedAt');
+          const deviceId = record.deviceId == null || String(record.deviceId).trim() === ''
+            ? null
+            : String(record.deviceId).trim().slice(0, 80);
           await execute(connection,
-            `INSERT INTO ${table} (EVIDENCE_ID, DOCUMENT_ID, REPARTIDOR_ID, EVIDENCE_KIND, STORAGE_REFERENCE, MIME_TYPE, CONTENT_SHA256, CONTENT_BYTES, CONTENT_BLOB, STATUS, CREATED_AT, EXPIRES_AT) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDIENTE', CURRENT TIMESTAMP, ?)`,
+            `INSERT INTO ${table} (EVIDENCE_ID, DOCUMENT_ID, REPARTIDOR_ID, EVIDENCE_KIND, STORAGE_REFERENCE, MIME_TYPE, CONTENT_SHA256, CONTENT_BYTES, CAPTURED_AT, DEVICE_ID, CONTENT_BLOB, STATUS, CREATED_AT, EXPIRES_AT) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDIENTE', CURRENT TIMESTAMP, ?)`,
             [record.evidenceId, record.documentId, record.repartidorId, record.kind,
               record.storageReference, record.mimeType, record.contentSha256,
-              record.contentBytes, record.content, db2Timestamp(expiresAt, 'expiresAt')], signal);
+              record.contentBytes, capturedAt, deviceId, record.content, db2Timestamp(expiresAt, 'expiresAt')], signal);
           throwIfAborted(signal);
           await connection.commit();
           throwIfAborted(signal);

@@ -189,7 +189,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                 Text(
                   'Alertas comerciales',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: AppColors.themedWhite,
                     letterSpacing: 0,
@@ -198,24 +198,28 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                 const SizedBox(height: 2),
                 Text(
                   _hasError
-                      ? 'Servicio no disponible'
-                      : 'Sin alertas Nestlé para este cliente',
+                      ? 'No se pudieron cargar. Pulsa actualizar.'
+                      : 'Este cliente no tiene alertas de Nestlé.',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 16,
                     color: _hasError
-                        ? AppTheme.warning.withValues(alpha: 0.7)
-                        : AppTheme.textTertiary,
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
                   ),
                 ),
               ],
             ),
           ),
-          InkWell(
-            onTap: _loadAlerts,
-            child: Icon(
-              Icons.refresh_rounded,
-              size: 16,
-              color: AppTheme.textTertiary,
+          Semantics(
+            button: true,
+            label: 'Actualizar alertas del cliente',
+            child: IconButton(
+              tooltip: 'Actualizar',
+              onPressed: _loadAlerts,
+              icon: Icon(
+                Icons.refresh_rounded,
+                color: AppTheme.textSecondary,
+              ),
             ),
           ),
         ],

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
+import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -687,42 +688,23 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage>
     }
 
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: AppTheme.error),
-            const SizedBox(height: 16),
-            Text('Error: $_error'),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadClients,
-              child: const Text('Reintentar'),
-            ),
-          ],
-        ),
+      return GmpErrorPanel(
+        whatHappened: gmpWhatHappened(_error!),
+        whatToDo: gmpWhatToDo(_error!),
+        onRetry: () => _loadClients(),
       );
     }
 
     if (_clients.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.people_outline,
-              size: 64,
-              color: AppTheme.textSecondary,
-            ),
-            const SizedBox(height: 16),
-            const Text('No se encontraron clientes'),
-            const SizedBox(height: 8),
-            Text(
-              'Vendedor: ${widget.employeeCode}',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ],
-        ),
+      final searching = _searchQuery.trim().isNotEmpty;
+      return GmpEmptyPanel(
+        icon: Icons.people_outline,
+        title: searching
+            ? 'Ningún cliente con ese texto'
+            : 'No hay clientes en esta cartera',
+        whatToDo: searching
+            ? 'Prueba el código o parte del nombre. Borra la búsqueda para ver toda la cartera del vendedor ${widget.employeeCode}.'
+            : 'La cartera del vendedor ${widget.employeeCode} está vacía. Si falta alguien, avisa a oficina.',
       );
     }
 

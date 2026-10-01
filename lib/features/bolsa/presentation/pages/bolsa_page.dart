@@ -12,6 +12,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
@@ -1587,28 +1588,10 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.themedWhite70),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-            ),
-          ],
-        ),
-      ),
+    return GmpErrorPanel(
+      whatHappened: gmpWhatHappened(message),
+      whatToDo: gmpWhatToDo(message),
+      onRetry: onRetry,
     );
   }
 }
@@ -1616,26 +1599,11 @@ class _ErrorView extends StatelessWidget {
 class _EmptyVendorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.account_balance_wallet_outlined,
-              size: 64,
-              color: AppColors.themedWhite24,
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Selecciona un vendedor en el filtro superior para ver su bolsa',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.themedWhite54, fontSize: 14),
-            ),
-          ],
-        ),
-      ),
+    return const GmpEmptyPanel(
+      icon: Icons.account_balance_wallet_outlined,
+      title: 'Elige un comercial',
+      whatToDo:
+          'Abre el filtro de arriba y elige un vendedor. Ahí verás el saldo de su bolsa.',
     );
   }
 }

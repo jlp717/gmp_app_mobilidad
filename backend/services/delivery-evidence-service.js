@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { assertDecodablePng } = require('../utils/png-image-validator');
+const { evaluatePhotoWindow } = require('./evidence-photo-window');
 
 // The global request guard rejects Content-Length above 5 MiB. Keep photos
 // at 4 MiB so multipart framing still fits below that request-wide ceiling.
@@ -44,15 +45,31 @@ function validate({ kind, mimeType, buffer, maxBytes = PHOTO_MAX_BYTES }) {
   }
   const normalizedMime = String(mimeType || '').trim().toLowerCase();
   const magic = MEDIA[normalizedMime];
-  if (!magic) throw new EvidenceError('UNSUPPORTED_EVIDENCE_TYPE', 'Tipo de evidencia no permitido', 415);
+  if (!magic) {
+    throw new EvidenceError(
+      'UNSUPPORTED_EVIDENCE_TYPE',
+      'Tipo de evidencia no permitido. Adjunta una imagen PNG, JPEG o WebP.',
+      415,
+    );
+  }
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
     throw new EvidenceError('EVIDENCE_REQUIRED', 'Debe adjuntar una evidencia', 400);
   }
   if (buffer.length > maxBytes) {
-    throw new EvidenceError('EVIDENCE_TOO_LARGE', 'La evidencia supera el límite permitido', 413);
+    const limitLabel = maxBytes <= SIGNATURE_MAX_BYTES ? '1 MiB' : '4 MiB';
+    const noun = maxBytes <= SIGNATURE_MAX_BYTES ? 'La firma' : 'La foto';
+    throw new EvidenceError(
+      'EVIDENCE_TOO_LARGE',
+      `${noun} supera el límite de ${limitLabel}`,
+      413,
+    );
   }
   if (!magic(buffer)) {
-    throw new EvidenceError('INVALID_EVIDENCE_MAGIC', 'El contenido no coincide con el tipo declarado', 415);
+    throw new EvidenceError(
+      'INVALID_EVIDENCE_MAGIC',
+      'El contenido no coincide con el tipo declarado. Adjunta una imagen PNG, JPEG o WebP.',
+      415,
+    );
   }
   return normalizedMime;
 }
@@ -91,7 +108,7 @@ function decodeSignature(dataUri) {
   }
   const maxEncodedLength = Math.ceil(SIGNATURE_MAX_BYTES / 3) * 4;
   if (match[2].length > maxEncodedLength) {
-    throw new EvidenceError('EVIDENCE_TOO_LARGE', 'La firma supera el límite permitido', 413);
+    throw new EvidenceError('EVIDENCE_TOO_LARGE', 'La firma supera el límite de 1 MiB', 413);
   }
   const buffer = Buffer.from(match[2], 'base64');
   if (buffer.toString('base64') !== match[2]) {
@@ -119,16 +136,39 @@ function decodeSignature(dataUri) {
   return Object.freeze({ mimeType, buffer });
 }
 
-function createDeliveryEvidenceService({ repository } = {}) {
+function normalizeDeviceId(deviceId) {
+  if (deviceId == null || String(deviceId).trim() === '') return null;
+  const value = String(deviceId).trim();
+  if (value.length > 80 || /[\u0000-\u001f]/.test(value)) {
+    throw new EvidenceError('INVALID_EVIDENCE_DEVICE', 'El identificador del dispositivo no es válido', 400);
+  }
+  return value;
+}
+
+function assertPhotoWindow(deliveryAt, now) {
+  const decision = evaluatePhotoWindow({ deliveryAt, now });
+  if (decision.ok) return decision.deadline;
+  const error = new EvidenceError(decision.code, decision.message, decision.statusCode || 422);
+  if (decision.deadline) error.deadline = decision.deadline;
+  throw error;
+}
+
+function createDeliveryEvidenceService({ repository, clock = () => new Date() } = {}) {
   if (!repository || typeof repository.stage !== 'function' || typeof repository.getLinked !== 'function') {
     throw new TypeError('repository.stage and repository.getLinked are required');
   }
+  if (typeof clock !== 'function') throw new TypeError('clock must be a function');
 
-  async function stage({ documentId, repartidorId, kind, mimeType, buffer, maxBytes, allowedRepartidorIds, signal }) {
+  async function stage({
+    documentId, repartidorId, kind, mimeType, buffer, maxBytes,
+    allowedRepartidorIds, signal, deviceId, capturedAt,
+  }) {
     throwIfAborted(signal);
     const safeDocumentId = validateText(documentId, 'documentId', 160);
     const safeRepartidorId = validateText(repartidorId, 'repartidorId', 20);
     const safeMimeType = validate({ kind, mimeType, buffer, maxBytes });
+    const safeDeviceId = normalizeDeviceId(deviceId);
+    const captured = capturedAt instanceof Date ? capturedAt : clock();
     const sha256 = contentSha256(buffer);
     const evidenceId = identity(safeDocumentId, safeRepartidorId, kind, sha256);
     const result = await repository.stage({
@@ -141,14 +181,27 @@ function createDeliveryEvidenceService({ repository } = {}) {
       contentBytes: buffer.length,
       content: buffer,
       storageReference: `DB2_BLOB:${evidenceId}`,
+      capturedAt: captured,
+      deviceId: safeDeviceId,
       allowedRepartidorIds,
       signal,
     });
     throwIfAborted(signal);
-    return result;
+    return {
+      evidenceId: result.evidenceId,
+      created: Boolean(result.created),
+      idempotent: Boolean(result.idempotent),
+      kind,
+      mimeType: safeMimeType,
+      contentSha256: sha256,
+      contentBytes: buffer.length,
+      capturedAt: captured.toISOString(),
+      deviceId: safeDeviceId,
+      retryable: false,
+    };
   }
 
-  async function stageSignature({ documentId, repartidorId, dataUri, allowedRepartidorIds, signal }) {
+  async function stageSignature({ documentId, repartidorId, dataUri, allowedRepartidorIds, signal, deviceId }) {
     throwIfAborted(signal);
     const decoded = decodeSignature(dataUri);
     return stage({
@@ -160,10 +213,16 @@ function createDeliveryEvidenceService({ repository } = {}) {
       maxBytes: SIGNATURE_MAX_BYTES,
       allowedRepartidorIds,
       signal,
+      deviceId,
+      capturedAt: clock(),
     });
   }
 
-  async function stagePhoto({ documentId, repartidorId, mimeType, buffer, allowedRepartidorIds, signal }) {
+  async function stagePhoto({
+    documentId, repartidorId, mimeType, buffer, allowedRepartidorIds, signal, deviceId, deliveryAt,
+  }) {
+    throwIfAborted(signal);
+    assertPhotoWindow(deliveryAt, clock());
     return stage({
       documentId,
       repartidorId,
@@ -173,6 +232,8 @@ function createDeliveryEvidenceService({ repository } = {}) {
       maxBytes: PHOTO_MAX_BYTES,
       allowedRepartidorIds,
       signal,
+      deviceId,
+      capturedAt: clock(),
     });
   }
 

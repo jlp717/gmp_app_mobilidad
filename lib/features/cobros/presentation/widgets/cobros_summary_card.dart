@@ -183,20 +183,18 @@ class CobrosSummaryCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Contra Reembolso Pendiente',
-                          style: TextStyle(
-                            color: AppTheme.error,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
+                        Text(
+                          'Hay entregas por cobrar',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ).copyWith(color: AppTheme.textPrimary),
                         ),
                         Text(
-                          '$totalCTR entregas requieren cobro',
-                          style: TextStyle(
-                            color: AppTheme.error.withValues(alpha: 0.7),
-                            fontSize: 10,
-                          ),
+                          '$totalCTR entregas requieren cobro antes de cerrarlas',
+                          style: const TextStyle(
+                            fontSize: 16,
+                          ).copyWith(color: AppTheme.textSecondary),
                         ),
                       ],
                     ),

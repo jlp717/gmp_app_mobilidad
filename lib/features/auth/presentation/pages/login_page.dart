@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/design/a11y_tokens.dart';
+import 'package:gmp_app_mobilidad/features/auth/presentation/widgets/login_error_dialog.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/widgets/role_selection_dialog.dart';
 import 'package:go_router/go_router.dart';
 
@@ -43,7 +45,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     _logoController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
-    )..repeat(reverse: true);
+    );
 
     _usernameFocus.addListener(
       () => setState(() => _isUsernameFocused = _usernameFocus.hasFocus),
@@ -51,6 +53,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     _passwordFocus.addListener(
       () => setState(() => _isPasswordFocused = _passwordFocus.hasFocus),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (reduceMotion) {
+      _logoController.stop();
+    } else if (!_logoController.isAnimating) {
+      _logoController.repeat(reverse: true);
+    }
   }
 
   @override
@@ -132,56 +145,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         }
       });
 
+      final rateLimited = (_errorMessage ?? '').contains('Espera unos minutos');
       await showDialog(
         context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: AppTheme.raisedSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-            side: BorderSide(color: AppTheme.error.withValues(alpha: 0.2)),
-          ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.error.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.error_outline,
-                  color: AppTheme.error,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Error de acceso',
-                style: TextStyle(color: AppTheme.error),
-              ),
-            ],
-          ),
-          content: Text(
-            _errorMessage ??
-                'Credenciales incorrectas. Por favor, inténtalo de nuevo.',
-            style: TextStyle(color: AppTheme.textPrimary),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              style: TextButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Entendido',
-                style: TextStyle(color: AppTheme.info),
-              ),
-            ),
-          ],
+        builder: (context) => LoginAccessErrorDialog(
+          message:
+              _errorMessage ?? 'El usuario o la contraseña no son correctos.',
+          whatToDo: rateLimited
+              ? 'Espera unos minutos y vuelve a intentarlo.'
+              : 'Revisa usuario y contraseña y pulsa Iniciar sesión otra vez.',
         ),
       );
     }
@@ -322,7 +294,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         Text(
           'Ventas, reparto y almacén',
           style: TextStyle(
-            fontSize: 13,
+            fontSize: A11yTokens.minText,
             color: AppTheme.textSecondary,
           ),
         ),
@@ -377,15 +349,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppTheme.info),
+          Icon(icon, size: 18, color: AppTheme.info),
           const SizedBox(width: 6),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 12,
-              color: AppTheme.textPrimary.withValues(alpha: 0.6),
-              fontWeight: FontWeight.w500,
-            ),
+            style: const TextStyle(
+              fontSize: A11yTokens.minText,
+              fontWeight: FontWeight.w600,
+            ).copyWith(color: AppTheme.textPrimary),
           ),
         ],
       ),
@@ -473,20 +444,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Error de acceso',
+                            'No se pudo entrar',
                             style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                              fontSize: A11yTokens.minText,
+                              fontWeight: FontWeight.w700,
                               color: AppTheme.error,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            _errorMessage ?? 'Verifica tus credenciales',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.error.withValues(alpha: 0.7),
-                            ),
+                            _errorMessage ??
+                                'Revisa usuario y contraseña e inténtalo otra vez.',
+                            style: const TextStyle(
+                              fontSize: A11yTokens.minText,
+                            ).copyWith(color: AppTheme.textPrimary),
                           ),
                         ],
                       ),
@@ -514,8 +485,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               icon: Icons.person_rounded,
               textInputAction: TextInputAction.next,
               onChanged: (_) => _clearError(),
-              validator: (v) =>
-                  (v?.trim().isEmpty ?? false) ? 'Ingresa tu usuario' : null,
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Escribe tu usuario para entrar'
+                  : null,
             ),
 
             const SizedBox(height: 16),
@@ -532,20 +504,25 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               textInputAction: TextInputAction.done,
               onChanged: (_) => _clearError(),
               onSubmit: (_) => _handleLogin(),
-              validator: (v) =>
-                  (v?.isEmpty ?? false) ? 'Ingresa tu contraseña' : null,
-              suffix: InkWell(
-                onTap: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Icon(
+              validator: (v) => (v == null || v.isEmpty)
+                  ? 'Escribe tu contraseña para entrar'
+                  : null,
+              suffix: Semantics(
+                button: true,
+                label: _obscurePassword
+                    ? 'Mostrar contraseña'
+                    : 'Ocultar contraseña',
+                child: IconButton(
+                  tooltip: _obscurePassword
+                      ? 'Mostrar contraseña'
+                      : 'Ocultar contraseña',
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
+                  icon: Icon(
                     _obscurePassword
                         ? Icons.visibility_off_rounded
                         : Icons.visibility_rounded,
-                    size: 18,
-                    color: AppTheme.textPrimary.withValues(alpha: 0.3),
+                    color: AppTheme.textSecondary,
                   ),
                 ),
               ),
@@ -561,66 +538,74 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 return MouseRegion(
                   onEnter: (_) => setState(() => _isButtonHovered = true),
                   onExit: (_) => setState(() => _isButtonHovered = false),
-                  child: GestureDetector(
-                    onTap: isLoading ? null : _handleLogin,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      height: 54,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                        color: isLoading
-                            ? AppTheme.textPrimary.withValues(alpha: 0.08)
-                            : AppTheme.info,
-                        boxShadow: isLoading
-                            ? []
-                            : [
-                                BoxShadow(
-                                  color: AppTheme.info.withValues(
-                                    alpha: _isButtonHovered ? 0.4 : 0.25,
-                                  ),
-                                  blurRadius: _isButtonHovered ? 18 : 12,
-                                  offset: Offset(0, _isButtonHovered ? 9 : 6),
-                                ),
-                              ],
-                      ),
-                      child: Center(
-                        child: isLoading
-                            ? SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation(
-                                    AppTheme.textPrimary.withValues(alpha: 0.8),
-                                  ),
-                                ),
-                              )
-                            : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Iniciar Sesión',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.textPrimary,
-                                      letterSpacing: 0,
+                  child: Semantics(
+                    button: true,
+                    enabled: !isLoading,
+                    label: isLoading ? 'Entrando' : 'Iniciar sesión',
+                    child: GestureDetector(
+                      onTap: isLoading ? null : _handleLogin,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        height: 54,
+                        decoration: BoxDecoration(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                          color: isLoading
+                              ? AppTheme.textPrimary.withValues(alpha: 0.08)
+                              : AppTheme.info,
+                          boxShadow: isLoading
+                              ? []
+                              : [
+                                  BoxShadow(
+                                    color: AppTheme.info.withValues(
+                                      alpha: _isButtonHovered ? 0.4 : 0.25,
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  AnimatedPadding(
-                                    duration: const Duration(milliseconds: 200),
-                                    padding: EdgeInsets.only(
-                                      left: _isButtonHovered ? 4 : 0,
-                                    ),
-                                    child: Icon(
-                                      Icons.arrow_forward_rounded,
-                                      color: AppTheme.textPrimary,
-                                      size: 18,
-                                    ),
+                                    blurRadius: _isButtonHovered ? 18 : 12,
+                                    offset: Offset(0, _isButtonHovered ? 9 : 6),
                                   ),
                                 ],
-                              ),
+                        ),
+                        child: Center(
+                          child: isLoading
+                              ? SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation(
+                                      AppTheme.textPrimary
+                                          .withValues(alpha: 0.8),
+                                    ),
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Iniciar sesión',
+                                      style: TextStyle(
+                                        fontSize: A11yTokens.minText,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.textPrimary,
+                                        letterSpacing: 0,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    AnimatedPadding(
+                                      duration:
+                                          const Duration(milliseconds: 200),
+                                      padding: EdgeInsets.only(
+                                        left: _isButtonHovered ? 4 : 0,
+                                      ),
+                                      child: Icon(
+                                        Icons.arrow_forward_rounded,
+                                        color: AppTheme.textPrimary,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
                       ),
                     ),
                   ),
@@ -650,10 +635,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Conexión segura • GMP 2026',
+                  'Conexión segura',
                   style: TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.textPrimary.withValues(alpha: 0.3),
+                    fontSize: A11yTokens.minText,
+                    color: AppTheme.textSecondary,
                     letterSpacing: 0,
                   ),
                 ),
@@ -685,11 +670,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         AnimatedDefaultTextStyle(
           duration: const Duration(milliseconds: 200),
           style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: isFocused
-                ? AppTheme.info
-                : AppTheme.textPrimary.withValues(alpha: 0.4),
+            fontSize: A11yTokens.minText,
+            fontWeight: FontWeight.w600,
+            color: isFocused ? AppTheme.info : AppTheme.textSecondary,
             letterSpacing: 0,
           ),
           child: Text(label),
@@ -725,11 +708,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             onChanged: onChanged,
             onFieldSubmitted: onSubmit,
             validator: validator,
-            style: TextStyle(fontSize: 14, color: AppTheme.textPrimary),
+            style: const TextStyle(
+              fontSize: A11yTokens.minText,
+            ).copyWith(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle:
-                  TextStyle(color: AppTheme.textPrimary.withValues(alpha: 0.2)),
+              hintStyle: TextStyle(
+                fontSize: A11yTokens.minText,
+                color: AppTheme.textSecondary,
+              ),
               prefixIcon: Icon(
                 icon,
                 size: 18,
@@ -742,7 +729,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               border: InputBorder.none,
-              errorStyle: const TextStyle(fontSize: 11, height: 0.8),
+              errorStyle: const TextStyle(
+                fontSize: A11yTokens.minText,
+                height: 1.3,
+              ),
             ),
           ),
         ),

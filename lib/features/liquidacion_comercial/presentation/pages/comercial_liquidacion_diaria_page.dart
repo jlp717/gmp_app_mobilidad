@@ -1283,8 +1283,8 @@ class _SaveBar extends StatelessWidget {
                       status.label,
                       style: TextStyle(
                         color: status.color,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
@@ -1296,7 +1296,7 @@ class _SaveBar extends StatelessWidget {
                       textAlign: TextAlign.end,
                       style: TextStyle(
                         color: AppTheme.textSecondary,
-                        fontSize: 12,
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1322,7 +1322,8 @@ class _SaveBar extends StatelessWidget {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.themedPrimaryText,
                           side: BorderSide(color: AppColors.themedLine),
-                          minimumSize: const Size(0, 44),
+                          minimumSize: const Size(48, 48),
+                          textStyle: const TextStyle(fontSize: 16),
                         ),
                         icon: const Icon(Icons.undo_rounded, size: 18),
                         label: const Text('Devuelve'),
@@ -1332,21 +1333,29 @@ class _SaveBar extends StatelessWidget {
                   const SizedBox(width: 12),
                 ],
                 Expanded(
-                  child: SizedBox(
-                    height: 44,
-                    child: ElevatedButton.icon(
-                      key: const ValueKey(
-                        'comercial-liquidacion-save-button',
+                  child: Semantics(
+                    button: true,
+                    label: 'Guardar liquidación del día',
+                    child: SizedBox(
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        key: const ValueKey(
+                          'comercial-liquidacion-save-button',
+                        ),
+                        onPressed: canSave ? onSave : null,
+                        icon: isSaving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.check_rounded, size: 18),
+                        label: Text(
+                          isSaving ? 'Guardando' : 'Guardar',
+                          style: const TextStyle(fontSize: 16),
+                        ),
                       ),
-                      onPressed: canSave ? onSave : null,
-                      icon: isSaving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.check_rounded, size: 18),
-                      label: Text(isSaving ? 'Guardando' : 'Guardar'),
                     ),
                   ),
                 ),
@@ -1495,7 +1504,7 @@ class _DevolucionesLoadError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'Error al cargar cobros y devoluciones',
+      label: 'No se pudieron cargar cobros y devoluciones. Pulsa Reintentar.',
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
@@ -1510,16 +1519,21 @@ class _DevolucionesLoadError extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'No se pudieron cargar cobros y devoluciones',
+                'No se pudieron cargar cobros y devoluciones. Pulsa Reintentar.',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w700,
+                  fontSize: 16,
                 ),
               ),
             ),
             TextButton(
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
               onPressed: onRetry,
-              child: const Text('Reintentar'),
+              child: const Text(
+                'Reintentar',
+                style: TextStyle(fontSize: 16),
+              ),
             ),
           ],
         ),
@@ -1539,13 +1553,26 @@ class _DevolucionesList extends StatelessWidget {
   Widget build(BuildContext context) {
     if (returns.isEmpty) {
       return Semantics(
-        label: 'Sin devoluciones de mercancía en el día',
-        child: Text(
-          'Sin devoluciones de mercancía en el día',
-          style: TextStyle(
-            color: AppTheme.textSecondary.withValues(alpha: 0.86),
-            fontSize: 13,
-          ),
+        label:
+            'Sin devoluciones de mercancía en el día. Si hay una, pulsa Devuelve.',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Sin devoluciones de mercancía en el día',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 16,
+              ),
+            ),
+            Text(
+              'Si hay una, pulsa Devuelve.',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 16,
+              ),
+            ),
+          ],
         ),
       );
     }

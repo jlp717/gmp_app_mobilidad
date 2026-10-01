@@ -5,6 +5,8 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
+import 'package:gmp_app_mobilidad/core/design/a11y_tokens.dart';
+import 'package:gmp_app_mobilidad/features/cobros/presentation/widgets/cobro_confirm_dialog.dart';
 import 'package:gmp_app_mobilidad/features/cobros/providers/cobros_provider.dart';
 import 'package:intl/intl.dart';
 
@@ -233,8 +235,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   }
 
   CobrosParams get _params => CobrosParams(employeeCode: widget.employeeCode);
-  CobrosNotifier get _notifier =>
-      ref.read(cobrosProvider(_params).notifier);
+  CobrosNotifier get _notifier => ref.read(cobrosProvider(_params).notifier);
   CobrosState get _state => ref.read(cobrosProvider(_params));
 
   Map<String, CobroPendiente> _pendientesById(List<CobroPendiente> pendientes) {
@@ -283,8 +284,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     } else if (!isValidCobroPaymentAmount(cobro, amount)) {
       final min = minimumCobroAmount(cobro);
       _partialErrors[cobroId] = cobro.cobroRiguroso && min > cobroPayableEpsilon
-          ? 'Minimo ${cobro.porcentajeMinimoCobro.toStringAsFixed(0)}%: ${_currencyFormat.format(min)}'
-          : 'Maximo: ${_currencyFormat.format(cobro.importePendiente)}';
+          ? 'Mínimo ${cobro.porcentajeMinimoCobro.toStringAsFixed(0)}%: ${_currencyFormat.format(min)}. Sube el importe.'
+          : 'Máximo: ${_currencyFormat.format(cobro.importePendiente)}. Baja el importe.';
       _partialAmounts.remove(cobroId);
     } else {
       _partialErrors.remove(cobroId);
@@ -297,7 +298,12 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     if (_isSubmitting) return;
     if (totalACobrar <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona algun documento para cobrar')),
+        const SnackBar(
+          content: Text(
+            'Selecciona algún documento para cobrar. Marca al menos uno de la lista.',
+            style: TextStyle(fontSize: A11yTokens.minText),
+          ),
+        ),
       );
       return;
     }
@@ -306,86 +312,25 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     if (_partialErrors.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Corrige los importes parciales antes de cobrar'),
+          content: Text(
+            'Corrige los importes en rojo antes de cobrar. El mínimo y el máximo están junto a cada documento.',
+            style: TextStyle(fontSize: A11yTokens.minText),
+          ),
           backgroundColor: AppTheme.error,
         ),
       );
       return;
     }
 
-    final observationsController = TextEditingController();
-    final confirmationForm = GlobalKey<FormState>();
     final observations = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.raisedSurface,
-        title: const Text('Confirmar cobro'),
-        content: Form(
-          key: confirmationForm,
-          child: SingleChildScrollView(
-              child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Cliente: ${widget.nombreCliente}',
-                style: TextStyle(color: AppColors.themedWhite70),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Importe: ${_currencyFormat.format(totalACobrar)}',
-                style: TextStyle(
-                  color: AppColors.themedWhite,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Forma de pago: $_formaPago',
-                style: TextStyle(color: AppColors.themedWhite70, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              Semantics(
-                label: 'Observaciones obligatorias del cobro',
-                child: TextFormField(
-                  controller: observationsController,
-                  minLines: 2,
-                  maxLines: 4,
-                  maxLength: 500,
-                  decoration: const InputDecoration(
-                    labelText: 'Observaciones del cobro',
-                    hintText: 'Indica el motivo o los detalles del cobro',
-                  ),
-                  validator: (value) => (value?.trim().isEmpty ?? true)
-                      ? 'Las observaciones son obligatorias'
-                      : null,
-                ),
-              ),
-            ],
-          )),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (confirmationForm.currentState?.validate() == true) {
-                Navigator.of(ctx).pop(observationsController.text.trim());
-              }
-            },
-            child: const Text('Confirmar cobro'),
-          ),
-        ],
+      builder: (ctx) => CobroConfirmDialog(
+        cliente: widget.nombreCliente,
+        importeLabel: _currencyFormat.format(totalACobrar),
+        formaPago: _formaPago,
       ),
     );
 
-    // Wait until the closing dialog releases its text field before disposal.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      observationsController.dispose();
-    });
     if (observations == null || observations.isEmpty || !mounted) return;
 
     var fallos = 0;

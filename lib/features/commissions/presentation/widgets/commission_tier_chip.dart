@@ -47,7 +47,7 @@ class CommissionTierChip extends StatelessWidget {
               child: Text(
                 tier,
                 style: const TextStyle(
-                  fontSize: 9,
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.info,
                 ),
@@ -56,7 +56,7 @@ class CommissionTierChip extends StatelessWidget {
             const SizedBox(width: 4),
             Text(
               '$range → $rate',
-              style: TextStyle(fontSize: 9, color: AppTheme.textSecondary),
+              style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
             ),
           ],
         ),

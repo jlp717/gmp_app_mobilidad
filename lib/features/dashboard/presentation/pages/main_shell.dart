@@ -12,6 +12,7 @@ import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
 import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/shell_frame.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/app_version_badge.dart';
 import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
@@ -580,7 +581,9 @@ class _MainShellState extends ConsumerState<MainShell> {
     final currentUserCode = user.code;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(pedidosNotifierProvider.notifier).setUserRole(currentRole, code: currentUserCode);
+      ref
+          .read(pedidosNotifierProvider.notifier)
+          .setUserRole(currentRole, code: currentUserCode);
     });
 
     // PERFORMANCE: Use select() to only rebuild when vendedorCodes changes
@@ -626,80 +629,41 @@ class _MainShellState extends ConsumerState<MainShell> {
     final bottomItems =
         hasOverflow ? navItems.sublist(0, maxBottomItems - 1) : navItems;
 
-    return Scaffold(
-      backgroundColor: AppColors.transparent,
+    return PhoneShellScaffold(
       drawer: _buildPhoneDrawer(user, isJefeVentas),
-      body: DecoratedBox(
-        decoration: AppTheme.appBackground(),
-        // REQ-20 tanda4: safe-area inferior global en un punto (shell).
-        // minimum max(inset, 0): paridad pixel cuando no hay inset.
-        child: SafeArea(
-          minimum: EdgeInsets.only(
-            bottom: Responsive.bottomSafeInset(context),
-          ),
-          child: _buildCurrentPage(isJefeVentas),
-        ),
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          gradient: AppTheme.commandGradient,
-          border: Border(
-            top: BorderSide(
-              color: AppTheme.activeRing.withValues(alpha: 0.16),
-            ),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.systemBlack.withValues(alpha: 0.42),
-              blurRadius: 24,
-              offset: const Offset(0, -10),
-            ),
-            BoxShadow(
-              color: AppTheme.activeRing.withValues(alpha: 0.06),
-              blurRadius: 28,
-            ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
-          minimum: EdgeInsets.only(
-            bottom: Responsive.bottomSafeInset(context),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                // Hamburger/avatar button to open drawer
-                _buildBottomNavDrawerButton(user),
-                // Nav items
-                ...bottomItems.asMap().entries.map((entry) {
-                  final idx = entry.key;
-                  return Expanded(
-                    child: _buildBottomNavItem(
-                      item: entry.value,
-                      isSelected: safeIndex == idx,
-                      onTap: () => setState(() => _currentIndex = idx),
-                    ),
-                  );
-                }),
-                // "More" overflow button
-                if (hasOverflow)
-                  Expanded(
-                    child: _buildBottomNavItem(
-                      item: _NavItem(
-                        icon: Icons.more_horiz,
-                        selectedIcon: Icons.more_horiz,
-                        label: 'Más',
-                        color: AppTheme.textSecondary,
-                      ),
-                      isSelected: safeIndex >= maxBottomItems - 1,
-                      onTap: () =>
-                          _showOverflowMenu(navItems, maxBottomItems - 1),
-                    ),
+      body: _buildCurrentPage(isJefeVentas),
+      bottomBar: PhoneShellBottomBar(
+        child: Row(
+          key: const Key('shell-nav-content'),
+          children: [
+            // Hamburger/avatar button to open drawer
+            _buildBottomNavDrawerButton(user),
+            // Nav items
+            ...bottomItems.asMap().entries.map((entry) {
+              final idx = entry.key;
+              return Expanded(
+                child: _buildBottomNavItem(
+                  item: entry.value,
+                  isSelected: safeIndex == idx,
+                  onTap: () => setState(() => _currentIndex = idx),
+                ),
+              );
+            }),
+            // "More" overflow button
+            if (hasOverflow)
+              Expanded(
+                child: _buildBottomNavItem(
+                  item: _NavItem(
+                    icon: Icons.more_horiz,
+                    selectedIcon: Icons.more_horiz,
+                    label: 'Más',
+                    color: AppTheme.textSecondary,
                   ),
-              ],
-            ),
-          ),
+                  isSelected: safeIndex >= maxBottomItems - 1,
+                  onTap: () => _showOverflowMenu(navItems, maxBottomItems - 1),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -997,147 +961,132 @@ class _MainShellState extends ConsumerState<MainShell> {
   ) {
     final sidebarW = Responsive.sidebarWidth(context);
 
-    return Scaffold(
-      backgroundColor: AppColors.transparent,
-      body: DecoratedBox(
-        decoration: AppTheme.appBackground(),
-        // REQ-20 tanda4: mismo punto shell en tablet (contenido Expanded).
-        child: SafeArea(
-          minimum: EdgeInsets.only(
-            bottom: Responsive.bottomSafeInset(context),
-          ),
-          child: Row(
-            children: [
-              // Sidebar Navigation
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                width: _isNavExpanded ? sidebarW : 0,
-                child: _isNavExpanded
-                    ? Container(
-                        decoration: BoxDecoration(
-                          gradient: AppTheme.commandGradient,
-                          border: Border(
-                            right: BorderSide(
-                              color:
-                                  AppTheme.activeRing.withValues(alpha: 0.16),
-                            ),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  AppColors.systemBlack.withValues(alpha: 0.40),
-                              blurRadius: 24,
-                              offset: const Offset(10, 0),
-                            ),
-                            BoxShadow(
-                              color:
-                                  AppTheme.activeRing.withValues(alpha: 0.05),
-                              blurRadius: 28,
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            const SizedBox(height: 16),
-                            _buildUserAvatar(user, isJefeVentas),
-                            const SizedBox(height: 16),
-
-                            // Mode switcher for Jefe
-                            if (canSwitchAuthenticatedModes(user))
-                              _buildModeSwitcher(compact: sidebarW < 128),
-
-                            const SizedBox(height: 16),
-
-                            Expanded(
-                              child: ListView.builder(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 8),
-                                itemCount: navItems.length,
-                                itemBuilder: (context, index) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: _buildNavItem(
-                                      item: navItems[index],
-                                      isSelected: safeIndex == index,
-                                      onTap: () =>
-                                          setState(() => _currentIndex = index),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-
-                            Divider(
-                              height: 1,
-                              color: AppTheme.borderColor,
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                children: [
-                                  const AppVersionBadge(),
-                                  const SizedBox(height: 8),
-                                  _buildNotificationSettingsButton(),
-                                  const SizedBox(height: 8),
-                                  _buildCollapseButton(),
-                                  const SizedBox(height: 8),
-                                  _buildLogoutButton(),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : null,
-              ),
-
-              // Expand button when sidebar is collapsed
-              if (!_isNavExpanded)
-                Semantics(
-                    button: true,
-                    label: 'Mostrar navegacion lateral',
-                    child: GestureDetector(
-                      onTap: () => setState(() => _isNavExpanded = true),
-                      child: Container(
-                        width: 24,
-                        decoration: BoxDecoration(
-                          color: AppTheme.raisedSurface,
-                          border: Border(
-                            right: BorderSide(
-                              color:
-                                  AppTheme.borderColor.withValues(alpha: 0.72),
-                            ),
-                          ),
-                        ),
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 20,
-                              horizontal: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.softPanel,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppTheme.borderColor),
-                            ),
-                            child: Icon(
-                              Icons.chevron_right_rounded,
-                              color: AppTheme.textSecondary,
-                              size: 16,
-                            ),
-                          ),
+    return TabletShellScaffold(
+      child: Row(
+        children: [
+          // Sidebar Navigation
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            width: _isNavExpanded ? sidebarW : 0,
+            child: _isNavExpanded
+                ? Container(
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.commandGradient,
+                      border: Border(
+                        right: BorderSide(
+                          color: AppTheme.activeRing.withValues(alpha: 0.16),
                         ),
                       ),
-                    )),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.systemBlack.withValues(alpha: 0.40),
+                          blurRadius: 24,
+                          offset: const Offset(10, 0),
+                        ),
+                        BoxShadow(
+                          color: AppTheme.activeRing.withValues(alpha: 0.05),
+                          blurRadius: 28,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 16),
+                        _buildUserAvatar(user, isJefeVentas),
+                        const SizedBox(height: 16),
 
-              // Main Content
-              Expanded(
-                child: _buildCurrentPage(isJefeVentas),
-              ),
-            ],
+                        // Mode switcher for Jefe
+                        if (canSwitchAuthenticatedModes(user))
+                          _buildModeSwitcher(compact: sidebarW < 128),
+
+                        const SizedBox(height: 16),
+
+                        Expanded(
+                          child: ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            itemCount: navItems.length,
+                            itemBuilder: (context, index) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _buildNavItem(
+                                  item: navItems[index],
+                                  isSelected: safeIndex == index,
+                                  onTap: () =>
+                                      setState(() => _currentIndex = index),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+
+                        Divider(
+                          height: 1,
+                          color: AppTheme.borderColor,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            children: [
+                              const AppVersionBadge(),
+                              const SizedBox(height: 8),
+                              _buildNotificationSettingsButton(),
+                              const SizedBox(height: 8),
+                              _buildCollapseButton(),
+                              const SizedBox(height: 8),
+                              _buildLogoutButton(),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : null,
           ),
-        ),
+
+          // Expand button when sidebar is collapsed
+          if (!_isNavExpanded)
+            Semantics(
+                button: true,
+                label: 'Mostrar navegacion lateral',
+                child: GestureDetector(
+                  onTap: () => setState(() => _isNavExpanded = true),
+                  child: Container(
+                    width: 24,
+                    decoration: BoxDecoration(
+                      color: AppTheme.raisedSurface,
+                      border: Border(
+                        right: BorderSide(
+                          color: AppTheme.borderColor.withValues(alpha: 0.72),
+                        ),
+                      ),
+                    ),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 20,
+                          horizontal: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.softPanel,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.borderColor),
+                        ),
+                        child: Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppTheme.textSecondary,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                )),
+
+          // Main Content
+          Expanded(
+            child: _buildCurrentPage(isJefeVentas),
+          ),
+        ],
       ),
     );
   }

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/design/a11y_tokens.dart';
+import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:go_router/go_router.dart';
 
-/// Role selection dialog with compact operational styling.
+/// El jefe elige un perfil de trabajo. El elegido se lee, no solo se colorea.
 class RoleSelectionDialog extends StatefulWidget {
   const RoleSelectionDialog({super.key});
 
@@ -21,7 +23,9 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
   @override
   Widget build(BuildContext context) {
     final isSmall = Responsive.isSmall(context);
-    final dialogWidth = Responsive.clampWidth(context, 440);
+    final screenW = MediaQuery.sizeOf(context).width;
+    final preferred = Responsive.clampWidth(context, 440);
+    final dialogWidth = preferred > screenW - 32 ? screenW - 32 : preferred;
 
     return Dialog(
       backgroundColor: AppColors.transparent,
@@ -31,149 +35,84 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
       ),
       child: Container(
         width: dialogWidth,
-        padding: EdgeInsets.all(isSmall ? 24 : 32),
+        padding: EdgeInsets.all(isSmall ? 20 : 28),
         decoration: BoxDecoration(
           color: AppTheme.raisedSurface,
           borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-          border:
-              Border.all(color: AppColors.themedWhite.withValues(alpha: 0.08)),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.systemBlack.withValues(alpha: 0.4),
-              blurRadius: 40,
-              offset: const Offset(0, 20),
-            ),
-          ],
+          border: Border.all(
+            color: AppColors.themedWhite.withValues(alpha: 0.08),
+          ),
         ),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.info,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    ),
-                    child: Icon(
-                      Icons.account_circle_rounded,
-                      color: AppColors.themedWhite,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Selecciona tu Rol Activo',
-                          style: TextStyle(
-                            color: AppColors.themedWhite,
-                            fontSize: isSmall ? 17 : 20,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Como Jefe, puedes operar en diferentes perfiles',
-                          style: TextStyle(
-                            color: AppColors.themedWhite.withValues(alpha: 0.4),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              Text(
+                'Elige cómo vas a trabajar',
+                style: A11yTokens.title.copyWith(color: AppColors.themedWhite),
               ),
-              SizedBox(height: isSmall ? 20 : 28),
-
-              // Role options
+              const SizedBox(height: 8),
+              Text(
+                'Puedes vender, repartir o entrar en almacén. Luego podrás cambiar.',
+                style: A11yTokens.body.copyWith(color: AppTheme.textSecondary),
+              ),
+              SizedBox(height: isSmall ? 16 : 24),
               _buildRoleOption(
                 'COMERCIAL',
                 Icons.shopping_bag_outlined,
-                'Gestión de Ventas',
+                'Ventas',
+                'Pedidos, clientes y cobros',
                 AppTheme.info,
               ),
               const SizedBox(height: 10),
               _buildRoleOption(
                 'REPARTIDOR',
                 Icons.local_shipping_outlined,
-                'Gestión de Reparto',
+                'Reparto',
+                'Entregas y cobros de ruta',
                 AppTheme.accentIndigo,
               ),
               const SizedBox(height: 10),
               _buildRoleOption(
                 'ALMACEN',
                 Icons.inventory_2_outlined,
-                'Gestión de Almacén',
+                'Almacén',
+                'Expediciones y preparación',
                 AppTheme.accentRose,
               ),
-
-              SizedBox(height: isSmall ? 20 : 28),
-
-              // Actions
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: _isSwitching
-                        ? null
-                        : () {
-                            Navigator.of(context).pop();
-                            context.go('/dashboard');
-                          },
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      ),
-                    ),
-                    child: Text(
-                      'Cancelar',
-                      style: TextStyle(color: AppColors.themedWhite38),
-                    ),
+              SizedBox(height: isSmall ? 16 : 24),
+              Semantics(
+                button: true,
+                label: _isSwitching ? 'Cambiando perfil' : 'Confirmar perfil',
+                child: FilledButton(
+                  style: A11yTokens.touchButton(background: AppTheme.info),
+                  onPressed: _isSwitching ? null : _confirmRole,
+                  child: _isSwitching
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Confirmar'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Semantics(
+                button: true,
+                label: 'Cancelar y entrar como comercial',
+                child: TextButton(
+                  style: A11yTokens.touchButton(
+                    foreground: AppTheme.textSecondary,
                   ),
-                  const SizedBox(width: 10),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.info,
-                      foregroundColor: AppColors.themedWhite,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isSmall ? 20 : 28,
-                        vertical: isSmall ? 10 : 14,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      ),
-                      elevation: 0,
-                      shadowColor: AppTheme.info.withValues(alpha: 0.3),
-                    ),
-                    onPressed: _isSwitching ? null : _confirmRole,
-                    child: _isSwitching
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text(
-                            'Confirmar',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0,
-                            ),
-                          ),
-                  ),
-                ],
+                  onPressed: _isSwitching
+                      ? null
+                      : () {
+                          Navigator.of(context).pop();
+                          context.go('/dashboard');
+                        },
+                  child: const Text('Cancelar'),
+                ),
               ),
             ],
           ),
@@ -186,79 +125,75 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
     String role,
     IconData icon,
     String label,
+    String detail,
     Color color,
   ) {
     final isSelected = _selectedRole == role;
-    return InkWell(
-      onTap: _isSwitching ? null : () => setState(() => _selectedRole = role),
-      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? color.withValues(alpha: 0.12)
-              : AppTheme.softPanel.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          border: Border.all(
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: isSelected ? '$label. Elegido' : label,
+      child: InkWell(
+        onTap: _isSwitching ? null : () => setState(() => _selectedRole = role),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        child: AnimatedContainer(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
             color: isSelected
-                ? color.withValues(alpha: 0.3)
-                : AppColors.themedWhite.withValues(alpha: 0.06),
-            width: isSelected ? 1.5 : 1,
+                ? color.withValues(alpha: 0.12)
+                : AppTheme.softPanel.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            border: Border.all(
+              color: isSelected
+                  ? color
+                  : AppColors.themedWhite.withValues(alpha: 0.16),
+              width: isSelected ? 2 : 1,
+            ),
           ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : [],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: (isSelected ? color : AppColors.themedWhite)
-                    .withValues(alpha: isSelected ? 0.15 : 0.06),
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              ),
-              child: Icon(
+          child: Row(
+            children: [
+              Icon(
                 icon,
-                color: isSelected
-                    ? color
-                    : AppColors.themedWhite.withValues(alpha: 0.3),
-                size: 22,
+                color: isSelected ? color : AppTheme.textSecondary,
+                size: 28,
               ),
-            ),
-            const SizedBox(width: 14),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected
-                    ? AppColors.themedWhite
-                    : AppColors.themedWhite.withValues(alpha: 0.5),
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                fontSize: 15,
-              ),
-            ),
-            const Spacer(),
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
-              opacity: isSelected ? 1.0 : 0.0,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: AppColors.themedWhite,
+                        fontWeight: FontWeight.w700,
+                        fontSize: A11yTokens.minText,
+                      ),
+                    ),
+                    Text(
+                      detail,
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: A11yTokens.minText,
+                      ),
+                    ),
+                    if (isSelected)
+                      Text(
+                        'Elegido',
+                        style: TextStyle(
+                          color: color,
+                          fontSize: A11yTokens.minText,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                  ],
                 ),
-                child: Icon(Icons.check_rounded, color: color, size: 16),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -271,39 +206,30 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
     try {
       final success =
           await ref.read(authProvider.notifier).switchRole(_selectedRole);
+      if (!mounted) return;
       if (success) {
-        if (mounted) {
-          Navigator.of(context).pop();
-          context.go('/dashboard');
-        }
-      } else {
-        if (mounted) {
-          final error = ref.read(authProvider).value?.error;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: ${error ?? "Failed to switch role"}'),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              ),
-            ),
-          );
-        }
+        Navigator.of(context).pop();
+        context.go('/dashboard');
+        return;
       }
+      final error = ref.read(authProvider).value?.error ?? '';
+      _showFailure(error);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            ),
-          ),
-        );
-      }
+      if (mounted) _showFailure(e.toString());
     } finally {
       if (mounted) setState(() => _isSwitching = false);
     }
+  }
+
+  void _showFailure(String raw) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${gmpWhatHappened(raw.isEmpty ? 'Error al cambiar el perfil' : raw)} ${gmpWhatToDo(raw)}',
+          style: const TextStyle(fontSize: A11yTokens.minText),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 }

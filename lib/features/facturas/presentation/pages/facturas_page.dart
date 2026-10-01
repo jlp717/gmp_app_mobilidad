@@ -17,7 +17,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
-import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 import 'package:gmp_app_mobilidad/core/widgets/email_form_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
@@ -320,7 +320,10 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       debugPrint('[FACTURAS] DatePicker Error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error abriendo calendario: $e'),
+          content: const Text(
+            'No se pudo abrir el calendario. Elige el mes en los filtros.',
+            style: TextStyle(fontSize: 16),
+          ),
           backgroundColor: AppTheme.error,
         ),
       );
@@ -715,7 +718,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     );
   }
 
-  Future<void> _refreshData({bool forceRefresh = false, bool fromSearch = false}) async {
+  Future<void> _refreshData(
+      {bool forceRefresh = false, bool fromSearch = false}) async {
     if (!mounted) return;
     if (_vendedorCodes.isEmpty) return;
     // REQ-07.1: search typing invalidates the fresh-guard (bypass
@@ -773,10 +777,16 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         _summary = results[1] as FacturaSummary?;
         _lastFetchTime = DateTime.now();
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
+        const SnackBar(
+          content: Text(
+            'No se pudieron cargar los documentos. Comprueba la conexión y pulsa actualizar.',
+            style: TextStyle(fontSize: 16),
+          ),
+          backgroundColor: AppTheme.error,
+        ),
       );
     }
   }
@@ -1177,12 +1187,15 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           ),
         );
       }
-    } catch (e) {
+    } catch (_) {
       modal.close();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al compartir: $e'),
+            content: const Text(
+              'No se pudo compartir el documento. Inténtalo otra vez o envíalo por correo.',
+              style: TextStyle(fontSize: 16),
+            ),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -1302,8 +1315,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                         // OPTIMIZATION: Use SkeletonList for perceived performance
                         ? const SkeletonList(itemCount: 8, itemHeight: 100)
                         : _error != null
-                            ? ErrorStateWidget(
-                                message: _error!,
+                            ? GmpErrorPanel(
+                                whatHappened: gmpWhatHappened(_error!),
+                                whatToDo: gmpWhatToDo(_error!),
                                 onRetry: () {
                                   unawaited(
                                     _refreshData(forceRefresh: true),
@@ -1934,67 +1948,28 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         _clientSearchController.text.isNotEmpty ||
         _facturaSearchController.text.isNotEmpty;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              hasFilters
-                  ? Icons.search_off_rounded
-                  : Icons.receipt_long_outlined,
-              size: 56,
-              color: AppColors.themedWhite24,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              hasFilters
-                  ? 'No se han encontrado documentos para los filtros seleccionados'
-                  : 'No hay documentos disponibles',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.themedWhite54,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              hasFilters
-                  ? 'Prueba a seleccionar otro comercial, ampliar el rango de fechas o modificar la búsqueda.'
-                  : 'Los documentos apareceran aqui cuando esten disponibles.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.themedWhite38, fontSize: 13),
-            ),
-            if (hasFilters) ...[
-              const SizedBox(height: 20),
-              OutlinedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _selectedMonth = null;
-                    _selectedDocumentType = null;
-                    _dateFrom = null;
-                    _dateTo = null;
-                    _clientSearchController.clear();
-                    _facturaSearchController.clear();
-                  });
-                  _refreshData();
-                },
-                icon: const Icon(Icons.filter_alt_off, size: 18),
-                label: const Text('Limpiar filtros'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.themedWhite54,
-                  side: BorderSide(color: AppColors.themedWhite24),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
+    return GmpEmptyPanel(
+      icon: hasFilters ? Icons.search_off_rounded : Icons.receipt_long_outlined,
+      title: hasFilters
+          ? 'Ningún documento con estos filtros'
+          : 'Todavía no hay documentos',
+      whatToDo: hasFilters
+          ? 'Quita los filtros o cambia el comercial y las fechas.'
+          : 'Cuando haya facturas o albaranes de este comercial, aparecerán aquí.',
+      actionLabel: hasFilters ? 'Quitar filtros' : null,
+      onAction: hasFilters
+          ? () {
+              setState(() {
+                _selectedMonth = null;
+                _selectedDocumentType = null;
+                _dateFrom = null;
+                _dateTo = null;
+                _clientSearchController.clear();
+                _facturaSearchController.clear();
+              });
+              _refreshData();
+            }
+          : null,
     );
   }
 }

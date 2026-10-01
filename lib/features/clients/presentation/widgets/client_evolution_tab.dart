@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -116,20 +117,10 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
     }
 
     if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: AppTheme.error),
-            const SizedBox(height: 16),
-            Text('Error: $_error'),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadEvolutionData,
-              child: const Text('Reintentar'),
-            ),
-          ],
-        ),
+      return GmpErrorPanel(
+        whatHappened: gmpWhatHappened(_error!),
+        whatToDo: gmpWhatToDo(_error!),
+        onRetry: _loadEvolutionData,
       );
     }
 
@@ -157,7 +148,13 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
               child: _buildEvolutionChart(),
             )
           else
-            const Center(child: Text('No hay datos de evolución mensual')),
+            const Center(
+              child: Text(
+                'Este cliente no tiene ventas mensuales en el periodo. Prueba otro año o vuelve a la ficha.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
           SizedBox(height: compact ? 16 : 24),
           Text(
             'Productos Más Comprados',
@@ -183,7 +180,11 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
             _buildReturnsList()
           else
             const Center(
-              child: Text('No hay historial de devoluciones reciente'),
+              child: Text(
+                'No hay devoluciones recientes de este cliente.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16),
+              ),
             ),
         ],
       ),

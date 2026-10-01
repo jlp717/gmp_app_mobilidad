@@ -4,6 +4,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -24,7 +25,8 @@ BoxDecoration _commissionSurfaceDecoration({
   Color? borderColor,
   double borderAlpha = 1,
   double radius = AppTheme.radiusMd,
-}) => commissionSurfaceDecoration(
+}) =>
+    commissionSurfaceDecoration(
       color: color,
       borderColor: borderColor,
       borderAlpha: borderAlpha,
@@ -2309,28 +2311,29 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage>
                     button: true,
                     enabled: true,
                     child: IconButton(
-                    icon: const Icon(
-                      Icons.payment_rounded,
-                      color: AppTheme.info,
-                      size: 28,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppTheme.info.withValues(alpha: 0.1),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                        side: BorderSide(
-                          color: AppTheme.info.withValues(alpha: 0.24),
+                      icon: const Icon(
+                        Icons.payment_rounded,
+                        color: AppTheme.info,
+                        size: 28,
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppTheme.info.withValues(alpha: 0.1),
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                          side: BorderSide(
+                            color: AppTheme.info.withValues(alpha: 0.24),
+                          ),
                         ),
                       ),
-                    ),
-                    // We need the ID/Code of the current single vendor
-                    onPressed: () => _showPayDialog(
-                      (_data?['vendor'] as String?) ??
-                          widget.employeeCode.split(',').first,
-                      'Vendedor',
-                      grandTotal,
-                    ),
-                    tooltip: 'Registrar Pago',
+                      // We need the ID/Code of the current single vendor
+                      onPressed: () => _showPayDialog(
+                        (_data?['vendor'] as String?) ??
+                            widget.employeeCode.split(',').first,
+                        'Vendedor',
+                        grandTotal,
+                      ),
+                      tooltip: 'Registrar Pago',
                     ),
                   ),
                 if (isCommissionReportAuthorized) // ERP-authorized PDF report
@@ -2747,11 +2750,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage>
                     child: SkeletonList(itemCount: 6, itemHeight: 120),
                   )
                 : _error != null
-                    ? Center(
-                        child: Text(
-                          'Error: $_error',
-                          style: const TextStyle(color: AppTheme.error),
-                        ),
+                    ? GmpErrorPanel(
+                        whatHappened: gmpWhatHappened(_error!),
+                        whatToDo: gmpWhatToDo(_error!),
+                        onRetry: () => _loadData(forceRefresh: true),
                       )
                     : isAllMode
                         ? _buildAllVendorsTable(
@@ -2784,11 +2786,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage>
                                       ),
                                       SizedBox(height: 8),
                                       Text(
-                                        'Prueba a seleccionar otro comercial o verifica que existan datos de ventas disponibles.',
+                                        'Elige otro comercial o comprueba que haya ventas en el periodo.',
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
-                                          color: AppTheme.textTertiary,
-                                          fontSize: 13,
+                                          color: AppTheme.textSecondary,
+                                          fontSize: 16,
                                         ),
                                       ),
                                     ],
@@ -3413,162 +3415,164 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
             child: InkWell(
               onTap: () => setState(() => _isExpanded = !_isExpanded),
               borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: _commissionSurfaceDecoration(
-                color: _isExpanded
-                    ? AppTheme.info.withValues(alpha: 0.08)
-                    : AppColors.transparent,
-                borderColor: AppColors.transparent,
-                radius: AppTheme.radiusLg,
-              ),
-              child: Row(
-                children: [
-                  // Left: Circle Avatar with Vendor Code
-                  CircleAvatar(
-                    radius: Responsive.isSmall(context) ? 10 : 12,
-                    backgroundColor: isExcluded
-                        ? AppTheme.mutedPanel
-                        : AppTheme.info.withValues(alpha: 0.12),
-                    child: Text(
-                      vendorCode,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color:
-                            isExcluded ? AppTheme.textTertiary : AppTheme.info,
-                        fontSize: Responsive.isSmall(context) ? 8 : 10,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-
-                  // Center: Name
-                  Expanded(
-                    child: Text(
-                      vendorName,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: isExcluded
-                            ? AppTheme.textTertiary
-                            : AppTheme.textPrimary,
-                        fontSize: Responsive.isSmall(context) ? 11 : 13,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (isExcluded) ...[
-                    // Clear "NO COMISIONA" badge for excluded vendors
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.warning.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'NO COMISIONA',
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: _commissionSurfaceDecoration(
+                  color: _isExpanded
+                      ? AppTheme.info.withValues(alpha: 0.08)
+                      : AppColors.transparent,
+                  borderColor: AppColors.transparent,
+                  radius: AppTheme.radiusLg,
+                ),
+                child: Row(
+                  children: [
+                    // Left: Circle Avatar with Vendor Code
+                    CircleAvatar(
+                      radius: Responsive.isSmall(context) ? 10 : 12,
+                      backgroundColor: isExcluded
+                          ? AppTheme.mutedPanel
+                          : AppTheme.info.withValues(alpha: 0.12),
+                      child: Text(
+                        vendorCode,
                         style: TextStyle(
-                          fontSize: 9,
                           fontWeight: FontWeight.bold,
-                          color: AppTheme.warning,
+                          color: isExcluded
+                              ? AppTheme.textTertiary
+                              : AppTheme.info,
+                          fontSize: Responsive.isSmall(context) ? 8 : 10,
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
-                  ],
-                  // Compliance: Obj vs Venta for active months only
-                  Tooltip(
-                    message:
-                        'Cumplimiento acumulado de meses activos (excluyendo futuros)',
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          vendorPositive
-                              ? Icons.trending_up
-                              : Icons.trending_down,
-                          color: statusColor,
-                          size: 14,
+
+                    // Center: Name
+                    Expanded(
+                      child: Text(
+                        vendorName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isExcluded
+                              ? AppTheme.textTertiary
+                              : AppTheme.textPrimary,
+                          fontSize: Responsive.isSmall(context) ? 11 : 13,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Cumpl: ${vendorPct.toStringAsFixed(1)}% (Vta: ${CurrencyFormatter.format(totalActual)} / Obj: ${CurrencyFormatter.format(totalTarget)})',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (isExcluded) ...[
+                      // Clear "NO COMISIONA" badge for excluded vendors
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.warning.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'NO COMISIONA',
                           style: TextStyle(
-                            color: statusColor,
+                            fontSize: 9,
                             fontWeight: FontWeight.bold,
-                            fontSize: Responsive.isSmall(context) ? 8 : 10,
+                            color: AppTheme.warning,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Commission & Payment
-                  if (!isExcluded) ...[
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Calculate "Paid Month" if possible. Default to 0 if not found for current month.
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              'Generado: ${CurrencyFormatter.format(grandTotal)}',
-                              style: TextStyle(
-                                color: AppTheme.success,
-                                fontWeight: FontWeight.bold,
-                                fontSize: Responsive.isSmall(context) ? 10 : 12,
-                              ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    // Compliance: Obj vs Venta for active months only
+                    Tooltip(
+                      message:
+                          'Cumplimiento acumulado de meses activos (excluyendo futuros)',
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            vendorPositive
+                                ? Icons.trending_up
+                                : Icons.trending_down,
+                            color: statusColor,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Cumpl: ${vendorPct.toStringAsFixed(1)}% (Vta: ${CurrencyFormatter.format(totalActual)} / Obj: ${CurrencyFormatter.format(totalTarget)})',
+                            style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: Responsive.isSmall(context) ? 8 : 10,
                             ),
-                            Text(
-                              'Pagado: ${CurrencyFormatter.format(totalPaid)}',
-                              style: TextStyle(
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Commission & Payment
+                    if (!isExcluded) ...[
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Calculate "Paid Month" if possible. Default to 0 if not found for current month.
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                'Generado: ${CurrencyFormatter.format(grandTotal)}',
+                                style: TextStyle(
+                                  color: AppTheme.success,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize:
+                                      Responsive.isSmall(context) ? 10 : 12,
+                                ),
+                              ),
+                              Text(
+                                'Pagado: ${CurrencyFormatter.format(totalPaid)}',
+                                style: TextStyle(
+                                  color: AppTheme.info,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: Responsive.isSmall(context) ? 8 : 9,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      if (widget.canPay)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Semantics(
+                            label: 'Pagar comisión del vendedor $vendorCode',
+                            button: true,
+                            enabled: true,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.payment_rounded,
                                 color: AppTheme.info,
-                                fontWeight: FontWeight.bold,
-                                fontSize: Responsive.isSmall(context) ? 8 : 9,
+                                size: 22,
                               ),
+                              onPressed: () =>
+                                  widget.onPay?.call(vendorCode, vendorName),
+                              tooltip: 'Pagar',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    if (widget.canPay)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: Semantics(
-                          label:
-                              'Pagar comisión del vendedor $vendorCode',
-                          button: true,
-                          enabled: true,
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.payment_rounded,
-                              color: AppTheme.info,
-                              size: 22,
-                            ),
-                            onPressed: () =>
-                                widget.onPay?.call(vendorCode, vendorName),
-                            tooltip: 'Pagar',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
                           ),
                         ),
+                    ] else
+                      Text(
+                        '0,00 €',
+                        style: TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 12,
+                        ),
                       ),
-                  ] else
-                    Text(
-                      '0,00 €',
-                      style: TextStyle(
-                        color: AppTheme.textTertiary,
-                        fontSize: 12,
-                      ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
             ),
           ),
 

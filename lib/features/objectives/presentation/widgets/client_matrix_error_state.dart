@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 
 /// Visible, retryable error state for the client purchase matrix.
 class ClientMatrixErrorState extends StatelessWidget {
@@ -14,27 +14,10 @@ class ClientMatrixErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline, size: 40, color: AppTheme.error),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: onRetry,
-            child: const Text('Reintentar'),
-          ),
-        ],
-      ),
+    return GmpErrorPanel(
+      whatHappened: message,
+      whatToDo: 'Pulsa Reintentar. Si sigue igual, avisa a oficina.',
+      onRetry: onRetry,
     );
   }
 }

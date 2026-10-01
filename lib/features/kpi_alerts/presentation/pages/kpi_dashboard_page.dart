@@ -11,7 +11,8 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
-import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/design/a11y_tokens.dart';
+import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 
@@ -145,6 +146,10 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
             child: IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Reintentar',
+              style: IconButton.styleFrom(
+                minimumSize:
+                    const Size(A11yTokens.minTouch, A11yTokens.minTouch),
+              ),
               onPressed: _loadDashboard,
             ),
           ),
@@ -163,39 +168,14 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
             child: _loading
                 ? const SkeletonList(itemCount: 4)
                 : _error != null
-                    ? ErrorStateWidget(
-                        message: _error!,
+                    ? GmpErrorPanel(
+                        whatHappened: gmpWhatHappened(_error!),
+                        whatToDo: gmpWhatToDo(_error!),
                         onRetry: _loadDashboard,
                       )
                     : _buildContent(),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off, size: 48, color: AppColors.systemGrey600),
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              style: TextStyle(color: AppColors.systemGrey400, fontSize: 14),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _loadDashboard,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Reintentar'),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -301,12 +281,13 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
     Map<String, dynamic>? gaps,
   ]) {
     final completedAt = lastLoad?['completedAt']?.toString() ?? '';
-    final stale = (freshness?['stale'] as bool?) ??
-        _isStaleFallback(completedAt);
+    final stale =
+        (freshness?['stale'] as bool?) ?? _isStaleFallback(completedAt);
     final days = (freshness?['daysSinceLoad'] as num?)?.toInt();
-    final missingTypes =
-        (gaps?['missingAlertTypes'] as List?)?.map((e) => e.toString()).toList() ??
-            const <String>[];
+    final missingTypes = (gaps?['missingAlertTypes'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        const <String>[];
 
     String label;
     Color dotColor;
@@ -318,7 +299,8 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
       final dateLabel = _formatDate(completedAt);
       final ageLabel =
           days != null ? 'hace $days d' : _formatRelativeTime(completedAt);
-      label = 'STALE · datos de $dateLabel ($ageLabel) · no son frescos';
+      label =
+          'Datos antiguos de $dateLabel ($ageLabel). No los uses como si fueran de hoy.';
       dotColor = AppTheme.warning;
     } else {
       final relativeTime = _formatRelativeTime(completedAt);
@@ -336,9 +318,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
         : null;
 
     return Semantics(
-      label: stale
-          ? 'Datos rancios. $label. ${gapLabel ?? ''}'
-          : label,
+      label: stale ? 'Datos antiguos. $label. ${gapLabel ?? ''}' : label,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
@@ -363,10 +343,9 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
                 Expanded(
                   child: Text(
                     label,
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 13,
-                    ),
+                    style: const TextStyle(
+                      fontSize: A11yTokens.minText,
+                    ).copyWith(color: AppTheme.textSecondary),
                   ),
                 ),
                 if (stale || lastLoad == null)
@@ -833,20 +812,19 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage>
             hasGlobalData
                 ? 'Sin alertas para tus clientes'
                 : 'Sin alertas de Nestlé',
-            style: TextStyle(
-              color: AppColors.themedWhite,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(
+              fontSize: A11yTokens.minText,
+              fontWeight: FontWeight.w700,
+            ).copyWith(color: AppColors.themedWhite),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
             hasGlobalData
-                ? 'Hay ${globalAlerts.toInt()} alertas globales '
-                    'pero ninguna afecta a tus clientes'
-                : 'Todos tus clientes estan al dia '
-                    'con sus objetivos',
-            style: TextStyle(color: AppColors.systemGrey500, fontSize: 13),
+                ? 'Hay ${globalAlerts.toInt()} alertas en la empresa, pero ninguna es de tus clientes. Cambia de comercial si buscas a otro.'
+                : 'Tus clientes están al día con Nestlé. No tienes que hacer nada ahora.',
+            style: const TextStyle(
+              fontSize: A11yTokens.minText,
+            ).copyWith(color: AppTheme.textSecondary),
             textAlign: TextAlign.center,
           ),
         ],

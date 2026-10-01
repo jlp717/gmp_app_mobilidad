@@ -221,7 +221,8 @@ describe('canonical reparto evidence routes', () => {
       expect(response.body).toEqual({
         success: false,
         code: 'EVIDENCE_TIMEOUT',
-        error: 'Servicio temporalmente no disponible',
+        retryable: true,
+        error: 'La evidencia no se pudo guardar a tiempo. La entrega sigue abierta. Vuelve a intentarlo.',
       });
       expect(JSON.stringify(response.body)).not.toMatch(/DB2|SQL|network|private|odbc/i);
     }

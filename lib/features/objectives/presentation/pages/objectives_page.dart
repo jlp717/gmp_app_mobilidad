@@ -9,7 +9,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/performance/scroll_cache_extent.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
-import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
@@ -1147,8 +1147,12 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   }
 
   Widget _buildError() {
-    return ErrorStateWidget(
-      message: 'Error: $_error',
+    final raw = _error ?? '';
+    return GmpErrorPanel(
+      whatHappened: gmpWhatHappened(
+        raw.isEmpty ? 'Error al cargar los objetivos' : raw,
+      ),
+      whatToDo: gmpWhatToDo(raw),
       onRetry: () => _loadData(forceRefresh: true),
     );
   }

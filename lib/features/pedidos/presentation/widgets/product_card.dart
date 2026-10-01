@@ -50,7 +50,10 @@ class ProductCard extends StatefulWidget {
 
 class _ProductCardState extends State<ProductCard> {
   bool _showIva = false;
-  bool _showClientePrice = true;
+
+  /// True when the seller is looking at the client special price.
+  /// Falls back to the tariff when that special price is absent.
+  bool _preferEspecial = true;
 
   double _ivaRateForProduct() => ivaRateFromCode(widget.product.codigoIva);
 
@@ -83,34 +86,75 @@ class _ProductCardState extends State<ProductCard> {
     return Icons.inventory_2; // caja default
   }
 
+  /// Positive amount only. A missing price is null, never a fake 0.
+  double? _positive(double value) => value > 0 ? value : null;
+
+  /// Tariff shown by the old «Tarifa» side: catalog [Product.precioTarifa1].
+  double? get _tarifaRaw => _positive(widget.product.precioTarifa1);
+
+  /// Client price shown by the old «Cliente» side: [Product.precioCliente].
+  /// «Último precio» is not on [Product]. A new JAVIER table, if any, belongs
+  /// to the backend owner — this card does not invent one or paint 0.
+  double? get _especialRaw => _positive(widget.product.precioCliente);
+
+  bool get _especialSelected => _preferEspecial && _especialRaw != null;
+
+  bool get _tarifaSelected => !_especialSelected && _tarifaRaw != null;
+
+  double? get _selectedRaw =>
+      _especialSelected ? _especialRaw : (_tarifaSelected ? _tarifaRaw : null);
+
+  String _money(double raw) {
+    final shown = _showIva ? _priceWithIva(raw) : raw;
+    final fixed = shown.toStringAsFixed(3).replaceAll('.', ',');
+    return '$fixed €';
+  }
+
+  String get _activePriceLabel {
+    final raw = _selectedRaw;
+    if (raw == null) return 'Sin precio';
+    return _money(raw);
+  }
+
+  void _selectTarifa() {
+    if (_tarifaRaw == null) return;
+    setState(() => _preferEspecial = false);
+  }
+
+  void _selectEspecial() {
+    if (_especialRaw == null) return;
+    setState(() => _preferEspecial = true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final inCart = widget.cartQty > 0;
     final badgeQty = widget.cartQty == widget.cartQty.truncateToDouble()
         ? widget.cartQty.toStringAsFixed(0)
         : widget.cartQty.toStringAsFixed(2);
-
-    final displayPrice = _showClientePrice
-        ? (widget.product.precioCliente > 0
-            ? widget.product.precioCliente
-            : widget.product.precioTarifa1)
-        : widget.product.precioTarifa1;
-    final primaryUnit = widget.product.displayUnit;
-    final minPrimaryPrice = widget.product.minimumPriceForUnit(primaryUnit);
-    final unitLabel = Product.unitLabel(primaryUnit);
-
-    final hasClientePrice = widget.product.precioCliente > 0;
-    final promoColor = widget.promo?.isGift ?? false
-        ? AppTheme.success
-        : AppTheme.accentIndigo;
-
     final compact = widget.compact || Responsive.useCompactTiles(context);
     final hPad = compact ? 8.0 : 14.0;
     final vPad = compact ? 6.0 : 10.0;
+    final promoColor = widget.promo?.isGift ?? false
+        ? AppTheme.success
+        : AppTheme.accentIndigo;
+    final unitLabel = _unitTypeLabel();
+    final primaryUnit = widget.product.displayUnit;
+    final minPrimaryPrice = widget.product.minimumPriceForUnit(primaryUnit);
+    final minUnit = Product.unitLabel(primaryUnit);
+    final selected = _selectedRaw;
+    final showMin = widget.isMarginVisible &&
+        widget.product.precioMinimo > 0 &&
+        selected != null &&
+        minPrimaryPrice != selected;
+    final boxBadge = _buildBoxContentBadge();
+    final showRetractil =
+        widget.product.unitsRetractil > 0 && widget.product.bestPrice > 0;
 
     return RepaintBoundary(
       child: Semantics(
         button: true,
+        explicitChildNodes: true,
         label: '${widget.product.name}, ${widget.product.code}',
         child: Card(
           color: inCart
@@ -136,667 +180,337 @@ class _ProductCardState extends State<ProductCard> {
             onTap: widget.onTap,
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Product thumbnail (left)
-                  Stack(
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () =>
-                            _showFullscreenImage(context, widget.product.code),
-                        child: _buildThumbnail(widget.product.code,
-                            compact: compact),
-                      ),
-                      // Cart quantity badge
-                      if (inCart)
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 1,
+                      Stack(
+                        children: [
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _showFullscreenImage(
+                              context,
+                              widget.product.code,
                             ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.success,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              '$badgeQty${widget.cartQtySuffix}',
-                              style: TextStyle(
-                                color: AppTheme.inkSurface,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            child: _buildThumbnail(
+                              widget.product.code,
+                              compact: compact,
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(width: 10),
-                  // Product info (center-left)
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Top badges row
-                        if (!compact)
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              // Purchase history dot
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: widget.product.hasPurchased
-                                      ? AppTheme.success
-                                      : AppTheme.error,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: (widget.product.hasPurchased
-                                              ? AppTheme.success
-                                              : AppTheme.error)
-                                          .withValues(alpha: 0.4),
-                                      blurRadius: 4,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                widget.product.hasPurchased
-                                    ? 'Comprado'
-                                    : 'Nuevo',
-                                style: TextStyle(
-                                  color: widget.product.hasPurchased
-                                      ? AppTheme.success
-                                      : AppTheme.error,
-                                  fontSize: Responsive.fontSize(
-                                    context,
-                                    small: 9,
-                                    large: 10,
-                                  ),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              // Unit type badge
-                              Container(
+                          if (inCart)
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
+                                  horizontal: 4,
                                   vertical: 1,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.info.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: AppTheme.info.withValues(alpha: 0.3),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _unitTypeIcon(),
-                                      color: AppTheme.info,
-                                      size: 10,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      _unitTypeLabel(),
-                                      style: TextStyle(
-                                        color: AppTheme.info,
-                                        fontSize: Responsive.fontSize(
-                                          context,
-                                          small: 9,
-                                          large: 10,
-                                        ),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              // Promo badge
-                              if (widget.promo != null) ...[
-                                ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 150),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                      vertical: 1,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: promoColor.withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                        color:
-                                            promoColor.withValues(alpha: 0.4),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (widget.promo!.isGift) ...[
-                                          Icon(
-                                            Icons.card_giftcard,
-                                            color: promoColor,
-                                            size: 10,
-                                          ),
-                                          const SizedBox(width: 2),
-                                        ],
-                                        Flexible(
-                                          child: Text(
-                                            (widget.promo!.isGift
-                                                    ? widget.promo!.giftLabel
-                                                    : widget.promo!.promoDesc) +
-                                                (widget.extraPromoCount > 0
-                                                    ? ' +${widget.extraPromoCount}'
-                                                    : ''),
-                                            style: TextStyle(
-                                              color: promoColor,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        if (!compact) const SizedBox(height: 4),
-                        // Product name
-                        Text(
-                          widget.product.name,
-                          style: TextStyle(
-                            color: AppTheme.textPrimary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: Responsive.fontSize(
-                              context,
-                              small: compact ? 12 : 13,
-                              large: compact ? 13 : 15,
-                            ),
-                          ),
-                          maxLines: compact ? 1 : 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        SizedBox(height: compact ? 1 : 2),
-                        // Code + YoY change
-                        Row(
-                          children: [
-                            if (compact) ...[
-                              Container(
-                                width: 6,
-                                height: 6,
-                                margin: const EdgeInsets.only(right: 4),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: widget.product.hasPurchased
-                                      ? AppTheme.success
-                                      : AppTheme.error,
-                                ),
-                              ),
-                            ],
-                            Text(
-                              widget.product.code,
-                              style: TextStyle(
-                                color: AppTheme.textTertiary,
-                                fontSize: Responsive.fontSize(
-                                  context,
-                                  small: compact ? 10 : 11,
-                                  large: compact ? 11 : 12,
-                                ),
-                              ),
-                            ),
-                            if (widget.product.hasPurchased &&
-                                widget.product.yoyChange != 0) ...[
-                              const SizedBox(width: 6),
-                              _buildYoyBadge(),
-                            ],
-                          ],
-                        ),
-                        if (!compact) ...[
-                          const SizedBox(height: 4),
-                          // Stock row
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.inventory_outlined,
-                                color: widget.product.hasStock
-                                    ? AppTheme.success
-                                    : AppTheme.error,
-                                size: 13,
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  _buildStockText(widget.product),
-                                  style: TextStyle(
-                                    color: widget.product.hasStock
-                                        ? AppTheme.success
-                                        : AppTheme.error,
-                                    fontSize: Responsive.fontSize(
-                                      context,
-                                      small: 11,
-                                      large: 12,
-                                    ),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  // Price + controls (right)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      // Price toggle (Cliente / Tarifa) — REQ-05: ≥48x48dp target.
-                      if (!compact && hasClientePrice)
-                        Semantics(
-                          button: true,
-                          label: _showClientePrice
-                              ? 'Ver precio de tarifa'
-                              : 'Ver precio de cliente',
-                          child: TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _showClientePrice = !_showClientePrice;
-                              });
-                            },
-                            style: TextButton.styleFrom(
-                              minimumSize: const Size(48, 48),
-                              tapTargetSize: MaterialTapTargetSize.padded,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              backgroundColor: _showClientePrice
-                                  ? AppTheme.success.withValues(alpha: 0.15)
-                                  : AppTheme.textPrimary
-                                      .withValues(alpha: 0.06),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(4),
-                                side: BorderSide(
-                                  color: _showClientePrice
-                                      ? AppTheme.success.withValues(alpha: 0.4)
-                                      : AppTheme.textPrimary
-                                          .withValues(alpha: 0.1),
-                                ),
-                              ),
-                            ),
-                            child: Text(
-                              _showClientePrice ? 'Cliente' : 'Tarifa',
-                              style: TextStyle(
-                                color: _showClientePrice
-                                    ? AppTheme.success
-                                    : AppTheme.textSecondary,
-                                fontSize: Responsive.fontSize(
-                                  context,
-                                  small: 8,
-                                  large: 9,
-                                ),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (!compact) const SizedBox(height: 2),
-                      // Main price display
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '${_formatPrice(displayPrice)}\u20AC',
-                            style: TextStyle(
-                              color: _showIva
-                                  ? AppTheme.accentIndigo
-                                  : AppTheme.success,
-                              fontWeight: FontWeight.bold,
-                              fontSize: Responsive.fontSize(
-                                context,
-                                small: compact ? 12 : 14,
-                                large: compact ? 13 : 16,
-                              ),
-                            ),
-                          ),
-                          // IVA toggle button — REQ-05: ≥48x48dp target.
-                          if (!compact) ...[
-                            const SizedBox(width: 3),
-                            Semantics(
-                              button: true,
-                              label: _showIva
-                                  ? 'Ver precio sin IVA'
-                                  : 'Ver precio con IVA',
-                              child: TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _showIva = !_showIva;
-                                  });
-                                },
-                                style: TextButton.styleFrom(
-                                  minimumSize: const Size(48, 48),
-                                  tapTargetSize: MaterialTapTargetSize.padded,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 4,
-                                  ),
-                                  backgroundColor: _showIva
-                                      ? AppTheme.accentIndigo
-                                          .withValues(alpha: 0.2)
-                                      : AppTheme.textPrimary
-                                          .withValues(alpha: 0.08),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(4),
-                                    side: BorderSide(
-                                      color: _showIva
-                                          ? AppTheme.accentIndigo
-                                              .withValues(alpha: 0.5)
-                                          : AppTheme.textPrimary
-                                              .withValues(alpha: 0.15),
-                                    ),
-                                  ),
+                                  color: AppTheme.success,
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  _showIva ? 'c/IVA' : 's/IVA',
+                                  '$badgeQty${widget.cartQtySuffix}',
                                   style: TextStyle(
-                                    color: _showIva
-                                        ? AppTheme.accentIndigo
-                                        : AppTheme.textSecondary,
-                                    fontSize: Responsive.fontSize(
-                                      context,
-                                      small: 7,
-                                      large: 8,
-                                    ),
-                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.inkSurface,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
                             ),
-                          ],
                         ],
                       ),
-                      // REQ-05.1 compact: toggles siempre accesibles ≥48dp
-                      // en fila horizontal para mantener densidad (~9-10).
-                      if (compact) ...[
-                        const SizedBox(height: 2),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (hasClientePrice)
-                              Semantics(
-                                button: true,
-                                label: _showClientePrice
-                                    ? 'Ver precio de tarifa'
-                                    : 'Ver precio de cliente',
-                                child: TextButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _showClientePrice = !_showClientePrice;
-                                    });
-                                  },
-                                  style: TextButton.styleFrom(
-                                    minimumSize: const Size(48, 48),
-                                    tapTargetSize: MaterialTapTargetSize.padded,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                    ),
-                                    backgroundColor: _showClientePrice
-                                        ? AppTheme.success
-                                            .withValues(alpha: 0.15)
-                                        : AppTheme.textPrimary
-                                            .withValues(alpha: 0.06),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                      side: BorderSide(
-                                        color: _showClientePrice
-                                            ? AppTheme.success
-                                                .withValues(alpha: 0.4)
-                                            : AppTheme.textPrimary
-                                                .withValues(alpha: 0.1),
-                                      ),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    _showClientePrice ? 'Cliente' : 'Tarifa',
-                                    style: TextStyle(
-                                      color: _showClientePrice
-                                          ? AppTheme.success
-                                          : AppTheme.textSecondary,
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (hasClientePrice) const SizedBox(width: 4),
-                            Semantics(
-                              button: true,
-                              label: _showIva
-                                  ? 'Ver precio sin IVA'
-                                  : 'Ver precio con IVA',
-                              child: TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _showIva = !_showIva;
-                                  });
-                                },
-                                style: TextButton.styleFrom(
-                                  minimumSize: const Size(48, 48),
-                                  tapTargetSize: MaterialTapTargetSize.padded,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                  ),
-                                  backgroundColor: _showIva
-                                      ? AppTheme.accentIndigo
-                                          .withValues(alpha: 0.2)
-                                      : AppTheme.textPrimary
-                                          .withValues(alpha: 0.08),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(4),
-                                    side: BorderSide(
-                                      color: _showIva
-                                          ? AppTheme.accentIndigo
-                                              .withValues(alpha: 0.5)
-                                          : AppTheme.textPrimary
-                                              .withValues(alpha: 0.15),
-                                    ),
-                                  ),
-                                ),
-                                child: Text(
-                                  _showIva ? 'c/IVA' : 's/IVA',
-                                  style: TextStyle(
-                                    color: _showIva
-                                        ? AppTheme.accentIndigo
-                                        : AppTheme.textSecondary,
-                                    fontSize: 7,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      // Minimum price reference (per primary sale unit)
-                      if (!compact &&
-                          widget.isMarginVisible &&
-                          widget.product.precioMinimo > 0 &&
-                          minPrimaryPrice != displayPrice)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            'Min $unitLabel: ${_formatPrice(minPrimaryPrice, decimals: 2)}\u20AC',
-                            style: TextStyle(
-                              color: AppTheme.textTertiary,
-                              fontSize: Responsive.fontSize(context,
-                                  small: 9, large: 10),
-                            ),
-                          ),
-                        ),
-                      if (!compact && widget.product.precioEspecialCliente)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            'Precio exclusivo cliente',
-                            style: TextStyle(
-                              color: AppTheme.success,
-                              fontSize: Responsive.fontSize(context,
-                                  small: 9, large: 10),
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      if (!compact) const SizedBox(height: 4),
-                      // Box content badge (U/C, kg/cj, L/cj)
-                      if (!compact)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppTheme.info.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: AppTheme.info.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Text(
-                            _buildBoxContentBadge(),
-                            style: TextStyle(
-                              color: AppTheme.info,
-                              fontSize: Responsive.fontSize(context,
-                                  small: 10, large: 11),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      // Neto U/R when retractil units available
-                      if (!compact &&
-                          widget.product.unitsRetractil > 0 &&
-                          widget.product.bestPrice > 0) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'U/R: ${(widget.product.bestPrice / widget.product.unitsRetractil).toStringAsFixed(3)}\u20AC',
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: Responsive.fontSize(context,
-                                small: 9, large: 10),
-                          ),
-                        ),
-                      ],
+                      const SizedBox(width: 10),
+                      Expanded(child: _buildIdentity(unitLabel, promoColor)),
                     ],
                   ),
-                  // Quick add button
-                  if (widget.onQuickAdd != null) ...[
-                    SizedBox(width: compact ? 4 : 8),
-                    Semantics(
-                      button: true,
-                      label: 'Añadir ${widget.product.name} al carrito',
-                      child: Tooltip(
-                        message: 'Añadir al carrito',
-                        child: Material(
-                          color: AppColors.transparent,
-                          child: InkWell(
-                            onTap: widget.onQuickAdd,
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.radiusFull),
-                            child: Container(
-                              constraints: BoxConstraints(
-                                minWidth: compact ? 40 : 72,
-                              ),
-                              height: compact ? 32 : 36,
-                              padding: EdgeInsets.symmetric(
-                                horizontal: compact ? 8 : 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.info.withValues(alpha: 0.14),
-                                borderRadius:
-                                    BorderRadius.circular(AppTheme.radiusFull),
-                                border: Border.all(
-                                  color: AppTheme.info.withValues(alpha: 0.38),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.add_shopping_cart_rounded,
-                                    color: AppTheme.info,
-                                    size: compact ? 14 : 16,
-                                  ),
-                                  if (!compact) ...[
-                                    const SizedBox(width: 5),
-                                    const Text(
-                                      'Añadir',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.clip,
-                                      style: TextStyle(
-                                        color: AppTheme.info,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                  const SizedBox(height: 6),
+                  _buildSecondaryRow(
+                    showMin: showMin,
+                    minUnit: minUnit,
+                    minPrimaryPrice: minPrimaryPrice,
+                    boxBadge: boxBadge,
+                    showRetractil: showRetractil,
+                  ),
+                  const SizedBox(height: 8),
+                  _PriceModeButton(
+                    buttonKey: const Key('price-mode-tarifa'),
+                    label: 'Precio de tarifa',
+                    amountLabel:
+                        _tarifaRaw == null ? 'Sin tarifa' : _money(_tarifaRaw!),
+                    selected: _tarifaSelected,
+                    onTap: _selectTarifa,
+                  ),
+                  const SizedBox(height: 8),
+                  _PriceModeButton(
+                    buttonKey: const Key('price-mode-especial'),
+                    label: 'Precio especial',
+                    amountLabel: _especialRaw == null
+                        ? 'Sin precio especial'
+                        : _money(_especialRaw!),
+                    selected: _especialSelected,
+                    onTap: _selectEspecial,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _activePriceLabel,
+                    key: const Key('active-sale-price'),
+                    style: TextStyle(
+                      color: _showIva
+                          ? AppTheme.accentIndigo
+                          : AppTheme.textPrimary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                      height: 1.25,
                     ),
-                  ],
-                  if (widget.onToggleFavorite != null) ...[
-                    const SizedBox(width: 2),
-                    Semantics(
-                      button: true,
-                      label: widget.isFavorite
-                          ? 'Quitar ${widget.product.name} de favoritos'
-                          : 'Marcar ${widget.product.name} como favorito',
-                      child: GestureDetector(
-                        onTap: widget.onToggleFavorite,
-                        child: Icon(
-                          widget.isFavorite
-                              ? Icons.star_rounded
-                              : Icons.star_outline_rounded,
-                          color: widget.isFavorite
-                              ? AppTheme.warning
-                              : AppTheme.textTertiary,
-                          size: compact ? 18 : 22,
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (!compact) ...[
-                    const SizedBox(width: 2),
-                    Icon(
-                      Icons.chevron_right,
-                      color: AppTheme.textTertiary,
-                      size: 18,
-                    ),
-                  ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildActions(),
                 ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildIdentity(String unitLabel, Color promoColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.product.name,
+          style: TextStyle(
+            color: AppTheme.textPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+            height: 1.25,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          widget.product.code,
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              widget.product.hasPurchased ? 'Comprado' : 'Nuevo',
+              style: TextStyle(
+                color: widget.product.hasPurchased
+                    ? AppTheme.success
+                    : AppTheme.error,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (unitLabel.isNotEmpty)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(_unitTypeIcon(), color: AppTheme.info, size: 16),
+                  const SizedBox(width: 4),
+                  Text(
+                    unitLabel,
+                    style: const TextStyle(
+                      color: AppTheme.info,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            if (widget.promo != null)
+              Text(
+                (widget.promo!.isGift
+                        ? widget.promo!.giftLabel
+                        : widget.promo!.promoDesc) +
+                    (widget.extraPromoCount > 0
+                        ? ' +${widget.extraPromoCount}'
+                        : ''),
+                style: TextStyle(
+                  color: promoColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _buildStockText(widget.product),
+          style: TextStyle(
+            color: widget.product.hasStock ? AppTheme.success : AppTheme.error,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Quieter second row. Still on screen: nothing here needs a tap.
+  Widget _buildSecondaryRow({
+    required bool showMin,
+    required String minUnit,
+    required double minPrimaryPrice,
+    required String boxBadge,
+    required bool showRetractil,
+  }) {
+    final children = <Widget>[
+      if (widget.product.hasPurchased && widget.product.yoyChange != 0)
+        _buildYoyBadge(),
+      if (boxBadge.isNotEmpty)
+        Text(
+          boxBadge,
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      if (showRetractil)
+        Text(
+          'U/R: ${(widget.product.bestPrice / widget.product.unitsRetractil).toStringAsFixed(3)}€',
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      if (showMin)
+        Text(
+          'Min $minUnit: ${_formatPrice(minPrimaryPrice, decimals: 2)}€',
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      if (widget.product.precioEspecialCliente)
+        const Text(
+          'Precio exclusivo cliente',
+          style: TextStyle(
+            color: AppTheme.success,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+    ];
+    if (children.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      spacing: 10,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: children,
+    );
+  }
+
+  Widget _buildActions() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        _ivaToggle(),
+        if (widget.onQuickAdd != null)
+          Semantics(
+            button: true,
+            label: 'Añadir ${widget.product.name} al carrito',
+            child: Tooltip(
+              message: 'Añadir al carrito',
+              child: Material(
+                color: AppColors.transparent,
+                child: InkWell(
+                  onTap: widget.onQuickAdd,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                  child: ConstrainedBox(
+                    constraints:
+                        const BoxConstraints(minWidth: 48, minHeight: 48),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.add_shopping_cart_rounded,
+                            color: AppTheme.info,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Añadir',
+                            style: TextStyle(
+                              color: AppTheme.info,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        if (widget.onToggleFavorite != null)
+          Semantics(
+            button: true,
+            label: widget.isFavorite
+                ? 'Quitar ${widget.product.name} de favoritos'
+                : 'Marcar ${widget.product.name} como favorito',
+            child: IconButton(
+              onPressed: widget.onToggleFavorite,
+              icon: Icon(
+                widget.isFavorite
+                    ? Icons.star_rounded
+                    : Icons.star_outline_rounded,
+                color: widget.isFavorite
+                    ? AppTheme.warning
+                    : AppTheme.textTertiary,
+              ),
+            ),
+          ),
+        Icon(
+          Icons.chevron_right,
+          color: AppTheme.textTertiary,
+          size: 24,
+        ),
+      ],
+    );
+  }
+
+  Widget _ivaToggle() {
+    return Semantics(
+      button: true,
+      label: _showIva ? 'Ver precio sin IVA' : 'Ver precio con IVA',
+      child: TextButton(
+        onPressed: () => setState(() => _showIva = !_showIva),
+        style: TextButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          tapTargetSize: MaterialTapTargetSize.padded,
+          foregroundColor:
+              _showIva ? AppTheme.accentIndigo : AppTheme.textPrimary,
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        child: Text(_showIva ? 'Con IVA' : 'Sin IVA'),
       ),
     );
   }
@@ -833,13 +547,13 @@ class _ProductCardState extends State<ProductCard> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: textColor, size: 9),
-          const SizedBox(width: 1),
+          Icon(icon, color: textColor, size: 16),
+          const SizedBox(width: 4),
           Text(
             '${yoy.abs().toStringAsFixed(1)}%',
             style: TextStyle(
               color: textColor,
-              fontSize: 9,
+              fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -866,7 +580,10 @@ class _ProductCardState extends State<ProductCard> {
   Widget _buildThumbnail(String code, {bool compact = false}) {
     final url = '${ApiConfig.baseUrl}/products/'
         '${Uri.encodeComponent(code.trim())}/image';
-    final size = compact ? 40.0 : 48.0;
+    // The missing-image fallback is a fixed box in SmartProductImage.
+    // Grow that box with the text scale so the initials stay inside it.
+    // Price labels keep the ambient text scale.
+    final size = MediaQuery.textScalerOf(context).scale(compact ? 40.0 : 48.0);
     return SmartProductImage(
       imageUrl: url,
       productCode: code,
@@ -904,5 +621,86 @@ class _ProductCardState extends State<ProductCard> {
       return value.toInt().toString();
     }
     return value.toStringAsFixed(1);
+  }
+}
+
+/// Two explicit prices. Selected = fill color + pill shape + check.
+/// Unselected = outlined rectangle, no check. Never color alone.
+class _PriceModeButton extends StatelessWidget {
+  const _PriceModeButton({
+    required this.buttonKey,
+    required this.label,
+    required this.amountLabel,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Key buttonKey;
+  final String label;
+  final String amountLabel;
+  final bool selected;
+  final VoidCallback onTap;
+
+  static const Color selectedFill = Color(0xFF007A52);
+  static const Color selectedForeground = Color(0xFFFFFFFF);
+  static const Color idleFill = Color(0xFFFFFFFF);
+  static const Color idleForeground = Color(0xFF132027);
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? selectedForeground : idleForeground;
+    final background = selected ? selectedFill : idleFill;
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(selected ? 20 : 8),
+      side: BorderSide(
+        color: selected ? const Color(0xFF004E34) : idleForeground,
+        width: selected ? 2 : 1.5,
+      ),
+    );
+    final textStyle = TextStyle(
+      color: foreground,
+      fontSize: 16,
+      height: 1.25,
+      fontWeight: FontWeight.w700,
+    );
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$label, $amountLabel',
+      child: Material(
+        key: buttonKey,
+        color: background,
+        shape: shape,
+        child: InkWell(
+          customBorder: shape,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  if (selected) ...[
+                    Icon(Icons.check, color: foreground, size: 22),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(label, style: textStyle),
+                        Text(amountLabel, style: textStyle),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

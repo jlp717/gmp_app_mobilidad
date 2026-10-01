@@ -568,7 +568,8 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage>
             ),
             SizedBox(height: 16),
             Text(
-              'Seleccione un cliente para ver su evolución',
+              'Elige un cliente de la lista para ver cómo compra.',
+              textAlign: TextAlign.center,
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
             ),
           ],
@@ -588,7 +589,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage>
             ),
             const SizedBox(height: 16),
             Text(
-              'No hay datos de evolución para $_selectedClientName ($_selectedClientCode)',
+              '$_selectedClientName no tiene ventas en este periodo. Prueba otro año.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
               textAlign: TextAlign.center,
             ),

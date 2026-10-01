@@ -830,6 +830,10 @@ app.use('/api/entregas', verifyToken, repartoConfirmationWriteGuard);
     app.use('/api/cobros', cobrosLimiter, cobrosRoutes);
   }
 
+  // Competitive prices live only in JAVIER.TEST_PRECIO_COMPETITIVO (isolated_test).
+  const { createPrecioCompetitivoRouter } = require('./routes/precio-competitivo');
+  app.use('/api/precios-competitivos', createPrecioCompetitivoRouter());
+
   // Legacy fallbacks for client/commission routes not covered by DDD adapters.
   app.use('/api/clients', clientsRoutes);
   app.use('/api/commissions', commissionsRoutes);

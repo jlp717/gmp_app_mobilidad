@@ -70,7 +70,10 @@ class AlbaranCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header: Número, Estado, CTR badge
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 // Número de albarán
                 Container(
@@ -88,7 +91,7 @@ class AlbaranCard extends StatelessWidget {
                     style: const TextStyle(
                       color: AppTheme.info,
                       fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontSize: 16,
                     ),
                   ),
                 ),
@@ -106,21 +109,21 @@ class AlbaranCard extends StatelessWidget {
                       color: albaran.estado.color.withValues(alpha: 0.3),
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  child: Wrap(
+                    spacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Icon(
                         albaran.estado.icon,
                         color: albaran.estado.color,
-                        size: 14,
+                        size: 18,
                       ),
-                      const SizedBox(width: 4),
                       Text(
                         albaran.estado.label,
                         style: TextStyle(
                           color: albaran.estado.color,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
@@ -143,26 +146,27 @@ class AlbaranCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.warning,
-                            color: AppColors.themedWhite, size: 12),
-                        SizedBox(width: 4),
-                        Text(
-                          'CTR',
-                          style: TextStyle(
-                            color: AppColors.themedWhite,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                    child: Semantics(
+                      label: 'Hay que cobrar esta entrega',
+                      child: Wrap(
+                        spacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Icon(Icons.warning,
+                              color: AppColors.themedWhite, size: 18),
+                          Text(
+                            'Cobrar',
+                            style: TextStyle(
+                              color: AppColors.themedWhite,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
-
-                const Spacer(),
 
                 // Importe
                 Column(
@@ -174,7 +178,7 @@ class AlbaranCard extends StatelessWidget {
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize:
-                            Responsive.fontSize(context, small: 14, large: 18),
+                            Responsive.fontSize(context, small: 16, large: 18),
                       ),
                     ),
                     if (albaran.formaPago != null)
@@ -182,7 +186,7 @@ class AlbaranCard extends StatelessWidget {
                         albaran.formaPago!,
                         style: TextStyle(
                           color: AppTheme.textSecondary.withValues(alpha: 0.7),
-                          fontSize: 10,
+                          fontSize: 16,
                         ),
                       ),
                   ],
@@ -220,7 +224,7 @@ class AlbaranCard extends StatelessWidget {
                         style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w600,
-                          fontSize: 15,
+                          fontSize: 16,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -241,7 +245,7 @@ class AlbaranCard extends StatelessWidget {
                               style: TextStyle(
                                 color: AppTheme.textSecondary
                                     .withValues(alpha: 0.7),
-                                fontSize: 12,
+                                fontSize: 16,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -311,40 +315,46 @@ class AlbaranCard extends StatelessWidget {
                     // Botón de completar rápido
                     Material(
                       color: AppColors.transparent,
-                      child: InkWell(
-                        onTap: onQuickComplete,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.success,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.systemBlack
-                                    .withValues(alpha: 0.14),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.check,
-                                  color: AppColors.themedWhite, size: 18),
-                              SizedBox(width: 6),
-                              Text(
-                                'Completar',
-                                style: TextStyle(
-                                  color: AppColors.themedWhite,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
+                      child: Semantics(
+                        button: true,
+                        label: 'Completar entrega',
+                        child: InkWell(
+                          onTap: onQuickComplete,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            constraints: const BoxConstraints(minHeight: 48),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.success,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.systemBlack
+                                      .withValues(alpha: 0.14),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check,
+                                    color: AppColors.themedWhite, size: 18),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Completar',
+                                  style: TextStyle(
+                                    color: AppColors.themedWhite,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -354,18 +364,24 @@ class AlbaranCard extends StatelessWidget {
               ),
             ] else ...[
               // Sin items, mostrar botón de ver detalles
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton.icon(
+              SizedBox(
+                width: double.infinity,
+                child: Semantics(
+                  button: true,
+                  label: 'Ver detalles de la entrega',
+                  child: TextButton.icon(
                     onPressed: onTap,
-                    icon: const Icon(Icons.visibility, size: 16),
-                    label: const Text('Ver detalles'),
+                    icon: const Icon(Icons.visibility, size: 20),
+                    label: const Text(
+                      'Ver detalles',
+                      style: TextStyle(fontSize: 16),
+                    ),
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.info,
+                      minimumSize: const Size(48, 48),
                     ),
                   ),
-                ],
+                ),
               ),
             ],
           ],

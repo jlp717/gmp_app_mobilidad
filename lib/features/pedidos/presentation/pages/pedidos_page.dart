@@ -2023,12 +2023,11 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         final gridGap = Responsive.denseListSpacing(context);
 
         if (columns <= 1) {
-          // F1b-01: fixed extent + 1-screen cache via OptimizedListView.
-          final tileExtent = Responsive.catalogTileExtent(context);
+          // Intrinsic height: a fixed 68px extent clipped the restored line
+          // (stock, promo, unit, prices). The card sizes itself.
           return OptimizedListView(
             controller: _catalogScrollController,
             padding: listPad,
-            itemExtent: tileExtent,
             itemCount: displayList.length + (provider.hasMoreProducts ? 1 : 0),
             itemBuilder: (itemCtx, i) {
               if (i >= displayList.length) {
@@ -2098,22 +2097,17 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         }
 
         final gridItems = displayList.whereType<Product>().toList();
-        final tileExtent = Responsive.catalogTileExtent(context);
+        final rowCount = (gridItems.length / columns).ceil() +
+            (provider.hasMoreProducts ? 1 : 0);
 
-        return GridView.builder(
+        // Rows size to the card. A fixed mainAxisExtent hid restored fields.
+        return OptimizedListView(
           controller: _catalogScrollController,
           padding: listPad,
-          cacheExtent: MediaQuery.sizeOf(context).height,
-          addAutomaticKeepAlives: false,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            mainAxisExtent: tileExtent,
-            mainAxisSpacing: gridGap,
-            crossAxisSpacing: gridGap,
-          ),
-          itemCount: gridItems.length + (provider.hasMoreProducts ? 1 : 0),
-          itemBuilder: (itemCtx, i) {
-            if (i >= gridItems.length) {
+          itemCount: rowCount,
+          itemBuilder: (itemCtx, row) {
+            final start = row * columns;
+            if (start >= gridItems.length) {
               return const Padding(
                 padding: EdgeInsets.all(16),
                 child: Center(
@@ -2121,7 +2115,24 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 ),
               );
             }
-            return buildProductCard(gridItems[i]);
+            return Padding(
+              padding: EdgeInsets.only(bottom: gridGap),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var col = 0; col < columns; col++) ...[
+                      if (col > 0) SizedBox(width: gridGap),
+                      Expanded(
+                        child: start + col < gridItems.length
+                            ? buildProductCard(gridItems[start + col])
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
           },
         );
       },

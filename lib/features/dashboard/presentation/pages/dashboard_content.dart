@@ -15,7 +15,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/date_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
-import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fi_filters_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/multi_select_dialog.dart';
@@ -1653,8 +1653,11 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   }
 
   Widget _buildErrorWidget() {
-    return ErrorStateWidget(
-      message: 'Error: $_error',
+    final raw = _error ?? '';
+    return GmpErrorPanel(
+      whatHappened:
+          gmpWhatHappened(raw.isEmpty ? 'Error al cargar el panel' : raw),
+      whatToDo: gmpWhatToDo(raw),
       onRetry: () => _fetchAllData(forceRefresh: true),
     );
   }
@@ -1669,13 +1672,15 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         border:
             Border.all(color: AppColors.themedWhite.withValues(alpha: 0.08)),
       ),
-      child: Row(
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          const Icon(Icons.bar_chart, color: AppTheme.info, size: 16),
-          const SizedBox(width: 8),
+          const Icon(Icons.bar_chart, color: AppTheme.info, size: 24),
           Text(
-            'Grafico',
-            style: TextStyle(color: AppColors.themedWhite70, fontSize: 12),
+            'Gráfico',
+            style: TextStyle(color: AppColors.themedWhite70, fontSize: 16),
           ),
           const SizedBox(width: 12),
           ...ChartType.values.map((type) {
@@ -1689,7 +1694,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                 ? 'Barras'
                 : type == ChartType.pie
                     ? 'Tarta'
-                    : 'Linea';
+                    : 'Línea';
             return Padding(
               padding: const EdgeInsets.only(right: 6),
               child: ChoiceChip(
@@ -1707,7 +1712,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                     Text(
                       label,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 16,
                         color: isSelected
                             ? AppColors.themedWhite
                             : AppColors.themedWhite54,

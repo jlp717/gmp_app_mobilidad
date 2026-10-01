@@ -382,27 +382,36 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.raisedSurface,
-        title: const Text('Observaciones Cliente'),
+        title: const Text(
+          'Observaciones del cliente',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+        ),
         content: TextField(
           controller: ctrl,
           maxLines: 5,
+          style: const TextStyle(fontSize: 16),
           decoration: const InputDecoration(
-            hintText: 'Escribe aquí las observaciones...',
+            hintText: 'Escribe lo que hay que recordar de este cliente',
             border: OutlineInputBorder(),
           ),
         ),
         actions: [
           TextButton(
+            style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
             onPressed: () => Navigator.pop(ctx),
-            child: Text(
+            child: const Text(
               'Cancelar',
-              style: TextStyle(color: AppTheme.textTertiary),
+              style: TextStyle(fontSize: 16),
             ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text),
-            style:
-                ElevatedButton.styleFrom(backgroundColor: AppTheme.accentRose),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.accentRose,
+              minimumSize: const Size(48, 48),
+              textStyle:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
             child: const Text('Guardar'),
           ),
         ],
@@ -438,16 +447,19 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Observaciones guardadas correctaemnte'),
+            content: Text(
+                'Observaciones guardadas. Ya están en la ficha del cliente.'),
           ),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() => _isLoading = false); // Stop loading if error
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error guardando notas: $e'),
+            content: const Text(
+              'No se guardaron las observaciones. Comprueba la conexión y pulsa Guardar otra vez.',
+            ),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -463,18 +475,19 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       appBar: AppBar(
         backgroundColor: AppTheme.raisedSurface,
         elevation: 0,
-        toolbarHeight: 50,
+        toolbarHeight: 72,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               '${widget.clientCode} - ${widget.clientName}',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             Text(
-              'Historial de Compras',
-              style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+              'Historial de compras',
+              style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -495,14 +508,15 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               tooltip: 'Observaciones',
             ),
           IconButton(
+            tooltip: _showFilters ? 'Ocultar filtros' : 'Mostrar filtros',
             icon: Icon(
               _showFilters ? Icons.filter_list_off : Icons.filter_list,
-              size: 20,
             ),
             onPressed: () => setState(() => _showFilters = !_showFilters),
           ),
           IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
+            tooltip: 'Actualizar historial',
+            icon: const Icon(Icons.refresh),
             onPressed: () => _loadData(forceRefresh: true),
           ),
         ],

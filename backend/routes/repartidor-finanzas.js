@@ -317,21 +317,71 @@ function isEvidenceTimeout(error) {
   return codes.some((code) => EVIDENCE_TIMEOUT_CODES.has(code));
 }
 
+const EVIDENCE_RETRYABLE_PUBLIC = Object.freeze({
+  EVIDENCE_TIMEOUT: {
+    statusCode: 504,
+    error: 'La evidencia no se pudo guardar a tiempo. La entrega sigue abierta. Vuelve a intentarlo.',
+  },
+  REPARTO_EVIDENCE_PERSISTENCE_FAILED: {
+    statusCode: 503,
+    error: 'No se pudo guardar la evidencia por un fallo temporal. La entrega no se ha cerrado. Vuelve a intentarlo.',
+  },
+  REPARTO_EVIDENCE_STORE_UNAVAILABLE: {
+    statusCode: 503,
+    error: 'El almacén de evidencias no está disponible ahora. La entrega no se ha cerrado. Vuelve a intentarlo en unos minutos.',
+  },
+  REPARTO_EVIDENCE_RUNTIME_UNAVAILABLE: {
+    statusCode: 503,
+    error: 'El almacén de evidencias no está habilitado. La entrega no se ha cerrado. Reinténtalo más tarde.',
+  },
+});
+
+function sendRetryableEvidence(res, code, action) {
+  const spec = EVIDENCE_RETRYABLE_PUBLIC[code];
+  logger.error('[REPARTIDOR_FINANZAS] request failed', {
+    action: action || 'unknown',
+    code,
+    statusCode: spec.statusCode,
+  });
+  return res.status(spec.statusCode).json({
+    success: false,
+    code,
+    retryable: true,
+    error: spec.error,
+  });
+}
+
 function sendEvidenceError(res, error, action) {
   if (isEvidenceTimeout(error)) {
-    return sendError(res, new EvidenceError(
-      'EVIDENCE_TIMEOUT',
-      'El almacen de evidencias no respondio a tiempo',
-      504,
-    ), { action });
+    return sendRetryableEvidence(res, 'EVIDENCE_TIMEOUT', action);
+  }
+  const rawCode = String(error?.code || '').trim().toUpperCase();
+  if (EVIDENCE_RETRYABLE_PUBLIC[rawCode]) {
+    return sendRetryableEvidence(res, rawCode, action);
   }
   if (error instanceof multer.MulterError) {
     const tooLarge = error.code === 'LIMIT_FILE_SIZE';
     return res.status(tooLarge ? 413 : 400).json({
       success: false,
       code: tooLarge ? 'EVIDENCE_TOO_LARGE' : 'INVALID_EVIDENCE_MULTIPART',
+      retryable: false,
       error: tooLarge ? 'La evidencia supera el límite de 4 MiB' : 'Formulario multipart inválido',
     });
+  }
+  if (error instanceof EvidenceError && error.statusCode < 500) {
+    logger.error('[REPARTIDOR_FINANZAS] request failed', {
+      action: action || 'unknown',
+      code: error.code,
+      statusCode: error.statusCode,
+    });
+    const body = {
+      success: false,
+      code: error.code,
+      retryable: false,
+      error: error.message,
+    };
+    if (typeof error.deadline === 'string') body.deadline = error.deadline;
+    return res.status(error.statusCode).json(body);
   }
   return sendError(res, error, { action });
 }
@@ -728,6 +778,7 @@ router.post('/rutero/evidence/signature', setCanonicalArtifactHeaders, verifyTok
       documentId: evidenceDocumentId(req.body),
       ...evidenceSelection(req, req.body?.repartidorId),
       dataUri: req.body?.signature || req.body?.firma,
+      deviceId: req.get('x-device-id') || req.body?.deviceId,
       signal,
     }));
     return res.status(result.created ? 201 : 200).json({ success: true, ...result });
@@ -747,6 +798,8 @@ router.post('/rutero/evidence/photo', setCanonicalArtifactHeaders, verifyToken, 
         ...evidenceSelection(req, req.body?.repartidorId),
         mimeType: req.file.mimetype,
         buffer: req.file.buffer,
+        deliveryAt: req.body?.deliveryAt || req.body?.fechaEntrega,
+        deviceId: req.get('x-device-id') || req.body?.deviceId,
         signal,
       }));
       return res.status(result.created ? 201 : 200).json({ success: true, ...result });

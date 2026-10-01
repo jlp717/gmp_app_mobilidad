@@ -520,6 +520,12 @@ const { sanitizeForSQL } = require('../utils/common');
 // y debilita la credencial). Van SIEMPRE parametrizados a la query.
 const SENSITIVE_FIELD_RE = /^(password|password_confirm|passwordConfirm|new_?password|current_?password|pin|secret|token|api_?key)$/i;
 
+// Signature payloads are data URIs (`data:image/png;base64,...`). The global
+// strip removes ';' ':' '/' '+' '=' and then the SQL allowlist, so a valid
+// PNG never reaches magic-byte checks and the delivery cannot be closed.
+// These fields are stored as parameterized BLOBs, never concatenated into SQL.
+const BINARY_EVIDENCE_FIELD_RE = /^(signature|firma)$/i;
+
 // F2b-03: campos de texto libre con contrato real (notas de cobro/cliente):
 // el stripping agresivo mutilaria apostrofes/comillas legitimos. Solo se
 // normaliza espacio en blanco; viajan SIEMPRE parametrizados. Intencionadamente
@@ -554,8 +560,8 @@ exports.sanitizeInput = (req, res, next) => {
             } else if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
                 const sanitizedObj = {};
                 for (const key of Object.keys(obj)) {
-                    // Los campos sensibles pasan intactos (van parametrizados).
-                    if (SENSITIVE_FIELD_RE.test(key)) {
+                    // Los campos sensibles y las firmas (data URI) pasan intactos.
+                    if (SENSITIVE_FIELD_RE.test(key) || BINARY_EVIDENCE_FIELD_RE.test(key)) {
                         sanitizedObj[key] = obj[key];
                     } else if (FREE_TEXT_FIELD_RE.test(key) && typeof obj[key] === 'string') {
                         sanitizedObj[key] = sanitizeFreeText(obj[key]);
@@ -630,8 +636,8 @@ exports.detectSqlInjection = (req, res, next) => {
             for (const [key, value] of Object.entries(obj)) {
                 const currentPath = path ? `${path}.${key}` : key;
 
-                // F2b-03: texto libre exento del detector (viaja parametrizado).
-                if (FREE_TEXT_FIELD_RE.test(key) && typeof value === 'string') continue;
+                // Texto libre y firmas (base64) viajan parametrizados; no son SQL.
+                if ((FREE_TEXT_FIELD_RE.test(key) || BINARY_EVIDENCE_FIELD_RE.test(key)) && typeof value === 'string') continue;
                 if (typeof value === 'string' && checkForSqlInjection(value)) {
                     logger.warn(`[SQL Injection Blocked] Suspicious field: ${currentPath}`);
                     return true;

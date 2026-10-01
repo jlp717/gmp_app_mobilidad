@@ -10,7 +10,8 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
 import 'package:gmp_app_mobilidad/core/widgets/offline_state_widget.dart';
-import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/design/a11y_tokens.dart';
+import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
@@ -128,8 +129,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
 
   // Single source of truth: Riverpod provider (Notifier + immutable State)
   CobrosParams get _params => CobrosParams(employeeCode: widget.employeeCode);
-  CobrosNotifier get _notifier =>
-      ref.read(cobrosProvider(_params).notifier);
+  CobrosNotifier get _notifier => ref.read(cobrosProvider(_params).notifier);
   CobrosState get _state => ref.read(cobrosProvider(_params));
 
   String _fallbackVendorCode(AuthState? authState) {
@@ -255,8 +255,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
   Future<void> _loadPendingSummary({bool forceRefresh = false}) async {
     if (!mounted) return;
     final generation = ++_summaryLoadGeneration;
-    final keepCurrentList =
-        !forceRefresh && _state.pendingSummary.isNotEmpty;
+    final keepCurrentList = !forceRefresh && _state.pendingSummary.isNotEmpty;
     setState(() {
       if (!keepCurrentList) {
         _isLoadingSummary = true;
@@ -377,8 +376,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
         (async) => async.value ?? ConnectivityStatus.online,
       ),
     );
-    final isOfflineView =
-        connectivityStatus != ConnectivityStatus.online;
+    final isOfflineView = connectivityStatus != ConnectivityStatus.online;
 
     return Scaffold(
       backgroundColor: AppColors.transparent,
@@ -423,8 +421,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                 )
               else if (_loadError != null)
                 Expanded(
-                  child: ErrorStateWidget(
-                    message: _loadError!,
+                  child: GmpErrorPanel(
+                    whatHappened: gmpWhatHappened(_loadError!),
+                    whatToDo: gmpWhatToDo(_loadError!),
                     onRetry: () {
                       unawaited(_onRefresh());
                     },
@@ -438,8 +437,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                 _buildEstadoFilterChips(),
                 Expanded(
                   child: _CobrosClientsSection(
-                    params:
-                        CobrosParams(employeeCode: widget.employeeCode),
+                    params: CobrosParams(employeeCode: widget.employeeCode),
                     foundClients: _foundClients,
                     estadoFilter: _estadoFilter,
                     searchQuery: _searchController.text.trim(),
@@ -537,12 +535,12 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                 color: AppColors.themedWhite.withValues(alpha: 0.35),
               ),
               const SizedBox(width: 4),
-              Text(
-                'Fuente: $sourceLabel',
-                style: TextStyle(
-                  fontSize: 9,
-                  color: AppColors.themedWhite.withValues(alpha: 0.35),
-                  fontStyle: FontStyle.italic,
+              Expanded(
+                child: Text(
+                  'Fuente: $sourceLabel',
+                  style: const TextStyle(
+                    fontSize: A11yTokens.minText,
+                  ).copyWith(color: AppTheme.textSecondary),
                 ),
               ),
             ],
@@ -550,13 +548,10 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
           if (hasAppLayer) ...[
             const SizedBox(height: 3),
             Text(
-              'ERP bruto: ${fmtMoney(cobros.cvcGrandTotal)} · App provisional: ${fmtMoney(cobros.appOrdersTotal)} · App ya descontado: ${fmtMoney(cobros.appAdjustmentsTotal)}',
-              style: TextStyle(
-                fontSize: 9,
-                color: AppColors.themedWhite.withValues(alpha: 0.4),
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              'ERP bruto: ${fmtMoney(cobros.cvcGrandTotal)}. App provisional: ${fmtMoney(cobros.appOrdersTotal)}. App ya descontado: ${fmtMoney(cobros.appAdjustmentsTotal)}.',
+              style: const TextStyle(
+                fontSize: A11yTokens.minText,
+              ).copyWith(color: AppTheme.textSecondary),
             ),
           ],
         ],
@@ -617,7 +612,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
       _FilterDef('vencido', 'Vencidos', Icons.error_outline, AppTheme.error),
       _FilterDef(
         'aldia',
-        'Al dia',
+        'Al día',
         Icons.check_circle_outline,
         AppTheme.success,
       ),
@@ -645,27 +640,31 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                 selected: selected,
                 enabled: true,
                 child: FilterChip(
-                avatar: Icon(
-                  f.icon,
-                  size: 16,
-                  color: selected ? AppColors.themedWhite : f.color,
-                ),
-                label: Text(f.label),
-                selected: selected,
-                onSelected: (_) => setState(() => _estadoFilter = f.value),
-                backgroundColor: AppTheme.softPanel,
-                selectedColor: f.color.withValues(alpha: 0.25),
-                labelStyle: TextStyle(
-                  color: selected
-                      ? AppColors.themedWhite
-                      : AppColors.themedWhite70,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                ),
-                side: BorderSide(
-                  color: selected
-                      ? f.color.withValues(alpha: 0.6)
-                      : AppColors.themedWhite.withValues(alpha: 0.1),
-                ),
+                  avatar: Icon(
+                    f.icon,
+                    size: 16,
+                    color: selected ? AppColors.themedWhite : f.color,
+                  ),
+                  label: Text(f.label),
+                  selected: selected,
+                  onSelected: (_) => setState(() => _estadoFilter = f.value),
+                  backgroundColor: AppTheme.softPanel,
+                  selectedColor: f.color.withValues(alpha: 0.25),
+                  labelStyle: TextStyle(
+                    color: selected
+                        ? AppColors.themedWhite
+                        : AppColors.themedWhite70,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    fontSize: A11yTokens.minText,
+                  ),
+                  showCheckmark: true,
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
+                  visualDensity: VisualDensity.comfortable,
+                  side: BorderSide(
+                    color: selected
+                        ? f.color.withValues(alpha: 0.6)
+                        : AppColors.themedWhite.withValues(alpha: 0.1),
+                  ),
                 ),
               ),
             );
@@ -800,44 +799,44 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
               controller: _searchController,
               onChanged: _onSearchChanged,
               style: TextStyle(color: AppColors.themedWhite),
-            decoration: InputDecoration(
-              hintText: 'Buscar por nombre, código, NIF...',
-              hintStyle: TextStyle(
-                color: AppTheme.textSecondary.withValues(alpha: 0.6),
-              ),
-              prefixIcon: Icon(
-                Icons.search,
-                color: AppTheme.info.withValues(alpha: 0.7),
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    BorderSide(color: AppTheme.info.withValues(alpha: 0.3)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    BorderSide(color: AppTheme.info.withValues(alpha: 0.3)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.info, width: 2),
-              ),
-              filled: true,
-              fillColor: AppTheme.softPanel,
-              suffixIcon: _isSearchingClients
-                  ? const SizedBox(
-                      width: 48,
-                      child: Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+              decoration: InputDecoration(
+                hintText: 'Buscar por nombre, código, NIF...',
+                hintStyle: TextStyle(
+                  color: AppTheme.textSecondary.withValues(alpha: 0.6),
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: AppTheme.info.withValues(alpha: 0.7),
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      BorderSide(color: AppTheme.info.withValues(alpha: 0.3)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      BorderSide(color: AppTheme.info.withValues(alpha: 0.3)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.info, width: 2),
+                ),
+                filled: true,
+                fillColor: AppTheme.softPanel,
+                suffixIcon: _isSearchingClients
+                    ? const SizedBox(
+                        width: 48,
+                        child: Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
                         ),
-                      ),
-                    )
-                  : null,
-            ),
+                      )
+                    : null,
+              ),
             ),
           ),
           const SizedBox(height: 10),
