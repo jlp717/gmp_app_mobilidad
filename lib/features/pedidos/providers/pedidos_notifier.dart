@@ -265,8 +265,7 @@ class PedidosState {
       final rate = normalizeIvaRate(line.ivaRate, fallback: 0);
       final ivaPct = (rate * 100).round();
       final saleAfterDiscount = line.importeVenta * discountFactor;
-      breakdown[ivaPct] =
-          (breakdown[ivaPct] ?? 0) + saleAfterDiscount * rate;
+      breakdown[ivaPct] = (breakdown[ivaPct] ?? 0) + saleAfterDiscount * rate;
     }
     return breakdown;
   }
@@ -328,16 +327,14 @@ class PedidosState {
 
   double lastQtyForProduct(String code, {String? clientCode}) {
     final client = (clientCode ?? this.clientCode ?? '').trim();
-    final key =
-        '${client.isEmpty ? '_noclient_' : client}|${code.trim()}';
+    final key = '${client.isEmpty ? '_noclient_' : client}|${code.trim()}';
     if (lastQtyByProduct.containsKey(key)) return lastQtyByProduct[key]!;
     return lastQtyByProduct[code.trim()] ?? 1.0;
   }
 
   String? lastUnitForProduct(String code, {String? clientCode}) {
     final client = (clientCode ?? this.clientCode ?? '').trim();
-    final key =
-        '${client.isEmpty ? '_noclient_' : client}|${code.trim()}';
+    final key = '${client.isEmpty ? '_noclient_' : client}|${code.trim()}';
     if (lastUnitByProduct.containsKey(key)) return lastUnitByProduct[key];
     return lastUnitByProduct[code.trim()];
   }
@@ -451,8 +448,7 @@ class PedidosState {
       draftAutoSendThreshold:
           draftAutoSendThreshold ?? this.draftAutoSendThreshold,
       clientBalance: clientBalance ?? this.clientBalance,
-      favoriteProductCodes:
-          favoriteProductCodes ?? this.favoriteProductCodes,
+      favoriteProductCodes: favoriteProductCodes ?? this.favoriteProductCodes,
       lastAutoSaved:
           clearLastAutoSaved ? null : (lastAutoSaved ?? this.lastAutoSaved),
       isDirty: isDirty ?? this.isDirty,
@@ -468,8 +464,7 @@ class PedidosState {
       globalDiscountPct: globalDiscountPct ?? this.globalDiscountPct,
       complementaryProducts:
           complementaryProducts ?? this.complementaryProducts,
-      activePromotionsList:
-          activePromotionsList ?? this.activePromotionsList,
+      activePromotionsList: activePromotionsList ?? this.activePromotionsList,
       promotionsByProduct: promotionsByProduct ?? this.promotionsByProduct,
       promotionsError: promotionsError ?? this.promotionsError,
       analytics: analytics ?? this.analytics,
@@ -907,16 +902,17 @@ class PedidosNotifier extends Notifier<PedidosState> {
         return;
       }
 
-      final metadata =
-          Map<String, Product>.from(state.productMetadataByCode);
+      final metadata = Map<String, Product>.from(state.productMetadataByCode);
       for (final product in results) {
         _rememberProductMetadataInto(metadata, product);
       }
       final filtered = requestOnlyStock
           ? results.where((p) => p.hasStock).toList()
           : results;
-      final merged =
-          reset ? filtered : [...state.products, ...filtered];
+      final merged = reset ? filtered : [...state.products, ...filtered];
+      // immediate: el finally de abajo también es immediate y, si esta
+      // escritura quedara en _pendingState, la borraría y el catálogo
+      // se quedaría vacío después de un HTTP 200.
       _setState(
         state.copyWith(
           productMetadataByCode: Map.unmodifiable(metadata),
@@ -924,6 +920,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
           hasMoreProducts: results.length >= 50,
           productOffset: requestOffset + results.length,
         ),
+        immediate: true,
       );
     } catch (e) {
       if (e is ApiException && e.code == 'CANCELLED') {
@@ -934,8 +931,9 @@ class PedidosNotifier extends Notifier<PedidosState> {
       }
     } finally {
       if (generation == _productsLoadGeneration) {
+        final latest = _pendingState ?? state;
         _setState(
-          state.copyWith(isLoadingProducts: false),
+          latest.copyWith(isLoadingProducts: false),
           immediate: true,
         );
       }
@@ -992,8 +990,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
     try {
       final stock = await PedidosService.getStock(productCode);
       final products = List<Product>.from(state.products);
-      final metadata =
-          Map<String, Product>.from(state.productMetadataByCode);
+      final metadata = Map<String, Product>.from(state.productMetadataByCode);
       _applyStockToLists(products, metadata, productCode, stock);
       _setState(
         state.copyWith(
@@ -1023,8 +1020,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
       return msg;
     }
 
-    final metadata =
-        Map<String, Product>.from(state.productMetadataByCode);
+    final metadata = Map<String, Product>.from(state.productMetadataByCode);
     _rememberProductMetadataInto(metadata, product);
 
     final unit = unidadMedida.trim().isEmpty
@@ -1091,10 +1087,8 @@ class PedidosNotifier extends Notifier<PedidosState> {
       }
     }
 
-    final lastQty =
-        Map<String, double>.from(state.lastQtyByProduct);
-    final lastUnit =
-        Map<String, String>.from(state.lastUnitByProduct);
+    final lastQty = Map<String, double>.from(state.lastQtyByProduct);
+    final lastUnit = Map<String, String>.from(state.lastUnitByProduct);
 
     if (existingIdx >= 0) {
       final line = lines[existingIdx];
@@ -1239,8 +1233,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
       }
     }
 
-    final metadata =
-        Map<String, Product>.from(state.productMetadataByCode);
+    final metadata = Map<String, Product>.from(state.productMetadataByCode);
     final listed = _productByCodeIn(state.products, line.codigoArticulo);
     if (listed != null) _rememberProductMetadataInto(metadata, listed);
     final product = listed;
@@ -1318,10 +1311,8 @@ class PedidosNotifier extends Notifier<PedidosState> {
         product: product,
       );
     }
-    final lastQty =
-        Map<String, double>.from(state.lastQtyByProduct);
-    final lastUnit =
-        Map<String, String>.from(state.lastUnitByProduct);
+    final lastQty = Map<String, double>.from(state.lastQtyByProduct);
+    final lastUnit = Map<String, String>.from(state.lastUnitByProduct);
     lastQty[_qtyKey(line.codigoArticulo)] = nextQty;
     lastUnit[_qtyKey(line.codigoArticulo, state.clientCode)] =
         line.unidadMedida;
@@ -1466,10 +1457,9 @@ class PedidosNotifier extends Notifier<PedidosState> {
     String productCode, {
     Product? product,
   }) {
-    final giftPromos =
-        (promosByProduct[productCode] ?? const <PromotionItem>[])
-            .where((p) => p.isGift && p.minQty > 0 && p.giftQty > 0)
-            .toList();
+    final giftPromos = (promosByProduct[productCode] ?? const <PromotionItem>[])
+        .where((p) => p.isGift && p.minQty > 0 && p.giftQty > 0)
+        .toList();
     if (giftPromos.isEmpty) {
       _removeAutoGiftLinesIn(lines, productCode);
       return;
@@ -2155,10 +2145,8 @@ class PedidosNotifier extends Notifier<PedidosState> {
       );
       _setState(
         state.copyWith(
-          clientHistory:
-              List.unmodifiable(reco['clientHistory'] ?? const []),
-          similarClients:
-              List.unmodifiable(reco['similarClients'] ?? const []),
+          clientHistory: List.unmodifiable(reco['clientHistory'] ?? const []),
+          similarClients: List.unmodifiable(reco['similarClients'] ?? const []),
         ),
         immediate: true,
       );
@@ -2169,8 +2157,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
 
   // ── Offline Support / Drafts (tramos 1863-1932) ──
 
-  Future<void> saveDraft(String vendedorCode,
-      {bool isAutoSave = false}) async {
+  Future<void> saveDraft(String vendedorCode, {bool isAutoSave = false}) async {
     if (!state.hasClient) {
       if (!isAutoSave) {
         _setState(
@@ -2230,10 +2217,8 @@ class PedidosNotifier extends Notifier<PedidosState> {
 
   void loadDraft(Map<String, dynamic> draft) {
     final lines = <OrderLine>[];
-    final lastQty =
-        Map<String, double>.from(state.lastQtyByProduct);
-    final lastUnit =
-        Map<String, String>.from(state.lastUnitByProduct);
+    final lastQty = Map<String, double>.from(state.lastQtyByProduct);
+    final lastUnit = Map<String, String>.from(state.lastUnitByProduct);
     final linesData = draft['lines'] as List? ?? [];
     for (final l in linesData) {
       final line = OrderLine.fromJson(l as Map<String, dynamic>);
@@ -2383,8 +2368,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
     }
     try {
       final codes = state.lines.map((l) => l.codigoArticulo).toList();
-      final complementary =
-          await PedidosService.getComplementaryProducts(
+      final complementary = await PedidosService.getComplementaryProducts(
         codes,
         clientCode: state.clientCode,
       );
@@ -2518,10 +2502,8 @@ class PedidosNotifier extends Notifier<PedidosState> {
     try {
       final data = await PedidosService.cloneOrder(orderId);
       final lines = <OrderLine>[];
-      final lastQty =
-          Map<String, double>.from(state.lastQtyByProduct);
-      final lastUnit =
-          Map<String, String>.from(state.lastUnitByProduct);
+      final lastQty = Map<String, double>.from(state.lastQtyByProduct);
+      final lastUnit = Map<String, String>.from(state.lastUnitByProduct);
       final linesData = data['lines'] as List? ?? [];
       for (final l in linesData) {
         final line = OrderLine.fromJson(l as Map<String, dynamic>);
@@ -2557,10 +2539,8 @@ class PedidosNotifier extends Notifier<PedidosState> {
   // ── Batch Add from Recommendations (tramo 2175-2213) ──
   void addMultipleProducts(List<Product> products, double defaultQty) {
     final lines = List<OrderLine>.from(state.lines);
-    final lastQty =
-        Map<String, double>.from(state.lastQtyByProduct);
-    final lastUnit =
-        Map<String, String>.from(state.lastUnitByProduct);
+    final lastQty = Map<String, double>.from(state.lastQtyByProduct);
+    final lastUnit = Map<String, String>.from(state.lastUnitByProduct);
     for (final product in products) {
       final existingIdx =
           lines.indexWhere((l) => l.codigoArticulo == product.code);
@@ -2618,8 +2598,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
         state.lines.map((line) => line.codigoArticulo),
       );
       final products = List<Product>.from(state.products);
-      final metadata =
-          Map<String, Product>.from(state.productMetadataByCode);
+      final metadata = Map<String, Product>.from(state.productMetadataByCode);
       for (final entry in stockByCode.entries) {
         _applyStockToLists(products, metadata, entry.key, entry.value);
       }

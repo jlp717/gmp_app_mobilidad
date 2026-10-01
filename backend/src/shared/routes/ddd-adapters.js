@@ -757,6 +757,12 @@ function createAuthRoutes() {
 // =============================================================================
 // PEDIDOS ROUTES (DDD) — with caching
 // =============================================================================
+function parseCatalogQueryFlag(value) {
+  if (value === true || value === 1) return true;
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['1', 'true', 'yes', 'si', 's'].includes(normalized);
+}
+
 function createPedidosRoutes() {
   const router = express.Router();
   const repo = new Db2PedidosRepository(getDbPool());
@@ -765,6 +771,8 @@ function createPedidosRoutes() {
   router.get('/products', async (req, res) => {
     try {
       const { vendedorCodes, clientCode, family, marca, prefamily, search, limit, offset, sortBy, sortOrder } = req.query;
+      const includeIva = parseCatalogQueryFlag(req.query.includeIva);
+      const onlyStock = parseCatalogQueryFlag(req.query.onlyStock);
       if (!vendedorCodes) return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
       if (!clientCode) return res.status(400).json({ success: false, error: 'clientCode is required' });
       const clientAccess = await authorizePedidoClientScope(req, clientCode, vendedorCodes, 'consultar catalogo para');
@@ -776,7 +784,7 @@ function createPedidosRoutes() {
       const normalizedSortBy = ['purchases', 'name'].includes(rawSortBy) ? rawSortBy : 'purchases';
       const normalizedSortOrder = String(sortOrder || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
-      const cacheKey = `ddd:products:${cacheSecurityScope}:${scopedVendedorCodes}:${scopedClientCode}:${family || ''}:${marca || ''}:${prefamily || ''}:${search || ''}:${limit || 50}:${offset || 0}:${normalizedSortBy}:${normalizedSortOrder}`;
+      const cacheKey = `ddd:products:${cacheSecurityScope}:${scopedVendedorCodes}:${scopedClientCode}:${family || ''}:${marca || ''}:${prefamily || ''}:${search || ''}:${limit || 50}:${offset || 0}:${normalizedSortBy}:${normalizedSortOrder}:${includeIva ? 'iva' : 'net'}:${onlyStock ? 'stock' : 'all'}`;
       await withCache(cache, cacheKey, TTL_MS.PRODUCT_CATALOG, async () => {
         const result = await repo.searchProducts({
           vendedorCodes: scopedVendedorCodes,
@@ -785,6 +793,8 @@ function createPedidosRoutes() {
           marca: marca ? String(marca).trim() : undefined,
           prefamily: prefamily ? String(prefamily).trim() : undefined,
           search: search ? String(search).trim() : undefined,
+          includeIva,
+          onlyStock,
           limit: parseInt(limit) || 50,
           offset: parseInt(offset) || 0,
           sortBy: normalizedSortBy,

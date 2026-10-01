@@ -167,6 +167,8 @@ class Responsive {
   static double catalogTileExtent(BuildContext ctx) {
     if (isLandscapeCompact(ctx)) return 70;
     if (isLandscape(ctx)) return 82;
+    // Teléfono en vertical: ficha baja para que quepan más líneas.
+    if (isPhone(ctx)) return 68;
     return 96;
   }
 
@@ -189,13 +191,13 @@ class Responsive {
   /// Tighter spacing for dense commercial lists in landscape.
   static double denseListSpacing(BuildContext ctx) {
     if (isLandscapeCompact(ctx)) return 4;
-    if (isLandscape(ctx)) return 6;
+    if (isLandscape(ctx) || isPhone(ctx)) return 6;
     return 10;
   }
 
-  /// Whether list/grid tiles should use compact chrome (landscape / short height).
+  /// Fichas densas en apaisado y en teléfono, para ver más líneas.
   static bool useCompactTiles(BuildContext ctx) =>
-      isLandscape(ctx) || isLandscapeCompact(ctx);
+      isLandscape(ctx) || isLandscapeCompact(ctx) || isPhone(ctx);
 
   // ---------------------------------------------------------------------------
   // Safe-area helpers (REQ-20 tanda4)
@@ -262,7 +264,7 @@ class Responsive {
     final factor = landscapeScale(ctx);
     if (w >= 1200) return EdgeInsets.all(24 * factor);
     if (w >= 600) return EdgeInsets.all(16 * factor);
-    return EdgeInsets.all(10 * factor);
+    return EdgeInsets.all(8 * factor);
   }
 
   /// Spacing between cards/sections.

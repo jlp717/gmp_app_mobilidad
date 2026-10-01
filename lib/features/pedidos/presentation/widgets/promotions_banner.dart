@@ -44,8 +44,9 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
     super.didChangeDependencies();
     if (!_landscapeInitDone) {
       _landscapeInitDone = true;
-      // Landscape: start collapsed so catalog shows ~9–10 products.
-      if (Responsive.isLandscape(context)) {
+      // Teléfono y apaisado: el banner nace plegado para que el catálogo
+      // ocupe la pantalla. El comercial lo abre si quiere ver las ofertas.
+      if (Responsive.isPhone(context) || Responsive.isLandscape(context)) {
         _isExpanded = false;
       }
     }

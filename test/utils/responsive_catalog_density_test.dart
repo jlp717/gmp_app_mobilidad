@@ -117,6 +117,34 @@ void main() {
       expect(cols, 1);
     });
 
+    testWidgets('portrait phone uses a short catalog row', (tester) async {
+      late double extent;
+      late bool compact;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(390, 844),
+              devicePixelRatio: 1,
+            ),
+            child: Builder(
+              builder: (context) {
+                extent = Responsive.catalogTileExtent(context);
+                compact = Responsive.useCompactTiles(context);
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(compact, isTrue);
+      expect(extent, 68);
+      // ~500 px de lista tras cabecera → al menos 7 productos.
+      expect((500 / extent).floor(), greaterThanOrEqualTo(7));
+    });
+
     testWidgets('dense lists use 2+ cols in landscape tablet', (tester) async {
       late int listCols;
 

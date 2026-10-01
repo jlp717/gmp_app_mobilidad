@@ -276,7 +276,6 @@ class CachePreWarmer {
         _preWarmPedidosBrands,
         () => _preWarmPedidosOrders(codes),
         () => _preWarmPedidosStats(codes),
-        () => _preWarmPedidosProducts(codes),
         () => _preWarmRuteroWeek(codes, currentYear, currentMonth),
       ]);
 
@@ -396,15 +395,6 @@ class CachePreWarmer {
       debugPrint('[CachePreWarmer] Pedidos stats pre-warmed');
     } catch (e) {
       debugPrint('[CachePreWarmer] Pedidos stats pre-warm failed: $e');
-    }
-  }
-
-  static Future<void> _preWarmPedidosProducts(String vendorCodes) async {
-    try {
-      await PedidosService.getProducts(vendedorCodes: vendorCodes, limit: 50);
-      debugPrint('[CachePreWarmer] Pedidos products pre-warmed');
-    } catch (e) {
-      debugPrint('[CachePreWarmer] Pedidos products pre-warm failed: $e');
     }
   }
 

@@ -10,6 +10,7 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/domain/product_family_filter.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/domain/quantity_format.dart';
 
 void _debugLog(String message) {
   if (kDebugMode) debugPrint(message);
@@ -301,13 +302,22 @@ class Product {
   /// Whether stock is available
   bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
 
+  /// Stock neto de ARO almacén 1 (envases y unidades), ya restadas las reservas.
   String get stockDisplay {
-    final parts = <String>[];
-    if (stockEnvases > 0) parts.add('${stockEnvases.toStringAsFixed(0)} cj');
-    if (stockUnidades > 0) {
-      parts.add('${stockUnidades.toStringAsFixed(0)} uds');
+    if (stockEnvases <= 0 && stockUnidades <= 0) return 'Sin stock';
+    final unitLabel = productoPesado ? 'kg' : 'uds';
+    final same = (stockEnvases - stockUnidades).abs() < 0.0005;
+    if (unitsPerBox <= 1 && same) {
+      return '${formatCatalogQuantity(stockUnidades)} $unitLabel';
     }
-    return parts.isEmpty ? 'Sin stock' : parts.join(' / ');
+    final parts = <String>[];
+    if (stockEnvases > 0) {
+      parts.add('${formatCatalogQuantity(stockEnvases)} cj');
+    }
+    if (stockUnidades > 0) {
+      parts.add('${formatCatalogQuantity(stockUnidades)} $unitLabel');
+    }
+    return parts.join(' / ');
   }
 
   /// Whether the product is discontinued
@@ -1776,14 +1786,19 @@ class Recommendation {
 
   /// Formatear stock para mostrar en UI
   String get stockDisplay {
+    if (stockEnvases <= 0 && stockUnidades <= 0) return 'Sin stock';
+    final same = (stockEnvases - stockUnidades).abs() < 0.0005;
+    if (unitsPerBox <= 1 && same) {
+      return '${formatCatalogQuantity(stockUnidades)} uds';
+    }
     final parts = <String>[];
     if (stockEnvases > 0) {
-      parts.add('${stockEnvases.toStringAsFixed(0)} cj');
+      parts.add('${formatCatalogQuantity(stockEnvases)} cj');
     }
     if (stockUnidades > 0) {
-      parts.add('${stockUnidades.toStringAsFixed(0)} uds');
+      parts.add('${formatCatalogQuantity(stockUnidades)} uds');
     }
-    return parts.isEmpty ? 'Sin stock' : parts.join(' / ');
+    return parts.join(' / ');
   }
 
   /// Unidades disponibles según la unidad de medida

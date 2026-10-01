@@ -15,7 +15,7 @@ class Db2PedidosRepository extends PedidosRepository {
     this._db = dbPool || new Db2ConnectionPool();
   }
 
-  async searchProducts({ vendedorCodes, clientCode, family, marca, prefamily, search, limit = 50, offset = 0, sortBy, sortOrder }) {
+  async searchProducts({ vendedorCodes, clientCode, family, marca, prefamily, search, includeIva = false, onlyStock = false, limit = 50, offset = 0, sortBy, sortOrder }) {
     // Delegate to legacy service which has tested SQL with proper client-based pricing
     const pedidosService = require('../../../../services/pedidos.service');
     const products = await pedidosService.getProducts({
@@ -24,6 +24,8 @@ class Db2PedidosRepository extends PedidosRepository {
       family,
       marca,
       prefamily,
+      includeIva,
+      onlyStock,
       limit,
       offset,
       sortBy,

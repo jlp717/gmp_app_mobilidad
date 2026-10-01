@@ -2992,8 +2992,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         final isPortrait = !Responsive.isLandscape(context);
         final cols =
             isPortrait ? 1 : Responsive.denseListCrossAxisCount(context);
-        final compact =
-            isPortrait ? false : Responsive.useCompactTiles(context);
+        final compact = isPortrait
+            ? Responsive.isPhone(context)
+            : Responsive.useCompactTiles(context);
         final gap = Responsive.denseListSpacing(context);
 
         if (cols <= 1) {

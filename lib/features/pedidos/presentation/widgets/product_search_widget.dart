@@ -108,7 +108,8 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
         ref.watch(pedidosNotifierProvider.select((p) => p.selectedPrefamily));
     final selectedBrand =
         ref.watch(pedidosNotifierProvider.select((p) => p.selectedBrand));
-    final families = ref.watch(pedidosNotifierProvider.select((p) => p.families));
+    final families =
+        ref.watch(pedidosNotifierProvider.select((p) => p.families));
     final provider = ref.read(pedidosNotifierProvider.notifier);
     final pad = Responsive.contentPadding(context);
     // REQ-04.1: "Todas" clears family + prefamily + brand.
@@ -256,8 +257,10 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     : null,
                 filled: true,
                 fillColor: AppTheme.inkSurface.withValues(alpha: 0.56),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: Responsive.useCompactTiles(context) ? 8 : 12,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   borderSide: BorderSide(
