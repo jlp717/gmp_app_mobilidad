@@ -865,7 +865,7 @@ function createPedidosRoutes() {
       const includeHistory = req.query.includeHistory === '1' || req.query.includeHistory === 'true';
       const scopedVendedorCodes = authorizedVendorCodesOrOriginal(clientAccess, vendedorCodes);
 
-      const cacheKey = `ddd:promotions:v4:${clientAccess.clientCode}:${scopedVendedorCodes}:${includeHistory ? 'all' : 'active'}`;
+      const cacheKey = `ddd:promotions:v5:${clientAccess.clientCode}:${scopedVendedorCodes}:${includeHistory ? 'all' : 'active'}`;
       if (!isForceRefreshRequest(req)) {
         const cached = await cache.get(cacheKey);
         const cachedHistory = Array.isArray(cached?.history) ? cached.history : [];

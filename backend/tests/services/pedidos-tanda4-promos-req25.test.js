@@ -12,7 +12,7 @@ const PRD_COLS = [
     'DIADESDE', 'MESDESDE', 'ANODESDE', 'DIAHASTA', 'MESHASTA', 'ANOHASTA',
 ].map((COLUMN_NAME) => ({ COLUMN_NAME }));
 
-function loadService({ sysColumnsByTable, promoRows, countTotal }) {
+function loadService({ sysColumnsByTable, promoRows, countTotal, generalRows = [] }) {
     jest.resetModules();
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
     jest.doMock('../../middleware/logger', () => logger);
@@ -23,6 +23,7 @@ function loadService({ sysColumnsByTable, promoRows, countTotal }) {
             return sysColumnsByTable[table] || [];
         }
         if (s.includes('COUNT(*) AS TOTAL')) return [{ TOTAL: countTotal }];
+        if (s.includes('PMR_GENERAL')) return generalRows;
         return promoRows;
     });
     jest.doMock('../../config/db', () => ({
@@ -118,5 +119,63 @@ describe('REQ-25 promos backend (TEST-only mocks)', () => {
         expect(String(pmrCalls[0][0])).not.toContain('ANOFIN * 10000');
         expect(String(pmrCalls[0][0])).toContain('ANOINICIO');
         expect(String(pmrCalls[1][0])).toContain('ANOFIN');
+    });
+
+    test('cabecera sin cliente y sin PMRC entra como promocion general', async () => {
+        const year = new Date().getFullYear();
+        const { svc, queryWithParams } = loadService({
+            sysColumnsByTable: {
+                PMR: [{ COLUMN_NAME: 'CODIGOPROMOCIONREGALO' }],
+                PMRC: [{ COLUMN_NAME: 'CODIGOCLIENTE' }],
+                PMP: [{ COLUMN_NAME: 'CODIGOPROMOCION' }],
+            },
+            promoRows: [],
+            generalRows: [
+                {
+                    PROMO_CODE: 'GEN1',
+                    PROMO_NAME: '3+1 general',
+                    ASSIGNMENT_SOURCE: 'PMR_GENERAL',
+                    PRODUCT_CODE: 'ART1',
+                    PRODUCT_NAME: 'Articulo',
+                    ANOINICIO: year,
+                    MESINICIO: 1,
+                    DIAINICIO: 1,
+                    ANOFIN: 0,
+                    MESFIN: 0,
+                    DIAFIN: 0,
+                },
+                {
+                    PROMO_CODE: 'GENOLD',
+                    PROMO_NAME: 'General caducada',
+                    ASSIGNMENT_SOURCE: 'PMR_GENERAL',
+                    PRODUCT_CODE: 'ART2',
+                    PRODUCT_NAME: 'Antigua',
+                    ANOINICIO: year - 2,
+                    MESINICIO: 1,
+                    DIAINICIO: 1,
+                    ANOFIN: year - 1,
+                    MESFIN: 1,
+                    DIAFIN: 1,
+                },
+            ],
+            countTotal: 0,
+        });
+
+        const active = await svc.getActivePromotions('4300035054');
+        expect(active.map((item) => item.promoCode)).toEqual(['GEN1']);
+        expect(active[0].isGlobal).toBe(true);
+        expect(active[0].active).toBe(true);
+
+        const catalog = await svc.getClientPromotionCatalog('4300035054');
+        expect(catalog.promotions.map((item) => item.promoCode)).toEqual(['GEN1']);
+        expect(catalog.history.map((item) => item.promoCode)).toEqual(['GENOLD']);
+        expect(catalog.history[0].active).toBe(false);
+
+        const generalCall = queryWithParams.mock.calls.find((call) =>
+            String(call[0] || '').includes('PMR_GENERAL'),
+        );
+        expect(String(generalCall[0])).toContain('NOT EXISTS');
+        expect(String(generalCall[0])).toContain("TRIM(COALESCE(P.CODIGOCLIENTE, '')) = ''");
+        expect(generalCall[1]).not.toContain('4300035054');
     });
 });

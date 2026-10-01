@@ -99,6 +99,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
     final filtered = groups.where(_groupMatchesFilters).toList()
       ..sort((a, b) {
         if (a.active != b.active) return a.active ? -1 : 1;
+        if (a.isGlobal != b.isGlobal) return a.isGlobal ? -1 : 1;
         if (a.promoType != b.promoType) {
           return a.promoType == 'GIFT' ? -1 : 1;
         }
@@ -510,6 +511,15 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                                 fontSize: 11,
                               ),
                             ),
+                          if (group.isGlobal)
+                            const Text(
+                              'General',
+                              style: TextStyle(
+                                color: AppTheme.info,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -822,6 +832,7 @@ class _PromotionGroup {
   double get giftQty => items.first.giftQty;
   bool get cumulative => items.first.cumulative;
   bool get active => items.any((item) => item.active);
+  bool get isGlobal => items.any((item) => item.isGlobal);
 
   /// Regalo fijado por promoción (mismo producto o SKU explícito).
   bool get hasFixedGift =>

@@ -21,9 +21,11 @@ class PromotionsBanner extends ConsumerStatefulWidget {
   const PromotionsBanner({
     super.key,
     this.onProductTap,
+    this.onOpenList,
     this.promotions,
   });
   final void Function(String code, String name)? onProductTap;
+  final VoidCallback? onOpenList;
   final List<PromotionItem>? promotions;
 
   @override
@@ -200,6 +202,7 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
       );
     }
     if (_promotions.isEmpty) return const SizedBox.shrink();
+    final groups = PromotionItem.campaignGroups(_promotions);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -210,8 +213,8 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
           child: Semantics(
             button: true,
             label: _isExpanded
-                ? 'Ocultar ${_promotions.length} promociones nuevas'
-                : 'Mostrar ${_promotions.length} promociones nuevas',
+                ? 'Ocultar ${groups.length} promociones nuevas'
+                : 'Mostrar ${groups.length} promociones nuevas',
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               child: Row(
@@ -236,7 +239,7 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          '${_promotions.length} nuevas',
+                          '${groups.length} nuevas',
                           style: TextStyle(
                             color: AppTheme.success,
                             fontWeight: FontWeight.w600,
@@ -268,22 +271,30 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: _promotions.length,
-              itemBuilder: (ctx, i) => _buildPromoCard(_promotions[i]),
+              itemCount: groups.length,
+              itemBuilder: (ctx, i) => _buildCampaignCard(groups[i]),
             ),
           ),
       ],
     );
   }
 
-  Widget _buildPromoCard(PromotionItem promo) {
+  Widget _buildCampaignCard(List<PromotionItem> items) {
+    final promo = items.first;
     final isGift = promo.promoType == 'GIFT';
-
+    final title =
+        promo.promoDesc.trim().isNotEmpty ? promo.promoDesc : promo.name;
+    final several = items.length > 1;
+    final isGlobal = items.any((item) => item.isGlobal);
     return Semantics(
       button: true,
-      label: 'Oferta ${promo.name}',
+      label: several
+          ? '$title, ${items.length} articulos'
+          : 'Oferta ${promo.name}',
       child: GestureDetector(
-        onTap: () => widget.onProductTap?.call(promo.code, promo.name),
+        onTap: several || promo.code.trim().isEmpty
+            ? widget.onOpenList
+            : () => widget.onProductTap?.call(promo.code, promo.name),
         child: Container(
           width: 180,
           margin: const EdgeInsets.only(right: 8, bottom: 4),
@@ -303,7 +314,7 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                promo.name,
+                title,
                 style: TextStyle(
                   color: AppColors.themedWhite,
                   fontWeight: FontWeight.w600,
@@ -314,23 +325,20 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
               ),
               const SizedBox(height: 2),
               Text(
-                promo.code,
+                several
+                    ? '${items.length} articulos'
+                    : (isGlobal ? 'General' : promo.code),
                 style: TextStyle(
-                  color: AppColors.themedWhite38,
+                  color: isGlobal ? AppTheme.info : AppColors.themedWhite38,
                   fontSize: Responsive.fontSize(context, small: 10, large: 11),
+                  fontWeight: isGlobal ? FontWeight.w700 : FontWeight.w400,
                 ),
               ),
               const SizedBox(height: 4),
-              if (isGift)
-                // GIFT promo: show description (e.g., "14+4 GRATIS")
-                _buildGiftRow(promo)
-              else
-                // PRICE promo: show promo price vs regular
-                _buildPriceRow(promo),
+              if (isGift) _buildGiftRow(promo) else _buildPriceRow(promo),
               const SizedBox(height: 2),
               Row(
                 children: [
-                  // Badge: type indicator
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -341,7 +349,9 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      isGift ? 'REGALO' : _buildDiscountLabel(promo),
+                      isGlobal
+                          ? 'GENERAL'
+                          : (isGift ? 'REGALO' : _buildDiscountLabel(promo)),
                       style: TextStyle(
                         color:
                             isGift ? AppTheme.accentIndigo : AppTheme.success,
@@ -379,7 +389,7 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
                             Responsive.fontSize(context, small: 9, large: 10),
                       ),
                     )
-                  else if (promo.hasStock)
+                  else if (!several && promo.hasStock)
                     Text(
                       '${promo.stockEnvases.toInt()} cj',
                       style: TextStyle(

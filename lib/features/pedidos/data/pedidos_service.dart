@@ -799,6 +799,21 @@ class PromotionItem {
       (noGiftBought ||
           productCode.isNotEmpty ||
           (code.isNotEmpty && !noGiftBought));
+
+  /// Una campaña, no una línea por artículo.
+  static String campaignKey(PromotionItem item) {
+    final code = item.promoCode.trim();
+    if (code.isNotEmpty) return '${item.promoType}|$code';
+    return '${item.promoType}|${item.promoDesc}|${item.dateFrom}|${item.dateTo}';
+  }
+
+  static List<List<PromotionItem>> campaignGroups(List<PromotionItem> items) {
+    final grouped = <String, List<PromotionItem>>{};
+    for (final item in items) {
+      grouped.putIfAbsent(campaignKey(item), () => <PromotionItem>[]).add(item);
+    }
+    return grouped.values.toList();
+  }
 }
 
 /// Full product detail

@@ -905,7 +905,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 );
               }
               final promos = prov.promos;
-              final promoCount = promos.length;
+              final promoCount = PromotionItem.campaignGroups(promos).length;
               return Semantics(
                 button: true,
                 label:
@@ -1374,7 +1374,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     final catalog = ref.watch(pedidosNotifierProvider.select(
       (p) => (
         hasClient: p.hasClient,
-        promoCount: p.activePromotionsList.length,
+        promoCount: PromotionItem.campaignGroups(p.activePromotionsList).length,
         clientCode: p.clientCode,
         productsLength: p.products.length,
         isLoadingProducts: p.isLoadingProducts,
@@ -1462,6 +1462,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           promotions: provider.activePromotionsList,
           onProductTap: (code, name) =>
               _openProductByCode(code, fallbackName: name),
+          onOpenList: () => _openPromotionsList(
+            ref.read(pedidosNotifierProvider).activePromotionsList,
+          ),
         ),
         // Recommendations
         if (provider.hasClient &&

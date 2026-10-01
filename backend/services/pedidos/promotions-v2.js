@@ -282,6 +282,100 @@ async function getActiveGiftPromotionsV2(clientCode, today, options = {}) {
         }
     }
 
+    // Cabecera sin cliente y sin filas PMRC: campaña general (vale para
+    // cualquier cliente). Las que sí tienen PMRC siguen siendo solo de esos
+    // clientes. DSEDAC no tiene tabla PRD de precios generales.
+    const generalGuard = options.hasClientAssignments
+        ? `AND NOT EXISTS (
+              SELECT 1 FROM ${comercialErpTable('PMRC')} C
+               WHERE TRIM(C.CODIGOPROMOCIONREGALO) = TRIM(P.CODIGOPROMOCIONREGALO)
+           )`
+        : '';
+    const generalSql = options.hasProductLines
+        ? `
+        SELECT
+            TRIM(P.CODIGOPROMOCIONREGALO) AS PROMO_CODE,
+            TRIM(P.NOMBREPROMOCIONREGALO) AS PROMO_NAME,
+            P.DIAINICIO, P.MESINICIO, P.ANOINICIO,
+            P.DIAFIN, P.MESFIN, P.ANOFIN,
+            P.CANTIDADMINIMAPROMOCION,
+            P.CANTIDADMAXIMAREGALO,
+            P.CANTIDADMINIMAREGALO,
+            P.CANTIDADMAXIMAPROMOCION,
+            P.PROMOCIONACUMULATIVASN,
+            P.NOREGALARPRODUCTOSCOMPRADOSSN,
+            P.PICADOOBLIGATORIOSN,
+            '' AS CLIENT_CODE,
+            TRIM(G.CODIGOARTICULO) AS PRODUCT_CODE,
+            TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME,
+            G.CANTIDADMINIMAENVASES AS PRODUCT_MIN_ENVASES,
+            G.CANTIDADMINIMAUNIDADES AS PRODUCT_MIN_UNIDADES,
+            G.CANTIDADMAXIMAENVASES AS PRODUCT_MAX_ENVASES,
+            G.CANTIDADMAXIMAUNIDADES AS PRODUCT_MAX_UNIDADES,
+            COALESCE(S.STOCK_ENVASES, 0) AS STOCK_ENVASES,
+            COALESCE(S.STOCK_UNIDADES, 0) AS STOCK_UNIDADES,
+            G.ORDEN AS PRODUCT_ORDER,
+            'PMR_GENERAL' AS ASSIGNMENT_SOURCE
+        FROM ${comercialErpTable('PMR')} P
+        LEFT JOIN ${comercialErpTable('PMP')} G
+          ON TRIM(G.CODIGOPROMOCION) = TRIM(P.CODIGOPROMOCIONREGALO)
+        LEFT JOIN ${comercialErpTable('ART')} A
+          ON TRIM(A.CODIGOARTICULO) = TRIM(G.CODIGOARTICULO)
+        LEFT JOIN (
+            SELECT TRIM(CODIGOARTICULO) AS CODE,
+                   SUM(ENVASESDISPONIBLES) AS STOCK_ENVASES,
+                   SUM(UNIDADESDISPONIBLES) AS STOCK_UNIDADES
+            FROM ${comercialErpTable('ARO')}
+            WHERE CODIGOALMACEN = 1
+            GROUP BY TRIM(CODIGOARTICULO)
+        ) S ON S.CODE = TRIM(G.CODIGOARTICULO)
+        WHERE TRIM(COALESCE(P.CODIGOCLIENTE, '')) = ''
+          ${generalGuard}
+          AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
+          ${endClause}
+        ORDER BY CASE WHEN P.ANOFIN = 0 THEN 0 ELSE 1 END,
+                 P.ANOFIN DESC, P.MESFIN DESC, P.DIAFIN DESC,
+                 TRIM(P.CODIGOPROMOCIONREGALO), G.ORDEN, TRIM(G.CODIGOARTICULO)
+        FETCH FIRST ${includeHistory ? 2000 : 1000} ROWS ONLY
+        `
+        : `
+        SELECT
+            TRIM(P.CODIGOPROMOCIONREGALO) AS PROMO_CODE,
+            TRIM(P.NOMBREPROMOCIONREGALO) AS PROMO_NAME,
+            P.DIAINICIO, P.MESINICIO, P.ANOINICIO,
+            P.DIAFIN, P.MESFIN, P.ANOFIN,
+            P.CANTIDADMINIMAPROMOCION,
+            P.CANTIDADMAXIMAREGALO,
+            P.CANTIDADMINIMAREGALO,
+            P.CANTIDADMAXIMAPROMOCION,
+            P.PROMOCIONACUMULATIVASN,
+            P.NOREGALARPRODUCTOSCOMPRADOSSN,
+            P.PICADOOBLIGATORIOSN,
+            '' AS CLIENT_CODE,
+            CAST(NULL AS VARCHAR(10)) AS PRODUCT_CODE,
+            CAST(NULL AS VARCHAR(80)) AS PRODUCT_NAME,
+            CAST(0 AS DECIMAL(10, 5)) AS PRODUCT_MIN_ENVASES,
+            CAST(0 AS DECIMAL(10, 5)) AS PRODUCT_MIN_UNIDADES,
+            CAST(0 AS DECIMAL(10, 5)) AS PRODUCT_MAX_ENVASES,
+            CAST(0 AS DECIMAL(10, 5)) AS PRODUCT_MAX_UNIDADES,
+            CAST(0 AS DECIMAL(15, 5)) AS STOCK_ENVASES,
+            CAST(0 AS DECIMAL(15, 5)) AS STOCK_UNIDADES,
+            CAST(0 AS INTEGER) AS PRODUCT_ORDER,
+            'PMR_GENERAL' AS ASSIGNMENT_SOURCE
+        FROM ${comercialErpTable('PMR')} P
+        WHERE TRIM(COALESCE(P.CODIGOCLIENTE, '')) = ''
+          ${generalGuard}
+          AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
+          ${endClause}
+        ORDER BY CASE WHEN P.ANOFIN = 0 THEN 0 ELSE 1 END, P.ANOFIN DESC
+        FETCH FIRST ${includeHistory ? 400 : 200} ROWS ONLY
+        `;
+    try {
+        rows.push(...(await queryWithParams(generalSql, includeHistory ? [today] : [today, today]) || []));
+    } catch (e) {
+        logger.warn(`[PEDIDOS] Query promociones generales fallo: ${e.message}`);
+    }
+
     logger.info(`[PEDIDOS] Promociones regalo PMR/PMRC para cliente=${clientCode}, hoy=${today}: ${rows.length} fila(s)`);
     return buildGiftPromotionItemsV2(rows, today);
 }
@@ -389,6 +483,7 @@ function buildGiftPromotionItemsV2(rows, today = todayYmd()) {
             stockEnvases: parseFloat(r.STOCK_ENVASES) || 0,
             stockUnidades: parseFloat(r.STOCK_UNIDADES) || 0,
             noGiftBought: String(r.NOREGALARPRODUCTOSCOMPRADOSSN || '').trim() === 'S',
+            isGlobal: trimString(r.ASSIGNMENT_SOURCE) === 'PMR_GENERAL',
             giftSelectionLocked: Boolean(productCode),
             giftSkus: [],
             productMinQty: parseFloat(r.PRODUCT_MIN_ENVASES) || parseFloat(r.PRODUCT_MIN_UNIDADES) || 0,
