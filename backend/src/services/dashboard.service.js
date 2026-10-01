@@ -8,7 +8,7 @@ const { buildVendedorFilterParameterized } = require('../utils/dashboardFilters'
 const { comercialErpTable } = require('../../utils/comercial-erp-tables');
 const { getMadridDateParts } = require('../utils/dashboard-date');
 
-const DASHBOARD_CACHE_VERSION = 'v20260929-sales-today-gross-alert-v2';
+const DASHBOARD_CACHE_VERSION = 'v20261001-sales-today-commercial-day';
 const CLOSED_YEAR_TTL_SECONDS = 7 * 24 * 3600;
 const OPEN_MONTH_TTL_SECONDS = 10 * 60;
 
@@ -130,8 +130,9 @@ class DashboardService {
                 todayClientsFiltered: 0,
             };
         }
-        // Ventas Hoy conserva el bruto documental. El equivalente del filtro
-        // histórico queda separado para que la diferencia sea auditable.
+        // Ventas hoy usa el mismo filtro comercial que el mes y los objetivos
+        // (LAC, CC/VC, AB/VT, sin series N/Z/G/D). El bruto del día, con LAE
+        // y regalos, queda en todaySalesGross y no se pinta como la venta.
         const documentKey = `L.LCSBAB || DIGITS(L.LCYEAB) || L.LCSRAB || DIGITS(L.LCTRAB) || DIGITS(L.LCNRAB)`;
         const todayDataSql = `
                 SELECT
@@ -151,9 +152,9 @@ class DashboardService {
         const todaySalesGross = parseFloat(td.SALES ?? td.sales) || 0;
         const todaySalesFiltered = parseFloat(td.FILTEREDSALES ?? td.filteredSales) || 0;
         return {
-            // Las apps ya instaladas leen todaySales. La hoja de ruta es el
-            // bruto documental; el filtro histórico queda en todaySalesFiltered.
-            todaySales: todaySalesGross,
+            // Las apps instaladas leen todaySales. Es la venta comercial del
+            // día, el mismo criterio que Ventas período y objetivos.
+            todaySales: todaySalesFiltered,
             todaySalesGross,
             todaySalesFiltered,
             todaySalesGap: Number((todaySalesGross - todaySalesFiltered).toFixed(2)),
@@ -315,17 +316,23 @@ class DashboardService {
         const madrid = getMadridDateParts(asOf || this._clock());
         const documentKey = `L.LCSBAB || DIGITS(L.LCYEAB) || L.LCSRAB || DIGITS(L.LCTRAB) || DIGITS(L.LCNRAB)`;
         const sql = `
-          SELECT COALESCE(SUM(L.LCIMVT), 0) AS sales,
-                 COUNT(DISTINCT ${documentKey}) AS documents
+          SELECT COALESCE(SUM(CASE WHEN ${LACLAE_SALES_FILTER} THEN L.LCIMVT ELSE 0 END), 0) AS sales,
+                 COALESCE(SUM(L.LCIMVT), 0) AS grossSales,
+                 COUNT(DISTINCT CASE WHEN ${LACLAE_SALES_FILTER} THEN ${documentKey} END) AS documents,
+                 COUNT(DISTINCT ${documentKey}) AS grossDocuments
           FROM ${comercialErpTable('LACLAE')} L
           WHERE L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC = ?
         `;
         const rows = await this._repo.fetchDailyGrossAudit(sql, [madrid.year, madrid.month, madrid.day]);
         const row = rows?.[0] || {};
+        const sales = Number(row.SALES ?? row.sales ?? 0);
+        const documents = Number(row.DOCUMENTS ?? row.documents ?? 0);
         return {
             date: madrid.dateKey,
-            sales: Number(row.SALES ?? row.sales ?? 0),
-            documents: Number(row.DOCUMENTS ?? row.documents ?? 0),
+            sales,
+            documents,
+            grossSales: Number(row.GROSSSALES ?? row.grossSales ?? sales),
+            grossDocuments: Number(row.GROSSDOCUMENTS ?? row.grossDocuments ?? documents),
         };
     }
 

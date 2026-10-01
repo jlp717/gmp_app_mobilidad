@@ -140,7 +140,7 @@ describe('DashboardService canonico Ventas Hoy 29/09/2026', () => {
         });
         const svc = new DashboardService({ repository: repo, cache: makeCache(), clock: () => new Date(NOW) });
         const { payload } = await svc.getMetrics('ALL', { year: String(Y), month: String(M) }, {});
-        expect(payload.todaySales).toBeCloseTo(57442.76, 2); // campo que pintan las apps ya instaladas
+        expect(payload.todaySales).toBeCloseTo(48928.95, 2); // venta comercial del día que pintan las apps
         expect(payload.todaySalesGross).toBeCloseTo(57442.76, 2);
         expect(payload.todaySalesFiltered).toBeCloseTo(48928.95, 2);
         expect(payload.todaySalesGap).toBe(8513.81);
@@ -154,7 +154,7 @@ describe('DashboardService canonico Ventas Hoy 29/09/2026', () => {
         expect(payload.todayClientsFiltered).toBe(241);
         expect(payload.todayContractDate).toBe('2026-09-29');
         expect(payload.uniqueClients).toBe(241);
-        expect(payload.avgOrderValue).toBeCloseTo(57442.76 / 312, 2);
+        expect(payload.avgOrderValue).toBeCloseTo(48928.95 / 312, 2);
         // El WHERE exterior aplica fecha y ámbito vendedor; las métricas
         // filtradas preservan por separado el universo histórico de ventas.
         const todaySql = repo.fetchPeriodAggregate.mock.calls[2][0];
@@ -212,9 +212,9 @@ describe('DashboardService canonico Ventas Hoy 29/09/2026', () => {
         expect(day30.todayCacheKey).toContain(':today:2026-09-30');
     });
 
-    test('consulta el canon bruto diario directamente, parametrizado y sin filtro legacy', async () => {
+    test('consulta la venta comercial del día y conserva el bruto documental', async () => {
         const repo = makeRepo({
-            fetchDailyGrossAudit: jest.fn(async () => [{ SALES: '57442.76', DOCUMENTS: '346' }]),
+            fetchDailyGrossAudit: jest.fn(async () => [{ SALES: '48928.95', GROSSSALES: '57442.76', DOCUMENTS: '326', GROSSDOCUMENTS: '346' }]),
         });
         const svc = new DashboardService({
             repository: repo,
@@ -222,12 +222,16 @@ describe('DashboardService canonico Ventas Hoy 29/09/2026', () => {
             clock: () => new Date('2026-09-29T12:00:00.000Z'),
         });
         await expect(svc.getTodayGrossAudit('ALL')).resolves.toEqual({
-            date: '2026-09-29', sales: 57442.76, documents: 346,
+            date: '2026-09-29',
+            sales: 48928.95,
+            documents: 326,
+            grossSales: 57442.76,
+            grossDocuments: 346,
         });
         const [sql, params] = repo.fetchDailyGrossAudit.mock.calls[0];
-        expect(sql).toContain('COALESCE(SUM(L.LCIMVT), 0)');
-        expect(sql).toContain('COUNT(DISTINCT L.LCSBAB');
-        expect(sql).not.toContain("TPDC = 'LAC'");
+        expect(sql).toContain('COALESCE(SUM(L.LCIMVT), 0) AS grossSales');
+        expect(sql).toContain("TPDC = 'LAC'");
+        expect(sql).toContain('WHERE L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC = ?');
         expect(params).toEqual([2026, 9, 29]);
     });
 

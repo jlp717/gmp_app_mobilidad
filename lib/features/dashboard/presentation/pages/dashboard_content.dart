@@ -1428,9 +1428,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     final totalSales = _safeDouble(_kpiData!['totalSales']);
     final uniqueClients = _safeInt(_kpiData!['uniqueClients']);
     final todayMetric = selectSalesTodayMetric(_kpiData!);
-    final hasGrossTodayMetrics = todayMetric.usesGross;
     final todaySales = todayMetric.amount;
-    final todaySalesFiltered = _safeDouble(_kpiData!['todaySalesFiltered']);
     final todaySalesGap = _safeDouble(_kpiData!['todaySalesGap']);
     final todayOrders = todayMetric.documents;
     final totalMargin = _safeDouble(_kpiData!['totalMargin']);
@@ -1511,26 +1509,22 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   width: cardWidth,
                 ),
                 _buildKPICard(
-                  hasGrossTodayMetrics ? 'Ventas hoy · bruto' : 'Ventas Hoy',
+                  salesTodayTitle(_kpiData!['todayContractDate']),
                   CurrencyFormatter.format(todaySales),
                   Icons.today,
                   AppTheme.accentAmber,
                   width: cardWidth,
-                  subtitle: _kpiData!.containsKey('todaySalesFiltered')
-                      ? 'App: ${CurrencyFormatter.format(todaySalesFiltered)}\n'
-                          'Diferencia: ${CurrencyFormatter.format(todaySalesGap)}'
-                      : 'Desglose de filtro no disponible',
+                  subtitle: todaySalesGap.abs() >= 0.01 &&
+                          _kpiData!.containsKey('todaySalesGross')
+                      ? 'Hoja de ruta: ${CurrencyFormatter.format(_safeDouble(_kpiData!['todaySalesGross']))}'
+                      : null,
                 ),
                 _buildKPICard(
-                  hasGrossTodayMetrics ? 'Documentos hoy' : 'Pedidos Hoy',
+                  'Pedidos hoy',
                   todayOrders.toString(),
                   Icons.shopping_cart,
                   AppTheme.info,
                   width: cardWidth,
-                  subtitle: hasGrossTodayMetrics &&
-                          _kpiData!.containsKey('todayDocumentsFiltered')
-                      ? 'Filtro app: ${_safeInt(_kpiData!['todayDocumentsFiltered'])}'
-                      : null,
                 ),
                 _buildKPICard(
                   'Crec. Interanual',

@@ -88,14 +88,14 @@ function makeService({ expected = 57442.76, documents = 346, redis = new FakeRed
 }
 
 describe('SalesDiscrepancyAlertService', () => {
-  test('does not alert when contractual gross matches independent gross', async () => {
-    const ctx = makeService({ expected: 57442.76 });
+  test('does not alert when the card matches commercial sales and the route sheet is higher', async () => {
+    const ctx = makeService({ expected: 48928.95, documents: 326 });
     const result = await ctx.service.audit({
       scope: 'ALL',
       asOf: AS_OF,
       payload: {
         ...PAYLOAD,
-        todaySales: 57442.76,
+        todaySales: 48928.95,
         todaySalesGross: 57442.76,
         todayDocumentsGross: 346,
       },
@@ -104,14 +104,14 @@ describe('SalesDiscrepancyAlertService', () => {
     expect(ctx.emailSender).not.toHaveBeenCalled();
   });
 
-  test('alerts when installed apps still read a filtered todaySales', async () => {
-    const ctx = makeService({ expected: 57442.76 });
+  test('alerts when the card still shows the unfiltered route sheet', async () => {
+    const ctx = makeService({ expected: 48928.95, documents: 326 });
     const result = await ctx.service.audit({
       scope: 'ALL',
       asOf: AS_OF,
       payload: {
         ...PAYLOAD,
-        todaySales: 48928.95,
+        todaySales: 57442.76,
         todaySalesGross: 57442.76,
         todayDocumentsGross: 346,
       },
@@ -146,7 +146,7 @@ describe('SalesDiscrepancyAlertService', () => {
     expect(ctx.emailSender.mock.calls[0][0].textBody).toContain(
       'Sale en la aplicación: 48.928,95',
     );
-    expect(ctx.emailSender.mock.calls[0][0].textBody).toContain('Selector aplicado: fallback legacy');
+    expect(ctx.emailSender.mock.calls[0][0].textBody).toContain('Selector aplicado: venta comercial');
   });
 
   test('missing payload date still audits using expected DB2 date and valid gross selector', async () => {
@@ -157,7 +157,7 @@ describe('SalesDiscrepancyAlertService', () => {
       asOf: AS_OF,
     })).resolves.toMatchObject({ status: 'sent' });
     expect(ctx.emailSender.mock.calls[0][0].textBody).toContain('Fecha Europe/Madrid: 2026-09-29');
-    expect(ctx.emailSender.mock.calls[0][0].textBody).toContain('Selector aplicado: bruto contractual');
+    expect(ctx.emailSender.mock.calls[0][0].textBody).toContain('Selector aplicado: venta comercial');
   });
 
   test.each([undefined, null, Number.NaN, Number.POSITIVE_INFINITY, 'not-a-number', '0x10'])
@@ -205,7 +205,7 @@ describe('SalesDiscrepancyAlertService', () => {
     expect(mail.textBody).toContain('Debería salir realmente: 57.442,76');
     expect(mail.textBody).toContain('Sale en la aplicación: 48.928,95');
     expect(mail.textBody).toContain('Diferencia (esperado - aplicación): 8513,81');
-    expect(mail.textBody).toContain('Valor filtrado histórico (todaySalesFiltered, no es la hoja): 48.928,95');
+    expect(mail.textBody).toContain('Campo todaySales (venta comercial del día en la app): 48.928,95');
     expect(mail.textBody).toContain('getTodayGrossAudit');
     expect(mail.messageId).toMatch(/^<gmp-reparto-sales-discrepancy-/);
   });

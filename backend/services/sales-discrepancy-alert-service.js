@@ -52,14 +52,9 @@ function finiteLegacyAmount(value) {
 }
 
 function selectVisibleTodaySales(payload) {
-  const gross = payload?.todaySalesGross;
-  const documents = payload?.todayDocumentsGross;
-  const grossContractValid = Number.isFinite(gross)
-    && Number.isInteger(documents)
-    && documents >= 0;
   return {
-    amount: grossContractValid ? Number(gross) : finiteLegacyAmount(payload?.todaySales),
-    source: grossContractValid ? 'gross' : 'legacy',
+    amount: finiteLegacyAmount(payload?.todaySales),
+    source: 'commercial',
   };
 }
 
@@ -157,11 +152,7 @@ class SalesDiscrepancyAlertService {
 
     const expectedCents = cents(expected.sales);
     const visibleCents = cents(visible.amount);
-    const hasLegacyField = payload != null && Object.prototype.hasOwnProperty.call(payload, 'todaySales');
-    const legacyAmount = hasLegacyField ? finiteLegacyAmount(payload.todaySales) : visible.amount;
-    const legacyCents = cents(legacyAmount);
-    const legacyDiffers = hasLegacyField && legacyCents !== expectedCents;
-    if (expectedCents === visibleCents && !legacyDiffers) return { status: 'matched' };
+    if (expectedCents === visibleCents) return { status: 'matched' };
 
     let delivery;
     try {
@@ -193,26 +184,23 @@ class SalesDiscrepancyAlertService {
       env: this.env,
     });
     const gap = (expectedCents - visibleCents) / 100;
-    const legacyGap = (expectedCents - legacyCents) / 100;
-    const filtered = Number.isFinite(payload?.todaySalesFiltered)
-      ? `\nValor filtrado histórico (todaySalesFiltered, no es la hoja): ${formatEuro(payload.todaySalesFiltered)}`
-      : '';
-    const legacyLine = legacyDiffers
-      ? `Campo todaySales (apps ya instaladas): ${formatEuro(legacyAmount)}. Diferencia con la hoja: ${formatEuro(legacyGap)}.`
-      : '';
+    const grossLine = Number.isFinite(expected.grossSales)
+      ? `Hoja de ruta (bruto del día, no es la venta del panel): ${formatEuro(expected.grossSales)}`
+      : (Number.isFinite(payload?.todaySalesGross)
+        ? `Hoja de ruta (bruto del día, no es la venta del panel): ${formatEuro(payload.todaySalesGross)}`
+        : '');
     const textBody = [
       `Fecha Europe/Madrid: ${expected.date}`,
       'Ámbito: ALL',
       `Debería salir realmente: ${formatEuro(expected.sales)}`,
       `Sale en la aplicación: ${formatEuro(visible.amount)}`,
-      `Selector aplicado: ${visible.source === 'gross' ? 'bruto contractual' : 'fallback legacy'}`,
+      'Selector aplicado: venta comercial',
       `Diferencia (esperado - aplicación): ${formatEuro(gap)}`,
-      legacyLine,
-      filtered.trim(),
+      `Campo todaySales (venta comercial del día en la app): ${formatEuro(visible.amount)}.`,
+      grossLine,
       'Dónde está el fallo:',
-      '- Esperado (hoja de ruta): DashboardService.getTodayGrossAudit, SUM(DSED.LACLAE.LCIMVT) del día, sin filtro de serie.',
-      '- Tarjeta nueva: todaySalesGross si todayDocumentsGross es un entero; si no, todaySales. Selector: selectSalesTodayMetric.',
-      '- Apps ya instaladas: leen todaySales. Tiene que ser el mismo bruto; el filtro histórico solo vive en todaySalesFiltered (LACLAE_SALES_FILTER).',
+      '- Esperado: DashboardService.getTodayGrossAudit, SUM(DSED.LACLAE.LCIMVT) del día con LACLAE_SALES_FILTER (LCAADC, LCMMDC y LCDDDC de Europe/Madrid).',
+      '- La tarjeta y las apps instaladas leen todaySales. todaySalesGross es el bruto documental y no se pinta como la venta del día.',
     ].filter(Boolean).join('\n');
     const htmlBody = `<p><strong>Discrepancia en Ventas hoy</strong></p><pre>${escapeHtml(textBody)}</pre>`;
 

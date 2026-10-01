@@ -661,14 +661,10 @@ class NotificationDataRepository {
           .where((name) => name.trim().isNotEmpty)
           .take(3)
           .toList(growable: false);
-      final dashboardSales = _toDouble(
-        metrics.containsKey('todaySalesGross')
-            ? metrics['todaySalesGross']
-            : metrics['todaySales'],
-      );
+      final dashboardSales = _toDouble(metrics['todaySales']);
       final dashboardOrders = _toInt(
-        metrics.containsKey('todayDocumentsGross')
-            ? metrics['todayDocumentsGross']
+        metrics.containsKey('todayDocumentsFiltered')
+            ? metrics['todayDocumentsFiltered']
             : metrics['todayOrders'],
       );
       return SalesDayNotificationSnapshot(
@@ -1064,13 +1060,11 @@ class NotificationBackendSnapshotMapper {
         .take(3)
         .toList(growable: false);
     final dashboardSales = NotificationDataRepository._toDouble(
-      metrics.containsKey('todaySalesGross')
-          ? metrics['todaySalesGross']
-          : metrics['todaySales'],
+      metrics['todaySales'],
     );
     final dashboardOrders = NotificationDataRepository._toInt(
-      metrics.containsKey('todayDocumentsGross')
-          ? metrics['todayDocumentsGross']
+      metrics.containsKey('todayDocumentsFiltered')
+          ? metrics['todayDocumentsFiltered']
           : metrics['todayOrders'],
     );
     return SalesDayNotificationSnapshot(

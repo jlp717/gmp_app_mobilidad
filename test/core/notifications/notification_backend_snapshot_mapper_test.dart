@@ -73,10 +73,10 @@ void main() {
     expect(snapshot.clients?.noPurchaseCount, 5);
     expect(snapshot.invoices?.todayAmount, 10.5);
     expect(snapshot.bolsa?.available, 120);
-    expect(snapshot.salesDay?.sales, 99);
+    expect(snapshot.salesDay?.sales, 80);
     expect(snapshot.salesDay?.filteredSales, 80);
     expect(snapshot.salesDay?.salesGap, 19);
-    expect(snapshot.salesDay?.orders, 4);
+    expect(snapshot.salesDay?.orders, 3);
     expect(snapshot.salesDay?.filteredOrders, 3);
     expect(snapshot.salesDay?.clients, 2);
     expect(snapshot.salesDay?.margin, 0);
