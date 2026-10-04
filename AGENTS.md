@@ -118,28 +118,28 @@ Si Javier dice "te corrijo / aprende esto / no vuelvas a / recuerda / prefiero":
 
 - La rama de referencia de trabajo es `test`, no `main`.
 - El modo claro/oscuro debe aplicar el tema a toda la app (filtros, tablas, matrices y páginas), no solo el chrome.
-- Para validar el perfil de reparto, usar REPARTIDOR: jefe de ventas en modo reparto y repartidor raso; no el perfil comercial.
+- Comercial y REPARTIDOR son workstreams aparte. Para validar el perfil de reparto, usar jefe de ventas en modo reparto y repartidor raso, no el perfil comercial; no mezclar validación ni declarar 100% cerrado sin pruebas reales o emulador.
 - Rendimiento y latencia: medir en móvil con jefe de ventas; no afirmar 100% sin medición `[campo]` en dispositivo (túnel/servidor no sustituye).
-- Comercial y REPARTIDOR son workstreams aparte; no mezclar validación ni declarar 100% cerrado sin pruebas reales/emulador.
 - Identificadores de albarán/factura en UI y PDF deben mostrar la serie completa (p.ej. P-15-2296, no P-2296).
 - En cartera y deuda comercial, consultar tablas DSEDAC (CVC, FPG, CAC, CPC), no VISTA_DEUDA_BASE.
 - Observaciones de cobro obligatorias si el importe cobrado es >0; en crédito/sin cobro no bloquear por notas vacías; nunca enviar `notas:null`.
 - Al Finalizar en el sheet del rutero: cobro y entrega juntos (nombre, apellidos, DNI y firma); no persistir cobro antes; el documento (email BBDD/indicado o WhatsApp) debe llegar a operaciones y al repartidor.
-- Landscape comercial: densificar listados (~9–10 productos visibles en pedidos); tablet y móvil fluidos, sin tiles a pantalla completa ni scroll roto.
+- Landscape comercial: densificar listados (~9–10 productos visibles en pedidos); tablet y móvil fluidos, sin tiles a pantalla completa ni scroll roto. Cantidades enteras sin decimales; con decimales solo cuando la cantidad los tiene. En los tres perfiles, priorizar líneas de datos y pedir confirmación antes de insertar o actualizar registros.
 - Bolsa comercial visible y actualizada en todo el flujo (carrito, confirmación, día de reparto, Mis pedidos), también al aplicar/quitar descuentos; UOM tipográfica correcta (caja/kg/uds reales).
-- La sesión del comercial debe durar 24 horas de verdad (misma o distinta tablet); no forzar re-login varias veces al día.
+- La sesión del comercial debe durar 24 horas de verdad (misma o distinta tablet); un reinicio del servidor o del clúster no debe forzar re-login antes de esas 24 horas.
+- Comerciales y repartidores son personas mayores: etiquetas textuales explícitas, estado seleccionado con color, forma y marca, objetivos táctiles grandes y texto que escale sin romper el layout.
 
 ## Learned Workspace Facts
 
-- Objetivos comerciales usan R1_T8CDVD (quién tiene el cliente); LCCDVD es quién vendió. Comisiones: sales=LCCDVD, baseline de objetivo=R1_T8CDVD.
-- Comercial 80 es líder de equipo (72/73/81/83); su objetivo personal no es la suma del equipo.
-- La sección Cobros del perfil repartidor no es solo lectura: un cobro parcial del rutero debe poder cobrarse el resto desde Cobros.
-- En cobro del rutero hay 4 métodos (Efectivo, Tarjeta, Bizum, Talón): Transferencia se sustituye por Talón (el usuario nunca ve Transferencia). Talón exige número, vencimiento y banco del catálogo ENB.
-- Si las unidades entregadas difieren de las previstas, el albarán recalcula precio unitario/totales y la liquidación diaria debe cuadrar con esos importes.
+- Objetivos comerciales usan R1_T8CDVD (quién tiene el cliente); LCCDVD es quién vendió. Comisiones: sales=LCCDVD, baseline de objetivo=R1_T8CDVD. Comercial 80 es líder de equipo (72/73/81/83); su objetivo personal no es la suma del equipo.
+- La sección Cobros del perfil repartidor no es solo lectura: un cobro parcial del rutero debe poder cobrarse el resto desde Cobros. Hay 4 métodos (Efectivo, Tarjeta, Bizum, Talón): Transferencia se sustituye por Talón (el usuario nunca ve Transferencia). Talón exige número, vencimiento y banco del catálogo ENB.
+- Si las unidades entregadas difieren de las previstas, el albarán recalcula precio unitario/totales y la liquidación diaria debe cuadrar con esos importes. El saldo cobrable de una entrega se limita al importe del documento (CPC / total vivo del albarán), no a la deuda CVC del cliente; lista, ficha, cabecera y cobro deben coincidir si no se tocan cantidades.
 - Devoluciones sobre facturas ya cobradas (PG = FPG/pagaré, no es tipo de documento) ajustan la liquidación del vendedor (ya cobrados / caja); no restar otra vez el total LQD. Los días de plazo salen de FPG; 30 es un ejemplo, no un hardcode.
-- El saldo cobrable de una entrega se limita al importe del documento (CPC / total vivo del albarán), no a la deuda CVC del cliente; lista, ficha, cabecera y cobro deben coincidir si no se tocan cantidades.
 - Escrituras solo en TEST (isolated_test / JAVIER.TEST_*); DSEDAC es lectura o copia hacia test. En isolated_test el correo usa sink/allowlist pero construye to/cc completo (operaciones + repartidor). Frontera lectura: objetivos/comisiones/ventas LY siguen en PRODUCCIÓN; pedidos/autoenvío/offline y el flag visita→venta del rutero pueden usar TEST.
 - Cobros del comercial: PDF a Carlos, Javier y el comercial; no solapar/duplicar con cobros del repartidor; liquidación diaria a partir de esos cobros.
-- El login acepta nombre de vendedor (p.ej. diego) y código numérico; el match exacto de SEC-01 no debe romper el alias de nombre.
-- jefe_ventas con catálogo de vendedores ≥20 debe enviar ALL; no expandir el JWT a un IN de ~80–94 códigos.
+- El login acepta nombre de vendedor (p.ej. diego) y código numérico; el match exacto de SEC-01 no debe romper el alias de nombre. jefe_ventas con catálogo de vendedores ≥20 debe enviar ALL; no expandir el JWT a un IN de ~80–94 códigos.
 - Borradores de pedido reservan stock 24h (si expiran, liberan y se borran). Offline comercial: cache local, alerta de pendientes en pedidos y auto-envío al reconectar; pedido en el día de ruta del cliente → rutero a «venta» verde (por día de pedido/ruta, no solo fecha de entrega).
+- La integración B2B Topgel/Comerzzia está en el programa Visual Studio PedidosTopgel (repo `Importacion de Pedidos de Topgel a AS400`), fuera de esta app. GMP es socio, no proveedor: la recepción portal→ERP que ya opera se queda en producción; las llamadas nuevas ERP→portal (alta de pedido y confirmación de recepción) van al entorno de pre hasta que Topgel diga que producción está lista. Artículos, tarifas y flujos de proveedor no aplican. Sí aplica el retorno de lo confirmado al portal (quedó comentado en la implementación original). El mapeo de códigos de proveedor es manual en el portal, no por API. La documentación de pre y producción es la misma; primero se prueba en pre (portal `pre.grupotopgel.com`, API `api.pre.grupotopgel.com`).
+- En Pedidos, la subpestaña Evolución es la del cliente abierto (distinta de la pestaña Evolución del inicio) y debe consultar ese cliente, también con jefe de ventas.
+- En el panel del jefe de ventas, «Ventas hoy» cuenta solo las ventas de ese día natural y el título debe mostrar la fecha (p.ej. Ventas hoy (01/10/2026)).
+- Fotos de evidencia de una entrega se guardan en JAVIER y se pueden añadir desde el histórico hasta el mismo día de la semana siguiente inclusive (23:59:59 Europe/Madrid); fuera de plazo el servidor las rechaza.
