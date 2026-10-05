@@ -16,12 +16,24 @@ describe('rutero anteroom dedupe', () => {
     }, existing)).toBe(true);
   });
 
-  test('drops a commercial order already collected in hand', () => {
+  test('drops a collected order that has no driver assigned', () => {
     expect(shouldKeepAnteroomPedido({
       CODIGO_REPARTIDOR: '',
       COBRO_PROPIO_SN: 'S',
       CLIENTE: 'C9',
     }, existing)).toBe(false);
+  });
+
+  test('keeps a collected-in-hand order assigned to a driver', () => {
+    expect(shouldKeepAnteroomPedido({
+      CODIGO_REPARTIDOR: '94',
+      COBRO_PROPIO_SN: 'S',
+      EJERCICIOALBARAN: 2026,
+      SERIEALBARAN: 'M',
+      TERMINALALBARAN: 15,
+      NUMEROALBARAN: 8,
+      CLIENTE: 'C3',
+    }, existing)).toBe(true);
   });
 
   test('drops the anteroom row when the synced ERP id is already on the route', () => {

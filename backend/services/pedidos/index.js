@@ -4161,15 +4161,11 @@ async function confirmOrder(orderId, saleType, options = {}) {
         routeCode: options.routeCode,
     });
     const cobroPropio = isCobroPropio(options, currentRows[0]);
-    const vehicleCode = cobroPropio
-        ? ''
-        : trimString(options.vehicleCode || inferredAssignment.vehicleCode).substring(0, 10);
-    const driverCode = cobroPropio
-        ? ''
-        : trimString(options.driverCode || inferredAssignment.driverCode).substring(0, 2);
-    const routeCode = cobroPropio
-        ? trimString(options.routeCode || inferredAssignment.routeCode).substring(0, 10)
-        : trimString(options.routeCode || inferredAssignment.routeCode).substring(0, 10);
+    // Cobro en mano quita la obligación de cobrar, no la entrega. El repartidor
+    // asignado sigue viendo la parada.
+    const vehicleCode = trimString(options.vehicleCode || inferredAssignment.vehicleCode).substring(0, 10);
+    const driverCode = trimString(options.driverCode || inferredAssignment.driverCode).substring(0, 2);
+    const routeCode = trimString(options.routeCode || inferredAssignment.routeCode).substring(0, 10);
 
     // P0-C: Validate stock BEFORE confirming - block if insufficient
     const lines = await queryWithParams(
@@ -4527,7 +4523,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
 
     if (order?.header) {
         order.header.cobroPropio = cobroPropio;
-        order.header.repartoDestino = cobroPropio ? 'COMERCIAL' : 'RUTERO';
+        order.header.repartoDestino = driverCode ? 'RUTERO' : 'COMERCIAL';
     }
 
     return { ...order, stockWarnings, cobroPropio };

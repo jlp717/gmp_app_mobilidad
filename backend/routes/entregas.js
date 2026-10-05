@@ -855,7 +855,7 @@ router.get('/pendientes/:repartidorId', verifyToken, validatePendientesRepartido
             ));
             const {
                 loadCommercialCollectedIndex,
-                shouldHideCommercialCollectedRow,
+                commercialCollectionStatus,
             } = require('../services/commercial-collected-route');
             const collectedIndex = await loadCommercialCollectedIndex(
                 (sql, params) => queryWithParams(sql, params, false, false),
@@ -865,10 +865,8 @@ router.get('/pendientes/:repartidorId', verifyToken, validatePendientesRepartido
                     cobrosTable: runtime?.tables?.finance?.commercialCobros,
                 },
             );
-            for (const [id, row] of aggregatedMap) {
-                if (shouldHideCommercialCollectedRow(row, collectedIndex)) {
-                    aggregatedMap.delete(id);
-                }
+            for (const row of aggregatedMap.values()) {
+                row._commercialCollection = commercialCollectionStatus(row, collectedIndex);
             }
         } catch (collectedErr) {
             logger.warn(`[ENTREGAS] Commercial-collected filter skipped: ${collectedErr.message}`);
@@ -1406,9 +1404,16 @@ async function enrichPendientesPage(pageItems, uniqueRows, idList) {
     const erpPage = pageItems.filter((item) => item.documentoTipo !== 'PEDIDO');
     const overlaid = await overlayCanonicalConfirmationStatuses(erpPage, idList);
     const byOverlayId = new Map(overlaid.map((item) => [item.id, item]));
-    return pageItems.map((item) => applyCollectedRemainder(
-        item.documentoTipo === 'PEDIDO' ? item : (byOverlayId.get(item.id) || item),
-    ));
+    const {
+        applyCommercialCollectionToRouteItem,
+    } = require('../services/commercial-collected-route');
+    return pageItems.map((item) => {
+        const settled = applyCollectedRemainder(
+            item.documentoTipo === 'PEDIDO' ? item : (byOverlayId.get(item.id) || item),
+        );
+        const source = byId.get(item.id);
+        return applyCommercialCollectionToRouteItem(settled, source?._commercialCollection);
+    });
 }
 
 function confirmationTables() {
@@ -1995,7 +2000,31 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, validateAlbaranRouteIdent
             recipientSuggestion = null;
         }
 
-        res.json({ success: true, albaran, recipientSuggestion });
+        let responseAlbaran = albaran;
+        try {
+            const runtime = resolveRepartoRuntime(process.env);
+            const {
+                loadCommercialCollectedIndex,
+                commercialCollectionStatus,
+                applyCommercialCollectionToRouteItem,
+            } = require('../services/commercial-collected-route');
+            const detailIndex = await loadCommercialCollectedIndex(
+                (sql, params) => queryWithParams(sql, params, false, false),
+                {
+                    clientCodes: [header.CLIENTE],
+                    pedidosTable: runtime?.tables?.commercial?.pedidosCab,
+                    cobrosTable: runtime?.tables?.finance?.commercialCobros,
+                },
+            );
+            responseAlbaran = applyCommercialCollectionToRouteItem(
+                albaran,
+                commercialCollectionStatus(header, detailIndex),
+            );
+        } catch (collectedErr) {
+            logger.warn(`[ENTREGAS] Commercial-collected detail skipped: ${collectedErr.message}`);
+        }
+
+        res.json({ success: true, albaran: responseAlbaran, recipientSuggestion });
     } catch (error) {
         if (error instanceof RepartoHttpError) {
             return res.status(error.status).json({ success: false, code: error.code, error: error.message });

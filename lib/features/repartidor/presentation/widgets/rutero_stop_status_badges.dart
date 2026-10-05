@@ -17,15 +17,17 @@ class RuteroStopStatusBadges extends StatelessWidget {
       RuteroRowTone.entregado => AppTheme.success,
       RuteroRowTone.incidencia => AppTheme.warning,
     };
-    final payment = albaran.hasAppCobro
-        ? albaran.cobroParcial
-            ? albaran.importePendienteCobro == null
-                ? 'Cobro parcial · saldo por actualizar'
-                : 'Cobro parcial · pendiente ${albaran.importePendienteCobro!.toStringAsFixed(2)} €'
-            : albaran.importePendienteCobro == null
-                ? 'Cobro registrado · saldo por actualizar'
-                : 'Cobrado'
-        : visual.label;
+    final payment = albaran.cobradoPorComercial
+        ? 'Ya está cobrado'
+        : albaran.hasAppCobro
+            ? albaran.cobroParcial
+                ? albaran.importePendienteCobro == null
+                    ? 'Cobro parcial · saldo por actualizar'
+                    : 'Cobro parcial · pendiente ${albaran.importePendienteCobro!.toStringAsFixed(2)} €'
+                : albaran.importePendienteCobro == null
+                    ? 'Cobro registrado · saldo por actualizar'
+                    : 'Cobrado'
+            : visual.label;
     return Wrap(spacing: 8, runSpacing: 4, children: [
       _badge(
           albaran.estado.icon, 'Entrega: ${albaran.estado.label}', statusColor),

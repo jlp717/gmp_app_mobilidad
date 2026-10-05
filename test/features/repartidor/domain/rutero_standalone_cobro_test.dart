@@ -86,17 +86,29 @@ void main() {
     );
   });
 
-  test('zero or missing CVC balance cannot collect', () {
-    expect(canRegisterRuteroStandaloneCobro(_albaran(saldoCvc: 0)), isFalse);
-    expect(canRegisterRuteroStandaloneCobro(_albaran(saldoCvc: null)), isFalse);
+  test('zero or missing CVC does not block a live document', () {
+    expect(canRegisterRuteroStandaloneCobro(_albaran(saldoCvc: 0)), isTrue);
+    expect(canRegisterRuteroStandaloneCobro(_albaran(saldoCvc: null)), isTrue);
   });
 
-  test('ambiguous CVC (pending exists but collectable is 0) cannot collect',
-      () {
+  test('ambiguous CVC does not block the live document amount', () {
     final albaran = _albaran(ambiguousCvc: true);
     expect(albaran.importeCvcPendiente, 3279.61);
     expect(albaran.importeDisponibleCobro, 0);
+    expect(canRegisterRuteroStandaloneCobro(albaran), isTrue);
+  });
+
+  test(
+      'a document already collected by the commercial cannot be collected again',
+      () {
+    final albaran = _albaran().copyWith(
+      cobradoPorComercial: true,
+      cobrado: true,
+      importeCobrado: 2841.76,
+      puedeCobrarse: false,
+    );
     expect(canRegisterRuteroStandaloneCobro(albaran), isFalse);
+    expect(effectiveDocumentCollectable(albaran), 0);
   });
 
   test('pending ERP price cannot collect', () {

@@ -53,6 +53,38 @@ void main() {
     expect(visual.label, contains('cobro opcional'));
   });
 
+  test(
+      'un pedido cobrado por el comercial sigue en entrega y no es cobro obligatorio',
+      () {
+    final visual = ruteroRowVisual(_stop(esCTR: true, cobrado: true).copyWith(
+      cobradoPorComercial: true,
+      puedeCobrarse: false,
+    ));
+    expect(visual.tone, isNot(RuteroRowTone.cobroObligatorio));
+    expect(visual.label, 'Entrega pendiente');
+  });
+
+  testWidgets(
+      'la fila cobrada por el comercial muestra la etiqueta y no ofrece Cobrar',
+      (tester) async {
+    final settled = _stop(esCTR: true, cobrado: true).copyWith(
+      cobradoPorComercial: true,
+      puedeCobrarse: false,
+      importeDisponibleCobro: 0,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SmartDeliveryCard(albaran: settled, onTap: () {}),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Ya está cobrado'), findsOneWidget);
+    expect(find.text('Cobrar'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   test('un cobro ya registrado deja de marcarse como obligatorio', () {
     final visual = ruteroRowVisual(
       _stop(esCTR: true, estado: EstadoEntrega.entregado, cobrado: true),

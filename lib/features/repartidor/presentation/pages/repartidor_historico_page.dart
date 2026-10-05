@@ -550,6 +550,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
           importePendienteCobro: d.importePendienteCobro,
           formaPagoCobro: d.formaPagoCobro,
           cobroParcial: d.cobroParcial,
+          cobradoPorComercial: d.cobradoPorComercial,
           repartidorId: resolveRepartoDocumentOwner(
             documentOwner: d.deliveryRepartidor,
             selectedOwner: owner,
@@ -2389,7 +2390,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
                                 const SizedBox(height: 4),
                                 Text(
                                   [
-                                    if (doc.cobroParcial)
+                                    if (doc.cobradoPorComercial)
+                                      'Ya está cobrado'
+                                    else if (doc.cobroParcial)
                                       'Cobro parcial'
                                     else
                                       'Cobrado',
@@ -4042,6 +4045,7 @@ class _DocumentItem {
     this.importePendienteCobro,
     this.formaPagoCobro,
     this.cobroParcial = false,
+    this.cobradoPorComercial = false,
     this.repartidorId,
   });
   final String id;
@@ -4077,6 +4081,7 @@ class _DocumentItem {
   final double? importePendienteCobro;
   final String? formaPagoCobro;
   final bool cobroParcial;
+  final bool cobradoPorComercial;
   final String? repartidorId;
 
   bool get hasAppCobro =>

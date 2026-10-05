@@ -139,7 +139,7 @@ class RuteroDetailPayment extends StatelessWidget {
   final TextEditingController? bancoNombreController;
   final double? liveDocumentTotal;
 
-  bool get _isUrgent => albaran.esCTR;
+  bool get _isUrgent => albaran.esCTR && _hasCollectibleBalance;
   bool get _hasCollectibleBalance => albaran.tieneSaldoCobrable;
   bool get _isTalon =>
       selectedPaymentMethod == 'TALON' ||
@@ -243,8 +243,8 @@ class RuteroDetailPayment extends StatelessWidget {
       label: _hasCollectibleBalance
           ? 'Saldo cobrable de $scopePhrase, '
               '${currency.format(collectable)}'
-          : albaran.hasAppCobro
-              ? 'Este documento ya está cobrado'
+          : albaran.hasAppCobro || albaran.cobradoPorComercial
+              ? 'Ya está cobrado'
               : 'El documento vivo es 0,00 euros. Puedes entregar sin cobrar',
       child: RepartidorExecutivePanel(
         padding: EdgeInsets.all(compact ? 14 : 18),
@@ -280,8 +280,8 @@ class RuteroDetailPayment extends StatelessWidget {
             if (!_hasCollectibleBalance && !albaran.isPendingPrice) ...[
               const SizedBox(height: 6),
               Text(
-                albaran.hasAppCobro
-                    ? 'Este documento ya está cobrado.'
+                albaran.hasAppCobro || albaran.cobradoPorComercial
+                    ? 'Ya está cobrado.'
                     : 'El documento vivo es 0,00 €. Puedes entregar sin cobrar.',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
@@ -359,8 +359,9 @@ class RuteroDetailPayment extends StatelessWidget {
                         albaran.isPendingPrice
                             ? 'Precio pendiente en ERP'
                             : !_hasCollectibleBalance
-                                ? (albaran.hasAppCobro
-                                    ? 'Este documento ya está cobrado'
+                                ? (albaran.hasAppCobro ||
+                                        albaran.cobradoPorComercial
+                                    ? 'Ya está cobrado'
                                     : 'Documento a 0,00 €. Puedes entregar sin cobrar')
                                 : _isUrgent
                                     ? 'Cobro obligatorio · $paymentType'

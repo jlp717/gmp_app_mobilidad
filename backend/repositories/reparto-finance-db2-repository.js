@@ -534,6 +534,43 @@ function createRepartoFinanceDb2Repository(options = {}) {
   `, criteria.params);
     },
 
+    async sumCommercialCobroMatch(conn, input) {
+      const { commercialCobroReferenceCandidates } = require('../utils/erp-document-label');
+      const refs = commercialCobroReferenceCandidates(input);
+      if (!refs.length) return [{ TOTAL_COBRADO: 0 }];
+      return runOn(conn, `
+      SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_COBRADO
+        FROM ${tables.commercialCobros}
+       WHERE TRIM(CODIGO_CLIENTE) = ?
+         AND TRIM(REFERENCIA) IN (${refs.map(() => '?').join(', ')})
+    `, [String(input.codigoCliente || '').trim(), ...refs]);
+    },
+
+    async commercialMarkerCoversDocument(conn, input) {
+      const runtime = resolveRepartoRuntime(process.env);
+      const pedidosTable = runtime?.valid ? runtime.tables?.commercial?.pedidosCab : null;
+      if (pedidosTable !== 'JAVIER.TEST_PEDIDOS_CAB' && pedidosTable !== 'JAVIER.PEDIDOS_CAB') {
+        return false;
+      }
+      const serie = String(input.serieDocumento || '').trim();
+      const numero = Number(input.numeroDocumento);
+      const terminal = Number(input.terminalDocumento);
+      const cliente = String(input.codigoCliente || '').trim();
+      if (!cliente || !serie || !Number.isFinite(numero) || !Number.isFinite(terminal)) return false;
+      const rows = await runOn(conn, `
+      SELECT ID
+        FROM ${pedidosTable}
+       WHERE TRIM(CODIGOCLIENTE) = ?
+         AND LOCATE('[COBRO_COMERCIAL]', COALESCE(OBSERVACIONES, '')) > 0
+         AND (
+           (TRIM(SERIEPEDIDO) = ? AND COALESCE(TERMINAL, TERMINALPEDIDO, 0) = ? AND NUMEROPEDIDO = ?)
+           OR (TRIM(SYSTEM_SERIEPEDIDO) = ? AND COALESCE(SYSTEM_TERMINALPEDIDO, 0) = ? AND COALESCE(SYSTEM_NUMEROPEDIDO, 0) = ?)
+         )
+       FETCH FIRST 1 ROW ONLY
+    `, [cliente, serie, terminal, numero, serie, terminal, numero]);
+      return Array.isArray(rows) && rows.length > 0;
+    },
+
     async selectCommercialCobroMatch(conn, { codigoCliente, composedRef, likeRef, references = [] }) {
       const refs = [...new Set([composedRef, ...(Array.isArray(references) ? references : [])].filter(Boolean))];
       const refSql = refs.length

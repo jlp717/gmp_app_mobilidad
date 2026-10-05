@@ -190,6 +190,9 @@ function normalizePayment(input, now) {
     pantallaOrigen: normalizeText(input.pantallaOrigen) || 'RUTERO',
     operador: normalizeText(input.operador),
     notas: input.notas == null ? '' : normalizeText(input.notas).slice(0, 60),
+    erpDocumentAmount: input.erpDocumentAmount == null || input.erpDocumentAmount === ''
+      ? null
+      : money(input.erpDocumentAmount, 'erpDocumentAmount'),
     diaCobro: cal.day,
     mesCobro: cal.month,
     anoCobro: cal.year,
@@ -359,7 +362,16 @@ function createRepartoCobrosDb2Port({ runtime, now = () => new Date(), logger = 
           throw new RepartoCobrosCapabilityError('No se pudo verificar la clave del ledger comercial');
         }
         const commercialAmount = money(rowValue(commercialRows[0], 'TOTAL_COBRADO'), 'commercialCobros');
-        if (commercialAmount > 0) {
+        const documentTotal = payment.erpDocumentAmount;
+        const commercialCoversDocument = documentTotal != null
+          && documentTotal > 0.004
+          && commercialAmount + 0.01 >= documentTotal;
+        const commercialLeavesNoRoom = documentTotal != null
+          && documentTotal > 0.004
+          && commercialAmount + payment.importeCobrado > documentTotal + 0.01;
+        if ((documentTotal == null && commercialAmount > 0)
+            || commercialCoversDocument
+            || commercialLeavesNoRoom) {
           throw new RepartoPersistenceError('El documento ya contiene cobros en el ledger comercial', {
             code: 'REPARTO_COBRO_COMMERCIAL_CONFLICT', statusCode: 409,
           });

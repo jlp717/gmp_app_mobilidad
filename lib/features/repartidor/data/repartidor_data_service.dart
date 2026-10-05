@@ -400,6 +400,7 @@ class HistoryDocument {
     this.importePendienteCobro,
     this.formaPagoCobro,
     this.cobroParcial = false,
+    this.cobradoPorComercial = false,
   });
 
   factory HistoryDocument.fromJson(Map<String, dynamic> json) {
@@ -467,6 +468,7 @@ class HistoryDocument {
       importePendienteCobro: asNullableDouble(json['importePendienteCobro']),
       formaPagoCobro: json['formaPagoCobro']?.toString(),
       cobroParcial: asBool(json['cobroParcial']),
+      cobradoPorComercial: asBool(json['cobradoPorComercial']),
     );
   }
   final String id;
@@ -502,6 +504,7 @@ class HistoryDocument {
   final double? importePendienteCobro;
   final String? formaPagoCobro;
   final bool cobroParcial;
+  final bool cobradoPorComercial;
 
   bool get hasAppCobro =>
       cobrado && (importeCobrado != null && importeCobrado! > 0.004);

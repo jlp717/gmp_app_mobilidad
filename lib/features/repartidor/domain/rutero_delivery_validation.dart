@@ -425,7 +425,7 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
     );
   }
 
-  if (input.isPaid && hasKnownCvcBalance && !hasCollectibleBalance) {
+  if (input.isPaid && !hasCollectibleBalance) {
     issues.add(
       const RuteroFieldIssue(
         tab: RuteroDeliveryTab.payment,

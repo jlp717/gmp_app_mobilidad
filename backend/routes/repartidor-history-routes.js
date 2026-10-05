@@ -15,6 +15,8 @@ const { generateInvoicePDF } = require('../app/services/pdfService');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { redisCache, TTL } = require('../services/redis-cache');
 const { verifyToken } = require('../middleware/auth');
+const { queryWithParams } = require('../middleware/db-timing');
+const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 
 const REPARTIDOR_PDF_CACHE_VERSION = 'v3';
 const REPARTIDOR_DOCUMENT_PDF_CACHE_TTL = Number(TTL?.REALTIME) || 60;
@@ -363,6 +365,27 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             return (b.number || 0) - (a.number || 0);
         });
 
+        let responseDocuments = documents;
+        try {
+            const runtime = resolveRepartoRuntime(process.env);
+            const {
+                loadCommercialCollectedIndex,
+                applyCommercialCollectionToHistoryDocument,
+            } = require('../services/commercial-collected-route');
+            const collectedIndex = await loadCommercialCollectedIndex(
+                (sql, params) => queryWithParams(sql, params, false, false),
+                {
+                    clientCodes: [clientId],
+                    pedidosTable: runtime?.tables?.commercial?.pedidosCab,
+                    cobrosTable: runtime?.tables?.finance?.commercialCobros,
+                },
+            );
+            responseDocuments = documents.map((document) =>
+                applyCommercialCollectionToHistoryDocument(document, clientId, collectedIndex));
+        } catch (collectedErr) {
+            logger.warn(`[REPARTIDOR] Commercial-collected history skipped: ${collectedErr.message}`);
+        }
+
         res.json({
             success: true,
             clientId,
@@ -374,7 +397,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 hasMore: pageOffset + documents.length < totalDocuments,
                 nextOffset: pageOffset + documents.length
             },
-            documents
+            documents: responseDocuments
         });
 
     } catch (error) {

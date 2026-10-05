@@ -736,6 +736,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final identityError = validateRuteroLineIdentities(filtered);
       if (mounted) {
         setState(() {
+          final commercialSettled = albaranDetalle.cobradoPorComercial ||
+              widget.albaran.cobradoPorComercial;
+          final detailHasCobro = albaranDetalle.cobrado ||
+              albaranDetalle.cobradoPorComercial ||
+              albaranDetalle.cobroParcial;
           _albaran = widget.albaran.copyWith(
             importeTotal: widget.albaran.importeTotal > 0.004
                 ? widget.albaran.importeTotal
@@ -756,10 +761,29 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             formaPagoDesc: albaranDetalle.formaPagoDesc,
             tipoPago: albaranDetalle.tipoPago,
             diasPago: albaranDetalle.diasPago,
-            esCTR: albaranDetalle.esCTR,
-            puedeCobrarse: albaranDetalle.puedeCobrarse,
+            esCTR: commercialSettled ? false : albaranDetalle.esCTR,
+            puedeCobrarse:
+                commercialSettled ? false : albaranDetalle.puedeCobrarse,
+            cobradoPorComercial: commercialSettled ? true : null,
+            cobrado: commercialSettled
+                ? true
+                : (detailHasCobro ? albaranDetalle.cobrado : null),
+            importeCobrado: commercialSettled
+                ? (albaranDetalle.importeCobrado ??
+                    widget.albaran.importeCobrado ??
+                    widget.albaran.importeTotal)
+                : (detailHasCobro ? albaranDetalle.importeCobrado : null),
+            importePendienteCobro: commercialSettled
+                ? 0
+                : (detailHasCobro
+                    ? albaranDetalle.importePendienteCobro
+                    : null),
+            cobroParcial: commercialSettled
+                ? false
+                : (detailHasCobro ? albaranDetalle.cobroParcial : null),
             colorEstado: albaranDetalle.colorEstado,
-            importeDisponibleCobro: albaranDetalle.importeDisponibleCobro,
+            importeDisponibleCobro:
+                commercialSettled ? 0 : albaranDetalle.importeDisponibleCobro,
             importeCvcPendiente: albaranDetalle.importeCvcPendiente,
             cobroSaldoCapped: albaranDetalle.cobroSaldoCapped,
             items: filtered,

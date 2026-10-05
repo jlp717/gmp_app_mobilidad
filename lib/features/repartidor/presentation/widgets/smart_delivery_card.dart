@@ -487,7 +487,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         const SizedBox(width: 8),
 
         // Payment button (if urgent)
-        if (_isUrgent && !_isTerminal)
+        if (_isUrgent && !_isTerminal && widget.albaran.tieneSaldoCobrable)
           _buildActionButton(
             icon: Icons.payment,
             label: 'Cobrar',

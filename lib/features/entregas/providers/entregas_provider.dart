@@ -366,6 +366,7 @@ class AlbaranEntrega {
     this.cobroSaldoCapped = false,
     this.formaPagoCobro,
     this.cobroParcial = false,
+    this.cobradoPorComercial = false,
     this.documentoTipo = '',
   });
 
@@ -474,6 +475,7 @@ class AlbaranEntrega {
       cobroSaldoCapped: json['cobroSaldoCapped'] == true,
       formaPagoCobro: json['formaPagoCobro']?.toString(),
       cobroParcial: json['cobroParcial'] == true,
+      cobradoPorComercial: json['cobradoPorComercial'] == true,
       documentoTipo: (json['documentoTipo'] ?? '').toString().trim(),
     );
   }
@@ -541,6 +543,7 @@ class AlbaranEntrega {
   final bool cobroSaldoCapped;
   final String? formaPagoCobro;
   final bool cobroParcial;
+  final bool cobradoPorComercial;
   final String documentoTipo;
 
   bool get isPedidoAnteroom => documentoTipo.toUpperCase() == 'PEDIDO';
@@ -569,6 +572,7 @@ class AlbaranEntrega {
       cobrado && (importeCobrado != null && importeCobrado! > 0.004);
 
   bool get tieneSaldoCobrable {
+    if (cobradoPorComercial) return false;
     if (isPendingPrice || importeTotal <= 0.004) return false;
     if (hasAppCobro) {
       return importeTotal - (importeCobrado ?? 0) > 0.004;
@@ -635,6 +639,7 @@ class AlbaranEntrega {
     bool? cobroSaldoCapped,
     String? formaPagoCobro,
     bool? cobroParcial,
+    bool? cobradoPorComercial,
     bool clearPaymentBalance = false,
     String? emailCliente,
   }) {
@@ -712,6 +717,9 @@ class AlbaranEntrega {
       formaPagoCobro: formaPagoCobro ?? this.formaPagoCobro,
       cobroParcial:
           clearPaymentBalance ? false : cobroParcial ?? this.cobroParcial,
+      cobradoPorComercial: clearPaymentBalance
+          ? false
+          : cobradoPorComercial ?? this.cobradoPorComercial,
       documentoTipo: documentoTipo,
     );
   }

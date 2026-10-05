@@ -23,22 +23,16 @@ function syncedRouteId(row) {
   return `${ejercicio}-${serie}-${terminal}-${numero}-${cliente}`;
 }
 
-function cobroPropioMarcado(row) {
-  const token = text(row?.COBRO_PROPIO_SN).toUpperCase();
-  return token === 'S' || token === 'TRUE' || token === '1' || token === 'SI';
-}
-
 /**
  * A confirmed commercial order is a second pending stop when the same
- * document is already on the DSEDAC route, or when the commercial already
- * collected it (cobro en mano). Reads stay on the planned document; this
- * only decides whether the TEST anteroom row is shown again.
+ * document is already on the DSEDAC route. A cobro en mano still belongs
+ * on the driver's route as a delivery; the collection flag is applied later.
+ * Rows without a driver are not route stops.
  */
 function shouldKeepAnteroomPedido(row, existingIds) {
   const ids = existingIds instanceof Set ? existingIds : new Set(existingIds || []);
   const driver = text(row?.CODIGO_REPARTIDOR);
   if (!driver) return false;
-  if (cobroPropioMarcado(row)) return false;
   if (ids.has(routeDocumentId(row))) return false;
   const synced = syncedRouteId(row);
   if (synced && ids.has(synced)) return false;

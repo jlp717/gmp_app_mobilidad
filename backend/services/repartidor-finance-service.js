@@ -23,6 +23,8 @@ const { assertTalonPayment } = require('./reparto-bank-catalog');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { resolveDocumentCollectable } = require('./delivery-cobro-availability');
+const { paymentCovers } = require('./commercial-collected-route');
+const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const { resolveDeliveryAmount } = require('./delivery-amount-resolver');
 const { validateFinanceTableMapping } = require('../config/reparto-runtime');
 const {
@@ -989,10 +991,19 @@ function evaluateStandaloneCobroRequest({
 
 async function assertPaymentWithinOutstandingBalance(conn, info, input, documentRow) {
   const totals = firstRow(await financeRepo.sumAppCollectedForDocument(conn, info, input));
-  const appCollected = roundMoney(value(totals, 'APP_COLLECTED'));
+  const driverCollected = roundMoney(value(totals, 'APP_COLLECTED'));
+  const documentAmount = erpDocumentAmountFromRow(documentRow);
+  const commercial = await readCommercialCoverage(conn, input, documentAmount);
+  if (commercial.covered) {
+    const composedRef = `${String(input.serieDocumento || '').trim()}-${input.terminalDocumento}-${input.numeroDocumento}`;
+    const err = new PaymentAlreadyRegisteredError();
+    err.message = `Documento ${composedRef} ya está cobrado por el comercial.`;
+    err.code = 'COBRO_ALREADY_COLLECTED_BY_COMERCIAL';
+    throw err;
+  }
   const result = evaluateStandaloneCobroRequest({
     documentRow,
-    appCollected,
+    appCollected: roundMoney(driverCollected + commercial.paid),
     requested: input.importeCobrado,
   });
   if (!result.ok) {
@@ -1008,32 +1019,21 @@ async function assertPaymentWithinOutstandingBalance(conn, info, input, document
   // Client importePendiente may still reflect uncapped CVC from a stale GET.
   // Write path is authoritative: persist the document-capped remainder.
   input.importePendiente = result.expectedRemaining;
+  input.erpDocumentAmount = documentAmount;
 }
 
-async function assertDocumentNotCollectedByCommercial(conn, input) {
-  // Preserve the existing cross-table business guard without changing the
-  // commercial collection subsystem.
-  try {
-    const composedRef = `${String(input.serieDocumento || '').trim()}-${input.numeroDocumento}`;
-    const labeledRef = `${String(input.serieDocumento || '').trim()}-${input.terminalDocumento}-${input.numeroDocumento}`;
-    const likeRef = `%${composedRef}`;
-    const comercialRows = await financeRepo.selectCommercialCobroMatch(conn, {
-      codigoCliente: input.codigoCliente,
-      composedRef,
-      likeRef,
-      references: [composedRef, labeledRef, `CVC:${composedRef}`, `CVC:${labeledRef}`],
-    });
-    if (Array.isArray(comercialRows) && comercialRows.length > 0) {
-      const err = new PaymentAlreadyRegisteredError();
-      err.message = `Documento ${composedRef} ya cobrado por el COMERCIAL (cliente=${input.codigoCliente}).`;
-      err.code = 'COBRO_ALREADY_COLLECTED_BY_COMERCIAL';
-      throw err;
-    }
-  } catch (xtableErr) {
-    if (xtableErr instanceof PaymentAlreadyRegisteredError) throw xtableErr;
-    if (xtableErr && xtableErr.code === 'COBRO_ALREADY_COLLECTED_BY_COMERCIAL') throw xtableErr;
-    logger.warn(`[REPARTIDOR_FINANZAS] Cross-table check failed: ${sanitizeErrorMessage(xtableErr)}`);
+async function assertDocumentNotCollectedByCommercial(conn, input, documentRow) {
+  const documentAmount = documentRow ? erpDocumentAmountFromRow(documentRow) : input.erpDocumentAmount;
+  const commercial = await readCommercialCoverage(conn, input, documentAmount);
+  if (!commercial.covered) {
+    if (!input.erpDocumentAmount && documentAmount) input.erpDocumentAmount = documentAmount;
+    return;
   }
+  const composedRef = `${String(input.serieDocumento || '').trim()}-${input.terminalDocumento}-${input.numeroDocumento}`;
+  const err = new PaymentAlreadyRegisteredError();
+  err.message = `Documento ${composedRef} ya está cobrado por el comercial.`;
+  err.code = 'COBRO_ALREADY_COLLECTED_BY_COMERCIAL';
+  throw err;
 }
 
 function assertLiquidacionMatchesInput(row, input) {
@@ -1579,7 +1579,8 @@ async function getVencimientos({
   });
   
 
-  const items = dedupeVencimientos((rows || []).map(mapVencimiento));
+  const mapped = dedupeVencimientos((rows || []).map(mapVencimiento));
+  const items = await omitFullyCommercialCollectedVencimientos(mapped);
   const reportedTotal = rows.length > 0 ? toInt(value(rows[0], 'TOTAL_COUNT')) : 0;
   const total = reportedTotal > 0 ? reportedTotal : offset + items.length;
   const nextOffset = offset + items.length;
@@ -1591,6 +1592,54 @@ async function getVencimientos({
     nextCursor: hasMore ? encodeVencimientosCursor(nextOffset, fingerprint, todayYmd) : null,
   };
 }
+async function omitFullyCommercialCollectedVencimientos(items) {
+  if (!Array.isArray(items) || items.length === 0) return items;
+  try {
+    const {
+      loadCommercialCollectedIndex,
+      applyCommercialCollectionToVencimiento,
+    } = require('./commercial-collected-route');
+    const { queryWithParams } = require('../middleware/db-timing');
+    const runtime = resolveRepartoRuntime(process.env);
+    const index = await loadCommercialCollectedIndex(
+      (sql, params) => queryWithParams(sql, params, false, false),
+      {
+        clientCodes: items.map((item) => item.codigoCliente),
+        pedidosTable: runtime?.tables?.commercial?.pedidosCab,
+        cobrosTable: runtime?.tables?.finance?.commercialCobros,
+      },
+    );
+    return items
+      .map((item) => applyCommercialCollectionToVencimiento(item, index))
+      .filter((item) => item.cobradoPorComercial !== true);
+  } catch (error) {
+    logger.warn(`[REPARTIDOR_FINANZAS] Commercial-collected vencimientos skipped: ${sanitizeErrorMessage(error)}`);
+    return items;
+  }
+}
+
+async function readCommercialCoverage(conn, input, documentAmount) {
+  const coverage = { paid: 0, covered: false };
+  try {
+    const rows = await financeRepo.sumCommercialCobroMatch(conn, input);
+    coverage.paid = roundMoney(value(firstRow(rows), 'TOTAL_COBRADO'));
+  } catch (error) {
+    logger.warn(`[REPARTIDOR_FINANZAS] Cross-table check failed: ${sanitizeErrorMessage(error)}`);
+    return coverage;
+  }
+  if (paymentCovers(coverage.paid, documentAmount)) {
+    coverage.covered = true;
+    return coverage;
+  }
+  try {
+    const marked = await financeRepo.commercialMarkerCoversDocument(conn, input);
+    if (marked) coverage.covered = true;
+  } catch (error) {
+    logger.warn(`[REPARTIDOR_FINANZAS] Commercial marker check skipped: ${sanitizeErrorMessage(error)}`);
+  }
+  return coverage;
+}
+
 async function registerCobroOnce(input) {
   const runtime = assertFinanceRuntime();
   if (!runtime.financeCapabilityApproved || !runtime.writesEnabled) {

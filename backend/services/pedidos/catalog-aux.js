@@ -52,6 +52,7 @@ async function getConfirmedPedidosForRutero({ repartidorIds, day, month, year })
             CAST(NULL AS VARCHAR(255)) AS DS_FIRMA,
             'PEDIDO' AS ANTEROOM_DOC_TIPO,
             C.ID AS PEDIDO_ID,
+            COALESCE(C.OBSERVACIONES, '') AS OBSERVACIONES,
             COALESCE(C.SYSTEM_EJERCICIOPEDIDO, 0) AS SYSTEM_EJERCICIO,
             TRIM(C.SYSTEM_SERIEPEDIDO) AS SYSTEM_SERIE,
             COALESCE(C.SYSTEM_TERMINALPEDIDO, 0) AS SYSTEM_TERMINAL,
@@ -64,7 +65,6 @@ async function getConfirmedPedidosForRutero({ repartidorIds, day, month, year })
           AND C.DIAREPARTO = ?
           AND C.MESREPARTO = ?
           AND C.ANOREPARTO = ?
-          AND LOCATE('[COBRO_COMERCIAL]', COALESCE(C.OBSERVACIONES, '')) = 0
           AND NOT EXISTS (
             SELECT 1 FROM JAVIER.RUTERO_CONFIG RC
             WHERE TRIM(RC.CLIENTE) = TRIM(C.CODIGOCLIENTE)
@@ -126,7 +126,8 @@ async function getConfirmedPedidoDetailForRutero({
             TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO,
             0 AS NUMEROFACTURA,
             CAST('' AS CHAR(1)) AS SERIEFACTURA,
-            TRIM(C.CODIGOREPARTIDOR) AS CODIGO_REPARTIDOR
+            TRIM(C.CODIGOREPARTIDOR) AS CODIGO_REPARTIDOR,
+            COALESCE(C.OBSERVACIONES, '') AS OBSERVACIONES
         FROM ${PEDIDOS_CAB_TABLE} C
         LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(C.CODIGOCLIENTE)
         WHERE C.NUMEROPEDIDO = ?
@@ -134,7 +135,6 @@ async function getConfirmedPedidoDetailForRutero({
           AND TRIM(C.CODIGOCLIENTE) = ?
           AND TRIM(C.ESTADO) = 'CONFIRMADO'
           AND TRIM(C.CODIGOREPARTIDOR) <> ''
-          AND LOCATE('[COBRO_COMERCIAL]', COALESCE(C.OBSERVACIONES, '')) = 0
           ${serieSql}
           ${terminalSql}
     `;

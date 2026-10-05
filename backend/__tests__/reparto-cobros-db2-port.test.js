@@ -220,6 +220,30 @@ describe('reparto cobros DB2 transaction-bound port', () => {
     expect(conflict.calls.some((call) => call.sql.startsWith('INSERT INTO'))).toBe(false);
   });
 
+  test('allows the remaining balance when the commercial cobro is partial', async () => {
+    const fake = fakeConnection({ commercialAmount: 5 });
+    const port = createRepartoCobrosDb2Port({ runtime: runtime() });
+    await port.assertCapabilities(fake.connection);
+    await expect(port.forConnection(fake.connection).insertCobro(payment({
+      erpDocumentAmount: 40,
+      importeCobrado: 10,
+      importePendiente: 25,
+    }))).resolves.toEqual({ id: '91', created: true });
+  });
+
+  test('rejects a driver cobro when the commercial cobro already covers the document', async () => {
+    const fake = fakeConnection({ commercialAmount: 40 });
+    const port = createRepartoCobrosDb2Port({ runtime: runtime() });
+    await port.assertCapabilities(fake.connection);
+    await expect(port.forConnection(fake.connection).insertCobro(payment({
+      erpDocumentAmount: 40,
+      importeCobrado: 10,
+      importePendiente: 0,
+    }))).rejects.toMatchObject({
+      code: 'REPARTO_COBRO_COMMERCIAL_CONFLICT', statusCode: 409,
+    });
+  });
+
   test('fails closed when the exact commercial document key already has a payment', async () => {
     const fake = fakeConnection({ commercialAmount: 1 });
     const port = createRepartoCobrosDb2Port({ runtime: runtime() });

@@ -262,7 +262,7 @@ describe('pedidos reparto confirmation contract', () => {
     expect(params).toEqual(expect.arrayContaining(['2026-05-05', 5, 5, 2026, '02', '57']));
   });
 
-  test('cobro propio leaves driver empty so the order stays out of rutero', async () => {
+  test('cobro propio keeps the assigned driver so the stop stays on the route', async () => {
     mockGetClientDays.mockReturnValue({
       visitDays: ['lunes'],
       deliveryDays: ['martes', 'jueves'],
@@ -280,8 +280,7 @@ describe('pedidos reparto confirmation contract', () => {
     );
     expect(updateCall).toBeDefined();
     const params = updateCall[1];
-    expect(params).toEqual(expect.arrayContaining(['2026-05-05', 5, 5, 2026, '', '']));
-    expect(params).not.toEqual(expect.arrayContaining(['02', '57']));
+    expect(params).toEqual(expect.arrayContaining(['2026-05-05', 5, 5, 2026, '02', '57']));
   });
 
   test('rutero overlay reads confirmed anteroom pedidos excluding RUTERO_CONFIG ORDEN < 0', async () => {

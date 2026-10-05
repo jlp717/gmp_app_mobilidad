@@ -64,6 +64,7 @@ function emptyIndex() {
     pedidoIds: new Set(),
     documents: new Set(),
     paidByDocument: new Map(),
+    paidByPedido: new Map(),
   };
 }
 
@@ -101,6 +102,7 @@ function indexCommercialCollections({ cobros = [], pedidos = [] } = {}) {
   for (const [key, amount] of paidByLooseDoc) {
     index.paidByDocument.set(key, amount);
   }
+  index.paidByPedido = paidByPedido;
 
   for (const row of pedidos) {
     const id = text(row.ID ?? row.id);
@@ -135,21 +137,186 @@ function routeRowAmount(row) {
   return total;
 }
 
-function shouldHideCommercialCollectedRow(row, index) {
-  if (!row || !index) return false;
-  if (text(row.OBSERVACIONES).includes(COBRO_COMERCIAL_MARKER)) return true;
-  const token = text(row.COBRO_PROPIO_SN).toUpperCase();
-  if (token === 'S' || token === 'SI' || token === 'TRUE' || token === '1') return true;
-  const pedidoId = text(row.PEDIDO_ID);
-  if (pedidoId && index.pedidoIds.has(pedidoId)) return true;
-  const cliente = text(row.CLIENTE || row.codigoCliente);
-  const keys = [
-    documentIdentity(cliente, row.SERIEALBARAN, row.TERMINALALBARAN, row.NUMEROALBARAN),
-    documentIdentity(cliente, row.SYSTEM_SERIE, row.SYSTEM_TERMINAL, row.SYSTEM_NUMERO),
+function rowMarkedCollected(row) {
+  if (text(row?.OBSERVACIONES).includes(COBRO_COMERCIAL_MARKER)) return true;
+  const token = text(row?.COBRO_PROPIO_SN).toUpperCase();
+  return token === 'S' || token === 'SI' || token === 'TRUE' || token === '1';
+}
+
+function documentKeysForRow(row) {
+  const cliente = text(row?.CLIENTE || row?.codigoCliente || row?.CODIGOCLIENTEALBARAN);
+  return [
+    documentIdentity(
+      cliente,
+      row?.SERIEALBARAN ?? row?.serieDocumento ?? row?.SERIEDOCUMENTO,
+      row?.TERMINALALBARAN ?? row?.terminalDocumento ?? row?.TERMINALDOCUMENTO,
+      row?.NUMEROALBARAN ?? row?.numeroDocumento ?? row?.NUMERODOCUMENTO,
+    ),
+    documentIdentity(cliente, row?.SYSTEM_SERIE, row?.SYSTEM_TERMINAL, row?.SYSTEM_NUMERO),
   ].filter(Boolean);
-  if (keys.some((key) => index.documents.has(key))) return true;
+}
+
+/**
+ * A commercial collection covers the delivery stop's cobro, or only part of it.
+ * It never decides whether the stop itself is shown.
+ */
+function commercialCollectionStatus(row, index) {
   const amount = routeRowAmount(row);
-  return keys.some((key) => paymentCovers(index.paidByDocument.get(key), amount));
+  if (!row || !index) {
+    return { covered: false, paid: 0, partial: false, amount };
+  }
+  const keys = documentKeysForRow(row);
+  let paid = 0;
+  for (const key of keys) {
+    paid = Math.max(paid, roundMoney(index.paidByDocument.get(key) || 0));
+  }
+  const pedidoId = text(row.PEDIDO_ID ?? row.pedidoId);
+  if (pedidoId && index.paidByPedido) {
+    paid = Math.max(paid, roundMoney(index.paidByPedido.get(pedidoId) || 0));
+  }
+  const covered = rowMarkedCollected(row)
+    || (pedidoId && index.pedidoIds.has(pedidoId))
+    || keys.some((key) => index.documents.has(key))
+    || paymentCovers(paid, amount);
+  if (covered) {
+    return {
+      covered: true,
+      paid: Math.max(paid, amount),
+      partial: false,
+      amount,
+    };
+  }
+  if (paid > 0.004) {
+    return { covered: false, paid, partial: true, amount };
+  }
+  return { covered: false, paid: 0, partial: false, amount };
+}
+
+function applyCommercialCollectionToRouteItem(item, status) {
+  if (!item || !status || (!status.covered && !(status.paid > 0.004))) return item;
+  const document = roundMoney(item.importe ?? item.amount);
+  const driverPaid = roundMoney(item.importeCobrado);
+  const commercialPaid = status.covered
+    ? Math.max(roundMoney(status.paid), Math.max(roundMoney(document - driverPaid), 0))
+    : roundMoney(status.paid);
+  const totalPaid = status.covered
+    ? Math.max(document, roundMoney(driverPaid + commercialPaid))
+    : roundMoney(Math.min(document, driverPaid + commercialPaid));
+  const remaining = roundMoney(Math.max(document - totalPaid, 0));
+  if (status.covered || remaining <= 0.004) {
+    return {
+      ...item,
+      cobrado: true,
+      cobradoPorComercial: true,
+      importeCobrado: roundMoney(Math.max(totalPaid, document)),
+      importePendienteCobro: 0,
+      importeDisponibleCobro: 0,
+      puedeCobrarse: false,
+      cobroParcial: false,
+      cobroDocumentoEstado: 'YA_COBRADO',
+      saldoMotivo: 'Ya está cobrado',
+    };
+  }
+  return {
+    ...item,
+    cobrado: totalPaid > 0.004,
+    cobradoPorComercial: false,
+    importeCobrado: totalPaid,
+    importePendienteCobro: remaining,
+    importeDisponibleCobro: remaining,
+    puedeCobrarse: true,
+    cobroParcial: true,
+    cobroDocumentoEstado: 'AVAILABLE',
+    saldoMotivo: null,
+  };
+}
+
+function vencimientoRow(item) {
+  const keys = item?.keys || {};
+  return {
+    CLIENTE: item?.codigoCliente,
+    SERIEALBARAN: keys.serieDocumento,
+    TERMINALALBARAN: keys.terminalDocumento,
+    NUMEROALBARAN: keys.numeroDocumento,
+    IMPORTETOTAL: item?.importe,
+  };
+}
+
+function applyCommercialCollectionToVencimiento(item, index) {
+  if (!item) return item;
+  const status = commercialCollectionStatus(vencimientoRow(item), index);
+  if (!status.covered && !(status.paid > 0.004)) return item;
+  const remaining = status.covered
+    ? 0
+    : roundMoney(Math.max(roundMoney(item.importePendiente) - status.paid, 0));
+  if (status.covered || remaining <= 0.004) {
+    return {
+      ...item,
+      importePendiente: 0,
+      cobradoPorComercial: true,
+    };
+  }
+  return {
+    ...item,
+    importePendiente: remaining,
+    cobradoPorComercial: false,
+  };
+}
+
+function historyParts(document) {
+  if (Array.isArray(document?.albaranes) && document.albaranes.length) {
+    return document.albaranes.map((part) => ({
+      serie: part.serie,
+      terminal: part.terminal,
+      numero: part.numero,
+      amount: part.amount,
+    }));
+  }
+  return [{
+    serie: document?.serie,
+    terminal: document?.terminal,
+    numero: document?.albaranNumber || document?.number,
+    amount: document?.amount,
+  }];
+}
+
+function applyCommercialCollectionToHistoryDocument(document, cliente, index) {
+  if (!document || !index) return document;
+  const parts = historyParts(document);
+  let paid = 0;
+  let coveredParts = 0;
+  for (const part of parts) {
+    const partAmount = roundMoney(part.amount || document.amount);
+    const status = commercialCollectionStatus({
+      CLIENTE: cliente,
+      SERIEALBARAN: part.serie,
+      TERMINALALBARAN: part.terminal,
+      NUMEROALBARAN: part.numero,
+      IMPORTETOTAL: partAmount,
+    }, index);
+    if (status.covered) {
+      coveredParts += 1;
+      paid = roundMoney(paid + Math.max(status.paid, partAmount));
+    } else {
+      paid = roundMoney(paid + status.paid);
+    }
+  }
+  const documentAmount = roundMoney(document.amount);
+  const covered = parts.length > 0 && coveredParts === parts.length;
+  const commercialPaid = covered ? Math.max(paid, documentAmount) : paid;
+  if (!covered && commercialPaid <= 0.004) return document;
+  const next = applyCommercialCollectionToRouteItem({
+    ...document,
+    importe: documentAmount,
+    importeCobrado: document.importeCobrado,
+  }, {
+    covered,
+    paid: commercialPaid,
+  });
+  return {
+    ...next,
+    pending: next.cobradoPorComercial ? 0 : next.importePendienteCobro,
+  };
 }
 
 function tablesAllowed(pedidosTable, cobrosTable) {
@@ -213,11 +380,14 @@ async function loadCommercialCollectedIndex(queryWithParams, {
 
 module.exports = {
   COBRO_COMERCIAL_MARKER,
+  applyCommercialCollectionToHistoryDocument,
+  applyCommercialCollectionToRouteItem,
+  applyCommercialCollectionToVencimiento,
+  commercialCollectionStatus,
   documentIdentity,
   indexCommercialCollections,
   loadCommercialCollectedIndex,
   parseCobroReference,
   paymentCovers,
-  shouldHideCommercialCollectedRow,
   tablesAllowed,
 };

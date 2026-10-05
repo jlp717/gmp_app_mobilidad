@@ -8,6 +8,7 @@ import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_delivery_val
 /// Document-scoped ceiling for rutero cobro (never above this albarán).
 /// Canonical money version: exact cents, no binary-float drift.
 Money effectiveDocumentCollectableMoney(AlbaranEntrega albaran) {
+  if (albaran.cobradoPorComercial) return Money.zero;
   if (albaran.isPendingPrice || !albaran.importeTotalMoney.isPositive) {
     return Money.zero;
   }
