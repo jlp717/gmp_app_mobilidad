@@ -98,16 +98,23 @@ void main() {
     expect(result.messageFor('nombre'), isNotNull);
   });
 
-  test('urgent delivery with explicit zero CVC balance can be delivered unpaid',
+  test('urgent delivery of a live document still requires cobro when CVC is 0',
       () {
     final result = validateRuteroDeliveryForm(
-      _base(isUrgent: true, importeDisponibleCobro: 0),
+      _base(isUrgent: true, importeTotal: 10, importeDisponibleCobro: 0),
+    );
+    expect(result.messageFor('pago'), contains('Cobro obligatorio'));
+  });
+
+  test('urgent delivery of a real zero document does not block', () {
+    final result = validateRuteroDeliveryForm(
+      _base(isUrgent: true, importeTotal: 0, importeDisponibleCobro: 0),
     );
     expect(result.messageFor('pago'), isNull);
   });
 
-  test('paid amount is capped by the CVC balance, not the invoice total', () {
-    final result = validateRuteroDeliveryForm(
+  test('CVC below the document does not shrink the collectable ceiling', () {
+    final withinDocument = validateRuteroDeliveryForm(
       _base(
         importeTotal: 100,
         importeDisponibleCobro: 12,
@@ -115,7 +122,16 @@ void main() {
         importeCobradoText: '12,01',
       ),
     );
-    expect(result.messageFor('importe'), contains('saldo cobrable'));
+    expect(withinDocument.messageFor('importe'), isNull);
+    final overDocument = validateRuteroDeliveryForm(
+      _base(
+        importeTotal: 100,
+        importeDisponibleCobro: 12,
+        isPaid: true,
+        importeCobradoText: '100,01',
+      ),
+    );
+    expect(overDocument.messageFor('importe'), contains('saldo cobrable'));
   });
 
   test('never allows cobro above the document when CVC pending is larger', () {

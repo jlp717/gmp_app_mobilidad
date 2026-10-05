@@ -2,7 +2,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -37,6 +36,8 @@ class VencimientoItem {
     this.nombreCliente = '',
     this.tipoDocumento = '',
     this.importePendiente = 0,
+    this.ordenPreparacion,
+    this.cobroObligatorio,
     this.keys = const {},
   });
 
@@ -52,6 +53,8 @@ class VencimientoItem {
   final String nombreCliente;
   final String tipoDocumento;
   final double importePendiente;
+  final String? ordenPreparacion;
+  final bool? cobroObligatorio;
   final JsonMap keys;
 
   /// Canonical money views (exact cents). New code must use these.
@@ -66,6 +69,7 @@ enum VencimientosFiltro {
   cobrados,
   hoy,
   proximos,
+  sinFecha,
 }
 
 String documentTypeLabel(String tipoDocumento) {
@@ -89,6 +93,17 @@ bool canCobrarVencimiento(VencimientoItem item, String repartidorId) {
       item.importePendienteMoney.isPositive;
 }
 
+List<VencimientoItem> dedupeVencimientoItems(Iterable<VencimientoItem> items) {
+  final seen = <String>{};
+  final unique = <VencimientoItem>[];
+  for (final item in items) {
+    final key =
+        '${item.tipoDocumento.trim()}|${item.documento.trim()}|${item.codigoCliente.trim()}';
+    if (seen.add(key)) unique.add(item);
+  }
+  return unique;
+}
+
 List<VencimientoItem> filterVencimientosBySearch(
   Iterable<VencimientoItem> items,
   String query,
@@ -99,7 +114,8 @@ List<VencimientoItem> filterVencimientosBySearch(
     return item.cliente.toLowerCase().contains(normalized) ||
         item.codigoCliente.toLowerCase().contains(normalized) ||
         item.nombreCliente.toLowerCase().contains(normalized) ||
-        item.documento.toLowerCase().contains(normalized);
+        item.documento.toLowerCase().contains(normalized) ||
+        (item.ordenPreparacion ?? '').toLowerCase().contains(normalized);
   }).toList();
 }
 
@@ -118,6 +134,7 @@ class VencimientosPage extends StatefulWidget {
     this.hasMore = false,
     this.isLoadingMore = false,
     this.onLoadMore,
+    this.repartidorId = '',
   });
 
   final String title;
@@ -132,6 +149,7 @@ class VencimientosPage extends StatefulWidget {
   final bool hasMore;
   final bool isLoadingMore;
   final VoidCallback? onLoadMore;
+  final String repartidorId;
 
   @override
   State<VencimientosPage> createState() => _VencimientosPageState();
@@ -140,6 +158,7 @@ class VencimientosPage extends StatefulWidget {
 class _VencimientosPageState extends State<VencimientosPage> {
   late VencimientosFiltro _filtro = widget.initialFiltro;
   late String? _tipoDocumento = widget.initialTipoDocumento;
+  bool? _soloObligatorio;
   String _searchQuery = '';
   String? _selectedKey;
 
@@ -179,17 +198,34 @@ class _VencimientosPageState extends State<VencimientosPage> {
               textInputAction: TextInputAction.search,
               style: TextStyle(color: AppTheme.textPrimary),
               decoration: const InputDecoration(
-                labelText: 'Buscar cliente, albarán o factura',
+                labelText: 'Buscar cliente, número u orden de preparación',
                 prefixIcon: Icon(Icons.search),
                 isDense: true,
               ),
             ),
           ),
-          _FilterStrip(
-            selected: _filtro,
-            onSelected: (filtro) {
+          _CobrosFilterPanel(
+            estado: _filtro,
+            tipoDocumento: _tipoDocumento,
+            soloObligatorio: _soloObligatorio,
+            repartidorId: widget.repartidorId,
+            onEstado: (filtro) {
               setState(() => _filtro = filtro);
               widget.onFiltroChanged?.call(filtro);
+            },
+            onTipo: (tipo) {
+              setState(() => _tipoDocumento = tipo);
+              widget.onTipoDocumentoChanged?.call(tipo);
+            },
+            onObligatorio: (value) => setState(() => _soloObligatorio = value),
+            onClear: () {
+              setState(() {
+                _filtro = VencimientosFiltro.todos;
+                _tipoDocumento = null;
+                _soloObligatorio = null;
+              });
+              widget.onFiltroChanged?.call(VencimientosFiltro.todos);
+              widget.onTipoDocumentoChanged?.call(null);
             },
           ),
           Expanded(
@@ -225,7 +261,6 @@ class _VencimientosPageState extends State<VencimientosPage> {
                                 setState(
                                   () => _selectedKey = _vencimientoKey(item),
                                 );
-                                widget.onItemTap?.call(item);
                               },
                             ),
                           ),
@@ -245,7 +280,66 @@ class _VencimientosPageState extends State<VencimientosPage> {
                     },
                   ),
           ),
+          if (_selectedItem != null) _buildCobrarBar(_selectedItem!),
         ],
+      ),
+    );
+  }
+
+  VencimientoItem? get _selectedItem {
+    for (final item in widget.vencimientos) {
+      if (_vencimientoKey(item) == _selectedKey) return item;
+    }
+    return null;
+  }
+
+  Widget _buildCobrarBar(VencimientoItem item) {
+    final owner = widget.repartidorId.trim();
+    final concrete = owner.isNotEmpty &&
+        !owner.contains(',') &&
+        owner.toUpperCase() != 'ALL';
+    final enabled = concrete && canCobrarVencimiento(item, owner);
+    final hint = concrete
+        ? 'Cobrar ${item.cliente}'
+        : 'Elige un repartidor concreto para cobrar';
+    return Material(
+      color: AppTheme.raisedSurface,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                hint,
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Semantics(
+                button: true,
+                enabled: enabled,
+                label: enabled ? 'Cobrar documento seleccionado' : hint,
+                child: SizedBox(
+                  height: 56,
+                  child: FilledButton(
+                    onPressed:
+                        enabled ? () => widget.onItemTap?.call(item) : null,
+                    child: const Text(
+                      'Cobrar',
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -263,13 +357,22 @@ class _VencimientosPageState extends State<VencimientosPage> {
         VencimientosFiltro.cobrados => item.estado == VencimientoEstado.cobrado,
         VencimientosFiltro.hoy => item.estado == VencimientoEstado.hoy,
         VencimientosFiltro.proximos => item.estado == VencimientoEstado.proximo,
+        VencimientosFiltro.sinFecha =>
+          item.estado == VencimientoEstado.sinFecha,
       };
     });
-    final byTipo = byEstado.where(
+    final byCobro = byEstado.where((item) {
+      if (_soloObligatorio == null) return true;
+      return _soloObligatorio == true
+          ? item.cobroObligatorio == true
+          : item.cobroObligatorio != true;
+    });
+    final byTipo = byCobro.where(
       (item) => _tipoDocumento == null || item.tipoDocumento == _tipoDocumento,
     );
-    return filterVencimientosBySearch(byTipo, _searchQuery)
-      ..sort((a, b) {
+    return dedupeVencimientoItems(
+      filterVencimientosBySearch(byTipo, _searchQuery),
+    )..sort((a, b) {
         if (a.fecha == null) return b.fecha == null ? 0 : 1;
         if (b.fecha == null) return -1;
         return a.fecha!.compareTo(b.fecha!);
@@ -510,6 +613,13 @@ class _RepartidorVencimientosPageState
             icon: const Icon(Icons.event, size: 16),
             label: Text('Hasta ${format.format(_to)}'),
           ),
+          TextButton(
+            onPressed: () {
+              setState(_setDefaultRange);
+              _loadFirstPage(forceRefresh: true);
+            },
+            child: const Text('Quitar fechas'),
+          ),
         ],
       ),
     );
@@ -577,15 +687,18 @@ class _RepartidorVencimientosPageState
             isLoadingMore: _isLoadingMore,
             onLoadMore: _loadMore,
             onSearchSubmitted: _submitSearch,
+            repartidorId: widget.repartidorId,
             onFiltroChanged: _changeFiltro,
             onTipoDocumentoChanged: _changeTipoDocumento,
-            onItemTap: (item) => _showDetail(
-              context,
-              ref,
-              widget.repartidorId,
-              item,
-              onSaved: () => _loadFirstPage(forceRefresh: true),
-            ),
+            onItemTap: (item) {
+              _showCobroDialog(
+                context,
+                ref,
+                widget.repartidorId,
+                item,
+                onSaved: () => _loadFirstPage(forceRefresh: true),
+              );
+            },
           ),
         ),
       ],
@@ -619,6 +732,8 @@ class _RepartidorVencimientosPageState
       nombreCliente: item.nombreCliente,
       tipoDocumento: item.tipoDocumento,
       importePendiente: item.importePendiente,
+      ordenPreparacion: item.ordenPreparacion?.toString(),
+      cobroObligatorio: item.cobroObligatorio,
       keys: item.keys,
       notas: [
         if (fecha == null) 'Sin fecha válida',
@@ -626,113 +741,6 @@ class _RepartidorVencimientosPageState
         if (item.nombreAlternativo.isNotEmpty) item.nombreAlternativo,
         if (item.poblacion.isNotEmpty) item.poblacion,
       ].join(' - '),
-    );
-  }
-
-  static void _showDetail(
-    BuildContext context,
-    WidgetRef ref,
-    String repartidorId,
-    VencimientoItem item, {
-    required VoidCallback onSaved,
-  }) {
-    final canAbonar = canCobrarVencimiento(item, repartidorId);
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.transparent,
-      builder: (sheetContext) {
-        return RepartidorExecutiveSheet(
-          accentColor: _statusColor(item.estado),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.cliente,
-                    style: TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _DocumentTypePill(tipoDocumento: item.tipoDocumento),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          item.documento,
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Vence: ${_formatDueDate(item.fecha)}',
-                    style: TextStyle(color: AppTheme.textSecondary),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _money(item.importe),
-                    style: const TextStyle(
-                      color: AppTheme.success,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 18,
-                    ),
-                  ),
-                  if ((item.notas ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      item.notas!,
-                      style: TextStyle(color: AppTheme.textTertiary),
-                    ),
-                  ],
-                  if (canAbonar) ...[
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: Semantics(
-                        button: true,
-                        label: item.importePendienteMoney < item.importeMoney
-                            ? 'Cobrar el resto de ${item.documento}'
-                            : 'Cobrar ${item.documento}',
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(52),
-                          ),
-                          onPressed: () {
-                            Navigator.of(sheetContext).pop();
-                            _showCobroDialog(
-                              context,
-                              ref,
-                              repartidorId,
-                              item,
-                              onSaved: onSaved,
-                            );
-                          },
-                          icon: const Icon(Icons.payments),
-                          label: Text(
-                            item.importePendienteMoney < item.importeMoney
-                                ? 'Cobrar el resto'
-                                : 'Cobrar',
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -1196,47 +1204,206 @@ class _FinanceHeader extends StatelessWidget {
   }
 }
 
-class _FilterStrip extends StatelessWidget {
-  const _FilterStrip({
-    required this.selected,
-    required this.onSelected,
+class _CobrosFilterPanel extends StatelessWidget {
+  const _CobrosFilterPanel({
+    required this.estado,
+    required this.tipoDocumento,
+    required this.soloObligatorio,
+    required this.repartidorId,
+    required this.onEstado,
+    required this.onTipo,
+    required this.onObligatorio,
+    required this.onClear,
   });
 
-  final VencimientosFiltro selected;
-  final ValueChanged<VencimientosFiltro> onSelected;
+  final VencimientosFiltro estado;
+  final String? tipoDocumento;
+  final bool? soloObligatorio;
+  final String repartidorId;
+  final ValueChanged<VencimientosFiltro> onEstado;
+  final ValueChanged<String?> onTipo;
+  final ValueChanged<bool?> onObligatorio;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: AppTheme.inkSurface,
+    final owner = repartidorId.trim();
+    final needsDriver =
+        owner.isEmpty || owner.contains(',') || owner.toUpperCase() == 'ALL';
+    final hasExtra = estado != VencimientosFiltro.todos ||
+        tipoDocumento != null ||
+        soloObligatorio != null;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 210),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _chip(VencimientosFiltro.pendientes, 'Pendientes'),
-            _chip(VencimientosFiltro.vencidos, 'Vencidos'),
-            _chip(VencimientosFiltro.cobrados, 'Cobrados'),
-          ],
+        child: Container(
+          width: double.infinity,
+          color: AppTheme.inkSurface,
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (needsDriver)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Elige un repartidor concreto para cobrar',
+                    style: TextStyle(
+                      color: AppTheme.warning,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              _group('Estado', [
+                _estadoChip(VencimientosFiltro.todos, 'Todos'),
+                _estadoChip(VencimientosFiltro.pendientes, 'Pendientes'),
+                _estadoChip(VencimientosFiltro.vencidos, 'Vencidos'),
+                _estadoChip(VencimientosFiltro.cobrados, 'Cobrados'),
+              ]),
+              _group('Documento', [
+                _tipoChip(null, 'Todos los documentos'),
+                _tipoChip('CAC', 'Albaranes'),
+                _tipoChip('COC', 'Facturas'),
+                _tipoChip('DEV', 'Devoluciones'),
+              ]),
+              _group('Vencimiento', [
+                _estadoChip(VencimientosFiltro.hoy, 'Hoy'),
+                _estadoChip(VencimientosFiltro.proximos, 'Próximos'),
+                _estadoChip(VencimientosFiltro.sinFecha, 'Sin fecha'),
+              ]),
+              _group('Cobro', [
+                _boolChip(true, 'Obligatorio'),
+                _boolChip(false, 'Opcional'),
+              ]),
+              if (hasExtra)
+                TextButton(
+                  onPressed: onClear,
+                  child: const Text('Quitar filtros'),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _chip(VencimientosFiltro filtro, String label) {
-    final isSelected = selected == filtro;
+  Widget _group(String title, List<Widget> chips) {
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Semantics(
-        button: true,
-        selected: isSelected,
-        label: 'Filtro $label',
-        child: RepartidorExecutivePill(
-          label: label,
-          color: AppTheme.info,
-          selected: isSelected,
-          onTap: () => onSelected(filtro),
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Wrap(spacing: 8, runSpacing: 8, children: chips),
+        ],
+      ),
+    );
+  }
+
+  Widget _estadoChip(VencimientosFiltro filtro, String label) {
+    final selected = estado == filtro;
+    return _FilterChoice(
+      label: label,
+      semanticsLabel: 'Filtro estado $label',
+      color: AppTheme.info,
+      selected: selected,
+      onTap: () => onEstado(selected ? VencimientosFiltro.todos : filtro),
+    );
+  }
+
+  Widget _tipoChip(String? tipo, String label) {
+    final selected = tipoDocumento == tipo;
+    return _FilterChoice(
+      label: label,
+      semanticsLabel: 'Filtro documento $label',
+      color: AppTheme.success,
+      selected: selected,
+      onTap: () => onTipo(selected ? null : tipo),
+    );
+  }
+
+  Widget _boolChip(bool value, String label) {
+    final selected = soloObligatorio == value;
+    return _FilterChoice(
+      label: label,
+      semanticsLabel: 'Filtro cobro $label',
+      color: AppTheme.warning,
+      selected: selected,
+      onTap: () => onObligatorio(selected ? null : value),
+    );
+  }
+}
+
+class _FilterChoice extends StatelessWidget {
+  const _FilterChoice({
+    required this.label,
+    required this.semanticsLabel,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String semanticsLabel;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: semanticsLabel,
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? color.withValues(alpha: 0.18) : AppTheme.softPanel,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(selected ? 8 : 24),
+          side: BorderSide(
+            color: selected ? color : AppTheme.borderColor,
+            width: selected ? 2.4 : 1,
+          ),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(selected ? 8 : 24),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    selected ? Icons.check_circle : Icons.circle_outlined,
+                    size: 22,
+                    color: selected ? color : AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: selected ? color : AppTheme.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

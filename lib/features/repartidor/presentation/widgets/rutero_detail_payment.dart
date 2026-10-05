@@ -243,7 +243,9 @@ class RuteroDetailPayment extends StatelessWidget {
       label: _hasCollectibleBalance
           ? 'Saldo cobrable de $scopePhrase, '
               '${currency.format(collectable)}'
-          : 'Sin saldo cobrable en $scopePhrase',
+          : albaran.hasAppCobro
+              ? 'Este documento ya está cobrado'
+              : 'El documento vivo es 0,00 euros. Puedes entregar sin cobrar',
       child: RepartidorExecutivePanel(
         padding: EdgeInsets.all(compact ? 14 : 18),
         accentColor: _isUrgent ? AppTheme.error : AppTheme.success,
@@ -264,7 +266,7 @@ class RuteroDetailPayment extends StatelessWidget {
                   ? 'Pendiente de precio'
                   : _hasCollectibleBalance
                       ? currency.format(collectable)
-                      : 'Sin saldo cobrable',
+                      : currency.format(0),
               style: TextStyle(
                 color: albaran.isPendingPrice
                     ? AppTheme.warning
@@ -275,6 +277,20 @@ class RuteroDetailPayment extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
+            if (!_hasCollectibleBalance && !albaran.isPendingPrice) ...[
+              const SizedBox(height: 6),
+              Text(
+                albaran.hasAppCobro
+                    ? 'Este documento ya está cobrado.'
+                    : 'El documento vivo es 0,00 €. Puedes entregar sin cobrar.',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: compact ? 13 : 14,
+                  height: 1.35,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
             if (showsDocumentTotal) ...[
               const SizedBox(height: 6),
               Text(
@@ -343,7 +359,9 @@ class RuteroDetailPayment extends StatelessWidget {
                         albaran.isPendingPrice
                             ? 'Precio pendiente en ERP'
                             : !_hasCollectibleBalance
-                                ? 'Sin saldo cobrable en $scopePhrase'
+                                ? (albaran.hasAppCobro
+                                    ? 'Este documento ya está cobrado'
+                                    : 'Documento a 0,00 €. Puedes entregar sin cobrar')
                                 : _isUrgent
                                     ? 'Cobro obligatorio · $paymentType'
                                     : 'Cobro opcional · $paymentType',

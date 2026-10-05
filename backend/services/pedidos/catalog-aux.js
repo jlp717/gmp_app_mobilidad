@@ -64,6 +64,7 @@ async function getConfirmedPedidosForRutero({ repartidorIds, day, month, year })
           AND C.DIAREPARTO = ?
           AND C.MESREPARTO = ?
           AND C.ANOREPARTO = ?
+          AND LOCATE('[COBRO_COMERCIAL]', COALESCE(C.OBSERVACIONES, '')) = 0
           AND NOT EXISTS (
             SELECT 1 FROM JAVIER.RUTERO_CONFIG RC
             WHERE TRIM(RC.CLIENTE) = TRIM(C.CODIGOCLIENTE)
@@ -71,6 +72,91 @@ async function getConfirmedPedidosForRutero({ repartidorIds, day, month, year })
           )
     `;
     return queryWithParams(sql, [...ids, day, month, year], false);
+}
+
+async function getConfirmedPedidoDetailForRutero({
+    numero, ejercicio, serie, terminal, cliente,
+} = {}) {
+    const { PEDIDOS_LIN_TABLE } = require('./_shared');
+    const number = Number(numero);
+    const year = Number(ejercicio);
+    const client = String(cliente || '').trim();
+    if (!Number.isFinite(number) || number <= 0 || !Number.isFinite(year) || !client) {
+        return { headers: [], lines: [] };
+    }
+    const params = [number, year, client];
+    let serieSql = '';
+    if (serie !== undefined && serie !== null && String(serie).trim() !== '') {
+        serieSql = ' AND TRIM(C.SERIEPEDIDO) = ?';
+        params.push(String(serie).trim());
+    }
+    let terminalSql = '';
+    if (terminal !== undefined && terminal !== null && String(terminal).trim() !== '') {
+        const term = Number(terminal);
+        if (Number.isFinite(term)) {
+            terminalSql = ' AND COALESCE(C.TERMINAL, C.TERMINALPEDIDO, 0) = ?';
+            params.push(term);
+        }
+    }
+    const headerSql = `
+        SELECT
+            C.ID AS PEDIDO_ID,
+            'GMP' AS SUBEMPRESAALBARAN,
+            C.EJERCICIO AS EJERCICIOALBARAN,
+            TRIM(COALESCE(NULLIF(TRIM(C.SERIEPEDIDO), ''), 'M')) AS SERIEALBARAN,
+            COALESCE(C.TERMINAL, C.TERMINALPEDIDO, 0) AS TERMINALALBARAN,
+            C.NUMEROPEDIDO AS NUMEROALBARAN,
+            C.IMPORTETOTAL AS IMPORTE,
+            C.IMPORTETOTAL AS CAC_IMPORTE,
+            COALESCE(C.IMPORTEBASE, C.IMPORTETOTAL) AS IMPORTE_BRUTO,
+            COALESCE(C.IMPORTEBASE, C.IMPORTETOTAL) AS CPC_BASE1,
+            0 AS CPC_BASE2,
+            0 AS CPC_BASE3,
+            0 AS CPC_PCTIVA1,
+            0 AS CPC_PCTIVA2,
+            0 AS CPC_PCTIVA3,
+            COALESCE(C.IMPORTEIVA, 0) AS CPC_IVA1,
+            0 AS CPC_IVA2,
+            0 AS CPC_IVA3,
+            C.DIADOCUMENTO, C.MESDOCUMENTO, C.ANODOCUMENTO,
+            TRIM(C.CODIGOCLIENTE) AS CLIENTE,
+            TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, C.NOMBRECLIENTE, '')) AS CLIENTE_NOM,
+            TRIM(COALESCE(CLI.DIRECCION, '')) AS DIR,
+            TRIM(COALESCE(CLI.POBLACION, '')) AS POB,
+            TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO,
+            0 AS NUMEROFACTURA,
+            CAST('' AS CHAR(1)) AS SERIEFACTURA,
+            TRIM(C.CODIGOREPARTIDOR) AS CODIGO_REPARTIDOR
+        FROM ${PEDIDOS_CAB_TABLE} C
+        LEFT JOIN ${comercialErpTable('CLI')} CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(C.CODIGOCLIENTE)
+        WHERE C.NUMEROPEDIDO = ?
+          AND C.EJERCICIO = ?
+          AND TRIM(C.CODIGOCLIENTE) = ?
+          AND TRIM(C.ESTADO) = 'CONFIRMADO'
+          AND TRIM(C.CODIGOREPARTIDOR) <> ''
+          AND LOCATE('[COBRO_COMERCIAL]', COALESCE(C.OBSERVACIONES, '')) = 0
+          ${serieSql}
+          ${terminalSql}
+    `;
+    const headers = await queryWithParams(headerSql, params, false);
+    if (!Array.isArray(headers) || headers.length !== 1) {
+        return { headers: headers || [], lines: [] };
+    }
+    const lines = await queryWithParams(`
+        SELECT
+            SECUENCIA,
+            TRIM(CODIGOARTICULO) AS CODIGOARTICULO,
+            TRIM(DESCRIPCION) AS DESCRIPCION,
+            CANTIDADUNIDADES,
+            CANTIDADENVASES,
+            PRECIOVENTA,
+            IMPORTEVENTA,
+            TRIM(UNIDADMEDIDA) AS UNIDADMEDIDA
+        FROM ${PEDIDOS_LIN_TABLE}
+        WHERE PEDIDO_ID = ?
+        ORDER BY SECUENCIA
+    `, [headers[0].PEDIDO_ID], false);
+    return { headers, lines: lines || [] };
 }
 
 async function searchProducts(params) {
@@ -106,6 +192,7 @@ async function getProductBrands() {
 }
 module.exports = {
     getConfirmedPedidosForRutero,
+    getConfirmedPedidoDetailForRutero,
     searchProducts,
     getProductStock,
     getClientPricing,

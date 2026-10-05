@@ -780,7 +780,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             _lastSuggestedImporteCobrado =
                 importeDisponibleCobro > 0.004 ? importeDisponibleCobro : null;
           }
-          _itemsError = identityError;
+          _itemsError = null;
+          _productsStatusError = null;
           _items = filtered;
           _isLoadingItems = false;
           _productChecked.clear();
@@ -803,6 +804,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       _useListedLines(
         'No se pudieron cargar las líneas del servidor. Se usan las del rutero. Pulsa reintentar.',
       );
+    } finally {
+      if (mounted && _isLoadingItems) {
+        setState(() => _isLoadingItems = false);
+      }
     }
   }
 
@@ -823,7 +828,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       }
       _items = listed;
       _itemsError = null;
-      _productsStatusError = null;
+      _productsStatusError = message;
       _productChecked.clear();
       _productQuantities.clear();
       for (final item in listed) {
@@ -3487,10 +3492,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final modal = AsyncOperationModal.show(
       context,
       text: 'Preparando nota de entrega...',
-      timeout: const Duration(seconds: 90),
+      timeout: const Duration(seconds: 25),
     );
     try {
-      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
+      final pdfData = _cachedPdfBase64 ??
+          await _generateReceiptPdf().timeout(const Duration(seconds: 25));
       if (pdfData == null || pdfData.isEmpty) {
         throw const RepartoReceiptUnavailableException();
       }
@@ -3501,11 +3507,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             Uint8List.fromList(await Isolate.run(() => base64Decode(pdfData))),
       );
     } catch (error) {
-      if (_isDeliveryNoteMissing(error)) {
-        modal.close();
-        await _printCommercialPdf();
-        return;
-      }
       if (mounted) {
         modal.error(
           repartidorSafeOperationMessage(
@@ -3940,21 +3941,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<void> _previewReceiptPdf() async {
-    final ok = await confirmRepartidorAction(
-      context,
-      title: '¿Estás seguro de abrir el PDF?',
-      message: 'Se generará y mostrará la nota de entrega.',
-      confirmLabel: 'Sí, abrir PDF',
-    );
-    if (!ok || !mounted) return;
     final modal = AsyncOperationModal.show(
       context,
       text: 'Generando nota de entrega...',
-      timeout: const Duration(seconds: 90),
+      timeout: const Duration(seconds: 25),
     );
     try {
-      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
-      if (pdfData == null) throw Exception('No se pudo generar el PDF');
+      final pdfData = _cachedPdfBase64 ??
+          await _generateReceiptPdf().timeout(const Duration(seconds: 25));
+      if (pdfData == null || pdfData.length < 32) {
+        throw Exception('La nota de entrega llegó vacía');
+      }
       _cachedPdfBase64 = pdfData;
 
       if (!mounted) {
@@ -3989,11 +3986,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ),
       );
     } catch (error) {
-      if (_isDeliveryNoteMissing(error)) {
-        modal.close();
-        await _previewCommercialPdf();
-        return;
-      }
       if (mounted) {
         modal.error(
           repartidorSafeOperationMessage(error: error, operation: 'pdfPreview'),
@@ -4013,10 +4005,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final modal = AsyncOperationModal.show(
       context,
       text: 'Preparando nota de entrega...',
-      timeout: const Duration(seconds: 90),
+      timeout: const Duration(seconds: 25),
     );
     try {
-      final file = await _prepareDeliveryNotePdfFile();
+      final file = await _prepareDeliveryNotePdfFile()
+          .timeout(const Duration(seconds: 25));
       modal.close();
       if (!mounted) return;
       await Share.shareXFiles(
@@ -4026,11 +4019,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         sharePositionOrigin: _shareOrigin(),
       );
     } catch (error) {
-      if (_isDeliveryNoteMissing(error)) {
-        modal.close();
-        await _shareCommercialLocally();
-        return;
-      }
       if (mounted) {
         modal.error(
           repartidorSafeOperationMessage(
@@ -4098,10 +4086,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final modal = AsyncOperationModal.show(
       context,
       text: 'Preparando nota de entrega para WhatsApp...',
-      timeout: const Duration(seconds: 90),
+      timeout: const Duration(seconds: 25),
     );
     try {
-      final confirmationId = await _resolveReceiptConfirmationId();
+      final confirmationId = await _resolveReceiptConfirmationId()
+          .timeout(const Duration(seconds: 25));
       final whatsapp = await RepartidorDataService.shareDeliveryNoteViaWhatsApp(
         confirmationId: confirmationId,
         telefono: form.phone,
@@ -4138,11 +4127,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         }
       }
     } catch (error) {
-      if (_isDeliveryNoteMissing(error)) {
-        modal.close();
-        await _shareCommercialViaWhatsApp(prefilled: form);
-        return;
-      }
       if (mounted) {
         modal.error(
           repartidorSafeOperationMessage(
@@ -4344,7 +4328,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       _showError('Selecciona un email y un repartidor válidos.');
       return;
     }
-    final modal = AsyncOperationModal.show(context, text: 'Enviando recibo...');
+    final modal = AsyncOperationModal.show(
+      context,
+      text: 'Enviando recibo...',
+      timeout: const Duration(seconds: 25),
+    );
     try {
       final confirmationId = await _resolveReceiptConfirmationId();
       await RepartidorDataService.emailDeliveryNote(
@@ -4360,11 +4348,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         );
       }
     } catch (error) {
-      if (_isDeliveryNoteMissing(error)) {
-        modal.close();
-        await _emailCommercialFallback(email);
-        return;
-      }
       if (mounted) {
         _showError(
           repartidorSafeOperationMessage(

@@ -91,7 +91,7 @@ describe('delivery cobro availability', () => {
   test('caps collectable to the document and never exceeds it', () => {
     expect(resolveDocumentCollectable({
       cvcState: 'AVAILABLE', cvcPending: 84.68, documentAmount: 49.56,
-    })).toEqual({
+    })).toMatchObject({
       state: 'AVAILABLE',
       importeDisponibleCobro: 49.56,
       importeDocumento: 49.56,
@@ -100,7 +100,7 @@ describe('delivery cobro availability', () => {
     });
     expect(resolveDocumentCollectable({
       cvcState: 'AVAILABLE', cvcPending: 3279.61, documentAmount: 2841.76,
-    })).toEqual({
+    })).toMatchObject({
       state: 'AVAILABLE',
       importeDisponibleCobro: 2841.76,
       importeDocumento: 2841.76,
@@ -109,7 +109,7 @@ describe('delivery cobro availability', () => {
     });
     expect(resolveDocumentCollectable({
       cvcState: 'AVAILABLE', cvcPending: 174.78, documentAmount: 161.58,
-    })).toEqual({
+    })).toMatchObject({
       state: 'AVAILABLE',
       importeDisponibleCobro: 161.58,
       importeDocumento: 161.58,
@@ -118,7 +118,7 @@ describe('delivery cobro availability', () => {
     });
     expect(resolveDocumentCollectable({
       cvcState: 'AVAILABLE', cvcPending: 12.35, documentAmount: 100,
-    }).importeDisponibleCobro).toBe(12.35);
+    }).importeDisponibleCobro).toBe(100);
     expect(resolveDocumentCollectable({
       cvcState: 'AVAILABLE', cvcPending: 50, documentAmount: 50,
     })).toMatchObject({ importeDisponibleCobro: 50, capped: false });
@@ -127,15 +127,20 @@ describe('delivery cobro availability', () => {
     })).toMatchObject({ state: 'AVAILABLE', importeDisponibleCobro: 2841.76, capped: false });
     expect(resolveDocumentCollectable({
       cvcState: 'AMBIGUOUS', cvcPending: 90, documentAmount: 50,
-    })).toMatchObject({ state: 'AMBIGUOUS', importeDisponibleCobro: 0, capped: false });
+    })).toMatchObject({ state: 'AVAILABLE', importeDisponibleCobro: 50, capped: true });
     expect(resolveDocumentCollectable({
       cvcState: ' ambiguous ', cvcPending: 90, documentAmount: 50,
-    })).toMatchObject({ state: 'AMBIGUOUS', importeDisponibleCobro: 0, capped: false });
+    })).toMatchObject({ state: 'AVAILABLE', importeDisponibleCobro: 50 });
     expect(resolveDocumentCollectable({
       cvcState: 'SETTLED', cvcPending: 0, documentAmount: 20.7,
-    })).toMatchObject({ state: 'SETTLED', importeDisponibleCobro: 0, capped: false });
+    })).toMatchObject({ state: 'AVAILABLE', importeDisponibleCobro: 20.7, capped: false });
     expect(resolveDocumentCollectable({
       cvcState: 'AVAILABLE', cvcPending: 40, documentAmount: 0,
-    })).toMatchObject({ state: 'MISSING', importeDisponibleCobro: 0, capped: true });
+    })).toMatchObject({
+      state: 'ZERO_DOCUMENT',
+      importeDisponibleCobro: 0,
+      capped: true,
+      saldoMotivo: 'El documento vivo es 0,00 €.',
+    });
   });
 });

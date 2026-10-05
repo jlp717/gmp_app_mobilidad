@@ -776,9 +776,8 @@ class RepartidorObjectiveTotals {
       sales: sales.toDouble(),
       cost: cost.toDouble(),
       units: units,
-      margin: sales.isZero
-          ? 0
-          : (sales - cost).toDouble() / sales.toDouble() * 100,
+      margin:
+          sales.isZero ? 0 : (sales - cost).toDouble() / sales.toDouble() * 100,
     );
   }
 
@@ -1453,6 +1452,8 @@ class RepartidorVencimiento {
     required this.importePendiente,
     this.nombreAlternativo = '',
     this.poblacion = '',
+    this.ordenPreparacion,
+    this.cobroObligatorio = false,
     this.keys = const {},
   });
 
@@ -1467,6 +1468,10 @@ class RepartidorVencimiento {
       documento: _stringValue(json, const ['documento']),
       importe: _doubleValue(json['importe']),
       importePendiente: _doubleValue(json['importePendiente']),
+      ordenPreparacion: _stringValue(json, const ['ordenPreparacion']).isEmpty
+          ? null
+          : _stringValue(json, const ['ordenPreparacion']),
+      cobroObligatorio: json['cobroObligatorio'] == true,
       keys: Map.unmodifiable(_jsonMap(json['keys'])),
     );
   }
@@ -1480,6 +1485,8 @@ class RepartidorVencimiento {
   final String documento;
   final double importe;
   final double importePendiente;
+  final String? ordenPreparacion;
+  final bool cobroObligatorio;
   final JsonMap keys;
 
   /// Canonical money views (exact cents). New code must use these.

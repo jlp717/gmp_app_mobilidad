@@ -21,4 +21,5 @@ module.exports = {
     getDefaultTruckAssignment: impl.getDefaultTruckAssignment,
     getClientOrderDefaults: impl.getClientOrderDefaults,
     getConfirmedPedidosForRutero: impl.getConfirmedPedidosForRutero,
+    getConfirmedPedidoDetailForRutero: impl.getConfirmedPedidoDetailForRutero,
 };

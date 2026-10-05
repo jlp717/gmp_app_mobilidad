@@ -1062,7 +1062,13 @@ function createRepartoFinanceDb2Repository(options = {}) {
         ? (info.cobrosAligned ? 'RC.CODIGOCLIENTEALBARAN' : 'RC.CODIGO_CLIENTE')
         : null;
       const cliJoin = clientJoinCol
-        ? `LEFT JOIN ${erpDataSchema}.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(${clientJoinCol})`
+        ? `LEFT JOIN (
+            SELECT CODIGOCLIENTE,
+                   MAX(NOMBRECLIENTE) AS NOMBRECLIENTE,
+                   MAX(NOMBREALTERNATIVO) AS NOMBREALTERNATIVO
+              FROM ${erpDataSchema}.CLI
+             GROUP BY CODIGOCLIENTE
+          ) CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(${clientJoinCol})`
         : '';
       const clientName = clientJoinCol
         ? "TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), TRIM(CLI.NOMBRECLIENTE))) AS NOMBRE_CLIENTE"
@@ -1177,8 +1183,9 @@ function createRepartoFinanceDb2Repository(options = {}) {
           + ' OR UPPER(TRIM(CVC.TIPODOCUMENTO)) LIKE UPPER(?)'
           + ' OR UPPER(TRIM(CVC.SERIEDOCUMENTO)) LIKE UPPER(?)'
           + ' OR TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) LIKE ?'
+          + ' OR TRIM(CAST(CPC.NUMEROORDENPREPARACION AS VARCHAR(20))) LIKE ?'
           + ')';
-        params.push(term, term, term, term, term, term);
+        params.push(term, term, term, term, term, term, term);
       }
       let documentTypeFilter = '';
       if (tipoDocumento) {
@@ -1287,6 +1294,14 @@ function createRepartoFinanceDb2Repository(options = {}) {
           CPC.ANODOCUMENTO AS ALBARAN_BASE_ANO,
           CLCL1.DIASLIMITECREDITO,
           CLCL1.DIASLIMITECREDITOCONFECHAALB,
+          CPC.NUMEROORDENPREPARACION AS ORDEN_PREPARACION,
+          (
+            SELECT PC.DEBE_COBRAR
+              FROM JAVIER.PAYMENT_CONDITIONS PC
+             WHERE TRIM(PC.CODIGO) = TRIM(CPC.CODIGOFORMAPAGO)
+               AND PC.ACTIVO = 'S'
+             FETCH FIRST 1 ROW ONLY
+          ) AS COBRO_OBLIGATORIO_SN,
           CVC.IMPORTEVENCIMIENTO,
           ${pendingExpr},
           ${dueYmd} AS DUE_YMD
@@ -1297,13 +1312,27 @@ function createRepartoFinanceDb2Repository(options = {}) {
           AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
           AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
           AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+          AND TRIM(CPC.CODIGOCLIENTEALBARAN) = TRIM(CVC.CODIGOCLIENTEALBARAN)
         INNER JOIN ${erpDataSchema}.OPP OPP
           ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
           AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
           AND OPP.SUBEMPRESA = CPC.SUBEMPRESAPEDIDO
-        LEFT JOIN ${erpDataSchema}.CLI CLI
+        LEFT JOIN (
+          SELECT CODIGOCLIENTE,
+                 MAX(NOMBRECLIENTE) AS NOMBRECLIENTE,
+                 MAX(NOMBREALTERNATIVO) AS NOMBREALTERNATIVO,
+                 MAX(POBLACION) AS POBLACION
+            FROM ${erpDataSchema}.CLI
+           GROUP BY CODIGOCLIENTE
+        ) CLI
           ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-        LEFT JOIN ${erpDataSchema}.CLCL1 CLCL1
+        LEFT JOIN (
+          SELECT CODIGOCLIENTE,
+                 MAX(DIASLIMITECREDITO) AS DIASLIMITECREDITO,
+                 MAX(DIASLIMITECREDITOCONFECHAALB) AS DIASLIMITECREDITOCONFECHAALB
+            FROM ${erpDataSchema}.CLCL1
+           GROUP BY CODIGOCLIENTE
+        ) CLCL1
           ON TRIM(CLCL1.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
         ${appCobrosJoin}
         WHERE ${repFilter.sql}

@@ -273,9 +273,11 @@ function createRepartoReceiptPdfService() {
       document.fillColor(ink).font('Helvetica-Bold').fontSize(9)
         .text(`Confirmación ${presentation.confirmationReference}`, x, metaY, { width: width * 0.34 })
         .text(`Documento ${presentation.documentReference || '-'}`, x + width * 0.34, metaY, { width: width * 0.32, align: 'center' });
+      document.fillColor(blue).font('Helvetica-Bold').fontSize(11)
+        .text(`${presentation.documentType} ${presentation.documentReference || '-'}`, x, metaY + 14, { width, align: 'center' });
       document.fillColor(muted).font('Helvetica').fontSize(8)
         .text(`Fecha ${presentation.dateLabel}`, x + width * 0.66, metaY, { width: width * 0.34, align: 'right' });
-      document.y = metaY + 16;
+      document.y = metaY + 32;
       document.moveDown(0.55);
       document.save().fillColor(paleBlue).roundedRect(x, document.y, width, 58, 6).fill();
       document.restore();
@@ -397,18 +399,26 @@ function createRepartoReceiptPdfService() {
       const x = left();
       const width = pageWidth();
       const taxLineCount = Math.max(1, presentation.ivaBreakdown.length);
-      const totalsHeight = 57 + (taxLineCount * 16);
+      const packageTotal = (presentation.rows || []).reduce((sum, line) => {
+        const packages = Number(line.packages == null ? line.delivered : line.packages);
+        return sum + (Number.isFinite(packages) ? packages : 0);
+      }, 0);
+      const totalsHeight = 73 + (taxLineCount * 16);
       ensureSpace(totalsHeight + 48);
       document.moveDown(0.25);
       document.save().fillColor('#F8FAFC').roundedRect(x, document.y, width, totalsHeight, 6).fill().restore();
       const y = document.y + 9;
       document.fillColor(muted).font('Helvetica').fontSize(8)
-        .text('Importe neto entregado', x + 14, y, { width: width * 0.55 });
+        .text('Bultos', x + 14, y, { width: width * 0.55 });
       document.fillColor(ink).font('Helvetica-Bold').fontSize(8)
-        .text(`${decimal(presentation.neto)} €`, x + width * 0.55, y, { width: width * 0.4, align: 'right' });
+        .text(decimal(packageTotal), x + width * 0.55, y, { width: width * 0.4, align: 'right' });
+      document.fillColor(muted).font('Helvetica').fontSize(8)
+        .text('Importe neto entregado', x + 14, y + 16, { width: width * 0.55 });
+      document.fillColor(ink).font('Helvetica-Bold').fontSize(8)
+        .text(`${decimal(presentation.neto)} €`, x + width * 0.55, y + 16, { width: width * 0.4, align: 'right' });
       if (presentation.ivaBreakdown.length) {
         presentation.ivaBreakdown.forEach((item, index) => {
-          const taxY = y + 17 + (index * 16);
+          const taxY = y + 33 + (index * 16);
           document.fillColor(muted).font('Helvetica').fontSize(8)
             .text(`Base IVA ${decimal(item.pct)} % · ${decimal(item.base)} €`, x + 14, taxY, { width: width * 0.7 });
           document.fillColor(ink).font('Helvetica-Bold').fontSize(8)
@@ -416,11 +426,11 @@ function createRepartoReceiptPdfService() {
         });
       } else {
         document.fillColor(muted).font('Helvetica').fontSize(8)
-          .text('IVA 0 %', x + 14, y + 17, { width: width * 0.7 });
+          .text('IVA 0 %', x + 14, y + 33, { width: width * 0.7 });
         document.fillColor(ink).font('Helvetica-Bold').fontSize(8)
-          .text('-', x + width * 0.7, y + 17, { width: width * 0.25, align: 'right' });
+          .text('-', x + width * 0.7, y + 33, { width: width * 0.25, align: 'right' });
       }
-      const totalY = y + 22 + (taxLineCount * 16);
+      const totalY = y + 38 + (taxLineCount * 16);
       document.save().strokeColor('#94A3B8').lineWidth(0.7).moveTo(x + 14, totalY - 5).lineTo(x + width - 14, totalY - 5).stroke().restore();
       document.fillColor(blue).font('Helvetica-Bold').fontSize(11)
         .text('TOTAL', x + 14, totalY, { width: width * 0.55 });

@@ -568,8 +568,13 @@ class AlbaranEntrega {
   bool get hasAppCobro =>
       cobrado && (importeCobrado != null && importeCobrado! > 0.004);
 
-  bool get tieneSaldoCobrable =>
-      importeDisponibleCobro != null && importeDisponibleCobro! > 0.004;
+  bool get tieneSaldoCobrable {
+    if (isPendingPrice || importeTotal <= 0.004) return false;
+    if (hasAppCobro) {
+      return importeTotal - (importeCobrado ?? 0) > 0.004;
+    }
+    return true;
+  }
 
   int? get visibleTerminal => terminal;
 

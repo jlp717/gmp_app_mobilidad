@@ -8,11 +8,15 @@ import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_delivery_val
 /// Document-scoped ceiling for rutero cobro (never above this albarán).
 /// Canonical money version: exact cents, no binary-float drift.
 Money effectiveDocumentCollectableMoney(AlbaranEntrega albaran) {
-  return capSaldoCobrableAlDocumentoMoney(
-    documentAmount: albaran.importeTotalMoney,
-    collectableAmount:
-        albaran.importeDisponibleCobroMoney ?? Money.zero,
-  );
+  if (albaran.isPendingPrice || !albaran.importeTotalMoney.isPositive) {
+    return Money.zero;
+  }
+  if (albaran.hasAppCobro) {
+    final remaining =
+        albaran.importeTotalMoney - (albaran.importeCobradoMoney ?? Money.zero);
+    return remaining.isPositive ? remaining : Money.zero;
+  }
+  return albaran.importeTotalMoney;
 }
 
 /// Document-scoped ceiling for rutero cobro (never above this albarán).

@@ -635,7 +635,7 @@ describe('Repartidor finanzas routes', () => {
     );
     expect(sql).toContain('WHERE 1 = 1');
     expect(sql).toMatch(/BETWEEN \? AND \? OR[\s\S]*IS NULL/);
-    expect(params).toEqual(['94', 20260401, 20260430, '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', 'CAC', 0, 25]);
+    expect(params).toEqual(['94', 20260401, 20260430, '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', '%MECA%', 'CAC', 0, 25]);
     expect(res.body.range).toMatchObject({
       tipoDocumento: 'CAC',
       search: 'MECA',

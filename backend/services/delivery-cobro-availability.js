@@ -145,12 +145,9 @@ function roundCollectable(value) {
   return Math.round(parsed * 100) / 100;
 }
 
-// Document-scoped cobro in rutero must never exceed the albarán/factura being
-// delivered. CVC.IMPORTEPENDIENTE can be a grouped invoice or leftover client
-// effect that matches the same identity; that remaining stays on the ERP write
-// path, but the amount offered/accepted for THIS stop is min(CVC, documento).
-// Client-level debt lives in VISTA_DEUDA_BASE / DSEDAC.CVC by cliente — do not
-// mix it into importeDisponibleCobro.
+// The driver collects the live document (CPC / albarán total). CVC is the
+// client cartera and must not zero or shrink this stop. A settled, smaller
+// or ambiguous cartera row stays informational.
 function resolveDocumentCollectable({
   cvcState,
   cvcPending,
@@ -159,61 +156,65 @@ function resolveDocumentCollectable({
   const normalizedState = String(cvcState || 'MISSING').trim().toUpperCase();
   const document = roundCollectable(documentAmount);
   const pending = roundCollectable(cvcPending);
-  if (normalizedState === 'SETTLED' || (normalizedState === 'AVAILABLE' && pending <= 0.004)) {
-    return Object.freeze({
-      state: 'SETTLED',
-      importeDisponibleCobro: 0,
-      importeDocumento: document,
-      importeCvcPendiente: pending,
-      capped: false,
-    });
-  }
-  if (normalizedState === 'AMBIGUOUS') {
-    return Object.freeze({
-      state: 'AMBIGUOUS',
-      importeDisponibleCobro: 0,
-      importeDocumento: document,
-      importeCvcPendiente: pending,
-      capped: false,
-    });
-  }
-  // No cartera row must not zero a document that still has a live amount.
-  // CTR albaranes often have no CVC until after the TEST cobro.
-  if (normalizedState !== 'AVAILABLE') {
-    if (document <= 0.004) {
-      return Object.freeze({
-        state: 'MISSING',
-        importeDisponibleCobro: 0,
-        importeDocumento: document,
-        importeCvcPendiente: pending,
-        capped: pending > 0.004,
-      });
-    }
-    return Object.freeze({
-      state: 'AVAILABLE',
-      importeDisponibleCobro: document,
-      importeDocumento: document,
-      importeCvcPendiente: pending,
-      capped: false,
-    });
-  }
+  // The amount the driver can collect is the live document (CPC / albarán),
+  // never the client CVC debt. A settled, smaller or ambiguous cartera row
+  // must not hide or zero a document that still has an amount.
   if (document <= 0.004) {
     return Object.freeze({
-      state: 'MISSING',
+      state: 'ZERO_DOCUMENT',
       importeDisponibleCobro: 0,
       importeDocumento: document,
       importeCvcPendiente: pending,
       capped: pending > 0.004,
+      saldoMotivo: 'El documento vivo es 0,00 €.',
     });
   }
-  const capped = pending > document + 0.004;
   return Object.freeze({
     state: 'AVAILABLE',
-    importeDisponibleCobro: capped ? document : pending,
+    importeDisponibleCobro: document,
     importeDocumento: document,
     importeCvcPendiente: pending,
-    capped,
+    capped: pending > document + 0.004,
+    saldoMotivo: null,
+    cvcState: normalizedState,
   });
+}
+
+function applyCollectedRemainder(item) {
+  if (!item || typeof item !== 'object') return item;
+  const document = roundCollectable(item.importe);
+  const collected = roundCollectable(item.importeCobrado);
+  if (document <= 0.004) {
+    return {
+      ...item,
+      importeDisponibleCobro: 0,
+      puedeCobrarse: false,
+      cobroDocumentoEstado: 'ZERO_DOCUMENT',
+      saldoMotivo: 'El documento vivo es 0,00 €.',
+    };
+  }
+  const remaining = collected > 0.004
+    ? roundCollectable(document - collected)
+    : document;
+  const offered = remaining > 0.004 ? remaining : 0;
+  if (offered <= 0.004) {
+    return {
+      ...item,
+      importeDisponibleCobro: 0,
+      puedeCobrarse: false,
+      cobroDocumentoEstado: collected > 0.004 ? 'YA_COBRADO' : 'ZERO_DOCUMENT',
+      saldoMotivo: collected > 0.004
+        ? 'Este documento ya está cobrado.'
+        : 'El documento vivo es 0,00 €.',
+    };
+  }
+  return {
+    ...item,
+    importeDisponibleCobro: offered,
+    puedeCobrarse: true,
+    cobroDocumentoEstado: 'AVAILABLE',
+    saldoMotivo: null,
+  };
 }
 
 module.exports = {
@@ -222,4 +223,5 @@ module.exports = {
   mapCvcAvailabilityRows,
   normalizeDocument,
   resolveDocumentCollectable,
+  applyCollectedRemainder,
 };

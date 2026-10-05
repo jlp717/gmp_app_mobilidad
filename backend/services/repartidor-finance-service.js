@@ -419,6 +419,53 @@ function isValidIsoCalendarDate(raw) {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === raw;
 }
 
+function dedupeCobroRows(rows) {
+  const seen = new Set();
+  const unique = [];
+  for (const row of rows || []) {
+    const id = value(row, 'ID');
+    const key = id == null || String(id).trim() === ''
+      ? [
+        value(row, 'IDEMPOTENCY_TOKEN'),
+        value(row, 'CODIGOCLIENTEALBARAN'),
+        value(row, 'TIPODOCUMENTO'),
+        value(row, 'SERIEDOCUMENTO'),
+        value(row, 'TERMINALDOCUMENTO'),
+        value(row, 'NUMERODOCUMENTO'),
+        value(row, 'IMPORTEVENCIMIENTO'),
+      ].join('|')
+      : `id:${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(row);
+  }
+  return unique;
+}
+
+function dedupeVencimientos(items) {
+  const seen = new Set();
+  const unique = [];
+  for (const item of items || []) {
+    const keys = item?.keys || {};
+    const key = [
+      keys.tipoDocumento,
+      keys.origenDocumento,
+      keys.subempresaDocumento,
+      keys.ejercicioDocumento,
+      keys.serieDocumento,
+      keys.terminalDocumento,
+      keys.numeroDocumento,
+      keys.xdeDocumento,
+      keys.dexDocumento,
+      item?.codigoCliente,
+    ].join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item);
+  }
+  return unique;
+}
+
 function mapVencimiento(row) {
   const calculatedDueDate = formatCvclDueDate(row) || formatCvcDueDate(row);
   const fechaVencimiento = isValidIsoCalendarDate(calculatedDueDate)
@@ -433,6 +480,8 @@ function mapVencimiento(row) {
     fechaVencimiento,
     fechaValida: fechaVencimiento !== null,
     documento: buildDocument(row),
+    ordenPreparacion: toInt(value(row, 'ORDEN_PREPARACION')) || null,
+    cobroObligatorio: String(value(row, 'COBRO_OBLIGATORIO_SN', '') || '').trim().toUpperCase() === 'S',
     importe: roundMoney(value(row, 'IMPORTEVENCIMIENTO')),
     importePendiente: roundMoney(value(row, 'IMPORTEPENDIENTE')),
     keys: {
@@ -900,6 +949,9 @@ function erpDocumentAmountFromRow(documentRow) {
 
 function resolveStandaloneCobroAvailable(documentRow, appCollected = 0) {
   const documentRows = Number(value(documentRow, 'ERP_DOCUMENT_ROWS'));
+  // More than one ERP header for the same identity is not a CVC debt
+  // problem: we do not know which document to charge.
+  if (documentRows > 1) return 0;
   const cvcState = documentRows === 1
     ? 'AVAILABLE'
     : (documentRows > 1 ? 'AMBIGUOUS' : 'MISSING');
@@ -1110,7 +1162,7 @@ async function getDailySummaryLegacyUnused({ repartidorId, date }) {
       entregado: 0,
       cobrosCount: toInt(value(totals, 'COBROS_COUNT')),
     },
-    cobros: cobroRows.map(mapCobro),
+    cobros: dedupeCobroRows(cobroRows).map(mapCobro),
   };
 }
 
@@ -1326,7 +1378,7 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
     summary,
     // Compatibility alias for older Flutter parsers that read `totals`.
     totals: summary,
-    cobros: cobroRows.map(mapCobro),
+    cobros: dedupeCobroRows(cobroRows).map(mapCobro),
   };
 }
 
@@ -1527,7 +1579,7 @@ async function getVencimientos({
   });
   
 
-  const items = (rows || []).map(mapVencimiento);
+  const items = dedupeVencimientos((rows || []).map(mapVencimiento));
   const reportedTotal = rows.length > 0 ? toInt(value(rows[0], 'TOTAL_COUNT')) : 0;
   const total = reportedTotal > 0 ? reportedTotal : offset + items.length;
   const nextOffset = offset + items.length;
@@ -2547,6 +2599,8 @@ module.exports = {
   resolveStandaloneCobroAvailable,
   evaluateStandaloneCobroRequest,
   erpDocumentAmountFromRow,
+  dedupeCobroRows,
+  dedupeVencimientos,
   PaymentExceedsOutstandingError,
   // Error classes (Req #16: facilita catch tipado en routes)
   AlreadyDeliveredError,

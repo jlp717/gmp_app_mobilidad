@@ -110,7 +110,7 @@ class RuteroDetailProducts extends StatelessWidget {
       return _buildLoading();
     }
 
-    if (itemsError != null) {
+    if (itemsError != null && items.isEmpty) {
       return _buildError(context);
     }
 
@@ -119,12 +119,10 @@ class RuteroDetailProducts extends StatelessWidget {
     }
 
     final identityError = validateRuteroLineIdentities(items);
-    if (identityError != null) {
-      return _buildLineIdentityError(identityError);
-    }
 
     return Column(
       children: [
+        if (identityError != null) _buildLineIdentityError(identityError),
         _buildSummary(context),
         Expanded(
           child: ListView.builder(
@@ -253,14 +251,30 @@ class RuteroDetailProducts extends StatelessWidget {
   }
 
   Widget _buildLineIdentityError(String message) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          message,
-          style: const TextStyle(color: AppTheme.error, fontSize: 16),
-          textAlign: TextAlign.center,
-        ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            message,
+            style: const TextStyle(color: AppTheme.error, fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.center,
+            child: Semantics(
+              button: true,
+              label: 'Reintentar carga de productos',
+              child: ElevatedButton.icon(
+                onPressed: onRetryItems,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reintentar'),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

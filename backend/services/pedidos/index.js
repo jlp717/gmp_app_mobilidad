@@ -4340,7 +4340,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     };
 
     // Export confirmed order to ERP when required.
-    if (target.shouldExportToSystem) {
+    if (target.shouldExportToSystem && !cobroPropio) {
         try {
             await withPedidosTransaction(async (conn) => {
                 syncResult = await exportCommercialOrderToSystem(conn, {
@@ -4402,6 +4402,22 @@ async function confirmOrder(orderId, saleType, options = {}) {
         }
         throw new Error(`No se pudo completar la reserva de stock. El pedido no ha sido confirmado. Error: ${resErr.message}`);
     }
+    }
+
+    if (cobroPropio) {
+        try {
+            await queryWithParams(
+                `UPDATE ${PEDIDOS_CAB_TABLE}
+                    SET OBSERVACIONES = SUBSTR(TRIM(COALESCE(OBSERVACIONES, '')), 1, 182) CONCAT ' [COBRO_COMERCIAL]',
+                        UPDATED_AT = CURRENT_TIMESTAMP
+                  WHERE ID = ?
+                    AND LOCATE('[COBRO_COMERCIAL]', COALESCE(OBSERVACIONES, '')) = 0`,
+                [id],
+                false,
+            );
+        } catch (markerErr) {
+            logger.warn(`[PEDIDOS] Cobro comercial marker skipped for #${id}: ${markerErr.message}`);
+        }
     }
 
     // P4-A: Invalidate stock and product cache to ensure real-time updates for all sales reps
@@ -5254,6 +5270,7 @@ module.exports = {
     purgeExpiredDraftReservations,
     updateOrderStatus,
     getConfirmedPedidosForRutero: catalogAux.getConfirmedPedidosForRutero,
+    getConfirmedPedidoDetailForRutero: catalogAux.getConfirmedPedidoDetailForRutero,
     getRecommendations: discovery.getRecommendations,
     getFamilies,
     getFamiliesDetailed,

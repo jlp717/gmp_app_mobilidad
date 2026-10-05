@@ -31,6 +31,17 @@ Future<void> _drainSoftRefreshTimer(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _tapFilter(WidgetTester tester, String semanticsLabel) async {
+  final finder = find.bySemanticsLabel(semanticsLabel);
+  await tester.scrollUntilVisible(
+    finder,
+    160,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUpAll(() async {
     await initializeDateFormatting('es_ES');
@@ -251,23 +262,24 @@ void main() {
 
     expect(find.text('Cobros'), findsOneWidget);
     expect(find.text('Cliente vencido'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Cliente futuro'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.text('Cliente futuro'), findsOneWidget);
 
-    await tester.tap(find.text('Vencidos'));
-    await tester.pumpAndSettle();
+    await _tapFilter(tester, 'Filtro estado Vencidos');
 
     expect(find.text('Cliente vencido'), findsOneWidget);
     expect(find.text('Cliente futuro'), findsNothing);
 
-    await tester.tap(find.text('Facturas'));
-    await tester.pumpAndSettle();
+    await _tapFilter(tester, 'Filtro documento Facturas');
 
     expect(find.text('Cliente vencido'), findsNothing);
 
-    await tester.tap(find.text('Todos'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Cobrados'));
-    await tester.pumpAndSettle();
+    await _tapFilter(tester, 'Filtro estado Todos');
+    await _tapFilter(tester, 'Filtro estado Cobrados');
 
     expect(find.text('Cliente cobrado'), findsOneWidget);
     expect(find.text('Cliente futuro'), findsNothing);
@@ -297,7 +309,52 @@ void main() {
 
     expect(filterVencimientosBySearch(items, '4300002228'), hasLength(1));
     expect(filterVencimientosBySearch(items, '000123'), hasLength(1));
+    expect(
+      filterVencimientosBySearch(
+        [
+          const VencimientoItem(
+            cliente: 'Cliente Norte',
+            documento: 'P-15-2296',
+            fecha: null,
+            importe: 10,
+            estado: VencimientoEstado.vencido,
+            ordenPreparacion: '88421',
+          ),
+        ],
+        '88421',
+      ),
+      hasLength(1),
+    );
     expect(filterVencimientosBySearch(items, 'cliente'), hasLength(2));
+  });
+
+  test('cobros no lista dos veces el mismo documento', () {
+    const duplicated = VencimientoItem(
+      cliente: 'Cliente Norte',
+      codigoCliente: '4300001119',
+      documento: 'P-15-2296',
+      tipoDocumento: 'CAC',
+      fecha: null,
+      importe: 20.70,
+      estado: VencimientoEstado.vencido,
+    );
+    final otherClient = VencimientoItem(
+      cliente: 'Otro cliente',
+      codigoCliente: '4300003337',
+      documento: duplicated.documento,
+      tipoDocumento: duplicated.tipoDocumento,
+      fecha: null,
+      importe: 20.70,
+      estado: VencimientoEstado.vencido,
+    );
+    final unique = dedupeVencimientoItems([
+      duplicated,
+      duplicated,
+      otherClient,
+    ]);
+    expect(unique, hasLength(2));
+    expect(unique.first.codigoCliente, '4300001119');
+    expect(unique.last.codigoCliente, '4300003337');
   });
 
   test('cobro de vencimiento conserva observaciones y separa cache por tipo',
@@ -493,10 +550,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.textContaining('CARNICERIA MECA'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.tap(find.textContaining('CARNICERIA MECA'));
     await tester.pumpAndSettle();
 
     expect(find.text('Cobrar'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('ALBARÁN'),
+      80,
+      scrollable: find.byType(Scrollable).last,
+    );
     expect(find.text('ALBARÁN'), findsWidgets);
 
     await tester.tap(find.text('Cobrar'));

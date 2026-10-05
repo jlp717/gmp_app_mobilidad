@@ -2828,7 +2828,19 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
   Future<void> _previewDeliveryNote(_DocumentItem doc) async {
     final confirmationId = doc.confirmationId?.trim() ?? '';
     if (confirmationId.isEmpty) {
-      await _previewDocument(doc);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Esta entrega no tiene nota. Pulsa de nuevo cuando esté confirmada.',
+          ),
+          backgroundColor: AppTheme.error,
+          action: SnackBarAction(
+            label: 'Reintentar',
+            onPressed: () => _previewDeliveryNote(doc),
+          ),
+        ),
+      );
       return;
     }
     final owner = _documentOwner(doc);
@@ -2839,6 +2851,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
     final modal = AsyncOperationModal.show(
       context,
       text: 'Cargando nota de entrega...',
+      timeout: const Duration(seconds: 25),
     );
     try {
       final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
@@ -2873,10 +2886,6 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       );
     } catch (e) {
       modal.close();
-      if (_isDeliveryNoteMissing(e)) {
-        await _previewDocument(doc);
-        return;
-      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2887,6 +2896,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
               ),
             ),
             backgroundColor: AppTheme.error,
+            action: SnackBarAction(
+              label: 'Reintentar',
+              onPressed: () => _previewDeliveryNote(doc),
+            ),
           ),
         );
       }

@@ -98,7 +98,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('F-001'), findsOneWidget);
     expect(find.textContaining('Cliente Prueba SL'), findsWidgets);
-    expect(find.text('Vencidos'), findsOneWidget);
+    expect(find.text('Vencidos'), findsWidgets);
   });
 
   testWidgets('estado error muestra mensaje y boton Reintentar',

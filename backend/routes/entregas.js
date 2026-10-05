@@ -28,6 +28,7 @@ const {
     documentKey,
     mapCvcAvailabilityRows,
     resolveDocumentCollectable,
+    applyCollectedRemainder,
 } = require('../services/delivery-cobro-availability');
 const {
     DeliveryStatusResolutionError,
@@ -845,6 +846,33 @@ router.get('/pendientes/:repartidorId', verifyToken, validatePendientesRepartido
         } catch (anteroomErr) {
             logger.warn(`[ENTREGAS] Anteroom pedidos overlay skipped: ${anteroomErr.message}`);
         }
+        try {
+            const runtime = resolveRepartoRuntime(process.env);
+            const hideClients = Array.from(new Set(
+                Array.from(aggregatedMap.values())
+                    .map((row) => String(row.CLIENTE || '').trim())
+                    .filter(Boolean),
+            ));
+            const {
+                loadCommercialCollectedIndex,
+                shouldHideCommercialCollectedRow,
+            } = require('../services/commercial-collected-route');
+            const collectedIndex = await loadCommercialCollectedIndex(
+                (sql, params) => queryWithParams(sql, params, false, false),
+                {
+                    clientCodes: hideClients,
+                    pedidosTable: runtime?.tables?.commercial?.pedidosCab,
+                    cobrosTable: runtime?.tables?.finance?.commercialCobros,
+                },
+            );
+            for (const [id, row] of aggregatedMap) {
+                if (shouldHideCommercialCollectedRow(row, collectedIndex)) {
+                    aggregatedMap.delete(id);
+                }
+            }
+        } catch (collectedErr) {
+            logger.warn(`[ENTREGAS] Commercial-collected filter skipped: ${collectedErr.message}`);
+        }
         const uniqueRows = Array.from(aggregatedMap.values());
 
         const clientCodes = Array.from(new Set(
@@ -1378,8 +1406,8 @@ async function enrichPendientesPage(pageItems, uniqueRows, idList) {
     const erpPage = pageItems.filter((item) => item.documentoTipo !== 'PEDIDO');
     const overlaid = await overlayCanonicalConfirmationStatuses(erpPage, idList);
     const byOverlayId = new Map(overlaid.map((item) => [item.id, item]));
-    return pageItems.map((item) => (
-        item.documentoTipo === 'PEDIDO' ? item : (byOverlayId.get(item.id) || item)
+    return pageItems.map((item) => applyCollectedRemainder(
+        item.documentoTipo === 'PEDIDO' ? item : (byOverlayId.get(item.id) || item),
     ));
 }
 
@@ -1727,7 +1755,25 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, validateAlbaranRouteIdent
             WHERE ${whereClause}
         `;
 
-        const headers = await queryWithParams(headerSql, headerParams);
+        let headers = await queryWithParams(headerSql, headerParams);
+        let pedidoLines = null;
+        if (headers.length === 0 && typeof pedidosService.getConfirmedPedidoDetailForRutero === 'function') {
+            try {
+                const pedidoDetail = await pedidosService.getConfirmedPedidoDetailForRutero({
+                    numero,
+                    ejercicio,
+                    serie,
+                    terminal,
+                    cliente,
+                });
+                if (pedidoDetail?.headers?.length) {
+                    headers = pedidoDetail.headers;
+                    pedidoLines = Array.isArray(pedidoDetail.lines) ? pedidoDetail.lines : [];
+                }
+            } catch (pedidoDetailError) {
+                logger.warn(`[ENTREGAS] Pedido line fallback skipped: ${pedidoDetailError.message}`);
+            }
+        }
         if (headers.length === 0) {
             return res.status(404).json({
                 success: false,
@@ -1775,7 +1821,9 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, validateAlbaranRouteIdent
         const canonical = await loadCanonicalDetailProjection(documentId, header.CODIGO_REPARTIDOR, header.CLIENTE);
         const canonicalStatus = canonical.confirmation ? String(canonical.confirmation.STATUS || '').trim() : '';
 
-        const items = await queryWithParams(itemsSql, itemParams);
+        const items = pedidoLines != null
+            ? pedidoLines
+            : await queryWithParams(itemsSql, itemParams);
 
         // IVA breakdown for detail
         const base1 = parseFloat(header.CPC_BASE1) || 0;

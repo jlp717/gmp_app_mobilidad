@@ -139,7 +139,8 @@ void main() {
     expect(continued, isTrue);
   });
 
-  testWidgets('sin saldo cobrable muestra mensaje claro', (tester) async {
+  testWidgets('el documento con importe muestra el saldo aunque CVC sea 0',
+      (tester) async {
     final controller = TextEditingController();
     final albaran = AlbaranEntrega(
       id: '2026-A-1-100-C1',
@@ -171,9 +172,46 @@ void main() {
       ),
     );
 
-    expect(find.text('Sin saldo cobrable'), findsOneWidget);
-    expect(find.textContaining('Sin saldo cobrable en este albarán'),
-        findsOneWidget);
+    expect(find.textContaining('80'), findsWidgets);
+    expect(find.text('Sin saldo cobrable'), findsNothing);
+    expect(find.textContaining('Cobro'), findsWidgets);
+  });
+
+  testWidgets('documento vivo a cero explica el motivo y no bloquea',
+      (tester) async {
+    final controller = TextEditingController();
+    final albaran = AlbaranEntrega(
+      id: '2026-A-1-101-C1',
+      numeroAlbaran: 101,
+      ejercicio: 2026,
+      codigoCliente: 'C3',
+      nombreCliente: 'Cliente a cero',
+      fecha: '2026-09-07',
+      importeTotal: 0,
+      codigoRepartidor: '08',
+      estado: EstadoEntrega.enRuta,
+      importeDisponibleCobro: 0,
+    );
+    await tester.pumpWidget(
+      _wrap(
+        RuteroDetailPayment(
+          albaran: albaran,
+          selectedPaymentMethod: 'EFECTIVO',
+          isPaid: false,
+          pagoError: null,
+          importeCobradoController: controller,
+          importeCobradoError: null,
+          onPaymentMethodChanged: (_) {},
+          onPaidChanged: () {},
+          onContinueToFinalize: () {},
+          getPaymentTypeLabel: () => 'Contado',
+        ),
+      ),
+    );
+    expect(
+      find.textContaining('El documento vivo es 0,00 €'),
+      findsOneWidget,
+    );
     expect(find.text('Registrar cobro'), findsNothing);
   });
 

@@ -90,7 +90,10 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
         (rows || []).filter((row) => Number(row.META_ONLY || 0) !== 1).forEach(row => {
             const subempresa = String(row.SUBEMPRESAALBARAN || '').trim();
             const serie = (row.SERIEALBARAN || '').toString().trim();
-            const key = `ALB-${subempresa}-${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`;
+            const cliente = String(
+                row.CLIENTE || row.CODIGOCLIENTE || row.CODIGOCLIENTEALBARAN || '',
+            ).trim();
+            const key = `ALB-${subempresa}-${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${cliente}`;
 
             if (!uniqueMap.has(key)) {
                 uniqueMap.set(key, { ...row });

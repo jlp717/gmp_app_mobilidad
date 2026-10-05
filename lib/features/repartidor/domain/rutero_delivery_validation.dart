@@ -115,17 +115,15 @@ class RuteroDeliveryValidationInput {
   Money get importeTotalMoney => Money.fromDouble(importeTotal);
   Money get importeDisponibleCobroMoney =>
       Money.moneyValue(importeDisponibleCobro, fallback: importeTotalMoney);
-  Money? get importeMaxCobrableMoney => importeMaxCobrable == null
-      ? null
-      : Money.fromDouble(importeMaxCobrable!);
+  Money? get importeMaxCobrableMoney =>
+      importeMaxCobrable == null ? null : Money.fromDouble(importeMaxCobrable!);
   Money get effectiveMaxCobroMoney {
-    final uncappedMoney =
-        importeMaxCobrableMoney ?? (importeDisponibleCobro == null
-            ? importeTotalMoney
-            : Money.fromDouble(importeDisponibleCobro!));
+    final document = importeTotalMoney;
+    if (!document.isPositive) return Money.zero;
+    final ceiling = importeMaxCobrableMoney ?? document;
     return capSaldoCobrableAlDocumentoMoney(
-      documentAmount: importeTotalMoney,
-      collectableAmount: uncappedMoney,
+      documentAmount: document,
+      collectableAmount: ceiling,
     );
   }
 
@@ -413,9 +411,7 @@ RuteroDeliveryValidationResult validateRuteroDeliveryForm(
   final paymentEligibleStatus =
       input.status == RepartoDeliveryStatus.entregado ||
           input.status == RepartoDeliveryStatus.parcial;
-  final hasKnownCvcBalance = input.importeDisponibleCobro != null;
-  final hasCollectibleBalance = !hasKnownCvcBalance ||
-      Money.fromDouble(input.importeDisponibleCobro!).isPositive;
+  final hasCollectibleBalance = input.importeTotalMoney.isPositive;
   if (paymentEligibleStatus &&
       input.isUrgent &&
       !input.isPaid &&
