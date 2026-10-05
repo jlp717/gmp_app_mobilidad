@@ -403,6 +403,18 @@ class RepartoConfirmationJournal {
     );
   }
 
+  /// A rejected HTTP attempt did not commit. Keep the same idempotency key
+  /// and leave the journal ready so the driver can retry.
+  Future<void> releaseSubmitting(String deliveryId) async {
+    final entry = await _store.read(deliveryId.trim());
+    if (entry == null || entry.state != RepartoOperationState.submitting) {
+      return;
+    }
+    await _store.write(
+      entry.copyWith(state: RepartoOperationState.ready),
+    );
+  }
+
   /// Drop a local journal that is not acknowledged so the driver can confirm.
   /// Acknowledged deliveries stay locked to avoid duplicate confirms.
   Future<void> resetIfNotAcknowledged(String deliveryId) async {

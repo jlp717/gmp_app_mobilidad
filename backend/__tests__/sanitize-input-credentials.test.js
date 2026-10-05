@@ -38,6 +38,61 @@ describe('sanitizeInput credential passthrough (contract)', () => {
         expect(out.profile.comment).toBe('obrien');
     });
 
+    it('keeps ISO confirmation timestamps, emails and image data URIs', () => {
+        const { buildConfirmationCommand } = require('../services/reparto-confirmation-contract');
+        const occurredAt = '2026-10-05T13:11:31.123456Z';
+        const signature = `data:image/png;base64,${'a'.repeat(64)}==`;
+        const out = run({
+            delivery: {
+                itemId: '2026-A-1-42-C1',
+                status: 'ENTREGADO',
+                occurredAt,
+                repartidorId: '98',
+                receiver: { nombre: 'Ana', apellidos: 'Lopez', dni: '12345678Z' },
+                lineas: [{
+                    lineaId: '1',
+                    codigoArticulo: 'ABC',
+                    cantidadPedida: 1,
+                    cantidadEntregada: 1,
+                    cantidadRechazada: 0,
+                    cantidadPendiente: 0,
+                    motivoDiferencia: null,
+                }],
+                firma: `ev_${'a'.repeat(64)}`,
+                evidencias: [],
+                forceUpdate: false,
+            },
+            notifications: {
+                sendClientEmail: true,
+                sendWhatsApp: false,
+                clientEmail: 'bar@cliente.test',
+            },
+            image: signature,
+            comment: "o'brien <script>",
+        });
+
+        expect(out.delivery.occurredAt).toBe(occurredAt);
+        expect(out.notifications.clientEmail).toBe('bar@cliente.test');
+        expect(out.image).toBe(signature);
+        expect(out.comment).not.toMatch(/[<>']/);
+
+        const command = buildConfirmationCommand({
+            user: { id: '98', code: '98', role: 'REPARTIDOR', repartidorCodes: ['98'] },
+            headers: { 'idempotency-key': 'rep-testkey01' },
+            body: {
+                delivery: out.delivery,
+                notifications: out.notifications,
+            },
+        });
+        expect(command.delivery.occurredAt).toBe(occurredAt);
+        expect(command.notifications.clientEmail).toBe('bar@cliente.test');
+    });
+
+    it('still strips a colon from ordinary text', () => {
+        const out = run({ note: 'hora 13:11' });
+        expect(out.note).toBe('hora 1311');
+    });
+
     it('leaves non-string scalars alone', () => {
         const out = run({ password: 12345, count: 7, flag: true });
         expect(out).toEqual({ password: 12345, count: 7, flag: true });

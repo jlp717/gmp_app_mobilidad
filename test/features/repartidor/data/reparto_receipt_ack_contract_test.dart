@@ -98,6 +98,31 @@ void main() {
       );
     });
 
+    test('invalid delivery payload stays retryable in Spanish', () {
+      final presentation = repartoConfirmationErrorPresentation(
+        error: ApiException(
+          'Confirmacion de entrega invalida: delivery.occurredAt: Invalid datetime',
+          statusCode: 422,
+          code: 'INVALID_DELIVERY_PAYLOAD',
+        ),
+        acknowledged: false,
+      );
+      expect(presentation.canRetry, isTrue);
+      expect(presentation.message, contains('No se ha guardado nada'));
+      expect(presentation.message, isNot(contains('no es concluyente')));
+      expect(presentation.message, isNot(contains('Invalid datetime')));
+    });
+
+    test('a local journal conflict explains how to continue', () {
+      final presentation = repartoConfirmationErrorPresentation(
+        error: const RepartoConfirmationConflictException(),
+        acknowledged: false,
+      );
+      expect(presentation.canRetry, isFalse);
+      expect(presentation.message, contains('Cierra la ficha'));
+      expect(presentation.message, isNot(contains('no es concluyente')));
+    });
+
     test('REPARTO_CONFIRMATION_TIMEOUT 504 is retryable', () {
       final presentation = repartoConfirmationErrorPresentation(
         error: ApiException(

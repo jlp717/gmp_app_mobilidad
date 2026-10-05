@@ -307,13 +307,35 @@ function parseIdempotencyKey(raw) {
   return value;
 }
 
+function issuePath(issue) {
+  return issue.path.join('.');
+}
+
+function humanIssueMessage(issue) {
+  const path = issuePath(issue);
+  const raw = String(issue.message || '');
+  if (path === 'delivery.occurredAt' || raw.toLowerCase() === 'invalid datetime') {
+    return 'La fecha y hora no tienen un formato válido';
+  }
+  return raw;
+}
+
+function confirmationRejectedMessage(issues) {
+  if (issues.some((issue) => issuePath(issue) === 'delivery.occurredAt'
+    || String(issue.message || '').toLowerCase() === 'invalid datetime')) {
+    return 'La fecha y hora de la entrega no son válidas. No se ha guardado nada. Reinténtalo.';
+  }
+  return 'Los datos de la entrega no se han aceptado. No se ha guardado nada. Reinténtalo.';
+}
+
 function parseConfirmationBody(raw) {
   const parsed = confirmationSchema.safeParse(raw);
   if (!parsed.success) {
-    const error = new RepartoContractError('Confirmacion de entrega invalida');
-    error.details = parsed.error.issues.map((issue) => ({
-      path: issue.path.join('.'),
-      message: issue.message,
+    const issues = parsed.error.issues;
+    const error = new RepartoContractError(confirmationRejectedMessage(issues));
+    error.details = issues.map((issue) => ({
+      path: issuePath(issue),
+      message: humanIssueMessage(issue),
     }));
     throw error;
   }

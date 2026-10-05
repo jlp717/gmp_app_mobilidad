@@ -648,6 +648,22 @@ class RepartoPreparedConfirmation {
       request.deferEvidence ? request.toDeferredJson() : request.toJson();
 }
 
+/// Validation and transport failures did not commit. A 409 is a real
+/// identity conflict and stays locked.
+bool _confirmationHttpFailureIsRetryable(int? statusCode, String? code) {
+  if (statusCode == 409) return false;
+  final status = statusCode ?? 0;
+  return status == 0 ||
+      status == 400 ||
+      status == 401 ||
+      status == 403 ||
+      status == 408 ||
+      status == 422 ||
+      status == 429 ||
+      status >= 500 ||
+      (code != null && code.contains('TIMEOUT'));
+}
+
 /// Persists the material fingerprint, request key and occurrence time before
 /// the network boundary so ambiguous retries keep the same operation identity.
 class RepartoPersistentConfirmationOperation {
@@ -776,6 +792,10 @@ class RepartoPersistentConfirmationOperation {
     String? confirmationId,
     String? cobroId,
   }) async {
+    if (_confirmationHttpFailureIsRetryable(statusCode, code)) {
+      await _journal.releaseSubmitting(deliveryId);
+      return false;
+    }
     if (statusCode != 409 || code != 'DELIVERY_ALREADY_CONFIRMED') {
       await _journal.markManualReview(deliveryId);
       return false;

@@ -132,6 +132,10 @@ RepartoConfirmationErrorDisposition repartoConfirmationErrorDisposition({
     if (status >= 400 && status < 500 && status != 409) {
       return RepartoConfirmationErrorDisposition.retryable;
     }
+    // 5xx did not prove a commit. The idempotency key makes a retry safe.
+    if (status >= 500) {
+      return RepartoConfirmationErrorDisposition.retryable;
+    }
     return RepartoConfirmationErrorDisposition.manualReview;
   }
   if (isTransientRepartoConfirmationFailure(error)) {
@@ -208,9 +212,24 @@ RepartoConfirmationErrorPresentation repartoConfirmationErrorPresentation({
           );
         }
       }
+      if (error is RepartoJournalCorruptionException &&
+          error.message.trim().isNotEmpty) {
+        return RepartoConfirmationErrorPresentation(
+          message: error.message.trim(),
+          canRetry: false,
+        );
+      }
+      if (error is RepartoConfirmationConflictException) {
+        return const RepartoConfirmationErrorPresentation(
+          message: 'Esta confirmación se quedó bloqueada en el teléfono. '
+              'Cierra la ficha, ábrela otra vez y confirma de nuevo. '
+              'Si ya se guardó, no se duplicará.',
+          canRetry: false,
+        );
+      }
       return const RepartoConfirmationErrorPresentation(
-        message: 'El resultado de la confirmación no es concluyente. '
-            'La operación requiere revisión manual.',
+        message: 'No se sabe si la entrega se guardó. '
+            'Cierra la ficha, ábrela otra vez y comprueba el estado antes de confirmar.',
         canRetry: false,
       );
     case RepartoConfirmationErrorDisposition.retryable:
@@ -262,6 +281,18 @@ String? _paymentConfirmationErrorMessage(ApiException error) {
     case 'REPARTO_CONFIRMATION_ROLE_REQUIRED':
       return 'Esta entrega no pertenece a tu ruta. '
           'Entra como el repartidor de este albarán e inténtalo de nuevo.';
+    case 'INVALID_DELIVERY_PAYLOAD':
+      {
+        final raw = error.message.toLowerCase();
+        if (raw.contains('datetime') ||
+            raw.contains('occurredat') ||
+            raw.contains('fecha y hora')) {
+          return 'La fecha y hora de la entrega no son válidas. '
+              'No se ha guardado nada. Reinténtalo.';
+        }
+        return 'Los datos de la entrega no se han aceptado. '
+            'No se ha guardado nada. Reinténtalo.';
+      }
     case 'REPARTO_CONFIRMATION_TIMEOUT':
     case 'REPARTO_RECEIPT_TIMEOUT':
     case 'EVIDENCE_TIMEOUT':

@@ -82,6 +82,60 @@ void main() {
     );
   });
 
+  test('un 422 de contrato no bloquea el reintento con la misma clave',
+      () async {
+    final journal = RepartoConfirmationJournal(_MemoryJournalStore());
+    final operation = RepartoPersistentConfirmationOperation(
+      journal,
+      keyGenerator: () => 'rep-persistent-fixed',
+    );
+    const deliveryId = '2026-A-1-42-C1';
+    final prepared = await operation.prepare(_emptyPrepaidRequest());
+    await operation.markSubmitting(deliveryId);
+
+    final reconciled = await operation.reconcileConflict(
+      deliveryId: deliveryId,
+      statusCode: 422,
+      code: 'INVALID_DELIVERY_PAYLOAD',
+      prepared: prepared,
+    );
+
+    expect(reconciled, isFalse);
+    expect(
+      (await journal.loadOrCreate(deliveryId)).state,
+      RepartoOperationState.ready,
+    );
+    final retried = await operation.prepare(_emptyPrepaidRequest());
+    expect(retried.idempotencyKey, prepared.idempotencyKey);
+  });
+
+  test('un 409 que no es entrega ya confirmada sigue en revisión', () async {
+    final journal = RepartoConfirmationJournal(_MemoryJournalStore());
+    final operation = RepartoPersistentConfirmationOperation(
+      journal,
+      keyGenerator: () => 'rep-persistent-fixed',
+    );
+    const deliveryId = '2026-A-1-42-C1';
+    final prepared = await operation.prepare(_emptyPrepaidRequest());
+
+    final reconciled = await operation.reconcileConflict(
+      deliveryId: deliveryId,
+      statusCode: 409,
+      code: 'IDEMPOTENCY_CONFLICT',
+      prepared: prepared,
+    );
+
+    expect(reconciled, isFalse);
+    expect(
+      (await journal.loadOrCreate(deliveryId)).state,
+      RepartoOperationState.manualReview,
+    );
+    expect(
+      () => operation.prepare(_emptyPrepaidRequest()),
+      throwsA(isA<RepartoConfirmationConflictException>()),
+    );
+  });
+
   test('prepare persistente conserva owner y prepago vacio', () async {
     final journal = RepartoConfirmationJournal(_MemoryJournalStore());
     final operation = RepartoPersistentConfirmationOperation(

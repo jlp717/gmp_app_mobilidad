@@ -1258,6 +1258,10 @@ router.post('/rutero/confirm-delivery-cobro', verifyToken, requireCanonicalConfi
     });
   } catch (error) {
     if (error instanceof RepartoContractError) {
+      const paths = Array.isArray(error.details)
+        ? error.details.map((item) => item && item.path).filter(Boolean).slice(0, 8)
+        : [];
+      logger.warn(`[reparto-confirm] contract rejected code=${error.code} paths=${paths.join(',') || '-'}`);
       return res.status(error.statusCode).json({
         success: false,
         code: error.code,

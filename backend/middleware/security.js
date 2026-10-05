@@ -533,8 +533,30 @@ const BINARY_EVIDENCE_FIELD_RE = /^(signature|firma)$/i;
 // en sanitize-input-credentials.test.js).
 const FREE_TEXT_FIELD_RE = /^(notas|observaciones|observacion|notes)$/i;
 
+// ISO-8601 with offset is a bind parameter, never concatenated SQL. The
+// allowlist used to delete ":", so 2026-10-05T13:11:31.123456Z became
+// 2026-10-05T131131.123456Z and Zod answered "Invalid datetime" (422, 166
+// bytes) before any confirmation row was written.
+const ISO_OFFSET_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+const EMAIL_FIELD_RE = /^(clientEmail|destinatario|email|correo)$/i;
+const SIMPLE_EMAIL_RE = /^[^\s<>"'\\;]{1,64}@[^\s<>"'\\;]{1,80}\.[^\s<>"'\\;]{2,24}$/;
+const DATA_IMAGE_URI_RE = /^data:image\/(?:png|jpeg|jpg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
 function sanitizeFreeText(value) {
     return String(value).replace(/\r?\n/g, ' ').trim();
+}
+
+function preservedStructuredString(key, value) {
+    const trimmed = String(value).trim();
+    if (ISO_OFFSET_DATETIME_RE.test(trimmed)) return trimmed;
+    if (DATA_IMAGE_URI_RE.test(trimmed)) return trimmed;
+    if (typeof key === 'string'
+        && EMAIL_FIELD_RE.test(key)
+        && trimmed.length <= 180
+        && SIMPLE_EMAIL_RE.test(trimmed)) {
+        return trimmed;
+    }
+    return null;
 }
 
 // Listas de la query (años, vendedores) viajan separadas por comas y luego
@@ -548,8 +570,10 @@ function sanitizeQueryValue(value) {
 
 exports.sanitizeInput = (req, res, next) => {
     if (req.body && typeof req.body === 'object') {
-        const sanitize = (obj) => {
+        const sanitize = (obj, key) => {
             if (typeof obj === 'string') {
+                const preserved = preservedStructuredString(key, obj);
+                if (preserved != null) return preserved;
                 let sanitized = obj
                     .replace(/[<>'"\\;]/g, '')
                     .replace(/&(?!(amp|lt|gt|quot|#39);)/g, '&amp;')
@@ -559,24 +583,24 @@ exports.sanitizeInput = (req, res, next) => {
                 return sanitized;
             } else if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
                 const sanitizedObj = {};
-                for (const key of Object.keys(obj)) {
+                for (const childKey of Object.keys(obj)) {
                     // Los campos sensibles y las firmas (data URI) pasan intactos.
-                    if (SENSITIVE_FIELD_RE.test(key) || BINARY_EVIDENCE_FIELD_RE.test(key)) {
-                        sanitizedObj[key] = obj[key];
-                    } else if (FREE_TEXT_FIELD_RE.test(key) && typeof obj[key] === 'string') {
-                        sanitizedObj[key] = sanitizeFreeText(obj[key]);
+                    if (SENSITIVE_FIELD_RE.test(childKey) || BINARY_EVIDENCE_FIELD_RE.test(childKey)) {
+                        sanitizedObj[childKey] = obj[childKey];
+                    } else if (FREE_TEXT_FIELD_RE.test(childKey) && typeof obj[childKey] === 'string') {
+                        sanitizedObj[childKey] = sanitizeFreeText(obj[childKey]);
                     } else {
-                        sanitizedObj[key] = sanitize(obj[key]);
+                        sanitizedObj[childKey] = sanitize(obj[childKey], childKey);
                     }
                 }
                 return sanitizedObj;
             } else if (Array.isArray(obj)) {
-                return obj.map(item => sanitize(item));
+                return obj.map(item => sanitize(item, key));
             }
             return obj;
         };
-        
-        req.body = sanitize(req.body);
+
+        req.body = sanitize(req.body, null);
     }
     
     if (req.query && typeof req.query === 'object') {
