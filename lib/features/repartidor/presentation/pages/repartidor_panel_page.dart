@@ -290,13 +290,15 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage>
                   ),
                 ),
                 Text(
-                  'Entregas y liquidaciones del periodo',
+                  'Entregas y liquidaciones del mes elegido. '
+                  'Pendiente sigue en el rutero. Entregado ya está cerrado.',
                   style: TextStyle(
                     fontSize: Responsive.fontSize(
                       context,
-                      small: 10,
-                      large: 12,
+                      small: 13,
+                      large: 15,
                     ),
+                    height: 1.35,
                     color: AppTheme.textSecondary,
                   ),
                 ),

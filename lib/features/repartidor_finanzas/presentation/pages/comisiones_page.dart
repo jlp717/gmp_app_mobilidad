@@ -289,7 +289,7 @@ class _RepartidorComisionesFinanzasPageState
         children: [
           SmartSyncHeader(
             title: 'Comisiones',
-            subtitle: 'Seguimiento y objetivos',
+            subtitle: 'Comisión del repartidor en el mes',
             isLoading: _isLoading,
             lastSync: _lastFetchTime,
             onSync: () => _loadData(forceRefresh: true),
@@ -336,7 +336,8 @@ class _RepartidorComisionesFinanzasPageState
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'No hay tramos de comisión configurados',
+                        'No hay tramos de comisión configurados. '
+                        'No es un fallo de las entregas: oficina tiene que darlos de alta.',
                         style: TextStyle(color: AppTheme.textSecondary),
                       ),
                       const SizedBox(height: 12),
@@ -521,8 +522,7 @@ class _Content extends StatelessWidget {
       final thresholdAmount = appliedTier?.thresholdAmountMoney ??
           (firstTier == null
               ? Money.zero
-              : summary.deliveredAmountMoney *
-                  (firstTier.thresholdPct / 100));
+              : summary.deliveredAmountMoney * (firstTier.thresholdPct / 100));
       final tierText = appliedTier == null
           ? '-'
           : 'F$tierIndex > '
@@ -634,7 +634,9 @@ class _Content extends StatelessWidget {
           ),
           DataCell(
             Text(
-              isFuture ? '-' : CurrencyFormatter.format(thresholdAmount.toDouble()),
+              isFuture
+                  ? '-'
+                  : CurrencyFormatter.format(thresholdAmount.toDouble()),
               style: TextStyle(
                 color: AppTheme.textSecondary.withValues(alpha: textOpacity),
                 fontSize: 9,

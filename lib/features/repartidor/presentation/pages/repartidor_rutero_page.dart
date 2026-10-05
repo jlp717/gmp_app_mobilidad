@@ -73,6 +73,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   final TextEditingController _searchClientController = TextEditingController();
   final TextEditingController _searchAlbaranController =
       TextEditingController();
+  final TextEditingController _searchOrdenController = TextEditingController();
   Timer? _loadDebounceTimer;
   Completer<void>? _loadCompleter;
   bool _isDetailModalOpen = false;
@@ -105,6 +106,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   void dispose() {
     _searchClientController.dispose();
     _searchAlbaranController.dispose();
+    _searchOrdenController.dispose();
     _loadDebounceTimer?.cancel();
     if (_loadCompleter?.isCompleted == false) {
       _loadCompleter?.complete();
@@ -534,272 +536,156 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   }) {
     final scopedId = (widget.repartidorId ?? authUserCode ?? '').trim();
     final canReorder = scopedId.isNotEmpty && !scopedId.contains(',');
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
       child: RepartidorExecutivePanel(
         accentColor: AppTheme.accentIndigo,
-        padding: const EdgeInsets.all(8),
-        child: Row(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Clients Filter (responsive - flex instead of fixed width)
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: 100,
-                maxWidth: Responsive.value(context, phone: 130, desktop: 160),
-              ),
-              child: Container(
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppTheme.softPanel,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.borderColor),
-                ),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.person_outline,
-                      size: 14,
-                      color: AppTheme.textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: TextField(
-                        controller: _searchClientController,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textPrimary,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Cliente...',
-                          hintStyle: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.textSecondary,
-                          ),
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        onChanged: (v) => _updateRouteFilter(
-                          (notifier) =>
-                              notifier.setSearchClient(v, autoReload: false),
-                        ),
-                      ),
-                    ),
-                    if (_searchClientController.text.isNotEmpty)
-                      IconButton(
-                        icon: const Icon(Icons.clear, size: 14),
-                        onPressed: () {
-                          _searchClientController.clear();
-                          _updateRouteFilter(
-                            (notifier) =>
-                                notifier.setSearchClient('', autoReload: false),
-                          );
-                        },
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                  ],
-                ),
+            Text(
+              'Busca una parada por cliente, número completo (P-15-2296) u orden de preparación.',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 14,
+                height: 1.35,
               ),
             ),
-
-            const SizedBox(width: 6),
-
-            // Albaranes Filter (responsive - flex instead of fixed width)
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: 90,
-                maxWidth: Responsive.value(context, phone: 110, desktop: 130),
-              ),
-              child: Container(
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppTheme.softPanel,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.borderColor),
-                ),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.description_outlined,
-                      size: 14,
-                      color: AppTheme.textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: TextField(
-                        controller: _searchAlbaranController,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textPrimary,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Nº Alb/Fac...',
-                          hintStyle: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.textSecondary,
-                          ),
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        onChanged: (v) => _updateRouteFilter(
-                          (notifier) =>
-                              notifier.setSearchAlbaran(v, autoReload: false),
-                        ),
-                      ),
-                    ),
-                    if (_searchAlbaranController.text.isNotEmpty)
-                      IconButton(
-                        icon: const Icon(Icons.clear, size: 14),
-                        onPressed: () {
-                          _searchAlbaranController.clear();
-                          _updateRouteFilter(
-                            (notifier) => notifier.setSearchAlbaran('',
-                                autoReload: false),
-                          );
-                        },
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                  ],
-                ),
+            const SizedBox(height: 10),
+            _ruteroSearchField(
+              controller: _searchClientController,
+              label: 'Cliente',
+              hint: 'Nombre o código',
+              onChanged: (value) => _updateRouteFilter(
+                (notifier) =>
+                    notifier.setSearchClient(value, autoReload: false),
               ),
             ),
-
-            const SizedBox(width: 8),
-
-            // Quick filter chips
-            _buildQuickFilterChip(
-              label: 'Cobrar',
-              isSelected: filterDebeCobrar == 'S',
-              color: AppTheme.obligatorio,
-              icon: Icons.euro,
-              onTap: () {
-                unawaited(HapticFeedback.selectionClick());
-                _updateRouteFilter(
-                  (notifier) => notifier.setFilterDebeCobrar(
-                    filterDebeCobrar == 'S' ? '' : 'S',
-                    autoReload: false,
-                  ),
-                );
-              },
-            ),
-
-            const SizedBox(width: 6),
-
-            _buildQuickFilterChip(
-              label: 'Crédito',
-              isSelected: filterTipoPago == 'CREDITO',
-              color: AppTheme.credito,
-              icon: Icons.credit_card,
-              onTap: () {
-                unawaited(HapticFeedback.selectionClick());
-                _updateRouteFilter(
-                  (notifier) => notifier.setFilterTipoPago(
-                    filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
-                    autoReload: false,
-                  ),
-                );
-              },
-            ),
-
-            const SizedBox(width: 6),
-
-            // Sort dropdown
-            Container(
-              height: 38,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.softPanel,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.borderColor),
+            const SizedBox(height: 8),
+            _ruteroSearchField(
+              controller: _searchAlbaranController,
+              label: 'Número',
+              hint: 'Serie completa o número',
+              onChanged: (value) => _updateRouteFilter(
+                (notifier) =>
+                    notifier.setSearchAlbaran(value, autoReload: false),
               ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: sortBy,
-                  icon: const Icon(
-                    Icons.sort,
-                    color: AppTheme.info,
-                    size: 18,
-                  ),
-                  dropdownColor: AppTheme.raisedSurface,
-                  items: [
-                    DropdownMenuItem(
-                      value: 'default',
-                      child: Text(
-                        '• Orden',
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 11,
-                        ),
+            ),
+            const SizedBox(height: 8),
+            _ruteroSearchField(
+              controller: _searchOrdenController,
+              label: 'Orden de preparación',
+              hint: 'Número de orden',
+              keyboardType: TextInputType.number,
+              onChanged: (value) => _updateRouteFilter(
+                (notifier) => notifier.setSearchOrden(value, autoReload: false),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Cobrar deja solo el cobro obligatorio. Crédito filtra esa forma de pago. '
+              'Si ya está cobrado, se entrega y no sale en Cobros. '
+              'Si el documento es 0,00 €, se puede entregar sin cobrar. '
+              'Si la nota no carga, finaliza la entrega o pulsa Reintentar.',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                // Quick filter chips
+                _buildQuickFilterChip(
+                  label: 'Cobrar',
+                  isSelected: filterDebeCobrar == 'S',
+                  color: AppTheme.obligatorio,
+                  icon: Icons.euro,
+                  onTap: () {
+                    unawaited(HapticFeedback.selectionClick());
+                    _updateRouteFilter(
+                      (notifier) => notifier.setFilterDebeCobrar(
+                        filterDebeCobrar == 'S' ? '' : 'S',
+                        autoReload: false,
                       ),
-                    ),
-                    DropdownMenuItem(
-                      value: 'importe_desc',
-                      child: Text(
-                        '• Mayor a menor',
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                    DropdownMenuItem(
-                      value: 'importe_asc',
-                      child: Text(
-                        '• Menor a mayor',
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) {
-                      unawaited(HapticFeedback.selectionClick());
-                      _updateRouteFilter(
-                        (notifier) =>
-                            notifier.setSortBy(val, autoReload: false),
-                      );
-                    }
+                    );
                   },
                 ),
-              ),
-            ),
 
-            if (canReorder) ...[
-              const SizedBox(width: 6),
-              Material(
-                color: AppTheme.softPanel,
-                borderRadius: BorderRadius.circular(10),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: () => _openReorderModal(
-                    scopedId,
-                    List<AlbaranEntrega>.from(albaranes),
-                  ),
-                  child: Container(
-                    height: 38,
-                    width: 38,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.borderColor),
-                    ),
-                    child: const Icon(
-                      Icons.reorder,
-                      color: AppTheme.info,
-                      size: 18,
+                const SizedBox(width: 6),
+
+                _buildQuickFilterChip(
+                  label: 'Crédito',
+                  isSelected: filterTipoPago == 'CREDITO',
+                  color: AppTheme.credito,
+                  icon: Icons.credit_card,
+                  onTap: () {
+                    unawaited(HapticFeedback.selectionClick());
+                    _updateRouteFilter(
+                      (notifier) => notifier.setFilterTipoPago(
+                        filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
+                        autoReload: false,
+                      ),
+                    );
+                  },
+                ),
+
+                const SizedBox(width: 6),
+
+                Semantics(
+                  label: 'Ordenar la lista',
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: sortBy,
+                      icon: const Icon(Icons.sort,
+                          color: AppTheme.info, size: 20),
+                      dropdownColor: AppTheme.raisedSurface,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'default',
+                          child: Text('Orden de ruta'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'importe_desc',
+                          child: Text('Mayor importe'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'importe_asc',
+                          child: Text('Menor importe'),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          unawaited(HapticFeedback.selectionClick());
+                          _updateRouteFilter(
+                            (notifier) =>
+                                notifier.setSortBy(val, autoReload: false),
+                          );
+                        }
+                      },
                     ),
                   ),
                 ),
-              ),
-            ],
+                if (canReorder)
+                  Semantics(
+                    button: true,
+                    label: 'Ordenar paradas',
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openReorderModal(
+                        scopedId,
+                        List<AlbaranEntrega>.from(albaranes),
+                      ),
+                      icon: const Icon(Icons.reorder),
+                      label: const Text('Ordenar paradas'),
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
       ),
@@ -821,7 +707,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         ),
       ),
     );
-    if (saved ?? false && mounted) {
+    if ((saved ?? false) && mounted) {
       await _loadData(forceRefresh: true);
     }
   }
@@ -833,12 +719,55 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    return RepartidorExecutivePill(
-      label: label,
-      icon: icon,
-      color: color,
+    return Semantics(
+      button: true,
       selected: isSelected,
-      onTap: onTap,
+      label: isSelected ? '$label, seleccionado' : label,
+      child: RepartidorExecutivePill(
+        label: label,
+        icon: isSelected ? Icons.check_circle : icon,
+        color: color,
+        selected: isSelected,
+        onTap: onTap,
+      ),
+    );
+  }
+
+  bool get _ruteroFiltersActive =>
+      _searchClientController.text.trim().isNotEmpty ||
+      _searchAlbaranController.text.trim().isNotEmpty ||
+      _searchOrdenController.text.trim().isNotEmpty ||
+      ref.read(entregasProvider).filterDebeCobrar.isNotEmpty ||
+      ref.read(entregasProvider).filterTipoPago.isNotEmpty;
+
+  Widget _ruteroSearchField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required ValueChanged<String> onChanged,
+    TextInputType? keyboardType,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      style: const TextStyle(fontSize: 16),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        filled: true,
+        fillColor: AppTheme.softPanel,
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Borrar $label',
+                onPressed: () {
+                  controller.clear();
+                  onChanged('');
+                },
+                icon: const Icon(Icons.clear),
+              ),
+      ),
+      onChanged: onChanged,
     );
   }
 
@@ -940,7 +869,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             ),
             const SizedBox(height: 24),
             Text(
-              'No hay entregas para este día',
+              _ruteroFiltersActive
+                  ? 'Ninguna parada coincide'
+                  : 'No hay entregas para este día',
               style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 18,
@@ -949,7 +880,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             ),
             const SizedBox(height: 8),
             Text(
-              'Selecciona otro día en el calendario\no usa el buscador',
+              _ruteroFiltersActive
+                  ? 'Prueba otro cliente, el número completo o la orden de preparación. '
+                      'También puedes quitar Cobrar o Crédito.'
+                  : 'Selecciona otro día en el calendario\no usa el buscador',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppTheme.textTertiary,

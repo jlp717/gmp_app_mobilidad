@@ -148,13 +148,24 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage>
               _HeaderSummary(evolution: data.evolution),
               const SizedBox(height: 24),
               _EvolutionChart(evolution: data.evolution),
+              const SizedBox(height: 12),
+              _EvolutionMonthList(evolution: data.evolution),
               const SizedBox(height: 24),
               Text(
-                'Productos Top (Ventas)',
+                'Productos más entregados',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: AppTheme.textPrimary,
                     ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Unidades e importe de lo entregado en el periodo.',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                  height: 1.35,
+                ),
               ),
               const SizedBox(height: 12),
               if (data.topProducts.isEmpty)
@@ -197,13 +208,27 @@ class _EvolutionHeader extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: Text(
-            'Evolución de cobros',
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Evolución de cobros',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                'Suma de los cobros registrados en la app, mes a mes. '
+                'No incluye lo cobrado entero por el comercial.',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                  height: 1.35,
+                ),
+              ),
+            ],
           ),
         ),
         Text(
@@ -396,6 +421,73 @@ class _ErrorContent extends StatelessWidget {
   }
 }
 
+class _EvolutionMonthList extends StatelessWidget {
+  const _EvolutionMonthList({required this.evolution});
+
+  final List<RepartidorEvolutionPoint> evolution;
+
+  static const _months = <String>[
+    'enero',
+    'febrero',
+    'marzo',
+    'abril',
+    'mayo',
+    'junio',
+    'julio',
+    'agosto',
+    'septiembre',
+    'octubre',
+    'noviembre',
+    'diciembre',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    if (evolution.isEmpty) return const SizedBox.shrink();
+    return Column(
+      children: [
+        for (final point in evolution)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: RepartidorExecutivePanel(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _label(point.period),
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${CurrencyFormatter.format(point.totalSales)} · '
+                    '${point.numCobros} cobros',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _label(String period) {
+    final parts = period.split('-');
+    if (parts.length != 2) return period;
+    final month = int.tryParse(parts[1]);
+    if (month == null || month < 1 || month > 12) return period;
+    return '${_months[month - 1]} ${parts[0]}';
+  }
+}
+
 class _EvolutionEmpty extends StatelessWidget {
   const _EvolutionEmpty();
 
@@ -405,7 +497,7 @@ class _EvolutionEmpty extends StatelessWidget {
       padding: EdgeInsets.all(24),
       child: Center(
         child: Text(
-          'Todavía no hay cobros ni productos para mostrar',
+          'Todavía no hay cobros de la app ni productos entregados en este periodo.',
           style: TextStyle(color: AppTheme.textSecondary),
         ),
       ),

@@ -262,11 +262,21 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage>
                                     ),
                                   ),
                                   SizedBox(height: 12),
-                                  Center(
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                    ),
                                     child: Text(
-                                      'No se encontraron clientes',
+                                      _searchQuery.trim().isEmpty
+                                          ? 'No hay clientes en este reparto. '
+                                              'Tira hacia abajo para actualizar.'
+                                          : 'Ningún cliente coincide. Prueba el nombre, '
+                                              'el código o la población.',
+                                      textAlign: TextAlign.center,
                                       style: TextStyle(
                                         color: AppTheme.textSecondary,
+                                        fontSize: 16,
+                                        height: 1.4,
                                       ),
                                     ),
                                   ),
@@ -371,21 +381,22 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage>
                   ),
                 ),
                 Text(
-                  '${_clients.length} clientes',
+                  '${_clients.length} clientes. Pulsa uno para ver sus documentos.',
                   style: TextStyle(
                     fontSize:
-                        Responsive.fontSize(context, small: 10, large: 12),
+                        Responsive.fontSize(context, small: 13, large: 15),
                     color: AppTheme.textSecondary,
+                    height: 1.3,
                   ),
                 ),
               ],
             ),
           ),
           // Refresh
-          IconButton(
-            icon: const Icon(Icons.refresh, color: AppTheme.info, size: 22),
+          TextButton.icon(
             onPressed: _refreshClients,
-            tooltip: 'Actualizar',
+            icon: const Icon(Icons.refresh, color: AppTheme.info),
+            label: const Text('Actualizar'),
           ),
         ],
       ),
@@ -487,7 +498,8 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage>
         },
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: selected
                 ? AppTheme.info.withValues(alpha: 0.14)
@@ -502,12 +514,16 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (selected) ...[
+                Icon(Icons.check, size: 16, color: AppTheme.info),
+                const SizedBox(width: 4),
+              ],
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                   color: selected ? AppTheme.info : AppTheme.textSecondary,
-                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
               if (selected)
@@ -524,118 +540,125 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage>
   }
 
   Widget _buildClientCard(HistoryClient client) {
-    return Card(
-      color: AppTheme.raisedSurface,
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        side: BorderSide(color: AppTheme.borderColor),
-      ),
-      child: InkWell(
-        onTap: () => _navigateToHistory(client),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding:
-              EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
-          child: Row(
-            children: [
-              // Avatar
-              Container(
-                width: Responsive.value(context, phone: 36, desktop: 44),
-                height: Responsive.value(context, phone: 36, desktop: 44),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: AppTheme.success.withValues(alpha: 0.14),
-                  border: Border.all(
-                    color: AppTheme.success.withValues(alpha: 0.28),
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
-                    style: TextStyle(
-                      color: AppTheme.success,
-                      fontSize:
-                          Responsive.fontSize(context, small: 14, large: 18),
-                      fontWeight: FontWeight.bold,
+    return Semantics(
+      button: true,
+      label: 'Abrir documentos de ${client.name}',
+      child: Card(
+        color: AppTheme.raisedSurface,
+        margin: const EdgeInsets.only(bottom: 8),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: BorderSide(color: AppTheme.borderColor),
+        ),
+        child: InkWell(
+          onTap: () => _navigateToHistory(client),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: EdgeInsets.all(
+                Responsive.padding(context, small: 10, large: 14)),
+            child: Row(
+              children: [
+                // Avatar
+                Container(
+                  width: Responsive.value(context, phone: 36, desktop: 44),
+                  height: Responsive.value(context, phone: 36, desktop: 44),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: AppTheme.success.withValues(alpha: 0.14),
+                    border: Border.all(
+                      color: AppTheme.success.withValues(alpha: 0.28),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      client.name,
+                  child: Center(
+                    child: Text(
+                      client.name.isNotEmpty
+                          ? client.name[0].toUpperCase()
+                          : '?',
                       style: TextStyle(
-                        fontSize: Responsive.fontSize(
-                          context,
-                          small: 12,
-                          large: 14,
-                        ),
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${client.id} · ${client.address}',
-                      style: TextStyle(
+                        color: AppTheme.success,
                         fontSize:
-                            Responsive.fontSize(context, small: 9, large: 11),
-                        color: AppTheme.textSecondary,
+                            Responsive.fontSize(context, small: 14, large: 18),
+                        fontWeight: FontWeight.bold,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 4,
-                      children: [
-                        _clientStat(
-                          Icons.receipt,
-                          '${client.totalDocuments} docs',
-                          AppTheme.info,
-                        ),
-                        _clientStat(
-                          Icons.euro,
-                          CurrencyFormatter.format(client.totalAmount),
-                          AppTheme.success,
-                        ),
-                        if (client.lastVisit != null)
-                          _clientStat(
-                            Icons.calendar_today,
-                            client.lastVisit!,
-                            AppTheme.textSecondary,
-                          ),
-                        if (widget.isJefeMode &&
-                            client.repCode != null &&
-                            client.repCode!.isNotEmpty)
-                          _clientStat(
-                            Icons.local_shipping,
-                            client.repName != null && client.repName!.isNotEmpty
-                                ? 'Rep ${client.repCode!} – ${client.repName!}'
-                                : 'Rep ${client.repCode!}',
-                            AppTheme.accentIndigo,
-                          ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: AppTheme.textSecondary,
-                size: 20,
-              ),
-            ],
+                const SizedBox(width: 12),
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        client.name,
+                        style: TextStyle(
+                          fontSize: Responsive.fontSize(
+                            context,
+                            small: 12,
+                            large: 14,
+                          ),
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${client.id} · ${client.address}',
+                        style: TextStyle(
+                          fontSize:
+                              Responsive.fontSize(context, small: 9, large: 11),
+                          color: AppTheme.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          _clientStat(
+                            Icons.receipt,
+                            '${client.totalDocuments} docs',
+                            AppTheme.info,
+                          ),
+                          _clientStat(
+                            Icons.euro,
+                            CurrencyFormatter.format(client.totalAmount),
+                            AppTheme.success,
+                          ),
+                          if (client.lastVisit != null)
+                            _clientStat(
+                              Icons.calendar_today,
+                              client.lastVisit!,
+                              AppTheme.textSecondary,
+                            ),
+                          if (widget.isJefeMode &&
+                              client.repCode != null &&
+                              client.repCode!.isNotEmpty)
+                            _clientStat(
+                              Icons.local_shipping,
+                              client.repName != null &&
+                                      client.repName!.isNotEmpty
+                                  ? 'Rep ${client.repCode!} – ${client.repName!}'
+                                  : 'Rep ${client.repCode!}',
+                              AppTheme.accentIndigo,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: AppTheme.textSecondary,
+                  size: 20,
+                ),
+              ],
+            ),
           ),
         ),
       ),

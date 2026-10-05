@@ -11,6 +11,15 @@ import 'package:intl/intl.dart';
 final NumberFormat _deliveryCurrency =
     NumberFormat.currency(symbol: '€', locale: 'es_ES');
 
+String _stopLocation(AlbaranEntrega albaran) {
+  final parts = <String>[
+    albaran.direccion.trim(),
+    albaran.poblacion.trim(),
+  ].where((part) => part.isNotEmpty);
+  if (parts.isEmpty) return 'Dirección no disponible en el documento';
+  return parts.join(', ');
+}
+
 /// Smart Delivery Card with futuristic design
 /// Features:
 /// - Clear distinction between Albaran and Factura
@@ -201,6 +210,15 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               _buildClientInfo(),
               const SizedBox(height: 6),
               RuteroStopStatusBadges(albaran: widget.albaran),
+              const SizedBox(height: 6),
+              Text(
+                ruteroStopActionHint(widget.albaran),
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: Responsive.isSmall(context) ? 13 : 14,
+                  height: 1.35,
+                ),
+              ),
               const SizedBox(height: 6),
               _buildQuickActions(),
             ],
@@ -446,6 +464,18 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           ],
         ),
 
+        if (widget.albaran.ordenPreparacion != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Orden de preparación ${widget.albaran.ordenPreparacion}',
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: Responsive.isSmall(context) ? 13 : 14,
+            ),
+          ),
+        ],
+
         const SizedBox(height: 6),
 
         // Address
@@ -453,18 +483,18 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           children: [
             Icon(
               Icons.location_on_outlined,
-              size: 14,
+              size: 16,
               color: AppTheme.textTertiary,
             ),
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                '${widget.albaran.direccion}, ${widget.albaran.poblacion}',
+                _stopLocation(widget.albaran),
                 style: TextStyle(
                   color: AppTheme.textSecondary,
-                  fontSize: Responsive.isSmall(context) ? 10 : 12,
+                  fontSize: Responsive.isSmall(context) ? 13 : 14,
                 ),
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -512,7 +542,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: buttonColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
@@ -529,7 +559,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 label,
                 style: TextStyle(
                   color: buttonColor,
-                  fontSize: 10,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
               ),

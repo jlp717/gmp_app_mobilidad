@@ -270,7 +270,9 @@ class _RepartidorLiquidacionDiariaPageState
           ? RepartidorExecutivePanel(
               accentColor: AppColors.textSecondary,
               child: Text(
-                'Sin cobros en el periodo (${summary.cobrosCount}).',
+                'Sin cobros de la app en este día (${summary.cobrosCount}). '
+                'Un pedido cobrado entero por el comercial no se duplica aquí. '
+                'Un cobro parcial sí deja el resto.',
                 style: TextStyle(color: AppColors.textSecondary),
               ),
             )

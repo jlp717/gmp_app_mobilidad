@@ -230,9 +230,7 @@ class _VencimientosPageState extends State<VencimientosPage> {
           ),
           Expanded(
             child: visible.isEmpty && !widget.hasMore
-                ? const _EmptyState(
-                    message: 'No hay cobros pendientes para el filtro',
-                  )
+                ? _EmptyState(message: _emptyCobrosMessage())
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                     itemCount: rowSpecs.length,
@@ -342,6 +340,23 @@ class _VencimientosPageState extends State<VencimientosPage> {
         ),
       ),
     );
+  }
+
+  String _emptyCobrosMessage() {
+    if (_searchQuery.trim().isNotEmpty) {
+      return 'Ningún cobro coincide con la búsqueda. Prueba el nombre, '
+          'el número completo o la orden de preparación.';
+    }
+    return switch (_filtro) {
+      VencimientosFiltro.pendientes =>
+        'No hay cobros pendientes. Lo cobrado entero no sale aquí: '
+            'sigue en el rutero solo para entregarlo. '
+            'Si el cobro fue parcial, el resto sí aparece.',
+      VencimientosFiltro.cobrados =>
+        'No hay cobros ya registrados con este filtro.',
+      _ =>
+        'No hay cobros para este filtro. Quita filtros o busca por cliente o número.',
+    };
   }
 
   String _vencimientoKey(VencimientoItem item) {
@@ -736,11 +751,12 @@ class _RepartidorVencimientosPageState
       cobroObligatorio: item.cobroObligatorio,
       keys: item.keys,
       notas: [
-        if (fecha == null) 'Sin fecha válida',
-        if (item.tipoDocumento.isNotEmpty) item.tipoDocumento,
+        if ((item.ordenPreparacion ?? '').trim().isNotEmpty)
+          'Orden de preparación ${item.ordenPreparacion}',
         if (item.nombreAlternativo.isNotEmpty) item.nombreAlternativo,
         if (item.poblacion.isNotEmpty) item.poblacion,
-      ].join(' - '),
+        if (fecha == null) 'Sin fecha de vencimiento',
+      ].join(' · '),
     );
   }
 
@@ -1545,13 +1561,24 @@ class _VencimientoRow extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if ((item.notas ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      item.notas!,
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
                   if ((item.vendedor ?? '').isNotEmpty) ...[
                     const SizedBox(height: 3),
                     Text(
                       item.vendedor!,
                       style: TextStyle(
                         color: AppTheme.textTertiary,
-                        fontSize: 11,
+                        fontSize: 13,
                       ),
                     ),
                   ],
@@ -1639,9 +1666,17 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text(
-        message,
-        style: TextStyle(color: AppTheme.textSecondary),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 16,
+            height: 1.4,
+          ),
+        ),
       ),
     );
   }
@@ -1671,7 +1706,7 @@ String _statusLabel(VencimientoEstado estado) {
   return switch (estado) {
     VencimientoEstado.vencido => 'Vencido',
     VencimientoEstado.hoy => 'Hoy',
-    VencimientoEstado.proximo => 'Proximo',
+    VencimientoEstado.proximo => 'Próximo',
     VencimientoEstado.sinFecha => 'Sin fecha válida',
     VencimientoEstado.cobrado => 'Cobrado',
   };

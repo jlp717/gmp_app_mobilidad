@@ -2895,7 +2895,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
             content: Text(
               _sanitizedDocumentActionError(
                 e,
-                fallback: 'No se pudo cargar la nota de entrega.',
+                fallback:
+                    'La nota no se ha podido cargar. Si la entrega no está confirmada, todavía no hay nota. Si ya lo está, pulsa Reintentar.',
               ),
             ),
             backgroundColor: AppTheme.error,
@@ -3234,7 +3235,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
           content: Text(
             _sanitizedDocumentActionError(
               error,
-              fallback: 'No se pudo enviar la nota de entrega.',
+              fallback:
+                  'No se pudo enviar la nota. Si la entrega no está confirmada, finalízala primero y pulsa Reintentar.',
             ),
           ),
           backgroundColor: AppTheme.error,
@@ -3342,7 +3344,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
           content: Text(
             _sanitizedDocumentActionError(
               error,
-              fallback: 'No se pudo imprimir la nota de entrega.',
+              fallback:
+                  'No se pudo imprimir la nota. Si la entrega no está confirmada, finalízala primero y pulsa Reintentar.',
             ),
           ),
           backgroundColor: AppTheme.error,
@@ -3744,7 +3747,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
             content: Text(
               _sanitizedDocumentActionError(
                 e,
-                fallback: 'No se pudo compartir la nota de entrega.',
+                fallback:
+                    'No se pudo compartir la nota. Si la entrega no está confirmada, finalízala primero y pulsa Reintentar.',
               ),
             ),
             backgroundColor: AppTheme.error,

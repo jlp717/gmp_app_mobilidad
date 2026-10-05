@@ -250,7 +250,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                   'ENTREGAS',
                   style: TextStyle(
                     color: AppTheme.textSecondary,
-                    fontSize: isSmall ? 8 : 9,
+                    fontSize: isSmall ? 12 : 13,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0,
                   ),
@@ -276,7 +276,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
       children: [
         Expanded(
           child: _buildMetricTile(
-            label: 'TOTAL',
+            label: 'Total del día',
             amount: widget.totalMonto,
             icon: Icons.functions,
             color: AppTheme.textPrimary,
@@ -285,7 +285,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
         ),
         Expanded(
           child: _buildMetricTile(
-            label: 'A COBRAR',
+            label: 'A cobrar',
             amount: widget.montoACobrar,
             icon: Icons.payment_outlined,
             color: AppTheme.obligatorio,
@@ -295,7 +295,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
         ),
         Expanded(
           child: _buildMetricTile(
-            label: 'OPCIONAL',
+            label: 'Opcional',
             amount: widget.montoOpcional,
             icon: Icons.attach_money_outlined,
             color: AppTheme.opcional,
@@ -364,7 +364,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                   label,
                   style: TextStyle(
                     color: AppTheme.textSecondary,
-                    fontSize: isSmall ? 7 : 9,
+                    fontSize: isSmall ? 12 : 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),

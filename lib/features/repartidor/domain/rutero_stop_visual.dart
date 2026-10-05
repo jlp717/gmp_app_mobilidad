@@ -76,3 +76,39 @@ RuteroRowVisual ruteroRowVisual(AlbaranEntrega albaran) {
     label: 'Entrega pendiente',
   );
 }
+
+/// One sentence a driver can act on without asking what the row means.
+String ruteroStopActionHint(AlbaranEntrega albaran) {
+  switch (albaran.estado) {
+    case EstadoEntrega.entregado:
+      return 'Entrega cerrada. La nota está en el detalle y en Histórico.';
+    case EstadoEntrega.parcial:
+    case EstadoEntrega.noEntregado:
+    case EstadoEntrega.rechazado:
+      return 'Hay una incidencia. Ábrela y revisa qué se entregó antes de seguir.';
+    case EstadoEntrega.pendiente:
+    case EstadoEntrega.enRuta:
+      break;
+  }
+  if (albaran.cobradoPorComercial ||
+      (albaran.hasAppCobro && !albaran.tieneSaldoCobrable)) {
+    return 'Ya está cobrado. Solo hay que entregarlo; no uses Cobrar.';
+  }
+  if (albaran.hasAppCobro && albaran.tieneSaldoCobrable) {
+    final pending = albaran.importePendienteCobro;
+    if (pending != null) {
+      return 'Cobro parcial. Queda ${pending.toStringAsFixed(2)} € por cobrar.';
+    }
+    return 'Cobro parcial. Cobra el resto que queda del documento.';
+  }
+  if (albaran.isPendingPrice) {
+    return 'El precio aún no está en el ERP. Puedes entregar; el cobro espera el precio.';
+  }
+  if (!albaran.tieneSaldoCobrable) {
+    return 'El documento es 0,00 €. Puedes entregarlo sin cobrar.';
+  }
+  if (ruteroCobroObligatorioPendiente(albaran)) {
+    return 'Hay saldo. El cierre exige el cobro junto con la entrega.';
+  }
+  return 'Puedes cobrar el saldo o entregar sin cobrar.';
+}

@@ -25,6 +25,16 @@ String repartidorSafeOperationMessage({
       return 'No se pudo preparar el PDF para descargar. Inténtalo de nuevo.';
     case 'pdfShare':
       return 'No se pudo preparar el PDF para compartir. Inténtalo de nuevo.';
+    case 'receiptPrint':
+    case 'receiptEmail':
+    case 'receiptWhatsApp':
+      return 'La nota de entrega no se ha podido cargar. '
+          'Si la entrega aún no está confirmada, finalízala primero. '
+          'Si ya lo está, espera un momento y pulsa Reintentar.';
+    case 'documentPrint':
+    case 'documentEmail':
+      return 'No se pudo abrir el albarán o la factura. '
+          'Comprueba la conexión y pulsa Reintentar.';
     case 'signature':
       return 'No se pudo guardar la firma. Vuelve a firmar e inténtalo de nuevo.';
     case 'printer':

@@ -85,6 +85,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  test('la pista dice qué hacer si ya está cobrado o el documento es cero', () {
+    final paid = _stop(esCTR: true, cobrado: true).copyWith(
+      cobradoPorComercial: true,
+      puedeCobrarse: false,
+    );
+    expect(ruteroStopActionHint(paid), contains('Solo hay que entregarlo'));
+    expect(
+      ruteroStopActionHint(_stop().copyWith(importeTotal: 0)),
+      'El documento es 0,00 €. Puedes entregarlo sin cobrar.',
+    );
+    expect(
+      ruteroStopActionHint(_stop(esCTR: true, puedeCobrarse: true)),
+      contains('El cierre exige el cobro'),
+    );
+  });
+
   test('un cobro ya registrado deja de marcarse como obligatorio', () {
     final visual = ruteroRowVisual(
       _stop(esCTR: true, estado: EstadoEntrega.entregado, cobrado: true),

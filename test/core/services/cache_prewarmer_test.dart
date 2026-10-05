@@ -39,7 +39,7 @@ void main() {
           repartidorId: selector,
           formattedDate: today,
         ),
-        'entregas:pendientes:rutero-page-v2:$selector:$today::::default:::0:',
+        'entregas:pendientes:rutero-page-v2:$selector:$today:::::default:::0:',
       );
       expect(
         CachePreWarmer.weekFirstPaintCacheKey(selector, today),

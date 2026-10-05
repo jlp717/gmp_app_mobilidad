@@ -13,6 +13,7 @@ const dayMoveRepo = require('../repositories/repartidor-rutero-day-move-db2-repo
 const ruteroOrdenRepo = require('../repositories/repartidor-rutero-orden-db2-repository');
 const pedidosService = require('../services/pedidos.service');
 const { applySavedOrder, applyDayMovePositions } = require('../services/repartidor-rutero-orden-service');
+const { matchesStopSearch } = require('../services/reparto-stop-search');
 const {
     resolveDeliveryAmount,
     documentAmountKey,
@@ -87,6 +88,7 @@ function pendientesNeedsFullDataset(query = {}) {
     const search = String(query.search || '').trim();
     const searchClient = String(query.searchClient || '').trim();
     const searchAlbaran = String(query.searchAlbaran || '').trim();
+    const searchOrden = String(query.searchOrden || '').trim();
     const sortBy = String(query.sortBy || 'default').trim() || 'default';
     const filterTipo = String(query.tipoPago || '').trim();
     const filterCobrar = query.debeCobrar;
@@ -95,6 +97,7 @@ function pendientesNeedsFullDataset(query = {}) {
         search
         || searchClient
         || searchAlbaran
+        || searchOrden
         || sortBy !== 'default'
         || filterTipo
         || filterCobrar === 'S'
@@ -1160,34 +1163,8 @@ router.get('/pendientes/:repartidorId', verifyToken, validatePendientesRepartido
         const anteroomProjected = projectedAlbaranes.filter((item) => item.documentoTipo === 'PEDIDO');
         const albaranes = projectedAlbaranes;
 
-        // --- FILTERING: Search by client name, code, albarÃ¡n or factura number ---
-        const searchQuery = req.query.search?.toLowerCase().trim() || '';
-        let filteredAlbaranes = albaranes;
-        if (searchQuery) {
-            filteredAlbaranes = albaranes.filter(a =>
-                a.nombreCliente?.toLowerCase().includes(searchQuery) ||
-                a.codigoCliente?.toLowerCase().includes(searchQuery) ||
-                String(a.numero).includes(searchQuery) ||
-                String(a.numeroFactura).includes(searchQuery)
-            );
-        }
-
-        // --- SPECIFIC FILTERS (Split Search) ---
-        const searchClient = req.query.searchClient?.toLowerCase().trim() || '';
-        if (searchClient) {
-            filteredAlbaranes = filteredAlbaranes.filter(a =>
-                a.nombreCliente?.toLowerCase().includes(searchClient) ||
-                a.codigoCliente?.toLowerCase().includes(searchClient)
-            );
-        }
-
-        const searchAlbaran = req.query.searchAlbaran?.trim() || '';
-        if (searchAlbaran) {
-            filteredAlbaranes = filteredAlbaranes.filter(a =>
-                String(a.numero).includes(searchAlbaran) ||
-                String(a.numeroFactura).includes(searchAlbaran)
-            );
-        }
+        // Client, full document series (P-15-2296) and preparation order.
+        let filteredAlbaranes = albaranes.filter((item) => matchesStopSearch(item, req.query));
 
         // --- FILTER BY PAYMENT TYPE ---
         const filterTipo = req.query.tipoPago || ''; // e.g., 'CONTADO', 'CREDITO', 'DOMICILIADO'

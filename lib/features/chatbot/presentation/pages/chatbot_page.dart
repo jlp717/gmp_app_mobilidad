@@ -1271,56 +1271,90 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
   }
 
   Widget _buildCapabilityGrid() {
-    final capabilities = [
-      (
-        Icons.groups_2_outlined,
-        'Clientes',
-        'Ficha, deuda, compras, facturas y riesgo',
-        _mint,
-      ),
-      (
-        Icons.route_outlined,
-        'Rutero',
-        'Rutas, entregas, albaranes y cobros',
-        AppTheme.accentMint,
-      ),
-      (
-        Icons.euro_outlined,
-        'Comisiones',
-        'Generado, acumulado, meses y detalle',
-        _amber,
-      ),
-      (
-        Icons.flag_outlined,
-        'Objetivos',
-        'Mes, acumulado, familias y desviaciones',
-        AppTheme.accentIndigo,
-      ),
-      (
-        Icons.picture_as_pdf_outlined,
-        'Facturas',
-        'Cabecera, lineas, importes y PDF',
-        _rose,
-      ),
-      (
-        Icons.ac_unit_outlined,
-        'Alertas',
-        'Ventas, actividad, pedidos y cobros',
-        AppTheme.info,
-      ),
-      (
-        Icons.account_balance_wallet_outlined,
-        'Bolsa',
-        'Saldo, movimientos y contexto comercial',
-        AppTheme.accentIndigo,
-      ),
-      (
-        Icons.local_shipping_outlined,
-        'Almacen',
-        'Camiones, carga, stock y vehiculos',
-        AppTheme.accentAmber,
-      ),
-    ];
+    final reparto = (widget.repartidorId ?? '').trim().isNotEmpty;
+    final capabilities = reparto
+        ? [
+            (
+              Icons.people_outline,
+              'Clientes',
+              'Pulsa un cliente para ver sus documentos',
+              _mint,
+            ),
+            (
+              Icons.route_outlined,
+              'Rutero',
+              'Paradas, cobro, entrega, firma y foto',
+              AppTheme.accentMint,
+            ),
+            (
+              Icons.payments_outlined,
+              'Cobros',
+              'Pendiente, parcial y ya cobrado',
+              AppTheme.success,
+            ),
+            (
+              Icons.account_balance_wallet_outlined,
+              'Liquidación',
+              'Caja del día y PDF',
+              AppTheme.accentIndigo,
+            ),
+            (
+              Icons.history_outlined,
+              'Histórico',
+              'Notas, albaranes y facturas',
+              _rose,
+            ),
+          ]
+        : [
+            (
+              Icons.groups_2_outlined,
+              'Clientes',
+              'Ficha, deuda, compras, facturas y riesgo',
+              _mint,
+            ),
+            (
+              Icons.route_outlined,
+              'Rutero',
+              'Rutas, entregas, albaranes y cobros',
+              AppTheme.accentMint,
+            ),
+            (
+              Icons.euro_outlined,
+              'Comisiones',
+              'Generado, acumulado, meses y detalle',
+              _amber,
+            ),
+            (
+              Icons.flag_outlined,
+              'Objetivos',
+              'Mes, acumulado, familias y desviaciones',
+              AppTheme.accentIndigo,
+            ),
+            (
+              Icons.picture_as_pdf_outlined,
+              'Facturas',
+              'Cabecera, lineas, importes y PDF',
+              _rose,
+            ),
+            (
+              Icons.ac_unit_outlined,
+              'Alertas',
+              'Ventas, actividad, pedidos y cobros',
+              AppTheme.info,
+            ),
+            (
+              Icons.account_balance_wallet_outlined,
+              'Bolsa',
+              'Saldo, movimientos y contexto comercial',
+              AppTheme.accentIndigo,
+            ),
+            (
+              Icons.local_shipping_outlined,
+              'Almacen',
+              'Camiones, carga, stock y vehiculos',
+              AppTheme.accentAmber,
+            ),
+          ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1353,39 +1387,63 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
   Widget _buildExampleQueries() {
     final currentClientCode =
         ref.watch(chatbotProvider.select((state) => state.currentClientCode));
-    final examples = [
-      (
-        Icons.payments_outlined,
-        'Comisiones',
-        'Mi comision acumulada de enero a marzo.',
-      ),
-      (
-        Icons.flag_outlined,
-        'Objetivos',
-        'Objetivo acumulado últimos 3 meses.',
-      ),
-      (
-        Icons.picture_as_pdf_outlined,
-        'Factura',
-        'Lee la factura F/100/2026 y dime lineas e importe.',
-      ),
-      (
-        Icons.ac_unit_outlined,
-        'Alertas',
-        'Resumen Alertas hoy y top clientes.',
-      ),
-      (
-        Icons.route_outlined,
-        'Rutero',
-        'Mi ruta hoy y cobros del repartidor.',
-      ),
-      if (currentClientCode != null)
-        (
-          Icons.groups_2_outlined,
-          'Cliente',
-          'Evalua el cliente $currentClientCode con deuda, facturas y pedidos.',
-        ),
-    ];
+    final reparto = (widget.repartidorId ?? '').trim().isNotEmpty;
+    final examples = reparto
+        ? [
+            (
+              Icons.route_outlined,
+              'Rutero',
+              'Paradas de hoy y cuáles hay que cobrar.',
+            ),
+            (
+              Icons.payments_outlined,
+              'Ya cobrado',
+              'Qué hago con un pedido que el comercial ya cobró.',
+            ),
+            (
+              Icons.receipt_long_outlined,
+              'Nota',
+              'La nota de entrega no carga. Qué puedo hacer.',
+            ),
+            (
+              Icons.account_balance_wallet_outlined,
+              'Liquidación',
+              'Cómo cuadra la liquidación de hoy.',
+            ),
+          ]
+        : [
+            (
+              Icons.payments_outlined,
+              'Comisiones',
+              'Mi comision acumulada de enero a marzo.',
+            ),
+            (
+              Icons.flag_outlined,
+              'Objetivos',
+              'Objetivo acumulado últimos 3 meses.',
+            ),
+            (
+              Icons.picture_as_pdf_outlined,
+              'Factura',
+              'Lee la factura F/100/2026 y dime lineas e importe.',
+            ),
+            (
+              Icons.ac_unit_outlined,
+              'Alertas',
+              'Resumen Alertas hoy y top clientes.',
+            ),
+            (
+              Icons.route_outlined,
+              'Rutero',
+              'Mi ruta hoy y cobros del repartidor.',
+            ),
+            if (currentClientCode != null)
+              (
+                Icons.groups_2_outlined,
+                'Cliente',
+                'Evalua el cliente $currentClientCode con deuda, facturas y pedidos.',
+              ),
+          ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1557,8 +1615,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
                       style:
                           TextStyle(color: AppColors.themedWhite, fontSize: 15),
                       decoration: InputDecoration(
-                        hintText:
-                            'Pregunta por cliente, producto, factura, ruta, objetivo...',
+                        hintText: (widget.repartidorId ?? '').trim().isNotEmpty
+                            ? 'Pregunta por una parada, un cobro, una nota o la liquidación...'
+                            : 'Pregunta por cliente, producto, factura, ruta, objetivo...',
                         hintStyle: TextStyle(color: AppColors.systemGrey500),
                         border: InputBorder.none,
                         prefixIcon: Icon(

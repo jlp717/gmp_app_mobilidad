@@ -753,6 +753,7 @@ class EntregasState {
     this.searchQuery = '',
     this.searchClient = '',
     this.searchAlbaran = '',
+    this.searchOrden = '',
     this.sortBy = 'default',
     this.filterTipoPago = '',
     this.filterDebeCobrar = '',
@@ -774,6 +775,7 @@ class EntregasState {
   final String searchQuery;
   final String searchClient;
   final String searchAlbaran;
+  final String searchOrden;
   final String sortBy;
   final String filterTipoPago;
   final String filterDebeCobrar;
@@ -796,6 +798,7 @@ class EntregasState {
     String? searchQuery,
     String? searchClient,
     String? searchAlbaran,
+    String? searchOrden,
     String? sortBy,
     String? filterTipoPago,
     String? filterDebeCobrar,
@@ -820,6 +823,7 @@ class EntregasState {
       searchQuery: searchQuery ?? this.searchQuery,
       searchClient: searchClient ?? this.searchClient,
       searchAlbaran: searchAlbaran ?? this.searchAlbaran,
+      searchOrden: searchOrden ?? this.searchOrden,
       sortBy: sortBy ?? this.sortBy,
       filterTipoPago: filterTipoPago ?? this.filterTipoPago,
       filterDebeCobrar: filterDebeCobrar ?? this.filterDebeCobrar,
@@ -978,6 +982,11 @@ class EntregasNotifier extends Notifier<EntregasState> {
     _scheduleFilterReload(autoReload);
   }
 
+  void setSearchOrden(String query, {bool autoReload = true}) {
+    state = state.copyWith(searchOrden: query);
+    _scheduleFilterReload(autoReload);
+  }
+
   void setSortBy(String sort, {bool autoReload = true}) {
     state = state.copyWith(sortBy: sort);
     _scheduleFilterReload(autoReload);
@@ -1035,6 +1044,9 @@ class EntregasNotifier extends Notifier<EntregasState> {
         url +=
             '&searchAlbaran=${Uri.encodeComponent(requestState.searchAlbaran)}';
       }
+      if (requestState.searchOrden.isNotEmpty) {
+        url += '&searchOrden=${Uri.encodeComponent(requestState.searchOrden)}';
+      }
       if (requestState.sortBy != 'default') {
         url += '&sortBy=${requestState.sortBy}';
       }
@@ -1057,6 +1069,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
           searchQuery: requestState.searchQuery,
           searchClient: requestState.searchClient,
           searchAlbaran: requestState.searchAlbaran,
+          searchOrden: requestState.searchOrden,
           sortBy: requestState.sortBy,
           filterTipoPago: requestState.filterTipoPago,
           filterDebeCobrar: requestState.filterDebeCobrar,
