@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
@@ -54,15 +55,23 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
   int _currentPage = 0;
   bool _isReady = false;
   String? _errorMessage;
+  Timer? _renderTimer;
 
   @override
   void initState() {
     super.initState();
     _writeTempFile();
+    _renderTimer = Timer(const Duration(seconds: 20), () {
+      if (!mounted || _isReady || _errorMessage != null) return;
+      setState(() {
+        _errorMessage = 'El PDF no llegó a mostrarse. Pulsa Reintentar.';
+      });
+    });
   }
 
   @override
   void dispose() {
+    _renderTimer?.cancel();
     // Save path for async cleanup, then nullify to unmount PDFView first
     final pathToClean = _tempPath;
     _tempPath = null;
@@ -262,11 +271,20 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () {
+                _renderTimer?.cancel();
                 setState(() {
                   _errorMessage = null;
                   _tempPath = null;
+                  _isReady = false;
                 });
                 _writeTempFile();
+                _renderTimer = Timer(const Duration(seconds: 20), () {
+                  if (!mounted || _isReady || _errorMessage != null) return;
+                  setState(() {
+                    _errorMessage =
+                        'El PDF no llegó a mostrarse. Pulsa Reintentar.';
+                  });
+                });
               },
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text('Reintentar'),
@@ -303,6 +321,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       filePath: _tempPath,
       nightMode: true,
       onRender: (pages) {
+        _renderTimer?.cancel();
         if (mounted) {
           setState(() {
             _totalPages = pages ?? 0;

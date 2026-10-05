@@ -674,22 +674,21 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   Future<void> _loadItems() async {
     try {
       final notifier = widget.ref.read(entregasProvider.notifier);
-      final albaranDetalle = await notifier.obtenerDetalleAlbaran(
-        widget.albaran.numeroAlbaran,
-        widget.albaran.ejercicio,
-        widget.albaran.serie,
-        widget.albaran.terminal,
-        widget.albaran.codigoCliente,
-        deliveryId: widget.albaran.id,
-        repartidorId: widget.albaran.codigoRepartidor,
-      );
+      final albaranDetalle = await notifier
+          .obtenerDetalleAlbaran(
+            widget.albaran.numeroAlbaran,
+            widget.albaran.ejercicio,
+            widget.albaran.serie,
+            widget.albaran.terminal,
+            widget.albaran.codigoCliente,
+            deliveryId: widget.albaran.id,
+            repartidorId: widget.albaran.codigoRepartidor,
+          )
+          .timeout(const Duration(seconds: 20));
       if (albaranDetalle == null) {
-        if (mounted) {
-          setState(() {
-            _itemsError = 'No se pudo cargar el detalle del albaran';
-            _isLoadingItems = false;
-          });
-        }
+        _useListedLines(
+          'No se pudo cargar el detalle. Se usan las líneas del rutero. Puedes reintentar.',
+        );
         return;
       }
 
@@ -765,15 +764,43 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           }
         });
       }
+    } on TimeoutException {
+      _useListedLines(
+        'El detalle tardó demasiado. Se usan las líneas del rutero. Pulsa reintentar si quieres volver a cargarlo.',
+      );
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _itemsError =
-              'No se pudieron cargar las líneas. Recarga el reparto e inténtalo de nuevo.';
-          _isLoadingItems = false;
-        });
-      }
+      _useListedLines(
+        'No se pudieron cargar las líneas del servidor. Se usan las del rutero. Pulsa reintentar.',
+      );
     }
+  }
+
+  void _useListedLines(String message) {
+    final listed = widget.albaran.items.where((item) {
+      final desc = item.descripcion.trim();
+      if (desc.toLowerCase().startsWith('pedido:')) return false;
+      if (item.cantidadPedida <= 0 && item.bultos <= 0) return false;
+      return true;
+    }).toList();
+    if (!mounted) return;
+    setState(() {
+      _isLoadingItems = false;
+      if (listed.isEmpty) {
+        _items = const [];
+        _itemsError = message;
+        return;
+      }
+      _items = listed;
+      _itemsError = null;
+      _productsStatusError = null;
+      _productChecked.clear();
+      _productQuantities.clear();
+      for (final item in listed) {
+        final lineId = ruteroLineKey(item);
+        _productChecked[lineId] = true;
+        _productQuantities[lineId] = item.cantidadPedida;
+      }
+    });
   }
 
   @override
@@ -3800,7 +3827,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final alb = widget.albaran;
     final isFactura = alb.numeroFactura > 0;
     if (isFactura) {
-      return RepartidorDataService.downloadDocument(
+      return _withDocumentTimeout(RepartidorDataService.downloadDocument(
         year: alb.ejercicio,
         serie: alb.serieFactura.isNotEmpty ? alb.serieFactura : alb.serie,
         number: alb.numeroFactura,
@@ -3815,15 +3842,26 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         albaranTerminal: alb.terminal,
         albaranYear: alb.ejercicio,
         repartidorId: alb.codigoRepartidor,
-      );
+      ));
     }
-    return RepartidorDataService.downloadDocument(
-      year: alb.ejercicio,
-      serie: alb.serie,
-      number: alb.numeroAlbaran,
-      type: 'albaran',
-      terminal: alb.terminal,
-      repartidorId: alb.codigoRepartidor,
+    return _withDocumentTimeout(
+      RepartidorDataService.downloadDocument(
+        year: alb.ejercicio,
+        serie: alb.serie,
+        number: alb.numeroAlbaran,
+        type: 'albaran',
+        terminal: alb.terminal,
+        repartidorId: alb.codigoRepartidor,
+      ),
+    );
+  }
+
+  Future<List<int>> _withDocumentTimeout(Future<List<int>> download) {
+    return download.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () => throw TimeoutException(
+        'El documento tardó demasiado. Pulsa Reintentar.',
+      ),
     );
   }
 

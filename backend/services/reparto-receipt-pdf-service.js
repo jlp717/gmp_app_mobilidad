@@ -142,16 +142,29 @@ function buildReceiptPresentation(receipt) {
     .map((item) => Object.freeze(item));
   const explicitNeto = optionalNumber(receipt.importeNeto);
   const explicitIva = optionalNumber(receipt.importeIva);
-  const fiscalAvailable = ivaBreakdown.length > 0 || explicitIva != null;
-  const neto = explicitNeto != null
-    ? explicitNeto
-    : (ivaBreakdown.length ? ivaBreakdown.reduce((sum, item) => sum + item.base, 0) : amount);
-  const iva = explicitIva != null
-    ? explicitIva
-    : ivaBreakdown.reduce((sum, item) => sum + item.iva, 0);
-  const totalConIva = fiscalAvailable
-    ? neto + iva
+  const headerTotal = optionalNumber(receipt.importeTotal);
+  const fiscalAvailable = ivaBreakdown.length > 0 || (explicitIva != null && explicitIva > 0.004);
+  // A Zebra photo can show net 0.00 against a different total. The note uses
+  // the live document: fiscal base+IVA when both exist, otherwise one amount.
+  const liveDocument = headerTotal != null && (amount <= 0.004 || Math.abs(headerTotal - amount) < 0.02)
+    ? headerTotal
     : amount;
+  let neto;
+  let iva;
+  let totalConIva;
+  if (ivaBreakdown.length) {
+    neto = ivaBreakdown.reduce((sum, item) => sum + item.base, 0);
+    iva = ivaBreakdown.reduce((sum, item) => sum + item.iva, 0);
+    totalConIva = neto + iva;
+  } else if (explicitNeto != null && explicitNeto > 0.004 && explicitIva != null && explicitIva > 0.004) {
+    neto = explicitNeto;
+    iva = explicitIva;
+    totalConIva = neto + iva;
+  } else {
+    neto = liveDocument;
+    iva = 0;
+    totalConIva = liveDocument;
+  }
   const documentNumber = formatErpDocumentLabel({
     serie: receipt.documento?.serie,
     terminal: receipt.documento?.terminal,
@@ -214,6 +227,7 @@ function buildReceiptPresentation(receipt) {
     clientName: printable(receipt.cliente?.nombre),
     clientAddress: printable(receipt.cliente?.direccion),
     clientTown: printable(receipt.cliente?.poblacion),
+    formaPago: printable(receipt.formaPago || receipt.cobro?.formaPago) || '-',
     status: printable(receipt.status),
     neto,
     iva,
@@ -276,7 +290,7 @@ function createRepartoReceiptPdfService() {
           .text(address, x + 82, y + 19, { width: width - 94 });
       }
       document.fillColor(muted).font('Helvetica').fontSize(8)
-        .text(`Estado: ${presentation.status || '-'}`, x + 82, y + (address ? 34 : 19), { width: width - 94 });
+        .text(`Forma de pago: ${presentation.formaPago || '-'}`, x + 82, y + (address ? 34 : 19), { width: width - 94 });
       document.y += 70;
       document.fillColor(blue).font('Helvetica').fontSize(7)
         .text(`Referencia de confirmación: ${presentation.header[1].replace('Confirmacion: ', '')}`, x, document.y, { width });
@@ -287,12 +301,10 @@ function createRepartoReceiptPdfService() {
       const x = left();
       const width = pageWidth();
       return [
-        { x, width: 211, label: 'Producto' },
-        { x: x + 211, width: 54, label: 'Pedida' },
-        { x: x + 265, width: 60, label: 'Entregada' },
-        { x: x + 325, width: 65, label: 'Diferencia' },
-        { x: x + 390, width: 55, label: 'Bultos' },
-        { x: x + 445, width: width - 445, label: 'Importe' },
+        { x, width: 42, label: 'Puesto', align: 'left' },
+        { x: x + 42, width: width - 42 - 70 - 88, label: 'Artículo', align: 'left' },
+        { x: x + width - 158, width: 70, label: 'Bultos', align: 'right' },
+        { x: x + width - 88, width: 88, label: 'Importe neto', align: 'right' },
       ];
     };
     const drawTableHeader = () => {
@@ -301,7 +313,7 @@ function createRepartoReceiptPdfService() {
       document.save().fillColor(blue).roundedRect(left(), y, pageWidth(), 24, 4).fill();
       document.restore();
       document.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(8);
-      for (const col of cols) document.text(col.label, col.x + 5, y + 8, { width: col.width - 10, align: col.label === 'Producto' ? 'left' : 'right' });
+      for (const col of cols) document.text(col.label, col.x + 5, y + 8, { width: col.width - 10, align: col.align || 'left' });
       document.y = y + 31;
       return cols;
     };
@@ -345,9 +357,12 @@ function createRepartoReceiptPdfService() {
       const cols = columns();
       for (const [index, line] of presentation.rows.entries()) {
         throwIfAborted(signal);
+        const partial = Math.abs(Number(line.difference) || 0) > 0.0001;
         const details = [
           `${line.article ? `${line.article} · ` : ''}${line.description}`,
-          `Pedida: ${decimal(line.ordered)} · Pendiente: ${decimal(line.pending)} · Rechazada: ${decimal(line.rejected)}`,
+          partial
+            ? `Pedida: ${decimal(line.ordered)} · Entregada: ${decimal(line.delivered)} · Pendiente: ${decimal(line.pending)} · Diferencia: ${decimal(line.difference)}`
+            : null,
           line.reason !== '-' ? `Motivo: ${line.reason}` : null,
           line.observations !== '-' ? `Observaciones: ${line.observations}` : null,
         ].filter(Boolean).join('\n');
@@ -357,18 +372,17 @@ function createRepartoReceiptPdfService() {
           document.font('Helvetica').fontSize(7.5);
           if (pageBottom() - document.y < 30) addContinuationPage();
           const available = pageBottom() - document.y;
-          const [chunk, rest] = textChunk(remaining, cols[0].width - 10, Math.max(12, available - 10));
-          const rowHeight = Math.max(28, document.heightOfString(chunk, { width: cols[0].width - 10, lineGap: 1 }) + 10);
+          const [chunk, rest] = textChunk(remaining, cols[1].width - 10, Math.max(12, available - 10));
+          const rowHeight = Math.max(28, document.heightOfString(chunk, { width: cols[1].width - 10, lineGap: 1 }) + 10);
           const y = document.y;
           if (index % 2 === 0) document.save().fillColor('#F8FAFC').rect(left(), y, pageWidth(), rowHeight).fill().restore();
           document.fillColor(ink).font('Helvetica').fontSize(7.5)
-            .text(chunk, cols[0].x + 5, y + 5, { width: cols[0].width - 10, lineGap: 1 });
+            .text(chunk, cols[1].x + 5, y + 5, { width: cols[1].width - 10, lineGap: 1 });
           if (firstSegment) {
-            document.text(decimal(line.ordered), cols[1].x + 5, y + 5, { width: cols[1].width - 10, align: 'right' })
-              .text(decimal(line.delivered), cols[2].x + 5, y + 5, { width: cols[2].width - 10, align: 'right' })
-              .text(decimal(line.difference), cols[3].x + 5, y + 5, { width: cols[3].width - 10, align: 'right' })
-              .text(line.packages == null ? '-' : decimal(line.packages), cols[4].x + 5, y + 5, { width: cols[4].width - 10, align: 'right' })
-              .text(`${decimal(line.amount)} €`, cols[5].x + 5, y + 5, { width: cols[5].width - 10, align: 'right' });
+            const packages = line.packages == null ? line.delivered : line.packages;
+            document.text(String(line.index), cols[0].x + 5, y + 5, { width: cols[0].width - 10 })
+              .text(Number.isFinite(packages) ? decimal(packages) : '-', cols[2].x + 5, y + 5, { width: cols[2].width - 10, align: 'right' })
+              .text(`${decimal(line.amount)} €`, cols[3].x + 5, y + 5, { width: cols[3].width - 10, align: 'right' });
           }
           document.save().strokeColor('#CBD5E1').lineWidth(0.5)
             .moveTo(left(), y + rowHeight).lineTo(left() + pageWidth(), y + rowHeight).stroke().restore();
@@ -402,14 +416,14 @@ function createRepartoReceiptPdfService() {
         });
       } else {
         document.fillColor(muted).font('Helvetica').fontSize(8)
-          .text('IVA no disponible en el snapshot persistido', x + 14, y + 17, { width: width * 0.7 });
+          .text('IVA 0 %', x + 14, y + 17, { width: width * 0.7 });
         document.fillColor(ink).font('Helvetica-Bold').fontSize(8)
           .text('-', x + width * 0.7, y + 17, { width: width * 0.25, align: 'right' });
       }
       const totalY = y + 22 + (taxLineCount * 16);
       document.save().strokeColor('#94A3B8').lineWidth(0.7).moveTo(x + 14, totalY - 5).lineTo(x + width - 14, totalY - 5).stroke().restore();
       document.fillColor(blue).font('Helvetica-Bold').fontSize(11)
-        .text('TOTAL ENTREGA', x + 14, totalY, { width: width * 0.55 });
+        .text('TOTAL', x + 14, totalY, { width: width * 0.55 });
       document.text(`${decimal(presentation.totalConIva)} €`, x + width * 0.55, totalY, { width: width * 0.4, align: 'right' });
       document.y += totalsHeight + 7;
       document.x = x;
@@ -466,7 +480,7 @@ function createRepartoReceiptPdfService() {
       document.fillColor(muted).font('Helvetica').fontSize(7.5)
         .text(receptorText, { width });
       document.moveDown(0.25);
-      const legalText = 'La posesión de este documento NO implica el pago de la misma. No se admiten devoluciones una vez aceptada la recepción.';
+      const legalText = 'La ausencia de este documento NO implica el pago de la misma';
       document.font('Helvetica').fontSize(6.5);
       ensureSpace(document.heightOfString(legalText, { width, lineGap: 1 }) + 4);
       document.fillColor(muted).font('Helvetica').fontSize(6.5)

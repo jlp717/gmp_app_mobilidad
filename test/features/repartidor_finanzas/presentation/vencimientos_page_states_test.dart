@@ -52,6 +52,23 @@ Future<void> _pump(
 }
 
 void main() {
+  test('jefe en modo reparto cobra un registro concreto y ALL no cobra', () {
+    const item = VencimientoItem(
+      cliente: 'Cliente',
+      documento: 'P-15-2296',
+      fecha: null,
+      importe: 20.7,
+      estado: VencimientoEstado.hoy,
+      tipoDocumento: 'CAC',
+      importePendiente: 20.7,
+      keys: {'numero': '2296'},
+    );
+    expect(canCobrarVencimiento(item, '94'), isTrue);
+    expect(canCobrarVencimiento(item, 'ALL'), isFalse);
+    expect(canCobrarVencimiento(item, ''), isFalse);
+    expect(canCobrarVencimiento(item, '94,95'), isFalse);
+  });
+
   testWidgets('estado loading muestra spinner mientras carga', (tester) async {
     await _pump(
       tester,

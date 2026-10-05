@@ -1087,12 +1087,49 @@ class RepartidorDataService {
     );
   }
 
+  static final Map<String, Future<List<int>>> _deliveryNoteInflight =
+      <String, Future<List<int>>>{};
+
   /// PDF de la nota de entrega canónica (líneas y firma persistidas).
   static Future<List<int>> downloadDeliveryNotePdf({
     required String confirmationId,
     required String repartidorId,
-  }) async {
+  }) {
     final owner = requireConcreteRepartoOwner(repartidorId);
+    final key = '$owner|$confirmationId';
+    final existing = _deliveryNoteInflight[key];
+    if (existing != null) {
+      return existing.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => throw const RepartidorDataException(
+          'La nota tardó demasiado. Espera un momento y pulsa Reintentar.',
+          statusCode: 504,
+        ),
+      );
+    }
+    final future = _downloadDeliveryNotePdfOnce(
+      confirmationId: confirmationId,
+      owner: owner,
+    );
+    _deliveryNoteInflight[key] = future;
+    future.whenComplete(() {
+      if (identical(_deliveryNoteInflight[key], future)) {
+        _deliveryNoteInflight.remove(key);
+      }
+    });
+    return future.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () => throw const RepartidorDataException(
+        'La nota tardó demasiado. Espera un momento y pulsa Reintentar.',
+        statusCode: 504,
+      ),
+    );
+  }
+
+  static Future<List<int>> _downloadDeliveryNotePdfOnce({
+    required String confirmationId,
+    required String owner,
+  }) async {
     try {
       final response = await ApiClient.get(
         RepartoCanonicalReceiptRequest(

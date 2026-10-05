@@ -23,7 +23,7 @@ describe('delivery cobro availability', () => {
     expect(plan.documents).toHaveLength(2);
     expect(plan.params).toEqual(['01', 2026, 'A', 1, 42, 'C1', '01', 2026, 'A', 1, 43, 'C2']);
     expect(plan.sql).toContain('FROM DSEDAC.CVC CVC');
-    expect(plan.sql).toContain('CVC.IMPORTEPENDIENTE > 0');
+    expect(plan.sql).not.toContain('CVC.IMPORTEPENDIENTE > 0');
     expect(plan.sql).toContain('COALESCE(TRIM(CVC.ANULADOSN), \'\') <> \'S\'');
     expect(plan.sql).not.toContain('INSERT');
   });
@@ -124,13 +124,16 @@ describe('delivery cobro availability', () => {
     })).toMatchObject({ importeDisponibleCobro: 50, capped: false });
     expect(resolveDocumentCollectable({
       cvcState: 'MISSING', cvcPending: 0, documentAmount: 2841.76,
-    })).toMatchObject({ state: 'MISSING', importeDisponibleCobro: 0, capped: false });
+    })).toMatchObject({ state: 'AVAILABLE', importeDisponibleCobro: 2841.76, capped: false });
     expect(resolveDocumentCollectable({
       cvcState: 'AMBIGUOUS', cvcPending: 90, documentAmount: 50,
-    })).toMatchObject({ state: 'AMBIGUOUS', importeDisponibleCobro: 0 });
+    })).toMatchObject({ state: 'AMBIGUOUS', importeDisponibleCobro: 0, capped: false });
     expect(resolveDocumentCollectable({
       cvcState: ' ambiguous ', cvcPending: 90, documentAmount: 50,
     })).toMatchObject({ state: 'AMBIGUOUS', importeDisponibleCobro: 0, capped: false });
+    expect(resolveDocumentCollectable({
+      cvcState: 'SETTLED', cvcPending: 0, documentAmount: 20.7,
+    })).toMatchObject({ state: 'SETTLED', importeDisponibleCobro: 0, capped: false });
     expect(resolveDocumentCollectable({
       cvcState: 'AVAILABLE', cvcPending: 40, documentAmount: 0,
     })).toMatchObject({ state: 'MISSING', importeDisponibleCobro: 0, capped: true });

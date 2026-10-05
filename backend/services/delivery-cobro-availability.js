@@ -99,7 +99,6 @@ function buildCvcAvailabilityQuery(sources) {
         COALESCE(SUM(CVC.IMPORTEPENDIENTE), 0) AS IMPORTEPENDIENTE
       FROM DSEDAC.CVC CVC
       WHERE COALESCE(TRIM(CVC.ANULADOSN), '') <> 'S'
-        AND CVC.IMPORTEPENDIENTE > 0
         AND (${clauses})
       GROUP BY ${groupBy}
     `,
@@ -121,9 +120,15 @@ function mapCvcAvailabilityRows(rows, documents) {
     const key = document && documentKey(document);
     if (!key || !result.has(key)) continue;
     const count = Number(value(row, 'CVC_ROW_COUNT'));
-    const pending = Number(value(row, 'IMPORTEPENDIENTE'));
-    if (!Number.isFinite(count) || count < 1 || !Number.isFinite(pending) || pending <= 0) {
+    const rawPending = value(row, 'IMPORTEPENDIENTE');
+    const pending = Number(rawPending);
+    if (!Number.isFinite(count) || count < 1 || rawPending == null || rawPending === ''
+        || !Number.isFinite(pending)) {
       result.set(key, Object.freeze({ state: 'MISSING', importeDisponibleCobro: 0 }));
+      continue;
+    }
+    if (pending <= 0) {
+      result.set(key, Object.freeze({ state: 'SETTLED', importeDisponibleCobro: 0 }));
       continue;
     }
     result.set(key, Object.freeze({
@@ -154,6 +159,15 @@ function resolveDocumentCollectable({
   const normalizedState = String(cvcState || 'MISSING').trim().toUpperCase();
   const document = roundCollectable(documentAmount);
   const pending = roundCollectable(cvcPending);
+  if (normalizedState === 'SETTLED' || (normalizedState === 'AVAILABLE' && pending <= 0.004)) {
+    return Object.freeze({
+      state: 'SETTLED',
+      importeDisponibleCobro: 0,
+      importeDocumento: document,
+      importeCvcPendiente: pending,
+      capped: false,
+    });
+  }
   if (normalizedState === 'AMBIGUOUS') {
     return Object.freeze({
       state: 'AMBIGUOUS',
@@ -163,10 +177,21 @@ function resolveDocumentCollectable({
       capped: false,
     });
   }
-  if (normalizedState !== 'AVAILABLE' || pending <= 0.004) {
+  // No cartera row must not zero a document that still has a live amount.
+  // CTR albaranes often have no CVC until after the TEST cobro.
+  if (normalizedState !== 'AVAILABLE') {
+    if (document <= 0.004) {
+      return Object.freeze({
+        state: 'MISSING',
+        importeDisponibleCobro: 0,
+        importeDocumento: document,
+        importeCvcPendiente: pending,
+        capped: pending > 0.004,
+      });
+    }
     return Object.freeze({
-      state: 'MISSING',
-      importeDisponibleCobro: 0,
+      state: 'AVAILABLE',
+      importeDisponibleCobro: document,
       importeDocumento: document,
       importeCvcPendiente: pending,
       capped: false,

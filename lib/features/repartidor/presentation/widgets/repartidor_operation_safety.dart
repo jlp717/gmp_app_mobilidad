@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 
@@ -9,6 +11,9 @@ String repartidorSafeOperationMessage({
   required Object error,
   required String operation,
 }) {
+  if (error is TimeoutException || _statusCode(error) == 504) {
+    return 'Tardó demasiado. Espera un momento y pulsa Reintentar.';
+  }
   switch (operation) {
     case 'camera':
       return 'No se pudo abrir la cámara. Revisa los permisos e inténtalo de nuevo.';
@@ -33,6 +38,15 @@ String repartidorSafeOperationMessage({
 ///
 /// `Image.network` does not run Dio interceptors, so it cannot refresh a
 /// session itself. Refuse to attach credentials to any non-canonical URL.
+int? _statusCode(Object error) {
+  try {
+    final status = (error as dynamic).statusCode;
+    return status is int ? status : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 Map<String, String>? repartidorProtectedImageHeaders(String imageUrl) {
   final imageUri = Uri.tryParse(imageUrl);
   final apiUri = Uri.tryParse(ApiConfig.baseUrl);

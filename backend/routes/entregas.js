@@ -831,14 +831,16 @@ router.get('/pendientes/:repartidorId', verifyToken, validatePendientesRepartido
                 month: mes,
                 year: ano,
             });
+            const { shouldKeepAnteroomPedido } = require('../services/rutero-anteroom-dedupe');
+            const existingIds = new Set(aggregatedMap.keys());
             for (const row of anteroomRows || []) {
                 const cliente = (row.CLIENTE || '').trim();
                 const id = row.PEDIDO_ID
                     ? `PED-${row.PEDIDO_ID}-${cliente}`
                     : `${row.EJERCICIOALBARAN}-${(row.SERIEALBARAN || '').trim()}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${cliente}`;
-                if (!aggregatedMap.has(id)) {
-                    aggregatedMap.set(id, { ...row, _anteroomId: id });
-                }
+                if (aggregatedMap.has(id)) continue;
+                if (!shouldKeepAnteroomPedido(row, existingIds)) continue;
+                aggregatedMap.set(id, { ...row, _anteroomId: id });
             }
         } catch (anteroomErr) {
             logger.warn(`[ENTREGAS] Anteroom pedidos overlay skipped: ${anteroomErr.message}`);
@@ -1792,7 +1794,7 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, validateAlbaranRouteIdent
         if (base2 > 0) ivaBreakdown.push({ base: base2, pct: pctIva2, iva: iva2 });
         if (base3 > 0) ivaBreakdown.push({ base: base3, pct: pctIva3, iva: iva3 });
 
-        const albaranItems = items.map(i => {
+        const albaranItems = items.map((i, index) => {
                 const confirmedLine = canonical.linesById.get(String(i.SECUENCIA));
                 const unidades = parseFloat(i.CANTIDADUNIDADES) || 0;
                 const envases = parseFloat(i.CANTIDADENVASES) || 0;
@@ -1802,7 +1804,7 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, validateAlbaranRouteIdent
                 const codigoArticulo = String(i.CODIGOARTICULO ?? '').trim() || secuencia;
                 const totalLinea = sanitizeErpAmount(i.IMPORTEVENTA);
                 return {
-                    itemId: secuencia,
+                    itemId: secuencia || `${codigoArticulo || 'LINEA'}-${index + 1}`,
                     codigoArticulo,
                     descripcion: i.DESCRIPCION,
                     cantidadPedida,

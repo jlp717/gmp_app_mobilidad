@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_stop_visual.dart';
 
 class RuteroStopStatusBadges extends StatelessWidget {
   const RuteroStopStatusBadges({super.key, required this.albaran});
@@ -8,11 +9,13 @@ class RuteroStopStatusBadges extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = switch (albaran.estado) {
-      EstadoEntrega.entregado => AppTheme.success,
-      EstadoEntrega.parcial || EstadoEntrega.noEntregado => AppTheme.warning,
-      EstadoEntrega.rechazado => AppTheme.error,
-      EstadoEntrega.pendiente || EstadoEntrega.enRuta => AppTheme.obligatorio,
+    final visual = ruteroRowVisual(albaran);
+    final statusColor = switch (visual.tone) {
+      RuteroRowTone.cobroObligatorio => AppTheme.obligatorio,
+      RuteroRowTone.entregaPendiente => AppTheme.info,
+      RuteroRowTone.cobroOpcional => AppTheme.opcional,
+      RuteroRowTone.entregado => AppTheme.success,
+      RuteroRowTone.incidencia => AppTheme.warning,
     };
     final payment = albaran.hasAppCobro
         ? albaran.cobroParcial
@@ -22,9 +25,7 @@ class RuteroStopStatusBadges extends StatelessWidget {
             : albaran.importePendienteCobro == null
                 ? 'Cobro registrado · saldo por actualizar'
                 : 'Cobrado'
-        : albaran.esCTR || albaran.puedeCobrarse
-            ? 'Cobro pendiente'
-            : 'Sin cobro registrado';
+        : visual.label;
     return Wrap(spacing: 8, runSpacing: 4, children: [
       _badge(
           albaran.estado.icon, 'Entrega: ${albaran.estado.label}', statusColor),

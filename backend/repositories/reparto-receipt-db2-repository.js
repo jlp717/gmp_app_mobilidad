@@ -196,6 +196,9 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
     });
     try {
       return await Promise.race([promise, aborted]);
+    } catch (error) {
+      if (signal?.aborted) capabilitiesPromise = null;
+      throw error;
     } finally {
       signal.removeEventListener('abort', abortHandler);
     }
@@ -209,7 +212,7 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
     const where = list.map(() => '(TABLE_SCHEMA = ? AND TABLE_NAME = ?)').join(' OR ');
     const params = list.flatMap(({ schema, table }) => [schema, table]);
     const tableRows = await query(connection,
-      `SELECT TABLE_SCHEMA, TABLE_NAME FROM QSYS2.SYSTABLES WHERE ${where}`,
+      `SELECT TABLE_SCHEMA, TABLE_NAME FROM QSYS2.SYSTABLES WHERE ${where} WITH UR`,
       params, signal);
     const found = new Set(tableRows.map((item) =>
       `${String(value(item, 'TABLE_SCHEMA')).trim().toUpperCase()}.${String(value(item, 'TABLE_NAME')).trim().toUpperCase()}`));
@@ -220,7 +223,7 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
       throw new RepartoReceiptUnavailableError('Faltan tablas del recibo de reparto', { missingTables });
     }
     const columns = await query(connection,
-      `SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME FROM QSYS2.SYSCOLUMNS WHERE ${where}`,
+      `SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME FROM QSYS2.SYSCOLUMNS WHERE ${where} WITH UR`,
       params, signal);
     const available = new Map();
     for (const item of columns) {
@@ -274,7 +277,7 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
       const lookupColumn = lookup.confirmationId ? 'ID' : 'IDEMPOTENCY_KEY';
       const lookupValue = lookup.confirmationId ? Number(lookup.confirmationId) : lookup.idempotencyKey;
       const confirmations = await query(connection,
-        `SELECT ID, REPARTIDOR_ID FROM ${tables.confirmation.confirmations} WHERE ${lookupColumn} = ? FETCH FIRST 2 ROWS ONLY`,
+        `SELECT ID, REPARTIDOR_ID FROM ${tables.confirmation.confirmations} WHERE ${lookupColumn} = ? FETCH FIRST 2 ROWS ONLY WITH UR`,
         [lookupValue], signal);
       if (confirmations.length > 1) {
         throw new RepartoReceiptUnavailableError('La confirmacion del recibo es ambigua');
@@ -295,7 +298,7 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
         throw new RepartoReceiptUnavailableError('La confirmacion no contiene un identificador');
       }
       const confirmationRows = await query(connection,
-        `SELECT ${REQUIRED.confirmation.join(', ')} FROM ${tables.confirmation.confirmations} WHERE ID = ? FETCH FIRST 2 ROWS ONLY`,
+        `SELECT ${REQUIRED.confirmation.join(', ')} FROM ${tables.confirmation.confirmations} WHERE ID = ? FETCH FIRST 2 ROWS ONLY WITH UR`,
         [confirmationId], signal);
       if (confirmationRows.length !== 1
           || String(value(confirmationRows[0], 'REPARTIDOR_ID') ?? '').trim() !== confirmationOwner) {
@@ -303,14 +306,14 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
       }
       const confirmation = confirmationRows[0];
       const lines = await query(connection,
-        `SELECT ${REQUIRED.lines.join(', ')} FROM ${tables.confirmation.lines} WHERE CONFIRMACION_ID = ? ORDER BY LINEA_ID`,
+        `SELECT ${REQUIRED.lines.join(', ')} FROM ${tables.confirmation.lines} WHERE CONFIRMACION_ID = ? ORDER BY LINEA_ID WITH UR`,
         [confirmationId], signal);
       const evidences = await query(connection,
         // Evidence retrieval starts from the persisted confirmation link. DISTINCT
         // keeps a historical duplicate link from making the canonical snapshot
         // ambiguous; content is still fetched by the evidence service through its
         // bounded, set-based HEX reader.
-        `SELECT DISTINCT E.EVIDENCE_ID, E.EVIDENCE_KIND, E.MIME_TYPE FROM ${tables.confirmation.confirmationEvidences} CE INNER JOIN ${tables.confirmation.evidences} E ON E.EVIDENCE_ID = CE.EVIDENCE_ID WHERE CE.CONFIRMACION_ID = ? ORDER BY E.EVIDENCE_ID`,
+        `SELECT DISTINCT E.EVIDENCE_ID, E.EVIDENCE_KIND, E.MIME_TYPE FROM ${tables.confirmation.confirmationEvidences} CE INNER JOIN ${tables.confirmation.evidences} E ON E.EVIDENCE_ID = CE.EVIDENCE_ID WHERE CE.CONFIRMACION_ID = ? ORDER BY E.EVIDENCE_ID WITH UR`,
         [confirmationId], signal);
 
       const financialValues = FINANCIAL_DOCUMENT_COLUMNS.map((name) => value(confirmation, name));
@@ -328,7 +331,7 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
           throw new RepartoReceiptUnavailableError('La identidad financiera de la confirmacion no esta disponible');
         }
         payments = await query(connection,
-          `SELECT ID, IDEMPOTENCY_TOKEN, CODIGOCLIENTEALBARAN, CODIGOVENDEDOR, TIPODOCUMENTO, ORIGENDOCUMENTO, SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO, XDEDOCUMENTO, DEXDOCUMENTO, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, DIACOBRO, MESCOBRO, ANOCOBRO FROM ${tables.finance.cobros} WHERE IDEMPOTENCY_TOKEN = ? AND TRIM(CODIGOCLIENTEALBARAN) = ? AND TRIM(CODIGOVENDEDOR) = ? AND TRIM(TIPODOCUMENTO) = ? AND TRIM(ORIGENDOCUMENTO) = ? AND TRIM(SUBEMPRESADOCUMENTO) = ? AND EJERCICIODOCUMENTO = ? AND TRIM(SERIEDOCUMENTO) = ? AND TERMINALDOCUMENTO = ? AND NUMERODOCUMENTO = ? AND XDEDOCUMENTO = ? AND DEXDOCUMENTO = ? FETCH FIRST 2 ROWS ONLY`,
+          `SELECT ID, IDEMPOTENCY_TOKEN, CODIGOCLIENTEALBARAN, CODIGOVENDEDOR, TIPODOCUMENTO, ORIGENDOCUMENTO, SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO, XDEDOCUMENTO, DEXDOCUMENTO, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, DIACOBRO, MESCOBRO, ANOCOBRO FROM ${tables.finance.cobros} WHERE IDEMPOTENCY_TOKEN = ? AND TRIM(CODIGOCLIENTEALBARAN) = ? AND TRIM(CODIGOVENDEDOR) = ? AND TRIM(TIPODOCUMENTO) = ? AND TRIM(ORIGENDOCUMENTO) = ? AND TRIM(SUBEMPRESADOCUMENTO) = ? AND EJERCICIODOCUMENTO = ? AND TRIM(SERIEDOCUMENTO) = ? AND TERMINALDOCUMENTO = ? AND NUMERODOCUMENTO = ? AND XDEDOCUMENTO = ? AND DEXDOCUMENTO = ? FETCH FIRST 2 ROWS ONLY WITH UR`,
           paymentKey, signal);
       }
       return Object.freeze({

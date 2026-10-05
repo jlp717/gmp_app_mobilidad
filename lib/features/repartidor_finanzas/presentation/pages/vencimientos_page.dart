@@ -79,8 +79,11 @@ String documentTypeLabel(String tipoDocumento) {
 }
 
 bool canCobrarVencimiento(VencimientoItem item, String repartidorId) {
-  return !repartidorId.contains(',') &&
-      item.documento.trim().isNotEmpty &&
+  final owner = repartidorId.trim();
+  if (owner.isEmpty || owner.contains(',') || owner.toUpperCase() == 'ALL') {
+    return false;
+  }
+  return item.documento.trim().isNotEmpty &&
       item.tipoDocumento.trim().isNotEmpty &&
       item.keys.isNotEmpty &&
       item.importePendienteMoney.isPositive;
@@ -138,6 +141,7 @@ class _VencimientosPageState extends State<VencimientosPage> {
   late VencimientosFiltro _filtro = widget.initialFiltro;
   late String? _tipoDocumento = widget.initialTipoDocumento;
   String _searchQuery = '';
+  String? _selectedKey;
 
   @override
   Widget build(BuildContext context) {
@@ -188,13 +192,6 @@ class _VencimientosPageState extends State<VencimientosPage> {
               widget.onFiltroChanged?.call(filtro);
             },
           ),
-          _DocumentTypeFilter(
-            selected: _tipoDocumento,
-            onSelected: (tipoDocumento) {
-              setState(() => _tipoDocumento = tipoDocumento);
-              widget.onTipoDocumentoChanged?.call(tipoDocumento);
-            },
-          ),
           Expanded(
             child: visible.isEmpty && !widget.hasMore
                 ? const _EmptyState(
@@ -223,9 +220,13 @@ class _VencimientosPageState extends State<VencimientosPage> {
                             padding: const EdgeInsets.only(bottom: 8),
                             child: _VencimientoRow(
                               item: item,
-                              onTap: widget.onItemTap == null
-                                  ? null
-                                  : () => widget.onItemTap?.call(item),
+                              selected: _selectedKey == _vencimientoKey(item),
+                              onTap: () {
+                                setState(
+                                  () => _selectedKey = _vencimientoKey(item),
+                                );
+                                widget.onItemTap?.call(item);
+                              },
                             ),
                           ),
                         _LoadMoreSpec() => Center(
@@ -249,12 +250,15 @@ class _VencimientosPageState extends State<VencimientosPage> {
     );
   }
 
+  String _vencimientoKey(VencimientoItem item) {
+    return '${item.tipoDocumento}|${item.documento}|${item.codigoCliente}|${item.fecha?.toIso8601String() ?? ''}';
+  }
+
   List<VencimientoItem> _filteredItems() {
     final byEstado = widget.vencimientos.where((item) {
       return switch (_filtro) {
         VencimientosFiltro.todos => true,
-        VencimientosFiltro.pendientes =>
-          item.importePendiente > 0 && item.estado != VencimientoEstado.vencido,
+        VencimientosFiltro.pendientes => item.importePendiente > 0,
         VencimientosFiltro.vencidos => item.estado == VencimientoEstado.vencido,
         VencimientosFiltro.cobrados => item.estado == VencimientoEstado.cobrado,
         VencimientosFiltro.hoy => item.estado == VencimientoEstado.hoy,
@@ -322,7 +326,7 @@ class _RepartidorVencimientosPageState
   late DateTime _to;
   String? _nextCursor;
   String _serverSearch = '';
-  VencimientosFiltro _filtro = VencimientosFiltro.todos;
+  VencimientosFiltro _filtro = VencimientosFiltro.pendientes;
   String? _estado;
   String? _tipoDocumento;
   Object? _error;
@@ -696,11 +700,13 @@ class _RepartidorVencimientosPageState
                       width: double.infinity,
                       child: Semantics(
                         button: true,
-                        label:
-                            item.importePendienteMoney < item.importeMoney
+                        label: item.importePendienteMoney < item.importeMoney
                             ? 'Cobrar el resto de ${item.documento}'
                             : 'Cobrar ${item.documento}',
                         child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(52),
+                          ),
                           onPressed: () {
                             Navigator.of(sheetContext).pop();
                             _showCobroDialog(
@@ -1209,12 +1215,9 @@ class _FilterStrip extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            _chip(VencimientosFiltro.todos, 'Todos'),
             _chip(VencimientosFiltro.pendientes, 'Pendientes'),
             _chip(VencimientosFiltro.vencidos, 'Vencidos'),
             _chip(VencimientosFiltro.cobrados, 'Cobrados'),
-            _chip(VencimientosFiltro.hoy, 'Hoy'),
-            _chip(VencimientosFiltro.proximos, 'Próximos'),
           ],
         ),
       ),
@@ -1234,49 +1237,6 @@ class _FilterStrip extends StatelessWidget {
           color: AppTheme.info,
           selected: isSelected,
           onTap: () => onSelected(filtro),
-        ),
-      ),
-    );
-  }
-}
-
-class _DocumentTypeFilter extends StatelessWidget {
-  const _DocumentTypeFilter({
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final String? selected;
-  final ValueChanged<String?> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _chip(null, 'Todos los documentos'),
-          _chip('COC', 'Facturas'),
-          _chip('CAC', 'Albaranes'),
-          _chip('DEV', 'Devoluciones'),
-        ],
-      ),
-    );
-  }
-
-  Widget _chip(String? value, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Semantics(
-        button: true,
-        selected: selected == value,
-        label: 'Tipo $label',
-        child: RepartidorExecutivePill(
-          label: label,
-          color: AppTheme.success,
-          selected: selected == value,
-          onTap: () => onSelected(value),
         ),
       ),
     );
@@ -1352,10 +1312,12 @@ class _GroupHeader extends StatelessWidget {
 class _VencimientoRow extends StatelessWidget {
   const _VencimientoRow({
     required this.item,
+    this.selected = false,
     this.onTap,
   });
 
   final VencimientoItem item;
+  final bool selected;
   final VoidCallback? onTap;
 
   @override
@@ -1363,13 +1325,19 @@ class _VencimientoRow extends StatelessWidget {
     final color = _statusColor(item.estado);
 
     return RepartidorExecutivePanel(
-      accentColor: color,
+      accentColor: selected ? AppTheme.info : color,
       padding: EdgeInsets.zero,
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
+            Icon(
+              selected ? Icons.check_circle : Icons.radio_button_unchecked,
+              color: selected ? AppTheme.info : AppTheme.textSecondary,
+              size: 22,
+            ),
+            const SizedBox(width: 8),
             Container(
               width: 4,
               height: 52,
@@ -1384,7 +1352,7 @@ class _VencimientoRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    item.cliente,
+                    selected ? 'Seleccionado · ${item.cliente}' : item.cliente,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

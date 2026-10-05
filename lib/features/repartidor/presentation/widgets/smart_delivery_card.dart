@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
-import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_payment.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/domain/rutero_stop_visual.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_stop_status_badges.dart';
 import 'package:intl/intl.dart';
 
@@ -78,9 +78,6 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           true,
         _ => false,
       };
-  bool get _isUnconfirmed =>
-      widget.albaran.estado == EstadoEntrega.pendiente ||
-      widget.albaran.estado == EstadoEntrega.enRuta;
   bool get _isUrgent => widget.albaran.esCTR;
 
   Color get _terminalColor => switch (widget.albaran.estado) {
@@ -90,31 +87,33 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         _ => AppTheme.info,
       };
 
-  Color get _borderColor {
-    if (_isTerminal) return _terminalColor;
-    if (_isUnconfirmed) return AppTheme.obligatorio;
-    if (widget.albaran.colorEstado == 'purple' || _isFactura) {
-      return AppTheme.accentIndigo;
-    }
-    if (widget.albaran.colorEstado == 'red' || _isUrgent) {
-      return AppTheme.obligatorio;
-    }
-    return AppTheme.info;
+  RuteroRowVisual get _rowVisual => ruteroRowVisual(widget.albaran);
+
+  Color _toneColor(RuteroRowTone tone) {
+    return switch (tone) {
+      RuteroRowTone.cobroObligatorio => AppTheme.obligatorio,
+      RuteroRowTone.entregaPendiente => AppTheme.info,
+      RuteroRowTone.cobroOpcional => AppTheme.opcional,
+      RuteroRowTone.entregado => AppTheme.success,
+      RuteroRowTone.incidencia => AppTheme.warning,
+    };
   }
 
+  IconData get _rowIcon {
+    return switch (_rowVisual.tone) {
+      RuteroRowTone.cobroObligatorio => Icons.priority_high,
+      RuteroRowTone.entregaPendiente => Icons.local_shipping_outlined,
+      RuteroRowTone.cobroOpcional => Icons.payments_outlined,
+      RuteroRowTone.entregado => Icons.check_circle_outline,
+      RuteroRowTone.incidencia => Icons.report_outlined,
+    };
+  }
+
+  Color get _borderColor =>
+      _isTerminal ? _terminalColor : _toneColor(_rowVisual.tone);
+
   BoxDecoration get _cardDecoration {
-    Color baseColor;
-    if (_isTerminal) {
-      baseColor = _terminalColor;
-    } else if (_isUnconfirmed) {
-      baseColor = AppTheme.obligatorio;
-    } else if (widget.albaran.colorEstado == 'purple' || _isFactura) {
-      baseColor = AppTheme.accentIndigo;
-    } else if (widget.albaran.colorEstado == 'red' || _isUrgent) {
-      baseColor = AppTheme.obligatorio;
-    } else {
-      baseColor = AppTheme.info;
-    }
+    final baseColor = _borderColor;
 
     return BoxDecoration(
       gradient: LinearGradient(
@@ -296,7 +295,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 style: TextStyle(
                   color: widget.albaran.isPendingPrice
                       ? AppTheme.warning
-                      : _isUrgent
+                      : _rowVisual.tone == RuteroRowTone.cobroObligatorio
                           ? AppTheme.obligatorio
                           : AppTheme.textPrimary,
                   fontSize: Responsive.isSmall(context) ? 17 : 20,
@@ -311,38 +310,38 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 decoration: BoxDecoration(
                   color: (widget.albaran.isPendingPrice
                           ? AppTheme.warning
-                          : _getPaymentColor())
+                          : _borderColor)
                       .withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: (widget.albaran.isPendingPrice
                             ? AppTheme.warning
-                            : _getPaymentColor())
+                            : _borderColor)
                         .withValues(alpha: 0.4),
                   ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (_isUrgent && !widget.albaran.isPendingPrice) ...[
-                      Icon(
-                        Icons.priority_high,
-                        size: 10,
-                        color: _getPaymentColor(),
-                      ),
-                      const SizedBox(width: 2),
-                    ],
+                    Icon(
+                      widget.albaran.isPendingPrice ? Icons.schedule : _rowIcon,
+                      size: 12,
+                      color: widget.albaran.isPendingPrice
+                          ? AppTheme.warning
+                          : _borderColor,
+                    ),
+                    const SizedBox(width: 2),
                     Flexible(
                       child: Text(
                         widget.albaran.isPendingPrice
                             ? 'Precio pendiente'
-                            : _getPaymentLabel(),
+                            : _rowVisual.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: widget.albaran.isPendingPrice
                               ? AppTheme.warning
-                              : _getPaymentColor(),
+                              : _borderColor,
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
                         ),
@@ -539,43 +538,6 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         ),
       ),
     );
-  }
-
-  String _getPaymentLabel() {
-    if (widget.albaran.hasAppCobro) {
-      final method = (widget.albaran.formaPagoCobro ?? '').trim();
-      final kind = widget.albaran.cobroParcial
-          ? 'Cobro parcial'
-          : widget.albaran.importePendienteCobro == null
-              ? 'Cobro registrado'
-              : 'Cobrado';
-      if (method.isEmpty) return kind;
-      return '$kind · ${ruteroPaymentMethodLabel(method)}';
-    }
-    final code = widget.albaran.tipoPago.toUpperCase().trim();
-    if (code == '01' || code == 'CNT' || code.contains('CONTADO')) {
-      return 'Contado';
-    }
-    if (code.contains('REP')) return 'Reposición';
-    if (code.contains('MEN')) return 'Mensual';
-    if (code.contains('CRE') || code == 'CR') return 'Crédito';
-    if (code.contains('TAR')) return 'Tarjeta';
-    if (code.contains('TRA') || code.contains('TAL') || code.contains('CHE')) {
-      return 'Talón';
-    }
-    return code.length > 8 ? code.substring(0, 8) : code;
-  }
-
-  Color _getPaymentColor() {
-    if (widget.albaran.hasAppCobro)
-      return widget.albaran.cobroParcial ||
-              widget.albaran.importePendienteCobro == null
-          ? AppTheme.warning
-          : AppTheme.success;
-    if (widget.albaran.esCTR) return AppTheme.obligatorio;
-    if (widget.albaran.colorEstado == 'green') return AppTheme.success;
-    if (widget.albaran.colorEstado == 'orange') return AppTheme.opcional;
-    return AppTheme.credito;
   }
 
   void _handleDragEnd(DragEndDetails details) {

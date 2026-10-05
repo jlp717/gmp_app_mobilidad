@@ -56,6 +56,17 @@ test('builds a deterministic unpaid presentation from actual quantities and obse
   expect(presentation.footer).toContain('Cobro: no registrado');
 });
 
+test('keeps net and total coherent when the snapshot net is zero', () => {
+  const presentation = buildReceiptPresentation(receipt({
+    importeNeto: 0,
+    importeIva: 1.88,
+    importeTotal: 20.7,
+  }));
+  expect(presentation.neto).toBeCloseTo(10, 6);
+  expect(presentation.totalConIva).toBeCloseTo(presentation.neto, 6);
+  expect(presentation.iva).toBe(0);
+});
+
 test('uses the persisted payment calendar date in the presentation', () => {
   const presentation = buildReceiptPresentation(receipt({
     cobro: { importeCobrado: 10, formaPago: 'EFECTIVO', fecha: { dia: 9, mes: 8, ano: 2026 } },
@@ -98,14 +109,15 @@ test('exposes the delivery-note identity and planned-versus-delivered table mode
   expect(text).toContain('NOTA DE ENTREGA');
   expect(text).toContain('Confirmación 7');
   expect(text).toContain('Documento ALB-7');
-  for (const heading of ['Producto', 'Pedida', 'Entregada', 'Diferencia', 'Bultos', 'Importe']) expect(text).toContain(heading);
+  for (const heading of ['Puesto', 'Artículo', 'Bultos', 'Importe neto']) expect(text).toContain(heading);
+  expect(text).toContain('La ausencia de este documento NO implica el pago de la misma');
   expect(text).toContain('-1.00');
 });
 
 test.each([
   { label: 'un tipo', taxes: [{ base: 10, pct: 10, iva: 1 }], expectedRows: [{ base: 10, pct: 10, iva: 1 }], expectedTotal: 11, expectedPdf: ['Base IVA 10.00 %', '1.00 €'] },
   { label: 'varios tipos', taxes: [{ base: 5, pct: 21, iva: 1.05 }, { base: 2, pct: 4, iva: 0.08 }, { base: 3, pct: 4, iva: 0.12 }], expectedRows: [{ base: 5, pct: 4, iva: 0.2 }, { base: 5, pct: 21, iva: 1.05 }], expectedTotal: 11.25, expectedPdf: ['Base IVA 4.00 %', 'Base IVA 21.00 %', '1.05 €'] },
-  { label: 'ningún tipo', taxes: [], expectedRows: [], expectedTotal: 10, expectedPdf: ['IVA no disponible'] },
+  { label: 'ningún tipo', taxes: [], expectedRows: [], expectedTotal: 10, expectedPdf: ['IVA 0 %'] },
 ])('renders a dynamic IVA summary with $label', async ({ taxes, expectedRows, expectedTotal, expectedPdf }) => {
   const fiscalReceipt = receipt({ ivaBreakdown: taxes });
   const presentation = buildReceiptPresentation(fiscalReceipt);
@@ -187,10 +199,10 @@ test('repeats headers and fixed page numbers while preserving long content above
   const text = pdfText(result.pdf);
   expect(pages).toBeGreaterThan(2);
   expect(occurrences(text, 'NOTA DE ENTREGA')).toBe(pages);
-  expect(occurrences(text, 'Producto')).toBe(pages);
+  expect(occurrences(text, 'Artículo')).toBe(pages);
   for (let page = 1; page <= pages; page += 1) expect(text).toContain(`Página ${page} de ${pages}`);
   expect(text).toContain('ULTIMO PRODUCTO VISIBLE');
-  expect(text).toContain('TOTAL ENTREGA');
+  expect(text).toContain('TOTAL');
   expect(text).toContain('Firma del cliente');
   expect(text).toContain('Receptor: ANA REAL');
 });
