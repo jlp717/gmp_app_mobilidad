@@ -1007,7 +1007,7 @@ class _LiquidacionCloseBar extends StatelessWidget {
       ),
       child: SizedBox(
         width: double.infinity,
-        height: 52,
+        height: 56,
         child: ElevatedButton.icon(
           key: isClosed && onRecoverClosed != null
               ? const Key('liquidacion-recover-closed')
@@ -1047,7 +1047,7 @@ class _LiquidacionCloseBar extends StatelessWidget {
                 ? onRecoverClosed != null
                     ? 'Recuperar cierre y PDF'
                     : 'Liquidación cerrada'
-                : 'Cerrar día y grabar liquidación',
+                : 'Ingresar en el banco',
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
           ),
         ),

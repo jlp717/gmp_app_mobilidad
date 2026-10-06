@@ -7,6 +7,7 @@ const {
   paperDocumentLabel,
   buildLiquidacionPdfBuffer,
 } = require('../services/liquidacion-pdf-service');
+const { settleIdleDeposit, roundMoney } = require('../utils/money-cents');
 
 describe('liquidacion-pdf-service', () => {
   test('formats GMP number like the paper liquidacion', () => {
@@ -21,6 +22,27 @@ describe('liquidacion-pdf-service', () => {
       vendorCode: '57',
       numero: 2082,
     })).toBe('GMP 2026 A 057 002082');
+  });
+
+  test('idle day with a one-cent residue deposits nothing', () => {
+    expect(roundMoney(8.43) + roundMoney(0.84)).toBeCloseTo(9.27, 2);
+    expect(settleIdleDeposit({
+      cobrosCount: 0,
+      totalEfectivo: 0,
+      saldoActual: 0.01,
+      totalAIngresar: 0.01,
+    })).toEqual({ saldoActual: 0, totalAIngresar: 0 });
+    expect(settleIdleDeposit({
+      cobrosCount: 0,
+      saldoActual: 50,
+      totalAIngresar: 50,
+    }).totalAIngresar).toBe(50);
+    expect(settleIdleDeposit({
+      cobrosCount: 1,
+      totalEfectivo: 10,
+      saldoActual: 0.01,
+      totalAIngresar: 10.01,
+    }).totalAIngresar).toBe(10.01);
   });
 
   test('cashToDeposit = efectivo + saldo − gastos ± ajustes; cheques/tarjeta fuera', () => {

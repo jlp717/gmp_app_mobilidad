@@ -5,6 +5,9 @@ const { drawCompanyHeader } = require('./company-header');
 const { RepartoPersistenceError } = require('./reparto-confirmation-service');
 const { assertDecodablePng } = require('../utils/png-image-validator');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
+const { moneyCents } = require('../utils/money-cents');
+
+const COMPANY_CAPTION = 'Pol. Ind. Saprelorca, Parcela D3 · 30817 Lorca (Murcia) · CIF B04008710 · Tel. 968 47 08 80';
 
 function unavailable(code, message) {
   return new RepartoPersistenceError(message, { code, statusCode: 503 });
@@ -77,6 +80,64 @@ function isExplicitZeroPrepaid(receipt) {
     && receipt?.cobro == null
     && receipt?.importeTotal === 0;
 }
+
+function formatTaxPercent(pct) {
+  const number = Number(pct);
+  if (!Number.isFinite(number)) return '0';
+  const rounded = Math.round(number * 100) / 100;
+  if (Math.abs(rounded - Math.round(rounded)) < 0.001) return String(Math.round(rounded));
+  return rounded.toFixed(2);
+}
+
+function taxIvaCents(baseCents, pct, givenCents) {
+  const computed = Math.round(baseCents * Number(pct) / 100);
+  if (!Number.isFinite(computed)) return givenCents;
+  if (Math.abs(givenCents - computed) <= 1) return givenCents;
+  return computed;
+}
+
+function resolveTaxRows(fiscalRows, lineNetCents) {
+  const slots = fiscalRows.map((item) => ({
+    pct: Number(item.pct),
+    baseCents: moneyCents(item.base),
+    ivaCents: moneyCents(item.iva),
+  })).filter((item) => Number.isFinite(item.pct) && (item.baseCents !== 0 || item.ivaCents !== 0));
+  if (!slots.length) return [];
+  const documentBase = slots.reduce((sum, item) => sum + item.baseCents, 0);
+  let allocated = slots.map((item) => ({
+    pct: item.pct,
+    baseCents: item.baseCents,
+    ivaCents: taxIvaCents(item.baseCents, item.pct, item.ivaCents),
+  }));
+  if (documentBase !== lineNetCents && documentBase !== 0) {
+    let assigned = 0;
+    allocated = slots.map((item, index) => {
+      const baseCents = index === slots.length - 1
+        ? lineNetCents - assigned
+        : Math.round(lineNetCents * item.baseCents / documentBase);
+      if (index !== slots.length - 1) assigned += baseCents;
+      return {
+        pct: item.pct,
+        baseCents,
+        ivaCents: Math.round(baseCents * item.pct / 100),
+      };
+    });
+  }
+  const grouped = new Map();
+  for (const item of allocated) {
+    const current = grouped.get(item.pct) || { pct: item.pct, baseCents: 0, ivaCents: 0 };
+    current.baseCents += item.baseCents;
+    current.ivaCents += item.ivaCents;
+    grouped.set(item.pct, current);
+  }
+  return [...grouped.values()]
+    .sort((left, right) => left.pct - right.pct)
+    .map((item) => Object.freeze({
+      base: item.baseCents / 100,
+      pct: item.pct,
+      iva: item.ivaCents / 100,
+    }));
+}
 /**
  * Builds the complete, deterministic text model before touching PDFKit. This
  * makes the legally relevant presentation testable without parsing PDF xrefs.
@@ -110,7 +171,7 @@ function buildReceiptPresentation(receipt) {
       difference: delivered - Number(line.cantidadPedida),
       packages: optionalNumber(line.bultos),
       price,
-      amount: delivered * price,
+      amount: moneyCents(delivered * price) / 100,
       reason: printable(line.motivoDiferencia) || '-',
       observations: printable(line.observaciones) || '-',
     });
@@ -120,7 +181,8 @@ function buildReceiptPresentation(receipt) {
     ordered: 0, delivered: 0, rejected: 0, pending: 0, price: 0, amount: 0,
     reason: '-', observations: '-',
   }));
-  const amount = rows.reduce((sum, line) => sum + line.amount, 0);
+  const amountCents = rows.reduce((sum, line) => sum + moneyCents(line.amount), 0);
+  const amount = amountCents / 100;
   if (!Number.isFinite(amount)) {
     throw unavailable('REPARTO_RECEIPT_VALUATION_UNAVAILABLE', 'La valoracion del recibo no esta disponible');
   }
@@ -131,15 +193,7 @@ function buildReceiptPresentation(receipt) {
         base: Number(item.base), pct: Number(item.pct), iva: Number(item.iva),
       }))
     : [];
-  const ivaBreakdown = [...fiscalRows.reduce((grouped, item) => {
-    const current = grouped.get(item.pct) || { base: 0, pct: item.pct, iva: 0 };
-    current.base += item.base;
-    current.iva += item.iva;
-    grouped.set(item.pct, current);
-    return grouped;
-  }, new Map()).values()]
-    .sort((left, right) => left.pct - right.pct)
-    .map((item) => Object.freeze(item));
+  const ivaBreakdown = resolveTaxRows(fiscalRows, amountCents);
   const explicitNeto = optionalNumber(receipt.importeNeto);
   const explicitIva = optionalNumber(receipt.importeIva);
   const headerTotal = optionalNumber(receipt.importeTotal);
@@ -153,9 +207,11 @@ function buildReceiptPresentation(receipt) {
   let iva;
   let totalConIva;
   if (ivaBreakdown.length) {
-    neto = ivaBreakdown.reduce((sum, item) => sum + item.base, 0);
-    iva = ivaBreakdown.reduce((sum, item) => sum + item.iva, 0);
-    totalConIva = neto + iva;
+    const netoCents = ivaBreakdown.reduce((sum, item) => sum + moneyCents(item.base), 0);
+    const ivaCents = ivaBreakdown.reduce((sum, item) => sum + moneyCents(item.iva), 0);
+    neto = netoCents / 100;
+    iva = ivaCents / 100;
+    totalConIva = (netoCents + ivaCents) / 100;
   } else if (explicitNeto != null && explicitNeto > 0.004 && explicitIva != null && explicitIva > 0.004) {
     neto = explicitNeto;
     iva = explicitIva;
@@ -228,6 +284,8 @@ function buildReceiptPresentation(receipt) {
     clientAddress: printable(receipt.cliente?.direccion),
     clientTown: printable(receipt.cliente?.poblacion),
     formaPago: printable(receipt.formaPago || receipt.cobro?.formaPago) || '-',
+    ordenPreparacion: printable(receipt.ordenPreparacion),
+    repartidorId: printable(receipt.repartidorId),
     status: printable(receipt.status),
     neto,
     iva,
@@ -291,8 +349,13 @@ function createRepartoReceiptPdfService() {
         document.fillColor(muted).font('Helvetica').fontSize(8)
           .text(address, x + 82, y + 19, { width: width - 94 });
       }
+      const paymentLine = [
+        `Forma de pago: ${presentation.formaPago || '-'}`,
+        presentation.ordenPreparacion ? `Orden ${presentation.ordenPreparacion}` : '',
+        presentation.repartidorId ? `Repartidor ${presentation.repartidorId}` : '',
+      ].filter(Boolean).join(' · ');
       document.fillColor(muted).font('Helvetica').fontSize(8)
-        .text(`Forma de pago: ${presentation.formaPago || '-'}`, x + 82, y + (address ? 34 : 19), { width: width - 94 });
+        .text(paymentLine, x + 82, y + (address ? 34 : 19), { width: width - 94 });
       document.y += 70;
       document.fillColor(blue).font('Helvetica').fontSize(7)
         .text(`Referencia de confirmación: ${presentation.header[1].replace('Confirmacion: ', '')}`, x, document.y, { width });
@@ -420,7 +483,7 @@ function createRepartoReceiptPdfService() {
         presentation.ivaBreakdown.forEach((item, index) => {
           const taxY = y + 33 + (index * 16);
           document.fillColor(muted).font('Helvetica').fontSize(8)
-            .text(`Base IVA ${decimal(item.pct)} % · ${decimal(item.base)} €`, x + 14, taxY, { width: width * 0.7 });
+            .text(`IVA ${formatTaxPercent(item.pct)} %`, x + 14, taxY, { width: width * 0.7 });
           document.fillColor(ink).font('Helvetica-Bold').fontSize(8)
             .text(`${decimal(item.iva)} €`, x + width * 0.7, taxY, { width: width * 0.25, align: 'right' });
         });
@@ -499,6 +562,9 @@ function createRepartoReceiptPdfService() {
     };
 
     document.y = drawCompanyHeader(document);
+    document.fillColor('#64748B').font('Helvetica').fontSize(7.5)
+      .text(COMPANY_CAPTION, left(), document.y + 2, { width: pageWidth(), align: 'center' });
+    document.moveDown(0.15);
     drawDocumentMeta();
     drawTableHeader();
     drawRows();

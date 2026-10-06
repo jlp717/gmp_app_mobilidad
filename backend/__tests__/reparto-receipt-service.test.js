@@ -13,6 +13,27 @@ test('JEFE selected owner remains repository-scoped without allowAnyOwner', asyn
 test('passes a mandatory owner scope to the repository before snapshot details are returned', async () => { const getReceipt = jest.fn().mockResolvedValue(stored()); const receiptService = createRepartoReceiptService({ repository: { getReceipt } }); await receiptService.getReceipt({ confirmationId: '7', actor: { repartidorId: 'R1' } }); expect(getReceipt).toHaveBeenCalledWith(expect.objectContaining({ confirmationId: '7', ownerRepartidorId: 'R1', allowAnyOwner: false })); });
 test('returns validated snapshot and never leaks storage references', async () => { const result = await service(stored()).getReceipt({ confirmationId: '7', actor: { repartidorId: 'R1' } }); expect(result.lineas[0]).toMatchObject({ cantidadPedida: 3, cantidadEntregada: 2, cantidadRechazada: 1, cantidadPendiente: 0 }); expect(result.evidencias[0]).not.toHaveProperty('storageReference'); expect(result.cobro.id).toBe('9'); expect(result.documento).toMatchObject({ xde: 3, dex: 4 }); expect(result.pedido.numero).toBe(10); });
 
+test('maps CPC tax slots onto the delivery note without inventing a rate', async () => {
+  const data = stored();
+  data.fiscal = {
+    BASE1: 8.43, PCT1: 10, IVA1: 0.84,
+    BASE2: 0, PCT2: 0, IVA2: 0,
+    FORMA_PAGO_DESC: 'CRÉDITO',
+    ORDEN: 53644,
+    DIRECCION: 'PS MARITIMO, 37',
+    POBLACION: 'VERA',
+  };
+  const result = await service(data).getReceipt({
+    confirmationId: '7', actor: { repartidorId: 'R1' },
+  });
+  expect(result.ivaBreakdown).toEqual([{ base: 8.43, pct: 10, iva: 0.84 }]);
+  expect(result.importeNeto).toBeCloseTo(8.43, 2);
+  expect(result.importeIva).toBeCloseTo(0.84, 2);
+  expect(result.formaPago).toBe('CRÉDITO');
+  expect(result.ordenPreparacion).toBe(53644);
+  expect(result.cliente.direccion).toBe('PS MARITIMO, 37');
+});
+
 test('marks the canonical DB2 snapshot as fiscally unavailable instead of inventing IVA or bultos', async () => {
   const result = await service(stored()).getReceipt({
     confirmationId: '7', actor: { repartidorId: 'R1' },

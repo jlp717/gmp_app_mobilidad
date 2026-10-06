@@ -56,6 +56,23 @@ test('builds a deterministic unpaid presentation from actual quantities and obse
   expect(presentation.footer).toContain('Cobro: no registrado');
 });
 
+test('squares net 8.43 plus document 10 percent IVA to 9.27', () => {
+  const presentation = buildReceiptPresentation(receipt({
+    lineas: [{
+      lineaId: '1', codigoArticulo: 'A', descripcion: 'CAFE',
+      cantidadPedida: 1, cantidadEntregada: 1, cantidadRechazada: 0,
+      cantidadPendiente: 0, precioUnitario: 8.43,
+    }],
+    importeTotal: 9.27,
+    importeNeto: 9.27,
+    importeIva: null,
+    ivaBreakdown: [{ base: 8.43, pct: 10, iva: 0 }],
+  }));
+  expect(presentation.neto).toBeCloseTo(8.43, 2);
+  expect(presentation.iva).toBeCloseTo(0.84, 2);
+  expect(presentation.totalConIva).toBeCloseTo(9.27, 2);
+});
+
 test('keeps net and total coherent when the snapshot net is zero', () => {
   const presentation = buildReceiptPresentation(receipt({
     importeNeto: 0,
@@ -115,8 +132,8 @@ test('exposes the delivery-note identity and planned-versus-delivered table mode
 });
 
 test.each([
-  { label: 'un tipo', taxes: [{ base: 10, pct: 10, iva: 1 }], expectedRows: [{ base: 10, pct: 10, iva: 1 }], expectedTotal: 11, expectedPdf: ['Base IVA 10.00 %', '1.00 €'] },
-  { label: 'varios tipos', taxes: [{ base: 5, pct: 21, iva: 1.05 }, { base: 2, pct: 4, iva: 0.08 }, { base: 3, pct: 4, iva: 0.12 }], expectedRows: [{ base: 5, pct: 4, iva: 0.2 }, { base: 5, pct: 21, iva: 1.05 }], expectedTotal: 11.25, expectedPdf: ['Base IVA 4.00 %', 'Base IVA 21.00 %', '1.05 €'] },
+  { label: 'un tipo', taxes: [{ base: 10, pct: 10, iva: 1 }], expectedRows: [{ base: 10, pct: 10, iva: 1 }], expectedTotal: 11, expectedPdf: ['IVA 10 %', '1.00 €'] },
+  { label: 'varios tipos', taxes: [{ base: 5, pct: 21, iva: 1.05 }, { base: 2, pct: 4, iva: 0.08 }, { base: 3, pct: 4, iva: 0.12 }], expectedRows: [{ base: 5, pct: 4, iva: 0.2 }, { base: 5, pct: 21, iva: 1.05 }], expectedTotal: 11.25, expectedPdf: ['IVA 4 %', 'IVA 21 %', '1.05 €'] },
   { label: 'ningún tipo', taxes: [], expectedRows: [], expectedTotal: 10, expectedPdf: ['IVA 0 %'] },
 ])('renders a dynamic IVA summary with $label', async ({ taxes, expectedRows, expectedTotal, expectedPdf }) => {
   const fiscalReceipt = receipt({ ivaBreakdown: taxes });

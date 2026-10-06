@@ -3965,58 +3965,63 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<void> _previewReceiptPdf() async {
-    final modal = AsyncOperationModal.show(
-      context,
-      text: 'Generando nota de entrega...',
-      timeout: const Duration(seconds: 25),
-    );
     try {
-      final pdfData = _cachedPdfBase64 ??
-          await _generateReceiptPdf().timeout(const Duration(seconds: 25));
-      if (pdfData == null || pdfData.length < 32) {
+      final bytes = await RepartidorDataService.downloadDeliveryNotePdf(
+        confirmationId: await _resolveReceiptConfirmationId(),
+        repartidorId: widget.albaran.codigoRepartidor,
+      ).timeout(const Duration(seconds: 25));
+      if (bytes.length < 32) {
         throw Exception('La nota de entrega llegó vacía');
       }
-      _cachedPdfBase64 = pdfData;
-
-      if (!mounted) {
-        modal.close();
-        return;
-      }
-      modal.close();
-
-      final pdfBytes = await Isolate.run(() => base64Decode(pdfData));
-      const title = 'Nota de entrega';
-      final fileName = 'Nota_Entrega_${widget.albaran.erpDocumentId}.pdf';
-
       if (!mounted) return;
-      unawaited(
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PdfPreviewScreen(
-              pdfBytes: pdfBytes,
-              title: title,
-              fileName: fileName,
-              onEmailTap: () {
-                Navigator.pop(context);
-                _emailReceipt();
-              },
-              onWhatsAppTap: () {
-                Navigator.pop(context);
-                unawaited(_shareDeliveryNoteViaWhatsApp(confirmFirst: false));
-              },
-            ),
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PdfPreviewScreen(
+            pdfBytes: Uint8List.fromList(bytes),
+            title: 'Nota de entrega',
+            fileName: 'Nota_Entrega_${widget.albaran.erpDocumentId}.pdf',
+            onEmailTap: () {
+              Navigator.pop(context);
+              _emailReceipt();
+            },
+            onWhatsAppTap: () {
+              Navigator.pop(context);
+              unawaited(_shareDeliveryNoteViaWhatsApp(confirmFirst: false));
+            },
           ),
         ),
       );
     } catch (error) {
-      if (mounted) {
-        modal.error(
-          repartidorSafeOperationMessage(error: error, operation: 'pdfPreview'),
-          onRetry: _previewReceiptPdf,
-        );
-      } else {
-        modal.close();
+      if (!mounted) return;
+      final message = repartidorSafeOperationMessage(
+        error: error,
+        operation: 'pdfPreview',
+      );
+      final retry = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('No se pudo abrir la nota'),
+          content: Text(message),
+          actions: [
+            SizedBox(
+              height: 56,
+              child: TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cerrar', style: TextStyle(fontSize: 18)),
+              ),
+            ),
+            SizedBox(
+              height: 56,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Reintentar', style: TextStyle(fontSize: 18)),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (retry == true && mounted) {
+        await _previewReceiptPdf();
       }
     }
   }

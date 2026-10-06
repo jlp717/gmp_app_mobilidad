@@ -63,10 +63,21 @@ void main() {
         openingBalance: openingBalance,
         ingresoBanco: 20,
       );
-      await tester.tap(find.text('Cerrar día y grabar liquidación'));
+      await tester.tap(find.text('Ingresar en el banco'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          '¿Estás seguro de que quieres realizar la liquidación diaria?',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Confirmar'));
       await tester.pumpAndSettle();
 
-      expect(find.text(_noCobrosMessage), findsOneWidget);
+      expect(
+        find.text('No hay cobros del día. No se ingresa nada.'),
+        findsOneWidget,
+      );
       expect(find.text('Grabando liquidacion...'), findsNothing);
       expect(actions.closeTokens, isEmpty);
       expect(actions.depositCalls, 0);
@@ -84,9 +95,9 @@ void main() {
         count: hasDetail ? 0 : 1,
         cobros: hasDetail ? const [_cardCobro] : const [],
       );
-      await tester.tap(find.text('Cerrar día y grabar liquidación'));
+      await tester.tap(find.text('Ingresar en el banco'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Sí, grabar'));
+      await tester.tap(find.text('Confirmar'));
       await tester.pumpAndSettle();
 
       await tester.pump(const Duration(seconds: 2));
@@ -95,7 +106,7 @@ void main() {
       expect(actions.closeTokens.single, isNotEmpty);
       expect(find.text(_noCobrosMessage), findsNothing);
       expect(actions.depositCalls, 0);
-      expect(find.text('Cerrar día y grabar liquidación'), findsNothing);
+      expect(find.text('Ingresar en el banco'), findsNothing);
       expect(find.byTooltip('Ver PDF'), findsOneWidget);
       await _drainSoftRefreshTimer(tester);
     });
@@ -214,9 +225,7 @@ Future<void> _pumpPage(
   await tester.pumpAndSettle();
   await tester.ensureVisible(
     find.text(
-      closedLedger
-          ? 'Recuperar cierre y PDF'
-          : 'Cerrar día y grabar liquidación',
+      closedLedger ? 'Recuperar cierre y PDF' : 'Ingresar en el banco',
     ),
   );
 }

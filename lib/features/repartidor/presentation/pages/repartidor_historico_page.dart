@@ -217,6 +217,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
   _DocType? _filterDocType;
   _DeliveryStatus? _filterStatus;
   int? _selectedYear; // null = all recent years (last 3)
+  bool? _documentFiltersOpen;
 
   @override
   void initState() {
@@ -1340,12 +1341,77 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
               ),
             ),
           ),
-        // Advanced filter bar
-        _buildAdvancedFilters(),
+        _buildDocumentFilterDisclosure(),
         // Stats summary
         _buildDocStats(),
         // Document list
         Expanded(child: _buildDocumentsList()),
+      ],
+    );
+  }
+
+  bool get _documentFiltersExpanded =>
+      _documentFiltersOpen ?? MediaQuery.sizeOf(context).shortestSide >= 600;
+
+  String get _documentFilterSummary {
+    final parts = <String>[
+      if (_selectedYear != null) '$_selectedYear',
+      if (_dateFrom != null)
+        'Desde ${DateFormat('dd/MM/yyyy').format(_dateFrom!)}',
+      if (_dateTo != null) 'Hasta ${DateFormat('dd/MM/yyyy').format(_dateTo!)}',
+      if (_filterDocType != null)
+        _filterDocType == _DocType.albaran ? 'Albaranes' : 'Facturas',
+      if (_filterStatus != null)
+        switch (_filterStatus!) {
+          _DeliveryStatus.delivered => 'Entregados',
+          _DeliveryStatus.partial => 'Parciales',
+          _DeliveryStatus.notDelivered => 'No entregados',
+          _DeliveryStatus.pending => 'Pendientes',
+          _DeliveryStatus.enRuta => 'En ruta',
+        },
+    ];
+    return parts.isEmpty ? 'Todos' : parts.join(' · ');
+  }
+
+  Widget _buildDocumentFilterDisclosure() {
+    final open = _documentFiltersExpanded;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: Row(
+            children: [
+              Semantics(
+                button: true,
+                expanded: open,
+                label: open ? 'Ocultar filtros' : 'Filtros',
+                child: OutlinedButton.icon(
+                  onPressed: () => setState(() => _documentFiltersOpen = !open),
+                  icon: Icon(open ? Icons.expand_less : Icons.filter_list),
+                  label: Text(open ? 'Ocultar filtros' : 'Filtros'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    textStyle: const TextStyle(fontSize: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _documentFilterSummary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (open) _buildAdvancedFilters(),
       ],
     );
   }

@@ -60,6 +60,7 @@ class _RepartidorLiquidacionDiariaPageState
   bool _seededClassicFields = false;
   bool _isRevalidating = false;
   bool _softRefreshStarted = false;
+  bool _tabWasVisible = false;
 
   @override
   void dispose() {
@@ -80,7 +81,7 @@ class _RepartidorLiquidacionDiariaPageState
     // Jefe ALL (comma fleet) already paid a heavy GET on first paint.
     // Do not stampede DB2 with an immediate forceRefresh.
     if (widget.repartidorId.contains(',')) return;
-    await Future<void>.delayed(const Duration(seconds: 12));
+    await Future<void>.delayed(Duration.zero);
     if (!mounted) return;
     setState(() => _isRevalidating = true);
     try {
@@ -150,6 +151,7 @@ class _RepartidorLiquidacionDiariaPageState
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    _syncTabVisibility();
     _refreshSessionDateIfSafe();
 
     if (widget.repartidorId.isEmpty) {
@@ -525,24 +527,26 @@ class _RepartidorLiquidacionDiariaPageState
     // Presence, not cash/balance: card payments also belong to the period.
     // A known closed day may still need to retrieve its immutable replay.
     final recoveringClose = ledgerClosed;
-    if (!recoveringClose &&
-        summary.cobros.isEmpty &&
-        summary.cobrosCount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            financeErrorMessage(
-              ApiException(
-                'Sin cobros en el periodo',
-                code: 'LIQUIDACION_NO_COBROS',
-                statusCode: 409,
-              ),
-              'No hay cobros en el periodo seleccionado.',
-            ),
+    if (!recoveringClose) {
+      final confirmed = await _confirmBankDeposit();
+      if (!confirmed || !mounted) return;
+      if (summary.cobros.isEmpty && summary.cobrosCount <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No hay cobros del día. No se ingresa nada.'),
           ),
-        ),
+        );
+        return;
+      }
+    } else {
+      final confirmed = await confirmRepartidorAction(
+        context,
+        title: '¿Recuperar la liquidación cerrada?',
+        message: 'Se consultará el cierre existente y se recuperará su PDF. '
+            'No se volverán a registrar movimientos ni el ingreso bancario.',
+        confirmLabel: 'Sí, recuperar',
       );
-      return;
+      if (!confirmed || !mounted) return;
     }
     if (_sessionDate != _today()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -555,18 +559,6 @@ class _RepartidorLiquidacionDiariaPageState
       );
       return;
     }
-    final confirmed = await confirmRepartidorAction(
-      context,
-      title: recoveringClose
-          ? '¿Recuperar la liquidación cerrada?'
-          : '¿Estás seguro de enviar la liquidación diaria?',
-      message: recoveringClose
-          ? 'Se consultará el cierre existente y se recuperará su PDF. '
-              'No se volverán a registrar movimientos ni el ingreso bancario.'
-          : 'Se grabará el cierre del día y se enviará el correo de liquidación.',
-      confirmLabel: recoveringClose ? 'Sí, recuperar' : 'Sí, grabar',
-    );
-    if (!confirmed || !mounted) return;
     setState(() => _saving = true);
 
     final modal = AsyncOperationModal.show(
@@ -825,21 +817,81 @@ class _RepartidorLiquidacionDiariaPageState
     );
   }
 
-  void _refreshSessionDateIfSafe() {
+  Future<bool> _confirmBankDeposit() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              '¿Estás seguro de que quieres realizar la liquidación diaria?',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              height: 56,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text(
+                  'Confirmar',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 56,
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text(
+                  'Cancelar',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return result == true;
+  }
+
+  void _syncTabVisibility() {
+    final visible = TickerMode.of(context);
+    if (visible && !_tabWasVisible) {
+      _tabWasVisible = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _refreshSessionDateIfSafe(entering: true);
+        _kickSoftRefresh();
+      });
+    } else if (!visible) {
+      _tabWasVisible = false;
+      _softRefreshStarted = false;
+    }
+  }
+
+  void _refreshSessionDateIfSafe({bool entering = false}) {
     final today = _today();
-    if (_saving ||
-        _closedResult != null ||
-        _knownClosedFromLedger ||
-        _sessionDate == today) {
+    if (_saving || _sessionDate == today) return;
+    if (!entering && (_closedResult != null || _knownClosedFromLedger)) {
       return;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _saving) return;
+      if (!mounted || _saving || _sessionDate == _today()) return;
       setState(() {
-        _sessionDate = today;
+        _sessionDate = _today();
+        _closedResult = entering ? null : _closedResult;
+        _knownClosedFromLedger = entering ? false : _knownClosedFromLedger;
         _entryTokens.clear();
-        _idempotencyToken =
-            buildLiquidacionIdempotencyToken(widget.repartidorId, _sessionDate);
+        _idempotencyToken = widget.repartidorId.isEmpty
+            ? ''
+            : buildLiquidacionIdempotencyToken(
+                widget.repartidorId,
+                _sessionDate,
+              );
       });
     });
   }
@@ -1846,10 +1898,7 @@ class _ModernSaveBar extends StatelessWidget {
                         // Req #16: cierre explicito de la jornada del repartidor.
                         isClosed
                             ? 'Liquidación cerrada'
-                            : MediaQuery.of(context).size.width < 380
-                                // ignore: lines_longer_than_80_chars
-                                ? 'Cerrar día'
-                                : 'Cerrar día y grabar liquidación',
+                            : 'Ingresar en el banco',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,

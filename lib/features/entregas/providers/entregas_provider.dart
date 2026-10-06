@@ -987,6 +987,16 @@ class EntregasNotifier extends Notifier<EntregasState> {
     _scheduleFilterReload(autoReload);
   }
 
+  void setUnifiedSearch(String query, {bool autoReload = true}) {
+    state = state.copyWith(
+      searchQuery: query,
+      searchClient: '',
+      searchAlbaran: '',
+      searchOrden: '',
+    );
+    _scheduleFilterReload(autoReload);
+  }
+
   void setSortBy(String sort, {bool autoReload = true}) {
     state = state.copyWith(sortBy: sort);
     _scheduleFilterReload(autoReload);

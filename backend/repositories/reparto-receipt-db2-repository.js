@@ -129,6 +129,71 @@ function hasValue(input) {
   return input != null && String(input).trim() !== '';
 }
 
+const READ_SCHEMA = /^[A-Z][A-Z0-9]{0,9}$/;
+
+function schemaName(value) {
+  const schema = String(value || '').trim().toUpperCase();
+  return READ_SCHEMA.test(schema) ? schema : null;
+}
+
+async function queryOptional(connection, sql, params, signal) {
+  try {
+    return await query(connection, sql, params, signal);
+  } catch (error) {
+    if (error instanceof RepartoReceiptUnavailableError) return null;
+    throw error;
+  }
+}
+
+async function loadDocumentFiscal(connection, confirmation, readSchema, appSchema, signal) {
+  const ejercicio = value(confirmation, 'DOCUMENTO_EJERCICIO');
+  const serie = String(value(confirmation, 'DOCUMENTO_SERIE') ?? '').trim();
+  const terminal = value(confirmation, 'DOCUMENTO_TERMINAL');
+  const numero = value(confirmation, 'DOCUMENTO_NUMERO');
+  if (!hasValue(ejercicio) || !serie || !hasValue(terminal) || !hasValue(numero)) return null;
+  const rows = await queryOptional(connection, `
+    SELECT
+      CPC.IMPORTEBASEIMPONIBLE1 AS BASE1,
+      CPC.PORCENTAJEIVA1 AS PCT1,
+      CPC.IMPORTEIVA1 AS IVA1,
+      CPC.IMPORTEBASEIMPONIBLE2 AS BASE2,
+      CPC.PORCENTAJEIVA2 AS PCT2,
+      CPC.IMPORTEIVA2 AS IVA2,
+      CPC.IMPORTEBASEIMPONIBLE3 AS BASE3,
+      CPC.PORCENTAJEIVA3 AS PCT3,
+      CPC.IMPORTEIVA3 AS IVA3,
+      TRIM(CPC.CODIGOFORMAPAGO) AS FORMA_PAGO,
+      CPC.NUMEROORDENPREPARACION AS ORDEN,
+      TRIM(COALESCE(CLI.DIRECCION, '')) AS DIRECCION,
+      TRIM(COALESCE(CLI.POBLACION, '')) AS POBLACION
+    FROM ${readSchema}.CPC CPC
+    LEFT JOIN ${readSchema}.CLI CLI
+      ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
+    WHERE CPC.EJERCICIOALBARAN = ?
+      AND TRIM(CPC.SERIEALBARAN) = ?
+      AND CPC.TERMINALALBARAN = ?
+      AND CPC.NUMEROALBARAN = ?
+    FETCH FIRST 2 ROWS ONLY
+    WITH UR
+  `, [ejercicio, serie, terminal, numero], signal);
+  if (!rows || rows.length !== 1) return null;
+  const fiscal = { ...rows[0] };
+  const paymentCode = String(value(fiscal, 'FORMA_PAGO') ?? '').trim();
+  if (appSchema && paymentCode) {
+    const catalog = await queryOptional(connection, `
+      SELECT DESCRIPCION
+      FROM ${appSchema}.PAYMENT_CONDITIONS
+      WHERE TRIM(CODIGO) = ? AND ACTIVO = 'S'
+      FETCH FIRST 1 ROW ONLY
+      WITH UR
+    `, [paymentCode], signal);
+    if (catalog && catalog.length === 1) {
+      fiscal.FORMA_PAGO_DESC = value(catalog[0], 'DESCRIPCION');
+    }
+  }
+  return fiscal;
+}
+
 function normalizeOwnerScope(input) {
   if (input?.allowAnyOwner === true) {
     return Object.freeze({ allowAnyOwner: true, ownerRepartidorId: null });
@@ -334,11 +399,17 @@ function createRepartoReceiptDb2Repository({ connectionFactory, runtime } = {}) 
           `SELECT ID, IDEMPOTENCY_TOKEN, CODIGOCLIENTEALBARAN, CODIGOVENDEDOR, TIPODOCUMENTO, ORIGENDOCUMENTO, SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO, XDEDOCUMENTO, DEXDOCUMENTO, IMPORTEVENCIMIENTO, CODIGOFORMAPAGO, DIACOBRO, MESCOBRO, ANOCOBRO FROM ${tables.finance.cobros} WHERE IDEMPOTENCY_TOKEN = ? AND TRIM(CODIGOCLIENTEALBARAN) = ? AND TRIM(CODIGOVENDEDOR) = ? AND TRIM(TIPODOCUMENTO) = ? AND TRIM(ORIGENDOCUMENTO) = ? AND TRIM(SUBEMPRESADOCUMENTO) = ? AND EJERCICIODOCUMENTO = ? AND TRIM(SERIEDOCUMENTO) = ? AND TERMINALDOCUMENTO = ? AND NUMERODOCUMENTO = ? AND XDEDOCUMENTO = ? AND DEXDOCUMENTO = ? FETCH FIRST 2 ROWS ONLY WITH UR`,
           paymentKey, signal);
       }
+      const readSchema = schemaName(runtime?.schemas?.read);
+      const appSchema = schemaName(runtime?.schemas?.app);
+      const fiscal = readSchema
+        ? await loadDocumentFiscal(connection, confirmation, readSchema, appSchema, signal)
+        : null;
       return Object.freeze({
         confirmation,
         lines: Object.freeze(lines),
         evidences: Object.freeze(evidences),
         payments: Object.freeze(payments),
+        fiscal: fiscal ? Object.freeze(fiscal) : null,
       });
     } finally {
       if (connection && typeof connection.close === 'function') {

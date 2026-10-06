@@ -3,6 +3,7 @@
 const PDFDocument = require('pdfkit');
 const { drawCompanyHeader } = require('./company-header');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
+const { moneyCents, roundMoney } = require('../utils/money-cents');
 
 const NAVY = '#003d7a';
 const NAVY_DEEP = '#00264d';
@@ -26,10 +27,6 @@ const POSTDATED_METHOD_RE = /^(POSTDATADO|PD|POSTDATADOS)$/i;
 function toNumber(raw) {
   const num = Number(raw);
   return Number.isFinite(num) ? num : 0;
-}
-
-function roundMoney(raw) {
-  return Math.round((toNumber(raw) + Number.EPSILON) * 100) / 100;
 }
 
 function pad(raw, size) {
@@ -90,12 +87,12 @@ function cashToDeposit({
   gastos = 0,
   ajustes = 0,
 } = {}) {
-  return roundMoney(
-    toNumber(totalEfectivo)
-      + toNumber(saldoActual)
-      - toNumber(gastos)
-      + toNumber(ajustes),
-  );
+  return (
+    moneyCents(totalEfectivo)
+      + moneyCents(saldoActual)
+      - moneyCents(gastos)
+      + moneyCents(ajustes)
+  ) / 100;
 }
 
 /**

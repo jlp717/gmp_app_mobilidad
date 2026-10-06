@@ -17,6 +17,20 @@ function numeric(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function fiscalSlots(fiscal) {
+  if (!fiscal || typeof fiscal !== 'object') return [];
+  const slots = [];
+  for (const index of [1, 2, 3]) {
+    const base = numeric(row(fiscal, `BASE${index}`));
+    const pct = numeric(row(fiscal, `PCT${index}`));
+    const iva = numeric(row(fiscal, `IVA${index}`));
+    if (base == null || pct == null || iva == null) continue;
+    if (Math.abs(base) <= 0.004 && Math.abs(iva) <= 0.004) continue;
+    slots.push(Object.freeze({ base, pct, iva }));
+  }
+  return slots;
+}
+
 function isAdmin(actor) {
   return String(actor?.role || '').trim().toUpperCase() === 'ADMIN';
 }
@@ -210,6 +224,10 @@ function isExactZeroPrepaid(confirmation, storedLines, payments) {
       throw unavailable('REPARTO_RECEIPT_SIGNATURE_UNAVAILABLE', 'La firma del recibo no esta disponible');
     }
     throwIfAborted(signal);
+    const fiscal = stored.fiscal && typeof stored.fiscal === 'object' ? stored.fiscal : null;
+    const slots = fiscalSlots(fiscal);
+    const netoCents = slots.reduce((sum, item) => sum + Math.round(Number(item.base) * 100), 0);
+    const ivaCents = slots.reduce((sum, item) => sum + Math.round(Number(item.iva) * 100), 0);
     return Object.freeze({
       confirmationId: String(row(confirmation, 'ID')),
       idempotencyKey: text(row(confirmation, 'IDEMPOTENCY_KEY')),
@@ -240,6 +258,8 @@ function isExactZeroPrepaid(confirmation, storedLines, payments) {
       cliente: Object.freeze({
         codigo: text(row(confirmation, 'CLIENTE_CODIGO')),
         nombre: text(row(confirmation, 'CLIENTE_NOMBRE')),
+        direccion: text(row(fiscal, 'DIRECCION')),
+        poblacion: text(row(fiscal, 'POBLACION')),
       }),
       receptor: Object.freeze({
         nombre: text(row(confirmation, 'RECEPTOR_NOMBRE')),
@@ -255,9 +275,11 @@ function isExactZeroPrepaid(confirmation, storedLines, payments) {
       firmaEvidenceId: signature,
       prepaidZeroWithoutLines: zeroPrepaid,
       importeTotal,
-      importeNeto: importeTotal,
-      importeIva: null,
-      ivaBreakdown: Object.freeze([]),
+      importeNeto: slots.length ? netoCents / 100 : importeTotal,
+      importeIva: slots.length ? ivaCents / 100 : null,
+      ivaBreakdown: Object.freeze(slots),
+      formaPago: text(row(fiscal, 'FORMA_PAGO_DESC')) || text(row(fiscal, 'FORMA_PAGO')),
+      ordenPreparacion: numeric(row(fiscal, 'ORDEN')),
       lineas: Object.freeze(lines),
       evidencias: Object.freeze(evidence),
       cobro: payment(stored.payments[0], confirmation),

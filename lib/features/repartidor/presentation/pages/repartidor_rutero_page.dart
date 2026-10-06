@@ -70,10 +70,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   String? _identityError;
   int _weekLoadGeneration = 0;
   String? _lastLoadedId;
-  final TextEditingController _searchClientController = TextEditingController();
-  final TextEditingController _searchAlbaranController =
-      TextEditingController();
-  final TextEditingController _searchOrdenController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   Timer? _loadDebounceTimer;
   Completer<void>? _loadCompleter;
   bool _isDetailModalOpen = false;
@@ -104,9 +101,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
 
   @override
   void dispose() {
-    _searchClientController.dispose();
-    _searchAlbaranController.dispose();
-    _searchOrdenController.dispose();
+    _searchController.dispose();
     _loadDebounceTimer?.cancel();
     if (_loadCompleter?.isCompleted == false) {
       _loadCompleter?.complete();
@@ -544,147 +539,111 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Busca una parada por cliente, número completo (P-15-2296) u orden de preparación.',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 14,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 10),
             _ruteroSearchField(
-              controller: _searchClientController,
-              label: 'Cliente',
-              hint: 'Nombre o código',
+              controller: _searchController,
+              label: 'Buscar parada',
+              hint: 'Cliente, serie o orden',
               onChanged: (value) => _updateRouteFilter(
-                (notifier) =>
-                    notifier.setSearchClient(value, autoReload: false),
+                (notifier) => notifier.setUnifiedSearch(
+                  value,
+                  autoReload: false,
+                ),
               ),
             ),
             const SizedBox(height: 8),
-            _ruteroSearchField(
-              controller: _searchAlbaranController,
-              label: 'Número',
-              hint: 'Serie completa o número',
-              onChanged: (value) => _updateRouteFilter(
-                (notifier) =>
-                    notifier.setSearchAlbaran(value, autoReload: false),
-              ),
-            ),
-            const SizedBox(height: 8),
-            _ruteroSearchField(
-              controller: _searchOrdenController,
-              label: 'Orden de preparación',
-              hint: 'Número de orden',
-              keyboardType: TextInputType.number,
-              onChanged: (value) => _updateRouteFilter(
-                (notifier) => notifier.setSearchOrden(value, autoReload: false),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Cobrar deja solo el cobro obligatorio. Crédito filtra esa forma de pago. '
-              'Si ya está cobrado, se entrega y no sale en Cobros. '
-              'Si el documento es 0,00 €, se puede entregar sin cobrar. '
-              'Si la nota no carga, finaliza la entrega o pulsa Reintentar.',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 13,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                // Quick filter chips
-                _buildQuickFilterChip(
-                  label: 'Cobrar',
-                  isSelected: filterDebeCobrar == 'S',
-                  color: AppTheme.obligatorio,
-                  icon: Icons.euro,
-                  onTap: () {
-                    unawaited(HapticFeedback.selectionClick());
-                    _updateRouteFilter(
-                      (notifier) => notifier.setFilterDebeCobrar(
-                        filterDebeCobrar == 'S' ? '' : 'S',
-                        autoReload: false,
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(width: 6),
-
-                _buildQuickFilterChip(
-                  label: 'Crédito',
-                  isSelected: filterTipoPago == 'CREDITO',
-                  color: AppTheme.credito,
-                  icon: Icons.credit_card,
-                  onTap: () {
-                    unawaited(HapticFeedback.selectionClick());
-                    _updateRouteFilter(
-                      (notifier) => notifier.setFilterTipoPago(
-                        filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
-                        autoReload: false,
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(width: 6),
-
-                Semantics(
-                  label: 'Ordenar la lista',
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: sortBy,
-                      icon: const Icon(Icons.sort,
-                          color: AppTheme.info, size: 20),
-                      dropdownColor: AppTheme.raisedSurface,
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'default',
-                          child: Text('Orden de ruta'),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  // Quick filter chips
+                  _buildQuickFilterChip(
+                    label: 'Cobrar',
+                    isSelected: filterDebeCobrar == 'S',
+                    color: AppTheme.obligatorio,
+                    icon: Icons.euro,
+                    onTap: () {
+                      unawaited(HapticFeedback.selectionClick());
+                      _updateRouteFilter(
+                        (notifier) => notifier.setFilterDebeCobrar(
+                          filterDebeCobrar == 'S' ? '' : 'S',
+                          autoReload: false,
                         ),
-                        DropdownMenuItem(
-                          value: 'importe_desc',
-                          child: Text('Mayor importe'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'importe_asc',
-                          child: Text('Menor importe'),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) {
-                          unawaited(HapticFeedback.selectionClick());
-                          _updateRouteFilter(
-                            (notifier) =>
-                                notifier.setSortBy(val, autoReload: false),
-                          );
-                        }
-                      },
-                    ),
+                      );
+                    },
                   ),
-                ),
-                if (canReorder)
+
+                  const SizedBox(width: 6),
+
+                  _buildQuickFilterChip(
+                    label: 'Crédito',
+                    isSelected: filterTipoPago == 'CREDITO',
+                    color: AppTheme.credito,
+                    icon: Icons.credit_card,
+                    onTap: () {
+                      unawaited(HapticFeedback.selectionClick());
+                      _updateRouteFilter(
+                        (notifier) => notifier.setFilterTipoPago(
+                          filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
+                          autoReload: false,
+                        ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(width: 6),
+
                   Semantics(
-                    button: true,
-                    label: 'Ordenar paradas',
-                    child: OutlinedButton.icon(
-                      onPressed: () => _openReorderModal(
-                        scopedId,
-                        List<AlbaranEntrega>.from(albaranes),
+                    label: 'Ordenar la lista',
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: sortBy,
+                        icon: const Icon(Icons.sort,
+                            color: AppTheme.info, size: 20),
+                        dropdownColor: AppTheme.raisedSurface,
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'default',
+                            child: Text('Orden de ruta'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'importe_desc',
+                            child: Text('Mayor importe'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'importe_asc',
+                            child: Text('Menor importe'),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            unawaited(HapticFeedback.selectionClick());
+                            _updateRouteFilter(
+                              (notifier) =>
+                                  notifier.setSortBy(val, autoReload: false),
+                            );
+                          }
+                        },
                       ),
-                      icon: const Icon(Icons.reorder),
-                      label: const Text('Ordenar paradas'),
                     ),
                   ),
-              ],
+                  if (canReorder)
+                    Semantics(
+                      button: true,
+                      label: 'Ordenar paradas',
+                      child: OutlinedButton.icon(
+                        onPressed: () => _openReorderModal(
+                          scopedId,
+                          List<AlbaranEntrega>.from(albaranes),
+                        ),
+                        icon: const Icon(Icons.reorder),
+                        label: const Text('Ordenar paradas'),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -734,9 +693,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   }
 
   bool get _ruteroFiltersActive =>
-      _searchClientController.text.trim().isNotEmpty ||
-      _searchAlbaranController.text.trim().isNotEmpty ||
-      _searchOrdenController.text.trim().isNotEmpty ||
+      _searchController.text.trim().isNotEmpty ||
       ref.read(entregasProvider).filterDebeCobrar.isNotEmpty ||
       ref.read(entregasProvider).filterTipoPago.isNotEmpty;
 

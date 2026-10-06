@@ -135,6 +135,10 @@ class VencimientosPage extends StatefulWidget {
     this.isLoadingMore = false,
     this.onLoadMore,
     this.repartidorId = '',
+    this.filtersExpanded,
+    this.showFilterToggle = true,
+    this.onFiltersToggle,
+    this.activeFilterSummary,
   });
 
   final String title;
@@ -150,6 +154,10 @@ class VencimientosPage extends StatefulWidget {
   final bool isLoadingMore;
   final VoidCallback? onLoadMore;
   final String repartidorId;
+  final bool? filtersExpanded;
+  final bool showFilterToggle;
+  final VoidCallback? onFiltersToggle;
+  final String? activeFilterSummary;
 
   @override
   State<VencimientosPage> createState() => _VencimientosPageState();
@@ -161,6 +169,47 @@ class _VencimientosPageState extends State<VencimientosPage> {
   bool? _soloObligatorio;
   String _searchQuery = '';
   String? _selectedKey;
+  bool? _filtersOpen;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _filtersOpen ??= widget.filtersExpanded ??
+        MediaQuery.sizeOf(context).shortestSide >= 600;
+  }
+
+  @override
+  void didUpdateWidget(covariant VencimientosPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.filtersExpanded != null &&
+        widget.filtersExpanded != oldWidget.filtersExpanded) {
+      _filtersOpen = widget.filtersExpanded;
+    }
+  }
+
+  String _activeFilterSummary() {
+    final estado = switch (_filtro) {
+      VencimientosFiltro.todos => 'Todos',
+      VencimientosFiltro.pendientes => 'Pendientes',
+      VencimientosFiltro.vencidos => 'Vencidos',
+      VencimientosFiltro.cobrados => 'Cobrados',
+      VencimientosFiltro.hoy => 'Hoy',
+      VencimientosFiltro.proximos => 'Próximos',
+      VencimientosFiltro.sinFecha => 'Sin fecha',
+    };
+    final tipo = switch (_tipoDocumento) {
+      'CAC' => 'Albaranes',
+      'COC' => 'Facturas',
+      'DEV' => 'Devoluciones',
+      _ => null,
+    };
+    return [estado, if (tipo != null) tipo].join(' · ');
+  }
+
+  bool get _needsConcreteDriver {
+    final owner = widget.repartidorId.trim();
+    return owner.isEmpty || owner.contains(',') || owner.toUpperCase() == 'ALL';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -192,42 +241,106 @@ class _VencimientosPageState extends State<VencimientosPage> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-            child: TextField(
-              onChanged: (value) => setState(() => _searchQuery = value),
-              onSubmitted: widget.onSearchSubmitted,
-              textInputAction: TextInputAction.search,
-              style: TextStyle(color: AppTheme.textPrimary),
-              decoration: const InputDecoration(
-                labelText: 'Buscar cliente, número u orden de preparación',
-                prefixIcon: Icon(Icons.search),
-                isDense: true,
-              ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    onChanged: (value) => setState(() => _searchQuery = value),
+                    onSubmitted: widget.onSearchSubmitted,
+                    textInputAction: TextInputAction.search,
+                    style: TextStyle(color: AppTheme.textPrimary),
+                    decoration: const InputDecoration(
+                      labelText: 'Buscar cliente, número u orden',
+                      prefixIcon: Icon(Icons.search),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                if (widget.showFilterToggle) ...[
+                  const SizedBox(width: 8),
+                  Semantics(
+                    button: true,
+                    expanded: _filtersOpen == true,
+                    label: _filtersOpen == true ? 'Ocultar filtros' : 'Filtros',
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        final toggle = widget.onFiltersToggle;
+                        if (toggle != null) {
+                          toggle();
+                          return;
+                        }
+                        setState(() => _filtersOpen = _filtersOpen != true);
+                      },
+                      icon: Icon(
+                        _filtersOpen == true
+                            ? Icons.expand_less
+                            : Icons.filter_list,
+                      ),
+                      label: Text(
+                        _filtersOpen == true ? 'Ocultar' : 'Filtros',
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                        textStyle: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          _CobrosFilterPanel(
-            estado: _filtro,
-            tipoDocumento: _tipoDocumento,
-            soloObligatorio: _soloObligatorio,
-            repartidorId: widget.repartidorId,
-            onEstado: (filtro) {
-              setState(() => _filtro = filtro);
-              widget.onFiltroChanged?.call(filtro);
-            },
-            onTipo: (tipo) {
-              setState(() => _tipoDocumento = tipo);
-              widget.onTipoDocumentoChanged?.call(tipo);
-            },
-            onObligatorio: (value) => setState(() => _soloObligatorio = value),
-            onClear: () {
-              setState(() {
-                _filtro = VencimientosFiltro.todos;
-                _tipoDocumento = null;
-                _soloObligatorio = null;
-              });
-              widget.onFiltroChanged?.call(VencimientosFiltro.todos);
-              widget.onTipoDocumentoChanged?.call(null);
-            },
-          ),
+          if (widget.showFilterToggle && _filtersOpen != true)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+              child: Text(
+                widget.activeFilterSummary ?? _activeFilterSummary(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          if (_needsConcreteDriver)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Text(
+                'Elige un repartidor concreto para cobrar',
+                style: TextStyle(
+                  color: AppTheme.warning,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          if (_filtersOpen == true)
+            _CobrosFilterPanel(
+              estado: _filtro,
+              tipoDocumento: _tipoDocumento,
+              soloObligatorio: _soloObligatorio,
+              repartidorId: widget.repartidorId,
+              onEstado: (filtro) {
+                setState(() => _filtro = filtro);
+                widget.onFiltroChanged?.call(filtro);
+              },
+              onTipo: (tipo) {
+                setState(() => _tipoDocumento = tipo);
+                widget.onTipoDocumentoChanged?.call(tipo);
+              },
+              onObligatorio: (value) =>
+                  setState(() => _soloObligatorio = value),
+              onClear: () {
+                setState(() {
+                  _filtro = VencimientosFiltro.todos;
+                  _tipoDocumento = null;
+                  _soloObligatorio = null;
+                });
+                widget.onFiltroChanged?.call(VencimientosFiltro.todos);
+                widget.onTipoDocumentoChanged?.call(null);
+              },
+            ),
           Expanded(
             child: visible.isEmpty && !widget.hasMore
                 ? _EmptyState(message: _emptyCobrosMessage())
@@ -452,6 +565,35 @@ class _RepartidorVencimientosPageState
   int _generation = 0;
   bool _isLoading = true;
   bool _isLoadingMore = false;
+  bool? _filtersOpen;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _filtersOpen ??= MediaQuery.sizeOf(context).shortestSide >= 600;
+  }
+
+  String get _cobrosFilterSummary {
+    final estado = switch (_filtro) {
+      VencimientosFiltro.todos => 'Todos',
+      VencimientosFiltro.pendientes => 'Pendientes',
+      VencimientosFiltro.vencidos => 'Vencidos',
+      VencimientosFiltro.cobrados => 'Cobrados',
+      _ => 'Pendientes',
+    };
+    final format = DateFormat('dd/MM/yyyy');
+    final tipo = switch (_tipoDocumento) {
+      'CAC' => 'Albaranes',
+      'COC' => 'Facturas',
+      'DEV' => 'Devoluciones',
+      _ => null,
+    };
+    return [
+      estado,
+      if (tipo != null) tipo,
+      '${format.format(_from)} – ${format.format(_to)}',
+    ].join(' · ');
+  }
 
   @override
   void initState() {
@@ -688,9 +830,10 @@ class _RepartidorVencimientosPageState
         ),
       );
     }
+    final filtersOpen = _filtersOpen == true;
     return Column(
       children: [
-        _buildDateFilters(),
+        if (filtersOpen) _buildDateFilters(),
         Expanded(
           child: VencimientosPage(
             title: widget.title,
@@ -705,6 +848,10 @@ class _RepartidorVencimientosPageState
             repartidorId: widget.repartidorId,
             onFiltroChanged: _changeFiltro,
             onTipoDocumentoChanged: _changeTipoDocumento,
+            filtersExpanded: filtersOpen,
+            showFilterToggle: true,
+            onFiltersToggle: () => setState(() => _filtersOpen = !filtersOpen),
+            activeFilterSummary: _cobrosFilterSummary,
             onItemTap: (item) {
               _showCobroDialog(
                 context,
@@ -1243,9 +1390,6 @@ class _CobrosFilterPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final owner = repartidorId.trim();
-    final needsDriver =
-        owner.isEmpty || owner.contains(',') || owner.toUpperCase() == 'ALL';
     final hasExtra = estado != VencimientosFiltro.todos ||
         tipoDocumento != null ||
         soloObligatorio != null;
@@ -1259,18 +1403,6 @@ class _CobrosFilterPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (needsDriver)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'Elige un repartidor concreto para cobrar',
-                    style: TextStyle(
-                      color: AppTheme.warning,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
               _group('Estado', [
                 _estadoChip(VencimientosFiltro.todos, 'Todos'),
                 _estadoChip(VencimientosFiltro.pendientes, 'Pendientes'),
@@ -1398,7 +1530,7 @@ class _FilterChoice extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1408,12 +1540,16 @@ class _FilterChoice extends StatelessWidget {
                     color: selected ? color : AppTheme.textSecondary,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: selected ? color : AppTheme.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: selected ? color : AppTheme.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ],

@@ -561,16 +561,32 @@ async function generateInvoicePDF(facturaData) {
             if (grupos.length === 0) {
                 const gruposIVA = {};
                 lines.forEach(line => {
-                    const porcIVA = line.CODIGOIVA ? (IVA_MAP[(line.CODIGOIVA || '').trim()] || 0) : 0;
-                    const key = `${porcIVA.toFixed(2)}`;
+                    const code = String(line.CODIGOIVA || '').trim();
+                    const mapped = Object.prototype.hasOwnProperty.call(IVA_MAP, code)
+                        ? IVA_MAP[code]
+                        : null;
+                    const linePct = Number(line.PORCENTAJEIVAARTICULO);
+                    const porcIVA = mapped != null
+                        ? mapped
+                        : (Number.isFinite(linePct) ? linePct : 0);
+                    const key = String(porcIVA);
                     if (!gruposIVA[key]) {
-                        gruposIVA[key] = { porcIVA, porcRec: 0, baseImponible: 0, iva: 0, recargo: 0 };
+                        gruposIVA[key] = { porcIVA, baseCents: 0, ivaCents: 0 };
                     }
-                    const importe = parseFloat(line.IMPORTENETOARTICULO) || 0;
-                    gruposIVA[key].baseImponible += importe;
-                    gruposIVA[key].iva += importe * (porcIVA / 100);
+                    const importe = Number(line.IMPORTENETOARTICULO);
+                    const baseCents = Number.isFinite(importe)
+                        ? Math.round(importe * 100 + Math.sign(importe) * 1e-8)
+                        : 0;
+                    gruposIVA[key].baseCents += baseCents;
+                    gruposIVA[key].ivaCents += Math.round(baseCents * porcIVA / 100);
                 });
-                grupos.push(...Object.values(gruposIVA));
+                grupos.push(...Object.values(gruposIVA).map((group) => ({
+                    porcIVA: group.porcIVA,
+                    porcRec: 0,
+                    baseImponible: group.baseCents / 100,
+                    iva: group.ivaCents / 100,
+                    recargo: 0,
+                })));
             }
 
             const taxRows = grupos.length > 0 ? Math.max(grupos.length, 1) : 0;

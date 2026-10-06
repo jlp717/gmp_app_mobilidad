@@ -9,6 +9,7 @@ const {
   computeClosingBalance,
   sumCashPayments,
 } = require('./liquidacion-pdf-service');
+const { moneyCents, roundMoney } = require('../utils/money-cents');
 
 class LiquidacionApplicationError extends Error {
   constructor(message, { code = 'LIQUIDACION_APPLICATION_ERROR', statusCode = 409, details } = {}) {
@@ -212,7 +213,7 @@ function normalizedAmount(value, field, { nonNegative = false } = {}) {
   if (!Number.isFinite(amount) || (nonNegative && amount < 0)) {
     throw invalidSnapshot(`${field} debe ser un importe finito${nonNegative ? ' no negativo' : ''}`);
   }
-  return Math.round((amount + Number.EPSILON) * 100) / 100;
+  return roundMoney(amount);
 }
 
 function uniqueEntries(value, field, normalize) {
@@ -234,7 +235,7 @@ function uniqueEntries(value, field, normalize) {
 }
 
 function total(entries, field = 'amount') {
-  return Math.round((entries.reduce((sum, entry) => sum + entry[field], 0) + Number.EPSILON) * 100) / 100;
+  return entries.reduce((sum, entry) => sum + moneyCents(entry[field]), 0) / 100;
 }
 
 function equalMoney(left, right) {
@@ -624,8 +625,7 @@ function createRepartidorLiquidacionService({ repository } = {}) {
           return [];
         }
       }));
-      const sum = (entries) => Math.round((entries.reduce((acc, entry) => acc + entry.amount, 0)
-        + Number.EPSILON) * 100) / 100;
+      const sum = (entries) => entries.reduce((acc, entry) => acc + moneyCents(entry.amount), 0) / 100;
       return Object.freeze({
         ...query, status: ledger.closed ? 'CLOSED' : 'OPEN',
         expenses, adjustments, bankDeposits, payments: cobros,

@@ -319,7 +319,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
 
     return PDFView(
       filePath: _tempPath,
-      nightMode: true,
+      nightMode: false,
       onRender: (pages) {
         _renderTimer?.cancel();
         if (mounted) {

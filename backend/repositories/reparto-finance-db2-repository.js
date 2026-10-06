@@ -7,6 +7,7 @@
  */
 
 const { queryWithParams, getPool, initDb } = require('../config/db');
+const { roundMoney } = require('../utils/money-cents');
 const logger = require('../middleware/logger');
 const { madridCalendarParts } = require('../utils/madrid-calendar');
 const {
@@ -53,11 +54,6 @@ function resolveFinanceBindings(env = process.env) {
   });
 }
 
-function roundMoney(raw) {
-  const num = Number(raw);
-  const safe = Number.isFinite(num) ? num : 0;
-  return Math.round((safe + Number.EPSILON) * 100) / 100;
-}
 
 function normalizeText(value) {
   return String(value || '').trim();
@@ -1871,16 +1867,25 @@ function createRepartoFinanceDb2Repository(options = {}) {
         AND CPC.SUBEMPRESAPEDIDO = OPP.SUBEMPRESA
       WHERE ${repFilter.sql}
         AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) = ?
+    ),
+    DOCUMENT_DEBT AS (
+      SELECT
+        SUM(COALESCE(CVC.IMPORTEPENDIENTE, 0)) AS IMPORTEPENDIENTE
+      FROM DELIVERY_DOCUMENTS DOC
+      LEFT JOIN ${erpDataSchema}.CVC CVC
+        ON CVC.SUBEMPRESADOCUMENTO = DOC.SUBEMPRESAALBARAN
+        AND CVC.EJERCICIODOCUMENTO = DOC.EJERCICIOALBARAN
+        AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(DOC.SERIEALBARAN)
+        AND CVC.TERMINALDOCUMENTO = DOC.TERMINALALBARAN
+        AND CVC.NUMERODOCUMENTO = DOC.NUMEROALBARAN
+        AND CVC.TIPODOCUMENTO IN ('CAC', 'COC', 'DEV')
+        AND COALESCE(CVC.ANULADOSN, '') <> 'S'
+      WHERE DOC.ALBARAN_RANK = 1
+      GROUP BY DOC.SUBEMPRESAALBARAN, DOC.EJERCICIOALBARAN,
+        TRIM(DOC.SERIEALBARAN), DOC.TERMINALALBARAN, DOC.NUMEROALBARAN
     )
-    SELECT COALESCE(SUM(COALESCE(CVC.IMPORTEPENDIENTE, 0)), 0) AS DEUDA_PENDIENTE
-    FROM DELIVERY_DOCUMENTS DOC
-    LEFT JOIN ${erpDataSchema}.CVC CVC
-      ON CVC.SUBEMPRESADOCUMENTO = DOC.SUBEMPRESAALBARAN
-      AND CVC.EJERCICIODOCUMENTO = DOC.EJERCICIOALBARAN
-      AND CVC.SERIEDOCUMENTO = DOC.SERIEALBARAN
-      AND CVC.TERMINALDOCUMENTO = DOC.TERMINALALBARAN
-      AND CVC.NUMERODOCUMENTO = DOC.NUMEROALBARAN
-    WHERE DOC.ALBARAN_RANK = 1
+    SELECT COALESCE(SUM(IMPORTEPENDIENTE), 0) AS DEUDA_PENDIENTE
+    FROM DOCUMENT_DEBT
   `, [...repFilter.params, dateYmd]);
     },
 

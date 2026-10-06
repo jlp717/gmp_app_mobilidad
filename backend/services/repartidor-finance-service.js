@@ -21,6 +21,7 @@ const {
 } = require('./staff-email-directory-service');
 const { assertTalonPayment } = require('./reparto-bank-catalog');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
+const { roundMoney, sumMoney, settleIdleDeposit } = require('../utils/money-cents');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 const { resolveDocumentCollectable } = require('./delivery-cobro-availability');
 const { paymentCovers } = require('./commercial-collected-route');
@@ -291,9 +292,6 @@ function toInt(raw) {
   return Number.isFinite(num) ? num : 0;
 }
 
-function roundMoney(raw) {
-  return Math.round((toNumber(raw) + Number.EPSILON) * 100) / 100;
-}
 
 function firstRow(rows) {
   return Array.isArray(rows) && rows.length > 0 ? rows[0] : {};
@@ -1216,7 +1214,7 @@ function aggregateDailySummaries({ repartidorId, date, parts }) {
   ];
   const summary = Object.fromEntries(numericKeys.map((key) => [
     key,
-    roundMoney(parts.reduce((total, item) => total + toNumber(item?.summary?.[key], 0), 0)),
+    sumMoney(parts.map((item) => item?.summary?.[key])),
   ]));
   summary.TOTAL_AJUSTES = summary.ajustes;
   summary.TOTAL_EFECTIVO = summary.totalEfectivo;
@@ -1339,6 +1337,21 @@ async function _getDailySummaryInternal({ repartidorId, date }) {
       'IMPORTETOTALAINGRESAR',
       cashToDeposit({ totalEfectivo, saldoActual, gastos, ajustes }),
     ));
+  } else {
+    const settled = settleIdleDeposit({
+      cobrosCount,
+      totalEfectivo,
+      totalCheques,
+      totalTarjeta,
+      totalPostdatados,
+      gastos,
+      ajustes,
+      ingresoBanco,
+      saldoActual,
+      totalAIngresar,
+    });
+    saldoActual = settled.saldoActual;
+    totalAIngresar = settled.totalAIngresar;
   }
 
   // camelCase = contrato Flutter actual; UPPER = alias legacy APK/parsers.

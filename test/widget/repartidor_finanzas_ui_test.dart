@@ -126,7 +126,7 @@ void main() {
     expect(find.text('Deuda pendiente'), findsOneWidget);
     expect(find.text('Ingreso en Banco'), findsOneWidget);
     expect(find.text('TOTAL'), findsOneWidget);
-    expect(find.text('Cerrar día y grabar liquidación'), findsOneWidget);
+    expect(find.text('Ingresar en el banco'), findsOneWidget);
     expect(find.text('Cliente'), findsWidgets);
     await _drainSoftRefreshTimer(tester);
   });
@@ -222,7 +222,7 @@ void main() {
 
     expect(find.text('Selecciona un repartidor para liquidar'), findsNothing);
     expect(find.text('Liquidación Diaria'), findsOneWidget);
-    expect(find.text('Cerrar día y grabar liquidación'), findsNothing);
+    expect(find.text('Ingresar en el banco'), findsNothing);
   });
 
   testWidgets('vencimientos can be filtered by group', (tester) async {
@@ -283,6 +283,34 @@ void main() {
 
     expect(find.text('Cliente cobrado'), findsOneWidget);
     expect(find.text('Cliente futuro'), findsNothing);
+  });
+
+  testWidgets('cobros filters stay hidden on a phone until Filtros opens',
+      (tester) async {
+    tester.view.physicalSize = const Size(520, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      wrap(
+        VencimientosPage(
+          vencimientos: [
+            VencimientoItem(
+              cliente: 'Cliente visible',
+              documento: 'P-15-2296',
+              fecha: DateTime(2026, 10, 1),
+              importe: 9.27,
+              estado: VencimientoEstado.vencido,
+            ),
+          ],
+        ),
+      ),
+    );
+    expect(find.text('Cliente visible'), findsOneWidget);
+    expect(find.bySemanticsLabel('Filtro estado Pendientes'), findsNothing);
+    await tester.tap(find.text('Filtros'));
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Filtro estado Pendientes'), findsOneWidget);
   });
 
   test('cobros search matches client and document', () {
