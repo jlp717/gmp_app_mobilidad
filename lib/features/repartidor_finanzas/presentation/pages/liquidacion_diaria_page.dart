@@ -1,16 +1,19 @@
 // ignore_for_file: public_member_api_docs, lines_longer_than_80_chars
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/money/money.dart';
+import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
+import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_confirm_dialog.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/repartidor_executive_ui.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/data/canonical_liquidacion_pdf_builder.dart';
@@ -20,8 +23,8 @@ import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/fina
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/providers/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/widgets/liquidacion_diaria_view.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:share_plus/share_plus.dart';
 
 class RepartidorLiquidacionDiariaPage extends ConsumerStatefulWidget {
   const RepartidorLiquidacionDiariaPage({
@@ -467,12 +470,52 @@ class _RepartidorLiquidacionDiariaPageState
     Uint8List bytes, {
     required String fileName,
     required String repartidorId,
-  }) {
-    return Share.shareXFiles(
-      <XFile>[
-        XFile.fromData(bytes, mimeType: 'application/pdf', name: fileName),
-      ],
-      subject: 'Liquidación diaria $repartidorId',
+  }) async {
+    final dir = await getTemporaryDirectory();
+    final safeName = fileName.replaceAll(RegExp(r'[^\w.\-]'), '_');
+    final file = File('${dir.path}/$safeName');
+    await file.writeAsBytes(bytes, flush: true);
+    if (!mounted) return;
+    final channel = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.chat, color: AppColors.whatsappGreen),
+              title: const Text('WhatsApp'),
+              onTap: () => Navigator.pop(sheetContext, 'whatsapp'),
+            ),
+            ListTile(
+              leading: Icon(Icons.email_outlined, color: AppTheme.info),
+              title: const Text('Gmail'),
+              onTap: () => Navigator.pop(sheetContext, 'gmail'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || channel == null) return;
+    final subject = 'Liquidación diaria $repartidorId';
+    if (channel == 'whatsapp') {
+      final form = await WhatsAppFormModal.show(
+        context,
+        defaultMessage: subject,
+      );
+      if (form == null || !mounted) return;
+      await WhatsAppDocumentShare.sharePdf(
+        filePath: file.path,
+        phone: form.phone,
+        message: form.message,
+      );
+      return;
+    }
+    await WhatsAppDocumentShare.sharePdfByGmail(
+      filePath: file.path,
+      email: '',
+      subject: subject,
+      message: 'Adjunto la liquidación diaria.',
     );
   }
 

@@ -36,22 +36,52 @@ class WhatsAppDocumentShare {
     }
 
     if (Platform.isAndroid) {
-      try {
-        final opened = await _channel.invokeMethod<bool>('sharePdf', {
-          'path': file.path,
-          'phone': phoneDigits(phone),
-          'text': message,
-        });
-        if (opened ?? false) return;
-      } on PlatformException {
-        // WhatsApp missing or the intent was rejected: fall through.
-      }
+      final opened = await _channel.invokeMethod<bool>('sharePdf', {
+        'path': file.path,
+        'phone': phoneDigits(phone),
+        'text': message,
+      });
+      if (opened ?? false) return;
+      throw const WhatsAppDocumentShareException(
+        'No se pudo abrir WhatsApp con el PDF. Comprueba que WhatsApp está instalado.',
+      );
     }
 
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'application/pdf')],
       text: message,
       subject: message,
+      sharePositionOrigin: sharePositionOrigin,
+    );
+  }
+
+  /// Opens Gmail with the PDF already attached to [email].
+  static Future<void> sharePdfByGmail({
+    required String filePath,
+    required String email,
+    required String subject,
+    required String message,
+    Rect? sharePositionOrigin,
+  }) async {
+    final file = File(filePath);
+    if (!file.existsSync() || file.lengthSync() == 0) {
+      throw const WhatsAppDocumentShareException(
+        'No se pudo preparar el PDF para el correo.',
+      );
+    }
+    if (Platform.isAndroid) {
+      final opened = await _channel.invokeMethod<bool>('shareGmail', {
+        'path': file.path,
+        'email': email.trim(),
+        'subject': subject,
+        'text': message,
+      });
+      if (opened ?? false) return;
+    }
+    await Share.shareXFiles(
+      [XFile(file.path, mimeType: 'application/pdf')],
+      text: message,
+      subject: subject,
       sharePositionOrigin: sharePositionOrigin,
     );
   }

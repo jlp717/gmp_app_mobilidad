@@ -11,7 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:gmp_app_mobilidad/core/widgets/email_form_modal.dart';
+import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -330,9 +331,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   }
 
   Future<void> _shareFichaViaWhatsApp(BuildContext context) async {
-    final phone = await _askPhoneNumber(context);
-    if (phone == null || !context.mounted) return;
-    if (!mounted) return;
+    final form = await WhatsAppFormModal.show(
+      context,
+      defaultMessage: 'Hola, le adjunto la ficha técnica ${widget.productName} '
+          '(${widget.productCode.trim()}).',
+    );
+    if (form == null || !context.mounted || !mounted) return;
     setState(() => _sharingFicha = true);
     try {
       final file = await _downloadFichaFile();
@@ -346,24 +350,10 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         );
         return;
       }
-      final message = 'Hola, le adjunto la ficha técnica ${widget.productName} '
-          '(${widget.productCode.trim()}).';
-      final renderBox = context.findRenderObject() as RenderBox?;
-      final origin = renderBox != null
-          ? Rect.fromCenter(
-              center: Offset(
-                renderBox.size.width / 2,
-                renderBox.size.height / 2,
-              ),
-              width: 1,
-              height: 1,
-            )
-          : null;
       await WhatsAppDocumentShare.sharePdf(
         filePath: file.path,
-        phone: phone,
-        message: message,
-        sharePositionOrigin: origin,
+        phone: form.phone,
+        message: form.message,
       );
     } finally {
       if (mounted) setState(() => _sharingFicha = false);
@@ -371,7 +361,14 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   }
 
   Future<void> _shareFichaViaEmail(BuildContext context) async {
-    if (!mounted) return;
+    final form = await EmailFormModal.show(
+      context,
+      defaultSubject:
+          'Ficha técnica ${widget.productCode.trim()} - ${widget.productName}',
+      defaultBody: 'Hola,\n\nAdjunto la ficha técnica ${widget.productName} '
+          '(${widget.productCode.trim()}).',
+    );
+    if (form == null || !context.mounted || !mounted) return;
     setState(() => _sharingFicha = true);
     try {
       final file = await _downloadFichaFile();
@@ -384,60 +381,15 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         );
         return;
       }
-      final renderBox = context.findRenderObject() as RenderBox?;
-      final origin = renderBox != null
-          ? Rect.fromCenter(
-              center: Offset(
-                renderBox.size.width / 2,
-                renderBox.size.height / 2,
-              ),
-              width: 1,
-              height: 1,
-            )
-          : null;
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        subject: 'Ficha técnica ${widget.productCode.trim()} - '
-            '${widget.productName}',
-        sharePositionOrigin: origin,
+      await WhatsAppDocumentShare.sharePdfByGmail(
+        filePath: file.path,
+        email: form.email,
+        subject: form.subject,
+        message: form.body,
       );
     } finally {
       if (mounted) setState(() => _sharingFicha = false);
     }
-  }
-
-  Future<String?> _askPhoneNumber(BuildContext context) async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.softPanel,
-        title: const Text('WhatsApp'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(
-            hintText: 'Nº teléfono (ej. 34600112233)',
-            prefixIcon: Icon(Icons.phone),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          Semantics(
-            button: true,
-            label: 'Enviar ficha por WhatsApp',
-            child: TextButton(
-              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-              child: const Text('Continuar'),
-            ),
-          ),
-        ],
-      ),
-    );
-    return (result == null || result.isEmpty) ? null : result;
   }
 
   @override

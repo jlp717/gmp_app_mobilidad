@@ -11,17 +11,14 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// Modal con formulario para compartir por WhatsApp.
 /// Campos: teléfono (validado +34), mensaje personalizado.
 ///
-/// Usa Share nativo (gratis) para adjuntar el PDF al compartir.
+/// El teléfono se puede escribir siempre, aunque ya venga de la ficha.
 ///
 /// Uso:
 ///   final result = await WhatsAppFormModal.show(
 ///     context,
+///     defaultPhone: cliente.telefono,
 ///     defaultMessage: 'Le adjunto la factura FAV-1234',
 ///   );
-///   if (result != null) {
-///     // result.phone, result.message
-///     // -> use Share.shareXFiles with the PDF
-///   }
 /// ---------------------------------------------------------------------------
 
 class WhatsAppFormResult {
@@ -36,19 +33,35 @@ class WhatsAppFormResult {
 class WhatsAppFormModal extends StatefulWidget {
   const WhatsAppFormModal({
     super.key,
+    this.defaultPhone = '',
     this.defaultMessage = '',
   });
+  final String defaultPhone;
   final String defaultMessage;
 
-  /// Show the modal and return the form result, or null if cancelled
+  /// Show the modal and return the form result, or null if cancelled.
+  /// [defaultPhone] is prefilled and stays editable.
   static Future<WhatsAppFormResult?> show(
     BuildContext context, {
+    String defaultPhone = '',
     String defaultMessage = '',
   }) {
     return showDialog<WhatsAppFormResult>(
       context: context,
-      builder: (ctx) => WhatsAppFormModal(defaultMessage: defaultMessage),
+      builder: (ctx) => WhatsAppFormModal(
+        defaultPhone: defaultPhone,
+        defaultMessage: defaultMessage,
+      ),
     );
+  }
+
+  /// `+34` plus the stored number, or just `+34` when there is none.
+  static String initialPhone(String? raw) {
+    final digits = (raw ?? '').replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return '+34';
+    if (digits.startsWith('34')) return '+$digits';
+    if (digits.length == 9) return '+34$digits';
+    return '+$digits';
   }
 
   @override
@@ -63,7 +76,9 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
   @override
   void initState() {
     super.initState();
-    _phoneController = TextEditingController(text: '+34');
+    _phoneController = TextEditingController(
+      text: WhatsAppFormModal.initialPhone(widget.defaultPhone),
+    );
     _messageController = TextEditingController(text: widget.defaultMessage);
   }
 
@@ -165,7 +180,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
               Padding(
                 padding: EdgeInsets.only(left: 2),
                 child: Text(
-                  'El mensaje y el PDF se envían juntos en el mismo WhatsApp.',
+                  'Escribe o cambia el número. El mensaje y el PDF salen juntos.',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                 ),
               ),
@@ -225,7 +240,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                   ElevatedButton.icon(
                     onPressed: _submit,
                     icon: const Icon(Icons.send_rounded, size: 18),
-                    label: const Text('Compartir'),
+                    label: const Text('Enviar'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: whatsAppGreen,
                       foregroundColor: AppColors.themedWhite,

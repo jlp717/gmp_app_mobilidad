@@ -2779,7 +2779,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         await _emailReceiptTo(_cobroDestinationEmail, confirmFirst: false);
       }
       if (_sendCobroWhatsApp && mounted) {
-        await _shareDeliveryNoteViaWhatsApp(confirmFirst: false);
+        await _shareDeliveryNoteViaWhatsApp();
       }
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -3707,7 +3707,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   color: AppColors.whatsappGreen,
                   onTap: () async {
                     Navigator.pop(ctx);
-                    await _shareDeliveryNoteViaWhatsApp(confirmFirst: false);
+                    await _shareDeliveryNoteViaWhatsApp();
                   },
                 ),
                 const SizedBox(height: 8),
@@ -3986,7 +3986,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             },
             onWhatsAppTap: () {
               Navigator.pop(context);
-              unawaited(_shareDeliveryNoteViaWhatsApp(confirmFirst: false));
+              unawaited(_shareDeliveryNoteViaWhatsApp());
             },
           ),
         ),
@@ -4088,25 +4088,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
-  Future<void> _shareDeliveryNoteViaWhatsApp({bool confirmFirst = true}) async {
+  Future<void> _shareDeliveryNoteViaWhatsApp() async {
     final owner = widget.albaran.codigoRepartidor.trim();
     if (!isValidRepartoOwnerId(owner)) {
       _showError('Selecciona un repartidor concreto para compartir.');
       return;
     }
-    if (confirmFirst) {
-      final ok = await confirmRepartidorAction(
-        context,
-        title: '¿Enviar por WhatsApp?',
-        message:
-            'Se enviará la nota de entrega ${widget.albaran.erpDocumentLabel} '
-            'al número que indiques.',
-        confirmLabel: 'Continuar',
-      );
-      if (!ok || !mounted) return;
-    }
+    final storedPhone = widget.albaran.telefono.trim().isNotEmpty
+        ? widget.albaran.telefono
+        : widget.albaran.telefono2;
     final form = await WhatsAppFormModal.show(
       context,
+      defaultPhone: storedPhone,
       defaultMessage: 'Nota de entrega ${widget.albaran.erpDocumentId}. '
           'Gracias por su confianza.',
     );
@@ -4155,7 +4148,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             error: error,
             operation: 'receiptWhatsApp',
           ),
-          onRetry: () => _shareDeliveryNoteViaWhatsApp(confirmFirst: false),
+          onRetry: _shareDeliveryNoteViaWhatsApp,
         );
       } else {
         modal.close();
@@ -4173,9 +4166,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
     final isFactura = widget.albaran.numeroFactura > 0;
     final docLabel = isFactura ? 'Factura' : 'Albarán';
+    final storedPhone = widget.albaran.telefono.trim().isNotEmpty
+        ? widget.albaran.telefono
+        : widget.albaran.telefono2;
     final form = prefilled ??
         await WhatsAppFormModal.show(
           context,
+          defaultPhone: storedPhone,
           defaultMessage: '${widget.albaran.erpDocumentLabel}. '
               'Gracias por su confianza.',
         );
@@ -4269,7 +4266,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         }
         if (!mounted) return;
         if (_sendCobroWhatsApp) {
-          await _shareDeliveryNoteViaWhatsApp(confirmFirst: false);
+          await _shareDeliveryNoteViaWhatsApp();
         }
       }).timeout(const Duration(seconds: 12));
     } catch (_) {

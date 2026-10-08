@@ -1182,7 +1182,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'WhatsApp abierto con el mensaje y el PDF. Pulsa enviar.',
+              'WhatsApp abierto con el mensaje y el PDF.',
             ),
             backgroundColor: AppTheme.success,
           ),

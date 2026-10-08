@@ -118,6 +118,7 @@
         <!-- WhatsApp: Required for Android 11+ to share files to WhatsApp -->
         <package android:name="com.whatsapp"/>
         <package android:name="com.whatsapp.w4b"/>
+        <package android:name="com.google.android.gm"/>
         <intent>
             <action android:name="android.intent.action.SEND"/>
             <data android:mimeType="application/pdf"/>
