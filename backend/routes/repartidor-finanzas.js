@@ -38,6 +38,7 @@ const {
   normalizeEmail,
 } = require('../services/reparto-email-delivery-policy');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
+const { commercialShareMessage } = require('../utils/documentShareMessage');
 const {
   recordDocumentEmailLedger,
 } = require('../repositories/repartidor-route-db2-repository');
@@ -1002,6 +1003,14 @@ router.post(
         .reduce((sum, line) => (
           sum + (Number(line.cantidadEntregada || 0) * Number(line.precioUnitario || 0))
         ), 0);
+      const receiptTotal = receipt.importeTotal || receipt.total || lineTotal || 0;
+      const receiptMessage = commercialShareMessage({
+        clientName: clienteNombre,
+        kind: 'nota',
+        documentLabel,
+        date: receipt.confirmedAt || receipt.fecha || '',
+        total: receiptTotal,
+      });
       let comercialCode = '';
       try {
         comercialCode = await repartoVarianceNotificationService.resolveDocumentComercialCode(
@@ -1034,8 +1043,9 @@ router.post(
           serie,
           terminal,
           fecha: receipt.confirmedAt || '',
-          total: receipt.importeTotal || receipt.total || lineTotal || 0,
+          total: receiptTotal,
           clienteNombre,
+          customBody: receiptMessage,
         }),
         pdfBuffer: rendered.pdf,
         messageId: expectedMessageId,
@@ -1144,8 +1154,15 @@ router.post(
         || `${serie}-${numero}`.replace(/^-|-$/g, '')
         || String(numero);
       const clienteNombre = parsed.data.clienteNombre || receipt.cliente?.nombre || receipt.clienteNombre || '';
+      const receiptTotal = receipt.importeTotal || receipt.total || 0;
       const caption = parsed.data.mensaje
-        || `Granja Mari Pepa\n\nNota de entrega: ${documentLabel}\nCliente: ${clienteNombre}`;
+        || commercialShareMessage({
+          clientName: clienteNombre,
+          kind: 'nota',
+          documentLabel,
+          date: receipt.confirmedAt || receipt.fecha || '',
+          total: receiptTotal,
+        }).slice(0, 900);
       const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(caption)}`;
       const fileName = rendered.fileName || `nota_entrega_${numero}.pdf`;
 

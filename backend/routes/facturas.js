@@ -17,6 +17,7 @@ const { authorizeVendorScope, isFinancialRole, userScopeCodes, normalizeCode } =
 const { emailLimiter } = require('../middleware/security');
 const { normalizeEmail, resolveRepartoEmailDelivery, isIsolatedTest } = require('../services/reparto-email-delivery-policy');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
+const { commercialShareMessage } = require('../utils/documentShareMessage');
 const whatsappGateway = require('../services/whatsappGatewayService');
 
 const FACTURA_PDF_CACHE_VERSION = 'v4';
@@ -204,12 +205,13 @@ function documentVisibleId(document) {
 }
 
 function buildWhatsAppMessageForDocument(document, clienteNombre) {
-    return `Granja Mari Pepa\n\n` +
-        `${document.label}: ${documentVisibleId(document)}\n` +
-        `Fecha: ${document.fecha}\n` +
-        `Total: ${document.total.toFixed(2)} EUR\n\n` +
-        `Cliente: ${clienteNombre || document.clienteNombre}\n\n` +
-        `Gracias por su confianza.`;
+    return commercialShareMessage({
+        clientName: clienteNombre || document.clienteNombre,
+        kind: document.documentType === 'albaran' ? 'albaran' : 'factura',
+        documentLabel: documentVisibleId(document),
+        date: document.fecha,
+        total: document.total,
+    });
 }
 
 function buildEmailHtmlForDocument(document, clienteNombre, customBody) {
@@ -873,7 +875,9 @@ router.post('/send-email', verifyToken, emailLimiter, async (req, res, next) => 
 
         const pdfDocument = await buildCommercialDocumentPdf(document);
         const emailSubject = asunto || `${document.label} ${documentVisibleId(document)} - Granja Mari Pepa`;
-        const htmlBody = buildEmailHtmlForDocument(document, clienteNombre, cuerpo);
+        const emailBody = String(cuerpo || '').trim()
+            || buildWhatsAppMessageForDocument(document, clienteNombre);
+        const htmlBody = buildEmailHtmlForDocument(document, clienteNombre, emailBody);
         const pdfFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 
         const result = await withFacturaEmailTimeout(sendEmailWithPdf({

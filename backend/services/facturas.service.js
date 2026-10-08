@@ -11,6 +11,7 @@ const { query, queryWithParams } = require('../config/db');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const logger = require('../middleware/logger');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
+const { commercialShareMessage } = require('../utils/documentShareMessage');
 const { CircuitBreaker } = require('./circuit-breaker');
 const { redisCache, TTL } = require('./redis-cache');
 
@@ -1551,12 +1552,13 @@ class FacturasService {
 
     generateWhatsAppMessage(serie, numero, fecha, total, clienteNombre, terminal) {
         const documentLabel = formatErpDocumentLabel({ serie, terminal, numero });
-        return `Granja Mari Pepa\n\n` +
-            `Factura: ${documentLabel}\n` +
-            `Fecha: ${fecha}\n` +
-            `Total: ${total.toFixed(2)} EUR\n\n` +
-            `Cliente: ${clienteNombre}\n\n` +
-            `Gracias por su confianza.`;
+        return commercialShareMessage({
+            clientName: clienteNombre,
+            kind: 'factura',
+            documentLabel,
+            date: fecha,
+            total,
+        });
     }
 }
 

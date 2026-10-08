@@ -10,6 +10,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:gmp_app_mobilidad/core/share/document_share_message.dart';
 import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
 import 'package:gmp_app_mobilidad/core/widgets/email_form_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
@@ -330,13 +331,25 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     );
   }
 
+  String _fichaShareText() {
+    return DocumentShareMessage.productSheet(
+      clientName: widget.clientName,
+      productName: widget.productName,
+      productCode: widget.productCode,
+    );
+  }
+
   Future<void> _shareFichaViaWhatsApp(BuildContext context) async {
+    final shareText = _fichaShareText();
     final form = await WhatsAppFormModal.show(
       context,
-      defaultMessage: 'Hola, le adjunto la ficha técnica ${widget.productName} '
-          '(${widget.productCode.trim()}).',
+      defaultMessage: shareText,
     );
     if (form == null || !context.mounted || !mounted) return;
+    final caption = DocumentShareMessage.captionOrDefault(
+      form.message,
+      shareText,
+    );
     setState(() => _sharingFicha = true);
     try {
       final file = await _downloadFichaFile();
@@ -353,7 +366,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       await WhatsAppDocumentShare.sharePdf(
         filePath: file.path,
         phone: form.phone,
-        message: form.message,
+        message: caption,
       );
     } finally {
       if (mounted) setState(() => _sharingFicha = false);
@@ -361,12 +374,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
   }
 
   Future<void> _shareFichaViaEmail(BuildContext context) async {
+    final shareText = _fichaShareText();
     final form = await EmailFormModal.show(
       context,
       defaultSubject:
           'Ficha técnica ${widget.productCode.trim()} - ${widget.productName}',
-      defaultBody: 'Hola,\n\nAdjunto la ficha técnica ${widget.productName} '
-          '(${widget.productCode.trim()}).',
+      defaultBody: shareText,
     );
     if (form == null || !context.mounted || !mounted) return;
     setState(() => _sharingFicha = true);
@@ -385,7 +398,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         filePath: file.path,
         email: form.email,
         subject: form.subject,
-        message: form.body,
+        message: DocumentShareMessage.captionOrDefault(form.body, shareText),
       );
     } finally {
       if (mounted) setState(() => _sharingFicha = false);

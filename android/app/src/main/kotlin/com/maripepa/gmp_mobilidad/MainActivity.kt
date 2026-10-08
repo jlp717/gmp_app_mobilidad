@@ -2,6 +2,7 @@ package com.maripepa.gmp_mobilidad
 
 import android.content.ActivityNotFoundException
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.Intent
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
@@ -58,20 +59,32 @@ class MainActivity : FlutterActivity() {
 
     /**
      * Opens WhatsApp on that chat with the PDF already attached and [text]
-     * as its caption. ClipData carries the PDF mime type: without it, recent
-     * WhatsApp builds keep the text and drop the file.
+     * as the message under the file. A PDF clip that only carries the URI
+     * makes WhatsApp drop the caption and send the file alone.
      */
     private fun sharePdf(path: String, phone: String, text: String): Boolean {
         val (uri, file) = pdfUri(path) ?: return false
         val digits = phone.filter { it.isDigit() }
         val jid = if (digits.length in 7..15) "$digits@s.whatsapp.net" else null
+        val caption = text.trim()
         for (pkg in WHATSAPP_PACKAGES) {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                if (text.isNotBlank()) putExtra(Intent.EXTRA_TEXT, text)
+                if (caption.isNotEmpty()) {
+                    putExtra(Intent.EXTRA_TEXT, caption)
+                    putExtra("caption", caption)
+                    putExtra("skip_preview", false)
+                }
                 if (jid != null) putExtra("jid", jid)
-                clipData = ClipData.newUri(contentResolver, file.name, uri)
+                clipData = if (caption.isNotEmpty()) {
+                    ClipData(
+                        ClipDescription(file.name, arrayOf("application/pdf")),
+                        ClipData.Item(caption, null as String?, null as Intent?, uri),
+                    )
+                } else {
+                    ClipData.newUri(contentResolver, file.name, uri)
+                }
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 setPackage(pkg)
             }

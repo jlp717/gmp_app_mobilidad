@@ -180,7 +180,8 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
               Padding(
                 padding: EdgeInsets.only(left: 2),
                 child: Text(
-                  'Escribe o cambia el número. El mensaje y el PDF salen juntos.',
+                  'Escribe o cambia el número. '
+                  'El texto sale como mensaje de WhatsApp, junto al PDF.',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                 ),
               ),

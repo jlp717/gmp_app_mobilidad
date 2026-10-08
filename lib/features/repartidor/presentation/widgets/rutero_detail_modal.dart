@@ -13,9 +13,11 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
+import 'package:gmp_app_mobilidad/core/share/document_share_message.dart';
 import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/erp_document_label.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
@@ -4088,6 +4090,39 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
+  String _deliveryNoteShareText() {
+    final alb = widget.albaran;
+    return DocumentShareMessage.deliveryNote(
+      clientName: alb.nombreCliente,
+      albaranLabel: formatErpDocumentLabel(
+        serie: alb.serie.isNotEmpty ? alb.serie : 'A',
+        terminal: alb.terminal,
+        numero: alb.numeroAlbaran,
+      ),
+      date: alb.fecha,
+      totalWithVat: alb.importeTotal,
+    );
+  }
+
+  String _commercialShareText() {
+    final alb = widget.albaran;
+    final isFactura = alb.numeroFactura > 0;
+    return DocumentShareMessage.commercial(
+      clientName: alb.nombreCliente,
+      isInvoice: isFactura,
+      documentLabel: alb.erpDocumentId,
+      albaranLabel: isFactura
+          ? formatErpDocumentLabel(
+              serie: alb.serie.isNotEmpty ? alb.serie : 'A',
+              terminal: alb.terminal,
+              numero: alb.numeroAlbaran,
+            )
+          : null,
+      date: alb.fecha,
+      totalWithVat: alb.importeTotal,
+    );
+  }
+
   Future<void> _shareDeliveryNoteViaWhatsApp() async {
     final owner = widget.albaran.codigoRepartidor.trim();
     if (!isValidRepartoOwnerId(owner)) {
@@ -4097,13 +4132,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final storedPhone = widget.albaran.telefono.trim().isNotEmpty
         ? widget.albaran.telefono
         : widget.albaran.telefono2;
+    final shareText = _deliveryNoteShareText();
     final form = await WhatsAppFormModal.show(
       context,
       defaultPhone: storedPhone,
-      defaultMessage: 'Nota de entrega ${widget.albaran.erpDocumentId}. '
-          'Gracias por su confianza.',
+      defaultMessage: shareText,
     );
     if (!mounted || form == null) return;
+    final caption = DocumentShareMessage.captionOrDefault(
+      form.message,
+      shareText,
+    );
 
     final modal = AsyncOperationModal.show(
       context,
@@ -4118,7 +4157,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         telefono: form.phone,
         repartidorId: owner,
         clienteNombre: widget.albaran.nombreCliente,
-        mensaje: form.message,
+        mensaje: caption,
       );
       if (whatsapp.deliveredByBot) {
         modal.close();
@@ -4138,7 +4177,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       await WhatsAppDocumentShare.sharePdf(
         filePath: file.path,
         phone: form.phone,
-        message: form.message,
+        message: caption,
         sharePositionOrigin: _shareOrigin(),
       );
     } catch (error) {
@@ -4169,14 +4208,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final storedPhone = widget.albaran.telefono.trim().isNotEmpty
         ? widget.albaran.telefono
         : widget.albaran.telefono2;
+    final shareText = _commercialShareText();
     final form = prefilled ??
         await WhatsAppFormModal.show(
           context,
           defaultPhone: storedPhone,
-          defaultMessage: '${widget.albaran.erpDocumentLabel}. '
-              'Gracias por su confianza.',
+          defaultMessage: shareText,
         );
     if (!mounted || form == null) return;
+    final caption = DocumentShareMessage.captionOrDefault(
+      form.message,
+      shareText,
+    );
 
     final modal = AsyncOperationModal.show(
       context,
@@ -4195,7 +4238,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         telefono: form.phone,
         repartidorId: owner,
         clienteNombre: widget.albaran.nombreCliente,
-        mensaje: form.message,
+        mensaje: caption,
         terminal: widget.albaran.terminal,
         albaranNumber: widget.albaran.numeroAlbaran,
         albaranSerie: widget.albaran.serie,
@@ -4229,7 +4272,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       await WhatsAppDocumentShare.sharePdf(
         filePath: file.path,
         phone: form.phone,
-        message: form.message,
+        message: caption,
         sharePositionOrigin: _shareOrigin(),
       );
     } catch (_) {
@@ -4417,6 +4460,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         albaranSerie: alb.serie,
         albaranTerminal: alb.terminal,
         albaranYear: alb.ejercicio,
+        asunto: alb.erpDocumentLabel,
+        cuerpo: _commercialShareText(),
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

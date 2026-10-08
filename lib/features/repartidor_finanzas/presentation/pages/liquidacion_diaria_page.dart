@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/money/money.dart';
+import 'package:gmp_app_mobilidad/core/share/document_share_message.dart';
 import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -377,7 +378,15 @@ class _RepartidorLiquidacionDiariaPageState
     RepartidorLiquidacionResult liquidacion,
   ) async {
     try {
-      await CanonicalLiquidacionPdfBuilder.share(liquidacion: liquidacion);
+      final bytes = await CanonicalLiquidacionPdfBuilder.buildBytes(
+        liquidacion: liquidacion,
+      );
+      await _sharePdfBytes(
+        bytes,
+        fileName: 'Liquidacion_${liquidacion.repartidorId}.pdf',
+        repartidorId: liquidacion.repartidorId,
+        date: liquidacion.date,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -448,6 +457,7 @@ class _RepartidorLiquidacionDiariaPageState
         pdf.bytes,
         fileName: pdf.fileName,
         repartidorId: liquidacion.repartidorId,
+        date: liquidacion.date,
       );
     } catch (error, stackTrace) {
       if (_canUseOfflinePdfFallback(error)) {
@@ -470,6 +480,7 @@ class _RepartidorLiquidacionDiariaPageState
     Uint8List bytes, {
     required String fileName,
     required String repartidorId,
+    Object? date,
   }) async {
     final dir = await getTemporaryDirectory();
     final safeName = fileName.replaceAll(RegExp(r'[^\w.\-]'), '_');
@@ -497,17 +508,21 @@ class _RepartidorLiquidacionDiariaPageState
       ),
     );
     if (!mounted || channel == null) return;
+    final shareText = DocumentShareMessage.settlement(date: date);
     final subject = 'Liquidación diaria $repartidorId';
     if (channel == 'whatsapp') {
       final form = await WhatsAppFormModal.show(
         context,
-        defaultMessage: subject,
+        defaultMessage: shareText,
       );
       if (form == null || !mounted) return;
       await WhatsAppDocumentShare.sharePdf(
         filePath: file.path,
         phone: form.phone,
-        message: form.message,
+        message: DocumentShareMessage.captionOrDefault(
+          form.message,
+          shareText,
+        ),
       );
       return;
     }
@@ -515,7 +530,7 @@ class _RepartidorLiquidacionDiariaPageState
       filePath: file.path,
       email: '',
       subject: subject,
-      message: 'Adjunto la liquidación diaria.',
+      message: shareText,
     );
   }
 

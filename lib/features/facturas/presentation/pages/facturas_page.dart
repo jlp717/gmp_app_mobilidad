@@ -16,6 +16,8 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
+import 'package:gmp_app_mobilidad/core/share/document_share_message.dart';
+import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/design/gmp_feedback.dart';
 import 'package:gmp_app_mobilidad/core/widgets/email_form_modal.dart';
@@ -23,7 +25,6 @@ import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
-import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/features/facturas/data/facturas_service.dart';
 import 'package:intl/intl.dart';
@@ -924,9 +925,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
       if (!mounted) return;
 
-      final text =
-          'Adjunto: ${factura.tipoLabel} ${factura.numeroFormateado} - '
-          '${factura.total.toStringAsFixed(2)} € - Granja Mari Pepa';
+      final text = _documentShareText(factura);
 
       final renderBox = context.findRenderObject()! as RenderBox;
       final size = renderBox.size;
@@ -1081,17 +1080,13 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       // Sin detalle: flujo libre actual.
     }
     if (!mounted) return;
+    final shareText = _documentShareText(factura);
     final result = await EmailFormModal.show(
       context,
       defaultEmail: defaultEmail,
       defaultSubject:
           '$documentLabel ${factura.numeroFormateado} - ${factura.clienteNombre}',
-      defaultBody: 'Hola ${factura.clienteNombre},\n\n'
-          'Adjunto le remitimos su ${documentLabel.toLowerCase()} ${factura.numeroFormateado} '
-          'por importe de ${factura.total.toStringAsFixed(2)} €.\n\n'
-          'Muchas gracias por su confianza.\n\n'
-          'Atentamente,\n'
-          'El equipo de Granja Mari Pepa',
+      defaultBody: shareText,
     );
 
     if (result == null || !mounted) return;
@@ -1118,17 +1113,29 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     }
   }
 
+  String _documentShareText(Factura factura) {
+    return DocumentShareMessage.commercial(
+      clientName: factura.clienteNombre,
+      isInvoice: factura.isFactura,
+      documentLabel: factura.numeroFormateado,
+      date: factura.fecha,
+      totalWithVat: factura.total,
+    );
+  }
+
   Future<void> _whatsAppFactura(Factura factura) async {
     final documentLabel = factura.isAlbaran ? 'albarán' : 'factura';
+    final shareText = _documentShareText(factura);
     final result = await WhatsAppFormModal.show(
       context,
-      defaultMessage:
-          'Hola ${factura.clienteNombre}, le adjunto su $documentLabel '
-          '${factura.numeroFormateado} (${factura.total.toStringAsFixed(2)} €). \n\n'
-          'Gracias por su confianza - Granja Mari Pepa',
+      defaultMessage: shareText,
     );
 
     if (result == null || !mounted) return;
+    final caption = DocumentShareMessage.captionOrDefault(
+      result.message,
+      shareText,
+    );
 
     final modal = AsyncOperationModal.show(
       context,
@@ -1143,7 +1150,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         clienteNombre: factura.clienteNombre,
         documentType: factura.isAlbaran ? 'albaran' : 'factura',
         terminal: factura.isAlbaran ? factura.terminal : null,
-        mensaje: result.message,
+        mensaje: caption,
       );
       if (remote.deliveredByBot) {
         modal.close();
@@ -1175,7 +1182,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       await WhatsAppDocumentShare.sharePdf(
         filePath: file.path,
         phone: result.phone,
-        message: result.message,
+        message: caption,
         sharePositionOrigin: origin,
       );
       if (mounted) {

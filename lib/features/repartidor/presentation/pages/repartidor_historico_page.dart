@@ -13,6 +13,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/share/document_share_message.dart';
 import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -3220,6 +3221,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
         albaranSerie: doc.serie,
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
+        asunto: doc.visibleDocumentTitle,
+        cuerpo: _documentShareText(doc),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3574,6 +3577,30 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
     await _runShareAction(() => _shareDeliveryNoteWhatsAppUnlocked(doc));
   }
 
+  String _documentShareText(
+    _DocumentItem doc, {
+    bool deliveryNote = false,
+  }) {
+    final clientName = _selectedClientName ?? '';
+    if (deliveryNote) {
+      return DocumentShareMessage.deliveryNote(
+        clientName: clientName,
+        albaranLabel: doc.albaranLabel,
+        date: doc.date ?? doc.deliveryDate,
+        totalWithVat: doc.amount,
+      );
+    }
+    final isFactura = doc.type == _DocType.factura;
+    return DocumentShareMessage.commercial(
+      clientName: clientName,
+      isInvoice: isFactura,
+      documentLabel: doc.visibleDocumentLabel,
+      albaranLabel: isFactura ? doc.albaranLabel : null,
+      date: doc.date ?? doc.deliveryDate,
+      totalWithVat: doc.amount,
+    );
+  }
+
   Future<void> _shareCommercialWhatsAppUnlocked(
     _DocumentItem doc, {
     WhatsAppFormResult? prefilled,
@@ -3587,15 +3614,18 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
     final typeLabel = isFactura ? 'Factura' : 'Albarán';
     final clientName = _selectedClientName ?? 'Cliente';
 
+    final shareText = _documentShareText(doc);
     final result = prefilled ??
         await WhatsAppFormModal.show(
           context,
-          defaultMessage:
-              'Hola $clientName, aquí tiene su documento $typeLabel ${doc.number}.\n\n'
-              'Saludos - Granja Mari Pepa',
+          defaultMessage: shareText,
         );
 
     if (result == null || !mounted) return;
+    final caption = DocumentShareMessage.captionOrDefault(
+      result.message,
+      shareText,
+    );
 
     final modal = AsyncOperationModal.show(
       context,
@@ -3617,7 +3647,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
         telefono: result.phone,
         repartidorId: owner,
         clienteNombre: clientName,
-        mensaje: result.message,
+        mensaje: caption,
         facturaNumber: doc.facturaNumber,
         serieFactura: doc.serieFactura,
         ejercicioFactura: doc.ejercicioFactura,
@@ -3676,7 +3706,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       await WhatsAppDocumentShare.sharePdf(
         filePath: file.path,
         phone: result.phone,
-        message: result.message,
+        message: caption,
         sharePositionOrigin: origin,
       );
     } catch (e) {
@@ -3710,13 +3740,16 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
     }
     final clientName = _selectedClientName ?? 'Cliente';
     final docRef = doc.albaranLabel;
+    final shareText = _documentShareText(doc, deliveryNote: true);
     final result = await WhatsAppFormModal.show(
       context,
-      defaultMessage:
-          'Hola $clientName, adjunto la nota de entrega $docRef.\n\n'
-          'Saludos - Granja Mari Pepa',
+      defaultMessage: shareText,
     );
     if (result == null || !mounted) return;
+    final caption = DocumentShareMessage.captionOrDefault(
+      result.message,
+      shareText,
+    );
 
     final modal = AsyncOperationModal.show(
       context,
@@ -3728,7 +3761,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
         telefono: result.phone,
         repartidorId: owner,
         clienteNombre: clientName,
-        mensaje: result.message,
+        mensaje: caption,
       );
       if (whatsapp.deliveredByBot) {
         modal.close();
@@ -3767,7 +3800,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
       await WhatsAppDocumentShare.sharePdf(
         filePath: file.path,
         phone: result.phone,
-        message: result.message,
+        message: caption,
         sharePositionOrigin: origin,
       );
     } catch (e) {

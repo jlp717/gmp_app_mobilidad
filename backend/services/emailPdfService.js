@@ -18,6 +18,7 @@ const nodemailer = require('nodemailer');
 const logger = require('../middleware/logger');
 const { smtpLogger, isSmtpDebugEnabled } = require('./smtpLogger');
 const { assertSecureSmtpConfig, buildSmtpConfig } = require('./smtp-config');
+const { commercialShareMessage } = require('../utils/documentShareMessage');
 const {
     shouldSkipSmtpForIsolatedTest,
     normalizeEmail: normalizeRepartoEmail,
@@ -598,10 +599,7 @@ async function sendHtmlEmail({ to, subject, htmlBody, textBody, messageId }) {
  */
 function generateInvoiceEmailHtml({ serie, numero, terminal, fecha, total, clienteNombre, customBody }) {
     const documentLabel = formatErpDocumentLabel({ serie, terminal, numero });
-    const safeSerieNumero = escapeHtml(documentLabel);
-    const safeCliente = escapeHtml(clienteNombre || 'cliente');
-    const safeFecha = escapeHtml(fecha || '');
-    const title = `Factura ${safeSerieNumero}`;
+    const title = `Factura ${escapeHtml(documentLabel)}`;
 
     let bodyHtml;
     if (customBody) {
@@ -612,21 +610,15 @@ function generateInvoiceEmailHtml({ serie, numero, terminal, fecha, total, clien
         `;
     } else {
         bodyHtml = `
-          <p style="font-size: 15px; color: #1a2b3c; margin: 0 0 12px 0;">
-            Estimado/a <strong>${safeCliente}</strong>,
+          <p style="font-size: 14px; color: #3d4f63; line-height: 1.8; white-space: pre-line; margin: 0;">
+            ${escapeHtml(commercialShareMessage({
+                clientName: clienteNombre,
+                kind: 'factura',
+                documentLabel,
+                date: fecha,
+                total,
+            }))}
           </p>
-          <p style="font-size: 14px; color: #3d4f63; line-height: 1.6; margin: 0 0 12px 0;">
-            Adjunto le remitimos la factura <strong>${safeSerieNumero}</strong>
-            emitida por ${escapeHtml(FROM_NAME)}.
-          </p>
-          ${safeFecha ? `<p style="font-size: 13px; color: #5a6b7d; margin: 0 0 12px 0;">Fecha: <strong>${safeFecha}</strong></p>` : ''}
-          ${total ? `
-          <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 16px 0; text-align: center; border: 1px solid #c8e6c9;">
-            <p style="font-size: 22px; color: #2c5530; font-weight: bold; margin: 0;">
-              Total: ${escapeHtml(typeof total === 'number' ? total.toFixed(2) : total)} €
-            </p>
-          </div>` : ''}
-          <p style="font-size: 14px; color: #3d4f63; margin: 0;">Gracias por su confianza.</p>
         `;
     }
 
@@ -643,10 +635,7 @@ function generateInvoiceEmailHtml({ serie, numero, terminal, fecha, total, clien
  */
 function generateDeliveryEmailHtml({ numero, serie, terminal, fecha, total, clienteNombre, customBody }) {
     const documentLabel = formatErpDocumentLabel({ serie, terminal, numero });
-    const safeSerieNumero = escapeHtml(documentLabel);
-    const safeCliente = escapeHtml(clienteNombre || 'cliente');
-    const safeFecha = escapeHtml(fecha || '');
-    const title = `Albarán ${safeSerieNumero}`;
+    const title = `Albarán ${escapeHtml(documentLabel)}`;
 
     let bodyHtml;
     if (customBody) {
@@ -657,19 +646,15 @@ function generateDeliveryEmailHtml({ numero, serie, terminal, fecha, total, clie
         `;
     } else {
         bodyHtml = `
-          <p style="font-size: 15px; color: #1a2b3c; margin: 0 0 12px 0;">
-            Estimado/a <strong>${safeCliente}</strong>,
+          <p style="font-size: 14px; color: #3d4f63; line-height: 1.8; white-space: pre-line; margin: 0;">
+            ${escapeHtml(commercialShareMessage({
+                clientName: clienteNombre,
+                kind: 'albaran',
+                documentLabel,
+                date: fecha,
+                total,
+            }))}
           </p>
-          <p style="font-size: 14px; color: #3d4f63; line-height: 1.6; margin: 0 0 12px 0;">
-            Adjunto le remitimos el albarán <strong>${safeSerieNumero}</strong>${safeFecha ? ` con fecha <strong>${safeFecha}</strong>` : ''}
-            desde ${escapeHtml(FROM_NAME)}.
-          </p>
-          ${total ? `
-          <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 16px 0; text-align: center; border: 1px solid #c8e6c9;">
-            <p style="font-size: 22px; color: #2c5530; font-weight: bold; margin: 0;">
-              Total: ${escapeHtml(typeof total === 'number' ? total.toFixed(2) : total)} €
-            </p>
-          </div>` : ''}
         `;
     }
 
