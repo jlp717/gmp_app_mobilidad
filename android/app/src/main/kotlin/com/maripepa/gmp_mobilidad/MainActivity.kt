@@ -58,15 +58,18 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * Opens WhatsApp on that chat with the PDF already attached and [text]
-     * as the message under the file. A PDF clip that only carries the URI
-     * makes WhatsApp drop the caption and send the file alone.
+     * Opens WhatsApp on that chat with the PDF attached and [text] as the
+     * message under the file, the same way a photo carries a caption.
+     *
+     * WhatsApp drops the caption when one clip item holds both the text and
+     * the file URI: it keeps the PDF and sends nothing else. The caption is
+     * its own item; the PDF is the next one, and also [Intent.EXTRA_STREAM].
      */
     private fun sharePdf(path: String, phone: String, text: String): Boolean {
         val (uri, file) = pdfUri(path) ?: return false
         val digits = phone.filter { it.isDigit() }
         val jid = if (digits.length in 7..15) "$digits@s.whatsapp.net" else null
-        val caption = text.trim()
+        val caption = text.trim().take(1024)
         for (pkg in WHATSAPP_PACKAGES) {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
@@ -75,23 +78,19 @@ class MainActivity : FlutterActivity() {
                     putExtra(Intent.EXTRA_TEXT, caption)
                     putExtra("caption", caption)
                     putExtra("skip_preview", false)
-                }
-                if (jid != null) putExtra("jid", jid)
-                clipData = if (caption.isNotEmpty()) {
-                    // One clip item carries the caption and the PDF. WhatsApp
-                    // reads that item text as the message under the file.
-                    // The description must advertise text/plain or the caption
-                    // is dropped and only the PDF is sent.
-                    ClipData(
+                    val clip = ClipData(
                         ClipDescription(
                             file.name,
                             arrayOf(ClipDescription.MIMETYPE_TEXT_PLAIN, "application/pdf"),
                         ),
-                        ClipData.Item(caption, null as String?, null as Intent?, uri),
+                        ClipData.Item(caption),
                     )
+                    clip.addItem(ClipData.Item(uri))
+                    clipData = clip
                 } else {
-                    ClipData.newUri(contentResolver, file.name, uri)
+                    clipData = ClipData.newUri(contentResolver, file.name, uri)
                 }
+                if (jid != null) putExtra("jid", jid)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 setPackage(pkg)
             }
