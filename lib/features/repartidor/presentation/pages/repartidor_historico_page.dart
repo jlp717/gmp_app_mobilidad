@@ -13,6 +13,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
@@ -33,7 +34,6 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 String _sanitizedDocumentActionError(
   Object error, {
@@ -3682,19 +3682,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
             )
           : null;
 
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        text: result.message,
-        subject: result.message,
+      await WhatsAppDocumentShare.sharePdf(
+        filePath: file.path,
+        phone: result.phone,
+        message: result.message,
         sharePositionOrigin: origin,
       );
-      final url = localShare.whatsappUrl;
-      if (url != null && url.isNotEmpty) {
-        final uri = Uri.tryParse(url);
-        if (uri != null && await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      }
     } catch (e) {
       modal.close();
       if (mounted) {
@@ -3788,19 +3781,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
             )
           : null;
 
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        text: result.message,
-        subject: 'Nota de entrega $docRef',
+      await WhatsAppDocumentShare.sharePdf(
+        filePath: file.path,
+        phone: result.phone,
+        message: result.message,
         sharePositionOrigin: origin,
       );
-      final url = whatsapp.whatsappUrl;
-      if (url != null && url.isNotEmpty) {
-        final uri = Uri.tryParse(url);
-        if (uri != null && await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      }
     } catch (e) {
       modal.close();
       if (_isDeliveryNoteMissing(e)) {

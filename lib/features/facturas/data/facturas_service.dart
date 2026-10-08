@@ -379,6 +379,15 @@ class FacturaSummary {
   Money get totalIvaMoney => Money.fromDouble(totalIva);
 }
 
+/// Result of asking the server to deliver a commercial document on WhatsApp.
+class FacturaWhatsAppShareResult {
+  /// Creates a share result.
+  const FacturaWhatsAppShareResult({required this.deliveredByBot});
+
+  /// True only when the corporate gateway already sent caption and PDF.
+  final bool deliveredByBot;
+}
+
 /// Service class for facturas API calls
 class FacturasService {
   static DateTime? _parseFacturaDate(String value) {
@@ -674,8 +683,12 @@ class FacturasService {
     }
   }
 
-  /// Share via WhatsApp - returns URL to open
-  static Future<String?> shareWhatsApp({
+  /// Asks the server to send the PDF and the caption together.
+  ///
+  /// A bot delivery means the corporate WhatsApp already sent both.
+  /// Any other outcome (bot offline, recipient policy, network) is a local
+  /// share: the caller attaches the PDF in the same WhatsApp send as the text.
+  static Future<FacturaWhatsAppShareResult> shareWhatsApp({
     required String serie,
     required int numero,
     required int ejercicio,
@@ -683,6 +696,7 @@ class FacturasService {
     String? clienteNombre,
     String? documentType,
     int? terminal,
+    String? mensaje,
   }) async {
     try {
       final response = await ApiClient.post('/facturas/share/whatsapp', {
@@ -693,15 +707,19 @@ class FacturasService {
         'clienteNombre': clienteNombre,
         'documentType': documentType,
         'terminal': terminal,
+        if (mensaje != null && mensaje.trim().isNotEmpty)
+          'mensaje': mensaje.trim(),
       });
 
-      if (response['success'] == true && response['whatsappUrl'] != null) {
-        return response['whatsappUrl'] as String?;
+      final sent = response['sent'] == true;
+      final localShare = response['localShare'] == true;
+      if (response['success'] == true && sent && !localShare) {
+        return const FacturaWhatsAppShareResult(deliveredByBot: true);
       }
-      return null;
+      return const FacturaWhatsAppShareResult(deliveredByBot: false);
     } catch (e) {
       debugPrint('Error in shareWhatsApp: $e');
-      return null;
+      return const FacturaWhatsAppShareResult(deliveredByBot: false);
     }
   }
 

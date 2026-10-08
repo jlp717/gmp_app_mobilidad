@@ -10,8 +10,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -257,8 +257,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         return Container(
           decoration: BoxDecoration(
             color: scheme.surface,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: SafeArea(
             child: Column(
@@ -347,31 +346,8 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         );
         return;
       }
-      // REQ-22/23 tanda4: directo wa.me primero, sin doble picker.
-      // Descarga previa ya hecha para adjuntar manual.
-      final digits = phone.replaceAll(RegExp(r'\D'), '');
-      final message =
-          'Hola, le adjunto la ficha técnica ${widget.productName} '
+      final message = 'Hola, le adjunto la ficha técnica ${widget.productName} '
           '(${widget.productCode.trim()}).';
-      if (digits.isNotEmpty) {
-        final uri = Uri.parse(
-          'https://wa.me/$digits?text=${Uri.encodeComponent(message)}',
-        );
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-          if (mounted && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Ficha descargada: adjúntala en el chat de WhatsApp.',
-                ),
-              ),
-            );
-          }
-          return;
-        }
-      }
-      // Fallback: WA ausente → share sheet con PDF.
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
@@ -383,11 +359,10 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
               height: 1,
             )
           : null;
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Ficha técnica ${widget.productName} '
-            '(${widget.productCode.trim()})',
-        subject: 'Ficha técnica ${widget.productCode.trim()}',
+      await WhatsAppDocumentShare.sharePdf(
+        filePath: file.path,
+        phone: phone,
+        message: message,
         sharePositionOrigin: origin,
       );
     } finally {
@@ -555,8 +530,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
 
   Widget _buildPriceHistoryStrip(Product p) {
     final history = _priceHistory;
-    final competitivo = history != null &&
-            (history['competitivo'] is num)
+    final competitivo = history != null && (history['competitivo'] is num)
         ? (history['competitivo'] as num).toDouble()
         : p.precioCompetitivo > 0
             ? p.precioCompetitivo
@@ -584,9 +558,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
           children: [
             _historyStat(
               Icons.history,
-              ultimo > 0
-                  ? PedidosFormatters.money(ultimo, decimals: 2)
-                  : '—',
+              ultimo > 0 ? PedidosFormatters.money(ultimo, decimals: 2) : '—',
               'Último',
             ),
             _historyStat(

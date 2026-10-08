@@ -165,7 +165,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
               Padding(
                 padding: EdgeInsets.only(left: 2),
                 child: Text(
-                  'Se compartirá el PDF automáticamente. Seleccione WhatsApp en el menú que aparece.',
+                  'El mensaje y el PDF se envían juntos en el mismo WhatsApp.',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                 ),
               ),

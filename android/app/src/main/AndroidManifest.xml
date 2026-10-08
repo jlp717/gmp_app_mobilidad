@@ -27,6 +27,15 @@
         android:icon="@mipmap/launcher_icon"
         android:networkSecurityConfig="@xml/network_security_config"
         android:requestLegacyExternalStorage="true">
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.whatsapp.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/whatsapp_share_paths" />
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -107,6 +116,8 @@
             <data android:scheme="mailto"/>
         </intent>
         <!-- WhatsApp: Required for Android 11+ to share files to WhatsApp -->
+        <package android:name="com.whatsapp"/>
+        <package android:name="com.whatsapp.w4b"/>
         <intent>
             <action android:name="android.intent.action.SEND"/>
             <data android:mimeType="application/pdf"/>

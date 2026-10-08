@@ -386,7 +386,12 @@ describe('POST /api/facturas/share/whatsapp recipient restriction', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.whatsappUrl).toContain('wa.me');
+    expect(res.body.localShare).toBe(true);
+    expect(res.body.sent).toBe(false);
+    expect(res.body.mimeType).toBe('application/pdf');
+    expect(String(res.body.pdfBase64 || '').length).toBeGreaterThan(10);
+    expect(res.body.message).toEqual(expect.any(String));
+    expect(res.body.whatsappUrl).toBeUndefined();
   });
 });
 
@@ -402,7 +407,7 @@ describe('emailLimiter middleware mounts', () => {
     expect(routesWithLimiter).toEqual(['/send-email', '/share/email']);
   });
 
-  test('emailLimiter is NOT mounted on share/whatsapp (no server-side send)', () => {
+  test('emailLimiter is NOT mounted on share/whatsapp', () => {
     const { emailLimiter } = require('../middleware/security');
 
     const whatsappLayer = facturasRoutes.stack.find((layer) => layer.route?.path === '/share/whatsapp');

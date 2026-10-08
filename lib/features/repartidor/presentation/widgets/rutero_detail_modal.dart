@@ -13,6 +13,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
+import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -50,7 +51,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:signature/signature.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 enum RepartoConfirmationErrorDisposition {
   alreadyConfirmed,
@@ -4142,19 +4142,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final file = await _prepareDeliveryNotePdfFile();
       modal.close();
       if (!mounted) return;
-      await Share.shareXFiles(
-        <XFile>[XFile(file.path, mimeType: 'application/pdf')],
-        text: form.message,
-        subject: 'Nota de entrega',
+      await WhatsAppDocumentShare.sharePdf(
+        filePath: file.path,
+        phone: form.phone,
+        message: form.message,
         sharePositionOrigin: _shareOrigin(),
       );
-      final url = whatsapp.whatsappUrl;
-      if (url != null && url.isNotEmpty) {
-        final uri = Uri.tryParse(url);
-        if (uri != null && await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      }
     } catch (error) {
       if (mounted) {
         modal.error(
@@ -4236,19 +4229,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final file = await _prepareCommercialPdfFile();
       modal.close();
       if (!mounted) return;
-      await Share.shareXFiles(
-        <XFile>[XFile(file.path, mimeType: 'application/pdf')],
-        text: form.message,
-        subject: docLabel,
+      await WhatsAppDocumentShare.sharePdf(
+        filePath: file.path,
+        phone: form.phone,
+        message: form.message,
         sharePositionOrigin: _shareOrigin(),
       );
-      final url = whatsapp.whatsappUrl;
-      if (url != null && url.isNotEmpty) {
-        final uri = Uri.tryParse(url);
-        if (uri != null && await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      }
     } catch (_) {
       modal.close();
       if (mounted) {

@@ -23,12 +23,12 @@ import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/core/share/whatsapp_document_share.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/features/facturas/data/facturas_service.dart';
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class FacturasPage extends ConsumerStatefulWidget {
   const FacturasPage({
@@ -1130,38 +1130,39 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
     if (result == null || !mounted) return;
 
-    // REQ-22 tanda4: envío directo wa.me tras form, sin doble picker.
-    // PDF: descarga previa para adjuntar manual (Share no inyecta a chat WA).
     final modal = AsyncOperationModal.show(
       context,
-      text: 'Preparando documento...',
+      text: 'Enviando $documentLabel por WhatsApp...',
     );
     try {
+      final remote = await FacturasService.shareWhatsApp(
+        serie: factura.serie,
+        numero: factura.numero,
+        ejercicio: factura.ejercicio,
+        telefono: result.phone,
+        clienteNombre: factura.clienteNombre,
+        documentType: factura.isAlbaran ? 'albaran' : 'factura',
+        terminal: factura.isAlbaran ? factura.terminal : null,
+        mensaje: result.message,
+      );
+      if (remote.deliveredByBot) {
+        modal.close();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${factura.isAlbaran ? 'Albarán' : 'Factura'} enviado por WhatsApp con su PDF.',
+            ),
+            backgroundColor: AppTheme.success,
+          ),
+        );
+        return;
+      }
+
       final file = await FacturasService.downloadDocumentoPdf(factura);
       modal.close();
       if (!mounted) return;
 
-      final digits = result.phone.replaceAll(RegExp(r'\D'), '');
-      final uri = Uri.parse(
-        'https://wa.me/$digits?text=${Uri.encodeComponent(result.message)}',
-      );
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'PDF descargado (${file.path.split('/').last}): '
-                'adjúntalo en el chat de WhatsApp.',
-              ),
-              backgroundColor: AppTheme.info,
-            ),
-          );
-        }
-        return;
-      }
-
-      // Fallback: WA ausente → share sheet con PDF + aviso actual.
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
@@ -1171,19 +1172,19 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               height: 1,
             )
           : null;
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        text: result.message,
-        subject: result.message,
+      await WhatsAppDocumentShare.sharePdf(
+        filePath: file.path,
+        phone: result.phone,
+        message: result.message,
         sharePositionOrigin: origin,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'No se pudo abrir WhatsApp. PDF listo para compartir.',
+              'WhatsApp abierto con el mensaje y el PDF. Pulsa enviar.',
             ),
-            backgroundColor: AppTheme.warning,
+            backgroundColor: AppTheme.success,
           ),
         );
       }

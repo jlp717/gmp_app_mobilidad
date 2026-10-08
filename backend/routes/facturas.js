@@ -17,6 +17,7 @@ const { authorizeVendorScope, isFinancialRole, userScopeCodes, normalizeCode } =
 const { emailLimiter } = require('../middleware/security');
 const { normalizeEmail, resolveRepartoEmailDelivery, isIsolatedTest } = require('../services/reparto-email-delivery-policy');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
+const whatsappGateway = require('../services/whatsappGatewayService');
 
 const FACTURA_PDF_CACHE_VERSION = 'v4';
 const FACTURA_DEFAULT_LIMIT = 250;
@@ -701,11 +702,13 @@ function emailDestinatarioNotAllowedResponse() {
 
 /**
  * POST /api/facturas/share/whatsapp
- * WhatsApp share with PDF base64 for Flutter to share as document
+ * One delivery: caption + PDF. Corporate bot when it is paired; otherwise
+ * the same response still carries the PDF so the app can attach it.
+ * A wa.me link cannot carry a file and must not be the send itself.
  */
 router.post('/share/whatsapp', verifyToken, async (req, res, next) => {
     try {
-        const { serie, numero, ejercicio, telefono, clienteNombre, terminal } = req.body;
+        const { serie, numero, ejercicio, telefono, clienteNombre, terminal, mensaje } = req.body;
 
         if (!serie || !numero || !ejercicio || !telefono) {
             return res.status(400).json({ success: false, error: 'Missing required fields' });
@@ -727,27 +730,77 @@ router.post('/share/whatsapp', verifyToken, async (req, res, next) => {
             return res.status(422).json(shareDestinatarioNotAllowedResponse());
         }
 
+        const phoneClean = String(telefono).replace(/\D/g, '');
+        if (!/^\d{7,15}$/.test(phoneClean)) {
+            return res.status(422).json({
+                success: false,
+                code: 'PHONE_INVALID',
+                error: 'Telefono de WhatsApp invalido'
+            });
+        }
+
         const pdfDocument = await buildCommercialDocumentPdf(document);
         const pdfBuffer = pdfDocument.pdfBuffer;
-        const message = buildWhatsAppMessageForDocument(document, clienteNombre);
-
-        const phoneClean = telefono.replace(/\D/g, '');
-        const whatsappUrl = `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`;
-
-        // Convert PDF to base64 for Flutter to share as document
-        const pdfBase64 = pdfBuffer.toString('base64');
-        const pdfFilename = document.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-
-        logger.info(`[FACTURAS] WhatsApp generated: ${document.label} ${documentVisibleId(document)} to ${phoneClean}`);
-
-        res.json({
+        const customMessage = String(mensaje || '').trim().slice(0, 900);
+        const message = customMessage || buildWhatsAppMessageForDocument(document, clienteNombre);
+        const pdfFilename = String(document.filename || 'documento.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const localPayload = {
             success: true,
-            whatsappUrl,
+            localShare: true,
+            sent: false,
+            deliveryConfirmed: false,
+            shareMode: 'LOCAL_USER_ACTION',
             message,
-            pdfBase64,
+            pdfBase64: pdfBuffer.toString('base64'),
             pdfFilename,
             mimeType: 'application/pdf'
-        });
+        };
+
+        const botUnavailable = !whatsappGateway.isBotConfigured()
+            || (!whatsappGateway.isBotReady()
+                && whatsappGateway.baileys.isConfigured()
+                && !whatsappGateway.cloud.isConfigured());
+        if (botUnavailable) {
+            logger.info(`[FACTURAS] WhatsApp local (PDF + texto): ${document.label} ${documentVisibleId(document)}`);
+            return res.json(localPayload);
+        }
+
+        try {
+            const result = await whatsappGateway.sendDocumentFromBot({
+                telefono: phoneClean,
+                pdfBuffer,
+                filename: pdfFilename,
+                caption: message,
+                bodyParams: [
+                    documentVisibleId(document),
+                    clienteNombre || document.clienteNombre || document.label
+                ]
+            });
+            logger.info(`[FACTURAS] WhatsApp bot sent PDF + texto: ${document.label} ${documentVisibleId(document)}`);
+            return res.json({
+                success: true,
+                localShare: false,
+                sent: true,
+                deliveryConfirmed: true,
+                shareMode: 'BOT_GATEWAY',
+                provider: result.provider,
+                mode: result.mode,
+                messageId: result.messageId,
+                message,
+                pdfFilename,
+                mimeType: 'application/pdf'
+            });
+        } catch (error) {
+            logger.error(`[FACTURAS] WhatsApp gateway send failed: ${error.message}`);
+            if (error.code === 'PHONE_INVALID') {
+                return res.status(422).json({
+                    success: false,
+                    code: 'PHONE_INVALID',
+                    error: 'Telefono de WhatsApp invalido'
+                });
+            }
+            return res.json(localPayload);
+        }
     } catch (error) {
         if (error.status === 400) {
             return res.status(400).json({ success: false, error: error.message });
