@@ -78,8 +78,15 @@ class MainActivity : FlutterActivity() {
                 }
                 if (jid != null) putExtra("jid", jid)
                 clipData = if (caption.isNotEmpty()) {
+                    // One clip item carries the caption and the PDF. WhatsApp
+                    // reads that item text as the message under the file.
+                    // The description must advertise text/plain or the caption
+                    // is dropped and only the PDF is sent.
                     ClipData(
-                        ClipDescription(file.name, arrayOf("application/pdf")),
+                        ClipDescription(
+                            file.name,
+                            arrayOf(ClipDescription.MIMETYPE_TEXT_PLAIN, "application/pdf"),
+                        ),
                         ClipData.Item(caption, null as String?, null as Intent?, uri),
                     )
                 } else {

@@ -4045,8 +4045,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (!mounted) return;
       await Share.shareXFiles(
         <XFile>[XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Nota de entrega ${widget.albaran.erpDocumentId}',
-        subject: 'Nota de entrega',
+        text: _deliveryNoteShareText(),
+        subject: 'Nota de entrega ${widget.albaran.erpDocumentId}',
         sharePositionOrigin: _shareOrigin(),
       );
     } catch (error) {
@@ -4075,11 +4075,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final file = await _prepareCommercialPdfFile();
       modal.close();
       if (!mounted) return;
-      final subject = widget.albaran.erpDocumentLabel;
       await Share.shareXFiles(
         <XFile>[XFile(file.path, mimeType: 'application/pdf')],
-        text: subject,
-        subject: subject,
+        text: _commercialShareText(),
+        subject: widget.albaran.erpDocumentLabel,
         sharePositionOrigin: _shareOrigin(),
       );
     } catch (_) {

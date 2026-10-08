@@ -3519,7 +3519,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
           : null;
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Nota de entrega $docRef',
+        text: _documentShareText(doc, deliveryNote: true),
+        subject: 'Nota de entrega $docRef',
         sharePositionOrigin: origin,
       );
     } catch (e) {
@@ -3873,7 +3874,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage>
 
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
-        text: '$typeLabel ${doc.number} - GMP',
+        text: _documentShareText(doc),
+        subject: '$typeLabel ${doc.visibleDocumentLabel} - Granja Mari Pepa',
         sharePositionOrigin: origin,
       );
     } catch (e) {
