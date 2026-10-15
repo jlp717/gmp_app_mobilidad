@@ -228,7 +228,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         // Auto-expand first item if only one
         if (_fiHierarchy.length == 1) {
           _expandedFiNodes
-              .add('fi1_${(_fiHierarchy.first['fi1Code'] as String?) ?? ''}');
+              .add('fi1_${(_fiHierarchy.first['code'] as String?) ?? ''}');
         }
         if (_families.length == 1) {
           _expandedFamilies

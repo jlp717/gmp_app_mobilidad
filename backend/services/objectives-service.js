@@ -611,6 +611,7 @@ function getMatrixProductRows(clientCode, uniqueYears, monthStart, monthEnd, fil
 async function getMatrixFamilyAndFiNames() {
     const familyNames = {};
     let fi1Names = {}, fi2Names = {}, fi3Names = {}, fi4Names = {}, fi5Names = {};
+    const fi1Order = {};
 
     if (isMetadataCacheReady()) {
         // Use cached data (instant)
@@ -640,7 +641,17 @@ async function getMatrixFamilyAndFiNames() {
             logger.warn(`Could not load family/FI names: ${e.message}`);
         }
     }
-    return { familyNames, fi1Names, fi2Names, fi3Names, fi4Names, fi5Names };
+    try {
+        const orderRows = await repo.fetchMatrixFi1Order();
+        orderRows.forEach((row) => {
+            const code = String(row.CODIGOFILTRO || '').trim();
+            const orden = Number(row.ORDEN);
+            if (code && Number.isFinite(orden)) fi1Order[code] = orden;
+        });
+    } catch (error) {
+        logger.warn(`Could not load FI1 order: ${error.message}`);
+    }
+    return { familyNames, fi1Names, fi2Names, fi3Names, fi4Names, fi5Names, fi1Order };
 }
 
 // =============================================================================

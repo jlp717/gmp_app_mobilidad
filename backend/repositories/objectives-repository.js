@@ -271,33 +271,89 @@ async function fetchMatrixProductRows(clientCode, uniqueYears, monthStart, month
     }
 }
 
+function chunkValues(values, size) {
+    const chunks = [];
+    for (let index = 0; index < values.length; index += size) {
+        chunks.push(values.slice(index, index + size));
+    }
+    return chunks;
+}
+
+async function lookupByArticleCodes(db, tableName, selectList, codes) {
+    const byCode = new Map();
+    for (const chunk of chunkValues(codes, 80)) {
+        const marks = chunk.map(() => '?').join(',');
+        const found = await db.queryWithParams(
+            `SELECT ${selectList}
+               FROM ${comercialErpTable(tableName)}
+              WHERE TRIM(CODIGOARTICULO) IN (${marks})`,
+            chunk,
+        );
+        for (const row of found || []) {
+            const code = String(row.CODIGOARTICULO || '').trim();
+            if (code) byCode.set(code, row);
+        }
+    }
+    return byCode;
+}
+
 async function attachMatrixArticleFields(rows, db) {
-    const codes = [...new Set((rows || []).map((row) => String(row.PRODUCT_CODE || '').trim()).filter(Boolean))].slice(0, 200);
+    const codes = [...new Set((rows || []).map((row) => String(row.PRODUCT_CODE || '').trim()).filter(Boolean))];
     if (!codes.length) return rows || [];
+    let artByCode = new Map();
+    let fiByCode = new Map();
     try {
-        const artRows = await db.queryWithParams(
-            `SELECT CODIGOARTICULO, DESCRIPCIONARTICULO, CODIGOFAMILIA, CODIGOSUBFAMILIA, UNIDADMEDIDA, CODIGOSECCIONLARGA
-               FROM ${comercialErpTable('ART')}
-              WHERE CODIGOARTICULO IN (${codes.map(() => '?').join(',')})`,
+        artByCode = await lookupByArticleCodes(
+            db,
+            'ART',
+            `TRIM(CODIGOARTICULO) AS CODIGOARTICULO,
+             TRIM(DESCRIPCIONARTICULO) AS DESCRIPCIONARTICULO,
+             TRIM(CODIGOFAMILIA) AS CODIGOFAMILIA,
+             TRIM(CODIGOSUBFAMILIA) AS CODIGOSUBFAMILIA,
+             TRIM(UNIDADMEDIDA) AS UNIDADMEDIDA,
+             TRIM(CODIGOSECCIONLARGA) AS CODIGOSECCIONLARGA`,
             codes,
         );
-        const byCode = new Map((artRows || []).map((art) => [String(art.CODIGOARTICULO || '').trim(), art]));
-        return rows.map((row) => {
-            const art = byCode.get(String(row.PRODUCT_CODE || '').trim());
-            if (!art) return row;
-            return {
-                ...row,
+    } catch (artError) {
+        logger.warn(`[MATRIX] article lookup skipped ${artError.message}`);
+    }
+    try {
+        fiByCode = await lookupByArticleCodes(
+            db,
+            'ARTX',
+            `TRIM(CODIGOARTICULO) AS CODIGOARTICULO,
+             TRIM(FILTRO01) AS FILTRO01,
+             TRIM(FILTRO02) AS FILTRO02,
+             TRIM(FILTRO03) AS FILTRO03,
+             TRIM(FILTRO04) AS FILTRO04`,
+            codes,
+        );
+    } catch (axError) {
+        logger.warn(`[MATRIX] ARTX lookup skipped ${axError.message}`);
+    }
+    if (!artByCode.size && !fiByCode.size) return rows || [];
+    return rows.map((row) => {
+        const key = String(row.PRODUCT_CODE || '').trim();
+        const art = artByCode.get(key);
+        const ax = fiByCode.get(key);
+        if (!art && !ax) return row;
+        return {
+            ...row,
+            ...(art ? {
                 PRODUCT_NAME: String(art.DESCRIPCIONARTICULO || '').trim() || row.PRODUCT_NAME,
                 FAMILY_CODE: String(art.CODIGOFAMILIA || '').trim() || row.FAMILY_CODE,
                 SUBFAMILY_CODE: String(art.CODIGOSUBFAMILIA || '').trim() || row.SUBFAMILY_CODE,
                 UNIT_TYPE: String(art.UNIDADMEDIDA || '').trim() || row.UNIT_TYPE,
                 FI5_CODE: String(art.CODIGOSECCIONLARGA || '').trim() || row.FI5_CODE,
-            };
-        });
-    } catch (artError) {
-        logger.warn(`[MATRIX] article lookup skipped ${artError.message}`);
-        return rows || [];
-    }
+            } : {}),
+            ...(ax ? {
+                FI1_CODE: String(ax.FILTRO01 || '').trim(),
+                FI2_CODE: String(ax.FILTRO02 || '').trim(),
+                FI3_CODE: String(ax.FILTRO03 || '').trim(),
+                FI4_CODE: String(ax.FILTRO04 || '').trim(),
+            } : {}),
+        };
+    });
 }
 
 function fetchMatrixFamilyNames(db = { query }) {
@@ -306,6 +362,10 @@ function fetchMatrixFamilyNames(db = { query }) {
 
 function fetchMatrixFiNames(table, db = { query }) {
     return db.query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM ${assertIdentifier(comercialErpTable(table), `objectives ${table} table`)}`, false, false);
+}
+
+function fetchMatrixFi1Order(db = { query }) {
+    return db.query(`SELECT CODIGOFILTRO, ORDEN FROM ${assertIdentifier(comercialErpTable('FI1'), 'objectives FI1 table')}`, false, false);
 }
 
 // =============================================================================
@@ -508,6 +568,7 @@ module.exports = {
     fetchMatrixProductRows,
     fetchMatrixFamilyNames,
     fetchMatrixFiNames,
+    fetchMatrixFi1Order,
     fetchPopulations,
     fetchByClientFilteredCount,
     fetchByClientSalesRank,

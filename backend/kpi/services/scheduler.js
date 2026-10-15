@@ -94,7 +94,21 @@ async function checkMissedRun() {
  * Además ejecuta checkMissedRun() para recuperar ejecuciones
  * perdidas por reinicios antes de la hora programada.
  */
+function isSchedulerOwner() {
+  if (process.env.KPI_SCHEDULER_ENABLED === 'false') return false;
+  const instanceRaw = process.env.NODE_APP_INSTANCE ?? process.env.INSTANCE_ID;
+  if (instanceRaw !== undefined && instanceRaw !== '' && String(instanceRaw) !== '0') return false;
+  return true;
+}
+
 function startScheduler() {
+  if (scheduledJob) return scheduledJob;
+  if (!isSchedulerOwner()) {
+    const instanceRaw = process.env.NODE_APP_INSTANCE ?? process.env.INSTANCE_ID;
+    logger.info(`[kpi:scheduler] omitido en worker instance=${instanceRaw || 'n/a'}`);
+    return null;
+  }
+
   const cronExpr = process.env.KPI_ETL_CRON || DEFAULT_CRON;
 
   // node-schedule con timezone: usa RecurrenceRule

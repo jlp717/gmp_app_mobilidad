@@ -153,6 +153,7 @@ describe('reparto server startup wiring', () => {
     expect(startServerSource).not.toMatch(
       /initAllTables|initWarehouseTables|initCommissionTables|initPedidosTables|initKpiModule|initKpiTables/,
     );
+    expect(startServerSource).toContain('startKpiRuntime');
     expect(startServerSource).not.toMatch(/\b\w+\.init(?:\w*Tables|\w*Module)\s*\(/);
     expect(source).toContain('await initDb();');
     expect(source).toContain('await initSchemaCheck();');

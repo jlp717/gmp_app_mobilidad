@@ -640,6 +640,43 @@ router.get('/evolution', verifyToken, requireVendorQueryScope, async (req, res) 
     }
 });
 
+function matrixText(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function filterResolvedMatrixRows(rows, filters) {
+    const expected = {
+        productCode: matrixText(filters.productCode),
+        productName: matrixText(filters.productName),
+        familyCode: matrixText(filters.familyCode),
+        subfamilyCode: matrixText(filters.subfamilyCode),
+        fi1: matrixText(filters.fi1),
+        fi2: matrixText(filters.fi2),
+        fi3: matrixText(filters.fi3),
+        fi4: matrixText(filters.fi4),
+        fi5: matrixText(filters.fi5),
+    };
+    return (rows || []).filter((row) => {
+        if (expected.productCode && !matrixText(row.PRODUCT_CODE).includes(expected.productCode)) return false;
+        if (expected.productName && !matrixText(row.PRODUCT_NAME).includes(expected.productName)) return false;
+        if (expected.familyCode && matrixText(row.FAMILY_CODE) !== expected.familyCode) return false;
+        if (expected.subfamilyCode && matrixText(row.SUBFAMILY_CODE) !== expected.subfamilyCode) return false;
+        if (expected.fi1 && matrixText(row.FI1_CODE) !== expected.fi1) return false;
+        if (expected.fi2 && matrixText(row.FI2_CODE) !== expected.fi2) return false;
+        if (expected.fi3 && matrixText(row.FI3_CODE) !== expected.fi3) return false;
+        if (expected.fi4 && matrixText(row.FI4_CODE) !== expected.fi4) return false;
+        if (expected.fi5 && matrixText(row.FI5_CODE) !== expected.fi5) return false;
+        return true;
+    });
+}
+
+function compareMatrixCategories(left, right) {
+    const leftOrder = Number.isFinite(left.sortOrder) ? left.sortOrder : 999998;
+    const rightOrder = Number.isFinite(right.sortOrder) ? right.sortOrder : 999998;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    return String(left.name || '').localeCompare(String(right.name || ''), 'es');
+}
+
 // =============================================================================
 // OBJECTIVES MATRIX
 // =============================================================================
@@ -686,51 +723,12 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         const { contactInfo, editableNotes } = await getMatrixContactAndNotes(clientCode);
         // -------------------------------------------
 
-        let filterConditions = '';
-        const filterParams = [];
-        if (productCode && productCode.trim()) {
-            const safeProdCode = `%${sanitizeForSQL(productCode.trim()).toUpperCase()}%`;
-            filterConditions += ` AND UPPER(L.LCCDRF) LIKE ?`;
-            filterParams.push(safeProdCode);
-        }
-        if (productName && productName.trim()) {
-            const safeProdName = `%${sanitizeForSQL(productName.trim()).toUpperCase()}%`;
-            filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE ? OR UPPER(L.LCDESC) LIKE ?)`;
-            filterParams.push(safeProdName, safeProdName);
-        }
-        if (familyCode && familyCode.trim()) {
-            filterConditions += ` AND A.CODIGOFAMILIA = ?`;
-            filterParams.push(familyCode.trim());
-        }
-        if (subfamilyCode && subfamilyCode.trim()) {
-            filterConditions += ` AND A.CODIGOSUBFAMILIA = ?`;
-            filterParams.push(subfamilyCode.trim());
-        }
-
-        if (fi1 && fi1.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO01) = ?`;
-            filterParams.push(fi1.trim());
-        }
-        if (fi2 && fi2.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO02) = ?`;
-            filterParams.push(fi2.trim());
-        }
-        if (fi3 && fi3.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO03) = ?`;
-            filterParams.push(fi3.trim());
-        }
-        if (fi4 && fi4.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO04) = ?`;
-            filterParams.push(fi4.trim());
-        }
-        if (fi5 && fi5.trim()) {
-            filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = ?`;
-            filterParams.push(fi5.trim());
-        }
-
-        // Get product purchases for this client - USING DSED.LACLAE (which has data for all clients including PUA)
-        // Query verbatim en services/objectives-service.js + repositories/objectives-repository.js.
-        const rows = await getMatrixProductRows(clientCode, uniqueYears, monthStart, monthEnd, filterConditions, filterParams);
+        // Las ventas se agregan sin join. Familia y FI se enlazan después
+        // (ART + ARTX) y el filtro se aplica sobre esas columnas ya resueltas.
+        const salesRows = await getMatrixProductRows(clientCode, uniqueYears, monthStart, monthEnd, '', []);
+        const rows = filterResolvedMatrixRows(salesRows, {
+            productCode, productName, familyCode, subfamilyCode, fi1, fi2, fi3, fi4, fi5,
+        });
 
         // Get family names and available filters properly
         const familyNames = {};
@@ -754,6 +752,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
         const fi3Names = matrixNames.fi3Names || {};
         const fi4Names = matrixNames.fi4Names || {};
         const fi5Names = matrixNames.fi5Names || {};
+        const fi1Order = matrixNames.fi1Order || {};
 
         // Build hierarchy: Family -> Subfamily -> Product (legacy)
         const familyMap = new Map();
@@ -1066,6 +1065,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
                     fiHierarchyMap.set(fi1Key, {
                         code: fi1Key,
                         name: fi1Names[fi1Key] ? `${fi1Key} - ${fi1Names[fi1Key]}` : (fi1Key === 'SIN_CAT' ? 'Sin Categoría' : fi1Key),
+                        sortOrder: fi1Key === 'SIN_CAT' ? 999999 : (fi1Order[fi1Key] ?? 999998),
                         level: 1,
                         totalSales: 0, totalCost: 0, totalUnits: 0,
                         prevYearSales: 0, prevYearCost: 0, prevYearUnits: 0,
@@ -1587,6 +1587,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
             return {
                 code: fi1.code,
                 name: fi1.name,
+                sortOrder: fi1.sortOrder,
                 level: 1,
                 totalSales: parseFloat(fi1.totalSales.toFixed(2)),
                 totalUnits: parseFloat(fi1.totalUnits.toFixed(2)),
@@ -1605,7 +1606,7 @@ router.get('/matrix', verifyToken, requireVendorQueryScope, async (req, res) => 
                 childCount: children1.length,
                 children: children1
             };
-        }).filter(f => f.totalSales > 0 || f.childCount > 0).sort((a, b) => b.totalSales - a.totalSales);
+        }).filter(f => f.totalSales > 0 || f.childCount > 0).sort(compareMatrixCategories);
 
         // Calculate Aggregated Summary
         const grandTotalMargin = grandTotalSales - grandTotalCost;

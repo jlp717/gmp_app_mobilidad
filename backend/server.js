@@ -97,6 +97,7 @@ async function startServer() {
     try { await initCache(); } catch (error) { logger.warn(`Redis unavailable (using L1 only): ${error.message}`); }
     try { await preloadCache(PORT); } catch (error) { logger.warn(`LACLAE preload skipped: ${error.message}`); }
     try { await loadMetadataCache(); } catch (error) { logger.warn(`Metadata cache skipped: ${error.message}`); }
+    try { await require('./kpi').startKpiRuntime(); } catch (error) { logger.warn(`KPI Glacius runtime skipped: ${error.message}`); }
   }
 
   startNetworkOptimizerCleanup();
@@ -172,6 +173,7 @@ function scheduleDbInitRetry(delayMs = 5000) {
       try { await initCache(); } catch (error) { logger.warn(`Redis unavailable (using L1 only): ${error.message}`); }
       try { await preloadCache(PORT); } catch (error) { logger.warn(`LACLAE preload skipped: ${error.message}`); }
       try { await loadMetadataCache(); } catch (error) { logger.warn(`Metadata cache skipped: ${error.message}`); }
+      try { await require('./kpi').startKpiRuntime(); } catch (error) { logger.warn(`KPI Glacius runtime skipped: ${error.message}`); }
     } catch (error) {
       logger.warn(`Database retry failed: ${error.message}`);
       scheduleDbInitRetry(Math.min(60000, wait * 2));
@@ -199,6 +201,11 @@ async function gracefulShutdown(signal, exitCode = 0) {
     require('./services/pedidos-draft-purge-scheduler').stopPedidosDraftPurgeScheduler();
   } catch (error) {
     logger.warn(`Draft purge scheduler stop error: ${error.message}`);
+  }
+  try {
+    await require('./kpi').shutdownKpiModule();
+  } catch (error) {
+    logger.warn(`KPI Glacius shutdown error: ${error.message}`);
   }
   if (global.__httpServer?.close) {
     await new Promise((resolve) => global.__httpServer.close(resolve));

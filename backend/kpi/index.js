@@ -8,9 +8,44 @@ const { startScheduler, stopScheduler, getSchedulerStatus } = require('./service
 const { kpiHealthCheck, kpiEndPool, initKpiTables } = require('./config/db');
 const logger = require('../middleware/logger');
 
+function isKpiRuntimeOwner() {
+  if (process.env.KPI_SCHEDULER_ENABLED === 'false') return false;
+  const instanceRaw = process.env.NODE_APP_INSTANCE ?? process.env.INSTANCE_ID;
+  if (instanceRaw !== undefined && instanceRaw !== '' && String(instanceRaw) !== '0') return false;
+  return true;
+}
+
+/**
+ * Arranca Redis y el refresco semanal sin crear tablas.
+ * initKpiTables hace DDL y no puede correr en el boot de producción.
+ */
+async function startKpiRuntime() {
+  if (!isKpiRuntimeOwner()) {
+    logger.info(`[kpi] runtime omitido en worker instance=${process.env.NODE_APP_INSTANCE ?? process.env.INSTANCE_ID ?? 'n/a'}`);
+    return { started: false };
+  }
+  try {
+    await initRedis();
+    logger.info('[kpi] Redis inicializado');
+    const dbHealth = await kpiHealthCheck();
+    if (dbHealth.status === 'ok') {
+      logger.info('[kpi] DB2 KPI conectado');
+    } else {
+      logger.warn(`[kpi] DB2 KPI no disponible: ${dbHealth.error}. Scheduler en espera.`);
+      return { started: false };
+    }
+    startScheduler();
+    logger.info('[kpi] Scheduler ETL iniciado (L-V 7:00 Europe/Madrid, un solo worker)');
+    return { started: true };
+  } catch (err) {
+    logger.error(`[kpi] Error arrancando runtime KPI: ${err.message}`);
+    return { started: false };
+  }
+}
+
 /**
  * Inicializa el módulo KPI: tablas DB2 + Redis + scheduler.
- * Llamar desde server.js en startServer().
+ * El boot de server.js usa startKpiRuntime y no esta función: crear tablas es DDL.
  */
 async function initKpiModule() {
   try {
@@ -56,6 +91,7 @@ async function shutdownKpiModule() {
 module.exports = {
   kpiRoutes,
   initKpiModule,
+  startKpiRuntime,
   shutdownKpiModule,
   getSchedulerStatus,
 };

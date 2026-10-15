@@ -149,9 +149,9 @@ async function runETL({ localDir, loadId, force = false } = {}) {
     [currentLoadId, filesList, globalHash]
   );
 
-  // 5. Desactivar alertas anteriores y limpiar alertas expiradas.
+  // 5. Limpiar alertas ya expiradas. Las vigentes se conservan hasta que
+  // esta carga termine: si el lunes falla a mitad, no se queda la cartera a cero.
   // REQ-G4: la expiracion ocurre SOLO dentro de runETL, nunca en rutas/lecturas.
-  await kpiQuery(`UPDATE ${SCHEMA}.KPI_ALERTS SET IS_ACTIVE = 0 WHERE IS_ACTIVE = 1`);
   await kpiQuery(`DELETE FROM ${SCHEMA}.KPI_ALERTS WHERE EXPIRES_AT IS NOT NULL AND EXPIRES_AT < CURRENT TIMESTAMP`);
 
   // 6. Procesar cada CSV
@@ -234,7 +234,13 @@ async function runETL({ localDir, loadId, force = false } = {}) {
     logger.info(`[kpi:etl] ${file.name}: ${rows.length} filas â†’ ${alerts.length} alertas`);
   }
 
-  // 7. Marcar carga como completada
+  // 7. Sustituir las alertas vigentes solo cuando la carga nueva ya está insertada.
+  await kpiQuery(
+    `UPDATE ${SCHEMA}.KPI_ALERTS SET IS_ACTIVE = 0 WHERE IS_ACTIVE = 1 AND LOAD_ID <> ?`,
+    [currentLoadId]
+  );
+
+  // 8. Marcar carga como completada
   await kpiQuery(
     `UPDATE ${SCHEMA}.KPI_LOADS SET STATUS = 'COMPLETED', TOTAL_ALERTS = ?, COMPLETED_AT = CURRENT TIMESTAMP, ERRORS = ?
      WHERE LOAD_ID = ?`,

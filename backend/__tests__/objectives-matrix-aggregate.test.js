@@ -31,6 +31,7 @@ test('matrix sales aggregate the selected client without a double cast or articl
     expect(sql).toContain('SUM(S.LCIMVT) AS SALES');
     expect(sql).not.toContain('AS DOUBLE');
     expect(sql).not.toContain('LEFT JOIN LATERAL');
+    expect(calls.some((call) => call.sql.includes('FILTRO01') && call.sql.includes('ARTX'))).toBe(true);
     expect(sql).toContain('S.LCCDCL = CAST(? AS CHAR(10))');
     expect(calls[0].params[0]).toBe('4300007540');
     expect(calls[0].params).toContain(2023);
