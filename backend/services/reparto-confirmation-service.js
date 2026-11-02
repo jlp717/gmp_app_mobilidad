@@ -432,6 +432,9 @@ function createRepartoConfirmationService({ repository, now = () => new Date() }
   async function confirm(command, { signal } = {}) {
     const fingerprint = confirmationFingerprint(command);
     const result = await repository.withTransaction(async (tx) => {
+      if (typeof tx.coordinateLocalDocument === 'function') {
+        await tx.coordinateLocalDocument(command.delivery.itemId);
+      }
       const replay = await tx.getByIdempotencyKey(command.idempotencyKey);
       if (replay) {
         if (replay.fingerprint !== fingerprint) {

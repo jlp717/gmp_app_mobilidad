@@ -1491,7 +1491,7 @@ router.post('/create', async (req, res) => {
         const {
             clientCode, clientName, vendedorCode,
             tipoventa, almacen, tarifa, formaPago, observaciones,
-            descuentoGlobal, globalDiscountPct, lines
+            descuentoGlobal, globalDiscountPct, lines, originalCreatedAt
         } = req.body;
 
         // Validation
@@ -1538,6 +1538,9 @@ router.post('/create', async (req, res) => {
                 observaciones: observaciones ? String(observaciones).trim() : '',
                 lines,
                 userId: vendorAccess.vendedorCode,
+                userRole: req.user?.role,
+                deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
+                originalClientAt: originalCreatedAt,
                 idempotencyKey,
             });
         } finally {
@@ -1624,6 +1627,12 @@ router.put('/:id/lines', async (req, res) => {
             precioTarifaCliente: parseFloat(precioTarifaCliente) || 0,
             precioMinimo: parseFloat(precioMinimo) || 0,
             claseLinea,
+            auditContext: {
+                actorId: req.user?.code || req.user?.id || ownership.ownership?.vendedorCode,
+                actorRole: req.user?.role,
+                deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
+                idempotencyKey: req.headers['idempotency-key'],
+            },
         });
 
         res.json({ success: true, line });
@@ -1662,6 +1671,12 @@ router.put('/:id/lines/:lineId', async (req, res) => {
             precioVenta: precioVenta !== undefined ? parseFloat(precioVenta) || 0 : undefined,
             unidadMedida: unidadMedida !== undefined ? String(unidadMedida).trim() : undefined,
             claseLinea: claseLinea !== undefined ? String(claseLinea).trim() : undefined,
+            auditContext: {
+                actorId: req.user?.code || req.user?.id || ownership.ownership?.vendedorCode,
+                actorRole: req.user?.role,
+                deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
+                idempotencyKey: req.headers['idempotency-key'],
+            },
         });
 
         res.json({ success: true, line });
@@ -1688,7 +1703,12 @@ router.delete('/:id/lines/:lineId', async (req, res) => {
             return res.status(ownership.status).json(ownership.body);
         }
 
-        await pedidosService.deleteOrderLine(lineId, id);
+        await pedidosService.deleteOrderLine(lineId, id, {
+            actorId: req.user?.code || req.user?.id || ownership.ownership?.vendedorCode,
+            actorRole: req.user?.role,
+            deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
+            idempotencyKey: req.headers['idempotency-key'],
+        });
 
         res.json({ success: true });
     } catch (error) {
@@ -1736,6 +1756,8 @@ router.put('/:id/confirm', async (req, res) => {
             driverCode: driverCode ? String(driverCode).trim() : undefined,
             routeCode: routeCode ? String(routeCode).trim() : undefined,
             cobroPropio: cobroPropio === true || cobroEnMano === true,
+            deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
+            idempotencyKey: req.headers['idempotency-key'],
         };
         const order = await pedidosService.confirmOrder(id, normalizedSaleType, options);
 
@@ -1796,9 +1818,15 @@ router.delete('/:id', async (req, res) => {
             return res.status(ownership.status).json(ownership.body);
         }
 
-        await pedidosService.cancelOrder(id, { userId: req.user?.code || 'SYSTEM' });
+        const order = await pedidosService.cancelOrder(id, {
+            userId: req.user?.code || req.user?.id || 'SYSTEM',
+            userRole: req.user?.role,
+            deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
+            idempotencyKey: req.headers['idempotency-key'],
+            reason: req.body?.reason || req.body?.cancellationReason,
+        });
 
-        res.json({ success: true });
+        res.json({ success: true, order });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in DELETE /${req.params.id}: ${error.message}`);
         return sendPedidosError(error, res, 'Error eliminando pedido', 'PEDIDOS_DELETE_ERROR');
@@ -1817,7 +1845,12 @@ router.put('/:id/lines/:lineId/delete', async (req, res) => {
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
-        await pedidosService.deleteOrderLine(lineId, id);
+        await pedidosService.deleteOrderLine(lineId, id, {
+            actorId: req.user?.code || req.user?.id || ownership.ownership?.vendedorCode,
+            actorRole: req.user?.role,
+            deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
+            idempotencyKey: req.headers['idempotency-key'],
+        });
         res.json({ success: true });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/lines/${req.params.lineId}/delete: ${error.message}`);
@@ -1836,8 +1869,14 @@ router.put('/:id/cancel', async (req, res) => {
             return res.status(ownership.status).json(ownership.body);
         }
 
-        await pedidosService.cancelOrder(id, { userId: req.user?.code || 'SYSTEM' });
-        res.json({ success: true });
+        const order = await pedidosService.cancelOrder(id, {
+            userId: req.user?.code || req.user?.id || 'SYSTEM',
+            userRole: req.user?.role,
+            deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
+            idempotencyKey: req.headers['idempotency-key'],
+            reason: req.body?.reason || req.body?.cancellationReason,
+        });
+        res.json({ success: true, order });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/cancel: ${error.message}`);
         return sendPedidosError(error, res, 'Error cancelando pedido', 'PEDIDOS_CANCEL_ERROR');

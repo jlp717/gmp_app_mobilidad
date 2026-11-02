@@ -1207,13 +1207,18 @@ describe('pedidos line amount contract', () => {
 
 describe('pedidos state machine contract', () => {
   test('allows only explicit lifecycle transitions', () => {
-    expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'CONFIRMADO')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'CONFIRMADO')).toBe(false);
+    expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'CONFIRMANDO')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'CANCELANDO')).toBe(true);
     expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'PENDIENTE_APROBACION')).toBe(false);
     expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'PEND_APROB')).toBe(false);
-    expect(pedidosService.isOrderTransitionAllowed('PENDIENTE_APROBACION', 'CONFIRMADO')).toBe(true);
-    expect(pedidosService.isOrderTransitionAllowed('PEND_APROB', 'CONFIRMADO')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('PENDIENTE_APROBACION', 'CONFIRMADO')).toBe(false);
+    expect(pedidosService.isOrderTransitionAllowed('PEND_APROB', 'CONFIRMADO')).toBe(false);
     expect(pedidosService.isOrderTransitionAllowed('CONFIRMANDO', 'CONFIRMADO')).toBe(true);
-    expect(pedidosService.isOrderTransitionAllowed('CONFIRMANDO', 'BORRADOR')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('CONFIRMANDO', 'BORRADOR')).toBe(false);
+    expect(pedidosService.isOrderTransitionAllowed('CONFIRMADO', 'CANCELANDO')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('CANCELANDO', 'CANCELADO')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('CANCELADO', 'BORRADOR')).toBe(false);
     expect(pedidosService.isOrderTransitionAllowed('CONFIRMADO', 'ENVIADO')).toBe(false);
     expect(pedidosService.isOrderTransitionAllowed('CONFIRMADO', 'BORRADOR')).toBe(false);
     expect(pedidosService.isOrderTransitionAllowed('ENVIADO', 'ANULADO')).toBe(false);
@@ -1254,6 +1259,9 @@ describe('pedidos state machine contract', () => {
     };
     mockQueryWithParams.mockImplementation((sql) => {
       if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO/i.test(sql)) return Promise.resolve([{ ESTADO: 'BORRADOR' }]);
+      if (/SELECT\s+ID,\s+TRIM\(ESTADO\).*DESCUENTO_GLOBAL/is.test(sql)) {
+        return Promise.resolve([{ ID: 42, ESTADO: 'BORRADOR', CODIGOCLIENTE: 'C001', CODIGOVENDEDOR: '01' }]);
+      }
       if (/SELECT\s+PEDIDO_ID,\s+CANTIDADENVASES/i.test(sql)) return Promise.resolve([line]);
       if (/RAW_BASE/i.test(sql)) return Promise.resolve([{ RAW_BASE: 20, RAW_COSTO: 8, RAW_IVA: 4.2, DESCUENTO_GLOBAL: 0 }]);
       if (/SELECT\s+ID,\s+PEDIDO_ID,\s+SECUENCIA/i.test(sql)) {
@@ -1286,17 +1294,10 @@ describe('pedidos state machine contract', () => {
     )).toBe(false);
   });
 
-  test('updateOrderStatus rejects non-confirmed target statuses', async () => {
-    mockQueryWithParams.mockImplementation(async (sql) => {
-      if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) {
-        return [{ ESTADO: 'CONFIRMADO' }];
-      }
-      return [];
-    });
-
+  test('updateOrderStatus rejects the unaudited generic transition endpoint', async () => {
     await expect(
-      pedidosService.updateOrderStatus(42, 'BORRADOR', { userId: '01' }),
-    ).rejects.toMatchObject({ code: 'INVALID_ORDER_STATUS' });
+      pedidosService.updateOrderStatus(42, 'CONFIRMADO', { userId: '01' }),
+    ).rejects.toMatchObject({ code: 'ORDER_TRANSITION_ENDPOINT_DISABLED', status: 409 });
 
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO/i.test(sql))).toBe(false);
   });
@@ -1307,6 +1308,9 @@ describe('pedidos mutation service error contract', () => {
   test('deleteOrderLine returns typed LINE_NOT_FOUND when line was already deleted', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO/i.test(sql)) return [{ ESTADO: 'BORRADOR' }];
+      if (/SELECT\s+ID,\s+TRIM\(ESTADO\).*DESCUENTO_GLOBAL/is.test(sql)) {
+        return [{ ID: 42, ESTADO: 'BORRADOR', CODIGOCLIENTE: 'C001', CODIGOVENDEDOR: '01' }];
+      }
       if (/SELECT\s+ID\s+FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+ID\s+=\s+\?\s+AND\s+PEDIDO_ID\s+=\s+\?/i.test(sql)) return [];
       return [];
     });
@@ -1316,29 +1320,77 @@ describe('pedidos mutation service error contract', () => {
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.PEDIDOS_LIN/i.test(sql))).toBe(false);
   });
 
-  test('cancelOrder deletes draft rows without writing a third status', async () => {
-    mockQueryWithParams.mockImplementation(async (sql) => {
-      if (/SELECT\s+ESTADO,\s+CODIGOCLIENTE,\s+IMPORTETOTAL\s+FROM\s+JAVIER\.PEDIDOS_CAB\s+WHERE\s+ID\s+=\s+\?/i.test(sql)) {
-        return [{ ESTADO: 'BORRADOR', CODIGOCLIENTE: 'C001', IMPORTETOTAL: '100.00' }];
-      }
-      if (/DELETE\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) {
-        return { count: 1 };
-      }
-      return [];
+  test('cancelOrder requires a traceable reason before any database access', async () => {
+    await expect(pedidosService.cancelOrder(42)).rejects.toMatchObject({
+      code: 'CANCELLATION_REASON_REQUIRED', status: 400,
     });
-
-    const result = await pedidosService.cancelOrder(42);
-
-    expect(result).toMatchObject({ id: 42, deleted: true, estado: 'BORRADOR' });
-    expect(mockQueryWithParams.mock.calls.some(([sql]) => /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO/i.test(sql))).toBe(false);
-    expect(mockQueryWithParams.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql))).toBe(true);
-    expect(mockQueryWithParams.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql))).toBe(true);
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 
-  test('cancelOrder rejects confirmed orders because ERP manages later lifecycle', async () => {
-    mockQueryWithParams.mockResolvedValueOnce([{ ESTADO: 'CONFIRMADO' }]);
-    await expect(pedidosService.cancelOrder(42)).rejects.toMatchObject({ code: 'PEDIDO_MANAGED_BY_ERP', status: 409 });
+  test('cancelOrder rejects an exported order after checking the actual ERP document link', async () => {
+    mockQueryWithParams
+      .mockResolvedValueOnce([{
+        ESTADO: 'CONFIRMADO', CODIGOCLIENTE: 'C001', SYSTEM_NUMEROPEDIDO: 123,
+        TARGET_SCHEMA: 'JAVIER',
+      }])
+      .mockResolvedValueOnce([{
+        CODIGOCLIENTE: 'C001', EJERCICIO: 2026, SERIEPEDIDO: 'P', TERMINAL: 73,
+        NUMEROPEDIDO: 42, SYSTEM_SUBEMPRESAPEDIDO: 'GMP', SYSTEM_EJERCICIOPEDIDO: 2026,
+        SYSTEM_SERIEPEDIDO: 'P', SYSTEM_TERMINALPEDIDO: 73, SYSTEM_NUMEROPEDIDO: 123,
+      }])
+      .mockResolvedValue([]);
+    await expect(pedidosService.cancelOrder(42, { reason: 'Cliente lo solicita' }))
+      .rejects.toMatchObject({ code: 'PEDIDO_MANAGED_BY_ERP', status: 409 });
   });
+
+  test.each(['BORRADOR', 'CONFIRMADO'])(
+    'cancelOrder retains the %s header and lines, releases stock and writes the audited terminal state',
+    async (initialState) => {
+      let state = initialState;
+      const header = () => ({
+        ID: 42, ESTADO: state, CODIGOCLIENTE: 'C001', CODIGOVENDEDOR: '01',
+        SYSTEM_NUMEROPEDIDO: 0, TARGET_SCHEMA: 'JAVIER', EJERCICIO: 2026,
+        SERIEPEDIDO: 'P', TERMINAL: 73, NUMEROPEDIDO: 42,
+      });
+      const queryResult = (sql) => {
+        if (/SELECT\s+ESTADO,\s+CODIGOCLIENTE,\s+SYSTEM_NUMEROPEDIDO/i.test(sql)) return [header()];
+        if (/SELECT\s+ID,\s+TRIM\(ESTADO\).*DESCUENTO_GLOBAL/is.test(sql)) return [header()];
+        if (/SELECT\s+ID,\s+PEDIDO_ID,\s+SECUENCIA/i.test(sql)) return [];
+        if (/SELECT\s+PAYLOAD_HASH/i.test(sql)) return [];
+        if (/FROM\s+JAVIER\.(?:TEST_)?(?:REPARTO_CONFIRMACIONES|REPARTO_EVIDENCIAS|REPARTIDOR_COBROS|COBROS)/i.test(sql)) return [];
+        if (/M\.TIPO\s+IN\s*\('CONSUMO',\s*'ACUMULACION',\s*'REGISTRO'\)/i.test(sql)) return [];
+        if (/SET\s+ESTADO\s*=\s*'CANCELANDO'/i.test(sql)) {
+          state = 'CANCELANDO';
+          return { count: 1 };
+        }
+        if (/SET\s+ESTADO\s*=\s*'CANCELADO'/i.test(sql)) {
+          state = 'CANCELADO';
+          return { count: 1 };
+        }
+        if (/FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB\s+WHERE\s+ID/i.test(sql)) return [header()];
+        if (/FROM\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql)) return [];
+        return { count: 1 };
+      };
+      mockQueryWithParams.mockImplementation((sql) => Promise.resolve(queryResult(sql)));
+
+      const result = await pedidosService.cancelOrder(42, {
+        reason: 'Cliente solicita cancelacion',
+        userId: '01',
+        userRole: 'COMERCIAL',
+        idempotencyKey: `cancel-${initialState.toLowerCase()}-42`,
+      });
+
+      expect(result).toMatchObject({ cancelled: true, deleted: false, estado: 'CANCELADO' });
+      expect(mockTxQuery.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql))).toBe(true);
+      expect(mockTxQuery.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_(?:CAB|LIN)/i.test(sql))).toBe(false);
+      expect(mockTxQuery.mock.calls.filter(([sql]) => /INSERT\s+INTO\s+JAVIER\.TEST_PEDIDO_STATE_EVENTS/i.test(sql))).toHaveLength(2);
+      if (initialState === 'CONFIRMADO') {
+        expect(mockTxQuery.mock.calls.some(([sql]) => /M\.TIPO\s+IN\s*\('CONSUMO',\s*'ACUMULACION',\s*'REGISTRO'\)/i.test(sql))).toBe(true);
+      }
+      expect(mockTxCommit).toHaveBeenCalledTimes(1);
+      expect(mockTxRollback).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('pedidos confirm route bolsa contract', function() {
@@ -1671,7 +1723,9 @@ describe('pedidos mutation route ownership contract', function() {
 
     expect(res.status).toBe(200);
     expect(mockService.getOrderVendorForAuth).toHaveBeenCalledWith(42);
-    expect(mockService.deleteOrderLine).toHaveBeenCalledWith(7, 42);
+    expect(mockService.deleteOrderLine).toHaveBeenCalledWith(7, 42, expect.objectContaining({
+      actorId: '01', actorRole: 'COMERCIAL',
+    }));
     expect(mockService.deleteOrderLine).not.toHaveBeenCalledWith(42, 7);
   });
   test('COMERCIAL can cancel own order after ownership check', async function() {

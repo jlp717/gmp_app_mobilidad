@@ -118,6 +118,19 @@ function setupCreateMocks({ existingIdempotency = null, clientDefaults = null } 
       return [];
     }
 
+    if (/UPDATE\s+JAVIER\.PEDIDO_IDEMPOTENCY\s+SET\s+PAYLOAD_HASH/i.test(normalized)) {
+      if (!existingIdempotency || existingIdempotency.payloadHash !== _params[3]) return { count: 0 };
+      existingIdempotency.payloadHash = _params[0];
+      return { count: 1 };
+    }
+
+    if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(normalized)) {
+      return [{ ESTADO: 'BORRADOR' }];
+    }
+
+    if (/FROM\s+JAVIER\.TEST_PEDIDO_STATE_EVENTS/i.test(normalized)) return [];
+    if (/INSERT INTO\s+JAVIER\.TEST_PEDIDO_STATE_EVENTS/i.test(normalized)) return { count: 1 };
+
     if (/FROM\s+JAVIER\.PEDIDOS_SEQ/i.test(normalized) || /UPDATE\s+JAVIER\.PEDIDOS_SEQ/i.test(normalized)) {
       return [{ ULTIMO_NUMERO: nextOrderNumber }];
     }
@@ -364,6 +377,77 @@ describe('pedidos create idempotency', () => {
     expect(result.idempotent).toBe(true);
     expect(result.header).toMatchObject({ id: 77, estado: 'BORRADOR' });
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql))).toBe(false);
+  });
+
+  test('legacy idempotency replay without timestamp remains compatible and performs no adoption write', async () => {
+    const { buildCreateOrderPayloadHashV1 } = require('../services/pedidos/order-idempotency');
+    const legacy = {
+      pedidoId: 77,
+      payloadHash: buildCreateOrderPayloadHashV1(baseCreatePayload),
+    };
+    setupCreateMocks({ existingIdempotency: legacy });
+
+    const result = await pedidosService.createOrder({
+      ...baseCreatePayload,
+      clientRequestId: 'legacyreplaykey001',
+    });
+
+    expect(result.idempotent).toBe(true);
+    expect(mockTxQuery.mock.calls.some(([sql]) =>
+      /UPDATE\s+JAVIER\.PEDIDO_IDEMPOTENCY/i.test(sql)
+    )).toBe(false);
+  });
+
+  test('legacy idempotency replay adopts the first normalized offline timestamp atomically', async () => {
+    const {
+      buildCreateOrderPayloadHash,
+      buildCreateOrderPayloadHashV1,
+    } = require('../services/pedidos/order-idempotency');
+    const originalClientAt = '2026-11-02T08:09:10.123456Z';
+    const legacy = {
+      pedidoId: 77,
+      payloadHash: buildCreateOrderPayloadHashV1(baseCreatePayload),
+    };
+    setupCreateMocks({ existingIdempotency: legacy });
+
+    const result = await pedidosService.createOrder({
+      ...baseCreatePayload,
+      clientRequestId: 'legacyreplaykey002',
+      originalClientAt,
+    });
+
+    expect(result.idempotent).toBe(true);
+    expect(legacy.payloadHash).toBe(buildCreateOrderPayloadHash({
+      ...baseCreatePayload,
+      originalClientAt,
+    }));
+    expect(mockTxQuery.mock.calls.some(([sql]) =>
+      /LOCK TABLE\s+JAVIER\.PEDIDO_IDEMPOTENCY/i.test(sql)
+    )).toBe(true);
+    const eventInsert = mockTxQuery.mock.calls.find(([sql]) =>
+      /INSERT INTO\s+JAVIER\.TEST_PEDIDO_STATE_EVENTS/i.test(sql)
+    );
+    expect(eventInsert?.[1]?.[10]).toBe('2026-11-02 08:09:10.123456');
+  });
+
+  test('legacy timestamp adoption rejects a later retry with a different original instant', async () => {
+    const { buildCreateOrderPayloadHashV1 } = require('../services/pedidos/order-idempotency');
+    const legacy = {
+      pedidoId: 77,
+      payloadHash: buildCreateOrderPayloadHashV1(baseCreatePayload),
+    };
+    setupCreateMocks({ existingIdempotency: legacy });
+
+    await pedidosService.createOrder({
+      ...baseCreatePayload,
+      clientRequestId: 'legacyreplaykey003',
+      originalClientAt: '2026-11-02T08:09:10.123456Z',
+    });
+    await expect(pedidosService.createOrder({
+      ...baseCreatePayload,
+      clientRequestId: 'legacyreplaykey003',
+      originalClientAt: '2026-11-02T08:09:11.123456Z',
+    })).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT', status: 409 });
   });
 
   test('createOrder rejects same clientRequestId with different payload', async () => {

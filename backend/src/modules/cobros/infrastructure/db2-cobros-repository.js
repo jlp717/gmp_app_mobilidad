@@ -5,7 +5,7 @@
  * The legacy implementation has proper column names and business logic
  */
 const { CobrosRepository } = require('../domain/cobros-repository');
-const { query, queryWithParams, acquireConfiguredConnection } = require('../../../../config/db');
+const { query, queryWithParams } = require('../../../../config/db');
 const logger = require('../../../../middleware/logger');
 const { db2InsertSql } = require('../../../../utils/db2-identifiers');
 const { db2AppTable } = require('../../../../utils/db2-schemas');
@@ -30,6 +30,12 @@ const {
 } = require('../../../../services/debt-view-contract');
 const { comercialErpTable, comercialErpSchemaAndName, comercialErpSnapshotTable, isIsolatedCommercialTest } = require('../../../../utils/comercial-erp-tables');
 const { formatErpDocumentLabel } = require('../../../../utils/erp-document-label');
+const {
+  lockLocalOrderCoordinator,
+} = require('../../../../adapters/pedidos-local-order-state-guard');
+const {
+  openDedicatedPedidosTransactionConnection,
+} = require('../../../../adapters/pedidos-transaction-connection');
 
 const COBROS_TABLE = db2AppTable('COBROS');
 const REPARTIDOR_COBROS_TABLE = db2AppTable('REPARTIDOR_COBROS');
@@ -755,6 +761,14 @@ function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
 }
 
 class Db2CobrosRepository extends CobrosRepository {
+  constructor(options = {}) {
+    super();
+    this.transactionConnectionFactory =
+      typeof options?.transactionConnectionFactory === 'function'
+        ? options.transactionConnectionFactory
+        : openDedicatedPedidosTransactionConnection;
+  }
+
   /**
    * Get pending payments for a client (orders that are CONFIRMADO/ENVIADO but not yet paid)
    * Uses correct column names: DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, IMPORTETOTAL
@@ -1537,17 +1551,27 @@ class Db2CobrosRepository extends CobrosRepository {
     let connection;
     let transactionStarted = false;
     try {
-      connection = await acquireConfiguredConnection();
-      if (!connection || typeof connection.query !== 'function') {
+      connection = await this.transactionConnectionFactory();
+      if (!connection || typeof connection.query !== 'function'
+          || typeof connection.beginTransaction !== 'function'
+          || typeof connection.commit !== 'function'
+          || typeof connection.rollback !== 'function'
+          || typeof connection.close !== 'function') {
         throw new Error('DB2 transaction connection is unavailable');
       }
-      // IBM i ODBC starts the unit of work through SET TRANSACTION.
-      await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+      await connection.beginTransaction();
       transactionStarted = true;
+      if (trim(order.SOURCE).toUpperCase() === 'PEDIDOS_CAB') {
+        await lockLocalOrderCoordinator(
+          (sql, params) => connection.query(sql, params),
+          `PED-${Number.parseInt(order.ID, 10)}-${normalizedClient}`,
+          { requireActive: true },
+        );
+      }
       await connection.query(`LOCK TABLE ${REPARTIDOR_COBROS_TABLE} IN EXCLUSIVE MODE`);
     } catch (error) {
       if (transactionStarted) {
-        try { await connection.query('ROLLBACK'); } catch (_) { /* preserve acquisition error */ }
+        try { await connection.rollback(); } catch (_) { /* preserve acquisition error */ }
       }
       if (connection && typeof connection.close === 'function') {
         try { await connection.close(); } catch (_) { /* best effort */ }
@@ -1584,7 +1608,7 @@ class Db2CobrosRepository extends CobrosRepository {
         status: 'REGISTRADO',
         idempotent: true,
       };
-      await connection.query('COMMIT');
+      await connection.commit();
       transactionStarted = false;
       return result;
     }
@@ -1736,7 +1760,7 @@ class Db2CobrosRepository extends CobrosRepository {
             status: 'REGISTRADO',
             idempotent: true,
           };
-          await connection.query('COMMIT');
+          await connection.commit();
           transactionStarted = false;
           return result;
         }
@@ -1755,7 +1779,7 @@ class Db2CobrosRepository extends CobrosRepository {
       pendingAfter: fromCents(pendingAfterCents),
       idempotent: false,
     };
-    await connection.query('COMMIT');
+    await connection.commit();
     transactionStarted = false;
     try {
       const dsedacExports = require('../../../../services/dsedac-exports.service');
@@ -1772,7 +1796,7 @@ class Db2CobrosRepository extends CobrosRepository {
     return result;
     } catch (error) {
       if (transactionStarted) {
-        try { await connection.query('ROLLBACK'); } catch (_) { /* preserve primary error */ }
+        try { await connection.rollback(); } catch (_) { /* preserve primary error */ }
       }
       throw error;
     } finally {

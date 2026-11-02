@@ -1,6 +1,9 @@
 'use strict';
 
 const { RepartoPersistenceError } = require('../services/reparto-confirmation-service');
+const {
+  lockLocalOrderCoordinator,
+} = require('../adapters/pedidos-local-order-state-guard');
 const { TABLE_MAPPINGS } = require('../config/reparto-runtime');
 
 const TEST_SCHEMA = 'JAVIER';
@@ -221,7 +224,7 @@ async function rows(connection, sql, params = [], signal) {
   return Array.isArray(result) ? result : (result?.rows || []);
 }
 
-async function execute(connection, sql, params = [], signal) {
+function execute(connection, sql, params = [], signal) {
   return runWithSignal(connection, () => typeof connection.query === 'function'
     ? connection.query(sql, params)
     : connection.execute(sql, params), signal);
@@ -453,6 +456,13 @@ function createRepartoConfirmationDb2Repository({
       cobrosPort, connection, 'insertCobro', 'cobrosPort',
     );
     return {
+      coordinateLocalDocument(documentId) {
+        return lockLocalOrderCoordinator(
+          (sql, params) => execute(connection, sql, params, signal),
+          documentId,
+          { requireActive: true },
+        );
+      },
       async getByIdempotencyKey(key) {
         const row = first(await rows(connection,
           `SELECT PAYLOAD_FINGERPRINT, RESULT_JSON FROM ${confirmations} WHERE IDEMPOTENCY_KEY = ? FOR UPDATE WITH RS`, [key], signal));

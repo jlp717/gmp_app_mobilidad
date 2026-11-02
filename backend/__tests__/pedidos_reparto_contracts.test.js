@@ -57,6 +57,33 @@ function mockSuccessfulConfirmationQueries({
   vendedorCode = '57',
   includeLine = false,
 } = {}) {
+  const orderHeader = {
+    ID: 42,
+    ESTADO: mockLocalState,
+    EJERCICIO: 2026,
+    NUMEROPEDIDO: 10363,
+    SERIEPEDIDO: 'M',
+    TERMINAL: 999,
+    DIADOCUMENTO: 4,
+    MESDOCUMENTO: 5,
+    ANODOCUMENTO: 2026,
+    HORADOCUMENTO: 100800,
+    CODIGOCLIENTE: '4300010363',
+    NOMBRECLIENTE: 'SUSHI LORCA, S.L.',
+    CODIGOVENDEDOR: vendedorCode,
+    CODIGOFORMAPAGO: '02',
+    CODIGOTARIFA: 1,
+    CODIGOALMACEN: 1,
+    TIPOVENTA: 'CC',
+    IMPORTETOTAL: 20,
+    IMPORTEBASE: 20,
+    IMPORTEIVA: 0,
+    IMPORTECOSTO: 8,
+    IMPORTEMARGEN: 12,
+    DESCUENTO_GLOBAL: 0,
+    PORCENTAJEDESCUENTO1: 0,
+    OBSERVACIONES: 'OBS TEST',
+  };
   const orderLine = {
     ID: 7,
     PEDIDO_ID: 42,
@@ -84,32 +111,23 @@ function mockSuccessfulConfirmationQueries({
   };
 
   mockQueryWithParams.mockImplementation(async (sql) => {
-    if (/SELECT\s+ESTADO/i.test(sql)) {
+    if (/SELECT\s+ID,\s+TRIM\(ESTADO\).*DESCUENTO_GLOBAL/is.test(sql)) {
+      return [{ ...orderHeader, ESTADO: mockLocalState }];
+    }
+    if (/FROM\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) {
       return [{
-        ID: 42,
-        ESTADO: 'BORRADOR',
-        EJERCICIO: 2026,
-        NUMEROPEDIDO: 10363,
-        SERIEPEDIDO: 'M',
-        TERMINAL: 999,
-        DIADOCUMENTO: 4,
-        MESDOCUMENTO: 5,
-        ANODOCUMENTO: 2026,
-        HORADOCUMENTO: 100800,
-        CODIGOCLIENTE: '4300010363',
-        NOMBRECLIENTE: 'SUSHI LORCA, S.L.',
+        ID: 9,
         CODIGOVENDEDOR: vendedorCode,
-        CODIGOFORMAPAGO: '02',
-        CODIGOTARIFA: 1,
-        CODIGOALMACEN: 1,
-        TIPOVENTA: 'CC',
-        IMPORTETOTAL: 20,
-        IMPORTEBASE: 20,
-        IMPORTEIVA: 0,
-        IMPORTECOSTO: 8,
-        IMPORTEMARGEN: 12,
-        OBSERVACIONES: 'OBS TEST',
+        EJERCICIO: 2026,
+        MES: 5,
+        SALDO_INICIAL: 300,
+        SALDO_DISPONIBLE: 300,
+        CONSUMIDO: 0,
+        ACUMULADO: 0,
       }];
+    }
+    if (/SELECT\s+ESTADO/i.test(sql)) {
+      return [{ ...orderHeader, ESTADO: 'BORRADOR' }];
     }
     if (/FROM\s+DSEDAC\.OPP/i.test(sql)) {
       return [{
@@ -418,6 +436,10 @@ describe('pedidos reparto confirmation contract', () => {
     mockSuccessfulConfirmationQueries({ includeLine: true, vehicleCode: '11', driverCode: '57' });
     mockConnQuery.mockImplementation(async (sql) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 778 }];
+      if (/FROM\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) {
+        return [{ ID: 9, CODIGOVENDEDOR: '57', EJERCICIO: 2026, MES: 5,
+          SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
+      }
       return [];
     });
     mockPool = {
@@ -473,6 +495,10 @@ describe('pedidos reparto confirmation contract', () => {
     mockSuccessfulConfirmationQueries({ includeLine: true, vehicleCode: '11', driverCode: '57' });
     mockConnQuery.mockImplementation(async (sql) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 779 }];
+      if (/FROM\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) {
+        return [{ ID: 9, CODIGOVENDEDOR: '57', EJERCICIO: 2026, MES: 5,
+          SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
+      }
       return [];
     });
     mockPool = {
@@ -518,6 +544,10 @@ describe('pedidos reparto confirmation contract', () => {
     });
     mockConnQuery.mockImplementation(async (sql) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 780 }];
+      if (/FROM\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) {
+        return [{ ID: 9, CODIGOVENDEDOR: '02', EJERCICIO: 2026, MES: 5,
+          SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
+      }
       return [];
     });
     mockPool = {
@@ -572,6 +602,10 @@ describe('pedidos reparto confirmation contract', () => {
     });
     mockConnQuery.mockImplementation(async (sql) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 781 }];
+      if (/FROM\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) {
+        return [{ ID: 9, CODIGOVENDEDOR: 'A3', EJERCICIO: 2026, MES: 5,
+          SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
+      }
       return [];
     });
     mockPool = {

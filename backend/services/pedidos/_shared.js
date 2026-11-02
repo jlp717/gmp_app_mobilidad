@@ -30,23 +30,32 @@ class OrderStateError extends Error {
     }
 }
 
-const VALID_ORDER_STATES = ['BORRADOR', 'CONFIRMANDO', 'CONFIRMADO'];
+const VALID_ORDER_STATES = [
+    'BORRADOR',
+    'CONFIRMANDO',
+    'CONFIRMADO',
+    'CANCELANDO',
+    'CANCELADO',
+];
 const MAX_ORDER_LINES = 200;
 const DB2_BULK_INSERT_CHUNK_SIZE = 25;
 const STOCK_RESERVE_BULK_INSERT_CHUNK_SIZE = 100;
 const DEFAULT_PEDIDOS_ERP_TERMINAL = 93;
 
 const ORDER_TRANSITIONS = {
-    BORRADOR: new Set(['CONFIRMADO']),
-    CONFIRMANDO: new Set(['CONFIRMADO', 'BORRADOR']),
-    CONFIRMADO: new Set(),
+    BORRADOR: new Set(['CONFIRMANDO', 'CANCELANDO']),
+    CONFIRMANDO: new Set(['CONFIRMADO']),
+    CONFIRMADO: new Set(['CANCELANDO']),
+    CANCELANDO: new Set(['CANCELADO']),
+    CANCELADO: new Set(),
 };
 
 function canonicalOrderStatus(status) {
     const normalized = trimString(status).toUpperCase();
     if (['PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION'].includes(normalized)) return 'BORRADOR';
     if (['ENVIADO', 'ENTREGADO', 'FACTURADO'].includes(normalized)) return 'CONFIRMADO';
-    return VALID_ORDER_STATES.includes(normalized) ? normalized : 'BORRADOR';
+    if (normalized === 'ANULADO') return 'CANCELADO';
+    return VALID_ORDER_STATES.includes(normalized) ? normalized : normalized;
 }
 
 function numberValue(raw) {

@@ -1,6 +1,9 @@
 'use strict';
 
 const { createRepartoConfirmationDb2Repository } = require('../repositories/reparto-confirmation-db2-repository');
+const {
+  openDedicatedPedidosTransactionConnection,
+} = require('../adapters/pedidos-transaction-connection');
 const { validateConfirmationTableMapping } = require('./reparto-runtime');
 const { createRepartoCobrosDb2Port } = require('../repositories/reparto-cobros-db2-port');
 const { createRepartoReceiptDb2Repository } = require('../repositories/reparto-receipt-db2-repository');
@@ -65,13 +68,27 @@ function unavailableCobrosPort() {
   });
 }
 
-/** A request acquires exactly one pooled DB2 connection, lazily. */
-function createDb2ConnectionFactory({ acquireConfiguredConnection }) {
-  if (typeof acquireConfiguredConnection !== 'function') throw new TypeError('acquireConfiguredConnection is required');
-  return async function connectionFactory() { return acquireConfiguredConnection(); };
+/**
+ * Confirmation takes explicit table locks, so its unit of work must own a
+ * physical DB2 connection. Returning that job to the pool can retain IBM i
+ * locks after COMMIT/ROLLBACK; the dedicated adapter is physically closed by
+ * the repository in `finally`.
+ */
+function createDb2ConnectionFactory({
+  openDedicatedConnection = openDedicatedPedidosTransactionConnection,
+} = {}) {
+  if (typeof openDedicatedConnection !== 'function') {
+    throw new TypeError('openDedicatedConnection is required');
+  }
+  return function connectionFactory() { return openDedicatedConnection(); };
 }
 
-function createCanonicalConfirmationBootstrap({ runtime, db, logger = console } = {}) {
+function createCanonicalConfirmationBootstrap({
+  runtime,
+  db,
+  logger = console,
+  openDedicatedConnection = openDedicatedPedidosTransactionConnection,
+} = {}) {
   const capabilitySatisfied = canEnableCanonicalConfirmation(runtime);
   const diagnostic = Object.freeze({
     enabled: capabilitySatisfied,
@@ -95,7 +112,8 @@ function createCanonicalConfirmationBootstrap({ runtime, db, logger = console } 
       runtime: disabledRuntime(),
     });
   }
-  const connectionFactory = createDb2ConnectionFactory(db);
+  const pooledConnectionFactory = () => db.acquireConfiguredConnection();
+  const confirmationConnectionFactory = createDb2ConnectionFactory({ openDedicatedConnection });
   const plannedDeliveryPort = createRepartoPlannedDeliveryDb2Port({ schema: 'DSEDAC' });
   // Confirmation remains independent from finance. A payment request still
   // fails closed unless the existing finance capability has been authorized.
@@ -109,7 +127,7 @@ function createCanonicalConfirmationBootstrap({ runtime, db, logger = console } 
     : unavailableCobrosPort();
   const evidenceRepository = createRepartoEvidenceDb2Repository({
     schema: APP_SCHEMA,
-    connectionFactory,
+    connectionFactory: pooledConnectionFactory,
     tables: runtime.tables.confirmation,
     pendingTtlHours: runtime.evidencePendingTtlHours,
     plannedDeliveryPort,
@@ -117,7 +135,7 @@ function createCanonicalConfirmationBootstrap({ runtime, db, logger = console } 
   });
   const repository = createRepartoConfirmationDb2Repository({
     schema: APP_SCHEMA,
-    connectionFactory,
+    connectionFactory: confirmationConnectionFactory,
     plannedDeliveryPort,
     tables: runtime.tables.confirmation,
     evidenceOwnershipPort: evidenceRepository,
@@ -129,7 +147,10 @@ function createCanonicalConfirmationBootstrap({ runtime, db, logger = console } 
   const confirmationRuntime = createRepartoConfirmationRuntime({ repository, catalogService });
   // Read-only receipt construction shares the canonical runtime allowlist and
   // lazy connection factory, but is not part of the confirmation write unit.
-  const receiptRepository = createRepartoReceiptDb2Repository({ connectionFactory, runtime });
+  const receiptRepository = createRepartoReceiptDb2Repository({
+    connectionFactory: pooledConnectionFactory,
+    runtime,
+  });
   return Object.freeze({
     enabled: true,
     diagnostic,

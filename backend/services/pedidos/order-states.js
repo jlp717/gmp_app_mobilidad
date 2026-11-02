@@ -9,7 +9,9 @@ const { trimString, truncate, integerValue, ORDER_TRANSITIONS, OrderStateError, 
 function publicOrderStatus(status) {
     const normalized = canonicalOrderStatus(status);
     if (normalized === 'CONFIRMADO') return 'CONFIRMADO';
-    return 'BORRADOR';
+    if (normalized === 'CANCELADO') return 'CANCELADO';
+    if (normalized === 'BORRADOR' || normalized === 'CONFIRMANDO') return 'BORRADOR';
+    return 'DESCONOCIDO';
 }
 
 function storedOrderStatus(status) {
@@ -20,7 +22,7 @@ function isOrderTransitionAllowed(fromStatus, toStatus) {
     const rawFrom = trimString(fromStatus).toUpperCase();
     const rawTo = trimString(toStatus).toUpperCase();
     if (['ENVIADO', 'ENTREGADO', 'FACTURADO', 'ANULADO'].includes(rawFrom)) return false;
-    if (rawTo !== 'BORRADOR' && rawTo !== 'CONFIRMADO') return false;
+    if (!['BORRADOR', 'CONFIRMANDO', 'CONFIRMADO', 'CANCELANDO', 'CANCELADO'].includes(rawTo)) return false;
     const from = canonicalOrderStatus(fromStatus);
     const to = canonicalOrderStatus(toStatus);
     return ORDER_TRANSITIONS[from]?.has(to) === true;

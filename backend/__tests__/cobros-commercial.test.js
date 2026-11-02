@@ -5,15 +5,22 @@ const crypto = require('crypto');
 const mockQuery = jest.fn();
 const mockQueryWithParams = jest.fn();
 const mockPoolConnect = jest.fn();
-const mockAcquireConfiguredConnection = jest.fn();
+const mockOpenDedicatedConnection = jest.fn();
 const mockConnQuery = jest.fn();
 const mockConnClose = jest.fn();
+const mockConnBegin = jest.fn();
+const mockConnCommit = jest.fn();
+const mockConnRollback = jest.fn();
 
 jest.mock('../config/db', () => ({
   query: (...args) => mockQuery(...args),
   queryWithParams: (...args) => mockQueryWithParams(...args),
-  acquireConfiguredConnection: (...args) => mockAcquireConfiguredConnection(...args),
   getPool: () => ({ connect: mockPoolConnect }),
+}));
+
+jest.mock('../adapters/pedidos-transaction-connection', () => ({
+  openDedicatedPedidosTransactionConnection: (...args) =>
+    mockOpenDedicatedConnection(...args),
 }));
 
 jest.mock('../middleware/logger', () => ({
@@ -76,11 +83,20 @@ beforeEach(() => {
   mockQuery.mockReset();
   mockQueryWithParams.mockReset();
   mockPoolConnect.mockReset();
-  mockAcquireConfiguredConnection.mockReset();
+  mockOpenDedicatedConnection.mockReset();
   mockConnQuery.mockReset();
   mockConnClose.mockReset();
+  mockConnBegin.mockReset().mockResolvedValue(undefined);
+  mockConnCommit.mockReset().mockResolvedValue(undefined);
+  mockConnRollback.mockReset().mockResolvedValue(undefined);
   mockConnQuery.mockImplementation((sql, params) => mockQueryWithParams(sql, params));
-  mockAcquireConfiguredConnection.mockResolvedValue({ query: mockConnQuery, close: mockConnClose });
+  mockOpenDedicatedConnection.mockResolvedValue({
+    query: mockConnQuery,
+    beginTransaction: mockConnBegin,
+    commit: mockConnCommit,
+    rollback: mockConnRollback,
+    close: mockConnClose,
+  });
   clearPedidoCabOptionalColumnsCache();
 });
 
@@ -919,7 +935,7 @@ describe('commercial cobros hardening', () => {
     ]));
   });
 
-  test('registerPayment locks the same reparto ledger as the other channel using IBM i transaction syntax', async () => {
+  test('registerPayment locks the same reparto ledger on one dedicated physical transaction', async () => {
     const repo = setupRepository({ paid: '0.00' });
 
     await repo.registerPayment({
@@ -933,15 +949,16 @@ describe('commercial cobros hardening', () => {
       idempotencyToken: 'cobro-token-no-lock-001',
     });
 
-    expect(mockAcquireConfiguredConnection).toHaveBeenCalledTimes(1);
+    expect(mockOpenDedicatedConnection).toHaveBeenCalledTimes(1);
     const allSql = [
       ...mockQuery.mock.calls.map(([sql]) => sql),
       ...mockQueryWithParams.mock.calls.map(([sql]) => sql),
     ];
     expect(allSql.some((sql) => /LOCK TABLE JAVIER\.REPARTIDOR_COBROS IN EXCLUSIVE MODE/i.test(sql))).toBe(true);
-    expect(allSql.some((sql) => /^SET TRANSACTION ISOLATION LEVEL READ COMMITTED$/i.test(sql))).toBe(true);
+    expect(mockConnBegin).toHaveBeenCalledTimes(1);
+    expect(mockConnCommit).toHaveBeenCalledTimes(1);
+    expect(mockConnRollback).not.toHaveBeenCalled();
     expect(allSql.some((sql) => /^BEGIN WORK$/i.test(sql))).toBe(false);
-    expect(allSql.some((sql) => /^COMMIT$/i.test(sql))).toBe(true);
     expect(mockConnClose).toHaveBeenCalledTimes(1);
   });
 
@@ -1316,7 +1333,7 @@ describe('real document amount protection', () => {
     const payment = await repo.registerPayment({ clientCode: 'C001', amount: 116.37, paymentMethod: 'CONTADO', reference: 'M-1', observations: 'cap regression', userId: '01', idempotencyToken: 'cap-partial-token' });
     expect(payment.pendingBefore).toBe(232.74);
     expect(payment.pendingAfter).toBe(116.37);
-    expect(rule.mock.invocationCallOrder[0]).toBeLessThan(mockAcquireConfiguredConnection.mock.invocationCallOrder[0]);
+    expect(rule.mock.invocationCallOrder[0]).toBeLessThan(mockOpenDedicatedConnection.mock.invocationCallOrder[0]);
   });
 });
 

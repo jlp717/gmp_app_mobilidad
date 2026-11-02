@@ -13,8 +13,14 @@ const {
     applyPctToAmount,
     isCobroPropio,
 } = require('./discounts');
-const { roundPrice, trimString, OrderStateError, MAX_ORDER_LINES, DB2_BULK_INSERT_CHUNK_SIZE, STOCK_RESERVE_BULK_INSERT_CHUNK_SIZE, ORDER_TRANSITIONS, numberValue, integerValue, truncate, ERP_SCHEMA, PEDIDOS_CAB_TABLE, PEDIDOS_LIN_TABLE, PEDIDOS_SEQ_TABLE, PEDIDOS_STOCK_RESERVE_TABLE, DRAFT_STOCK_RESERVATION_HOURS, DRAFT_STOCK_RESERVATION_STATES_SQL, ACTIVE_STOCK_RESERVATION_CONDITION } = require('./_shared');
+const { roundPrice, trimString, OrderStateError, MAX_ORDER_LINES, DB2_BULK_INSERT_CHUNK_SIZE, STOCK_RESERVE_BULK_INSERT_CHUNK_SIZE, numberValue, integerValue, truncate, ERP_SCHEMA, PEDIDOS_CAB_TABLE, PEDIDOS_LIN_TABLE, PEDIDOS_SEQ_TABLE, PEDIDOS_STOCK_RESERVE_TABLE, DRAFT_STOCK_RESERVATION_HOURS, DRAFT_STOCK_RESERVATION_STATES_SQL, ACTIVE_STOCK_RESERVATION_CONDITION } = require('./_shared');
 const orderLifecycle = require('./order-lifecycle');
+const {
+    appendOrderStateEvent,
+    canonicalPayload,
+    normalizeOriginalClientAt,
+    payloadHash,
+} = require('./order-state-events');
 const {
     withDraftCreationTransaction,
     withDraftMutationTransaction,
@@ -26,7 +32,7 @@ const catalogAux = require('./catalog-aux');
 const discovery = require('./discovery');
 const similarity = require('./similarity');
 const history = require('./history');
-const { normalizeDayList, CRUT_DELIVERY_COLUMNS, deliveryDaysFromRows, LACLAE_DELIVERY_COLUMNS, getNextDeliveryDate, parseDeliveryDate, DAY_LABELS, formatDateDisplay, deliveryDaysShort, pad2, resolvePedidoActorCodes, normalizePedidoSaleType, getPedidosConfirmationTarget, resolvePedidoTerminal, normalizePedidoIdempotencyKey, generatePedidoIdempotencyKey, resolveIdempotentCreateOrder, storePedidoIdempotency, lookupPedidoIdempotency, createIdempotencyConflictError, createIdempotencyUnavailableError, publicOrderStatus, formatPedidoNumeroAcisa, assertOrderEditable, isAuthorizedForceConfirm, canonicalOrderStatus, getOrderStatusForUpdate, isOrderTransitionAllowed, storedOrderStatus } = orderLifecycle;
+const { normalizeDayList, CRUT_DELIVERY_COLUMNS, deliveryDaysFromRows, LACLAE_DELIVERY_COLUMNS, getNextDeliveryDate, parseDeliveryDate, DAY_LABELS, formatDateDisplay, deliveryDaysShort, pad2, resolvePedidoActorCodes, normalizePedidoSaleType, getPedidosConfirmationTarget, resolvePedidoTerminal, normalizePedidoIdempotencyKey, generatePedidoIdempotencyKey, resolveIdempotentCreateOrder, storePedidoIdempotency, lookupPedidoIdempotency, createIdempotencyConflictError, createIdempotencyUnavailableError, publicOrderStatus, formatPedidoNumeroAcisa, assertOrderEditable, isAuthorizedForceConfirm, canonicalOrderStatus } = orderLifecycle;
 const { getActivePromotionsV2 } = promotions;
 const { getSimilarProducts } = similarity;
 const { query, queryWithParams, getPool, initDb } = require('../../config/db');
@@ -40,6 +46,9 @@ const {
     db2AppTable,
     assertMoneyFitsWriteSchema,
 } = require('../../utils/db2-schemas');
+const {
+    lockLocalCancellationGuards,
+} = require('../../adapters/pedidos-local-order-state-guard');
 const PRICING_CONFIG_SCHEMA = 'JAVIER';
 const BOLSA_PRODUCT_PRICE_TABLE = `${PRICING_CONFIG_SCHEMA}.BOLSA_PRODUCTO_PRECIO`;
 const { comercialErpTable } = require('../../utils/comercial-erp-tables');
@@ -1682,6 +1691,13 @@ async function readConfirmationState(queryFn, id) {
     return trimString(rows[0].ESTADO).toUpperCase();
 }
 
+async function assertHeaderStateAfterUnknownUpdate(queryFn, id, expectedState, errorMessage) {
+    const state = canonicalOrderStatus(await readConfirmationState(queryFn, id));
+    if (state !== expectedState) {
+        throw new OrderStateError('PEDIDO_STATE_CONFLICT', errorMessage, 409);
+    }
+}
+
 async function claimLocalOrderForConfirmation(queryFn, id) {
     const initialState = await readConfirmationState(queryFn, id);
     if (initialState === 'CONFIRMADO') {
@@ -1736,6 +1752,36 @@ function readOrderLinesForMutation(queryFn, id) {
     );
 }
 
+function rehydrateLockedPricingProvenance(lines, configuredPricing) {
+    return (lines || []).map((line) => {
+        const code = truncate(line.CODIGOARTICULO || line.codigoArticulo, 10);
+        const productPricing = configuredPricing?.productPricing?.get(code);
+        const clientPrice = configuredPricing?.clientPrices?.get(code);
+        const authoritative = mergeConfiguredPricing({
+            ...line,
+            code,
+            precioTarifa: Number(line.PRECIOTARIFA) || 0,
+            precioTarifaCliente: Number(line.PRECIOTARIFACLIENTE) || 0,
+            precioMinimo: Number(line.PRECIOMINIMO) || 0,
+        }, productPricing, clientPrice);
+        return {
+            ...line,
+            PRECIOCLIENTESOURCE: authoritative.precioClienteSource || '',
+            PRECIOESPECIALCLIENTE: authoritative.precioEspecialCliente === true,
+            PERMITEBAJOMINIMO: authoritative.permiteBajoMinimo === true,
+            PRECIOTARIFACLIENTE: Number(authoritative.precioTarifaCliente)
+                || Number(line.PRECIOTARIFACLIENTE)
+                || 0,
+            PRECIOMINIMO: Number(authoritative.precioMinimo)
+                || Number(line.PRECIOMINIMO)
+                || 0,
+            PRECIOCOSTO: Number(authoritative.precioCosto)
+                || Number(line.PRECIOCOSTO)
+                || 0,
+        };
+    });
+}
+
 async function refreshDraftReservationWithStockCheck(queryFn, id) {
     const lines = await readOrderLinesForMutation(queryFn, id);
     const stock = await getStockBatch(
@@ -1760,6 +1806,63 @@ function withEditableDraftMutation(orderId, callback) {
         const queryFn = (sql, params) => conn.query(sql, params);
         await assertOrderEditable(orderId, queryFn);
         return callback(queryFn);
+    });
+}
+
+async function readOrderAuditHeader(queryFn, orderId) {
+    const headers = await queryFn(
+        `SELECT ID, TRIM(ESTADO) AS ESTADO,
+                EJERCICIO, NUMEROPEDIDO, TRIM(SERIEPEDIDO) AS SERIEPEDIDO, TERMINAL,
+                DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, HORADOCUMENTO,
+                TRIM(CODIGOCLIENTE) AS CODIGOCLIENTE, TRIM(NOMBRECLIENTE) AS NOMBRECLIENTE,
+                TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR,
+                TRIM(CODIGOFORMAPAGO) AS CODIGOFORMAPAGO,
+                CODIGOTARIFA, CODIGOALMACEN, TRIM(TIPOVENTA) AS TIPOVENTA,
+                IMPORTETOTAL, IMPORTEBASE, IMPORTEIVA, IMPORTECOSTO, IMPORTEMARGEN,
+                COALESCE(DESCUENTO_GLOBAL, 0) AS DESCUENTO_GLOBAL,
+                COALESCE(PORCENTAJEDESCUENTO1, 0) AS PORCENTAJEDESCUENTO1,
+                TRIM(COALESCE(OBSERVACIONES, '')) AS OBSERVACIONES,
+                FECHAREPARTO, DIAREPARTO, MESREPARTO, ANOREPARTO,
+                TRIM(COALESCE(CODIGOREPARTIDOR, '')) AS CODIGOREPARTIDOR,
+                TRIM(COALESCE(CODIGOVEHICULO, '')) AS CODIGOVEHICULO,
+                TRIM(COALESCE(RUTA, '')) AS RUTA
+           FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
+        [orderId],
+    );
+    if (!Array.isArray(headers) || headers.length !== 1) {
+        throw new OrderStateError('ORDER_NOT_FOUND', 'Pedido no encontrado', 404);
+    }
+    return headers[0];
+}
+
+async function readOrderAuditSnapshot(queryFn, orderId) {
+    const [header, lines] = await Promise.all([
+        readOrderAuditHeader(queryFn, orderId),
+        readOrderLinesForMutation(queryFn, orderId),
+    ]);
+    return { header, lines: lines || [] };
+}
+
+function appendDraftMutationAudit(queryFn, {
+    orderId,
+    event,
+    before,
+    after,
+    context = {},
+}) {
+    const payload = { event, before, after };
+    const digest = payloadHash(canonicalPayload(payload)).slice(0, 24);
+    return appendOrderStateEvent(queryFn, {
+        pedidoId: orderId,
+        fromState: 'BORRADOR',
+        toState: 'BORRADOR',
+        actorId: context.actorId || context.userId || 'SYSTEM',
+        actorRole: context.actorRole || context.userRole,
+        deviceId: context.deviceId,
+        reason: context.reason,
+        idempotencyKey: context.idempotencyKey || `pedido-${orderId}-${event.toLowerCase()}-${digest}`,
+        originalClientAt: context.originalClientAt,
+        payload,
     });
 }
 
@@ -3055,6 +3158,8 @@ async function createOrder({
     clientRequestId,
     userId,
     userRole,
+    deviceId,
+    originalClientAt,
 }) {
     const serviceT0 = Date.now();
     const lineCount = Array.isArray(lines) ? lines.length : 0;
@@ -3098,6 +3203,7 @@ async function createOrder({
         descuentoGlobal,
         globalDiscountPct,
     });
+    const normalizedOriginalClientAt = normalizeOriginalClientAt(originalClientAt);
 
     const normalizedIdempotencyKey = idempotencyKey
         ? normalizePedidoIdempotencyKey(idempotencyKey)
@@ -3114,6 +3220,7 @@ async function createOrder({
         observaciones,
         descuentoGlobal: effectiveDescuentoGlobal,
         lines,
+        originalClientAt: normalizedOriginalClientAt,
     });
     logger.info(`[PEDIDOS] createOrder stage=idempotency_lookup lineCount=${lineCount} durationMs=${Date.now() - idempotencyT0}`);
     if (idempotencyState?.replay) {
@@ -3353,6 +3460,43 @@ async function createOrder({
                 storeErr.pedidoCreationStage = 'idempotency_store';
                 throw storeErr;
             }
+            await appendOrderStateEvent(queryFn, {
+                pedidoId,
+                fromState: null,
+                toState: 'BORRADOR',
+                actorId: userId || effectiveVendedorCode,
+                actorRole: userRole || 'COMERCIAL',
+                deviceId,
+                idempotencyKey: `pedido-${pedidoId}-created-${normalizedIdempotencyKey}`,
+                originalClientAt: normalizedOriginalClientAt,
+                payload: {
+                    event: 'ORDER_CREATED',
+                    idempotencyKey: normalizedIdempotencyKey,
+                    header: {
+                        clientCode: effectiveClientCode,
+                        vendedorCode: effectiveVendedorCode,
+                        tipoventa: effectiveSaleType,
+                        descuentoGlobal: effectiveDescuentoGlobal,
+                    },
+                    lines: lineContexts.map(({ line, amounts, sequence }) => ({
+                        sequence,
+                        codigoArticulo: line.codigoArticulo || line.CODIGOARTICULO,
+                        cantidadEnvases: amounts.cantidadEnvases,
+                        cantidadUnidades: amounts.cantidadUnidades,
+                        unidadMedida: amounts.unidadMedida,
+                        precioVenta: amounts.precio,
+                        precioTarifa: line.precioTarifa,
+                        precioTarifaCliente: line.precioTarifaCliente,
+                        precioMinimo: line.precioMinimo,
+                        precioClienteSource: line.precioClienteSource,
+                        descuentoLinea: amounts.descuentoLinea,
+                        importeVenta: amounts.importeVenta,
+                        precioCosto: line.precioCosto,
+                        importeCosto: amounts.importeCosto,
+                        importeMargen: amounts.importeMargen,
+                    })),
+                },
+            });
             return { pedidoId, idempotent: false };
         });
     } catch (creationError) {
@@ -4052,6 +4196,7 @@ async function addOrderLine(pedidoId, lineData) {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
     await withEditableDraftMutation(id, async (queryFn) => {
+        const before = await readOrderAuditSnapshot(queryFn, id);
         const seqRows = await queryFn(
             `SELECT COALESCE(MAX(SECUENCIA), 0) + 1 AS NEXT_SEQ FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`,
             [id],
@@ -4073,6 +4218,14 @@ async function addOrderLine(pedidoId, lineData) {
         await queryFn(sql, params);
         await recalculateOrderTotals(id, queryFn);
         await refreshDraftReservationWithStockCheck(queryFn, id);
+        const after = await readOrderAuditSnapshot(queryFn, id);
+        await appendDraftMutationAudit(queryFn, {
+            orderId: id,
+            event: 'LINE_ADDED',
+            before,
+            after,
+            context: lineData.auditContext,
+        });
     });
     await invalidatePedidosStockCache('draft_line_add');
 
@@ -4089,6 +4242,7 @@ async function updateOrderLine(lineId, {
     claseLinea,
     descuentoLinea,
     lineDiscountPct,
+    auditContext,
 }) {
     const id = parseInt(lineId, 10);
     if (isNaN(id)) throw new Error('Invalid lineId');
@@ -4116,6 +4270,7 @@ async function updateOrderLine(lineId, {
     const verifiedCost = roundPrice(productPricing?.COSTE_FABRICACION);
     const costVerified = verifiedCost > 0;
     await withEditableDraftMutation(pedidoId, async (queryFn) => {
+        const before = await readOrderAuditSnapshot(queryFn, pedidoId);
         const lockedRows = await queryFn(
             `SELECT PEDIDO_ID, CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO,
                     UNIDADMEDIDA, UNIDADESCAJA, CLASELINEA,
@@ -4184,18 +4339,27 @@ async function updateOrderLine(lineId, {
         }
         await recalculateOrderTotals(pedidoId, queryFn);
         await refreshDraftReservationWithStockCheck(queryFn, pedidoId);
+        const after = await readOrderAuditSnapshot(queryFn, pedidoId);
+        await appendDraftMutationAudit(queryFn, {
+            orderId: pedidoId,
+            event: 'LINE_UPDATED',
+            before,
+            after,
+            context: auditContext,
+        });
     });
     await invalidatePedidosStockCache('draft_line_update');
     invalidatePedidosCache(pedidoId);
     return getOrderDetail(pedidoId);
 }
 
-async function deleteOrderLine(lineId, pedidoId) {
+async function deleteOrderLine(lineId, pedidoId, auditContext = {}) {
     const lid = parseInt(lineId, 10);
     const pid = parseInt(pedidoId, 10);
     if (isNaN(lid) || isNaN(pid)) throw new Error('Invalid lineId or pedidoId');
 
     await withEditableDraftMutation(pid, async (queryFn) => {
+        const before = await readOrderAuditSnapshot(queryFn, pid);
         const lineRows = await queryFn(
             `SELECT ID FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ? AND PEDIDO_ID = ?`,
             [lid, pid],
@@ -4209,6 +4373,14 @@ async function deleteOrderLine(lineId, pedidoId) {
         );
         await recalculateOrderTotals(pid, queryFn);
         await refreshDraftReservationWithStockCheck(queryFn, pid);
+        const after = await readOrderAuditSnapshot(queryFn, pid);
+        await appendDraftMutationAudit(queryFn, {
+            orderId: pid,
+            event: 'LINE_REMOVED',
+            before,
+            after,
+            context: auditContext,
+        });
     });
     await invalidatePedidosStockCache('draft_line_delete');
     invalidatePedidosCache(pid);
@@ -4460,6 +4632,10 @@ async function confirmOrder(orderId, saleType, options = {}) {
 
     let stockWarnings = [];
     let outOfStockProducts = [];
+    const confirmationPricing = await getConfiguredPricingMaps(
+        lines.map((line) => line.CODIGOARTICULO),
+        clientCode,
+    );
 
     // P0-BOLSA: Validate bolsa comercial before confirming
     try {
@@ -4566,9 +4742,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     const bolsaService = require('../bolsa-comercial.service');
     let consumoAmount = Number(options._bolsaConsumo || 0);
     let acumulacionAmount = Number(options._bolsaAcumulacion || 0);
-    let mustWriteBolsaLedger =
-        (consumoAmount > 0 || acumulacionAmount > 0)
-        && !options.skipBolsaMovement;
+    let mustWriteBolsaLedger = !options.skipBolsaMovement;
     const lineMovements = Array.isArray(options._bolsaLineMovements)
         ? options._bolsaLineMovements
         : [];
@@ -4631,6 +4805,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
         try {
             const txResult = await withLocalConfirmationTransaction(async (conn) => {
                 const queryFn = (sql, params) => conn.query(sql, params);
+                const lockedHeaderBefore = await readOrderAuditHeader(queryFn, id);
                 const claim = await claimLocalOrderForConfirmation(queryFn, id);
                 if (claim.idempotentReplay) {
                     return {
@@ -4639,17 +4814,29 @@ async function confirmOrder(orderId, saleType, options = {}) {
                         outOfStockProducts: [],
                     };
                 }
-                const lockedLines = await readOrderLinesForMutation(queryFn, id);
-                const lockedDiscountRows = await queryFn(
-                    `SELECT COALESCE(DESCUENTO_GLOBAL, 0) AS DESCUENTO_GLOBAL,
-                            COALESCE(PORCENTAJEDESCUENTO1, 0) AS PORCENTAJEDESCUENTO1
-                       FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
-                    [id],
+                const lockedLines = rehydrateLockedPricingProvenance(
+                    await readOrderLinesForMutation(queryFn, id),
+                    confirmationPricing,
                 );
-                const lockedHeader = lockedDiscountRows?.[0] || {};
+                await appendOrderStateEvent(queryFn, {
+                    pedidoId: id,
+                    fromState: 'BORRADOR',
+                    toState: 'CONFIRMANDO',
+                    actorId: options.userId || vendedorCode,
+                    actorRole: options.userRole || 'COMERCIAL',
+                    deviceId: options.deviceId,
+                    idempotencyKey: `pedido-${id}-confirming`,
+                    payload: {
+                        event: 'ORDER_CONFIRMING',
+                        before: {
+                            header: lockedHeaderBefore,
+                            lines: lockedLines,
+                        },
+                    },
+                });
                 const lockedGlobalDiscountPct = Math.max(
-                    Number.parseFloat(lockedHeader.DESCUENTO_GLOBAL) || 0,
-                    Number.parseFloat(lockedHeader.PORCENTAJEDESCUENTO1) || 0,
+                    Number.parseFloat(lockedHeaderBefore.DESCUENTO_GLOBAL) || 0,
+                    Number.parseFloat(lockedHeaderBefore.PORCENTAJEDESCUENTO1) || 0,
                 );
                 const lockedBolsa = await bolsaService.validateOrderWithBolsa(
                     vendedorCode,
@@ -4676,9 +4863,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
                 const lockedAcumulacionMovements = lockedLineMovements.filter((movement) =>
                     movement && movement.tipo === 'ACUMULACION'
                 );
-                const lockedMustWriteBolsa =
-                    (lockedConsumo > 0 || lockedAcumulacion > 0)
-                    && !options.skipBolsaMovement;
+                const lockedMustWriteBolsa = !options.skipBolsaMovement;
                 // Relee stock sin cache DESPUÉS del lock de reservas. Esta es
                 // la comprobación autoritativa frente a dos dispositivos.
                 const lockedStock = await getStockBatch(
@@ -4727,6 +4912,33 @@ async function confirmOrder(orderId, saleType, options = {}) {
                         throw bolsaError;
                     }
                 }
+
+                const lockedHeaderAfter = await readOrderAuditHeader(queryFn, id);
+
+                await appendOrderStateEvent(queryFn, {
+                    pedidoId: id,
+                    fromState: 'CONFIRMANDO',
+                    toState: 'CONFIRMADO',
+                    actorId: options.userId || vendedorCode,
+                    actorRole: options.userRole || 'COMERCIAL',
+                    deviceId: options.deviceId,
+                    idempotencyKey: `pedido-${id}-confirmed`,
+                    payload: {
+                        event: 'ORDER_CONFIRMED',
+                        before: {
+                            header: lockedHeaderBefore,
+                            lines: lockedLines,
+                        },
+                        after: {
+                            header: lockedHeaderAfter,
+                            lines: lockedLines,
+                        },
+                        bolsa: {
+                            consumo: lockedConsumo,
+                            acumulacion: lockedAcumulacion,
+                        },
+                    },
+                });
 
                 return {
                     ...lockedAvailability,
@@ -4839,18 +5051,16 @@ async function confirmOrder(orderId, saleType, options = {}) {
     // bolsa ya quedó incluida en la transacción de pedido + reserva.
     if (mustWriteBolsaLedger && !bolsaWrittenInOrderTransaction) {
         try {
-            if (consumoAmount > 0) {
-                const consumoResult = await bolsaService.consumirBolsa(vendedorCode, id, consumoAmount, consumoMovements.length ? consumoMovements : undefined);
-                if (consumoResult && consumoResult.allowed === false) {
-                    throw new Error('Bolsa insuficiente al registrar consumo. Deficit: ' + consumoResult.deficit);
-                }
-                if (consumoResult && consumoResult.duplicate === true && !(consumoMovements.length > 0)) {
-                    // Idempotent replay with no pending rows is OK; first confirm must write.
-                    logger.warn(`[PEDIDOS] Bolsa consumo idempotent replay for #${id} (no new ledger rows)`);
-                }
-            }
-            if (acumulacionAmount > 0) {
-                await bolsaService.acumularBolsa(vendedorCode, id, acumulacionAmount, acumulacionMovements.length ? acumulacionMovements : undefined);
+            const bolsaResult = await bolsaService.applyOrderMovements({
+                vendedorCode,
+                pedidoId: id,
+                consumoAmount,
+                acumulacionAmount,
+                consumoMovements,
+                acumulacionMovements,
+            });
+            if (bolsaResult && bolsaResult.allowed === false) {
+                throw new Error('Bolsa insuficiente al registrar consumo. Deficit: ' + bolsaResult.deficit);
             }
             order = await getOrderDetail(id);
             logger.info(
@@ -4956,42 +5166,71 @@ async function purgeExpiredDraftReservations({ limit = 50 } = {}) {
                 }
                 const currentState = canonicalOrderStatus(currentRows?.[0]?.ESTADO);
                 if (!PURGEABLE_DRAFT_STATES.has(currentState)) return false;
-
-                await conn.query(
-                    `DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`,
-                    [id],
+                const before = await readOrderAuditSnapshot(
+                    (sql, params) => conn.query(sql, params),
+                    id,
                 );
-                await conn.query(
-                    `DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`,
-                    [id],
-                );
-                const headerDelete = await conn.query(
-                    `DELETE FROM ${PEDIDOS_CAB_TABLE}
+                const claimed = await conn.query(
+                    `UPDATE ${PEDIDOS_CAB_TABLE}
+                        SET ESTADO = 'CANCELANDO', UPDATED_AT = CURRENT_TIMESTAMP
                       WHERE ID = ?
                         AND TRIM(ESTADO) IN (${PURGEABLE_DRAFT_STATES_SQL})
                         AND CREATED_AT <= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS`,
                     [id],
                 );
-                let affected = (headerDelete && typeof headerDelete.count === 'number')
-                    ? headerDelete.count
-                    : (typeof headerDelete === 'number' ? headerDelete : null);
+                if (affectedRowCount(claimed) === 0) return false;
+                await appendOrderStateEvent((sql, params) => conn.query(sql, params), {
+                    pedidoId: id,
+                    fromState: 'BORRADOR',
+                    toState: 'CANCELANDO',
+                    actorId: 'SYSTEM_TTL',
+                    actorRole: 'SYSTEM',
+                    reason: 'Reserva de borrador expirada tras 24 horas',
+                    idempotencyKey: `pedido-${id}-ttl-expired-start`,
+                    payload: { event: 'DRAFT_EXPIRING', before },
+                });
+                await conn.query(
+                    `DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`,
+                    [id],
+                );
+                const headerCancel = await conn.query(
+                    `UPDATE ${PEDIDOS_CAB_TABLE}
+                        SET ESTADO = 'CANCELADO', UPDATED_AT = CURRENT_TIMESTAMP
+                      WHERE ID = ? AND ESTADO = 'CANCELANDO'`,
+                    [id],
+                );
+                let affected = affectedRowCount(headerCancel);
                 if (affected === null) {
                     const remainingRows = await conn.query(
-                        `SELECT ID FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
+                        `SELECT ID FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ? AND ESTADO = 'CANCELADO'`,
                         [id],
                     );
                     if (!Array.isArray(remainingRows)) {
-                        const verifyError = new Error('No se pudo verificar la eliminación del borrador.');
+                        const verifyError = new Error('No se pudo verificar la expiracion del borrador.');
                         verifyError.code = 'DRAFT_PURGE_DELETE_UNVERIFIED';
                         throw verifyError;
                     }
-                    affected = remainingRows.length === 0 ? 1 : 0;
+                    affected = remainingRows.length === 1 ? 1 : 0;
                 }
                 if (affected < 1) {
                     const raceError = new Error('El borrador cambió durante la purga.');
                     raceError.code = 'DRAFT_PURGE_STATE_CHANGED';
                     throw raceError;
                 }
+                const after = await readOrderAuditSnapshot(
+                    (sql, params) => conn.query(sql, params),
+                    id,
+                );
+                await appendOrderStateEvent((sql, params) => conn.query(sql, params), {
+                    pedidoId: id,
+                    fromState: 'CANCELANDO',
+                    toState: 'CANCELADO',
+                    actorId: 'SYSTEM_TTL',
+                    actorRole: 'SYSTEM',
+                    reason: 'Reserva de borrador expirada tras 24 horas',
+                    idempotencyKey: `pedido-${id}-ttl-expired-done`,
+                    payload: { event: 'DRAFT_EXPIRED', before, after },
+                });
                 return true;
             });
             if (deleted) purged += 1;
@@ -5010,148 +5249,151 @@ async function purgeExpiredDraftReservations({ limit = 50 } = {}) {
 async function cancelOrder(orderId, options = {}) {
     const id = parseInt(orderId, 10);
     if (isNaN(id)) throw new Error('Invalid orderId');
-
-    const currentRows = await queryWithParams(
-        `SELECT ESTADO, CODIGOCLIENTE, IMPORTETOTAL FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
-        [id], false
+    const reason = trimString(options.reason || options.cancellationReason || options.auditReason);
+    if (reason.length < 3) {
+        throw new OrderStateError(
+            'CANCELLATION_REASON_REQUIRED',
+            'Indica un motivo de cancelacion de al menos 3 caracteres.',
+            400,
+        );
+    }
+    const initialRows = await queryWithParams(
+        `SELECT ESTADO, CODIGOCLIENTE, SYSTEM_NUMEROPEDIDO, TARGET_SCHEMA
+           FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
+        [id],
+        false,
     );
-
-    if (!currentRows || currentRows.length === 0) {
+    if (!initialRows?.length) {
         throw new OrderStateError('ORDER_NOT_FOUND', 'Pedido no encontrado', 404);
     }
-
-    const currentState = canonicalOrderStatus(currentRows[0].ESTADO);
-
-    if (currentState === 'CONFIRMADO') {
+    const initial = initialRows[0];
+    const systemNumero = Number.parseInt(initial.SYSTEM_NUMEROPEDIDO, 10) || 0;
+    const targetSchema = trimString(initial.TARGET_SCHEMA).toUpperCase();
+    if (systemNumero > 0 || (targetSchema && targetSchema !== 'JAVIER')) {
+        const documents = await getOrderAlbaran(id);
         throw new OrderStateError(
             'PEDIDO_MANAGED_BY_ERP',
-            'El pedido confirmado ya lo gestiona el ERP',
+            documents.length > 0
+                ? 'El pedido ya tiene albaran o factura en el ERP y no se puede cancelar desde la app.'
+                : 'El pedido fue exportado al ERP y requiere su protocolo de cancelacion.',
             409,
         );
     }
-
-    if (currentState !== 'BORRADOR') {
-        throw new OrderStateError(
-            'PEDIDO_INVALID_STATE',
-            `Solo se pueden eliminar borradores (estado actual: ${currentState})`,
-            409,
-        );
-    }
-
-    const draftStateExists = `EXISTS (
-              SELECT 1 FROM ${PEDIDOS_CAB_TABLE} C
-               WHERE C.ID = ?
-                 AND TRIM(C.ESTADO) IN ('BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION')
-            )`;
-
-    await queryWithParams(
-        `DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ? AND ${draftStateExists}`,
-        [id, id],
-        false,
-    )
-        .catch(e => logger.warn(`[PEDIDOS] Stock reservation cleanup for draft #${id}: ${e.message}`));
-    await queryWithParams(
-        `DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ? AND ${draftStateExists}`,
-        [id, id],
-        false,
-    );
-
-    const deleteResult = await queryWithParams(
-        `DELETE FROM ${PEDIDOS_CAB_TABLE}
-          WHERE ID = ?
-            AND TRIM(ESTADO) IN ('BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION')`,
-        [id], false
-    );
-    const deleteRowsAffected = (deleteResult && typeof deleteResult.count === 'number')
-        ? deleteResult.count
-        : (typeof deleteResult === 'number' ? deleteResult : null);
-
-    if (deleteRowsAffected === 0) {
-        const conflictRows = await queryWithParams(
-            `SELECT ESTADO, CODIGOCLIENTE, IMPORTETOTAL FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
-            [id], false
-        );
-        if (!conflictRows || conflictRows.length === 0) {
-            await invalidatePedidosStockCache('draft_cancel_race');
-            return { id, deleted: true, estado: 'BORRADOR' };
+    const clientCode = trimString(initial.CODIGOCLIENTE);
+    const documentId = `PED-${id}-${clientCode}`;
+    const eventBaseKey = String(options.idempotencyKey || `pedido-${id}-cancel`).trim().slice(0, 96);
+    const bolsaService = require('../bolsa-comercial.service');
+    const result = await withLocalConfirmationTransaction(async (conn) => {
+        const queryFn = (sql, params) => conn.query(sql, params);
+        const before = await readOrderAuditSnapshot(queryFn, id);
+        const currentState = canonicalOrderStatus(before.header.ESTADO);
+        if (currentState === 'CANCELADO') {
+            return { idempotentReplay: true, previousState: currentState, bolsa: { reversed: [], count: 0 } };
         }
-        const conflictState = canonicalOrderStatus(conflictRows[0].ESTADO);
-        throw new OrderStateError(
-            'PEDIDO_STATE_CONFLICT',
-            `No se pudo eliminar el borrador porque cambio de estado durante la operacion (estado actual: ${conflictState})`,
-            409,
+        if (!['BORRADOR', 'CONFIRMADO'].includes(currentState)) {
+            throw new OrderStateError(
+                'PEDIDO_INVALID_STATE',
+                `No se puede cancelar el pedido en estado ${currentState || 'DESCONOCIDO'}.`,
+                409,
+            );
+        }
+        await lockLocalCancellationGuards(queryFn, documentId, { alreadyCoordinated: true });
+        const claimed = await queryFn(
+            `UPDATE ${PEDIDOS_CAB_TABLE}
+                SET ESTADO = 'CANCELANDO', UPDATED_AT = CURRENT_TIMESTAMP
+              WHERE ID = ? AND ESTADO = ?`,
+            [id, currentState],
         );
-    }
+        const claimedCount = affectedRowCount(claimed);
+        if (claimedCount === 0) {
+            throw new OrderStateError('PEDIDO_STATE_CONFLICT', 'El pedido cambio mientras se cancelaba.', 409);
+        }
+        if (claimedCount === null) {
+            await assertHeaderStateAfterUnknownUpdate(
+                queryFn,
+                id,
+                'CANCELANDO',
+                'No se pudo verificar el bloqueo del pedido para cancelarlo.',
+            );
+        }
+        await appendOrderStateEvent(queryFn, {
+            pedidoId: id,
+            fromState: currentState,
+            toState: 'CANCELANDO',
+            actorId: options.userId || 'SYSTEM',
+            actorRole: options.userRole,
+            deviceId: options.deviceId,
+            reason,
+            idempotencyKey: `${eventBaseKey}-start`,
+            payload: { event: 'ORDER_CANCELLING', before },
+        });
+        await queryFn(DELETE_STOCK_RESERVE_BY_PEDIDO_SQL, [id]);
+        const bolsa = currentState === 'CONFIRMADO'
+            ? await bolsaService.reverseOrderMovementsWith(queryFn, {
+                pedidoId: id,
+                vendedorCode: trimString(before.header.CODIGOVENDEDOR),
+            })
+            : { reversed: [], count: 0 };
+        const cancelled = await queryFn(
+            `UPDATE ${PEDIDOS_CAB_TABLE}
+                SET ESTADO = 'CANCELADO', UPDATED_AT = CURRENT_TIMESTAMP
+              WHERE ID = ? AND ESTADO = 'CANCELANDO'`,
+            [id],
+        );
+        const cancelledCount = affectedRowCount(cancelled);
+        if (cancelledCount === 0) {
+            throw new OrderStateError('PEDIDO_STATE_CONFLICT', 'No se pudo finalizar la cancelacion.', 409);
+        }
+        if (cancelledCount === null) {
+            await assertHeaderStateAfterUnknownUpdate(
+                queryFn,
+                id,
+                'CANCELADO',
+                'No se pudo verificar la cancelacion del pedido.',
+            );
+        }
+        const after = await readOrderAuditSnapshot(queryFn, id);
+        await appendOrderStateEvent(queryFn, {
+            pedidoId: id,
+            fromState: 'CANCELANDO',
+            toState: 'CANCELADO',
+            actorId: options.userId || 'SYSTEM',
+            actorRole: options.userRole,
+            deviceId: options.deviceId,
+            reason,
+            idempotencyKey: `${eventBaseKey}-done`,
+            payload: { event: 'ORDER_CANCELLED', before, after, bolsa },
+        });
+        return { idempotentReplay: false, previousState: currentState, bolsa };
+    });
 
-    await invalidatePedidosStockCache('draft_cancel');
-
-    try {
-        logger.info(`[AUDIT] ORDER_DRAFT_DELETED #${id} | Client:${currentRows[0].CODIGOCLIENTE || '?'} | Total:${currentRows[0].IMPORTETOTAL || 0} | By:${options.userId || 'SYSTEM'}`);
-    } catch { /* silent */ }
-
-    return { id, deleted: true, estado: 'BORRADOR' };
+    await invalidatePedidosStockCache('order_cancel');
+    invalidatePedidosCache(id);
+    const order = await getOrderDetail(id);
+    return {
+        ...order,
+        cancelled: true,
+        deleted: false,
+        estado: 'CANCELADO',
+        previousState: result.previousState,
+        idempotentReplay: result.idempotentReplay,
+        bolsaReversalCount: result.bolsa.count,
+    };
 }
 // ============================================================================
 // ORDER STATUS UPDATE
 // ============================================================================
 
-async function updateOrderStatus(orderId, newStatus, options = {}) {
+function updateOrderStatus(orderId, newStatus, options = {}) {
     const id = parseInt(orderId, 10);
     if (isNaN(id)) throw new Error('Invalid orderId');
-
-    const rawRequestedStatus = trimString(newStatus).toUpperCase();
-    if (rawRequestedStatus !== 'CONFIRMADO') {
-        throw new OrderStateError(
-            'INVALID_ORDER_STATUS',
-            `Estado no valido: ${newStatus}`,
-            400,
-        );
-    }
-
-    const requestedStatus = canonicalOrderStatus(rawRequestedStatus);
-    if (!ORDER_TRANSITIONS[requestedStatus]) {
-        throw new OrderStateError(
-            'INVALID_ORDER_STATUS',
-            `Estado no valido: ${newStatus}`,
-            400,
-        );
-    }
-
-    const currentStatus = await getOrderStatusForUpdate(id);
-    if (!isOrderTransitionAllowed(currentStatus, requestedStatus)) {
-        throw new OrderStateError(
-            'INVALID_ORDER_TRANSITION',
-            `Transicion no permitida: ${currentStatus} -> ${requestedStatus}`,
-            409,
-        );
-    }
-
-    const status = storedOrderStatus(requestedStatus);
-
-    // Get order info for audit before updating
-    const orderBefore = { header: { estado: currentStatus } };
-
-    await queryWithParams(
-        `UPDATE ${PEDIDOS_CAB_TABLE} SET ESTADO = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
-        [status, id], false
-    );
-
-    // Invalidate cache — version bump for route keys + one SCAN for query:pedidos
-    try {
-        await bumpPedidosRouteCacheVersion('order_status');
-        if (redisCache && typeof redisCache.invalidatePattern === 'function') {
-            await redisCache.invalidatePattern('query:query:pedidos:*');
-        }
-    } catch (e) {
-        logger.warn(`[PEDIDOS] Failed to invalidate cache: ${e.message}`);
-    }
-
-    // AUD: Audit log
-    try {
-        logger.info(`[AUDIT] ðŸ”„ ORDER_STATUS_CHANGED #${id} | ${orderBefore?.header?.estado || '?'} -> ${status} | By:${options.userId || 'SYSTEM'}`);
-    } catch { /* silent */ }
-
-    return getOrderDetail(id);
+    void newStatus;
+    void options;
+    return Promise.reject(new OrderStateError(
+        'ORDER_TRANSITION_ENDPOINT_DISABLED',
+        'Usa las operaciones confirmar o cancelar para conservar stock, bolsa y auditoria atomicos.',
+        409,
+    ));
 }
 
 // ============================================================================

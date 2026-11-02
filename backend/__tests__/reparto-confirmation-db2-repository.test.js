@@ -65,6 +65,7 @@ function fakeConnection({
   transactionMethods = true, commitError, rollbackError, closeError, failWriteAt, cobrosCapabilityError,
   receiverNameLength = 100, receiverNameDataType = 'VARCHAR',
   missingUniqueIndex,
+  localOrder,
   tables = QUALIFIED_TABLES,
 } = {}) {
   const calls = [];
@@ -94,6 +95,9 @@ function fakeConnection({
     }
     if (sql.includes('QSYS2.SYSINDEXES')) {
       return indexRows(tables, missingUniqueIndex);
+    }
+    if (/FROM JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql)) {
+      return localOrder ? [localOrder] : [];
     }
     if (sql.includes('WHERE IDEMPOTENCY_KEY = ?')) {
       idempotencyLookups += 1;
@@ -244,6 +248,34 @@ function confirmationRecord() {
 }
 
 describe('DB2 reparto confirmation repository', () => {
+  test('coordinates a local PED document before confirmation reads on the same physical lease', async () => {
+    const factory = fakeConnection({
+      localOrder: {
+        ID: 81,
+        ESTADO: 'CONFIRMADO',
+        CODIGOCLIENTE: '4300032888',
+        SERIEPEDIDO: 'P',
+        NUMEROPEDIDO: 7654321,
+      },
+    });
+    const repo = repository(factory);
+
+    await repo.withTransaction(async (tx) => {
+      await expect(tx.coordinateLocalDocument('PED-81-4300032888'))
+        .resolves.toMatchObject({ local: true, pedidoId: 81, state: 'CONFIRMADO' });
+      await expect(tx.getByIdempotencyKey('safe-key')).resolves.toBeNull();
+    });
+
+    const sql = factory.calls.map((call) => call.sql);
+    const idempotencyRead = sql.findIndex((value) => /WHERE IDEMPOTENCY_KEY = \?/i.test(value));
+    const stockLock = sql.findIndex((value) => /LOCK TABLE JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(value));
+    const headerLock = sql.findIndex((value) => /LOCK TABLE JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(value));
+    expect(stockLock).toBeGreaterThanOrEqual(0);
+    expect(headerLock).toBeGreaterThan(stockLock);
+    expect(headerLock).toBeLessThan(idempotencyRead);
+    expect(factory.isClosed()).toBe(true);
+  });
+
   test('aborts an in-flight confirmation callback, rolls back and closes the connection', async () => {
     const factory = fakeConnection();
     const repo = repository(factory);

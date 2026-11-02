@@ -9,7 +9,10 @@
  * Write schema: DB2_WRITE_SCHEMA (default JAVIER). ERP reads: DSEDAC.ARA.
  */
 
-const { queryWithParams, getPool, initDb } = require('../config/db');
+const { queryWithParams } = require('../config/db');
+const {
+    openDedicatedPedidosTransactionConnection,
+} = require('../adapters/pedidos-transaction-connection');
 const logger = require('../middleware/logger');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
 const { db2AppTable } = require('../utils/db2-schemas');
@@ -117,39 +120,55 @@ async function runQuery(queryFn, sql, params) {
     return queryFn(sql, params);
 }
 
-async function withBolsaTransaction(callback) {
-    if (typeof getPool === 'function') {
-        let pool = getPool();
-        if (!pool && typeof initDb === 'function') {
-            await initDb();
-            pool = getPool();
-        }
-        if (pool && typeof pool.connect === 'function') {
-            const conn = await pool.connect();
+function bolsaTransactionUnavailable(cause) {
+    const error = new Error('No hay una conexion fisica disponible para la transaccion de bolsa.');
+    error.code = 'BOLSA_TRANSACTION_UNAVAILABLE';
+    error.status = 503;
+    error.cause = cause;
+    return error;
+}
+
+async function withBolsaTransaction(callback, { lockLedger = true } = {}) {
+    let conn;
+    let active = false;
+    try {
+        conn = await openDedicatedPedidosTransactionConnection();
+        const valid = conn
+            && typeof conn.query === 'function'
+            && typeof conn.beginTransaction === 'function'
+            && typeof conn.commit === 'function'
+            && typeof conn.rollback === 'function'
+            && typeof conn.close === 'function';
+        if (!valid) throw bolsaTransactionUnavailable();
+        await conn.beginTransaction();
+        active = true;
+        const queryFn = (sql, params) => runQuery(conn.query.bind(conn), sql, params);
+        if (lockLedger) await lockBolsaLedger(queryFn);
+        const result = await callback(queryFn);
+        await conn.commit();
+        active = false;
+        return result;
+    } catch (error) {
+        if (active) {
             try {
-                // IBM i ODBC rejects BEGIN WORK (-104); mirror pedidos export transaction pattern.
-                await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
-                const queryFn = (sql, params) => runQuery(conn.query.bind(conn), sql, params);
-                await lockBolsaLedger(queryFn);
-                const result = await callback(queryFn);
-                await conn.query('COMMIT');
-                return result;
-            } catch (error) {
-                try {
-                    await conn.query('ROLLBACK');
-                } catch (rollbackErr) {
-                    logger.error(`[BOLSA] Rollback failed: ${rollbackErr.message}`);
-                }
-                throw error;
-            } finally {
-                if (conn && typeof conn.close === 'function') {
-                    await conn.close();
-                }
+                await conn.rollback();
+            } catch (rollbackErr) {
+                logger.error(`[BOLSA] Rollback failed: ${rollbackErr.message}`);
+            }
+        }
+        if (!conn || error?.code === 'LOCAL_CONFIRMATION_TRANSACTION_UNAVAILABLE') {
+            throw bolsaTransactionUnavailable(error);
+        }
+        throw error;
+    } finally {
+        if (conn && typeof conn.close === 'function') {
+            try {
+                await conn.close();
+            } catch (closeError) {
+                logger.warn(`[BOLSA] Physical connection close failed: ${closeError.code || 'UNKNOWN'}`);
             }
         }
     }
-
-    return callback(queryWithParams);
 }
 
 async function lockBolsaLedger(queryFn) {
@@ -158,6 +177,18 @@ async function lockBolsaLedger(queryFn) {
     }
     await runQuery(queryFn, LOCK_BOLSA_COMERCIAL_SQL);
     await runQuery(queryFn, LOCK_MOVIMIENTOS_BOLSA_SQL);
+}
+
+function isDuplicateBolsaKeyError(error) {
+    const candidates = [error, error?.cause, ...(Array.isArray(error?.odbcErrors) ? error.odbcErrors : [])];
+    return candidates.some((item) => {
+        const state = String(item?.state || item?.sqlState || item?.sqlstate || '').trim().toUpperCase();
+        const code = String(item?.code ?? item?.nativeError ?? item?.nativeCode ?? '').trim().toUpperCase();
+        const message = String(item?.message || '');
+        return state === '23505'
+            || ['-803', '803', 'SQL0803'].includes(code)
+            || /23505|duplicate|SQL0803|UQ_(?:TEST_)?BOLSA/i.test(message);
+    });
 }
 
 async function getOrCreateBolsaWith(queryFn, vendedorCode, year, month) {
@@ -182,11 +213,7 @@ async function getOrCreateBolsaWith(queryFn, vendedorCode, year, month) {
                 [code, y, m]
             );
         } catch (insertErr) {
-            const odbc0 = insertErr.odbcErrors && insertErr.odbcErrors[0];
-            const msg = String(insertErr.message || '') + ' ' + String(odbc0?.message || '');
-            // SQLSTATE 23505 = duplicate key (UNIQUE constraint violation)
-            // SQLCODE -803 = duplicate key on IBM i
-            if (!/23505|duplicate|803|UQ_BOLSA/i.test(msg)) {
+            if (!isDuplicateBolsaKeyError(insertErr)) {
                 throw insertErr; // error real, propagar
             }
             logger.info(`[BOLSA] Race condition detectado para ${code}/${y}-${m}, releyendo`);
@@ -198,12 +225,10 @@ async function getOrCreateBolsaWith(queryFn, vendedorCode, year, month) {
             [code, y, m]
         );
         if (!rows || rows.length === 0) {
-            // Falback ultra-defensivo: devolver defaults sin ID
-            return {
-                id: null, vendedor: code, ejercicio: y, mes: m,
-                limitePct: 3.0, limiteImporte: 0, saldoDisponible: 300.00,
-                consumido: 0, acumulado: 0,
-            };
+            const error = new Error('No se pudo leer la bolsa mensual tras crearla.');
+            error.code = 'BOLSA_MONTHLY_ROW_UNAVAILABLE';
+            error.status = 503;
+            throw error;
         }
     }
 
@@ -356,6 +381,7 @@ async function applyOrderMovementsWith(queryFn, {
     const now = new Date();
     let consumoResult = null;
     let saldoAcumulado = null;
+    let registration = null;
 
     if (Number(consumoAmount) > 0) {
         consumoResult = await consumirBolsaWith(
@@ -386,11 +412,173 @@ async function applyOrderMovementsWith(queryFn, {
         );
     }
 
+    if (!(Number(consumoAmount) > 0) && !(Number(acumulacionAmount) > 0)) {
+        const bolsa = await getOrCreateBolsaWith(
+            queryFn,
+            vendedorCode,
+            now.getFullYear(),
+            now.getMonth() + 1,
+        );
+        const movement = normalizeBolsaMovements([
+            {
+                importe: 0,
+                descripcion: 'Pedido confirmado sin impacto economico en bolsa',
+                idempotencyKey: `pedido-${pedidoId}-bag-registration`,
+            },
+        ], 'REGISTRO', 0, '', pedidoId);
+        const pending = await filterPendingBolsaMovements(movement, queryFn);
+        if (pending.length > 0) {
+            await insertBolsaMovements(
+                'REGISTRO',
+                pending,
+                bolsa.id,
+                vendedorCode,
+                pedidoId,
+                bolsa.saldoDisponible,
+                bolsa.saldoDisponible,
+                queryFn,
+            );
+            registration = { created: true, idempotencyKey: pending[0].idempotencyKey };
+        } else {
+            registration = { created: false, idempotencyKey: movement[0].idempotencyKey };
+        }
+    }
+
     return {
         allowed: true,
         consumo: consumoResult,
         saldoAcumulado,
+        registration,
     };
+}
+
+function applyOrderMovements(options) {
+    return withBolsaTransaction(
+        (queryFn) => applyOrderMovementsWith(queryFn, options),
+        { lockLedger: false },
+    );
+}
+
+async function reverseOrderMovementsWith(queryFn, {
+    pedidoId,
+    vendedorCode,
+} = {}) {
+    if (typeof queryFn !== 'function') {
+        throw new TypeError('queryFn transaccional requerido para reversar bolsa');
+    }
+    await lockBolsaLedger(queryFn);
+    const rows = await runQuery(
+        queryFn,
+        `SELECT M.ID, M.BOLSA_ID, M.LINEA_ID, M.TIPO, M.IMPORTE,
+                M.CODIGO_ARTICULO, M.DESCRIPCION, M.PRECIO_MINIMO_CONGELADO,
+                M.PRECIO_VENTA, M.CANTIDAD, M.UNIDAD_MEDIDA, M.IDEMPOTENCY_KEY,
+                B.SALDO_DISPONIBLE, B.CONSUMIDO, B.ACUMULADO,
+                B.EJERCICIO, B.MES
+           FROM ${MOVIMIENTOS_TABLE} M
+           JOIN ${BOLSA_TABLE} B ON B.ID = M.BOLSA_ID
+          WHERE M.PEDIDO_ID = ?
+            AND M.TIPO IN ('CONSUMO', 'ACUMULACION', 'REGISTRO')
+          ORDER BY M.ID ASC`,
+        [pedidoId],
+    );
+    const candidates = (rows || []).map((row) => ({
+        row,
+        idempotencyKey: `pedido-${pedidoId}-movement-${Number(row.ID)}-reverse`,
+    }));
+    const pendingCandidates = await filterPendingBolsaMovements(candidates, queryFn);
+    const aggregateByBolsa = new Map();
+    const reversed = [];
+    for (const candidate of pendingCandidates) {
+        const { row } = candidate;
+        const originalId = Number(row.ID);
+        const originalType = String(row.TIPO || '').trim().toUpperCase();
+        const amount = toMoney(row.IMPORTE);
+        const reverseType = originalType === 'CONSUMO'
+            ? 'REVERSO_CONSUMO'
+            : (originalType === 'ACUMULACION' ? 'REVERSO_ACUMULACION' : 'REVERSO_REGISTRO');
+        const key = candidate.idempotencyKey;
+        const bolsaId = Number(row.BOLSA_ID);
+        if (!Number.isSafeInteger(bolsaId) || bolsaId <= 0) {
+            throw new Error(`Bolsa original ${row.BOLSA_ID} no disponible para reverso`);
+        }
+        if (originalType === 'REGISTRO' && amount !== 0) {
+            throw new Error(`Registro neutral inconsistente en movimiento ${originalId}`);
+        }
+        if (!aggregateByBolsa.has(bolsaId)) {
+            aggregateByBolsa.set(bolsaId, {
+                SALDO_DISPONIBLE: row.SALDO_DISPONIBLE,
+                CONSUMIDO: row.CONSUMIDO,
+                ACUMULADO: row.ACUMULADO,
+            });
+        }
+        const bolsa = aggregateByBolsa.get(bolsaId);
+        const saldoAnterior = toMoney(bolsa.SALDO_DISPONIBLE);
+        const saldoPosterior = originalType === 'CONSUMO'
+            ? toMoney(saldoAnterior + amount)
+            : toMoney(saldoAnterior - amount);
+        if (originalType === 'CONSUMO') {
+            const consumed = toMoney(bolsa.CONSUMIDO);
+            if (consumed + 0.001 < amount) {
+                throw new Error(`Consumo agregado inconsistente en bolsa ${row.BOLSA_ID}`);
+            }
+            await runQuery(
+                queryFn,
+                `UPDATE ${BOLSA_TABLE}
+                    SET SALDO_DISPONIBLE = ?, CONSUMIDO = CONSUMIDO - ?, UPDATED_AT = CURRENT TIMESTAMP
+                  WHERE ID = ?`,
+                [saldoPosterior, amount, bolsaId],
+            );
+            bolsa.CONSUMIDO = toMoney(consumed - amount);
+        } else if (originalType === 'ACUMULACION') {
+            const accumulated = toMoney(bolsa.ACUMULADO);
+            if (accumulated + 0.001 < amount) {
+                throw new Error(`Acumulado inconsistente en bolsa ${row.BOLSA_ID}`);
+            }
+            await runQuery(
+                queryFn,
+                `UPDATE ${BOLSA_TABLE}
+                    SET SALDO_DISPONIBLE = ?, ACUMULADO = ACUMULADO - ?, UPDATED_AT = CURRENT TIMESTAMP
+                  WHERE ID = ?`,
+                [saldoPosterior, amount, bolsaId],
+            );
+            bolsa.ACUMULADO = toMoney(accumulated - amount);
+        }
+        bolsa.SALDO_DISPONIBLE = saldoPosterior;
+        await runQuery(
+            queryFn,
+            MOVIMIENTOS_INSERT_PREFIX + MOVIMIENTOS_INSERT_ROW,
+            [
+                bolsaId,
+                toDb2Timestamp(new Date()),
+                String(vendedorCode || '').trim(),
+                pedidoId,
+                row.LINEA_ID,
+                reverseType,
+                amount,
+                saldoAnterior,
+                saldoPosterior,
+                String(row.CODIGO_ARTICULO || '').trim(),
+                `Reverso de movimiento ${originalId}: ${String(row.DESCRIPCION || '').trim()}`.slice(0, 255),
+                row.PRECIO_MINIMO_CONGELADO,
+                row.PRECIO_VENTA,
+                row.CANTIDAD,
+                String(row.UNIDAD_MEDIDA || '').trim(),
+                key,
+            ],
+        );
+        reversed.push({
+            originalMovementId: originalId,
+            originalBolsaId: bolsaId,
+            ejercicio: Number(row.EJERCICIO),
+            mes: Number(row.MES),
+            type: reverseType,
+            amount,
+            saldoAnterior,
+            saldoPosterior,
+            idempotencyKey: key,
+        });
+    }
+    return { reversed, count: reversed.length };
 }
 
 // -- Validate order lines against bolsa -------------------------------
@@ -477,7 +665,9 @@ function normalizeBolsaMovements(input, tipo, totalImporte, legacyValue, pedidoI
             precioVenta: movement.precioVenta ?? null,
             cantidad: movement.cantidad ?? null,
             unidadMedida: String(movement.unidadMedida || '').trim(),
-            idempotencyKey: buildBolsaMovementIdempotencyKey(pedidoId, movement.lineId ?? null, tipo) || movement.idempotencyKey || null,
+            idempotencyKey: movement.idempotencyKey
+                || buildBolsaMovementIdempotencyKey(pedidoId, movement.lineId ?? null, tipo)
+                || null,
         };
     });
     const movementTotal = toMoney(movements.reduce(function (sum, movement) { return sum + movement.importe; }, 0));
@@ -1072,7 +1262,9 @@ module.exports = {
     getBolsaStatus,
     acumularBolsa,
     consumirBolsa,
+    applyOrderMovements,
     applyOrderMovementsWith,
+    reverseOrderMovementsWith,
     validateOrderWithBolsa,
     resolveBolsaReferencePrice,
     resolveConfiguredMinFloor,

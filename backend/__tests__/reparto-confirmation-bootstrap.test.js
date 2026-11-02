@@ -124,13 +124,31 @@ describe('canonical reparto confirmation bootstrap', () => {
     expect(STATIC_REPARTO_CATALOG.paymentMethods).not.toContain('CHEQUE');
   });
 
-  test('acquires one lazy connection from the initialized pool', async () => {
+  test('acquires one lazy physical connection for the lock-bearing confirmation unit', async () => {
     const connection = { query: jest.fn(), close: jest.fn() };
-    const acquireConfiguredConnection = jest.fn().mockResolvedValue(connection);
-    const factory = createDb2ConnectionFactory({ acquireConfiguredConnection });
+    const openDedicatedConnection = jest.fn().mockResolvedValue(connection);
+    const factory = createDb2ConnectionFactory({ openDedicatedConnection });
 
     await expect(factory()).resolves.toBe(connection);
-    expect(acquireConfiguredConnection).toHaveBeenCalledTimes(1);
+    expect(openDedicatedConnection).toHaveBeenCalledTimes(1);
+  });
+
+  test('canonical confirmation never returns a lock-bearing transaction to the configured pool', async () => {
+    const pooled = { query: jest.fn(), close: jest.fn() };
+    const physical = { query: jest.fn(), close: jest.fn() };
+    const acquireConfiguredConnection = jest.fn().mockResolvedValue(pooled);
+    const openDedicatedConnection = jest.fn().mockResolvedValue(physical);
+    const result = createCanonicalConfirmationBootstrap({
+      runtime: runtime(),
+      db: { acquireConfiguredConnection },
+      openDedicatedConnection,
+    });
+
+    expect(result.enabled).toBe(true);
+    const factory = createDb2ConnectionFactory({ openDedicatedConnection });
+    await expect(factory()).resolves.toBe(physical);
+    expect(openDedicatedConnection).toHaveBeenCalledTimes(1);
+    expect(acquireConfiguredConnection).not.toHaveBeenCalled();
   });
 
   test('enables finance cobros for production mapping when finance capability is approved', () => {

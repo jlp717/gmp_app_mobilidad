@@ -33,6 +33,15 @@ const SCHEMA = 'JAVIER';
 beforeEach(() => {
     mockOpenDedicatedConnection.mockReset();
     const db = require('../config/db');
+    mockOpenDedicatedConnection.mockImplementation(() => ({
+        query: (sql, params) => /^LOCK TABLE/i.test(String(sql).trim())
+            ? Promise.resolve([])
+            : require('../config/db').queryWithParams(sql, params),
+        beginTransaction: jest.fn().mockResolvedValue(undefined),
+        commit: jest.fn().mockResolvedValue(undefined),
+        rollback: jest.fn().mockResolvedValue(undefined),
+        close: jest.fn().mockResolvedValue(undefined),
+    }));
     if (db.getPool && db.getPool.mockReturnValue) db.getPool.mockReturnValue(null);
     if (db.initDb && db.initDb.mockReset) db.initDb.mockReset();
 });
@@ -172,6 +181,106 @@ describe('BolsaComercial Service', () => {
 
             expect(result.vendedor).toBe('15');
             expect(result.limitePct).toBe(3);
+        });
+
+        test('fails closed when a duplicate-race reread still cannot return the monthly row', async () => {
+            const duplicate = Object.assign(new Error('duplicate key'), { state: '23505' });
+            mockQuery
+                .mockResolvedValueOnce([])
+                .mockRejectedValueOnce(duplicate)
+                .mockResolvedValueOnce([]);
+
+            await expect(bolsaService.getOrCreateBolsa('15', 2026, 6))
+                .rejects.toMatchObject({ code: 'BOLSA_MONTHLY_ROW_UNAVAILABLE', status: 503 });
+        });
+    });
+
+    describe('applyOrderMovements physical transaction', () => {
+        test('fails before writes when the physical connection lacks transaction methods', async () => {
+            const query = jest.fn();
+            mockOpenDedicatedConnection.mockResolvedValue({ query, close: jest.fn() });
+
+            await expect(bolsaService.applyOrderMovements({
+                vendedorCode: '73', pedidoId: 81,
+            })).rejects.toMatchObject({ code: 'BOLSA_TRANSACTION_UNAVAILABLE', status: 503 });
+            expect(query).not.toHaveBeenCalled();
+        });
+
+        test('rolls back mixed movements when the second ledger write fails', async () => {
+            const rollback = jest.fn().mockResolvedValue(undefined);
+            const commit = jest.fn().mockResolvedValue(undefined);
+            const close = jest.fn().mockResolvedValue(undefined);
+            let movementWrites = 0;
+            const query = jest.fn((sql) => {
+                if (/^LOCK TABLE/i.test(sql)) return [];
+                if (/FROM JAVIER\.(?:TEST_)?BOLSA_COMERCIAL.*CODIGOVENDEDOR/i.test(sql)) {
+                    return [{
+                        ID: 4, CODIGOVENDEDOR: '73', EJERCICIO: 2026, MES: 11,
+                        SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0,
+                    }];
+                }
+                if (/SELECT IDEMPOTENCY_KEY/i.test(sql)) return [];
+                if (/INSERT INTO JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql)) {
+                    movementWrites += 1;
+                    if (movementWrites === 2) throw new Error('ledger stage failed');
+                }
+                return { count: 1 };
+            });
+            mockOpenDedicatedConnection.mockResolvedValue({
+                query,
+                beginTransaction: jest.fn().mockResolvedValue(undefined),
+                commit,
+                rollback,
+                close,
+            });
+
+            await expect(bolsaService.applyOrderMovements({
+                vendedorCode: '73', pedidoId: 81,
+                consumoAmount: 2,
+                acumulacionAmount: 3,
+                consumoMovements: [{ importe: 2, idempotencyKey: 'pedido-81-consumo' }],
+                acumulacionMovements: [{ importe: 3, idempotencyKey: 'pedido-81-acumulacion' }],
+            })).rejects.toThrow('ledger stage failed');
+
+            expect(rollback).toHaveBeenCalledTimes(1);
+            expect(commit).not.toHaveBeenCalled();
+            expect(close).toHaveBeenCalledTimes(1);
+        });
+
+        test('commits a zero-impact registration and exact retry writes no duplicate', async () => {
+            const persisted = new Set();
+            const commit = jest.fn().mockResolvedValue(undefined);
+            const query = jest.fn((sql, params = []) => {
+                if (/^LOCK TABLE/i.test(sql)) return [];
+                if (/FROM JAVIER\.(?:TEST_)?BOLSA_COMERCIAL.*CODIGOVENDEDOR/i.test(sql)) {
+                    return [{
+                        ID: 4, CODIGOVENDEDOR: '73', EJERCICIO: 2026, MES: 11,
+                        SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0,
+                    }];
+                }
+                if (/SELECT IDEMPOTENCY_KEY/i.test(sql)) {
+                    return [...persisted].map((IDEMPOTENCY_KEY) => ({ IDEMPOTENCY_KEY }));
+                }
+                if (/INSERT INTO JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql)) {
+                    persisted.add(params.at(-1));
+                }
+                return { count: 1 };
+            });
+            mockOpenDedicatedConnection.mockImplementation(() => ({
+                query,
+                beginTransaction: jest.fn().mockResolvedValue(undefined),
+                commit,
+                rollback: jest.fn().mockResolvedValue(undefined),
+                close: jest.fn().mockResolvedValue(undefined),
+            }));
+
+            const first = await bolsaService.applyOrderMovements({ vendedorCode: '73', pedidoId: 81 });
+            const replay = await bolsaService.applyOrderMovements({ vendedorCode: '73', pedidoId: 81 });
+
+            expect(first.registration).toMatchObject({ created: true });
+            expect(replay.registration).toMatchObject({ created: false });
+            expect(persisted).toEqual(new Set(['pedido-81-bag-registration']));
+            expect(commit).toHaveBeenCalledTimes(2);
         });
     });
 
@@ -611,6 +720,14 @@ describe("pedidos confirmation bolsa contract", () => {
     db.queryWithParams.mockReset();
     db.queryWithParams.mockImplementation(async (sql) => {
       if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMANDO")) return { count: 1 };
+      if (/SELECT\s+ID,\s+TRIM\(ESTADO\).*DESCUENTO_GLOBAL/is.test(sql)) {
+        return [{
+          ID: 42, ESTADO: conn.getState(), EJERCICIO: 2026, NUMEROPEDIDO: 1001,
+          SERIEPEDIDO: 'M', TERMINAL: 1, CODIGOCLIENTE: 'C001', CODIGOVENDEDOR: '10',
+          IMPORTETOTAL: 7, IMPORTEBASE: 7, IMPORTEIVA: 0, IMPORTECOSTO: 4,
+          IMPORTEMARGEN: 3, DESCUENTO_GLOBAL: 0, PORCENTAJEDESCUENTO1: 0,
+        }];
+      }
       if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ID: 42, ESTADO: "BORRADOR", EJERCICIO: 2026, NUMEROPEDIDO: 1001, SERIEPEDIDO: "M", TERMINAL: 1, DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 233639, CODIGOCLIENTE: "C001", NOMBRECLIENTE: "Cliente Test", CODIGOVENDEDOR: "10", CODIGOFORMAPAGO: "01", CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: "CC", IMPORTETOTAL: 7, IMPORTEBASE: 7, IMPORTEIVA: 0, IMPORTECOSTO: 4, IMPORTEMARGEN: 3, OBSERVACIONES: "" }];
       if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return [{ CODIGOVEHICULO: "02", CODIGOREPARTIDOR: "10" }];
       if (/FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return [{ ID: 7, PEDIDO_ID: 42, SECUENCIA: 1, CODIGOARTICULO: "ART-UNDER", DESCRIPCION: "Producto bajo minimo", CANTIDADENVASES: 1, CANTIDADUNIDADES: 0, UNIDADMEDIDA: "CAJAS", UNIDADESCAJA: 1, PRECIOVENTA: 7, PRECIOCOSTO: 4, PRECIOTARIFA: 10, PRECIOTARIFACLIENTE: 10, PRECIOMINIMO: 10, IMPORTEVENTA: 7, IMPORTECOSTO: 4, IMPORTEMARGEN: 3, PORCENTAJEMARGEN: 42.85, TIPOLINEA: "R", TIPOVENTA: "CC", CLASELINEA: "VT", ORDEN: 1 }];
@@ -647,13 +764,21 @@ describe("pedidos confirmation bolsa contract", () => {
 
   test("confirmOrder returns refreshed bolsa summary after movement write", async () => {
     const db = require("../config/db");
-    installTransactionalPool(db);
+    const conn = installTransactionalPool(db);
     const header = { ID: 42, EJERCICIO: 2026, NUMEROPEDIDO: 1001, SERIEPEDIDO: "M", TERMINAL: 1, DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 233639, CODIGOCLIENTE: "C001", NOMBRECLIENTE: "Cliente Test", CODIGOVENDEDOR: "10", CODIGOFORMAPAGO: "01", CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: "CC", IMPORTETOTAL: 36, IMPORTEBASE: 36, IMPORTEIVA: 0, IMPORTECOSTO: 24, IMPORTEMARGEN: 12, OBSERVACIONES: "" };
     const line = { ID: 7, PEDIDO_ID: 42, SECUENCIA: 1, CODIGOARTICULO: "ART-OVER", DESCRIPCION: "Producto sobre minimo", CANTIDADENVASES: 3, CANTIDADUNIDADES: 0, UNIDADMEDIDA: "CAJAS", UNIDADESCAJA: 1, PRECIOVENTA: 12, PRECIOCOSTO: 8, PRECIOTARIFA: 10, PRECIOTARIFACLIENTE: 10, PRECIOMINIMO: 10, IMPORTEVENTA: 36, IMPORTECOSTO: 24, IMPORTEMARGEN: 12, PORCENTAJEMARGEN: 33.33, TIPOLINEA: "R", TIPOVENTA: "CC", CLASELINEA: "VT", CODIGOIVA: "2", ORDEN: 1 };
     let movementReads = 0;
     db.queryWithParams.mockReset();
     db.queryWithParams.mockImplementation(async (sql) => {
       if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMANDO")) return { count: 1 };
+      if (/SELECT\s+ID,\s+TRIM\(ESTADO\).*DESCUENTO_GLOBAL/is.test(sql)) {
+        return [{
+          ...header,
+          ESTADO: conn.getState(),
+          DESCUENTO_GLOBAL: 0,
+          PORCENTAJEDESCUENTO1: 0,
+        }];
+      }
       if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ...header, ESTADO: "BORRADOR" }];
       if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return [{ CODIGOVEHICULO: "02", CODIGOREPARTIDOR: "10" }];
       if (/FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return [line];
@@ -856,7 +981,7 @@ describe("pedidos confirmation bolsa contract", () => {
       PORCENTAJEDESCUENTO: 10,
     };
     let lineReads = 0;
-    let discountReads = 0;
+    let auditHeaderReads = 0;
     db.queryWithParams.mockReset();
     db.queryWithParams.mockImplementation((sql) => {
       if (/SELECT\s+ESTADO,/i.test(sql)) return Promise.resolve([{ ...header, ESTADO: 'BORRADOR' }]);
@@ -865,9 +990,18 @@ describe("pedidos confirmation bolsa contract", () => {
         lineReads += 1;
         return Promise.resolve([lineReads === 1 ? baseLine : lockedLine]);
       }
-      if (/DESCUENTO_GLOBAL/i.test(sql) && /PEDIDOS_CAB/i.test(sql)) {
-        discountReads += 1;
-        return Promise.resolve([{ DESCUENTO_GLOBAL: discountReads === 1 ? 0 : 5, PORCENTAJEDESCUENTO1: 0 }]);
+      if (/SELECT\s+ID,\s+TRIM\(ESTADO\).*DESCUENTO_GLOBAL/is.test(sql)) {
+        auditHeaderReads += 1;
+        return Promise.resolve([{
+          ...header,
+          ESTADO: auditHeaderReads === 1 ? 'BORRADOR' : 'CONFIRMADO',
+          IMPORTETOTAL: 14.4,
+          IMPORTEBASE: 14.4,
+          IMPORTECOSTO: 8,
+          IMPORTEMARGEN: 6.4,
+          DESCUENTO_GLOBAL: 5,
+          PORCENTAJEDESCUENTO1: 0,
+        }]);
       }
       if (/FROM\s+DSEDAC\.ARO/i.test(sql)) return Promise.resolve([{ CODE: 'ART-EDIT', ENVASES: 100, UNIDADES: 0 }]);
       if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return Promise.resolve([{ ...header, ESTADO: 'CONFIRMADO' }]);
@@ -921,6 +1055,21 @@ describe("pedidos confirmation bolsa contract", () => {
       /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql)
     );
     expect(reservationInsert?.[1]).toEqual(expect.arrayContaining([45, 'ART-EDIT', 2, 0]));
+    const confirmedEventInsert = conn.query.mock.calls.find(([sql, params]) =>
+      /INSERT\s+INTO\s+JAVIER\.TEST_PEDIDO_STATE_EVENTS/i.test(sql)
+      && params?.[2] === 'CONFIRMADO'
+    );
+    const confirmedPayload = JSON.parse(confirmedEventInsert[1][8]);
+    expect(confirmedPayload.before.header).toMatchObject({
+      ESTADO: 'BORRADOR', IMPORTETOTAL: 14.4, DESCUENTO_GLOBAL: 5,
+    });
+    expect(confirmedPayload.after.header).toMatchObject({
+      ESTADO: 'CONFIRMADO', IMPORTETOTAL: 14.4, DESCUENTO_GLOBAL: 5,
+    });
+    expect(confirmedPayload.before.lines).toEqual([
+      expect.objectContaining({ CANTIDADENVASES: 2, PRECIOVENTA: 8, DESCUENTO_LINEA: 10 }),
+    ]);
+    expect(confirmedPayload.after.lines).toEqual(confirmedPayload.before.lines);
   });
 
   test('a line edit that starts after the confirmation claim waits and is rejected without writes', async () => {
@@ -1094,15 +1243,15 @@ describe('expired draft purge transaction contract', () => {
     expect(conn.query.mock.calls.some(([sql]) => /DELETE\s+FROM/i.test(sql))).toBe(false);
   });
 
-  test('rolls back when the driver omits delete count and the header still exists', async () => {
+  test('rolls back when the driver omits final state count and cancellation cannot be verified', async () => {
     const db = require('../config/db');
     const conn = installTransactionalPool(db);
     db.queryWithParams.mockReset();
     db.queryWithParams.mockImplementation(promisedImplementation((sql) => {
       if (/SELECT\s+C\.ID/i.test(sql)) return [{ ID: 78 }];
       if (/SELECT\s+ID,\s+TRIM\(ESTADO\)/i.test(sql)) return [{ ID: 78, ESTADO: 'BORRADOR' }];
-      if (/DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql)) return {};
-      if (/SELECT\s+ID\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB\s+WHERE\s+ID/i.test(sql)) return [{ ID: 78 }];
+      if (/SET\s+ESTADO\s*=\s*'CANCELADO'/i.test(sql)) return {};
+      if (/SELECT\s+ID\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB\s+WHERE\s+ID/i.test(sql)) return [];
       return { count: 1 };
     }));
 
@@ -1112,6 +1261,43 @@ describe('expired draft purge transaction contract', () => {
     expect(result).toMatchObject({ purged: 0, candidates: 1 });
     expect(conn.rollback).toHaveBeenCalledTimes(1);
     expect(conn.commit).not.toHaveBeenCalled();
+    expect(conn.query.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_LIN/i.test(sql))).toBe(false);
+    expect(conn.query.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql))).toBe(false);
+  });
+
+  test('expires an eligible draft into an audited tombstone without deleting its header or lines', async () => {
+    const db = require('../config/db');
+    const conn = installTransactionalPool(db);
+    let state = 'BORRADOR';
+    db.queryWithParams.mockReset();
+    db.queryWithParams.mockImplementation(promisedImplementation((sql) => {
+      if (/SELECT\s+C\.ID/i.test(sql)) return [{ ID: 79 }];
+      if (/SELECT\s+ID,\s+TRIM\(ESTADO\)/i.test(sql)) return [{ ID: 79, ESTADO: state }];
+      if (/SELECT\s+ID,\s+TRIM\(ESTADO\)\s+AS\s+ESTADO,\s+TRIM\(CODIGOCLIENTE\)/i.test(sql)) {
+        return [{ ID: 79, ESTADO: state, CODIGOCLIENTE: 'C001', CODIGOVENDEDOR: '01' }];
+      }
+      if (/SELECT\s+ID,\s+PEDIDO_ID,\s+SECUENCIA/i.test(sql)) return [];
+      if (/SELECT\s+PAYLOAD_HASH/i.test(sql)) return [];
+      if (/SET\s+ESTADO\s*=\s*'CANCELANDO'/i.test(sql)) {
+        state = 'CANCELANDO';
+        return { count: 1 };
+      }
+      if (/SET\s+ESTADO\s*=\s*'CANCELADO'/i.test(sql)) {
+        state = 'CANCELADO';
+        return { count: 1 };
+      }
+      return { count: 1 };
+    }));
+
+    const pedidos = require('../services/pedidos/index');
+    const result = await pedidos.purgeExpiredDraftReservations({ limit: 1 });
+
+    expect(result).toMatchObject({ purged: 1, candidates: 1 });
+    expect(state).toBe('CANCELADO');
+    expect(conn.query.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql))).toBe(true);
+    expect(conn.query.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_(?:LIN|CAB)/i.test(sql))).toBe(false);
+    expect(conn.query.mock.calls.filter(([sql]) => /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDO_STATE_EVENTS/i.test(sql))).toHaveLength(2);
+    expect(conn.commit).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1140,11 +1326,15 @@ describe('bolsa ledger per-line persistence', () => {
 
   test('rolls back balance update when ledger insert fails in DB2 transaction path', async () => {
     jest.resetModules();
-    const db = require('../config/db');
-    const conn = { query: jest.fn(), close: jest.fn().mockResolvedValue(undefined) };
-    db.getPool.mockReturnValue({ connect: jest.fn().mockResolvedValue(conn) });
-    conn.query.mockImplementation(async (sql) => {
-      if (/SET TRANSACTION ISOLATION LEVEL READ COMMITTED/i.test(sql)) return [];
+    const conn = {
+      query: jest.fn(),
+      beginTransaction: jest.fn().mockResolvedValue(undefined),
+      commit: jest.fn().mockResolvedValue(undefined),
+      rollback: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    mockOpenDedicatedConnection.mockResolvedValue(conn);
+    conn.query.mockImplementation((sql) => {
       if (/^LOCK TABLE JAVIER\.(?:TEST_)?(BOLSA_COMERCIAL|MOVIMIENTOS_BOLSA) IN EXCLUSIVE MODE$/i.test(sql)) return [];
       if (/SELECT\s+ID,\s+CODIGOVENDEDOR/i.test(sql)) {
         return [{ ID: 1, CODIGOVENDEDOR: '10  ', EJERCICIO: 2026, MES: 6, LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
@@ -1152,7 +1342,6 @@ describe('bolsa ledger per-line persistence', () => {
       if (/SELECT\s+IDEMPOTENCY_KEY\s+FROM\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql)) return [];
       if (/UPDATE\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) return [];
       if (/INSERT\s+INTO\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql)) throw new Error('ledger insert failed');
-      if (/^ROLLBACK$/i.test(sql)) return [];
       return [];
     });
     svc = require('../services/bolsa-comercial.service');
@@ -1162,12 +1351,11 @@ describe('bolsa ledger per-line persistence', () => {
     ])).rejects.toThrow(/ledger insert failed/);
 
     const sqls = conn.query.mock.calls.map(([sql]) => sql).join('\n');
-    expect(sqls).toMatch(/SET TRANSACTION ISOLATION LEVEL READ COMMITTED/);
     expect(sqls).toMatch(/LOCK TABLE JAVIER\.(?:TEST_)?BOLSA_COMERCIAL IN EXCLUSIVE MODE/);
     expect(sqls).toMatch(/UPDATE\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/);
     expect(sqls).toMatch(/INSERT\s+INTO\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/);
-    expect(sqls).toMatch(/ROLLBACK/);
-    expect(sqls).not.toMatch(/^COMMIT$/m);
+    expect(conn.rollback).toHaveBeenCalledTimes(1);
+    expect(conn.commit).not.toHaveBeenCalled();
     expect(conn.close).toHaveBeenCalled();
   });
 });

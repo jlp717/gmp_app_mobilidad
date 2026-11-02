@@ -4,8 +4,21 @@ const crypto = require('crypto');
 const { parseLineDiscountPct, parseGlobalDiscountPct } = require('./discounts');
 const { queryWithParams } = require('../../config/db');
 const logger = require('../../middleware/logger');
-const { trimString, truncate, isTableNotFound, PEDIDO_IDEMPOTENCY_TABLE, ERP_SCHEMA } = require('./_shared');
+const {
+    trimString,
+    truncate,
+    isTableNotFound,
+    PEDIDO_IDEMPOTENCY_TABLE,
+    PEDIDOS_CAB_TABLE,
+    ERP_SCHEMA,
+} = require('./_shared');
 const { resolvePedidoActorCodes } = require('./order-states');
+const {
+    appendOrderStateEvent,
+    normalizeOriginalClientAt,
+    normalizeState,
+} = require('./order-state-events');
+const { withDraftCreationTransaction } = require('./local-confirmation-transaction');
 
 function generatePedidoIdempotencyKey() {
     return crypto.randomBytes(12).toString('hex');
@@ -96,14 +109,15 @@ function getPedidoSaleTypeLabel(value = 'CC') {
     return PEDIDO_SALE_TYPE_LABELS[normalizePedidoSaleType(value)];
 }
 
-function buildCreateOrderPayloadHash({
+function buildCreateOrderPayload({
     clientCode,
     vendedorCode,
     tipoventa = 'CC',
     observaciones = '',
     descuentoGlobal = 0,
     lines = [],
-}) {
+    originalClientAt,
+}, { includeOriginalClientAt = true } = {}) {
     const canonicalLines = (lines || []).map((line) => ({
         codigoArticulo: trimString(line.codigoArticulo || line.CODIGOARTICULO),
         cantidadEnvases: Number(parseFloat(line.cantidadEnvases ?? line.CANTIDADENVASES) || 0).toFixed(4),
@@ -120,8 +134,22 @@ function buildCreateOrderPayloadHash({
         tipoventa: normalizePedidoSaleType(tipoventa),
         observaciones: trimString(observaciones),
         descuentoGlobal: Number(parseGlobalDiscountPct({ descuentoGlobal })).toFixed(2),
-        lines: canonicalLines,
     };
+    if (includeOriginalClientAt) {
+        payload.originalClientAt = normalizeOriginalClientAt(originalClientAt);
+    }
+    payload.lines = canonicalLines;
+    return payload;
+}
+
+function buildCreateOrderPayloadHash(input) {
+    const payload = buildCreateOrderPayload(input, { includeOriginalClientAt: true });
+
+    return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
+function buildCreateOrderPayloadHashV1(input) {
+    const payload = buildCreateOrderPayload(input, { includeOriginalClientAt: false });
 
     return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
@@ -192,6 +220,70 @@ function createIdempotencyUnavailableError(message) {
     return err;
 }
 
+function affectedRowCount(result) {
+    if (typeof result === 'number') return result;
+    if (result && typeof result.count === 'number') return result.count;
+    return null;
+}
+
+function adoptLegacyOriginalClientAt({
+    idempotencyKey,
+    pedidoId,
+    legacyPayloadHash,
+    payloadHash,
+    originalClientAt,
+}) {
+    return withDraftCreationTransaction(async (conn) => {
+        const queryFn = (sql, params) => conn.query(sql, params);
+        await queryFn(`LOCK TABLE ${PEDIDO_IDEMPOTENCY_TABLE} IN EXCLUSIVE MODE`);
+        const current = await lookupPedidoIdempotency(idempotencyKey, queryFn);
+        if (!current || current.pedidoId !== pedidoId) {
+            throw createIdempotencyConflictError();
+        }
+        if (current.payloadHash === payloadHash) return payloadHash;
+        if (current.payloadHash !== legacyPayloadHash) {
+            throw createIdempotencyConflictError();
+        }
+        const stateRows = await queryFn(
+            `SELECT TRIM(ESTADO) AS ESTADO FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
+            [pedidoId],
+        );
+        if (!Array.isArray(stateRows) || stateRows.length !== 1) {
+            throw createIdempotencyConflictError('El pedido idempotente ya no esta disponible.');
+        }
+        const state = normalizeState(stateRows[0].ESTADO);
+        const update = await queryFn(
+            `UPDATE ${PEDIDO_IDEMPOTENCY_TABLE}
+                SET PAYLOAD_HASH = ?
+              WHERE IDEMPOTENCY_KEY = ? AND PEDIDO_ID = ? AND PAYLOAD_HASH = ?`,
+            [payloadHash, idempotencyKey, pedidoId, legacyPayloadHash],
+        );
+        const updated = affectedRowCount(update);
+        if (updated === 0) throw createIdempotencyConflictError();
+        if (updated === null) {
+            const verified = await lookupPedidoIdempotency(idempotencyKey, queryFn);
+            if (!verified || verified.pedidoId !== pedidoId || verified.payloadHash !== payloadHash) {
+                throw createIdempotencyConflictError();
+            }
+        }
+        await appendOrderStateEvent(queryFn, {
+            pedidoId,
+            fromState: state,
+            toState: state,
+            actorId: 'SYSTEM_OFFLINE_REPLAY',
+            actorRole: 'SYSTEM',
+            reason: 'Adopcion de fecha original para replay offline legado',
+            idempotencyKey: `pedido-${pedidoId}-offline-created-at-adopted`,
+            originalClientAt,
+            payload: {
+                event: 'OFFLINE_ORIGINAL_CREATED_AT_ADOPTED',
+                originalClientAt,
+            },
+        });
+        return payloadHash;
+    });
+}
+
 async function resolveIdempotentCreateOrder({
     idempotencyKey,
     clientCode,
@@ -200,11 +292,21 @@ async function resolveIdempotentCreateOrder({
     observaciones,
     descuentoGlobal,
     lines,
+    originalClientAt,
 }) {
     const { getOrderDetail } = require('./index'); // puente split: def vive en index
     if (!idempotencyKey) return null;
 
     const payloadHash = buildCreateOrderPayloadHash({
+        clientCode,
+        vendedorCode,
+        tipoventa,
+        observaciones,
+        descuentoGlobal,
+        lines,
+        originalClientAt,
+    });
+    const legacyPayloadHash = buildCreateOrderPayloadHashV1({
         clientCode,
         vendedorCode,
         tipoventa,
@@ -217,8 +319,19 @@ async function resolveIdempotentCreateOrder({
         return { payloadHash, replay: null };
     }
 
-    if (existing.payloadHash !== payloadHash) {
+    if (existing.payloadHash !== payloadHash && existing.payloadHash !== legacyPayloadHash) {
         throw createIdempotencyConflictError();
+    }
+
+    const normalizedOriginalClientAt = normalizeOriginalClientAt(originalClientAt);
+    if (existing.payloadHash === legacyPayloadHash && normalizedOriginalClientAt) {
+        await adoptLegacyOriginalClientAt({
+            idempotencyKey,
+            pedidoId: existing.pedidoId,
+            legacyPayloadHash,
+            payloadHash,
+            originalClientAt: normalizedOriginalClientAt,
+        });
     }
 
     const order = await getOrderDetail(existing.pedidoId);
@@ -234,6 +347,7 @@ module.exports = {
     normalizePedidoSaleType,
     getPedidoSaleTypeLabel,
     buildCreateOrderPayloadHash,
+    buildCreateOrderPayloadHashV1,
     lookupPedidoIdempotency,
     storePedidoIdempotency,
     createIdempotencyConflictError,

@@ -1881,7 +1881,7 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { clientCode, clientName, vendedorCode, lines, observations, observaciones, tipoventa, almacen, tarifa, formaPago, descuentoGlobal, globalDiscountPct } = req.body;
+      const { clientCode, clientName, vendedorCode, lines, observations, observaciones, tipoventa, almacen, tarifa, formaPago, descuentoGlobal, globalDiscountPct, originalCreatedAt } = req.body;
       // Use explicit vendedorCode from body, fallback to userId (the logged-in user)
       const actualVendedor = normalizePedidoMutationVendorCode(vendedorCode, userId);
 
@@ -1926,6 +1926,9 @@ function createPedidosRoutes() {
         origen: 'A',
         idempotencyKey,
         userRole: req.user?.role,
+        userId: req.user?.code || req.user?.id,
+        deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
+        originalClientAt: originalCreatedAt,
       });
 
       // Invalidate related caches
