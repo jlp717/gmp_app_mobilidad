@@ -1,15 +1,16 @@
 {
   "status": "ok",
   "node_id": "bolsa",
-  "summary": "ledger commits separately after order confirmation",
+  "summary": "The baseline writes commercial bag consumption through a separate service after the confirmation block.",
   "facts": [
     {
-      "claim": "ledger commits separately after order confirmation",
+      "claim": "The baseline writes commercial bag consumption through a separate service after the confirmation block.",
       "evidence": [
         {
           "path": "backend/services/pedidos/index.js",
-          "line": 4449,
-          "quote": "See source and detailed docs/orders-audit.md"
+          "line": 4460,
+          "quote": "const consumoResult = await bolsaService.consumirBolsa(vendedorCode, id, consumoAmount, consumoMovements.length ? consumoMovements : undefined);",
+          "commit": "4a36ddd"
         }
       ]
     }
@@ -18,5 +19,7 @@
     "Runtime evidence incomplete; source audit only"
   ],
   "artifacts": [],
-  "confidence": 0.9
+  "confidence": 0.9,
+  "receipt_origin": "Root-normalized Phase 1 discovery receipt; source quote verified against baseline commit, not a raw agent transcript.",
+  "evidence_phase": "historical baseline; does not describe the current patched state"
 }

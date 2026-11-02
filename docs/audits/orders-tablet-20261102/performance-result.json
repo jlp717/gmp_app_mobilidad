@@ -1,15 +1,16 @@
 {
   "status": "partial",
   "node_id": "performance",
-  "summary": "real timings unavailable; SSH/ODBC blocked",
+  "summary": "The baseline product filter waits 300ms before a remote request. Device latency remains unmeasured.",
   "facts": [
     {
-      "claim": "real timings unavailable; SSH/ODBC blocked",
+      "claim": "The baseline product filter waits 300ms before a remote request. Device latency remains unmeasured.",
       "evidence": [
         {
           "path": "lib/features/pedidos/presentation/widgets/product_search_widget.dart",
           "line": 53,
-          "quote": "See source and detailed docs/orders-audit.md"
+          "quote": "_debounce = Timer(const Duration(milliseconds: 300), () {",
+          "commit": "4a36ddd"
         }
       ]
     }
@@ -18,5 +19,7 @@
     "Runtime evidence incomplete; source audit only"
   ],
   "artifacts": [],
-  "confidence": 0.9
+  "confidence": 0.9,
+  "receipt_origin": "Root-normalized Phase 1 discovery receipt; source quote verified against baseline commit, not a raw agent transcript.",
+  "evidence_phase": "historical baseline; does not describe the current patched state"
 }

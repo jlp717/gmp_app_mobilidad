@@ -1,15 +1,16 @@
 {
   "status": "ok",
   "node_id": "pricing",
-  "summary": "special/promo priority differs UI and confirm",
+  "summary": "The baseline server price resolver starts from tariff or minimum; customer-specific authority needs to be preserved server-side.",
   "facts": [
     {
-      "claim": "special/promo priority differs UI and confirm",
+      "claim": "The baseline server price resolver starts from tariff or minimum; customer-specific authority needs to be preserved server-side.",
       "evidence": [
         {
-          "path": "lib/features/pedidos/presentation/widgets/add_to_order_sheet.dart",
-          "line": 204,
-          "quote": "See source and detailed docs/orders-audit.md"
+          "path": "backend/services/pedidos/index.js",
+          "line": 400,
+          "quote": "let unit = tariff > 0 ? tariff : (min > 0 ? min : 0);",
+          "commit": "4a36ddd"
         }
       ]
     }
@@ -18,5 +19,7 @@
     "Runtime evidence incomplete; source audit only"
   ],
   "artifacts": [],
-  "confidence": 0.9
+  "confidence": 0.9,
+  "receipt_origin": "Root-normalized Phase 1 discovery receipt; source quote verified against baseline commit, not a raw agent transcript.",
+  "evidence_phase": "historical baseline; does not describe the current patched state"
 }

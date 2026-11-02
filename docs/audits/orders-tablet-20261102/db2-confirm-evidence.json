@@ -1,0 +1,125 @@
+{
+  "scope": "exact local confirmOrder repair3; real order106/line121 clone; auth UI/createOrder not exercised",
+  "fixtureId": 108,
+  "before": {
+    "header": {
+      "ID": 108,
+      "ESTADO": "BORRADOR",
+      "IMPORTETOTAL": 28.78,
+      "DESCUENTO_GLOBAL": 5
+    },
+    "reserve": [],
+    "movements": [],
+    "bag": {
+      "ID": 13,
+      "SALDO_DISPONIBLE": 300,
+      "CONSUMIDO": 0,
+      "ACUMULADO": 0
+    }
+  },
+  "faultCode": "LOCAL_CONFIRMATION_FAILED",
+  "afterFault": {
+    "header": {
+      "ID": 108,
+      "ESTADO": "BORRADOR",
+      "IMPORTETOTAL": 28.78,
+      "DESCUENTO_GLOBAL": 5
+    },
+    "reserve": [],
+    "movements": [],
+    "bag": {
+      "ID": 13,
+      "SALDO_DISPONIBLE": 300,
+      "CONSUMIDO": 0,
+      "ACUMULADO": 0
+    }
+  },
+  "rollbackPassed": true,
+  "confirmElapsedMs": 278,
+  "afterConfirm": {
+    "header": {
+      "ID": 108,
+      "ESTADO": "CONFIRMADO",
+      "IMPORTETOTAL": 28.78,
+      "DESCUENTO_GLOBAL": 5
+    },
+    "reserve": [
+      {
+        "PEDIDO_ID": 108,
+        "CODIGOARTICULO": "3519      ",
+        "CANTIDADENVASES": 1,
+        "CANTIDADUNIDADES": 1
+      }
+    ],
+    "movements": [
+      {
+        "PEDIDO_ID": 108,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 1.38,
+        "SALDO_ANTERIOR": 300,
+        "SALDO_POSTERIOR": 298.62,
+        "IDEMPOTENCY_KEY": "pedido-108-line-124-under-min"
+      }
+    ],
+    "bag": {
+      "ID": 13,
+      "SALDO_DISPONIBLE": 298.62,
+      "CONSUMIDO": 1.38,
+      "ACUMULADO": 0
+    }
+  },
+  "replayElapsedMs": 12,
+  "afterReplay": {
+    "header": {
+      "ID": 108,
+      "ESTADO": "CONFIRMADO",
+      "IMPORTETOTAL": 28.78,
+      "DESCUENTO_GLOBAL": 5
+    },
+    "reserve": [
+      {
+        "PEDIDO_ID": 108,
+        "CODIGOARTICULO": "3519      ",
+        "CANTIDADENVASES": 1,
+        "CANTIDADUNIDADES": 1
+      }
+    ],
+    "movements": [
+      {
+        "PEDIDO_ID": 108,
+        "TIPO": "CONSUMO",
+        "IMPORTE": 1.38,
+        "SALDO_ANTERIOR": 300,
+        "SALDO_POSTERIOR": 298.62,
+        "IDEMPOTENCY_KEY": "pedido-108-line-124-under-min"
+      }
+    ],
+    "bag": {
+      "ID": 13,
+      "SALDO_DISPONIBLE": 298.62,
+      "CONSUMIDO": 1.38,
+      "ACUMULADO": 0
+    }
+  },
+  "confirmPassed": true,
+  "replayPassed": true,
+  "cleanup": {
+    "orderRemoved": true,
+    "bagAfter": [],
+    "sequenceRewound": false
+  },
+  "writeTargets": [
+    "JAVIER.TEST_BOLSA_COMERCIAL",
+    "JAVIER.TEST_MOVIMIENTOS_BOLSA",
+    "JAVIER.TEST_PEDIDOS_CAB",
+    "JAVIER.TEST_PEDIDOS_LIN",
+    "JAVIER.TEST_PEDIDOS_SEQ",
+    "JAVIER.TEST_PEDIDOS_STOCK_RESERVE",
+    "JAVIER.TEST_PRECIO_HISTORICO"
+  ],
+  "source_commits": [
+    "e594d3b",
+    "e8fc6de"
+  ],
+  "source_note": "Measured source precedes one log-only condition correction in e8fc6de; no money/reservation behavior changed."
+}

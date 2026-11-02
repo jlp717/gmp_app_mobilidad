@@ -1,0 +1,87 @@
+{
+  "read_only": true,
+  "source": "DSEDAC.LQD",
+  "vendor": "35",
+  "rows": 12,
+  "pairs": [
+    {
+      "current": 170,
+      "previous": 169,
+      "balance": 1214.15,
+      "previous_remaining": 1214.15,
+      "matches": true
+    },
+    {
+      "current": 169,
+      "previous": 168,
+      "balance": 19.9,
+      "previous_remaining": 19.9,
+      "matches": true
+    },
+    {
+      "current": 168,
+      "previous": 167,
+      "balance": 589.32,
+      "previous_remaining": 589.32,
+      "matches": true
+    },
+    {
+      "current": 167,
+      "previous": 166,
+      "balance": 2.37,
+      "previous_remaining": 2.37,
+      "matches": true
+    },
+    {
+      "current": 166,
+      "previous": 165,
+      "balance": 11.83,
+      "previous_remaining": 11.83,
+      "matches": true
+    },
+    {
+      "current": 165,
+      "previous": 164,
+      "balance": 1256.83,
+      "previous_remaining": 1256.83,
+      "matches": true
+    },
+    {
+      "current": 164,
+      "previous": 163,
+      "balance": 9.16,
+      "previous_remaining": 9.16,
+      "matches": true
+    },
+    {
+      "current": 163,
+      "previous": 162,
+      "balance": 9.16,
+      "previous_remaining": 9.16,
+      "matches": true
+    },
+    {
+      "current": 162,
+      "previous": 161,
+      "balance": 1.2,
+      "previous_remaining": 1.2,
+      "matches": true
+    },
+    {
+      "current": 161,
+      "previous": 160,
+      "balance": -0.19,
+      "previous_remaining": -0.19,
+      "matches": true
+    },
+    {
+      "current": 160,
+      "previous": 159,
+      "balance": 0.09,
+      "previous_remaining": 0.09,
+      "matches": true
+    }
+  ],
+  "current_remaining": 29.15,
+  "unmeasured_rule": "Nonzero gastos/efectivo2/entregado2 are not covered by this sample."
+}

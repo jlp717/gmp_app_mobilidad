@@ -2,108 +2,116 @@
   {
     "node_id": "bolsa",
     "status": "ok",
-    "claim": "ledger commits separately after order confirmation",
+    "claim": "The baseline writes commercial bag consumption through a separate service after the confirmation block.",
     "evidence": [
       {
         "path": "backend/services/pedidos/index.js",
-        "line": 4449,
-        "quote": "See source and detailed docs/orders-audit.md"
+        "line": 4460,
+        "quote": "const consumoResult = await bolsaService.consumirBolsa(vendedorCode, id, consumoAmount, consumoMovements.length ? consumoMovements : undefined);",
+        "commit": "4a36ddd"
       }
     ]
   },
   {
     "node_id": "config",
     "status": "ok",
-    "claim": "missing single APP_ENV profile",
+    "claim": "The baseline table selector depends on the legacy REPARTO_TABLE_SET flag; the new profile work is documented separately.",
     "evidence": [
       {
         "path": "backend/utils/db2-schemas.js",
-        "line": 35,
-        "quote": "See source and detailed docs/orders-audit.md"
+        "line": 134,
+        "quote": "if (String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test'",
+        "commit": "4a36ddd"
       }
     ]
   },
   {
     "node_id": "finance",
     "status": "ok",
-    "claim": "settlement can save with no registered collections",
+    "claim": "The baseline settlement save accepts the expected amount supplied by the caller.",
     "evidence": [
       {
         "path": "backend/services/comercial-devoluciones-service.js",
-        "line": 921,
-        "quote": "See source and detailed docs/orders-audit.md"
+        "line": 950,
+        "quote": "const expected = money(expectedTotal);",
+        "commit": "4a36ddd"
       }
     ]
   },
   {
     "node_id": "inventory",
     "status": "ok",
-    "claim": "stock availability/reservations lack shared transaction",
+    "claim": "The baseline stock availability expires reservations by reserve-row timestamp, while draft purge uses header timestamp.",
     "evidence": [
       {
-        "path": "backend/services/pedidos/index.js",
-        "line": 4256,
-        "quote": "See source and detailed docs/orders-audit.md"
+        "path": "backend/services/pedidos/_shared.js",
+        "line": 82,
+        "quote": "AND SR.CREATED_AT >= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS",
+        "commit": "4a36ddd"
       }
     ]
   },
   {
     "node_id": "offline",
     "status": "ok",
-    "claim": "no temporal backoff; default concurrency breaks FIFO",
+    "claim": "The baseline offline drain documents default concurrency three; strict FIFO is not guaranteed by that drain.",
     "evidence": [
       {
         "path": "lib/features/pedidos/data/pedidos_offline_service.dart",
         "line": 330,
-        "quote": "See source and detailed docs/orders-audit.md"
+        "quote": "/// PERF: [maxConcurrency] drains independent orders in parallel (default 3)",
+        "commit": "4a36ddd"
       }
     ]
   },
   {
     "node_id": "performance",
     "status": "partial",
-    "claim": "real timings unavailable; SSH/ODBC blocked",
+    "claim": "The baseline product filter waits 300ms before a remote request. Device latency remains unmeasured.",
     "evidence": [
       {
         "path": "lib/features/pedidos/presentation/widgets/product_search_widget.dart",
         "line": 53,
-        "quote": "See source and detailed docs/orders-audit.md"
+        "quote": "_debounce = Timer(const Duration(milliseconds: 300), () {",
+        "commit": "4a36ddd"
       }
     ]
   },
   {
     "node_id": "pricing",
     "status": "ok",
-    "claim": "special/promo priority differs UI and confirm",
+    "claim": "The baseline server price resolver starts from tariff or minimum; customer-specific authority needs to be preserved server-side.",
     "evidence": [
       {
-        "path": "lib/features/pedidos/presentation/widgets/add_to_order_sheet.dart",
-        "line": 204,
-        "quote": "See source and detailed docs/orders-audit.md"
+        "path": "backend/services/pedidos/index.js",
+        "line": 400,
+        "quote": "let unit = tariff > 0 ? tariff : (min > 0 ? min : 0);",
+        "commit": "4a36ddd"
       }
     ]
   },
   {
     "node_id": "qa",
     "status": "ok",
-    "claim": "veto demo-ready: baseline failure and missing runtime evidence",
+    "claim": "Baseline backend tests failed three suites; this does not permit declaring the entire demo ready.",
     "evidence": [
       {
-        "path": "backend/package.json",
-        "line": 19,
-        "quote": "See source and detailed docs/orders-audit.md"
+        "path": "docs/audits/orders-tablet-20261102/baseline-evidence.json",
+        "line": 11,
+        "quote": "\"suites_failed\": 3,"
       }
     ]
   },
   {
     "node_id": "ux",
     "status": "ok",
-    "claim": "critical order controls below size target",
+    "claim": "The baseline price selector has a 40dp control height, below the requested 56dp target.",
     "evidence": [
       {
-        "path": "lib/features/pedidos/presentation/widgets/order_line_tile.dart",
-        "line": 315,
-        "quote": "See source and detailed docs/orders-audit.md"
+        "path": "lib/features/pedidos/presentation/widgets/add_to_order_sheet.dart",
+        "line": 678,
+        "quote": "height: 40,",
+        "commit": "4a36ddd"
       }
     ]
   }

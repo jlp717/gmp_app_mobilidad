@@ -1,15 +1,16 @@
 {
   "status": "ok",
   "node_id": "finance",
-  "summary": "settlement can save with no registered collections",
+  "summary": "The baseline settlement save accepts the expected amount supplied by the caller.",
   "facts": [
     {
-      "claim": "settlement can save with no registered collections",
+      "claim": "The baseline settlement save accepts the expected amount supplied by the caller.",
       "evidence": [
         {
           "path": "backend/services/comercial-devoluciones-service.js",
-          "line": 921,
-          "quote": "See source and detailed docs/orders-audit.md"
+          "line": 950,
+          "quote": "const expected = money(expectedTotal);",
+          "commit": "4a36ddd"
         }
       ]
     }
@@ -18,5 +19,7 @@
     "Runtime evidence incomplete; source audit only"
   ],
   "artifacts": [],
-  "confidence": 0.9
+  "confidence": 0.9,
+  "receipt_origin": "Root-normalized Phase 1 discovery receipt; source quote verified against baseline commit, not a raw agent transcript.",
+  "evidence_phase": "historical baseline; does not describe the current patched state"
 }

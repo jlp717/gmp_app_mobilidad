@@ -1,0 +1,60 @@
+{
+  "run_id": "orders-tablet-20261102",
+  "commit": "99c5925",
+  "verdict": "PASS_SCOPED",
+  "independent_verifier": "/root/offline_verifier",
+  "checks": [
+    {
+      "id": "auth-epoch-before-bearer",
+      "result": "PASS",
+      "evidence": "A session change before Dio onRequest returns AUTH_CONTEXT_CHANGED and the capturing adapter receives zero requests. A stable session sends exactly one request."
+    },
+    {
+      "id": "threshold-finalized-2-plus-1",
+      "result": "PASS",
+      "evidence": "Persisted threshold 3; two finalized orders do not trigger threshold sync; the third triggers one FIFO drain of all three. An editable local draft remains outside the queue."
+    },
+    {
+      "id": "durable-retry-scope-return",
+      "result": "PASS",
+      "evidence": "A persisted nextRetryAt expires while B is active; returning to A rearms and executes it once without sending A under B."
+    },
+    {
+      "id": "active-scope-rerun",
+      "result": "PASS",
+      "evidence": "An active A drain queues B, reruns B after A, and preserves A serverOrderId=9801 for idempotent resumption. Same-scope rerun is covered by the common source branch, without a separate nominal test."
+    }
+  ],
+  "commands": [
+    {
+      "command": "Flutter tools snapshot test --no-pub test/api/api_client_auth_epoch_mutation_test.dart test/features/pedidos/pedidos_offline_drain_test.dart",
+      "executed_by": "independent verifier",
+      "exit_code": 0,
+      "tests_passed": 14,
+      "tests_failed": 0
+    },
+    {
+      "command": "C:\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe C:\\flutter\\bin\\cache\\flutter_tools.snapshot test --no-pub --reporter compact test/api/api_client_auth_epoch_mutation_test.dart test/api/api_client_tls_policy_test.dart test/api/auth_session_resume_contract_test.dart test/core/offline/sync_mutation_policy_test.dart test/core/offline/sync_queue_service_test.dart test/features/pedidos/pedidos_offline_drain_test.dart test/features/pedidos/pedidos_business_logic_test.dart",
+      "executed_by": "maker",
+      "exit_code": 0,
+      "tests_passed": 90,
+      "tests_failed": 0,
+      "wall_time_seconds": 17.62
+    },
+    {
+      "command": "npm run test:targeted -- __tests__/pedidos-vddx-autosync-threshold.test.js __tests__/pedidos-db2-22001-param-length.test.js",
+      "executed_by": "root",
+      "exit_code": 0,
+      "suites_passed": 2,
+      "tests_passed": 23,
+      "log": "offline-backend-tests-final.log"
+    }
+  ],
+  "limitations": [
+    "EARS-OFF-06 original creation timestamp is still pending at this checkpoint; queuedAt exists only in durable local storage.",
+    "No device/network/DB2 end-to-end scenario is implied by these deterministic tests.",
+    "The capturing Dio adapter is not a real HTTP server.",
+    "The secure-storage plugin is unavailable in flutter_test; the harness used its test fallback.",
+    "Directed Dart analysis reported 358 information diagnostics and zero errors/warnings; its exit 0 does not mean zero diagnostics."
+  ]
+}

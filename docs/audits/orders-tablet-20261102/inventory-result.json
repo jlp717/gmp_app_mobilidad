@@ -1,15 +1,16 @@
 {
   "status": "ok",
   "node_id": "inventory",
-  "summary": "stock availability/reservations lack shared transaction",
+  "summary": "The baseline stock availability expires reservations by reserve-row timestamp, while draft purge uses header timestamp.",
   "facts": [
     {
-      "claim": "stock availability/reservations lack shared transaction",
+      "claim": "The baseline stock availability expires reservations by reserve-row timestamp, while draft purge uses header timestamp.",
       "evidence": [
         {
-          "path": "backend/services/pedidos/index.js",
-          "line": 4256,
-          "quote": "See source and detailed docs/orders-audit.md"
+          "path": "backend/services/pedidos/_shared.js",
+          "line": 82,
+          "quote": "AND SR.CREATED_AT >= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS",
+          "commit": "4a36ddd"
         }
       ]
     }
@@ -18,5 +19,7 @@
     "Runtime evidence incomplete; source audit only"
   ],
   "artifacts": [],
-  "confidence": 0.9
+  "confidence": 0.9,
+  "receipt_origin": "Root-normalized Phase 1 discovery receipt; source quote verified against baseline commit, not a raw agent transcript.",
+  "evidence_phase": "historical baseline; does not describe the current patched state"
 }

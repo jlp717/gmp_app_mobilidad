@@ -1,0 +1,1937 @@
+{
+  "schema": "JAVIER",
+  "tables": [
+    {
+      "TABLE_NAME": "TEST_COBROS"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRM_EVIDENCIAS"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS"
+    }
+  ],
+  "columns": [
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "ID",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 36,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGO_CLIENTE",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "REFERENCIA",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 100,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "IMPORTE",
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 15,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "FORMA_PAGO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TIPO_VENTA",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 5,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TIPO_MODO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TIPO_USUARIO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGO_USUARIO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "OBSERVACIONES",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 255,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "FECHA",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CREATED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "SUBEMPRESARECIBO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "EJERCICIORECIBO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "SERIERECIBO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TERMINALRECIBO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "NUMERORECIBO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGOCLIENTEFACTURA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGOSUBDISTRIBUIDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGOVENDEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TIPORECIBO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "DIADOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "MESDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "ANODOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "HORADOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "IMPORTECOBRADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "IMPORTEREDONDEO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "EFECTIVOTALON",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "NUMEROTALON",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "DIAVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "MESVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "ANOVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGOENTIDADBANCARIA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "OFICINIEXTERIOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGOVENDEDORUSUARIO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "SUBEMPRESALIQUIDACION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "EJERCICIOLIQUIDACION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "SERIELIQUIDACION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TERMINALLIQUIDACION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "NUMEROLIQUIDACION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "IDMARCALIQUIDACION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 30,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "MARCAACTUALIZACION",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 50,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO",
+      "COLUMN_NAME": "ID",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO",
+      "COLUMN_NAME": "CODIGOARTICULO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO",
+      "COLUMN_NAME": "CODIGOCLIENTE",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO",
+      "COLUMN_NAME": "CODIGOTARIFA",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO",
+      "COLUMN_NAME": "PRECIO_COMPETITIVO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 9,
+      "NUMERIC_SCALE": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO",
+      "COLUMN_NAME": "MARGEN_PCT",
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 5,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO",
+      "COLUMN_NAME": "VALIDO_DESDE",
+      "DATA_TYPE": "DATE",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO",
+      "COLUMN_NAME": "VALIDO_HASTA",
+      "DATA_TYPE": "DATE",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO",
+      "COLUMN_NAME": "USUARIO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 40,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO",
+      "COLUMN_NAME": "CREATED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_PRECIO_COMPETITIVO",
+      "COLUMN_NAME": "UPDATED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "TIPODOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ORIGENDOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SUBEMPRESADOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EJERCICIODOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SERIEDOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "TERMINALDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMERODOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "XDEDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DEXDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SITUACION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CLAVEAGRUPAMIENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOFORMATOIMPRESION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTABANCOREMESA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIAREMESABANCO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MESREMESABANCO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANOREMESABANCO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIAREMESACLIENTE",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MESREMESACLIENTE",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANOREMESACLIENTE",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTALIBRADO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTAPAGO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTABANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTABANCOEFECTOSDESCONTADOS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTAEFECTOSDESCONTADOS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCLIENTEALBARAN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCLIENTEFACTURA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCLIENTECADENA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOVENDEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOVENDEDORCOBRO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGORUTA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOFORMAPAGO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIAVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MESVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANOVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIAEMISION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MESEMISION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANOEMISION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTEVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTECANCELADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTEPENDIENTE",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN01",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN02",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN03",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN04",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN05",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN06",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CLAUSULASBANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIRECCIONBANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 60,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOPOSTALBANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 5,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SECUENCIACODIGOPOSTALBANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "POBLACIONBANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 25,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "PROVINCIABANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 34,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "OBSERVACIONES",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 60,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EMPRESACONTABLE",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EMPRESACONTABLE2",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIACOBRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MESCOBRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANOCOBRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROLIQUIDACION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EJERCICIODELDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "LUGAREMISION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 15,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESDESERIENROPAG",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESDENUMERONROPAG",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 7,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESDECTRLNUMERONROPAG",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESDENUMERO2NROPAG",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESDECTRLNUMERO2NROPAG",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCONCEPTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESCRIPCIONCONCEPTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 40,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESCRIPCIONCONCEPTO_1",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 30,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROASIGNADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SUBEMPRESADOCUMENTOASOCIADO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EJERCICIODOCUMENTOASOCIADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SERIEDOCUMENTOASOCIADO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "TERMINALDOCUMENTOASOCIADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMERODOCUMENTOASOCIADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOMETODOPAGO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "REFERENCIACARTERA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "REFERENCIATIPODOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 5,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "COMISIONESSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTECOMISION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOIVA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTEIVACOMISION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTEOTROS",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTEGASTOS",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPUTARGASTOSSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTAACREEDORA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTAGASTOS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTAOTROS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCANAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 5,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANULADOSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOFORMAPAGOORIGINAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOMETODOPAGOORIGINAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTACARGOABONO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SUBEMPRESAASIENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EJERCICIOASIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SERIEASIENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "TERMINALASIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROASIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SECUENCIAASIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SITUACIONORIGINAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOVENDEDORPOSEEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ID",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MARCAACTUALIZACION",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 50,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CREATED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "UPDATED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "STATUS",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "OPERADOR",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 50,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "PANTALLA_ORIGEN",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "LIQUIDADO_SN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "LIQUIDACION_TOKEN",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SUBEMPRESAREGISTRO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EJERCICIOREGISTRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SERIEREGISTRO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "TERMINALREGISTRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROREGISTRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROREGISTROORIGINAL",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTACOBRADO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTATALONES",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTADESCUENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTETOTALCOBRADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTETOTALTALONES",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTETOTALOTROS",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTETOTALDESCUENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTETOTALPENDIENTE",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EXTENSIONCONCEPTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 40,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCONCEPTOCONTRAPARTIDA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESCCONCEPTOCONTRAPARTIDA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 40,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EXTCONCEPTOCONTRAPARTIDA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 40,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROTALON",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOENTIDADBANCARIA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NOMBREENTIDADBANCARIA",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 40,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EFECTIVOTALON",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRM_EVIDENCIAS",
+      "COLUMN_NAME": "CONFIRMACION_ID",
+      "DATA_TYPE": "BIGINT",
+      "LENGTH": 8,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRM_EVIDENCIAS",
+      "COLUMN_NAME": "EVIDENCE_ID",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "ID",
+      "DATA_TYPE": "BIGINT",
+      "LENGTH": 8,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "IDEMPOTENCY_KEY",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "PAYLOAD_FINGERPRINT",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 64,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "DOCUMENT_ID",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 160,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "REPARTIDOR_ID",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "ACTOR_USER_ID",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 80,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "CLIENTE_CODIGO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 40,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "CLIENTE_NOMBRE",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 180,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "PEDIDO_EJERCICIO",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "PEDIDO_NUMERO",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "DOCUMENTO_TIPO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "DOCUMENTO_ORIGEN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "DOCUMENTO_SUBEMPRESA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "DOCUMENTO_EJERCICIO",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "DOCUMENTO_SERIE",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "DOCUMENTO_TERMINAL",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "DOCUMENTO_NUMERO",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "DOCUMENTO_XDE",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "DOCUMENTO_DEX",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "STATUS",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "OCCURRED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "CONFIRMED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "RECEPTOR_NOMBRE",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 100,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "RECEPTOR_APELLIDOS",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 160,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "RECEPTOR_DNI",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "FIRMA_EVIDENCE_ID",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "RESULT_JSON",
+      "DATA_TYPE": "CLOB",
+      "LENGTH": 8192,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "INCIDENCIA_CODIGO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 60,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "INCIDENCIA_DESCRIPCION",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 1000,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "INCIDENCIA_OBSERVACIONES",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 1000,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "OBSERVACIONES",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 2000,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "LATITUD",
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": 8,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_CONFIRMACIONES",
+      "COLUMN_NAME": "LONGITUD",
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 8,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "ID",
+      "DATA_TYPE": "BIGINT",
+      "LENGTH": 8,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "EVIDENCE_ID",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "DOCUMENT_ID",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 160,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "REPARTIDOR_ID",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "EVIDENCE_KIND",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "STORAGE_REFERENCE",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 140,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "MIME_TYPE",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 30,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "CONTENT_SHA256",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 64,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "CONTENT_BYTES",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "CONTENT_BLOB",
+      "DATA_TYPE": "BLOB",
+      "LENGTH": 4194304,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "STATUS",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 12,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "CREATED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "LINKED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "EXPIRES_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "CAPTURED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTO_EVIDENCIAS",
+      "COLUMN_NAME": "DEVICE_ID",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 80,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y"
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "views": [
+    {
+      "TABLE_NAME": "SYSCHKCST"
+    },
+    {
+      "TABLE_NAME": "SYSCST"
+    }
+  ],
+  "columns": [
+    {
+      "TABLE_NAME": "SYSCHKCST",
+      "COLUMN_NAME": "CONSTRAINT_SCHEMA"
+    },
+    {
+      "TABLE_NAME": "SYSCHKCST",
+      "COLUMN_NAME": "CONSTRAINT_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSCHKCST",
+      "COLUMN_NAME": "CHECK_CLAUSE"
+    },
+    {
+      "TABLE_NAME": "SYSCHKCST",
+      "COLUMN_NAME": "ROUNDING_MODE"
+    },
+    {
+      "TABLE_NAME": "SYSCHKCST",
+      "COLUMN_NAME": "SYSTEM_CONSTRAINT_SCHEMA"
+    },
+    {
+      "TABLE_NAME": "SYSCHKCST",
+      "COLUMN_NAME": "INSERT_ACTION"
+    },
+    {
+      "TABLE_NAME": "SYSCHKCST",
+      "COLUMN_NAME": "UPDATE_ACTION"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "CONSTRAINT_SCHEMA"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "CONSTRAINT_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "CONSTRAINT_TYPE"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "TABLE_SCHEMA"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "TABLE_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "IS_DEFERRABLE"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "INITIALLY_DEFERRED"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "SYSTEM_TABLE_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "SYSTEM_TABLE_SCHEMA"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "CONSTRAINT_KEYS"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "IASP_NUMBER"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "CONSTRAINT_STATE"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "ENABLED"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "CHECK_PENDING"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "CONSTRAINT_TEXT"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "LONG_COMMENT"
+    },
+    {
+      "TABLE_NAME": "SYSCST",
+      "COLUMN_NAME": "SYSTEM_CONSTRAINT_SCHEMA"
+    }
+  ]
+}

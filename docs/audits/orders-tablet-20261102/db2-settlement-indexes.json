@@ -1,0 +1,207 @@
+{
+  "readOnly": true,
+  "metadata": [
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "INDEX_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "INDEX_OWNER"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "TABLE_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "TABLE_OWNER"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "TABLE_SCHEMA"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "IS_UNIQUE"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "COLUMN_COUNT"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "INDEX_SCHEMA"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "SYSTEM_INDEX_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "SYSTEM_INDEX_SCHEMA"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "SYSTEM_TABLE_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "SYSTEM_TABLE_SCHEMA"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "LONG_COMMENT"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "IASP_NUMBER"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "INDEX_TEXT"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "IS_SPANNING_INDEX"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "INDEX_DEFINER"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "ROUNDING_MODE"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "INDEX_HAS_SEARCH_CONDITION"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "SEARCH_CONDITION_HAS_UDF"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "SEARCH_CONDITION"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "INDEX_HAS_INCLUDE_EXPRESSION"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "INCLUDE_EXPRESSION"
+    },
+    {
+      "TABLE_NAME": "SYSINDEXES",
+      "COLUMN_NAME": "CREATE_TIMESTAMP"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "INDEX_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "INDEX_OWNER"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "COLUMN_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "COLUMN_POSITION"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "ORDINAL_POSITION"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "ORDERING"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "INDEX_SCHEMA"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "SYSTEM_COLUMN_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "SYSTEM_INDEX_NAME"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "SYSTEM_INDEX_SCHEMA"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "COLUMN_IS_EXPRESSION"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "EXPRESSION_HAS_UDF"
+    },
+    {
+      "TABLE_NAME": "SYSKEYS",
+      "COLUMN_NAME": "KEY_EXPRESSION"
+    }
+  ],
+  "indexes": [
+    {
+      "INDEX_NAME": "UX_TEST_LIQCOM_VENDOR_DAY",
+      "INDEX_OWNER": "JAVIER",
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "TABLE_OWNER": "JAVIER",
+      "TABLE_SCHEMA": "JAVIER",
+      "IS_UNIQUE": "U",
+      "COLUMN_COUNT": 2,
+      "INDEX_SCHEMA": "JAVIER",
+      "SYSTEM_INDEX_NAME": "UX_TE00003",
+      "SYSTEM_INDEX_SCHEMA": "JAVIER    ",
+      "SYSTEM_TABLE_NAME": "TEST_00196",
+      "SYSTEM_TABLE_SCHEMA": "JAVIER    ",
+      "LONG_COMMENT": null,
+      "IASP_NUMBER": 0,
+      "INDEX_TEXT": "",
+      "IS_SPANNING_INDEX": null,
+      "INDEX_DEFINER": "JAVIER",
+      "ROUNDING_MODE": null,
+      "INDEX_HAS_SEARCH_CONDITION": "N",
+      "SEARCH_CONDITION_HAS_UDF": "N",
+      "SEARCH_CONDITION": null,
+      "INDEX_HAS_INCLUDE_EXPRESSION": "N",
+      "INCLUDE_EXPRESSION": null,
+      "CREATE_TIMESTAMP": "2026-09-11 15:32:36.537000"
+    },
+    {
+      "INDEX_NAME": "UX_TEST_LIQCOM_TOKEN",
+      "INDEX_OWNER": "JAVIER",
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "TABLE_OWNER": "JAVIER",
+      "TABLE_SCHEMA": "JAVIER",
+      "IS_UNIQUE": "U",
+      "COLUMN_COUNT": 1,
+      "INDEX_SCHEMA": "JAVIER",
+      "SYSTEM_INDEX_NAME": "UX_TE00004",
+      "SYSTEM_INDEX_SCHEMA": "JAVIER    ",
+      "SYSTEM_TABLE_NAME": "TEST_00196",
+      "SYSTEM_TABLE_SCHEMA": "JAVIER    ",
+      "LONG_COMMENT": null,
+      "IASP_NUMBER": 0,
+      "INDEX_TEXT": "",
+      "IS_SPANNING_INDEX": null,
+      "INDEX_DEFINER": "JAVIER",
+      "ROUNDING_MODE": null,
+      "INDEX_HAS_SEARCH_CONDITION": "N",
+      "SEARCH_CONDITION_HAS_UDF": "N",
+      "SEARCH_CONDITION": null,
+      "INDEX_HAS_INCLUDE_EXPRESSION": "N",
+      "INCLUDE_EXPRESSION": null,
+      "CREATE_TIMESTAMP": "2026-09-11 15:32:36.947000"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "readOnly": true,
+  "rawStockBeforeReservations": [
+    {
+      "ARTICULO": "3207",
+      "ENVASES": 4.17,
+      "UNIDADES": 0
+    },
+    {
+      "ARTICULO": "2917",
+      "ENVASES": 83,
+      "UNIDADES": 83
+    },
+    {
+      "ARTICULO": "2916",
+      "ENVASES": 48,
+      "UNIDADES": 48
+    }
+  ],
+  "threshold": [
+    {
+      "VENDEDOR": "73",
+      "THRESHOLD": 3
+    }
+  ]
+}

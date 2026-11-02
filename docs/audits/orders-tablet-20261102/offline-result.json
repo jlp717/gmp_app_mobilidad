@@ -1,15 +1,16 @@
 {
   "status": "ok",
   "node_id": "offline",
-  "summary": "no temporal backoff; default concurrency breaks FIFO",
+  "summary": "The baseline offline drain documents default concurrency three; strict FIFO is not guaranteed by that drain.",
   "facts": [
     {
-      "claim": "no temporal backoff; default concurrency breaks FIFO",
+      "claim": "The baseline offline drain documents default concurrency three; strict FIFO is not guaranteed by that drain.",
       "evidence": [
         {
           "path": "lib/features/pedidos/data/pedidos_offline_service.dart",
           "line": 330,
-          "quote": "See source and detailed docs/orders-audit.md"
+          "quote": "/// PERF: [maxConcurrency] drains independent orders in parallel (default 3)",
+          "commit": "4a36ddd"
         }
       ]
     }
@@ -18,5 +19,7 @@
     "Runtime evidence incomplete; source audit only"
   ],
   "artifacts": [],
-  "confidence": 0.9
+  "confidence": 0.9,
+  "receipt_origin": "Root-normalized Phase 1 discovery receipt; source quote verified against baseline commit, not a raw agent transcript.",
+  "evidence_phase": "historical baseline; does not describe the current patched state"
 }

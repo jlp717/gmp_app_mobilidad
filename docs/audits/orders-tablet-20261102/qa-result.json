@@ -1,15 +1,15 @@
 {
   "status": "ok",
   "node_id": "qa",
-  "summary": "veto demo-ready: baseline failure and missing runtime evidence",
+  "summary": "Baseline backend tests failed three suites; this does not permit declaring the entire demo ready.",
   "facts": [
     {
-      "claim": "veto demo-ready: baseline failure and missing runtime evidence",
+      "claim": "Baseline backend tests failed three suites; this does not permit declaring the entire demo ready.",
       "evidence": [
         {
-          "path": "backend/package.json",
-          "line": 19,
-          "quote": "See source and detailed docs/orders-audit.md"
+          "path": "docs/audits/orders-tablet-20261102/baseline-evidence.json",
+          "line": 11,
+          "quote": "\"suites_failed\": 3,"
         }
       ]
     }
@@ -18,5 +18,6 @@
     "Runtime evidence incomplete; source audit only"
   ],
   "artifacts": [],
-  "confidence": 0.9
+  "confidence": 0.9,
+  "receipt_origin": "Root-normalized independent QA receipt; executed baseline is retained in the evidence JSON."
 }

@@ -1,0 +1,24 @@
+{
+  "readOnly": true,
+  "clientCode": "4300032888",
+  "articleCode": "2916",
+  "specialPrice": 29.28,
+  "ownerSource": "DSED.LACLAE.R1_T8CDVD in 2026",
+  "catalogVerified": [
+    {
+      "COLUMN_NAME": "LCAADC"
+    },
+    {
+      "COLUMN_NAME": "LCCDCL"
+    },
+    {
+      "COLUMN_NAME": "R1_T8CDVD"
+    }
+  ],
+  "owners": [
+    {
+      "VENDEDOR": "73",
+      "FILAS": 219
+    }
+  ]
+}

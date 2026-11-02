@@ -1,0 +1,102 @@
+{
+  "run_id": "orders-tablet-20261102",
+  "base_commit": "4a36ddd",
+  "branch": "codex/orders-tablet-demo-20261102",
+  "baseline": {
+    "backend_tests": {
+      "command": "npm test -- --runInBand",
+      "cwd": "backend",
+      "exit_code": 1,
+      "suites_passed": 298,
+      "suites_failed": 3,
+      "suites_skipped": 1,
+      "tests_passed": 3443,
+      "tests_failed": 3,
+      "tests_skipped": 2,
+      "seconds": 615.452,
+      "log": "backend-tests-before.log"
+    },
+    "backend_lint": {
+      "command": "npm run lint",
+      "exit_code": 2,
+      "reason": "root flat ESLint config ignores TS pattern",
+      "log": "backend-lint-before.log"
+    },
+    "flutter_analyze": {
+      "command": "Flutter tools snapshot analyze --no-pub (launcher fallback)",
+      "exit_code": 1,
+      "errors": 0,
+      "warnings": 0,
+      "infos": 7570,
+      "seconds": 248.7,
+      "log": "flutter-analyze-qa-direct.log"
+    },
+    "flutter_tests": {
+      "command": "Flutter tools snapshot test --no-pub (launcher fallback)",
+      "exit_code": 1,
+      "passed": 1140,
+      "failed": 6,
+      "seconds": 297,
+      "log": "flutter-test-qa.log"
+    }
+  },
+  "db2": {
+    "catalog_confirmed_tables": 10,
+    "catalog_columns": 408,
+    "table_scope": "JAVIER.TEST_*",
+    "reconciliation_initial": {
+      "bags": 9,
+      "consumed_delta": 0,
+      "accumulated_delta": 0,
+      "orphan_movements": 0,
+      "duplicate_movement_keys": 0
+    },
+    "unique_constraints_confirmed": [
+      "UQ_TEST_BOLSA_VND_MES",
+      "UQ_TEST_MOV_BOLSA_IDEMP",
+      "PK_TEST_PEDIDO_IDEMPOTENCY"
+    ],
+    "competitive_rows_before": 0,
+    "rollback_probe": {
+      "real_order_total": 193.89,
+      "restored": true
+    },
+    "patched_helper_probe": {
+      "restored": true,
+      "concurrent_callbacks_peak": 1,
+      "scope": "helper only; not confirmOrder E2E"
+    }
+  },
+  "runtime": {
+    "readiness_http": 503,
+    "transport_ms": 18.588,
+    "db_query_ms": 2,
+    "reason": "missing PIN hash B2; 67/68 active vendors hashed",
+    "device_available": false
+  },
+  "performance": {
+    "scope": "remote backend service + DB2, no HTTP/device",
+    "catalog_cold_ms": [
+      2179.46,
+      3297.74,
+      1872.33,
+      2012.7,
+      1979.2
+    ],
+    "catalog_warm_ms": [
+      0.03,
+      0.01,
+      0.01,
+      0.01,
+      0.01
+    ],
+    "rows_per_page": 50,
+    "after": null
+  },
+  "limitations": [
+    "No actual mobile/tablet profile",
+    "No full new-source confirmOrder E2E yet",
+    "No production writes/deploy",
+    "Baseline suite failures prevent final PASS"
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "readOnly": true,
+  "rows": [
+    {
+      "TABLE_NAME": "TEST_BOLSA_COMERCIAL",
+      "CONSTRAINT_NAME": "PK_TEST_BOLSA_COMERCIAL",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "ENABLED": "YES",
+      "CHECK_CLAUSE": null
+    },
+    {
+      "TABLE_NAME": "TEST_BOLSA_COMERCIAL",
+      "CONSTRAINT_NAME": "UQ_TEST_BOLSA_VND_MES",
+      "CONSTRAINT_TYPE": "UNIQUE",
+      "ENABLED": "YES",
+      "CHECK_CLAUSE": null
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "CONSTRAINT_NAME": "Q_JAVIER_TEST_00196_ID_00001",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "ENABLED": "YES",
+      "CHECK_CLAUSE": null
+    },
+    {
+      "TABLE_NAME": "TEST_MOVIMIENTOS_BOLSA",
+      "CONSTRAINT_NAME": "PK_TEST_MOVIMIENTOS_BOLSA",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "ENABLED": "YES",
+      "CHECK_CLAUSE": null
+    },
+    {
+      "TABLE_NAME": "TEST_MOVIMIENTOS_BOLSA",
+      "CONSTRAINT_NAME": "UQ_TEST_MOV_BOLSA_IDEMP",
+      "CONSTRAINT_TYPE": "UNIQUE",
+      "ENABLED": "YES",
+      "CHECK_CLAUSE": null
+    }
+  ]
+}

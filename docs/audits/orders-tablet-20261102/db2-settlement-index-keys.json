@@ -1,0 +1,20 @@
+{
+  "readOnly": true,
+  "rows": [
+    {
+      "INDEX_NAME": "UX_TEST_LIQCOM_TOKEN",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "INDEX_NAME": "UX_TEST_LIQCOM_VENDOR_DAY",
+      "COLUMN_NAME": "CODIGO_VENDEDOR",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "INDEX_NAME": "UX_TEST_LIQCOM_VENDOR_DAY",
+      "COLUMN_NAME": "FECHA",
+      "ORDINAL_POSITION": 2
+    }
+  ]
+}

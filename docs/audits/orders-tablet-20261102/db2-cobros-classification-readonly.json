@@ -1,0 +1,12 @@
+{
+  "table": "JAVIER.TEST_COBROS",
+  "readOnly": true,
+  "rows": [
+    {
+      "TIPO_USUARIO": "COMERCIAL",
+      "FORMA_PAGO": "CONTADO",
+      "FILAS": 16,
+      "IMPORTE": 15154.43
+    }
+  ]
+}

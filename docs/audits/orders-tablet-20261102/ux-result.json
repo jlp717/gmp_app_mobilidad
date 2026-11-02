@@ -1,15 +1,16 @@
 {
   "status": "ok",
   "node_id": "ux",
-  "summary": "critical order controls below size target",
+  "summary": "The baseline price selector has a 40dp control height, below the requested 56dp target.",
   "facts": [
     {
-      "claim": "critical order controls below size target",
+      "claim": "The baseline price selector has a 40dp control height, below the requested 56dp target.",
       "evidence": [
         {
-          "path": "lib/features/pedidos/presentation/widgets/order_line_tile.dart",
-          "line": 315,
-          "quote": "See source and detailed docs/orders-audit.md"
+          "path": "lib/features/pedidos/presentation/widgets/add_to_order_sheet.dart",
+          "line": 678,
+          "quote": "height: 40,",
+          "commit": "4a36ddd"
         }
       ]
     }
@@ -18,5 +19,7 @@
     "Runtime evidence incomplete; source audit only"
   ],
   "artifacts": [],
-  "confidence": 0.9
+  "confidence": 0.9,
+  "receipt_origin": "Root-normalized Phase 1 discovery receipt; source quote verified against baseline commit, not a raw agent transcript.",
+  "evidence_phase": "historical baseline; does not describe the current patched state"
 }

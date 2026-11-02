@@ -1,15 +1,16 @@
 {
   "status": "ok",
   "node_id": "config",
-  "summary": "missing single APP_ENV profile",
+  "summary": "The baseline table selector depends on the legacy REPARTO_TABLE_SET flag; the new profile work is documented separately.",
   "facts": [
     {
-      "claim": "missing single APP_ENV profile",
+      "claim": "The baseline table selector depends on the legacy REPARTO_TABLE_SET flag; the new profile work is documented separately.",
       "evidence": [
         {
           "path": "backend/utils/db2-schemas.js",
-          "line": 35,
-          "quote": "See source and detailed docs/orders-audit.md"
+          "line": 134,
+          "quote": "if (String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test'",
+          "commit": "4a36ddd"
         }
       ]
     }
@@ -18,5 +19,7 @@
     "Runtime evidence incomplete; source audit only"
   ],
   "artifacts": [],
-  "confidence": 0.9
+  "confidence": 0.9,
+  "receipt_origin": "Root-normalized Phase 1 discovery receipt; source quote verified against baseline commit, not a raw agent transcript.",
+  "evidence_phase": "historical baseline; does not describe the current patched state"
 }
