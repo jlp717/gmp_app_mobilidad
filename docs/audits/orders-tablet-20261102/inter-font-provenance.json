@@ -1,0 +1,57 @@
+{
+  "status": "RESOURCE_PREPARED_NOT_IN_APP_YET",
+  "version": "4.1",
+  "source": "https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip",
+  "licenseSource": "https://raw.githubusercontent.com/rsms/inter/v4.1/LICENSE.txt",
+  "license": "SIL Open Font License 1.1",
+  "archiveSha256": "9883FDD4A49D4FB66BD8177BA6625EF9A64AA45899767DDE3D36AA425756B11E",
+  "archiveBytes": 33707794,
+  "temporaryDirectory": "C:/Users/Javier/AppData/Local/Temp/gmp-orders-inter-4.1-20261103",
+  "familyVerifiedWithFontTools": "Inter",
+  "spanishGlyphsVerified": true,
+  "files": [
+    {
+      "name": "Inter-Regular.ttf",
+      "weight": 400,
+      "bytes": 411640,
+      "sha256": "40D692FCE188E4471E2B3CBA937BE967878F631AD3EBBBDCD587687C7EBE0C82"
+    },
+    {
+      "name": "Inter-Medium.ttf",
+      "weight": 500,
+      "bytes": 417300,
+      "sha256": "97AD806F526E41546D46365BB3A393145F75B7B1568913DB74549AD8B8DBA872"
+    },
+    {
+      "name": "Inter-SemiBold.ttf",
+      "weight": 600,
+      "bytes": 419744,
+      "sha256": "78A843FADE9D4612A5567302FB595B56976EB5FCEBF4FEA5A5912D638BAFCDE3"
+    },
+    {
+      "name": "Inter-Bold.ttf",
+      "weight": 700,
+      "bytes": 420428,
+      "sha256": "288316099B1E0A47A4716D159098005EEF7C0066921F34E3200393DBDB01947F"
+    },
+    {
+      "name": "Inter-ExtraBold.ttf",
+      "weight": 800,
+      "bytes": 421796,
+      "sha256": "E6756AD5690B77606AA62249A7B420D9902D45CAE4B0048A24911FD4324B0A22"
+    },
+    {
+      "name": "Inter-Black.ttf",
+      "weight": 900,
+      "bytes": 419968,
+      "sha256": "6342D3EA6DC088B43867F615E807D898ADF100C93EDB978B8E52C5EB71A264DA"
+    },
+    {
+      "name": "LICENSE.txt",
+      "bytes": 4380,
+      "sha256": "262481E844521B326F5ECD053E59B98C8B2DA78C8EE1BDBB6E8174305E54935A"
+    }
+  ],
+  "integrationPlan": "Sole product writer adds six faces under assets/fonts/inter with license, pubspec family Inter and existing theme family substitution. Golden harness explicitly loads the same faces; no Ahem/HTTP/hardware claim.",
+  "appFilesChangedByRoot": false
+}

@@ -15,3 +15,7 @@ La reparación propuesta es una única intervención sobre `lib/features/pedidos
 Origen del límite: AGENTS.md del repositorio y `C:/Users/Javier/.codex/skills/loop-engineering/SKILL.md`: “Stop after three iterations, two consecutive no-progress rounds, a timeout, a budget limit, a security block, or unresolved ambiguity.” La excepción requiere una nueva instrucción expresa de Javier; el mandato general de autonomía no se usa para eludir el límite.
 
 No afecta a DB2, autenticación, secretos, producción, despliegue ni eliminación de archivos. El backend STATE tiene su revisión independiente separada: 14 suites, 350 pruebas aprobadas; ello no concede PASS a OFF06.
+
+## Autorización recibida
+
+Javier respondió expresamente «Autorizar una reparación adicional acotada» el 02/11/2026 a las 22:00 Europe/Madrid. Gate `orders_off06_exception=PASS`; se mantiene exactamente una intervención y parada si falla. Se ejecutará tras el handoff del escritor actual COLL, sin dos escritores concurrentes. La autorización no implica PASS del resultado.

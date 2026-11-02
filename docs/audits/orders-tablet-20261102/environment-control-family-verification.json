@@ -1,0 +1,24 @@
+{
+  "status": "PASS_SOURCE_SCOPED",
+  "commit": "562eb49120463a91a1c3bebe88600919d6ca90f0",
+  "independent_reviewer": "config_security",
+  "tests": {
+    "command": "npm test -- --runInBand __tests__/db2-isolated-control-tables.test.js __tests__/comercial-runtime-tables.test.js __tests__/commercial-aux-isolation.test.js __tests__/app-profile.test.js",
+    "exit_code": 0,
+    "suites": 4,
+    "passed": 36,
+    "elapsed_seconds": 1.552
+  },
+  "coverage": [
+    "12 tables test/demo/legacy",
+    "mixed case/whitespace test overrides contradictory DSEDAC routing",
+    "7 complete adapter targets in TEST and production",
+    "runtime-invalid fallback remains isolated"
+  ],
+  "database_actions": false,
+  "limits": [
+    "Installed daemon not upgraded",
+    "No production writes or deployment",
+    "Does not replace blocked lifecycle runtime probe"
+  ]
+}

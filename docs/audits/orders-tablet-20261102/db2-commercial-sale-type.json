@@ -1,0 +1,109 @@
+{
+  "readOnly": true,
+  "exit_code": 0,
+  "capture": "Compact facts from actual QSYS2 and parameterized CVC/CAC/LACLAE reads; no collection recorded.",
+  "cvc": {
+    "TIPODOCUMENTO": "COB",
+    "ORIGENDOCUMENTO": "F",
+    "SUBEMPRESADOCUMENTO": "GMP",
+    "EJERCICIODOCUMENTO": 2026,
+    "SERIEDOCUMENTO": "F",
+    "TERMINALDOCUMENTO": 0,
+    "NUMERODOCUMENTO": 13427,
+    "CODIGOCLIENTEALBARAN": "4300040687",
+    "CODIGOVENDEDOR": "35",
+    "CODIGOFORMAPAGO": "C5",
+    "CODIGOFORMAPAGOORIGINAL": "C5"
+  },
+  "cac": [
+    {
+      "SUBEMPRESAALBARAN": "GMP",
+      "EJERCICIOALBARAN": 2026,
+      "SERIEALBARAN": "P",
+      "TERMINALALBARAN": 35,
+      "NUMEROALBARAN": 3816,
+      "CODIGOVENDEDOR": "35",
+      "CODIGOFORMAPAGO": "C5",
+      "SUBEMPRESAFACTURA": "GMP",
+      "EJERCICIOFACTURA": 2026,
+      "SERIEFACTURA": "F",
+      "TERMINALFACTURA": 0,
+      "NUMEROFACTURA": 13427
+    },
+    {
+      "SUBEMPRESAALBARAN": "GMP",
+      "EJERCICIOALBARAN": 2026,
+      "SERIEALBARAN": "P",
+      "TERMINALALBARAN": 35,
+      "NUMEROALBARAN": 3851,
+      "CODIGOVENDEDOR": "35",
+      "CODIGOFORMAPAGO": "C5",
+      "SUBEMPRESAFACTURA": "GMP",
+      "EJERCICIOFACTURA": 2026,
+      "SERIEFACTURA": "F",
+      "TERMINALFACTURA": 0,
+      "NUMEROFACTURA": 13427
+    },
+    {
+      "SUBEMPRESAALBARAN": "GMP",
+      "EJERCICIOALBARAN": 2026,
+      "SERIEALBARAN": "P",
+      "TERMINALALBARAN": 35,
+      "NUMEROALBARAN": 3898,
+      "CODIGOVENDEDOR": "35",
+      "CODIGOFORMAPAGO": "C5",
+      "SUBEMPRESAFACTURA": "GMP",
+      "EJERCICIOFACTURA": 2026,
+      "SERIEFACTURA": "F",
+      "TERMINALFACTURA": 0,
+      "NUMEROFACTURA": 13427
+    },
+    {
+      "SUBEMPRESAALBARAN": "GMP",
+      "EJERCICIOALBARAN": 2026,
+      "SERIEALBARAN": "P",
+      "TERMINALALBARAN": 35,
+      "NUMEROALBARAN": 4044,
+      "CODIGOVENDEDOR": "35",
+      "CODIGOFORMAPAGO": "C5",
+      "SUBEMPRESAFACTURA": "GMP",
+      "EJERCICIOFACTURA": 2026,
+      "SERIEFACTURA": "F",
+      "TERMINALFACTURA": 0,
+      "NUMEROFACTURA": 13427
+    }
+  ],
+  "saleTypes": [
+    {
+      "TIPO_VENTA": "CC",
+      "LINE_COUNT": 8
+    }
+  ],
+  "join": "CVC invoice full subcompany/year/series/terminal/number + customer -> CAC; CAC delivery full subcompany/year/series/terminal/number -> DSED.LACLAE",
+  "testModeSchema": [
+    {
+      "COLUMN_NAME": "TIPO_VENTA",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 5,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null
+    },
+    {
+      "COLUMN_NAME": "TIPO_MODO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null
+    }
+  ],
+  "interpretation": [
+    "Copy the verified ERP LCTPVT code; do not infer it from payment instrument or FPG.",
+    "C5 (90-day terms observed separately) coexists with CC in these eight real lines.",
+    "No NORMAL/ESPECIAL source was verified in the four inspected ERP tables; persist unknown mode as NULL."
+  ],
+  "limits": [
+    "No fresh amount/balance query in this metadata probe",
+    "No payment eligibility or write acceptance claimed",
+    "No proof of absence of a mode field elsewhere in ERP"
+  ]
+}

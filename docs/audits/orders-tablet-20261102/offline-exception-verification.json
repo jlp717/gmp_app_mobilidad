@@ -1,0 +1,31 @@
+{
+  "status": "PASS_LIMITED",
+  "authorization": "Explicit one-off user approval 2026-11-02 22:00 Europe/Madrid",
+  "independent_reviewer": "offline_verifier",
+  "tests": {
+    "exit_code": 0,
+    "passed": 18,
+    "auth_epoch": 2,
+    "offline_queue": 16,
+    "command": "flutter_tools.snapshot test --no-pub test/api/api_client_auth_epoch_mutation_test.dart test/features/pedidos/pedidos_offline_drain_test.dart"
+  },
+  "contracts": [
+    "positive order kind and minimum legacy shape",
+    "migration/status/retry/prepare exclude metadata",
+    "heal only four proven threshold contamination fields, preserve unknown fields",
+    "zero HTTP for metadata; original UTC immutable across init/retry"
+  ],
+  "integration": {
+    "test_file": "test/features/pedidos/pedidos_business_logic_test.dart",
+    "change": "three optional parameters in fakes only",
+    "before_exit": 1,
+    "after_exit": 0,
+    "passed": 45
+  },
+  "limits": [
+    "Host encrypted Hive box remains open during service init; physical process kill/reboot not tested",
+    "No live backend, DB2, HTTP login or mobile hardware proof",
+    "Full global checks remain pending"
+  ],
+  "loop_gate": "WARN Windows launcher discovery; focused commands ran directly"
+}

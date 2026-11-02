@@ -1,0 +1,29 @@
+{
+  "status": "FAIL",
+  "command": "npm.cmd test -- --runInBand",
+  "cwd": "C:\\Users\\Javier\\Desktop\\Repositorios\\gmp_app_mobilidad\\backend",
+  "exit_code": 1,
+  "elapsed_seconds": 545.581,
+  "source": "c9a99bd plus COLL round1 frozen worktree; checkpoint, not final",
+  "suites": {
+    "passed": 305,
+    "failed": 8,
+    "skipped": 1
+  },
+  "tests": {
+    "passed": 3636,
+    "failed": 13,
+    "skipped": 2
+  },
+  "failed_suites": [
+    "openapi-contract",
+    "health-check-e2e",
+    "reparto-server-startup",
+    "entregas-upload-security",
+    "perf-low-risk-contracts",
+    "post-demo-bolsa-draft-uom",
+    "reparto-route-mounts",
+    "pedidos-tanda5-req28"
+  ],
+  "note": "Independent diagnosis in progress; do not alter expectations to hide behavior regressions."
+}

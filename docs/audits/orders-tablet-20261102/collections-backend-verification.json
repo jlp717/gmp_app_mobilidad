@@ -1,0 +1,37 @@
+{
+  "status": "PASS_SOURCE_SCOPED",
+  "commit": "f4b025a",
+  "independent_reviewer": "finance_verifier",
+  "repair_round": 3,
+  "tests": {
+    "command": "npm.cmd run test:targeted -- __tests__/commercial-payment-contract.test.js __tests__/cobros-commercial.test.js __tests__/cobros-legacy.test.js __tests__/cobros_route_contracts.test.js __tests__/comercial-cobro-notify-service.test.js __tests__/comercial-devoluciones-service.test.js __tests__/ddd_route_contracts.test.js __tests__/reparto-cobro-pdf-service.test.js tests/services/cobros-tanda5-req30.test.js --runInBand",
+    "exit_code": 0,
+    "suites": 9,
+    "passed": 254,
+    "elapsed_seconds": 12.882
+  },
+  "closed_findings": [
+    "exact ID/token/cardinality/document-owner replay under dedicated transaction",
+    "legacy debt overlay failure returns503 rather than gross debt",
+    "ERP sale type comes from local header or full CAC invoice to LACLAE delivery identity; modeNULL",
+    "VDDX minimum follows document owner, not collector; missing/changed owner fails closed"
+  ],
+  "lint": {
+    "independent_reviewer": "pricing",
+    "files": 19,
+    "current_warnings": 137,
+    "current_errors": 0,
+    "baseline_228e0e8_warnings": 148,
+    "baseline_4a36ddd_warnings": 154,
+    "new_fingerprints_vs_either": 0,
+    "rules_relaxed": false,
+    "notes": "19-file scope differs from initial18 and producer10; counts not additive"
+  },
+  "limits": [
+    "Source/mocks only, no live payment writes",
+    "Commercial Flutter integration still pending",
+    "Mail best-effort after commit, no durable outbox proof",
+    "Full suite checkpoint remains failed pending reviewed fixture/OpenAPI integration",
+    "Jest --forceExit advisory remains"
+  ]
+}

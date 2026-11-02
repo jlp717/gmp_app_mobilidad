@@ -59,3 +59,13 @@ ssh gmp@192.168.1.230 'curl -A GMP-SRE-HealthCheck/1.0 http://localhost:3335/api
 ```
 
 La comprobación real anterior al despliegue devolvió HTTP 503 por un vendedor activo sin hash PIN (B2); DB2 y Redis respondieron. Este bloqueo de preparación no se ha corregido modificando autenticación ni secretos y requiere su procedimiento específico antes de declarar el entorno listo.
+
+## Compatibilidad observada el 03/11/2026
+
+El diagnóstico de enrutamiento `read-env-profile-conflicts.ps1` ejecutó únicamente el cargador/perfil fijados en `f4b025a`, sin abrir DB2, modificar archivos ni imprimir valores de credenciales. `environment-routing-conflicts-current.json` acredita que **APP_ENV=demo es compatible con la configuración heredada actual: cero contradicciones**. Su perfil mantiene DSEDAC/DSED para lectura, JAVIER.TEST_* para escritura y exportación apagada.
+
+APP_ENV=test encuentra dos contradicciones: NODE_ENV y REPARTO_ENVIRONMENT; el perfil test exige ambos `test`. No se debe cambiar el servidor a TEST sólo para acomodar una sonda. Para esta instalación, el operador debe usar la línea `APP_ENV=demo`, ejecutar los dos comandos env:verify anteriores y seguir el despliegue autorizado. La comprobación de compatibilidad no instala ni reinicia nada.
+
+APP_ENV=production encuentra cuatro selectores heredados que requieren la migración inicial antes de ser válido: NODE_ENV, REPARTO_ENVIRONMENT, REPARTO_TABLE_SET y REPARTIDOR_FINANCE_ERP_SCHEMA. El perfil espera respectivamente production, production, production y DSEDAC. El operador debe retirar esos selectores heredados de su configuración protegida para que APP_ENV derive la combinación, verificar el perfil de sólo lectura y completar los gates de activación. No se han retirado ni se han habilitado escrituras reales durante esta sesión.
+
+La sonda financiera fijó TEST en vez del DEMO compatible; su tercer intento se detuvo antes de DB2 con INVALID_APP_ENV_PROFILE. Es un bloqueo de esa instrumentación bajo su límite de reparaciones, no evidencia de un cobro fallido ni de que el perfil DEMO sea inválido. No se vuelve a ejecutar Run sin una autorización nueva para esa unidad.

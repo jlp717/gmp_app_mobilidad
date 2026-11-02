@@ -1,0 +1,32 @@
+{
+  "status": "BLOCKED",
+  "unit": "FINANCE_CLOSED_CODE",
+  "repairLimit": 3,
+  "repairsUsed": 3,
+  "runExecuted": false,
+  "productionWrites": 0,
+  "newCollections": 0,
+  "newSettlements": 0,
+  "finalWrapperSha256": "F4035D7FF8A6DCC91107CE0DAD1980155E1001115D2753475533779C42866084",
+  "finalRuntimeSha256": "1895182D29BEC05F1E186BA09950FBA78051D29F16252EEAD93D4E0E7B524431",
+  "sourceCommit": "f4b025a11335599bbb4dcd99d382f778bac6e2a0",
+  "sourceManifest": "6133d1e64128f173230fa100526218e5773d60a2daa3097793131a576e178ea2",
+  "finalEvidence": "finance-readonly-preflight-round3.jsonl",
+  "finalPhase": "SETUP",
+  "finalCode": "INVALID_APP_ENV_PROFILE",
+  "finalDbQueries": 0,
+  "finalMutations": 0,
+  "allPhysicalConnectionsClosed": true,
+  "independentReviews": {
+    "finance_verifier": "BLOCKED_FINAL_EXHAUSTED",
+    "config_security": "BLOCKED_FINAL_EXHAUSTED"
+  },
+  "cause": "Harness explicitly selected TEST; current inherited NODE_ENV and REPARTO_ENVIRONMENT are staging and the separate environment diagnostic proves DEMO is compatible.",
+  "restrictions": [
+    "Do not run Mode Run.",
+    "Do not apply repair 4 or replace this with an equivalent renamed operational probe.",
+    "No server configuration changes to accommodate this instrument.",
+    "Original 32 SELECT ReadOnly success is an earlier harness, not approval of this final version."
+  ],
+  "required": "New explicit authority to reopen this blocked operational unit; review and a green ReadOnly on the exact future artifact before any TEST write."
+}

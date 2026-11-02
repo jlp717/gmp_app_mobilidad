@@ -1,0 +1,58 @@
+{
+  "readOnly": true,
+  "exit_code": 0,
+  "capture": "Compact transcription of actual independent SSH/ODBC SELECT result after maintenance connection was physically closed; no DML repeated.",
+  "header": [
+    {
+      "ID": 112,
+      "ESTADO": "CANCELADO",
+      "IMPORTETOTAL": 30.29,
+      "OBSERVACIONES": "OTDstate2026110222f9c03be8reference"
+    }
+  ],
+  "reserve": [],
+  "movements": [],
+  "events": [
+    {
+      "ID": "9",
+      "FROM_STATE": null,
+      "TO_STATE": "BORRADOR",
+      "ACTOR_ID": "35",
+      "ACTOR_ROLE": "COMERCIAL",
+      "DEVICE_ID": "QA-LIFECYCLE-TEST",
+      "IDEMPOTENCY_KEY": "pedido-112-created-ab8bb12560b056566fd8ae5c",
+      "PAYLOAD_HASH": "2a2dfb4e79f57909ebc3a4d412cb9488d2eeaeaf23d018a520a2bc68de2fa6c4",
+      "ORIGINAL_CLIENT_AT": "2026-11-02 20:53:07.147000",
+      "SERVER_OCCURRED_AT": "2026-11-02 22:51:05.823304",
+      "payloadHashVerified": true
+    },
+    {
+      "ID": "10",
+      "FROM_STATE": "BORRADOR",
+      "TO_STATE": "CANCELANDO",
+      "ACTOR_ID": "QA_COORDINATOR",
+      "ACTOR_ROLE": "SYSTEM_TEST",
+      "DEVICE_ID": "QA-MAINTENANCE",
+      "IDEMPOTENCY_KEY": "qa-compensation-112-20261102-start",
+      "PAYLOAD_HASH": "6fbddb521ae03bbafd5519ecfdc61b18ac1f9c24df715e2d8970a17ae4d2b9df",
+      "ORIGINAL_CLIENT_AT": "2026-11-02 20:53:07.147000",
+      "SERVER_OCCURRED_AT": "2026-11-02 23:04:05.058149",
+      "payloadHashVerified": true
+    },
+    {
+      "ID": "11",
+      "FROM_STATE": "CANCELANDO",
+      "TO_STATE": "CANCELADO",
+      "ACTOR_ID": "QA_COORDINATOR",
+      "ACTOR_ROLE": "SYSTEM_TEST",
+      "DEVICE_ID": "QA-MAINTENANCE",
+      "IDEMPOTENCY_KEY": "qa-compensation-112-20261102-done",
+      "PAYLOAD_HASH": "7d56906901044efece1a35c4924b9d4d4bce34836755d4e056b25cf83ff69a3a",
+      "ORIGINAL_CLIENT_AT": "2026-11-02 20:53:07.147000",
+      "SERVER_OCCURRED_AT": "2026-11-02 23:04:05.124289",
+      "payloadHashVerified": true
+    }
+  ],
+  "passed": true,
+  "scope": "Fixture recovery only. Not product cancelOrder, lifecycle or STATE03 acceptance."
+}

@@ -1,0 +1,48 @@
+{
+  "status": "VETO",
+  "unit": "READ_MODEL",
+  "iteration": 1,
+  "independentQa": {
+    "distinctSuites": 11,
+    "distinctTests": 155,
+    "testsExit": 0,
+    "syntaxFiles": 7,
+    "syntaxExit": 0,
+    "lintErrors": 0,
+    "lintInheritedWarnings": 35,
+    "diffCheckExit": 0,
+    "database": false,
+    "sdk": false
+  },
+  "independentSecurity": {
+    "suites": 4,
+    "tests": 100,
+    "testsExit": 0,
+    "database": false,
+    "sdk": false
+  },
+  "findings": [
+    {
+      "requirement": "READ04",
+      "code": "CONTRADICTORY_PROFILE_READS_TEST_AUDIT",
+      "source": "backend/services/pedidos/order-state-events.js:358"
+    },
+    {
+      "requirement": "Commercial field visibility",
+      "code": "TIMELINE_EXPOSES_PRICE_FLOOR",
+      "source": "backend/services/pedidos/order-state-events.js:272"
+    },
+    {
+      "requirement": "Bounded history",
+      "code": "UNBOUNDED_ALL_CLOB_LOAD",
+      "source": "backend/services/pedidos/order-state-events.js:188"
+    },
+    {
+      "requirement": "Published response contract",
+      "code": "PUBLIC_IDEMPOTENCY_KEY_UNDECLARED_PAYLOAD_OPEN",
+      "source": "backend/services/pedidos/order-state-events.js:343"
+    }
+  ],
+  "repair2Plan": "Strict coherent profile; bounded metadata cursor pages; one opt-in event snapshot scoped to order; no public floor/idempotency/hash; nested closed OpenAPI allowlists; role and boundary tests.",
+  "loopGate": "BLOCKED baseline fictitious OpenAPI inline login example; independent manual review approved only placeholder scalar replacement, not scanner changes."
+}

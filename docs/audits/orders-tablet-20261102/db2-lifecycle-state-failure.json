@@ -1,0 +1,34 @@
+{
+  "status": "FAILED",
+  "exit_code": 1,
+  "source_commit": "c9a99bd",
+  "wrapper_sha256": "0be205fa63b0f4f837fe8a4033d7bc0cedcccc7eafaa18c9b39b26822a7aadc7",
+  "runtime_sha256": "c337426279265eb7ddd8706988ec52781303d3ebf727a93f492a27665c33609a",
+  "single_run_consumed": true,
+  "actual_result": "Primary evidence emission failed because native DB2 audit ID is JavaScript bigint; wrapper finally could not serialize it. Guarded source compensation refused non-TEST control-table locks.",
+  "created": {
+    "orderId": 112,
+    "lineId": 128,
+    "reservationId": 84,
+    "auditId": "9",
+    "total": 30.29,
+    "state_before_compensation": "BORRADOR",
+    "bag_movements": 0,
+    "monthlyBagId": 14
+  },
+  "native_type_read": {
+    "exit_code": 0,
+    "audit_id_type": "bigint",
+    "payload_json_type": "string"
+  },
+  "compensation": "db2-owned112-compensation.json; operational exit1 after committed data, observer lock -913",
+  "independent_postcheck": "db2-owned112-readonly-postcheck.json exit0",
+  "claims_not_supported": [
+    "confirmation flow",
+    "product cancellation",
+    "full lifecycle",
+    "STATE03 provenance",
+    "HTTP/UI/E2E"
+  ],
+  "next": "No automatic retry. Correct central environment family mapping under separate ENV contract; final runtime repair requires new independent review."
+}

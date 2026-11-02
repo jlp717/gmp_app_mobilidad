@@ -1,19 +1,21 @@
-# Evidencia de pedidos en tablet — 02/11/2026
+# Evidencia de pedidos en tablet — run iniciado 02/11/2026
 
 **Checkpoint de implementación en curso. Demo completa: no aprobada.** Este documento distingue las pruebas ejecutadas de los requisitos todavía pendientes. Rama `codex/orders-tablet-demo-20261102`, creada desde `test` en `4a36ddd`. No hubo push, despliegue, reinicio PM2 ni escritura en tablas de producción.
+
+La sesión ha cruzado medianoche: el entorno confirma **03/11/2026 Europe/Madrid**. Las lecturas y ejemplos del 02/11 conservan su fecha histórica. Ningún cobro nuevo puede presentarse como realizado el día 02 ni se retrodata el reloj del servidor para reproducirlo. Las secciones de checkpoint se conservan como historial; la tabla siguiente se actualiza con la última evidencia disponible.
 
 ## Estado por unidad
 
 | Unidad | Estado del requisito completo | Evidencia conseguida | Pendiente |
 |---|---|---|---|
 | Descubrimiento y plan | DONE | `orders-audit.md`, `orders-plan.md`, grafo validado de 12 nodos; nueve especialistas y reducción con citas verificadas del commit base | Las mediciones posteriores se añaden sin sustituir la línea base |
-| Confirmación local, reserva y Bolsa | PARTIAL | Una conexión dedicada y una transacción; fallo después del movimiento real revierte las cuatro tablas; confirmación y replay reales correctos. Fuente `9008cdf`: revisión independiente 157/157, creación/edición serializadas con confirmación y relectura autoritativa bajo lock | Sonda real de la nueva creación/concurrencia, anulación y ramas de exportación |
-| Cola offline y umbral | PARTIAL | Verificador independiente: 14/14; regresión del maker: 90/90; backend: 23/23. FIFO, umbral 2+1, drafts separados, cambio de cuenta y retry durable | Fecha original en servidor y recorrido con red/dispositivo reales |
+| Confirmación local, reserva y Bolsa | PARTIAL | Confirmación y replay reales; CREATE/rollback/replay/concurrencia real `9008cdf`; estados/anulación auditada `c9a99bd` revisados con 350 pruebas | Ciclo completo de anulación del producto en DB2; sonda operativa BLOCKED tras tres reparaciones; procedencia durable de coste STATE03 BLOCKED; exportación no validada |
+| Cola offline y umbral | PARTIAL | FIFO, umbral 2+1, drafts separados, cambio de cuenta y retry durable; timestamp UTC original y metadata separada en `228e0e8`, 18 pruebas independientes de la excepción autorizada | Recorrido de red y reapertura física del dispositivo; el harness Hive no acredita reboot físico |
 | Perfil de entorno y aviso Flutter | PARTIAL | 80/80 Node, 4/4 Flutter, AppSec independiente; tres perfiles con ocho objetos DB2 correctos mediante SELECT | Instalar la versión, limpiar contradicciones heredadas y comprobar el entorno instalado; gates de producción sin activar |
 | Controles de precio y cantidad | PARTIAL | 25 pruebas: dos modales en 24 combinaciones y selección correcta entre tarifas de igual precio | Pantallas completas, PNG y validación física de safe area, teclado y fluidez |
-| Precios especiales y competitivo | PARTIAL | PES/CLP real vigente identificado; tabla competitiva TEST existe y estaba vacía | Precio autoritativo en creación, semilla real idempotente, lectura informativa en UI y pruebas completas |
-| Reservas de 24 h y estados | PARTIAL | Disponibilidad y TTL derivan de la creación de cabecera, sin renovar al editar; fuente revisada. Tabla de auditoría real creada, journal activo y cinco probes revertidos correctos | Cableado de auditoría, recuperación tras caída y cancelación local conservando historia; instalador reutilizable BLOCKED |
-| Cobros y liquidación comercial | PARTIAL | Commit `7bc6344`, 56/56 Node y 34/34 Flutter independientes. Último LQD/arrastre del servidor, replay y revisión optimista, roles y guardado vacío comprobados | UI/API de tres métodos, cierre con cobros reales y documento/cabecera de liquidación |
+| Precios especiales y competitivo | PARTIAL | `466b0e6`: precio/coste autoritativos y conflictos tipados; semilla competitiva real idempotente con dos filas y batch de lectura acreditado | Último precio y competitivo en formulario; prioridad PES/promoción superpuesta sin caso ERP acreditado |
+| Reservas de 24 h y estados | PARTIAL | TTL desde creación servidor sin renovación al editar; auditoría transaccional y cancelación conservando datos en fuente; tabla real con journal y cinco probes revertidos | Recorrido de cancelación del producto en DB2, recuperación tras caída; instalador reutilizable y sonda runtime BLOCKED |
+| Cobros y liquidación comercial | PARTIAL | `7bc6344` y `f4b025a`: arrastre LQD, totales servidor, replay/rol/propietario/mínimo VDDX; revisión independiente backend comercial 254/254, cero nuevos avisos en 19 archivos | Cliente de tres métodos y aislamiento de selección en curso; cobros reales/cierre y documento con cabecera real pendientes |
 | Rendimiento | PARTIAL | Tiempos reales de servicio/DB2 y diagnóstico de bloqueo ODBC | Mejora del catálogo, índice local, render/transiciones/FPS y medición en jefe de ventas con móvil |
 | Guion de demo y reset | PARTIAL | `demo-script.md` contiene pasos, guardas y condiciones STOP explícitas | Scripts de semilla/reset del run y ejecución completa |
 
@@ -144,3 +146,62 @@ La lectura competitiva real encontró esos dos artículos mediante una consulta 
 `db2-b2-eligibility.json` acredita sin devolver credenciales que B2 pertenece tanto a la población de readiness como a los usuarios elegibles de login, tiene VDD y no tiene hash. No procede excluirlo ni relajar el health check. El CLI heredado de backfill no se ha ejecutado ni se recomienda: su dry-run puede hacer DDL antes de comprobar el modo y sus errores pueden imprimir información nativa. La intervención de autenticación requiere un procedimiento específico revisado y autorización manual; no es una escritura TEST de este mandato.
 
 La revisión encontró datos de PIN en un archivo versionado preexistente: `docs/archive/audits/db2-discovery/agent1-dsedac-mapping.json`. No se ha abierto para copiar valores, no se incluyen en esta evidencia y no se ha realizado rotación ni reescritura de historia. El incidente se comunicó al propietario. La ausencia de patrones del scanner sobre archivos cambiados no acredita que el histórico completo esté libre de secretos.
+
+
+## Integración posterior: offline, cobros y fallo de la sonda
+
+`228e0e8` conserva el timestamp original UTC y separa metadata de pedidos. La excepción autorizada pasó 18/18 pruebas independientes; tres fakes de API se alinearon con el parámetro opcional y sus 45 pruebas pasaron. El reinicio físico de un dispositivo sigue sin medir; se reinicializó el servicio sobre Hive en el harness host.
+
+`562eb49` corrige el resolver central de las doce familias TEST, incluidas las tres tablas de control de entrega. AppSec reprodujo 36/36 pruebas con exit 0; la prueba contradictoria con APP_ENV mixto y permisos DSEDAC sigue devolviendo TEST. La modificación no despliega el servidor ni acredita DML por sí sola.
+
+`f4b025a` contiene el backend comercial de cobros: 19 archivos, +1706/-727. Su tercera revisión independiente pasó 254/254, con replay exacto, ambos ledgers, propietario/cobrador separados, mínimo VDDX del propietario y condición ERP leída mediante la identidad completa. El caso real F-0-13427 acredita C5 junto con CC en ocho líneas; no se deduce el tipo por instrumento ni por FPG. TIPO_MODO queda NULL porque no hay fuente acreditada. La lectura completa está resumida en `db2-commercial-sale-type.json`; no se registró ningún cobro con esa sonda.
+
+La revisión de lint encontró primero 27 avisos nuevos que el productor había clasificado mal. Se corrigieron manualmente sin cambiar reglas ni suprimir diagnósticos. La comprobación independiente final sobre 19 archivos dio 137 avisos históricos/0 errores y cero huellas nuevas frente a 228e0e8 y 4a36ddd. El lint global y el lint backend son comandos distintos; el exit 0 global con miles de avisos no reemplaza los 242 errores TS heredados del backend.
+
+### Incidente de validación y recuperación del pedido 112
+
+La única ejecución de la sonda de ciclo creó el pedido TEST 112, línea 128 y reserva 84, con artículo 3519, cantidades 1/1 y total 30,29 €. Se registró correctamente el evento inicial ID 9 con CLOB y timestamp UTC original. La sonda falló al serializar el ID BIGINT nativo de DB2 y no pudo emitir su evidencia completa; su compensación mediante el servicio rechazó los destinos de control no aislados que motivaron el posterior ajuste ENV. No hubo confirmación ni movimiento de bolsa. `db2-lifecycle-state-failure.json` conserva el fallo: no se presenta como un ciclo aprobado.
+
+Una operación de mantenimiento independiente, revisada por QA y AppSec, dejó 112 CANCELADO y liberó exclusivamente la reserva 84. Conservó cabecera, línea, idempotencia, secuencia, bolsa y evento original; añadió dos eventos SYSTEM_TEST (IDs 10 y 11). Los hashes de ocho conjuntos de filas ajenas se verificaron antes del commit. El script terminó exit 1 porque intentó postcheck desde otro observador antes de cerrar la conexión con locks explícitos. La lectura separada después del cierre terminó exit 0 y confirmó CANCELADO, cero reservas/movimientos y tres hashes de CLOB válidos. Ambos resultados se conservan separados en `db2-owned112-compensation.json` y `db2-owned112-readonly-postcheck.json`.
+
+La bolsa mensual canónica creada por el servicio para vendedor 35/noviembre, ID 14, permanece con disponible 300, consumido 0 y acumulado 0. Es una fixture declarada, sin movimientos inventados. No se rebobinaron identidades ni secuencias.
+
+La última reparación de la sonda operativa queda **BLOCKED tras tres intentos**: sus cierres de observer/pool no cubren todos los errores de apertura/cierre. No se ha ejecutado esa última versión y no se permite repair 4 automático. `runtime-probe-blocker.json` identifica SHA y veto. No ejecutar estos scripts con -Run. La procedencia durable del coste en auditoría STATE03 también sigue BLOCKED; conservar el número del coste no equivale a conservar su fuente.
+
+El control `node scripts/team/sync-harness.cjs --check` terminó exit 1: faltan cuatro espejos .opencode de skills; no se modificó configuración del equipo para ocultar el drift. La suite backend completa del checkpoint terminó exit 1: 305 suites aprobadas, 8 fallidas, 1 omitida; 3636 tests aprobados, 13 fallidos, 2 omitidos, 545,581 s. La revisión independiente atribuye un contrato OpenAPI omitido (/runtime-profile) y siete grupos de fixtures obsoletos; la reparación aún no se ha ejecutado. El siguiente pase completo debe validar el árbol final.
+
+## Conciliación real y preflight financiero del 03/11
+
+`read-commercial-integrity.ps1` ejecutó ocho SELECT con metadatos previos y cero DML; la conexión física se cerró antes de emitir el resultado. La segunda lectura conservada en `db2-commercial-reconciliation-current.json` terminó exit 0, con 59,657 ms de consultas: diez bolsas, 27 movimientos, 39 pedidos y 32 reservas. No hay claves duplicadas, huérfanos, tipos desconocidos ni diferencias de consumo/acumulación. Las cinco cadenas con movimientos terminan en el saldo almacenado; las cinco bolsas sin movimientos no tienen snapshot de apertura y su saldo absoluto no se reconstruye por suposición. No había reversos en esta muestra: la ausencia de errores no prueba el nuevo recorrido de anulación con movimientos. El pedido 112 sigue CANCELADO, sin reserva ni movimiento. El especialista Bolsa revisó independientemente las fórmulas y limitaciones: PASS_OBSERVED_AGGREGATE, no PASS del ciclo completo.
+
+El primer canal de lectura del especialista falló por selección de SSH/restricciones locales. Git SSH con acceso autorizado al archivo known_hosts permitió al coordinador ejecutar la lectura; no se trató de una reparación ni escritura DB2. Los hashes del JSON cubren sólo las columnas económicas/referenciales declaradas, y las ocho lecturas no constituyen un snapshot transaccional.
+
+La unidad financiera es independiente de la sonda STATE bloqueada. `probe-finance-closed-code.ps1` fija quince fuentes de negocio de `f4b025a`; reemplaza únicamente transporte y dependencias no utilizadas, impide cargar el backend instalado diferente, y separa DryRun, ReadOnly y Run. No se ha ejecutado Run. El primer ReadOnly se detuvo en SETUP, con cero consultas/conexiones/mutaciones, por resolver incorrectamente módulos *.service/*.repository; una reparación de resolución a *.js precedió al segundo ReadOnly.
+
+`finance-readonly-preflight.jsonl` conserva los checkpoints BEFORE_MUTATION y FINAL del preflight nativo posterior: exit 0, 32 SELECT, cero DML y todas las conexiones cerradas. La fecha real es 03/11/2026, no se retrodata el mandato del día 02.
+
+| Documento CVC exacto | Cliente / propietario | Pendiente real | Importe documental | Condición / instrumento previsto |
+|---|---|---:|---:|---|
+| CVC:COB:F:GMP:2026:F:0:13427:1:1 | 4300040687 / 35 | 738,46 | 738,47 | C5 / efectivo CONTADO |
+| CVC:COB:F:GMP:2026:F:0:13423:1:1 | 4300032575 / 35 | 139,02 | 426,34 | 02 / tarjeta TJ |
+| CVC:COB:F:GMP:2026:F:0:13422:1:1 | 4300032572 / 35 | 1.031,53 | 1.031,53 | 02 / transferencia TR |
+
+Los tres tipos de venta se resolvieron mediante el código fijado a CC, sin deducirlos de la forma de pago. Los tres clientes carecen de cobro riguroso activo; el mínimo del vendedor leído es 25 %. El resumen del día 03 no contiene cobros ni borrador guardado, y deriva 29,15 € de la última LQD viva número 170 del día 02. Ese preflight no registra un pago ni genera una liquidación; Run requiere revisión funcional y de seguridad independiente del artefacto exacto.
+
+## Veto de READ_MODEL, iteración 1
+
+El nuevo GET de detalle/catálogo pasó 155 pruebas distintas de once suites en QA independiente, pero recibió veto: perfiles contradictorios podían consultar auditoría TEST; el snapshot exponía precioMinimo a COMERCIAL; se cargaban CLOB de todos los eventos sin límite, y la propiedad pública idempotencyKey no coincidía con OpenAPI. AppSec reprodujo 100 pruebas de cuatro suites y los hallazgos de exposición/límite/contrato. Las pruebas verdes no levantan ese veto.
+
+La reparación 2 está planificada sin escribir mientras el escritor único completa COLL cliente: conjunción estricta del perfil, timeline paginado sin CLOB por defecto, snapshot individual bajo demanda, eliminación de suelo/clave del DTO público y esquema allowlist cerrado. No reabre STATE03 ni la sonda operativa bloqueada.
+
+El loop gate detectó además un ejemplo ficticio preexistente en OpenAPI al escanear el archivo completo. AppSec comprobó que la línea coincide exactamente con HEAD mediante SHA-256 sin copiar su valor. Se ha autorizado cambiar únicamente ese scalar de ejemplo a `<provided-at-runtime>`, manteniendo contrato, autenticación y detector. El gate continúa BLOCKED hasta ejecutar la reparación y repetirlo; la clasificación manual no equivale a aprobarlo mecánicamente.
+
+### Límite posterior de la instrumentación financiera
+
+El ReadOnly de 32 consultas corresponde a la primera versión del harness, con quince fuentes selladas y cargador instalado. La revisión independiente no autorizó Run: exigió sellar el wrapper/bootstrap/manifiesto, conservar inventario propio ante commit parcial, limitar operaciones nativas y comprobar todos los importes de liquidación.
+
+La revisión 2 fijó diecisiete fuentes y commit completo, ambos SHA de scripts, manifiesto `6133d1e64128f173230fa100526218e5773d60a2daa3097793131a576e178ea2`, límites de consulta/conexión/transacción/cierre y watchdog, huella monetaria y postflight de fallo. ReadOnly 2 se detuvo en SETUP con VERIFIED_ISOLATED_RUNTIME_REQUIRED, cero consultas y mutaciones. La reparación 3 seleccionó TEST en ese proceso y aplicó el nuevo arranque; ReadOnly 3 se detuvo en SETUP con INVALID_APP_ENV_PROFILE, también antes de DB2. No hubo Run ni cobro nuevo en ningún intento. La unidad queda BLOCKED tras tres reparaciones, sin una cuarta automática.
+
+El diagnóstico separado de perfiles aclaró la causa sin tocar el servidor: **DEMO es compatible con la configuración actual, con cero errores; TEST contradice NODE_ENV y REPARTO_ENVIRONMENT heredados**. La sonda fijó el selector TEST incorrecto para esa compatibilidad; no se acusa a DEMO de estar mal ni se modifica el servidor para hacer pasar un ensayo. El operador puede preparar APP_ENV=demo y verificarlo con el procedimiento documentado. Este hecho no levanta el límite ni autoriza volver a ejecutar el harness financiero.
+
+El diagnóstico de perfiles tuvo un primer fallo de compilación por filename de módulo sin inicializar (exit 255, antes del cargador/DB); una reparación acotada añadió los dos filename y terminó exit 0, cero conexiones DB y cero mutaciones. Su JSON y script se conservan separados de la sonda financiera. La documentación de límites nativos se contrastó con [node-odbc de IBM](https://github.com/IBM/node-odbc) y [el comportamiento de timeout de IBM i](https://www.ibm.com/docs/en/i/7.5.0?topic=details-handle-long-running-queries); configurar timeout no se presenta como prueba de cancelación efectiva de un proceso colgado.

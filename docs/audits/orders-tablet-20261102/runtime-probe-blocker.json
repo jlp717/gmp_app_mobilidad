@@ -1,0 +1,22 @@
+{
+  "status": "BLOCKED",
+  "unit": "STATE runtime probe",
+  "repair_iteration": 3,
+  "wrapper_sha256": "721129a5f3d693b78d83bd53d924513cbf9f11b054cf0acbdaf46459316ab36b",
+  "runtime_sha256": "49c7b1aa4a56fe09cf131e71b315006f4bb980ad939c053faaeb8bb4b1cb185e",
+  "source_commit": "562eb49120463a91a1c3bebe88600919d6ca90f0",
+  "code": "CLOSURE_NOT_EXHAUSTIVE",
+  "cause": "observer/pool open before outer cleanup and sequential closes may skip remaining resources after first failure",
+  "reviewers": [
+    "config_security",
+    "qa"
+  ],
+  "new_Run_permitted": false,
+  "automatic_fourth_repair_permitted": false,
+  "disconnected_selftest": {
+    "exit_code": 0,
+    "passed": 20
+  },
+  "independent_cost_provenance_requirement": "STATE03 BLOCKED: audit omits cost source",
+  "owned_fixture112": "Recovered with separately reviewed maintenance and independent read-only postcheck exit0; no reservation/movement remains."
+}
