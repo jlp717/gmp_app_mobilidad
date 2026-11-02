@@ -153,8 +153,8 @@ describe('Email PDF Service', () => {
         });
         expect(html).toContain('Factura FAV-99');
         expect(html).toContain('Cliente &lt;script&gt;');
-        expect(html).toContain('12.50');
-        expect(html).toContain('2026-09-03');
+        expect(html).toContain('12,50 €');
+        expect(html).toContain('03/09/2026');
         expect(html).not.toContain('<script>');
 
         const custom = service.generateInvoiceEmailHtml({
