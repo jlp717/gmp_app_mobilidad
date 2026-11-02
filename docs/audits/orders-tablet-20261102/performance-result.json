@@ -1,0 +1,22 @@
+{
+  "status": "partial",
+  "node_id": "performance",
+  "summary": "real timings unavailable; SSH/ODBC blocked",
+  "facts": [
+    {
+      "claim": "real timings unavailable; SSH/ODBC blocked",
+      "evidence": [
+        {
+          "path": "lib/features/pedidos/presentation/widgets/product_search_widget.dart",
+          "line": 53,
+          "quote": "See source and detailed docs/orders-audit.md"
+        }
+      ]
+    }
+  ],
+  "risks": [
+    "Runtime evidence incomplete; source audit only"
+  ],
+  "artifacts": [],
+  "confidence": 0.9
+}

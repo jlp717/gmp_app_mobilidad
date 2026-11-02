@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "node_id": "offline",
+  "summary": "no temporal backoff; default concurrency breaks FIFO",
+  "facts": [
+    {
+      "claim": "no temporal backoff; default concurrency breaks FIFO",
+      "evidence": [
+        {
+          "path": "lib/features/pedidos/data/pedidos_offline_service.dart",
+          "line": 330,
+          "quote": "See source and detailed docs/orders-audit.md"
+        }
+      ]
+    }
+  ],
+  "risks": [
+    "Runtime evidence incomplete; source audit only"
+  ],
+  "artifacts": [],
+  "confidence": 0.9
+}

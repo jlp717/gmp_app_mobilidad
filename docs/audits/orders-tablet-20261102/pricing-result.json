@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "node_id": "pricing",
+  "summary": "special/promo priority differs UI and confirm",
+  "facts": [
+    {
+      "claim": "special/promo priority differs UI and confirm",
+      "evidence": [
+        {
+          "path": "lib/features/pedidos/presentation/widgets/add_to_order_sheet.dart",
+          "line": 204,
+          "quote": "See source and detailed docs/orders-audit.md"
+        }
+      ]
+    }
+  ],
+  "risks": [
+    "Runtime evidence incomplete; source audit only"
+  ],
+  "artifacts": [],
+  "confidence": 0.9
+}

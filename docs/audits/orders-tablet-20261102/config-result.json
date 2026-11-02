@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "node_id": "config",
+  "summary": "missing single APP_ENV profile",
+  "facts": [
+    {
+      "claim": "missing single APP_ENV profile",
+      "evidence": [
+        {
+          "path": "backend/utils/db2-schemas.js",
+          "line": 35,
+          "quote": "See source and detailed docs/orders-audit.md"
+        }
+      ]
+    }
+  ],
+  "risks": [
+    "Runtime evidence incomplete; source audit only"
+  ],
+  "artifacts": [],
+  "confidence": 0.9
+}

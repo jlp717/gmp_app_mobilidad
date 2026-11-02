@@ -1,0 +1,490 @@
+{
+  "version": "1",
+  "run_id": "orders-tablet-20261102",
+  "goal": "Professionalize commercial orders and report measured demo readiness without production writes",
+  "settings": {
+    "max_concurrent": 8,
+    "max_rounds": 3,
+    "empty_rounds_to_stop": 2,
+    "default_mode": "barrier"
+  },
+  "nodes": [
+    {
+      "id": "ux",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "facts": {
+            "type": "array"
+          },
+          "risks": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary",
+          "facts",
+          "risks"
+        ]
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "performance",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "facts": {
+            "type": "array"
+          },
+          "risks": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary",
+          "facts",
+          "risks"
+        ]
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "offline",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "facts": {
+            "type": "array"
+          },
+          "risks": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary",
+          "facts",
+          "risks"
+        ]
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "inventory",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "facts": {
+            "type": "array"
+          },
+          "risks": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary",
+          "facts",
+          "risks"
+        ]
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "pricing",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "facts": {
+            "type": "array"
+          },
+          "risks": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary",
+          "facts",
+          "risks"
+        ]
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "bolsa",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "facts": {
+            "type": "array"
+          },
+          "risks": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary",
+          "facts",
+          "risks"
+        ]
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "finance",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "facts": {
+            "type": "array"
+          },
+          "risks": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary",
+          "facts",
+          "risks"
+        ]
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "config",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "facts": {
+            "type": "array"
+          },
+          "risks": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary",
+          "facts",
+          "risks"
+        ]
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "qa",
+      "kind": "agent",
+      "role": "graph_qa",
+      "model_tier": "premium",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "facts": {
+            "type": "array"
+          },
+          "risks": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary",
+          "facts",
+          "risks"
+        ]
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "reduce",
+      "kind": "code",
+      "role": "deterministic-reducer",
+      "model_tier": "cheap",
+      "input_schema": {
+        "type": "array"
+      },
+      "output_schema": {
+        "type": "array"
+      },
+      "writes": [],
+      "requires_all_inputs": true
+    },
+    {
+      "id": "maker",
+      "kind": "agent",
+      "role": "single-writer-specialist-sequential",
+      "model_tier": "premium",
+      "input_schema": {
+        "type": "array"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "writes": [
+        "lib/features/pedidos/**",
+        "lib/features/bolsa/**",
+        "backend/services/pedidos/**",
+        "backend/services/bolsa-comercial.service.js",
+        "backend/config/app-profile.js",
+        "backend/tests/**",
+        "test/features/pedidos/**",
+        "docs/orders-audit.md",
+        "docs/orders-plan.md",
+        "docs/demo-script.md",
+        "docs/orders-evidence.md"
+      ],
+      "requires_all_inputs": true
+    },
+    {
+      "id": "verifier",
+      "kind": "agent",
+      "role": "graph_verifier",
+      "model_tier": "premium",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "facts": {
+            "type": "array"
+          },
+          "risks": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary",
+          "facts",
+          "risks"
+        ]
+      },
+      "writes": [],
+      "requires_all_inputs": true
+    }
+  ],
+  "edges": [
+    {
+      "from": "ux",
+      "to": "reduce",
+      "data": "ux-findings"
+    },
+    {
+      "from": "performance",
+      "to": "reduce",
+      "data": "performance-findings"
+    },
+    {
+      "from": "offline",
+      "to": "reduce",
+      "data": "offline-findings"
+    },
+    {
+      "from": "inventory",
+      "to": "reduce",
+      "data": "inventory-findings"
+    },
+    {
+      "from": "pricing",
+      "to": "reduce",
+      "data": "pricing-findings"
+    },
+    {
+      "from": "bolsa",
+      "to": "reduce",
+      "data": "bolsa-findings"
+    },
+    {
+      "from": "finance",
+      "to": "reduce",
+      "data": "finance-findings"
+    },
+    {
+      "from": "config",
+      "to": "reduce",
+      "data": "config-findings"
+    },
+    {
+      "from": "qa",
+      "to": "reduce",
+      "data": "qa-findings"
+    },
+    {
+      "from": "reduce",
+      "to": "maker",
+      "data": "deduplicated-source-backed-plan"
+    },
+    {
+      "from": "maker",
+      "to": "verifier",
+      "data": "diff-and-test-evidence"
+    }
+  ]
+}

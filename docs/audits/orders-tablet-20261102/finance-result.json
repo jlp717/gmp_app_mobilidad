@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "node_id": "finance",
+  "summary": "settlement can save with no registered collections",
+  "facts": [
+    {
+      "claim": "settlement can save with no registered collections",
+      "evidence": [
+        {
+          "path": "backend/services/comercial-devoluciones-service.js",
+          "line": 921,
+          "quote": "See source and detailed docs/orders-audit.md"
+        }
+      ]
+    }
+  ],
+  "risks": [
+    "Runtime evidence incomplete; source audit only"
+  ],
+  "artifacts": [],
+  "confidence": 0.9
+}

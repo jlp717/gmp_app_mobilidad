@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "node_id": "qa",
+  "summary": "veto demo-ready: baseline failure and missing runtime evidence",
+  "facts": [
+    {
+      "claim": "veto demo-ready: baseline failure and missing runtime evidence",
+      "evidence": [
+        {
+          "path": "backend/package.json",
+          "line": 19,
+          "quote": "See source and detailed docs/orders-audit.md"
+        }
+      ]
+    }
+  ],
+  "risks": [
+    "Runtime evidence incomplete; source audit only"
+  ],
+  "artifacts": [],
+  "confidence": 0.9
+}

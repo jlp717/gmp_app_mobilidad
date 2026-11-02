@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "node_id": "bolsa",
+  "summary": "ledger commits separately after order confirmation",
+  "facts": [
+    {
+      "claim": "ledger commits separately after order confirmation",
+      "evidence": [
+        {
+          "path": "backend/services/pedidos/index.js",
+          "line": 4449,
+          "quote": "See source and detailed docs/orders-audit.md"
+        }
+      ]
+    }
+  ],
+  "risks": [
+    "Runtime evidence incomplete; source audit only"
+  ],
+  "artifacts": [],
+  "confidence": 0.9
+}

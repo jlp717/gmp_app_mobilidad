@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "node_id": "ux",
+  "summary": "critical order controls below size target",
+  "facts": [
+    {
+      "claim": "critical order controls below size target",
+      "evidence": [
+        {
+          "path": "lib/features/pedidos/presentation/widgets/order_line_tile.dart",
+          "line": 315,
+          "quote": "See source and detailed docs/orders-audit.md"
+        }
+      ]
+    }
+  ],
+  "risks": [
+    "Runtime evidence incomplete; source audit only"
+  ],
+  "artifacts": [],
+  "confidence": 0.9
+}
