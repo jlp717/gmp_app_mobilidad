@@ -695,7 +695,8 @@ async function getDailyCobrosByFormaPago({
   }
 
   const cobrosTable = db2AppTable('COBROS');
-  const vendorFilter = buildVendorInClause('CODIGO_USUARIO', vendorCodes);
+  const ownerExpression = "COALESCE(NULLIF(TRIM(CODIGOVENDEDOR), ''), TRIM(CODIGO_USUARIO))";
+  const vendorFilter = buildVendorInClause(ownerExpression, vendorCodes);
   const sql = `
     SELECT TRIM(FORMA_PAGO) AS FORMA_PAGO,
            SUM(IMPORTE) AS TOTAL,
@@ -704,7 +705,9 @@ async function getDailyCobrosByFormaPago({
     WHERE YEAR(FECHA) = ?
       AND MONTH(FECHA) = ?
       AND DAY(FECHA) = ?
-      AND UPPER(TRIM(TIPO_USUARIO)) = CAST(? AS VARCHAR(20))
+      AND UPPER(TRIM(TIPO_USUARIO)) IN (
+        CAST(? AS VARCHAR(20)), CAST(? AS VARCHAR(20)), CAST(? AS VARCHAR(20))
+      )
       ${vendorFilter.clause}
     GROUP BY TRIM(FORMA_PAGO)
   `;
@@ -713,6 +716,8 @@ async function getDailyCobrosByFormaPago({
     parsedDate.month,
     parsedDate.day,
     'COMERCIAL',
+    'JEFE_VENTAS',
+    'ADMIN',
     ...vendorFilter.params,
   ]);
 

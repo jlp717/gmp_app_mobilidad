@@ -24,6 +24,27 @@ function loadCobrosApp({ invalidateCache, queryImpl }) {
     TTL: { SHORT: 60, MEDIUM: 300, LONG: 1800, STATIC: 3600 },
     invalidateCache,
   }));
+  const registerPayment = jest.fn(async (payment) => {
+    await queryWithParams(
+      'INSERT INTO JAVIER.COBROS (ID, IMPORTE) VALUES (?, ?)',
+      [payment.idempotencyToken, payment.amount],
+    );
+    return {
+      id: payment.idempotencyToken,
+      clientCode: payment.clientCode,
+      reference: payment.reference,
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      collectorCode: payment.userId,
+      ownerVendorCode: payment.userId,
+      observations: payment.observations,
+      pendingAfter: 0,
+      idempotent: false,
+    };
+  });
+  jest.doMock('../../src/modules/cobros', () => ({
+    Db2CobrosRepository: jest.fn(() => ({ registerPayment })),
+  }));
   jest.doMock('../../services/query-optimizer', () => ({
     cachedQuery: jest.fn(async (fn, sql) => fn(sql)),
     invalidateOnMutation: jest.fn(),
@@ -32,6 +53,10 @@ function loadCobrosApp({ invalidateCache, queryImpl }) {
   const router = require('../../routes/cobros');
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    req.user = { id: '07', code: '07', role: 'COMERCIAL', clientCodes: ['C001'] };
+    next();
+  });
   app.use('/api/cobros', router);
   return { app, logger, queryWithParams };
 }
@@ -63,7 +88,7 @@ describe('REQ-30 registrarCobro invalida liquidacion (mock DB2)', () => {
       .send({
         referencia: `SERIE-15-100${importe}`,
         importe,
-        formaPago: 'EFECTIVO',
+        formaPago: 'CONTADO',
         tipoVenta: 'CC',
         tipoModo: 'NORMAL',
         tipoUsuario: 'REPARTIDOR',

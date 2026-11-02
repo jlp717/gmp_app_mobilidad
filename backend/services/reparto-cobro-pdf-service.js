@@ -42,6 +42,7 @@ function buildCobroPdfFileName(payload = {}) {
 
 function buildCobroPdfBuffer(payload = {}) {
   return new Promise((resolve, reject) => {
+    const isCommercial = text(payload.origen, '').toUpperCase() === 'COMERCIAL';
     const document = new PDFDocument({ size: 'A4', margin: 42, compress: false });
     const chunks = [];
     let y = 0;
@@ -62,7 +63,14 @@ function buildCobroPdfBuffer(payload = {}) {
     document.fillColor(NAVY).font('Helvetica-Bold').fontSize(19)
       .text('JUSTIFICANTE DE COBRO', left, y, { width: contentWidth });
     document.font('Helvetica').fontSize(8).fillColor(MUTED)
-      .text('Documento generado desde el cobro registrado en reparto', left, document.y + 6, { width: contentWidth });
+      .text(
+        isCommercial
+          ? 'Documento generado desde el cobro registrado por el equipo comercial'
+          : 'Documento generado desde el cobro registrado en reparto',
+        left,
+        document.y + 6,
+        { width: contentWidth },
+      );
     y = document.y + 16;
     document.roundedRect(left, y, contentWidth, 82, 8).fillAndStroke(CARD, LINE);
     document.fillColor(MUTED).font('Helvetica').fontSize(8).text('ID DE COBRO', left + 12, y + 12);
@@ -81,7 +89,7 @@ function buildCobroPdfBuffer(payload = {}) {
     const rows = [
       ['Documento', payload.documento],
       ['Cliente', text(payload.codigoCliente) + ' · ' + text(payload.nombreCliente)],
-      ['Repartidor', payload.repartidorId],
+      [isCommercial ? 'Comercial' : 'Repartidor', payload.repartidorId],
       ['Forma de pago', payload.formaPago],
     ];
     document.roundedRect(left, y, contentWidth, rows.length * 25 + 14, 6).fillAndStroke('#f8fafc', LINE);
@@ -120,10 +128,17 @@ function buildCobroPdfBuffer(payload = {}) {
     }
 
     document.fillColor(MUTED).font('Helvetica').fontSize(8)
-      .text('Este documento acredita el registro del cobro en el sistema de reparto.', left, Math.min(y, 730), {
+      .text(
+        isCommercial
+          ? 'Este documento acredita el registro del cobro en el sistema comercial.'
+          : 'Este documento acredita el registro del cobro en el sistema de reparto.',
+        left,
+        Math.min(y, 730),
+        {
         width: contentWidth,
         align: 'center',
-      });
+        },
+      );
     document.end();
   });
 }

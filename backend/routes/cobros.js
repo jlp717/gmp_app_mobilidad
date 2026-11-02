@@ -10,21 +10,24 @@ const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, invalidateCache: invalidateCachePattern } = require('../services/redis-cache');
 const { getDebtView, cvcPendientesJoins, cvcCliJoin, cvcLiveTypeSql, cvcPendingPredicate, formaPagoLabel, capPendingToDocument } = require('../services/debt-view-contract');
 const logger = require('../middleware/logger');
-const { db2InsertSql } = require('../utils/db2-identifiers');
-const { getDb2WriteSchema, db2AppTable } = require('../utils/db2-schemas');
+const { db2AppTable } = require('../utils/db2-schemas');
 const {
     buildCvcVendorScopeFilter,
     buildClientVendorParamFilter,
     normalizeCvcTipoDocumentoFilter,
 } = require('../utils/common');
-const crypto = require('crypto');
 const { parsePage, paginationContract, db2OffsetFetch } = require('../src/utils/pagination');
 const { comercialErpTable } = require('../utils/comercial-erp-tables');
+const { Db2CobrosRepository } = require('../src/modules/cobros');
+const {
+    normalizeCommercialActor,
+    normalizeCommercialPaymentInput,
+} = require('../src/modules/cobros/domain/commercial-payment-contract');
+const { notifyCommercialCobro } = require('../services/comercial-cobro-notify-service');
 
-const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2AppTable('COBROS');
 const REPARTIDOR_COBROS_TABLE = db2AppTable('REPARTIDOR_COBROS');
-const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
+const commercialCobrosRepository = new Db2CobrosRepository();
 
 // F5-02 TTL por dominio: lecturas de dinero/cobros en REALTIME 60.
 // Fallback a 60 para mocks legacy sin TTL.REALTIME. No tocar logica de dinero.
@@ -132,11 +135,21 @@ function sendCobrosError(res, error, { code, message } = {}) {
     const status = typedStatus >= 400 && typedStatus <= 599 ? typedStatus : 500;
     logger.error(`[COBROS] ${code || 'INTERNAL_SERVER_ERROR'}: ${error?.message || error}`);
     if (res.headersSent) return;
+    const typedCode = (Number.isInteger(error?.status) || Number.isInteger(error?.statusCode))
+        ? error?.code
+        : null;
     return res.status(status).json({
         success: false,
-        code: status >= 500 ? (code || 'INTERNAL_SERVER_ERROR') : (error?.code || code || 'REQUEST_ERROR'),
+        code: typedCode || (status >= 500 ? (code || 'INTERNAL_SERVER_ERROR') : (error?.code || code || 'REQUEST_ERROR')),
         error: status >= 500 ? (message || 'Error interno del servidor') : (error?.message || message),
     });
+}
+
+function debtLookupUnavailable(message) {
+    const error = new Error(message);
+    error.code = 'PAYMENT_DEBT_LOOKUP_UNAVAILABLE';
+    error.status = 503;
+    return error;
 }
 
 function db2StringLiteral(value) {
@@ -244,8 +257,8 @@ async function getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams) {
             const match = reference.match(/([^:]+-\d+)$/);
             addAdjustment(row.CLIENTE, match ? match[1] : reference, row.TOTAL_APP);
         }
-    } catch (error) {
-        logger.warn('[COBROS] App-side COBROS portfolio subtract skipped: ' + error.message);
+    } catch {
+        throw debtLookupUnavailable('No se pudo verificar el ledger de cobros comerciales.');
     }
 
     try {
@@ -272,8 +285,8 @@ async function getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams) {
         for (const row of repRows || []) {
             addAdjustment(row.CLIENTE, sanitizeCode(row.SERIE) + '-' + row.NUMERO, row.TOTAL_REP);
         }
-    } catch (error) {
-        logger.warn('[COBROS] App-side REPARTIDOR_COBROS portfolio subtract skipped: ' + error.message);
+    } catch {
+        throw debtLookupUnavailable('No se pudo verificar el ledger de cobros de reparto.');
     }
 
     return adjustments;
@@ -297,78 +310,6 @@ function codesMatch(left, right) {
     const leftNumeric = normalizeNumericCode(leftCode);
     const rightNumeric = normalizeNumericCode(rightCode);
     return leftNumeric !== null && rightNumeric !== null && leftNumeric === rightNumeric;
-}
-
-function isColumnNotFound(err) {
-    const msg = String(err?.message || '').toLowerCase();
-    const codes = (err?.odbcErrors || []).map(e => e.code);
-    const states = (err?.odbcErrors || []).map(e => e.state);
-    return codes.includes(-205) || states.includes('42S22') || msg.includes('sql0205') || msg.includes('column not found');
-}
-
-function currentHhmmss(date = new Date()) {
-    return parseInt(
-        `${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}${String(date.getSeconds()).padStart(2, '0')}`,
-        10,
-    );
-}
-
-function buildCobroInsert({
-    id,
-    codigoCliente,
-    referencia,
-    importe,
-    formaPago,
-    tipoVenta,
-    tipoModo,
-    tipoUsuario,
-    codigoUsuario,
-    observaciones,
-    idempotencyToken,
-    includeErpColumns,
-}) {
-    const columns = [
-        'ID', 'CODIGO_CLIENTE', 'REFERENCIA', 'IMPORTE', 'FORMA_PAGO',
-        'TIPO_VENTA', 'TIPO_MODO', 'TIPO_USUARIO', 'CODIGO_USUARIO',
-        'OBSERVACIONES', 'IDEMPOTENCY_TOKEN',
-    ];
-    const params = [
-        id, codigoCliente, referencia, importe,
-        formaPago, tipoVenta, tipoModo,
-        tipoUsuario, codigoUsuario, observaciones,
-        idempotencyToken,
-    ];
-
-    if (includeErpColumns) {
-        const now = new Date();
-        columns.push(
-            'SUBEMPRESARECIBO', 'EJERCICIORECIBO', 'SERIERECIBO', 'TERMINALRECIBO', 'NUMERORECIBO',
-            'CODIGOCLIENTEFACTURA', 'CODIGOVENDEDOR', 'TIPORECIBO',
-            'DIADOCUMENTO', 'MESDOCUMENTO', 'ANODOCUMENTO', 'HORADOCUMENTO',
-            'IMPORTECOBRADO', 'IDMARCALIQUIDACION',
-        );
-        params.push(
-            String(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP').substring(0, 3),
-            now.getFullYear(),
-            String(process.env.PEDIDOS_SYSTEM_SERIE || 'R').substring(0, 1),
-            parseInt(process.env.PEDIDOS_SYSTEM_TERMINAL || '10', 10),
-            0, // NUMERORECIBO — allocated at DSEDAC export; 0 = pending in JAVIER buffer
-            String(codigoCliente || '').padEnd(10).slice(0, 10),
-            String(codigoUsuario || '').padEnd(2).slice(0, 2),
-            'C',
-            now.getDate(),
-            now.getMonth() + 1,
-            now.getFullYear(),
-            currentHhmmss(now),
-            importe,
-            String(id).slice(0, 30),
-        );
-    }
-
-    return {
-        sql: db2InsertSql(COBROS_TABLE, columns),
-        params,
-    };
 }
 
 function normalizeCodeList(value) {
@@ -625,20 +566,8 @@ router.get('/:codigoCliente/pendientes', validateCobroClientParam, validateCobro
                 cacheKey,
                 COBROS_MONEY_TTL // F5-02 dominio dinero-cobros REALTIME 60
             );
-        } catch (cvcErr) {
-            logger.warn(`[COBROS] CVC query failed (will use PEDIDOS_CAB fallback): ${cvcErr.message}`);
-            // Fallback to PEDIDOS_CAB for environments without CVC
-            const fallbackSql = `
-                SELECT PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
-                    PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
-                    PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
-                FROM ${PEDIDOS_CAB_TABLE} PC
-                WHERE TRIM(PC.CODIGOCLIENTE) = ?
-                  AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
-                  AND PC.IMPORTETOTAL > 0
-                ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC
-                ${db2OffsetFetch(pendientesPage)}`;
-            resultado = await queryWithParams(fallbackSql, [codigoCliente]);
+        } catch {
+            throw debtLookupUnavailable('No se pudo consultar la deuda ERP del cliente.');
         }
 
         const format2 = (n) => String(n).padStart(2, '0');
@@ -673,8 +602,8 @@ router.get('/:codigoCliente/pendientes', validateCobroClientParam, validateCobro
                 appRepartidorByDoc.set(k, (appRepartidorByDoc.get(k) || 0) + total);
                 appCobrosByDoc.set(k, (appCobrosByDoc.get(k) || 0) + total);
             }
-        } catch (e) {
-            logger.warn(`[COBROS] App-side REPARTIDOR_COBROS subtract fallo: ${e.message}`);
+        } catch {
+            throw debtLookupUnavailable('No se pudo verificar el ledger de cobros de reparto.');
         }
         try {
             const comRows = await queryWithParams(
@@ -692,8 +621,8 @@ router.get('/:codigoCliente/pendientes', validateCobroClientParam, validateCobro
                 if (!k) continue;
                 appCobrosByDoc.set(k, (appCobrosByDoc.get(k) || 0) + (parseFloat(r.TOTAL) || 0));
             }
-        } catch (e) {
-            logger.warn(`[COBROS] App-side COBROS subtract fallo: ${e.message}`);
+        } catch {
+            throw debtLookupUnavailable('No se pudo verificar el ledger de cobros comerciales.');
         }
 
         const cobros = (resultado || []).map(row => {
@@ -863,21 +792,7 @@ router.get('/:codigoCliente/estado', validateCobroClientParam, async (req, res) 
             totalPendiente = parseFloat(rows?.[0]?.TOTAL_PENDIENTE) || 0;
             numPedidos = parseInt(rows?.[0]?.NUM_DOCS) || 0;
         } catch (cvcErr) {
-            // Fallback to PEDIDOS_CAB
-            try {
-                const rows = await queryWithParams(`
-                    SELECT COALESCE(SUM(PC.IMPORTETOTAL), 0) AS TOTAL_PENDIENTE,
-                           COUNT(*) AS NUM_PEDIDOS
-                    FROM ${PEDIDOS_CAB_TABLE} PC
-                    WHERE TRIM(PC.CODIGOCLIENTE) = ?
-                      AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
-                      AND PC.IMPORTETOTAL > 0
-                `, [codigoCliente], false);
-                totalPendiente = parseFloat(rows?.[0]?.TOTAL_PENDIENTE) || 0;
-                numPedidos = parseInt(rows?.[0]?.NUM_PEDIDOS) || 0;
-            } catch (e) {
-                logger.warn('[COBROS] Error calculando estado (PEDIDOS_CAB fallback): ' + e.message);
-            }
+            throw debtLookupUnavailable('No se pudo consultar la deuda ERP del cliente.');
         }
 
         const [appRows, repRows, cliRows] = await Promise.all([
@@ -885,17 +800,15 @@ router.get('/:codigoCliente/estado', validateCobroClientParam, async (req, res) 
                 SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_APP
                   FROM ${COBROS_TABLE}
                  WHERE TRIM(CODIGO_CLIENTE) = ?
-            `, [codigoCliente], false).catch((adjustErr) => {
-                logger.warn('[COBROS] Error leyendo cobros app-side: ' + adjustErr.message);
-                return [];
+            `, [codigoCliente], false).catch(() => {
+                throw debtLookupUnavailable('No se pudo verificar el ledger de cobros comerciales.');
             }),
             queryWithParams(`
                 SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
                   FROM ${REPARTIDOR_COBROS_TABLE}
                  WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
-            `, [codigoCliente], false).catch((adjustErr) => {
-                logger.warn('[COBROS] Error leyendo cobros repartidor: ' + adjustErr.message);
-                return [];
+            `, [codigoCliente], false).catch(() => {
+                throw debtLookupUnavailable('No se pudo verificar el ledger de cobros de reparto.');
             }),
             queryWithParams(`
                 SELECT LIMITECREDITO FROM ${comercialErpTable('CLI')}
@@ -933,30 +846,6 @@ router.get('/:codigoCliente/estado', validateCobroClientParam, async (req, res) 
     }
 });
 
-// Normaliza/valida un idempotencyToken (8-128 chars seguros, hash si supera 64).
-function normalizeIdempotencyToken(rawToken) {
-    const token = String(rawToken || '').trim();
-    if (!/^[A-Za-z0-9_.:-]{8,128}$/.test(token)) {
-        const err = new Error('idempotencyToken requerido (8-128 chars [A-Za-z0-9_.:-])');
-        err.code = 'INVALID_IDEMPOTENCY_TOKEN';
-        err.status = 400;
-        throw err;
-    }
-    if (token.length <= 64) return token;
-    return crypto.createHash('sha256').update(token).digest('hex');
-}
-
-function paymentIdFromIdempotencyToken(token) {
-    return `CBR-${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}`;
-}
-
-function isSameCobroPayload(row, expected) {
-    return String(row.CODIGO_CLIENTE || "").trim() === expected.codigoCliente
-        && String(row.REFERENCIA || "").trim() === expected.referencia
-        && Math.round((parseFloat(row.IMPORTE) || 0) * 100) === Math.round(expected.importe * 100)
-        && String(row.FORMA_PAGO || "").trim() === expected.formaPago;
-}
-
 /**
  * POST /api/cobros/:codigoCliente/registrar
  * Req #19: protegido con rate limiter (10/min/usuario)
@@ -966,216 +855,55 @@ function isSameCobroPayload(row, expected) {
  */
 router.post('/:codigoCliente/registrar', limitRegistrarCobro, validateCobroClientParam, async (req, res) => {
     try {
-        const codigoCliente = sanitizeCode(req.params.codigoCliente);
-        const clientScope = await authorizeCobrosClientScope(req, codigoCliente, 'registrar cobros');
-        if (!clientScope.ok) {
-            return res.status(clientScope.status).json(clientScope.body);
-        }
-        const {
-            referencia, importe, formaPago, observaciones,
-            tipoVenta, tipoModo, tipoUsuario, codigoUsuario,
-            idempotencyToken,
-        } = req.body;
+        const context = getCobrosContext(req);
+        const actor = normalizeCommercialActor({
+            userId: context.userId,
+            userRole: req.user?.role || req.user?.userRole,
+        });
+        const payment = normalizeCommercialPaymentInput({
+            clientCode: req.params.codigoCliente,
+            reference: req.body.referencia,
+            amount: req.body.importe,
+            paymentMethod: req.body.formaPago,
+            observations: req.body.observaciones,
+        });
+        const clientScope = await authorizeCobrosClientScope(req, payment.clientCode, 'registrar cobros');
+        if (!clientScope.ok) return res.status(clientScope.status).json(clientScope.body);
 
-        let normalizedIdempotencyToken;
-        let paymentId;
-        try {
-            normalizedIdempotencyToken = normalizeIdempotencyToken(idempotencyToken);
-            paymentId = paymentIdFromIdempotencyToken(normalizedIdempotencyToken);
-        } catch (tokenErr) {
-            return res.status(400).json({
-                success: false,
-                code: tokenErr.code || 'INVALID_IDEMPOTENCY_TOKEN',
-                error: tokenErr.message,
-            });
-        }
-
-        const importeNum = parseFloat(importe) || 0;
-        const referenciaTrim = String(referencia || '').trim();
-        const formaPagoTrim = (formaPago || 'CONTADO').trim();
-        const tipoVentaTrim = (tipoVenta || 'CC').trim();
-        const tipoModoTrim = (tipoModo || 'NORMAL').trim();
-        const tipoUsuarioTrim = (tipoUsuario || 'COMERCIAL').trim();
-        const authenticatedUserCode = sanitizeCode(getCobrosContext(req).userId);
-        const codigoUsuarioTrim = authenticatedUserCode || String(codigoUsuario || '').trim();
-        const obsTrim = String(observaciones || '').substring(0, 500);
-
-        if (!codigoCliente || !referenciaTrim || importeNum <= 0) {
-            return res.status(400).json({
-                success: false,
-                code: 'INVALID_PAYMENT_PAYLOAD',
-                error: 'cliente, referencia e importe positivo requeridos',
-            });
-        }
-
-        logger.info(`[COBROS] Registrando cobro para ${codigoCliente}: ${importeNum} ref=${referenciaTrim} paymentId=${paymentId.slice(0, 12)}...`);
-
-        // CROSS-TABLE: si el REPARTIDOR ya cobro este documento al entregar,
-        // bloqueamos el cobro comercial (cliente intentando doble-pago).
-        try {
-            const repartidorRows = await queryWithParams(
-                `SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
-                   FROM ${REPARTIDOR_COBROS_TABLE}
-                  WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
-                    AND (
-                      TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20))) = ?
-                      OR TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(TERMINALDOCUMENTO AS VARCHAR(20))) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20))) = ?
-                      OR ? LIKE '%' || TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(TERMINALDOCUMENTO AS VARCHAR(20))) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20))) || '%'
-                      OR ? LIKE '%' || TRIM(SERIEDOCUMENTO) || ':' || TRIM(CAST(TERMINALDOCUMENTO AS VARCHAR(20))) || ':' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20))) || '%'
-                      OR ? LIKE '%' || TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20)))
-                    )`,
-                [codigoCliente, referenciaTrim, referenciaTrim, referenciaTrim, referenciaTrim, referenciaTrim], false, false
-            );
-            const totalRepartidor = parseFloat(repartidorRows?.[0]?.TOTAL_REP) || 0;
-            if (totalRepartidor > 0) {
-                return res.status(409).json({
-                    success: false,
-                    code: 'COBRO_ALREADY_COLLECTED_BY_REPARTIDOR',
-                    error: `Documento ${referenciaTrim} ya cobrado por el REPARTIDOR (entrega al cliente). Importe cobrado: ${totalRepartidor}.`,
-                });
-            }
-        } catch (xtableErr) {
-            logger.warn(`[COBROS] Cross-table REPARTIDOR_COBROS fallo (continuando): ${xtableErr.message}`);
-        }
-
-        // Replay check: si el token ya existe en ${APP_SCHEMA}.COBROS, devolvemos 200 si
-        // el payload coincide, 409 si difiere. La tabla tiene IDX_COBROS_IDEM.
-        try {
-            const existingRows = await queryWithParams(
-                `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
-                   FROM ${COBROS_TABLE} WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
-                [paymentId, normalizedIdempotencyToken], false, false
-            );
-            if (existingRows && existingRows.length > 0) {
-                const e = existingRows[0];
-                const samePayload = isSameCobroPayload(e, {
-                    codigoCliente,
-                    referencia: referenciaTrim,
-                    importe: importeNum,
-                    formaPago: formaPagoTrim,
-                });
-                if (!samePayload) {
-                    return res.status(409).json({
-                        success: false,
-                        code: 'IDEMPOTENCY_CONFLICT',
-                        error: 'Token de idempotencia reutilizado con otro payload',
-                    });
-                }
-                return res.json({
-                    success: true,
-                    idempotent: true,
-                    mensaje: 'Cobro ya registrado (idempotente)',
-                });
-            }
-        } catch (lookupErr) {
-            logger.warn(`[COBROS] Lookup idempotency fallo (siguiendo INSERT): ${lookupErr.message}`);
-        }
-
-        try {
-            let insert = buildCobroInsert({
-                id: paymentId,
-                idempotencyToken: normalizedIdempotencyToken,
-                codigoCliente,
-                referencia: referenciaTrim,
-                importe: importeNum,
-                formaPago: formaPagoTrim,
-                tipoVenta: tipoVentaTrim,
-                tipoModo: tipoModoTrim,
-                tipoUsuario: tipoUsuarioTrim,
-                codigoUsuario: codigoUsuarioTrim,
-                observaciones: obsTrim,
-                includeErpColumns: true,
-            });
-            try {
-                await queryWithParams(insert.sql, insert.params, false);
-            } catch (erpInsertErr) {
-                if (!isColumnNotFound(erpInsertErr)) throw erpInsertErr;
-                logger.warn(`[COBROS] ERP-compatible columns missing in ${APP_SCHEMA}.COBROS, using legacy insert`);
-                insert = buildCobroInsert({
-                    id: paymentId,
-                    idempotencyToken: normalizedIdempotencyToken,
-                    codigoCliente,
-                    referencia: referenciaTrim,
-                    importe: importeNum,
-                    formaPago: formaPagoTrim,
-                    tipoVenta: tipoVentaTrim,
-                    tipoModo: tipoModoTrim,
-                    tipoUsuario: tipoUsuarioTrim,
-                    codigoUsuario: codigoUsuarioTrim,
-                    observaciones: obsTrim,
-                    includeErpColumns: false,
-                });
-                await queryWithParams(insert.sql, insert.params, false);
-            }
-        } catch (insertErr) {
-            // Si hubo race entre el SELECT y el INSERT, vuelve a intentar el
-            // replay-check antes de fallar (PK colision sobre ID).
-            const msg = String(insertErr.message || '');
-            if (/DUPLICATE|PRIMARY|UNIQUE|SQL0803/i.test(msg)) {
-                logger.warn(`[COBROS] Colision PK (race idempotencia) paymentId=${paymentId.slice(0, 12)}: ${msg}`);
-                const existingRows = await queryWithParams(
-                    `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
-                       FROM ${COBROS_TABLE} WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
-                    [paymentId, normalizedIdempotencyToken], false, false
-                );
-                const existing = existingRows && existingRows[0];
-                if (existing && !isSameCobroPayload(existing, {
-                    codigoCliente,
-                    referencia: referenciaTrim,
-                    importe: importeNum,
-                    formaPago: formaPagoTrim,
-                })) {
-                    return res.status(409).json({
-                        success: false,
-                        code: 'IDEMPOTENCY_CONFLICT',
-                        error: 'Token de idempotencia reutilizado con otro payload',
-                    });
-                }
-                return res.json({
-                    success: true,
-                    idempotent: true,
-                    mensaje: 'Cobro ya registrado (idempotente)',
-                });
-            }
-            throw insertErr;
-        }
-
-        // Invalida cache de pendientes para que la siguiente consulta vea el nuevo cobro
-        invalidateCobrosCache(codigoCliente);
-
-        try {
-            const dsedacExports = require('../services/dsedac-exports.service');
-            await dsedacExports.exportCobroToSystem({
-                IDEMPOTENCY_TOKEN: normalizedIdempotencyToken,
-                CODIGO_CLIENTE: codigoCliente,
-                CODIGOVENDEDOR: codigoUsuarioTrim,
-                IMPORTE: importeNum,
-                CODIGO_USUARIO: codigoUsuarioTrim,
-            });
-        } catch (exportErr) {
-            logger.warn('[COBROS] DSEDAC export best-effort fail: ' + exportErr.message);
-        }
-
-        // PDF cobro → Carlos, Javier y comercial (best-effort, no bloquea respuesta).
-        try {
-            const { notifyCommercialCobro } = require('../services/comercial-cobro-notify-service');
+        const result = await commercialCobrosRepository.registerPayment({
+            clientCode: payment.clientCode,
+            amount: payment.amount,
+            paymentMethod: payment.paymentMethod,
+            reference: payment.reference,
+            observations: payment.observations,
+            userId: actor.userId,
+            userRole: actor.userRole,
+            idempotencyToken: req.body.idempotencyToken,
+        });
+        invalidateCobrosCache(payment.clientCode);
+        if (!result.idempotent) {
             notifyCommercialCobro({
-                paymentId,
-                codigoCliente,
-                referencia: referenciaTrim,
-                importe: importeNum,
-                formaPago: formaPagoTrim,
-                codigoUsuario: codigoUsuarioTrim,
-                observaciones: obsTrim,
-            }).catch((notifyErr) => {
-                logger.warn(`[COBROS] comercial cobro PDF notify: ${notifyErr.message}`);
+                paymentId: result.id,
+                codigoCliente: result.clientCode,
+                referencia: result.reference,
+                importe: result.amount,
+                pendiente: result.pendingAfter,
+                formaPago: result.paymentMethod,
+                codigoUsuario: result.collectorCode,
+                codigoVendedor: result.ownerVendorCode,
+                observaciones: result.observations,
+            }).catch((notifyError) => {
+                logger.warn(`[COBROS] commercial notification skipped: ${notifyError.message}`);
             });
-        } catch (notifyLoadErr) {
-            logger.warn(`[COBROS] comercial cobro notify load: ${notifyLoadErr.message}`);
         }
-
-        res.json({ success: true, mensaje: 'Cobro registrado correctamente', id: paymentId });
-
+        return res.json({
+            success: true,
+            idempotent: result.idempotent,
+            mensaje: result.idempotent
+                ? 'Cobro ya registrado (idempotente)'
+                : 'Cobro registrado correctamente',
+            payment: result,
+        });
     } catch (error) {
         return sendCobrosError(res, error, { code: 'COBROS_REGISTER_ERROR', message: 'Error registrando cobro' });
     }
@@ -1331,8 +1059,8 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                     const match = reference.match(/([^:]+-\d+)$/);
                     addAdjustment(row.CLIENTE, match ? match[1] : reference, row.TOTAL_APP);
                 }
-            } catch (error) {
-                logger.warn('[COBROS] App-side COBROS summary subtract skipped: ' + error.message);
+            } catch {
+                throw debtLookupUnavailable('No se pudo verificar el ledger de cobros comerciales.');
             }
 
             try {
@@ -1350,8 +1078,8 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                 ].join('\n');
                 const repRows = await queryWithParams(repartidorSql, [...pageDocsCte.params]);
                 for (const row of repRows || []) addAdjustment(row.CLIENTE, row.DOC_KEY, row.TOTAL_REP);
-            } catch (error) {
-                logger.warn('[COBROS] App-side REPARTIDOR_COBROS summary subtract skipped: ' + error.message);
+            } catch {
+                throw debtLookupUnavailable('No se pudo verificar el ledger de cobros de reparto.');
             }
         }
 

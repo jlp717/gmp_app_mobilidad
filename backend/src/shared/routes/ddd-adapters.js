@@ -19,6 +19,10 @@ const { z } = require('zod');
 const logger = require('../../../middleware/logger');
 const { Db2PedidosRepository } = require('../../modules/pedidos');
 const { Db2CobrosRepository } = require('../../modules/cobros');
+const {
+  normalizeCommercialActor,
+  normalizeCommercialPaymentInput,
+} = require('../../modules/cobros/domain/commercial-payment-contract');
 const { Db2EntregasRepository } = require('../../modules/entregas');
 const { Db2RuteroRepository } = require('../../modules/rutero');
 const { Db2AuthRepository } = require('../../modules/auth');
@@ -57,6 +61,7 @@ const authTokenService = require('../../../middleware/auth');
 const { createAuthClaimsResolver } = require('../../modules/auth/application/auth-claims-resolver');
 const { createAuthClaimsLoginHandler } = require('../../modules/auth/application/auth-claims-login-handler');
 const { buildLaclaeDateRangeFilter } = require('../../utils/dashboardFilters');
+const { notifyCommercialCobro } = require('../../../services/comercial-cobro-notify-service');
 
 // TTL constants (milliseconds)
 const INTERNAL_SERVER_ERROR_MESSAGE = 'Error interno del servidor';
@@ -1501,7 +1506,7 @@ function createPedidosRoutes() {
   router.post('/draft-status/:vendedorCode/auto-confirm', async (req, res) => {
     try {
       const code = String(req.params.vendedorCode || '').trim();
-      const vendorAccess = authorizePedidoVendorCode(req, code, 'auto-confirmar');
+      const vendorAccess = await authorizePedidoVendorCode(req, code, 'auto-confirmar');
       if (!vendorAccess.ok) return res.status(vendorAccess.status).json(vendorAccess.body);
       return res.status(409).json({
         success: false,
@@ -2429,16 +2434,20 @@ function createCobrosRoutes() {
   router.post('/:codigoCliente/registrar', async (req, res) => {
     try {
       const { codigoCliente } = req.params;
-      const userId = req.user?.code || req.user?.id;
-      if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
-
-      const { referencia, importe, formaPago, observaciones, idempotencyToken } = req.body;
-      if (!codigoCliente || importe == null || !formaPago) {
-        return res.status(400).json({ success: false, error: 'codigoCliente, importe, and formaPago required' });
-      }
+      const actor = normalizeCommercialActor({
+        userId: req.user?.code || req.user?.codigo || req.user?.id,
+        userRole: req.user?.role || req.user?.userRole,
+      });
+      const payment = normalizeCommercialPaymentInput({
+        clientCode: codigoCliente,
+        reference: req.body.referencia,
+        amount: req.body.importe,
+        paymentMethod: req.body.formaPago,
+        observations: req.body.observaciones,
+      });
       const clientAccess = await authorizeCobrosClientScope(
         req,
-        codigoCliente,
+        payment.clientCode,
         req.body.vendedorCodes || req.body.vendedorCode || req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
         'registrar cobros de',
       );
@@ -2446,20 +2455,35 @@ function createCobrosRoutes() {
 
       const result = await repo.registerPayment({
         clientCode: clientAccess.clientCode,
-        amount: parseFloat(importe) || 0,
-        paymentMethod: formaPago,
-        reference: referencia || '',
-        observations: observaciones || '',
-        userId,
-        userRole: req.user?.role || 'COMERCIAL',
-        isJefeVentas: req.user?.isJefeVentas === true,
-        idempotencyToken,
+        amount: payment.amount,
+        paymentMethod: payment.paymentMethod,
+        reference: payment.reference,
+        observations: payment.observations,
+        userId: actor.userId,
+        userRole: actor.userRole,
+        idempotencyToken: req.body.idempotencyToken,
       });
 
       cache.invalidatePattern(`ddd:cobros:pendientes:${clientAccess.clientCode}:`);
       cache.invalidatePattern(`ddd:cobros:estado:${clientAccess.clientCode}:`);
       cache.invalidatePattern(`ddd:cobros:historico:${clientAccess.clientCode}:`);
       cache.invalidatePattern('ddd:cobros:pending-summary:');
+
+      if (!result.idempotent) {
+        notifyCommercialCobro({
+          paymentId: result.id,
+          codigoCliente: result.clientCode,
+          referencia: result.reference,
+          importe: result.amount,
+          pendiente: result.pendingAfter,
+          formaPago: result.paymentMethod,
+          codigoUsuario: result.collectorCode,
+          codigoVendedor: result.ownerVendorCode,
+          observaciones: result.observations,
+        }).catch((notifyError) => {
+          logger.warn(`[DDD-COBROS] commercial notification skipped: ${notifyError.message}`);
+        });
+      }
 
       res.json({ success: true, mensaje: 'Cobro registrado correctamente', payment: result });
     } catch (error) {
@@ -2470,16 +2494,20 @@ function createCobrosRoutes() {
 
   router.post('/register', async (req, res) => {
     try {
-      const userId = req.user?.code || req.user?.id;
-      if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
-
-      const { clientCode, amount, paymentMethod, reference, observations, idempotencyToken } = req.body;
-      if (!clientCode || !amount || !paymentMethod) {
-        return res.status(400).json({ success: false, error: 'clientCode, amount, and paymentMethod required' });
-      }
+      const actor = normalizeCommercialActor({
+        userId: req.user?.code || req.user?.codigo || req.user?.id,
+        userRole: req.user?.role || req.user?.userRole,
+      });
+      const payment = normalizeCommercialPaymentInput({
+        clientCode: req.body.clientCode,
+        reference: req.body.reference,
+        amount: req.body.amount,
+        paymentMethod: req.body.paymentMethod,
+        observations: req.body.observations,
+      });
       const clientAccess = await authorizeCobrosClientScope(
         req,
-        clientCode,
+        payment.clientCode,
         req.body.vendedorCodes || req.body.vendedorCode || req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
         'registrar cobros de',
       );
@@ -2487,14 +2515,13 @@ function createCobrosRoutes() {
 
       const result = await repo.registerPayment({
         clientCode: clientAccess.clientCode,
-        amount,
-        paymentMethod,
-        reference,
-        observations,
-        userId,
-        userRole: req.user?.role || 'COMERCIAL',
-        isJefeVentas: req.user?.isJefeVentas === true,
-        idempotencyToken,
+        amount: payment.amount,
+        paymentMethod: payment.paymentMethod,
+        reference: payment.reference,
+        observations: payment.observations,
+        userId: actor.userId,
+        userRole: actor.userRole,
+        idempotencyToken: req.body.idempotencyToken,
       });
 
       // Invalidate cobros caches
@@ -2502,6 +2529,22 @@ function createCobrosRoutes() {
       cache.invalidatePattern(`ddd:cobros:estado:${clientAccess.clientCode}:`);
       cache.invalidatePattern(`ddd:cobros:historico:${clientAccess.clientCode}:`);
       cache.invalidatePattern('ddd:cobros:pending-summary:');
+
+      if (!result.idempotent) {
+        notifyCommercialCobro({
+          paymentId: result.id,
+          codigoCliente: result.clientCode,
+          referencia: result.reference,
+          importe: result.amount,
+          pendiente: result.pendingAfter,
+          formaPago: result.paymentMethod,
+          codigoUsuario: result.collectorCode,
+          codigoVendedor: result.ownerVendorCode,
+          observaciones: result.observations,
+        }).catch((notifyError) => {
+          logger.warn(`[DDD-COBROS] commercial notification skipped: ${notifyError.message}`);
+        });
+      }
 
       res.json({ success: true, payment: result });
     } catch (error) {

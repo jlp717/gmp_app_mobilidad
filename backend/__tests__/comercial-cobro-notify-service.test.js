@@ -32,6 +32,7 @@ jest.mock('../services/staff-email-directory-service', () => ({
 const {
   notifyCommercialCobro,
 } = require('../services/comercial-cobro-notify-service');
+const { buildCobroPdfBuffer } = require('../services/reparto-cobro-pdf-service');
 
 describe('notifyCommercialCobro delivery evidence', () => {
   test('isolated_test sink returns pdf magic + redirected policy (not opaque)', async () => {
@@ -40,11 +41,16 @@ describe('notifyCommercialCobro delivery evidence', () => {
       paymentId: 'CBR-test-sink',
       codigoCliente: '4300009586',
       referencia: 'F-0-12346',
-      importe: 0.01,
-      formaPago: 'E',
+      importe: 738.46,
+      pendiente: 125.20,
+      formaPago: 'CONTADO',
       codigoUsuario: '35',
+      codigoVendedor: '35',
       observaciones: 'sink evidence',
     }, {
+      query: jest.fn((sql) => Promise.resolve(/FROM DSEDAC\.CLI/i.test(sql)
+        ? [{ NOMBRE_CLIENTE: 'Cliente real de pruebas' }]
+        : [])),
       env: {
         REPARTO_TABLE_SET: 'isolated_test',
       },
@@ -63,5 +69,11 @@ describe('notifyCommercialCobro delivery evidence', () => {
     expect(result.allSucceeded).toBe(true);
     expect(sendEmail).toHaveBeenCalledTimes(1);
     expect(sendEmail.mock.calls[0][0].to).toBe('reparto-test@localhost');
+    expect(buildCobroPdfBuffer).toHaveBeenCalledWith(expect.objectContaining({
+      nombreCliente: 'Cliente real de pruebas',
+      importe: '738.46',
+      pendiente: '125.20',
+      origen: 'COMERCIAL',
+    }));
   });
 });

@@ -8,6 +8,16 @@ const mockQuery = jest.fn();
 const mockQueryWithParams = jest.fn();
 const mockCachedQuery = jest.fn((fn, sql) => fn(sql));
 const mockInvalidateCache = jest.fn();
+const mockRegisterPayment = jest.fn();
+const mockNotifyCommercialCobro = jest.fn(() => Promise.resolve({ skipped: false }));
+
+jest.mock('../src/modules/cobros', () => ({
+  Db2CobrosRepository: jest.fn(() => ({ registerPayment: mockRegisterPayment })),
+}));
+
+jest.mock('../services/comercial-cobro-notify-service', () => ({
+  notifyCommercialCobro: (...args) => mockNotifyCommercialCobro(...args),
+}));
 
 jest.mock('../config/db', () => ({
   query: mockQuery,
@@ -55,6 +65,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockQuery.mockReset();
   mockQueryWithParams.mockReset();
+  mockRegisterPayment.mockReset();
+  mockNotifyCommercialCobro.mockClear();
 });
 
 describe('legacy cobros route DB2 contracts', () => {
@@ -178,12 +190,14 @@ describe('legacy cobros route DB2 contracts', () => {
     expect(summarySql).toMatch(/OFFSET\s+50\s+ROWS\s+FETCH\s+FIRST\s+25\s+ROWS\s+ONLY/i);
   });
 
-  test('POST /:cliente/registrar writes ERP-compatible payment columns when available', async () => {
+  test('POST /:cliente/registrar delegates normalized commercial payment to the transaction repository', async () => {
+    mockRegisterPayment.mockResolvedValue({
+      id: 'CBR-1', clientCode: 'C001', reference: 'M-123', amount: 60,
+      paymentMethod: 'TJ', pendingAfter: 40, collectorCode: '01', ownerVendorCode: '01',
+      observations: 'Pago parcial', idempotent: false,
+    });
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
-      if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 0 }];
-      if (/FROM\s+JAVIER\.COBROS\s+WHERE\s+ID\s+=\s+\?/i.test(sql)) return [];
-      if (/INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql)) return [];
       return [];
     });
 
@@ -192,109 +206,136 @@ describe('legacy cobros route DB2 contracts', () => {
       .send({
         referencia: 'M-123',
         importe: 60,
-        formaPago: '02',
+        formaPago: 'TJ',
+        tipoVenta: 'VC',
+        tipoModo: 'NORMAL',
         observaciones: 'Pago parcial',
         idempotencyToken: 'token-erp-cobro-001',
       });
 
     expect(res.status).toBe(200);
-    const insertCall = mockQueryWithParams.mock.calls.find(([sql]) =>
-      /INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql),
-    );
-    expect(insertCall).toBeDefined();
-    expect(insertCall[0]).toContain('CODIGOCLIENTEFACTURA');
-    expect(insertCall[0]).toContain('IMPORTECOBRADO');
-    expect(insertCall[0]).toContain('IDMARCALIQUIDACION');
-    expect(insertCall[1]).toContain('C001');
-    expect(insertCall[1]).toContain(60);
-    expect(insertCall[1]).toContain('token-erp-cobro-001');
+    expect(mockRegisterPayment).toHaveBeenCalledWith(expect.objectContaining({
+      clientCode: 'C001', amount: 60, paymentMethod: 'TJ',
+      observations: 'Pago parcial', userId: '01', userRole: 'COMERCIAL',
+      idempotencyToken: 'token-erp-cobro-001',
+    }));
+    expect(mockRegisterPayment.mock.calls[0][0]).not.toHaveProperty('saleType');
+    expect(mockRegisterPayment.mock.calls[0][0]).not.toHaveProperty('paymentMode');
+    expect(mockNotifyCommercialCobro).toHaveBeenCalledTimes(1);
   });
-  test('POST /:cliente/registrar uses DB2-safe primary id for 128 char idem value', async () => {
+  test('POST /:cliente/registrar forwards the full 128-char idempotency value to the repository', async () => {
     const raw = 'A'.repeat(128);
     const normalized = crypto.createHash('sha256').update(raw).digest('hex');
     const expectedId = paymentIdForTest(normalized);
+    mockRegisterPayment.mockResolvedValue({
+      id: expectedId, clientCode: 'C001', reference: 'M-123', amount: 60,
+      paymentMethod: 'CONTADO', collectorCode: '01', ownerVendorCode: '01',
+      observations: 'Cobro con token largo', idempotent: false,
+    });
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
-      if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 0 }];
-      if (new RegExp('FROM\\s+JAVIER\\.COBROS\\s+WHERE\\s+ID\\s+=\\s+\\?\\s+OR\\s+IDEMPOTENCY_TOKEN\\s+=\\s+\\?', 'i').test(sql)) return [];
-      if (/INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql)) return [];
       return [];
     });
 
     const res = await request(makeApp({ code: '01', role: 'COMERCIAL' }))
       .post('/C001/registrar')
-      .send({ referencia: 'M-123', importe: 60, formaPago: '02', idempotencyToken: raw });
+      .send({
+        referencia: 'M-123', importe: 60, formaPago: 'CONTADO', tipoVenta: 'CC',
+        tipoModo: 'NORMAL', observaciones: 'Cobro con token largo', idempotencyToken: raw,
+      });
 
     expect(res.status).toBe(200);
-    expect(res.body.id).toBe(expectedId);
-    expect(res.body.id.length).toBeLessThanOrEqual(36);
-    const lookupCall = mockQueryWithParams.mock.calls.find(([sql]) => /FROM\s+JAVIER\.COBROS\s+WHERE\s+ID\s+=\s+\?/i.test(sql));
-    expect(lookupCall[1]).toEqual([expectedId, normalized]);
-    const insertCall = mockQueryWithParams.mock.calls.find(([sql]) => /INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql));
-    expect(insertCall[1][0]).toBe(expectedId);
-    expect(insertCall[1][0].length).toBeLessThanOrEqual(36);
-    expect(insertCall[1][10]).toBe(normalized);
-    expect(insertCall[1][10].length).toBeLessThanOrEqual(128);
+    expect(res.body.payment.id).toBe(expectedId);
+    expect(mockRegisterPayment).toHaveBeenCalledWith(expect.objectContaining({ idempotencyToken: raw }));
   });
 
   test('POST /:cliente/registrar replays same idem value with same payload', async () => {
     const raw = 'B'.repeat(64);
     const expectedId = paymentIdForTest(raw);
+    mockRegisterPayment.mockResolvedValue({
+      id: expectedId, clientCode: 'C001', reference: 'M-123', amount: 60,
+      paymentMethod: 'CONTADO', collectorCode: '01', ownerVendorCode: '01',
+      observations: 'Replay estable', idempotent: true,
+    });
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
-      if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 0 }];
-      if (/FROM\s+JAVIER\.COBROS\s+WHERE\s+ID\s+=\s+\?/i.test(sql)) {
-        return [{ ID: expectedId, CODIGO_CLIENTE: 'C001', REFERENCIA: 'M-123', IMPORTE: '60.00', FORMA_PAGO: '02', CODIGO_USUARIO: '01' }];
-      }
-      if (/INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql)) return [];
       return [];
     });
 
     const res = await request(makeApp({ code: '01', role: 'COMERCIAL' }))
       .post('/C001/registrar')
-      .send({ referencia: 'M-123', importe: 60, formaPago: '02', idempotencyToken: raw });
+      .send({
+        referencia: 'M-123', importe: 60, formaPago: 'CONTADO', tipoVenta: 'CC',
+        tipoModo: 'NORMAL', observaciones: 'Replay estable', idempotencyToken: raw,
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.idempotent).toBe(true);
-    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql))).toBe(false);
+    expect(mockNotifyCommercialCobro).not.toHaveBeenCalled();
   });
 
   test('POST /:cliente/registrar rejects same idem value with different payload', async () => {
     const raw = 'C'.repeat(64);
-    const expectedId = paymentIdForTest(raw);
+    mockRegisterPayment.mockRejectedValue(Object.assign(new Error('Token de idempotencia reutilizado con otro payload'), {
+      code: 'IDEMPOTENCY_CONFLICT', status: 409,
+    }));
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
-      if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 0 }];
-      if (/FROM\s+JAVIER\.COBROS\s+WHERE\s+ID\s+=\s+\?/i.test(sql)) {
-        return [{ ID: expectedId, CODIGO_CLIENTE: 'C001', REFERENCIA: 'M-123', IMPORTE: '61.00', FORMA_PAGO: '02', CODIGO_USUARIO: '01' }];
-      }
       return [];
     });
 
     const res = await request(makeApp({ code: '01', role: 'COMERCIAL' }))
       .post('/C001/registrar')
-      .send({ referencia: 'M-123', importe: 60, formaPago: '02', idempotencyToken: raw });
+      .send({
+        referencia: 'M-123', importe: 60, formaPago: 'CONTADO', tipoVenta: 'CC',
+        tipoModo: 'NORMAL', observaciones: 'Payload distinto', idempotencyToken: raw,
+      });
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('IDEMPOTENCY_CONFLICT');
   });
 
   test('POST /:cliente/registrar preserves repartidor double-payment prevention', async () => {
+    mockRegisterPayment.mockRejectedValue(Object.assign(new Error('Documento ya cobrado por el repartidor'), {
+      code: 'COBRO_ALREADY_COLLECTED_BY_REPARTIDOR', status: 409,
+    }));
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
-      if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 60 }];
-      if (/INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql)) return [];
       return [];
     });
 
     const res = await request(makeApp({ code: '01', role: 'COMERCIAL' }))
       .post('/C001/registrar')
-      .send({ referencia: 'M-123', importe: 60, formaPago: '02', idempotencyToken: 'idem-repartidor-001' });
+      .send({
+        referencia: 'M-123', importe: 60, formaPago: 'CONTADO', tipoVenta: 'CC',
+        tipoModo: 'NORMAL', observaciones: 'No duplicar reparto', idempotencyToken: 'idem-repartidor-001',
+      });
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('COBRO_ALREADY_COLLECTED_BY_REPARTIDOR');
-    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql))).toBe(false);
+    expect(mockRegisterPayment).toHaveBeenCalledTimes(1);
   });
+
+  test.each(['REPARTIDOR', 'ALMACEN'])(
+    'POST /:cliente/registrar rejects role %s before repository access',
+    async (role) => {
+      const res = await request(makeApp({ id: 'R1', code: 'R1', role }))
+        .post('/C001/registrar')
+        .send({
+          referencia: 'M-123',
+          importe: 60,
+          formaPago: 'CONTADO',
+          tipoVenta: 'CC',
+          tipoModo: 'NORMAL',
+          observaciones: 'Intento no autorizado',
+          idempotencyToken: `legacy-role-${role.toLowerCase()}-001`,
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('FORBIDDEN_COMMERCIAL_ROLE');
+      expect(mockRegisterPayment).not.toHaveBeenCalled();
+    },
+  );
 
   test('GET /:cliente/pendientes flags cobradoPorRepartidor for CTR and REPARTIDOR_COBROS', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
@@ -526,6 +567,9 @@ describe('legacy cobros vendor-scope fallback without clientCodes', () => {
         referencia: 'M-1',
         importe: 10,
         formaPago: 'CONTADO',
+        tipoVenta: 'CC',
+        tipoModo: 'NORMAL',
+        observaciones: 'Cobro fuera de alcance',
         idempotencyToken: 'legacy-route-vendor-scope-001',
       });
 

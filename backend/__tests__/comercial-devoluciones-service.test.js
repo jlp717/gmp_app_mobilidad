@@ -287,6 +287,26 @@ describe('getDailySummary', () => {
     expect(totals.count).toBe(1);
     expect(totals.totalEfectivo).toBe(0);
   });
+
+  test('settles manager collections once under document owner and keeps legacy owner fallback', async () => {
+    mockQueryWithParams.mockImplementation((_sql, params) => {
+      const selectedOwner = params[params.length - 1];
+      return Promise.resolve(selectedOwner === '35'
+        ? [{ FORMA_PAGO: 'CONTADO', TOTAL: 738.46, FILAS: 1 }]
+        : []);
+    });
+
+    const owner35 = await getDailyCobrosByFormaPago({ vendorCodes: ['35'], date: '2026-11-02' });
+    const actor80 = await getDailyCobrosByFormaPago({ vendorCodes: ['80'], date: '2026-11-02' });
+
+    expect(owner35).toEqual(expect.objectContaining({ count: 1, totalEfectivo: 738.46 }));
+    expect(actor80).toEqual(expect.objectContaining({ count: 0, totalEfectivo: 0 }));
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/COALESCE\(NULLIF\(TRIM\(CODIGOVENDEDOR\), ''\), TRIM\(CODIGO_USUARIO\)\)/i);
+    expect(sql).toMatch(/UPPER\(TRIM\(TIPO_USUARIO\)\) IN/i);
+    expect(sql).not.toMatch(/TIPO_USUARIO\)\s*=\s*/i);
+    expect(params).toEqual([2026, 11, 2, 'COMERCIAL', 'JEFE_VENTAS', 'ADMIN', '35']);
+  });
 });
 
 function isolatedWriteEnv() {

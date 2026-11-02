@@ -21,6 +21,7 @@ const {
   redactDeliverySummary,
 } = require('./reparto-email-delivery-policy');
 const { sendEmailWithPdf } = require('./emailPdfService');
+const { comercialErpTable } = require('../utils/comercial-erp-tables');
 
 function normalizeText(value) {
   return String(value ?? '').trim();
@@ -81,6 +82,8 @@ async function notifyCommercialCobro({
   importe,
   formaPago,
   codigoUsuario,
+  codigoVendedor,
+  pendiente,
   observaciones,
 } = {}, {
   query = queryWithParams,
@@ -114,15 +117,31 @@ async function notifyCommercialCobro({
       return { skipped: true, reason: 'policy_rejected' };
     }
 
+    let customerName = '';
+    try {
+      const customerRows = await query(
+        `SELECT COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) AS NOMBRE_CLIENTE
+           FROM ${comercialErpTable('CLI')}
+          WHERE CODIGOCLIENTE = CAST(? AS CHAR(10))
+          FETCH FIRST 1 ROW ONLY`,
+        [normalizeText(codigoCliente).substring(0, 10)],
+        [],
+      );
+      customerName = normalizeText(customerRows?.[0]?.NOMBRE_CLIENTE);
+    } catch (error) {
+      logger.warn(`[comercial-cobro-notify] customer resolve: ${error.message}`);
+    }
+
     const amount = Number(importe);
+    const pendingAfter = Number(pendiente);
     const payload = {
       cobroId: identity,
       documento: normalizeText(referencia),
       codigoCliente: normalizeText(codigoCliente),
-      nombreCliente: '',
+      nombreCliente: customerName,
       repartidorId: comercialCode,
       importe: Number.isFinite(amount) ? amount.toFixed(2) : '0.00',
-      pendiente: '0.00',
+      pendiente: Number.isFinite(pendingAfter) ? pendingAfter.toFixed(2) : '0.00',
       formaPago: normalizeText(formaPago),
       origen: 'COMERCIAL',
       registradoAt: new Date().toISOString(),
@@ -134,7 +153,8 @@ async function notifyCommercialCobro({
       'ID de cobro: ' + payload.cobroId,
       'Documento: ' + payload.documento,
       'Cliente: ' + payload.codigoCliente,
-      'Comercial: ' + comercialCode,
+      'Propietario documental: ' + normalizeText(codigoVendedor),
+      'Registrado por: ' + comercialCode,
       'Importe: ' + payload.importe + ' EUR',
       'Forma de pago: ' + payload.formaPago,
       'Origen: COMERCIAL',

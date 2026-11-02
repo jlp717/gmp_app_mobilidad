@@ -35,24 +35,40 @@ const { Db2CobrosRepository, clearPedidoCabOptionalColumnsCache } = require('../
 function orderRow(overrides = {}) {
   return {
     ID: 22,
+    SOURCE: 'PEDIDOS_CAB',
     CODIGOCLIENTE: 'C001',
     CODIGOVENDEDOR: '01',
     SERIEPEDIDO: 'M',
     NUMEROPEDIDO: 1,
     IMPORTETOTAL: '100.00',
+    TIPOVENTA: 'CC',
     ESTADO: 'CONFIRMADO',
+    ...(overrides.SOURCE === 'CVC' ? {
+      ORIGEN_DOCUMENTO: 'F',
+      SUBEMPRESA: 'GMP',
+      EJERCICIO_DOCUMENTO: 2026,
+      TERMINAL_DOCUMENTO: 35,
+      CODIGOCLIENTEFACTURA: 'C001',
+    } : {}),
     ...overrides,
   };
 }
 
 function setupRegisterPaymentMocks({ existingToken = [], paid = '0.00', order = orderRow(), repartidorPaid = '0.00' } = {}) {
-  return async (sql) => {
+  let insertedRow = null;
+  return async (sql, params = []) => {
     if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return order ? [order] : [];
     if (/FROM DSEDAC\.CVC C/i.test(sql)) return [];
-    if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) return existingToken;
+    if (/FROM DSEDAC\.CAC H/i.test(sql) && /JOIN DSED\.LACLAE L/i.test(sql)) return [{ SALE_TYPE: 'VC' }];
+    if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) return existingToken.length ? existingToken : (insertedRow ? [insertedRow] : []);
     if (/COALESCE\(SUM\(IMPORTE\)/i.test(sql)) return [{ TOTAL_COBRADO: paid }];
     if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: repartidorPaid }];
-    if (/INSERT INTO JAVIER\.COBROS/i.test(sql)) return [];
+    if (/INSERT INTO JAVIER\.COBROS/i.test(sql)) {
+      const columnMatch = /INSERT INTO\s+[^\s(]+\s*\(([^)]+)\)/i.exec(sql);
+      const columns = columnMatch ? columnMatch[1].split(',').map((value) => value.trim()) : [];
+      insertedRow = Object.fromEntries(columns.map((column, index) => [column, params[index]]));
+      return [];
+    }
     return [];
   };
 }
@@ -89,7 +105,18 @@ beforeEach(() => {
   mockConnBegin.mockReset().mockResolvedValue(undefined);
   mockConnCommit.mockReset().mockResolvedValue(undefined);
   mockConnRollback.mockReset().mockResolvedValue(undefined);
-  mockConnQuery.mockImplementation((sql, params) => mockQueryWithParams(sql, params));
+  mockConnQuery.mockImplementation((sql, params) => {
+    if (/FROM JAVIER\.PEDIDOS_CAB\s+WHERE ID = \?/i.test(sql)) {
+      return Promise.resolve([{
+        ID: 22,
+        ESTADO: 'CONFIRMADO',
+        CODIGOCLIENTE: 'C001',
+        SERIEPEDIDO: 'M',
+        NUMEROPEDIDO: 1,
+      }]);
+    }
+    return mockQueryWithParams(sql, params);
+  });
   mockOpenDedicatedConnection.mockResolvedValue({
     query: mockConnQuery,
     beginTransaction: mockConnBegin,
@@ -912,6 +939,8 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 30,
       paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
       reference: 'M-1',
       observations: 'parcial',
       userId: '01',
@@ -942,6 +971,8 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 30,
       paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
       reference: 'M-1',
       observations: 'sin lock',
       userId: '01',
@@ -955,6 +986,15 @@ describe('commercial cobros hardening', () => {
       ...mockQueryWithParams.mock.calls.map(([sql]) => sql),
     ];
     expect(allSql.some((sql) => /LOCK TABLE JAVIER\.REPARTIDOR_COBROS IN EXCLUSIVE MODE/i.test(sql))).toBe(true);
+    expect(allSql.some((sql) => /LOCK TABLE JAVIER\.COBROS IN EXCLUSIVE MODE/i.test(sql))).toBe(true);
+    const connectionSql = mockConnQuery.mock.calls.map(([sql]) => sql);
+    const repartidorLock = connectionSql.findIndex((sql) => /LOCK TABLE JAVIER\.REPARTIDOR_COBROS/i.test(sql));
+    const commercialLock = connectionSql.findIndex((sql) => /LOCK TABLE JAVIER\.COBROS/i.test(sql));
+    const transactionalRecheck = connectionSql.findIndex((sql, index) =>
+      index > commercialLock && /FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql));
+    expect(repartidorLock).toBeGreaterThanOrEqual(0);
+    expect(commercialLock).toBeGreaterThan(repartidorLock);
+    expect(transactionalRecheck).toBeGreaterThan(commercialLock);
     expect(mockConnBegin).toHaveBeenCalledTimes(1);
     expect(mockConnCommit).toHaveBeenCalledTimes(1);
     expect(mockConnRollback).not.toHaveBeenCalled();
@@ -963,28 +1003,30 @@ describe('commercial cobros hardening', () => {
   });
 
   test('registerPayment stores a DB2-safe ID and the idempotency token separately', async () => {
-    const token = ['cobro', 'token', 'exceeds', 'db2', 'id', 'length', '000001'].join('-');
-    const expectedId = paymentIdForTest(token);
+    const idempotencyValue = ['cobro', 'token', 'exceeds', 'db2', 'id', 'length', '000001'].join('-');
+    const expectedId = paymentIdForTest(idempotencyValue);
     const repo = setupRepository({ paid: '0.00' });
 
     await repo.registerPayment({
       clientCode: 'C001',
       amount: 30,
       paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
       reference: 'M-1',
       observations: 'parcial',
       userId: '01',
       userRole: 'COMERCIAL',
-      idempotencyToken: token,
+      idempotencyToken: idempotencyValue,
     });
 
     const lookupCall = mockQueryWithParams.mock.calls.find(([sql]) => /FROM JAVIER\.COBROS\s+WHERE ID = \? OR IDEMPOTENCY_TOKEN = \?/i.test(sql));
-    expect(lookupCall[1]).toEqual([expectedId, token]);
+    expect(lookupCall[1]).toEqual([expectedId, idempotencyValue]);
     const insertCall = mockQueryWithParams.mock.calls.find(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql));
     expect(insertCall[0]).toContain('IDEMPOTENCY_TOKEN');
     expect(insertCall[1][0]).toBe(expectedId);
     expect(insertCall[1][0].length).toBeLessThanOrEqual(36);
-    expect(insertCall[1][10]).toBe(token);
+    expect(insertCall[1][10]).toBe(idempotencyValue);
   });
 
   test('registerPayment sums previous payments by exact normalized reference only', async () => {
@@ -994,6 +1036,8 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 30,
       paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
       reference: 'M-1',
       observations: 'parcial',
       userId: '01',
@@ -1010,14 +1054,21 @@ describe('commercial cobros hardening', () => {
   });
 
   test('registerPayment replays same idempotency token without duplicate insert', async () => {
+    const idempotencyValue = 'cobro-token-replay-001';
     const repo = setupRepository({
       existingToken: [{
-        ID: 'cobro-token-replay-001',
+        ID: paymentIdForTest(idempotencyValue),
         CODIGO_CLIENTE: 'C001',
         REFERENCIA: 'PEDIDO:22:M-1',
         IMPORTE: '30.00',
         FORMA_PAGO: 'CONTADO',
+        TIPO_VENTA: 'CC',
+        TIPO_MODO: null,
+        TIPO_USUARIO: 'COMERCIAL',
         CODIGO_USUARIO: '01',
+        CODIGOVENDEDOR: '01',
+        OBSERVACIONES: 'Reintento de cobro',
+        IDEMPOTENCY_TOKEN: idempotencyValue,
       }],
       paid: '30.00',
     });
@@ -1026,10 +1077,13 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 30,
       paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
       reference: 'M-1',
+      observations: 'Reintento de cobro',
       userId: '01',
       userRole: 'COMERCIAL',
-      idempotencyToken: 'cobro-token-replay-001',
+      idempotencyToken: idempotencyValue,
     });
 
     expect(result.idempotent).toBe(true);
@@ -1037,11 +1091,11 @@ describe('commercial cobros hardening', () => {
   });
 
   test('registerPayment replays idempotency after duplicate insert race', async () => {
-    const token = ['cobro', 'token', 'race', '001'].join('-');
-    const expectedId = paymentIdForTest(token);
+    const idempotencyValue = ['cobro', 'token', 'race', '001'].join('-');
+    const expectedId = paymentIdForTest(idempotencyValue);
     mockQuery.mockResolvedValue([{ 1: 1 }]);
     let insertAttempts = 0;
-    mockQueryWithParams.mockImplementation(async (sql, params) => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
       if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return [orderRow()];
       if (/FROM DSEDAC\.CVC C/i.test(sql)) return [];
       if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) {
@@ -1052,7 +1106,13 @@ describe('commercial cobros hardening', () => {
             REFERENCIA: 'PEDIDO:22:M-1',
             IMPORTE: '30.00',
             FORMA_PAGO: 'CONTADO',
+            TIPO_VENTA: 'CC',
+            TIPO_MODO: null,
+            TIPO_USUARIO: 'COMERCIAL',
             CODIGO_USUARIO: '01',
+            CODIGOVENDEDOR: '01',
+            OBSERVACIONES: 'Carrera idempotente',
+            IDEMPOTENCY_TOKEN: idempotencyValue,
           }];
         }
         return [];
@@ -1071,10 +1131,13 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 30,
       paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
       reference: 'M-1',
+      observations: 'Carrera idempotente',
       userId: '01',
       userRole: 'COMERCIAL',
-      idempotencyToken: token,
+      idempotencyToken: idempotencyValue,
     });
 
     expect(result.idempotent).toBe(true);
@@ -1082,14 +1145,21 @@ describe('commercial cobros hardening', () => {
   });
 
   test('registerPayment rejects same idempotency token with different payload', async () => {
+    const idempotencyValue = 'cobro-token-conflict-001';
     const repo = setupRepository({
       existingToken: [{
-        ID: 'cobro-token-conflict-001',
+        ID: paymentIdForTest(idempotencyValue),
         CODIGO_CLIENTE: 'C001',
         REFERENCIA: 'PEDIDO:22:M-1',
         IMPORTE: '30.00',
         FORMA_PAGO: 'CONTADO',
+        TIPO_VENTA: 'CC',
+        TIPO_MODO: null,
+        TIPO_USUARIO: 'COMERCIAL',
         CODIGO_USUARIO: '01',
+        CODIGOVENDEDOR: '01',
+        OBSERVACIONES: 'Payload original',
+        IDEMPOTENCY_TOKEN: idempotencyValue,
       }],
     });
 
@@ -1097,11 +1167,54 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 31,
       paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
       reference: 'M-1',
+      observations: 'Payload distinto',
       userId: '01',
       userRole: 'COMERCIAL',
-      idempotencyToken: 'cobro-token-conflict-001',
+      idempotencyToken: idempotencyValue,
     })).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT', status: 409 });
+  });
+
+  test.each([
+    ['observations', { observations: 'Observaciones modificadas' }],
+    ['collector role', { userRole: 'ADMIN' }],
+    ['payment method', { paymentMethod: 'TJ' }],
+  ])('registerPayment rejects a replay with changed %s', async (_field, override) => {
+    const idempotencyValue = 'cobro-token-fingerprint-001';
+    const repo = setupRepository({
+      existingToken: [{
+        ID: paymentIdForTest(idempotencyValue),
+        CODIGO_CLIENTE: 'C001',
+        REFERENCIA: 'PEDIDO:22:M-1',
+        IMPORTE: '30.00',
+        FORMA_PAGO: 'CONTADO',
+        TIPO_VENTA: 'CC',
+        TIPO_MODO: null,
+        TIPO_USUARIO: 'COMERCIAL',
+        CODIGO_USUARIO: '01',
+        CODIGOVENDEDOR: '01',
+        OBSERVACIONES: 'Payload original',
+        IDEMPOTENCY_TOKEN: idempotencyValue,
+      }],
+    });
+
+    await expect(repo.registerPayment({
+      clientCode: 'C001',
+      amount: 30,
+      paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
+      reference: 'M-1',
+      observations: 'Payload original',
+      userId: '01',
+      userRole: 'COMERCIAL',
+      idempotencyToken: idempotencyValue,
+      ...override,
+    })).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT', status: 409 });
+
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql))).toBe(false);
   });
 
   test('registerPayment rejects commercial overpay', async () => {
@@ -1111,7 +1224,10 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 10,
       paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
       reference: 'M-1',
+      observations: 'Cobro superior al pendiente',
       userId: '01',
       userRole: 'COMERCIAL',
       idempotencyToken: 'cobro-token-overpay-001',
@@ -1125,7 +1241,10 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 10,
       paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
       reference: 'M-1',
+      observations: 'Cobro de manager',
       userId: '98',
       userRole: 'JEFE_VENTAS',
       isJefeVentas: true,
@@ -1143,7 +1262,10 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 10,
       paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
       reference: 'M-1',
+      observations: 'Fuera de propietario',
       userId: '01',
       userRole: 'COMERCIAL',
       idempotencyToken: 'cobro-token-authz-001',
@@ -1167,25 +1289,29 @@ describe('commercial cobros hardening', () => {
 
   test('registerPayment accepts a real CVC document reference and stores a stable CVC reference', async () => {
     mockQuery.mockResolvedValue([{ 1: 1 }]);
-    mockQueryWithParams.mockImplementation(async (sql) => {
+    let insertedRow = null;
+    mockQueryWithParams.mockImplementation(async (sql, params = []) => {
       if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return [];
       if (/FROM DSEDAC\.CVC C/i.test(sql)) {
-        return [{
+        return [orderRow({
           ID: 'CVC:M-123',
           SOURCE: 'CVC',
-          CODIGOCLIENTE: 'C001',
-          CODIGOVENDEDOR: '01',
           SERIEPEDIDO: 'M',
           NUMEROPEDIDO: 123,
           IMPORTETOTAL: '80.00',
           IMPORTE_DOCUMENTO: '80.00',
           ESTADO: 'PENDIENTE',
-        }];
+        })];
       }
-      if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) return [];
+      if (/FROM DSEDAC\.CAC H/i.test(sql) && /JOIN DSED\.LACLAE L/i.test(sql)) return [{ SALE_TYPE: 'CC' }];
+      if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) return insertedRow ? [insertedRow] : [];
       if (/COALESCE\(SUM\(IMPORTE\)/i.test(sql)) return [{ TOTAL_COBRADO: '30.00' }];
       if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: '0.00' }];
-      if (/INSERT INTO JAVIER\.COBROS/i.test(sql)) return [];
+      if (/INSERT INTO JAVIER\.COBROS/i.test(sql)) {
+        const columns = /\(([^)]+)\)/.exec(sql)[1].split(',').map((value) => value.trim());
+        insertedRow = Object.fromEntries(columns.map((column, index) => [column, params[index]]));
+        return [];
+      }
       return [];
     });
     const repo = new Db2CobrosRepository();
@@ -1194,6 +1320,8 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 20,
       paymentMethod: 'CONTADO',
+      saleType: 'VC',
+      paymentMode: 'NORMAL',
       reference: 'M-123',
       observations: 'parcial CVC',
       userId: '01',
@@ -1227,18 +1355,17 @@ describe('commercial cobros hardening', () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return [];
       if (/FROM DSEDAC\.CVC C/i.test(sql)) {
-        return [{
+        return [orderRow({
           ID: 'CVC:M-123',
           SOURCE: 'CVC',
-          CODIGOCLIENTE: 'C001',
-          CODIGOVENDEDOR: '01',
           SERIEPEDIDO: 'M',
           NUMEROPEDIDO: 123,
           IMPORTETOTAL: '80.00',
           IMPORTE_DOCUMENTO: '80.00',
           ESTADO: 'PENDIENTE',
-        }];
+        })];
       }
+      if (/FROM DSEDAC\.CAC H/i.test(sql) && /JOIN DSED\.LACLAE L/i.test(sql)) return [{ SALE_TYPE: 'CC' }];
       if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) return [];
       if (/COALESCE\(SUM\(IMPORTE\)/i.test(sql)) return [{ TOTAL_COBRADO: '0.00' }];
       if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: '15.00' }];
@@ -1251,6 +1378,8 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 20,
       paymentMethod: 'CONTADO',
+      saleType: 'VC',
+      paymentMode: 'NORMAL',
       reference: 'M-123',
       observations: 'doble cobro',
       userId: '01',
@@ -1260,6 +1389,28 @@ describe('commercial cobros hardening', () => {
       code: 'COBRO_ALREADY_COLLECTED_BY_REPARTIDOR',
       status: 409,
     });
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql))).toBe(false);
+  });
+
+  test('registerPayment rejects a document assigned to repartidor by its ERP payment condition', async () => {
+    const repo = setupRepository({ order: orderRow({ FORMA_PAGO: '01' }) });
+
+    await expect(repo.registerPayment({
+      clientCode: 'C001',
+      amount: 10,
+      paymentMethod: 'CONTADO',
+      saleType: 'CC',
+      paymentMode: 'NORMAL',
+      reference: 'M-1',
+      observations: 'Responsabilidad de reparto',
+      userId: '01',
+      userRole: 'COMERCIAL',
+      idempotencyToken: 'cobro-token-driver-responsibility-001',
+    })).rejects.toMatchObject({
+      code: 'COBRO_RESPONSIBILITY_REPARTIDOR',
+      status: 409,
+    });
+
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql))).toBe(false);
   });
 
@@ -1274,6 +1425,7 @@ describe('commercial cobros hardening', () => {
     });
     await expect(repo.registerPayment({
       clientCode: 'C001', amount: 20, paymentMethod: 'CONTADO',
+      saleType: 'CC', paymentMode: 'NORMAL',
       reference: 'M-1', observations: 'Cobro de prueba', userId: '01',
       userRole: 'COMERCIAL', idempotencyToken: 'cross-ledger-unavailable',
     })).rejects.toMatchObject({ code: 'PAYMENT_CROSS_CHECK_UNAVAILABLE', status: 503 });
@@ -1285,18 +1437,17 @@ describe('commercial cobros hardening', () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return [];
       if (/FROM DSEDAC\.CVC C/i.test(sql)) {
-        return [{
+        return [orderRow({
           ID: 'CVC:M-123',
           SOURCE: 'CVC',
-          CODIGOCLIENTE: 'C001',
-          CODIGOVENDEDOR: '01',
           SERIEPEDIDO: 'M',
           NUMEROPEDIDO: 123,
           IMPORTETOTAL: '100.00',
           IMPORTE_DOCUMENTO: '100.00',
           ESTADO: 'PENDIENTE',
-        }];
+        })];
       }
+      if (/FROM DSEDAC\.CAC H/i.test(sql) && /JOIN DSED\.LACLAE L/i.test(sql)) return [{ SALE_TYPE: 'CC' }];
       if (/FROM DSEDAC\.CLX/i.test(sql)) {
         return [{ SN: 'S', PCT: 50 }];
       }
@@ -1311,11 +1462,317 @@ describe('commercial cobros hardening', () => {
       clientCode: 'C001',
       amount: 20,
       paymentMethod: 'CONTADO',
+      saleType: 'VC',
+      paymentMode: 'NORMAL',
       reference: 'CVC:M-123',
+      observations: 'Cobro inferior al minimo',
       userId: '01',
       userRole: 'COMERCIAL',
       idempotencyToken: 'cobro-token-min-001',
     })).rejects.toMatchObject({ code: 'BELOW_MIN_COBRO', status: 409 });
+  });
+
+  test.each(['JEFE_VENTAS', 'ADMIN'])('stores document owner separately from %s collector identity', async (userRole) => {
+    const repo = setupRepository({ order: orderRow({ CODIGOVENDEDOR: '35' }) });
+    const result = await repo.registerPayment({
+      clientCode: 'C001', amount: 25, paymentMethod: 'T0', saleType: 'VC', paymentMode: 'ESPECIAL',
+      reference: 'M-1', observations: 'Transferencia recibida', userId: '80', userRole,
+      idempotencyToken: `manager-owner-${userRole.toLowerCase()}-001`,
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      ownerVendorCode: '35', collectorCode: '80', collectorRole: userRole,
+      paymentMethod: 'TR', saleType: 'CC', paymentMode: null,
+    }));
+    const [sql, params] = mockConnQuery.mock.calls.find(([statement]) => /INSERT INTO JAVIER\.COBROS/i.test(statement));
+    const columns = /\(([^)]+)\)/.exec(sql)[1].split(',').map((value) => value.trim());
+    const persisted = Object.fromEntries(columns.map((column, index) => [column, params[index]]));
+    expect(persisted).toEqual(expect.objectContaining({
+      CODIGOVENDEDOR: '35', CODIGO_USUARIO: '80', TIPO_USUARIO: userRole,
+      FORMA_PAGO: 'TR', TIPO_VENTA: 'CC', TIPO_MODO: null,
+    }));
+  });
+
+  test('loads the minimum collection rule for document owner 35 when manager 80 collects', async () => {
+    const repo = setupRepository({ order: orderRow({ CODIGOVENDEDOR: '35' }) });
+    const rule = jest.spyOn(repo, 'getClientCobroRiguroso')
+      .mockResolvedValue({ cobroRiguroso: false, porcentajeMinimoCobro: 0 });
+
+    await repo.registerPayment({
+      clientCode: 'C001', amount: 25, paymentMethod: 'CONTADO', reference: 'M-1',
+      observations: 'Cobro de documento 35', userId: '80', userRole: 'JEFE_VENTAS',
+      idempotencyToken: 'owner-rule-manager-001',
+    });
+
+    expect(rule).toHaveBeenCalledWith('C001', expect.objectContaining({
+      ownerVendorCode: '35', userId: '35', vendorCodes: ['35'],
+    }));
+  });
+
+  test('loads the minimum collection rule for the same owner when commercial collects own document', async () => {
+    const repo = setupRepository({ order: orderRow({ CODIGOVENDEDOR: '35' }) });
+    const rule = jest.spyOn(repo, 'getClientCobroRiguroso')
+      .mockResolvedValue({ cobroRiguroso: false, porcentajeMinimoCobro: 0 });
+
+    await repo.registerPayment({
+      clientCode: 'C001', amount: 25, paymentMethod: 'CONTADO', reference: 'M-1',
+      observations: 'Cobro propio 35', userId: '35', userRole: 'COMERCIAL',
+      idempotencyToken: 'owner-rule-self-001',
+    });
+
+    expect(rule).toHaveBeenCalledWith('C001', expect.objectContaining({
+      ownerVendorCode: '35', userId: '35', vendorCodes: ['35'],
+    }));
+  });
+
+  test('fails closed before opening a transaction when document owner is missing', async () => {
+    const repo = setupRepository({ order: orderRow({ CODIGOVENDEDOR: '' }) });
+    const rule = jest.spyOn(repo, 'getClientCobroRiguroso');
+
+    await expect(repo.registerPayment({
+      clientCode: 'C001', amount: 25, paymentMethod: 'CONTADO', reference: 'M-1',
+      observations: 'Documento sin propietario', userId: '80', userRole: 'JEFE_VENTAS',
+      idempotencyToken: 'owner-rule-missing-001',
+    })).rejects.toMatchObject({ code: 'PAYMENT_DOCUMENT_OWNER_UNVERIFIED', status: 409 });
+    expect(rule).not.toHaveBeenCalled();
+    expect(mockOpenDedicatedConnection).not.toHaveBeenCalled();
+  });
+
+  test('rolls back if document owner changes after the owner rule was selected', async () => {
+    const repo = setupRepository();
+    jest.spyOn(repo, 'findOrderForPayment')
+      .mockResolvedValueOnce(orderRow({ CODIGOVENDEDOR: '35' }))
+      .mockResolvedValueOnce(orderRow({ CODIGOVENDEDOR: '80' }));
+    const rule = jest.spyOn(repo, 'getClientCobroRiguroso')
+      .mockResolvedValue({ cobroRiguroso: false, porcentajeMinimoCobro: 0 });
+
+    await expect(repo.registerPayment({
+      clientCode: 'C001', amount: 25, paymentMethod: 'CONTADO', reference: 'M-1',
+      observations: 'Cambio concurrente de propietario', userId: '80', userRole: 'JEFE_VENTAS',
+      idempotencyToken: 'owner-rule-changed-001',
+    })).rejects.toMatchObject({ code: 'PAYMENT_DOCUMENT_OWNER_CHANGED', status: 409 });
+    expect(rule).toHaveBeenCalledWith('C001', expect.objectContaining({ ownerVendorCode: '35' }));
+    expect(mockConnRollback).toHaveBeenCalledTimes(1);
+    expect(mockConnCommit).not.toHaveBeenCalled();
+    expect(mockConnQuery.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql))).toBe(false);
+  });
+
+  test('rolls back when inserted payment cannot be confirmed by persisted read-back', async () => {
+    mockQuery.mockResolvedValue([{ 1: 1 }]);
+    mockQueryWithParams.mockImplementation((sql) => Promise.resolve(
+      /FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql) ? [orderRow()]
+        : /COALESCE\(SUM\(IMPORTE\)/i.test(sql) ? [{ TOTAL_COBRADO: 0 }]
+          : /FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql) ? [{ TOTAL_REP: 0 }]
+            : [],
+    ));
+    const repo = new Db2CobrosRepository();
+
+    await expect(repo.registerPayment({
+      clientCode: 'C001', amount: 25, paymentMethod: 'CONTADO', saleType: 'CC', paymentMode: 'NORMAL',
+      reference: 'M-1', observations: 'Cobro que exige readback', userId: '01', userRole: 'COMERCIAL',
+      idempotencyToken: 'missing-readback-payment-001',
+    })).rejects.toMatchObject({ code: 'PAYMENT_PERSISTENCE_UNCONFIRMED', status: 503 });
+    expect(mockConnRollback).toHaveBeenCalledTimes(1);
+    expect(mockConnCommit).not.toHaveBeenCalled();
+  });
+
+  test('rejects ambiguous legacy CVC reference and requires the full ERP identity', async () => {
+    const repo = setupRepository({
+      order: orderRow({
+        SOURCE: 'CVC', ID: 'CVC:CAC:B:GMP:2026:M:1:123:1:1', SERIEPEDIDO: 'M',
+        NUMEROPEDIDO: 123, IMPORTE_DOCUMENTO: 100, LEGACY_COLLISION_COUNT: 2,
+      }),
+    });
+    await expect(repo.registerPayment({
+      clientCode: 'C001', amount: 25, paymentMethod: 'CONTADO', saleType: 'VC', paymentMode: 'NORMAL',
+      reference: 'M-123', observations: 'Referencia no univoca', userId: '01', userRole: 'COMERCIAL',
+      idempotencyToken: 'ambiguous-cvc-payment-001',
+    })).rejects.toMatchObject({ code: 'AMBIGUOUS_DOCUMENT_REFERENCE', status: 409 });
+    expect(mockConnQuery.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.COBROS/i.test(sql))).toBe(false);
+  });
+
+  test('fails closed when either debt overlay ledger cannot be read', async () => {
+    mockQuery.mockResolvedValue([]);
+    mockQueryWithParams.mockImplementation((sql) => (
+      /FROM JAVIER\.COBROS/i.test(sql)
+        ? Promise.reject(new Error('ledger unavailable'))
+        : Promise.resolve([])
+    ));
+    const repo = new Db2CobrosRepository();
+    await expect(repo.getPendientes('C001', { userId: '01', userRole: 'COMERCIAL' }))
+      .rejects.toMatchObject({ code: 'PAYMENT_DEBT_LOOKUP_UNAVAILABLE', status: 503 });
+  });
+
+  test('re-reads document ownership before rejecting a forged replay row with mismatched token and owner', async () => {
+    const idempotencyValue = 'owner-replay-token-001';
+    const repo = setupRepository({
+      order: orderRow({ CODIGOVENDEDOR: '35' }),
+      existingToken: [{
+        ID: paymentIdForTest(idempotencyValue),
+        CODIGO_CLIENTE: 'C001',
+        REFERENCIA: 'PEDIDO:22:M-1',
+        IMPORTE: 25,
+        FORMA_PAGO: 'CONTADO',
+        TIPO_VENTA: 'CC',
+        TIPO_MODO: null,
+        TIPO_USUARIO: 'JEFE_VENTAS',
+        CODIGO_USUARIO: '80',
+        CODIGOVENDEDOR: '99',
+        OBSERVACIONES: 'Fila ajena',
+        IDEMPOTENCY_TOKEN: 'different-unique-token-001',
+      }],
+    });
+
+    await expect(repo.registerPayment({
+      clientCode: 'C001', amount: 25, paymentMethod: 'CONTADO',
+      reference: 'M-1', observations: 'Fila ajena', userId: '80', userRole: 'JEFE_VENTAS',
+      idempotencyToken: idempotencyValue,
+    })).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT', status: 409 });
+
+    const sqlCalls = mockConnQuery.mock.calls.map(([sql]) => String(sql));
+    const documentRecheck = sqlCalls.findIndex((sql) => /FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql));
+    const replayRead = sqlCalls.findIndex((sql) => /WHERE ID = \? OR IDEMPOTENCY_TOKEN = \?/i.test(sql));
+    expect(documentRecheck).toBeGreaterThanOrEqual(0);
+    expect(replayRead).toBeGreaterThan(documentRecheck);
+    expect(mockConnRollback).toHaveBeenCalledTimes(1);
+    expect(mockConnCommit).not.toHaveBeenCalled();
+  });
+
+  test('rolls back when ID and token lookup is not cardinality-one', async () => {
+    const idempotencyValue = 'ambiguous-replay-token-001';
+    const base = {
+      ID: paymentIdForTest(idempotencyValue), CODIGO_CLIENTE: 'C001', REFERENCIA: 'PEDIDO:22:M-1',
+      IMPORTE: 25, FORMA_PAGO: 'CONTADO', TIPO_VENTA: 'CC', TIPO_MODO: null,
+      TIPO_USUARIO: 'COMERCIAL', CODIGO_USUARIO: '01', CODIGOVENDEDOR: '01',
+      OBSERVACIONES: 'Replay ambiguo', IDEMPOTENCY_TOKEN: idempotencyValue,
+    };
+    const repo = setupRepository({ existingToken: [base, { ...base, ID: 'CBR-other' }] });
+
+    await expect(repo.registerPayment({
+      clientCode: 'C001', amount: 25, paymentMethod: 'CONTADO', reference: 'M-1',
+      observations: 'Replay ambiguo', userId: '01', userRole: 'COMERCIAL', idempotencyToken: idempotencyValue,
+    })).rejects.toMatchObject({ code: 'IDEMPOTENCY_STATE_AMBIGUOUS', status: 409 });
+    expect(mockConnRollback).toHaveBeenCalledTimes(1);
+    expect(mockConnCommit).not.toHaveBeenCalled();
+  });
+
+  test('derives invoice sale type from full CAC invoice and LACLAE delivery identities', async () => {
+    const execute = jest.fn().mockResolvedValue([{ SALE_TYPE: 'CC' }]);
+    const repo = new Db2CobrosRepository();
+    const saleType = await repo.resolveOrderSaleType(orderRow({
+      SOURCE: 'CVC', ORIGEN_DOCUMENTO: 'F', SUBEMPRESA: 'GMP',
+      EJERCICIO_DOCUMENTO: 2026, SERIEPEDIDO: 'F', TERMINAL_DOCUMENTO: 0,
+      NUMEROPEDIDO: 13427, CODIGOCLIENTEFACTURA: '4300040687', CODIGOCLIENTE: '4300040687',
+    }), execute);
+
+    expect(saleType).toBe('CC');
+    const [sql, params] = execute.mock.calls[0];
+    expect(sql).toMatch(/FROM DSEDAC\.CAC H/i);
+    expect(sql).toMatch(/JOIN DSED\.LACLAE L/i);
+    expect(sql).toMatch(/SUBEMPRESAFACTURA[\s\S]*EJERCICIOFACTURA[\s\S]*SERIEFACTURA[\s\S]*TERMINALFACTURA[\s\S]*NUMEROFACTURA/i);
+    expect(sql).toMatch(/LCSBAB[\s\S]*LCYEAB[\s\S]*LCSRAB[\s\S]*LCTRAB[\s\S]*LCNRAB/i);
+    expect(params).toEqual(['GMP', 2026, 'F', 0, 13427, '4300040687', '4300040687']);
+  });
+
+  test.each([
+    [[], 'absent'],
+    [[{ SALE_TYPE: 'CC' }, { SALE_TYPE: 'VC' }], 'mixed'],
+    [[{ SALE_TYPE: 'XX' }], 'unknown'],
+  ])('fails closed for %s ERP sale type evidence', async (rows) => {
+    const repo = new Db2CobrosRepository();
+    await expect(repo.resolveOrderSaleType(orderRow({
+      SOURCE: 'CVC', ORIGEN_DOCUMENTO: 'F', SUBEMPRESA: 'GMP',
+      EJERCICIO_DOCUMENTO: 2026, SERIEPEDIDO: 'F', TERMINAL_DOCUMENTO: 0,
+      NUMEROPEDIDO: 13427, CODIGOCLIENTEFACTURA: '4300040687',
+    }), jest.fn().mockResolvedValue(rows))).rejects.toMatchObject({
+      code: 'PAYMENT_SALE_TYPE_UNVERIFIED', status: 409,
+    });
+  });
+
+  test('fails closed with a typed service error when ERP sale type lookup is unavailable', async () => {
+    const repo = new Db2CobrosRepository();
+    await expect(repo.resolveOrderSaleType(orderRow({
+      SOURCE: 'CVC', ORIGEN_DOCUMENTO: 'F', SUBEMPRESA: 'GMP',
+      EJERCICIO_DOCUMENTO: 2026, SERIEPEDIDO: 'F', TERMINAL_DOCUMENTO: 0,
+      NUMEROPEDIDO: 13427, CODIGOCLIENTEFACTURA: '4300040687',
+    }), jest.fn().mockRejectedValue(new Error('ODBC unavailable')))).rejects.toMatchObject({
+      code: 'PAYMENT_SALE_TYPE_LOOKUP_UNAVAILABLE', status: 503,
+    });
+  });
+
+  test('serializes concurrent commercial attempts and prevents aggregate overcollection', async () => {
+    const fullReference = 'CVC:CAC:B:GMP:2026:M:1:123:1:1';
+    const erpOrder = orderRow({
+      SOURCE: 'CVC', ID: fullReference, SERIEPEDIDO: 'M', NUMEROPEDIDO: 123,
+      IMPORTETOTAL: 100, IMPORTE_DOCUMENTO: 100, LEGACY_COLLISION_COUNT: 1,
+    });
+    mockQuery.mockResolvedValue([{ 1: 1 }]);
+    mockQueryWithParams.mockImplementation((sql) => Promise.resolve(
+      /FROM DSEDAC\.CVC C/i.test(sql) ? [erpOrder]
+        : /FROM DSEDAC\.CAC H/i.test(sql) && /JOIN DSED\.LACLAE L/i.test(sql) ? [{ SALE_TYPE: 'CC' }]
+          : [],
+    ));
+
+    let tail = Promise.resolve();
+    const persisted = new Map();
+    let paidCents = 0;
+    const transactionConnectionFactory = () => {
+      let release = null;
+      return Promise.resolve({
+        beginTransaction: jest.fn(() => Promise.resolve()),
+        query: jest.fn(async (sql, params = []) => {
+          if (/LOCK TABLE JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [];
+          if (/LOCK TABLE JAVIER\.COBROS/i.test(sql)) {
+            const previous = tail;
+            tail = new Promise((resolve) => { release = resolve; });
+            await previous;
+            return [];
+          }
+          if (/FROM JAVIER\.COBROS\s+WHERE ID = \?/i.test(sql)) {
+            return persisted.has(params[1]) ? [persisted.get(params[1])] : [];
+          }
+          if (/FROM JAVIER\.PEDIDOS_CAB PC/i.test(sql)) return [];
+          if (/FROM DSEDAC\.CVC C/i.test(sql)) return [erpOrder];
+          if (/FROM DSEDAC\.CAC H/i.test(sql) && /JOIN DSED\.LACLAE L/i.test(sql)) return [{ SALE_TYPE: 'CC' }];
+          if (/COALESCE\(SUM\(IMPORTE\)/i.test(sql)) return [{ TOTAL_COBRADO: paidCents / 100 }];
+          if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 0 }];
+          if (/INSERT INTO JAVIER\.COBROS/i.test(sql)) {
+            const columns = /\(([^)]+)\)/.exec(sql)[1].split(',').map((value) => value.trim());
+            const row = Object.fromEntries(columns.map((column, index) => [column, params[index]]));
+            persisted.set(row.IDEMPOTENCY_TOKEN, row);
+            paidCents += Math.round(Number(row.IMPORTE) * 100);
+          }
+          return [];
+        }),
+        commit: jest.fn(() => {
+          if (release) release();
+          return Promise.resolve();
+        }),
+        rollback: jest.fn(() => {
+          if (release) release();
+          return Promise.resolve();
+        }),
+        close: jest.fn(() => Promise.resolve()),
+      });
+    };
+    const repo = new Db2CobrosRepository({ transactionConnectionFactory });
+    const first = repo.registerPayment({
+      clientCode: 'C001', amount: 70, paymentMethod: 'CONTADO', saleType: 'VC', paymentMode: 'NORMAL',
+      reference: fullReference, observations: 'Primer cobro concurrente', userId: '01', userRole: 'COMERCIAL',
+      idempotencyToken: 'concurrent-commercial-first-001',
+    });
+    const second = repo.registerPayment({
+      clientCode: 'C001', amount: 40, paymentMethod: 'TJ', saleType: 'VC', paymentMode: 'NORMAL',
+      reference: fullReference, observations: 'Segundo cobro concurrente', userId: '01', userRole: 'COMERCIAL',
+      idempotencyToken: 'concurrent-commercial-second-001',
+    });
+
+    const outcomes = await Promise.allSettled([first, second]);
+    expect(outcomes.filter((entry) => entry.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter((entry) => entry.status === 'rejected')[0].reason)
+      .toMatchObject({ code: 'PAYMENT_EXCEEDS', status: 409 });
+    expect(persisted.size).toBe(1);
+    expect(paidCents).toBe(7000);
   });
 });
 
@@ -1324,13 +1781,21 @@ describe('real document amount protection', () => {
   test.each([[233, 232.74, 'PAYMENT_EXCEEDS'], [10, null, 'DOCUMENT_TOTAL_UNAVAILABLE']])(
     'rejects payment %s when the verified document total is %s', async (amount, documentTotal, code) => {
       const repo = setupRepository({ order: orderRow({ SOURCE: 'CVC', ID: 'CVC:M-1', IMPORTETOTAL: 960.40, IMPORTE_DOCUMENTO: documentTotal }) });
-      await expect(repo.registerPayment({ clientCode: 'C001', amount, paymentMethod: 'CONTADO', reference: 'M-1', observations: 'cap regression', userId: '01', idempotencyToken: 'cap-check-token' })).rejects.toMatchObject({ code, status: 409 });
+      await expect(repo.registerPayment({
+        clientCode: 'C001', amount, paymentMethod: 'CONTADO', saleType: 'VC', paymentMode: 'NORMAL',
+        reference: 'M-1', observations: 'cap regression', userId: '01', userRole: 'COMERCIAL',
+        idempotencyToken: 'cap-check-token',
+      })).rejects.toMatchObject({ code, status: 409 });
       expect(mockConnQuery.mock.calls.some(([sql]) => /INSERT INTO/.test(sql))).toBe(false);
     });
   test('partial collection uses CPC total instead of the larger CVC amount and loads the rule before locking', async () => {
     const repo = setupRepository({ order: orderRow({ SOURCE: 'CVC', ID: 'CVC:M-1', IMPORTETOTAL: 960.40, IMPORTE_DOCUMENTO: 232.74 }) });
     const rule = jest.spyOn(repo, 'getClientCobroRiguroso').mockResolvedValue({ cobroRiguroso: false, porcentajeMinimoCobro: 0 });
-    const payment = await repo.registerPayment({ clientCode: 'C001', amount: 116.37, paymentMethod: 'CONTADO', reference: 'M-1', observations: 'cap regression', userId: '01', idempotencyToken: 'cap-partial-token' });
+    const payment = await repo.registerPayment({
+      clientCode: 'C001', amount: 116.37, paymentMethod: 'CONTADO', saleType: 'VC', paymentMode: 'NORMAL',
+      reference: 'M-1', observations: 'cap regression', userId: '01', userRole: 'COMERCIAL',
+      idempotencyToken: 'cap-partial-token',
+    });
     expect(payment.pendingBefore).toBe(232.74);
     expect(payment.pendingAfter).toBe(116.37);
     expect(rule.mock.invocationCallOrder[0]).toBeLessThan(mockOpenDedicatedConnection.mock.invocationCallOrder[0]);

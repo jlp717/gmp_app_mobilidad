@@ -656,7 +656,7 @@ router.get('/draft-status/:vendedorCode', async (req, res) => {
 router.post('/draft-status/:vendedorCode/auto-confirm', async (req, res) => {
     try {
         const code = String(req.params.vendedorCode || '').trim();
-        const vendorAccess = authorizePedidoVendorCode(req, code, 'auto-confirmar');
+        const vendorAccess = await authorizePedidoVendorCode(req, code, 'auto-confirmar');
         if (!vendorAccess.ok) {
             return res.status(vendorAccess.status).json(vendorAccess.body);
         }

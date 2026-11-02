@@ -28,3 +28,22 @@ test('builds a payment receipt PDF with the persisted cobro facts', async () => 
   expect(raw).toContain('31302C3030');
   expect(buildCobroPdfFileName(payload)).toBe('RECIBO_COBRO_2026-S-10-404-4300001.pdf');
 });
+
+test('labels a commercial receipt as commercial instead of repartidor', async () => {
+  const buffer = await buildCobroPdfBuffer({
+    cobroId: 'CBR-commercial-35',
+    documento: 'F-0-13427',
+    codigoCliente: '4300040687',
+    nombreCliente: 'Cliente comercial',
+    repartidorId: '35',
+    importe: '738.46',
+    pendiente: '0.00',
+    formaPago: 'TJ',
+    origen: 'COMERCIAL',
+    registradoAt: '2026-11-02T12:00:00.000Z',
+    notas: 'Pago con tarjeta',
+  });
+  const raw = buffer.toString('latin1').toUpperCase();
+  expect(raw).toContain(Buffer.from('COMERCIAL').toString('hex').toUpperCase());
+  expect(raw).not.toContain(Buffer.from('REPARTIDOR').toString('hex').toUpperCase());
+});

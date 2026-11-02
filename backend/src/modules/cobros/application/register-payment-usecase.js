@@ -3,6 +3,10 @@
  */
 const { UseCase } = require('../../../core/application/use-case');
 const logger = require('../../../../middleware/logger');
+const {
+  normalizeCommercialActor,
+  normalizeCommercialPaymentInput,
+} = require('../domain/commercial-payment-contract');
 
 class PaymentError extends Error {
   constructor(message, code) {
@@ -18,28 +22,36 @@ class RegisterPaymentUseCase extends UseCase {
     this._cobrosRepository = cobrosRepository;
   }
 
-  async execute({ clientCode, amount, paymentMethod, reference, observations, userId }) {
-    if (!clientCode) {
-      throw new PaymentError('clientCode is required', 'MISSING_CLIENT_CODE');
-    }
-
-    if (!paymentMethod) {
-      throw new PaymentError('paymentMethod is required', 'MISSING_PAYMENT_METHOD');
-    }
-
-    if (!amount || amount <= 0) {
-      throw new PaymentError('amount must be greater than 0', 'INVALID_AMOUNT');
-    }
-
-    logger.info(`RegisterPaymentUseCase: Registering payment for client ${clientCode}, amount ${amount}`);
-
-    const result = await this._cobrosRepository.registerPayment({
+  async execute({
+    clientCode,
+    amount,
+    paymentMethod,
+    reference,
+    observations,
+    userId,
+    userRole,
+    idempotencyToken,
+  }) {
+    const actor = normalizeCommercialActor({ userId, userRole });
+    const payment = normalizeCommercialPaymentInput({
       clientCode,
       amount,
       paymentMethod,
       reference,
       observations,
-      userId
+    });
+
+    logger.info(`RegisterPaymentUseCase: Registering payment for client ${payment.clientCode}, amount ${payment.amount}`);
+
+    const result = await this._cobrosRepository.registerPayment({
+      clientCode: payment.clientCode,
+      amount: payment.amount,
+      paymentMethod: payment.paymentMethod,
+      reference: payment.reference,
+      observations: payment.observations,
+      userId: actor.userId,
+      userRole: actor.userRole,
+      idempotencyToken,
     });
 
     logger.info(`RegisterPaymentUseCase: Payment registered with id ${result.id}`);

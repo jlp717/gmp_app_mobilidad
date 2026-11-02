@@ -60,6 +60,7 @@ const mockCache = {
   set: jest.fn(),
   invalidatePattern: jest.fn(),
 };
+const mockNotifyCommercialCobro = jest.fn(() => Promise.resolve({ skipped: false }));
 
 jest.mock('../middleware/logger', () => ({
   info: jest.fn(),
@@ -115,6 +116,9 @@ jest.mock('../src/core/infrastructure/cache/performance-cache', () => ({
       data: await fn(),
     })),
   },
+}));
+jest.mock('../services/comercial-cobro-notify-service', () => ({
+  notifyCommercialCobro: (...args) => mockNotifyCommercialCobro(...args),
 }));
 jest.mock('../routes/entregas', () => {
   const express = require('express');
@@ -1210,7 +1214,11 @@ describe('DDD cobros route contracts', () => {
   });
 
   test('POST /:codigoCliente/registrar is available for Flutter and registers payment', async () => {
-    mockCobrosRepo.registerPayment.mockResolvedValue({ id: 'pay1', status: 'REGISTRADO' });
+    mockCobrosRepo.registerPayment.mockResolvedValue({
+      id: 'pay1', clientCode: 'C001', reference: 'M-1', amount: 42,
+      paymentMethod: 'CONTADO', pendingAfter: 0, collectorCode: '01',
+      ownerVendorCode: '01', observations: 'Cobro confirmado', idempotent: false,
+    });
 
     const res = await request(makeApp(createCobrosRoutes()))
       .post('/C001/registrar')
@@ -1218,6 +1226,9 @@ describe('DDD cobros route contracts', () => {
         referencia: 'M-1',
         importe: 42,
         formaPago: 'CONTADO',
+        tipoVenta: 'CC',
+        tipoModo: 'NORMAL',
+        observaciones: 'Cobro confirmado',
         codigoUsuario: '99',
         idempotencyToken: 'cobro-token-route-001',
       });
@@ -1234,18 +1245,27 @@ describe('DDD cobros route contracts', () => {
         idempotencyToken: 'cobro-token-route-001',
       }),
     );
+    expect(mockCobrosRepo.registerPayment.mock.calls[0][0]).not.toHaveProperty('saleType');
+    expect(mockCobrosRepo.registerPayment.mock.calls[0][0]).not.toHaveProperty('paymentMode');
     expect(res.body.success).toBe(true);
   });
 
   test('POST /4300000354/registrar maps the DDD route client before repository insert', async () => {
-    mockCobrosRepo.registerPayment.mockResolvedValue({ id: 'pay-real-client', status: 'REGISTRADO' });
+    mockCobrosRepo.registerPayment.mockResolvedValue({
+      id: 'pay-real-client', clientCode: '4300000354', reference: 'M-1', amount: 42,
+      paymentMethod: 'TJ', pendingAfter: 10, collectorCode: '01',
+      ownerVendorCode: '01', observations: 'Tarjeta cliente', idempotent: false,
+    });
 
     const res = await request(makeApp(createCobrosRoutes()))
       .post('/4300000354/registrar')
       .send({
         referencia: 'M-1',
         importe: 42,
-        formaPago: 'CONTADO',
+        formaPago: 'TJ',
+        tipoVenta: 'VC',
+        tipoModo: 'ESPECIAL',
+        observaciones: 'Tarjeta cliente',
         idempotencyToken: 'cobro-token-route-real-client-001',
       });
 
@@ -1255,9 +1275,12 @@ describe('DDD cobros route contracts', () => {
         clientCode: '4300000354',
         amount: 42,
         reference: 'M-1',
+        paymentMethod: 'TJ',
         idempotencyToken: 'cobro-token-route-real-client-001',
       }),
     );
+    expect(mockCobrosRepo.registerPayment.mock.calls[0][0]).not.toHaveProperty('saleType');
+    expect(mockCobrosRepo.registerPayment.mock.calls[0][0]).not.toHaveProperty('paymentMode');
   });
 
   test('POST /:codigoCliente/registrar maps idempotency conflicts to 409', async () => {
@@ -1272,6 +1295,9 @@ describe('DDD cobros route contracts', () => {
         referencia: 'M-1',
         importe: 42,
         formaPago: 'CONTADO',
+        tipoVenta: 'CC',
+        tipoModo: 'NORMAL',
+        observaciones: 'Cobro confirmado',
         idempotencyToken: 'cobro-token-route-002',
       });
 
@@ -1465,12 +1491,44 @@ describe('DDD cobros route contracts', () => {
         amount: 10,
         paymentMethod: 'CONTADO',
         reference: 'M-1',
+        saleType: 'CC',
+        paymentMode: 'NORMAL',
+        observations: 'Cobro fuera de alcance',
         idempotencyToken: 'ddd-cobros-register-scope-001',
       });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
     expect(mockCobrosRepo.registerPayment).not.toHaveBeenCalled();
+  });
+
+  test('POST /register uses the JWT actor and normalized commercial payload', async () => {
+    mockCobrosRepo.registerPayment.mockResolvedValue({
+      id: 'pay-register-admin', clientCode: 'C001', reference: 'CVC:X', amount: 25,
+      paymentMethod: 'TR', pendingAfter: 75, collectorCode: '80', collectorRole: 'ADMIN',
+      ownerVendorCode: '35', observations: 'Transferencia recibida', idempotent: false,
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), {
+      id: '80', code: '80', role: 'ADMIN', vendorCodes: ['35'],
+    }))
+      .post('/register')
+      .send({
+        clientCode: 'C001', reference: 'CVC:X', amount: '25.00', paymentMethod: 'T0',
+        saleType: 'VC', paymentMode: 'ESPECIAL', observations: 'Transferencia recibida',
+        codigoUsuario: '99', tipoUsuario: 'COMERCIAL', vendedorCode: '35',
+        idempotencyToken: 'ddd-register-admin-001',
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockCobrosRepo.registerPayment).toHaveBeenCalledWith(expect.objectContaining({
+      clientCode: 'C001', reference: 'CVC:X', amount: 25, paymentMethod: 'TR',
+      observations: 'Transferencia recibida',
+      userId: '80', userRole: 'ADMIN', idempotencyToken: 'ddd-register-admin-001',
+    }));
+    expect(mockCobrosRepo.registerPayment.mock.calls[0][0]).not.toHaveProperty('saleType');
+    expect(mockCobrosRepo.registerPayment.mock.calls[0][0]).not.toHaveProperty('paymentMode');
+    expect(mockNotifyCommercialCobro).toHaveBeenCalledTimes(1);
   });
 
   test('POST /:codigoCliente/registrar rejects COMERCIAL outside vendor client scope when clientCodes absent', async () => {
@@ -1488,12 +1546,76 @@ describe('DDD cobros route contracts', () => {
         referencia: 'M-1',
         importe: 10,
         formaPago: 'CONTADO',
+        tipoVenta: 'CC',
+        tipoModo: 'NORMAL',
+        observaciones: 'Cobro fuera de alcance',
         idempotencyToken: 'ddd-cobros-vendor-scope-001',
       });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
     expect(mockCobrosRepo.registerPayment).not.toHaveBeenCalled();
+  });
+
+  test.each(['REPARTIDOR', 'ALMACEN'])('POST cobro rejects role %s before repository access', async (role) => {
+    const res = await request(makeApp(createCobrosRoutes(), { id: 'R1', code: 'R1', role }))
+      .post('/C001/registrar')
+      .send({
+        referencia: 'M-1', importe: 10, formaPago: 'CONTADO',
+        tipoVenta: 'CC', tipoModo: 'NORMAL', observaciones: 'Intento no autorizado',
+        idempotencyToken: `ddd-role-${role.toLowerCase()}-001`,
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_COMMERCIAL_ROLE');
+    expect(mockCobrosRepo.registerPayment).not.toHaveBeenCalled();
+  });
+
+  test('POST cobro uses JWT actor and exact ADMIN role, canonicalizes T0 and notifies once', async () => {
+    mockCobrosRepo.registerPayment.mockResolvedValue({
+      id: 'pay-admin', clientCode: 'C001', reference: 'CVC:X', amount: 25,
+      paymentMethod: 'TR', pendingAfter: 75, collectorCode: '80', collectorRole: 'ADMIN',
+      ownerVendorCode: '35', observations: 'Transferencia recibida', idempotent: false,
+    });
+    const res = await request(makeApp(createCobrosRoutes(), {
+      id: '80', code: '80', role: 'ADMIN', vendorCodes: ['35'],
+    }))
+      .post('/C001/registrar')
+      .send({
+        referencia: 'CVC:X', importe: '25.00', formaPago: 'T0',
+        tipoVenta: 'VC', tipoModo: 'ESPECIAL', observaciones: 'Transferencia recibida',
+        codigoUsuario: '99', tipoUsuario: 'COMERCIAL', vendedorCode: '35',
+        idempotencyToken: 'ddd-admin-transfer-001',
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockCobrosRepo.registerPayment).toHaveBeenCalledWith(expect.objectContaining({
+      userId: '80', userRole: 'ADMIN', paymentMethod: 'TR',
+    }));
+    expect(mockCobrosRepo.registerPayment.mock.calls[0][0]).not.toHaveProperty('saleType');
+    expect(mockCobrosRepo.registerPayment.mock.calls[0][0]).not.toHaveProperty('paymentMode');
+    expect(mockNotifyCommercialCobro).toHaveBeenCalledTimes(1);
+    expect(mockNotifyCommercialCobro).toHaveBeenCalledWith(expect.objectContaining({
+      codigoUsuario: '80', codigoVendedor: '35', pendiente: 75,
+    }));
+  });
+
+  test('idempotent replay does not repeat commercial notification', async () => {
+    mockCobrosRepo.registerPayment.mockResolvedValue({
+      id: 'pay-replay', clientCode: 'C001', reference: 'M-1', amount: 10,
+      paymentMethod: 'CONTADO', collectorCode: '01', ownerVendorCode: '01',
+      observations: 'Cobro ya enviado', idempotent: true,
+    });
+    const res = await request(makeApp(createCobrosRoutes()))
+      .post('/C001/registrar')
+      .send({
+        referencia: 'M-1', importe: 10, formaPago: 'CONTADO',
+        tipoVenta: 'CC', tipoModo: 'NORMAL', observaciones: 'Cobro ya enviado',
+        idempotencyToken: 'ddd-replay-notify-001',
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockNotifyCommercialCobro).not.toHaveBeenCalled();
   });
 
   test('GET /:codigoCliente/estado rejects COMERCIAL outside vendor client scope when clientCodes absent', async () => {

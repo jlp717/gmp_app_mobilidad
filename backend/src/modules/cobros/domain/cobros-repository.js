@@ -8,7 +8,7 @@ class CobrosRepository extends Repository {
     throw new Error('Method not implemented: getPendientes');
   }
 
-  async registerPayment({ clientCode, amount, paymentMethod, reference, observations, userId }) {
+  async registerPayment(_payment) {
     throw new Error('Method not implemented: registerPayment');
   }
 
