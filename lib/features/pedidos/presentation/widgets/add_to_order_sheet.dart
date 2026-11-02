@@ -69,6 +69,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
 
   late String _selectedUnit;
   double? _selectedTariffUnitPrice;
+  int? _selectedTariffCode;
   bool _userOverrodePrice =
       false; // true cuando el usuario elige tarifa manualmente
   bool _showWarehouseStock = false;
@@ -182,6 +183,16 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
         _tariffs = detail.tariffs;
         _stockByWarehouse = detail.stockByWarehouse;
         _clientTarifaCode = detail.codigoTarifaCliente;
+        if (_selectedTariffCode == null && _selectedTariffUnitPrice != null) {
+          for (final tariff in detail.tariffs) {
+            if (tariff.code == detail.codigoTarifaCliente &&
+                (tariff.precioUnitario - _selectedTariffUnitPrice!).abs() <
+                    0.0005) {
+              _selectedTariffCode = tariff.code;
+              break;
+            }
+          }
+        }
         if (detail.clientPrice > 0 &&
             !_userOverrodePrice &&
             !_editingExistingLine) {
@@ -328,17 +339,30 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
   }
 
   Widget _buildQtyButton(IconData icon, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
+    final label = icon == Icons.remove
+        ? 'Reducir cantidad'
+        : icon == Icons.add
+            ? 'Aumentar cantidad'
+            : 'Cambiar cantidad';
+    return Semantics(
+      button: true,
+      label: label,
+      child: Material(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withValues(alpha: 0.4)),
+            ),
+            child: Icon(icon, color: color, size: 28),
+          ),
         ),
-        child: Icon(icon, color: color, size: 24),
       ),
     );
   }
@@ -349,29 +373,40 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
+    return Semantics(
+      button: true,
+      label: label,
+      child: Material(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 14),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withValues(alpha: 0.3)),
             ),
-          ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: color, size: 24),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -515,7 +550,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     Text(
                       product.code,
@@ -636,7 +673,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                       onTap: () {
                         final prov = ref.read(pedidosNotifierProvider.notifier);
                         final canSeeMargin = ref.watch(
-                          pedidosNotifierProvider.select((p) => p.isMarginVisible),
+                          pedidosNotifierProvider
+                              .select((p) => p.isMarginVisible),
                         );
                         ProductDetailSheet.show(
                           ctx,
@@ -648,16 +686,17 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                         );
                       },
                     ),
-                    const SizedBox(width: 8),
                     if (ref.read(pedidosNotifierProvider.notifier).hasClient)
                       _buildQuickLink(
                         icon: Icons.bar_chart_rounded,
                         label: 'Historial compras',
                         color: AppTheme.accentIndigo,
                         onTap: () {
-                          final prov = ref.read(pedidosNotifierProvider.notifier);
+                          final prov =
+                              ref.read(pedidosNotifierProvider.notifier);
                           final canSeeMargin = ref.watch(
-                            pedidosNotifierProvider.select((p) => p.isMarginVisible),
+                            pedidosNotifierProvider
+                                .select((p) => p.isMarginVisible),
                           );
                           ProductHistorySheet.show(
                             ctx,
@@ -675,20 +714,25 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
-                    height: 40,
+                    height: 64,
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         final prov = ref.read(pedidosNotifierProvider.notifier);
+                        int? selectedTariffCode;
                         final selected = await TarifaSelectorModal.show(
                           ctx,
                           product: product,
                           tariffs: _tariffs,
                           codigoTarifaCliente: _clientTarifaCode,
                           initialPrice: _selectedTariffUnitPrice,
+                          onTariffSelected: (code) {
+                            selectedTariffCode = code;
+                          },
                         );
                         if (selected != null) {
                           setModalState(() {
                             _selectedTariffUnitPrice = selected;
+                            _selectedTariffCode = selectedTariffCode;
                             _userOverrodePrice = true;
                             _priceController.text = _formatPriceForInput(
                               _unitPriceForSelection(_selectedUnit),
@@ -704,12 +748,12 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                           );
                         }
                       },
-                      icon: const Icon(Icons.euro_rounded, size: 16),
+                      icon: const Icon(Icons.euro_rounded, size: 24),
                       label: const Text(
-                        'Precio',
+                        'Elegir precio y tarifa',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                          fontSize: 18,
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -726,19 +770,16 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                 if (_tariffs.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Text(
-                    'Tarifas',
+                    'Tarifas disponibles',
                     style: TextStyle(
                       color: AppTheme.textSecondary,
-                      fontSize: Responsive.fontSize(
-                        context,
-                        small: 11,
-                        large: 13,
-                      ),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 6),
                   SizedBox(
-                    height: 36,
+                    height: 112,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _tariffs.length,
@@ -750,70 +791,92 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             : (product.unitsPerBox > 0
                                 ? t.price / product.unitsPerBox
                                 : t.price);
-                        final isSelected =
-                            (_parseInputNumber(_priceController.text) -
-                                        (_selectedUnit == 'CAJAS'
-                                            ? tariffUnitPrice *
-                                                (product.unitsPerBox > 0
-                                                    ? product.unitsPerBox
-                                                    : 1)
-                                            : tariffUnitPrice))
-                                    .abs() <
-                                0.0005;
-                        return GestureDetector(
-                          onTap: () {
-                            setModalState(() {
-                              _selectedTariffUnitPrice = tariffUnitPrice;
-                              _priceController.text = _formatPriceForInput(
-                                _unitPriceForSelection(_selectedUnit),
-                              );
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppTheme.success.withValues(alpha: 0.2)
-                                  : AppTheme.softPanel,
+                        final isSelected = _selectedTariffCode == t.code;
+                        final tariffName = t.description.isNotEmpty
+                            ? t.description
+                            : 'Tarifa ${t.code}';
+                        return Semantics(
+                          button: true,
+                          selected: isSelected,
+                          label:
+                              '$tariffName, ${PedidosFormatters.money(t.price, decimals: 3)} por caja${isSelected ? ', seleccionada' : ''}',
+                          child: Material(
+                            color: isSelected
+                                ? AppTheme.success.withValues(alpha: 0.16)
+                                : AppTheme.softPanel,
+                            borderRadius: BorderRadius.circular(10),
+                            child: InkWell(
+                              onTap: () {
+                                setModalState(() {
+                                  _selectedTariffUnitPrice = tariffUnitPrice;
+                                  _selectedTariffCode = t.code;
+                                  _userOverrodePrice = true;
+                                  _priceController.text = _formatPriceForInput(
+                                    _unitPriceForSelection(_selectedUnit),
+                                  );
+                                });
+                              },
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppTheme.success
-                                    : AppTheme.borderColor,
+                              child: Container(
+                                constraints:
+                                    const BoxConstraints(minHeight: 56),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? AppTheme.success
+                                        : AppTheme.borderColor,
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      isSelected
+                                          ? Icons.check_circle
+                                          : Icons.circle_outlined,
+                                      color: isSelected
+                                          ? AppTheme.success
+                                          : AppTheme.textTertiary,
+                                      size: 26,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          tariffName,
+                                          style: TextStyle(
+                                            color: isSelected
+                                                ? AppTheme.success
+                                                : AppTheme.textPrimary,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${PedidosFormatters.money(t.price, decimals: 3)} €/caja',
+                                          style: TextStyle(
+                                            color: isSelected
+                                                ? AppTheme.success
+                                                : AppTheme.textSecondary,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  t.description.isNotEmpty
-                                      ? t.description
-                                      : 'T${t.code}',
-                                  style: TextStyle(
-                                    color: isSelected
-                                        ? AppTheme.success
-                                        : AppTheme.textSecondary,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  PedidosFormatters.money(
-                                    t.price,
-                                    decimals: 3,
-                                  ),
-                                  style: TextStyle(
-                                    color: isSelected
-                                        ? AppTheme.success
-                                        : AppTheme.textPrimary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
                             ),
                           ),
                         );
@@ -1251,7 +1314,11 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     color: AppTheme.textPrimary,
                     fontSize: 16,
                   ),
-                  onChanged: (_) => setModalState(() {}),
+                  onChanged: (_) {
+                    _selectedTariffCode = null;
+                    _userOverrodePrice = true;
+                    setModalState(() {});
+                  },
                   decoration: InputDecoration(
                     labelText: 'Precio',
                     suffixText: ' \u20AC',
@@ -1287,7 +1354,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                           style: TextStyle(
                             color: price > 0 &&
                                     price <
-                                        product.minimumPriceForUnit(_selectedUnit)
+                                        product
+                                            .minimumPriceForUnit(_selectedUnit)
                                 ? AppTheme.error
                                 : AppTheme.textTertiary,
                             fontSize: 11,
@@ -1378,7 +1446,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   children: [
                     Expanded(
                       child: SizedBox(
-                        height: 46,
+                        height: 56,
                         child: OutlinedButton(
                           onPressed: () {
                             setModalState(() {
@@ -1398,7 +1466,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             'LIMPIAR',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                              fontSize: 18,
                             ),
                           ),
                         ),
@@ -1408,11 +1476,14 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     Expanded(
                       flex: 2,
                       child: SizedBox(
-                        height: 46,
+                        height: 56,
                         child: ElevatedButton.icon(
                           onPressed: () => _handleAddToOrder(ctx),
                           icon: const Icon(Icons.add_shopping_cart),
-                          label: const Text('Anadir al pedido'),
+                          label: const Text(
+                            'Añadir al pedido',
+                            style: TextStyle(fontSize: 18),
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.info,
                             foregroundColor: AppTheme.inkSurface,

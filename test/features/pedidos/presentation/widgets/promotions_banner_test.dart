@@ -124,6 +124,61 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Ofertas activas (27)'), findsOneWidget);
   });
+
+  testWidgets('cabecera es legible y tactil con texto al 200 por ciento',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(2),
+            ),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: PromotionsBanner(
+              promotions: [
+                PromotionItem(
+                  code: '3519',
+                  name: 'Producto en oferta',
+                  promoDesc: 'Oferta activa',
+                  promoType: 'PRICE',
+                  promoCode: 'PROMO-1',
+                  promoPrice: 27.54,
+                  regularPrice: 29.4,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final title = find.text('Ofertas activas (1)');
+    expect(title, findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'Mostrar ofertas activas.*1 campañas')),
+      findsOneWidget,
+    );
+    final header = find.ancestor(of: title, matching: find.byType(InkWell));
+    expect(tester.getSize(header.first).height, greaterThanOrEqualTo(56));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+      find.bySemanticsLabel(RegExp(r'Ocultar ofertas activas.*1 campañas')),
+      findsOneWidget,
+    );
+  });
 }
 
 class _PromotionsBannerHarness extends StatefulWidget {

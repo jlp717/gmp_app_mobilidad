@@ -17,11 +17,13 @@ class TarifaSelectorModal extends StatefulWidget {
     required this.codigoTarifaCliente,
     super.key,
     this.initialPrice,
+    this.onTariffSelected,
   });
   final Product product;
   final List<TariffEntry> tariffs;
   final int codigoTarifaCliente;
   final double? initialPrice;
+  final ValueChanged<int?>? onTariffSelected;
 
   /// Show the modal and return the selected price per unit, or null if cancelled.
   static Future<double?> show(
@@ -30,6 +32,7 @@ class TarifaSelectorModal extends StatefulWidget {
     required List<TariffEntry> tariffs,
     required int codigoTarifaCliente,
     double? initialPrice,
+    ValueChanged<int?>? onTariffSelected,
   }) {
     return showDialog<double>(
       context: context,
@@ -39,6 +42,7 @@ class TarifaSelectorModal extends StatefulWidget {
         tariffs: tariffs,
         codigoTarifaCliente: codigoTarifaCliente,
         initialPrice: initialPrice,
+        onTariffSelected: onTariffSelected,
       ),
     );
   }
@@ -66,7 +70,23 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
   void initState() {
     super.initState();
     // Default selection: PT if available, else first tariff
-    _selected = _clientTariff != null ? _kPT : _firstSelection();
+    _selected = _initialSelection();
+  }
+
+  String _initialSelection() {
+    final initialPrice = widget.initialPrice;
+    if (initialPrice != null) {
+      final matching = widget.tariffs
+          .where(
+            (tariff) => (tariff.precioUnitario - initialPrice).abs() < 0.0005,
+          )
+          .toList(growable: false);
+      for (final tariff in matching) {
+        if (tariff.code == widget.codigoTarifaCliente) return _kPT;
+      }
+      if (matching.length == 1) return matching.single.code.toString();
+    }
+    return _clientTariff != null ? _kPT : _firstSelection();
   }
 
   String _firstSelection() {
@@ -87,6 +107,16 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
           orElse: () => null,
         );
     return t?.precioUnitario ?? 0;
+  }
+
+  int? _tariffCodeForSelection(String sel) {
+    if (sel == _kPT || sel == _kPU) return _clientTariff?.code;
+    return int.tryParse(sel);
+  }
+
+  void _acceptSelection() {
+    widget.onTariffSelected?.call(_tariffCodeForSelection(_selected));
+    Navigator.pop(context, _priceForSelection(_selected));
   }
 
   String _unitAbbr(String unit) {
@@ -118,8 +148,9 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
 
   Widget _buildRow({
     required String selKey,
-    required Widget leading,
-    required Widget content,
+    required String label,
+    required String priceLabel,
+    String? supportingLabel,
     bool isClientTariff = false,
   }) {
     final selected = _selected == selKey;
@@ -127,31 +158,91 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: isClientTariff && selected
-            ? orange.withValues(alpha: 0.18)
-            : selected
-                ? orange.withValues(alpha: 0.1)
-                : AppTheme.softPanel,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: () => setState(() => _selected = selKey),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: '$label. $priceLabel${selected ? '. Seleccionada' : ''}',
+        child: Material(
+          color: isClientTariff && selected
+              ? orange.withValues(alpha: 0.18)
+              : selected
+                  ? orange.withValues(alpha: 0.1)
+                  : AppTheme.softPanel,
           borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: selected ? orange : AppTheme.borderColor,
-                width: selected ? 1.5 : 1,
+          child: InkWell(
+            onTap: () => setState(() => _selected = selKey),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 56),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: selected ? orange : AppTheme.borderColor,
+                  width: selected ? 2 : 1,
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                leading,
-                const SizedBox(width: 10),
-                Expanded(child: content),
-              ],
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    selected ? Icons.check_circle : Icons.circle_outlined,
+                    color: selected ? orange : AppColors.themedWhite54,
+                    size: 26,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: TextStyle(
+                            color: selected
+                                ? AppColors.themedWhite
+                                : AppColors.themedWhite70,
+                            fontSize: 18,
+                            fontWeight:
+                                selected ? FontWeight.bold : FontWeight.w600,
+                          ),
+                        ),
+                        if (supportingLabel != null &&
+                            supportingLabel.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            supportingLabel,
+                            style: TextStyle(
+                              color: AppColors.themedWhite60,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 4),
+                        Text(
+                          priceLabel,
+                          style: TextStyle(
+                            color: selected ? orange : AppColors.themedWhite70,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (selected)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 2),
+                            child: Text(
+                              'Seleccionada',
+                              style: TextStyle(
+                                color: orange,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -174,272 +265,161 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
         horizontal: Responsive.useCompactTiles(context) ? 16 : 24,
         vertical: Responsive.useCompactTiles(context) ? 16 : 40,
       ),
-      child: Padding(
-        padding: EdgeInsets.all(Responsive.useCompactTiles(context) ? 12 : 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                const Icon(Icons.euro_rounded, color: orange, size: 22),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Precio',
-                    style: TextStyle(
-                      color: AppColors.themedWhite,
-                      fontWeight: FontWeight.bold,
-                      fontSize:
-                          Responsive.fontSize(context, small: 15, large: 17),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: Icon(Icons.close,
-                      color: AppColors.themedWhite54, size: 20),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              p.name,
-              style: TextStyle(color: AppColors.themedWhite70, fontSize: 13),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            SizedBox(height: Responsive.useCompactTiles(context) ? 8 : 14),
-
-            if (!hasTariffs) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.softPanel,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.borderColor),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        color: AppColors.themedWhite38, size: 18),
-                    SizedBox(width: 8),
-                    Text(
-                      'Sin tarifa disponible',
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height - 32,
+        ),
+        child: SingleChildScrollView(
+          padding:
+              EdgeInsets.all(Responsive.useCompactTiles(context) ? 12 : 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  const Icon(Icons.euro_rounded, color: orange, size: 22),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Precio',
                       style: TextStyle(
-                          color: AppColors.themedWhite54, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-
-            // PT row – client's assigned tariff
-            if (ct != null)
-              _buildRow(
-                selKey: _kPT,
-                isClientTariff: true,
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _selected == _kPT
-                          ? Icons.play_arrow
-                          : Icons.play_arrow_outlined,
-                      color: orange,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      'PT',
-                      style: TextStyle(
-                        color: orange,
+                        color: AppColors.themedWhite,
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                        fontSize: 20,
                       ),
                     ),
-                  ],
-                ),
-                content: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _abbreviate(ct.description),
-                            style: TextStyle(
-                              color: AppColors.themedWhite,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            '${_fmt(ct.price)} €/cj',
-                            style: const TextStyle(color: orange, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (p.unitsPerBox > 1)
-                      Text(
-                        '(${_fmt(ct.precioUnitario)} €/$unitAbbr)',
-                        style: TextStyle(
-                          color: orange.withValues(alpha: 0.75),
-                          fontSize: 11,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-
-            // PU row – per-unit breakdown of PT
-            if (_showPU && ct != null)
-              _buildRow(
-                selKey: _kPU,
-                leading: Text(
-                  'PU',
-                  style: TextStyle(
-                    color: _selected == _kPU ? orange : AppColors.themedWhite54,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
                   ),
-                ),
-                content: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'por unidad',
-                        style: TextStyle(
-                            color: AppColors.themedWhite60, fontSize: 12),
-                      ),
-                    ),
-                    Text(
-                      '${_fmt(ct.precioUnitario)} €/$unitAbbr',
-                      style: TextStyle(
-                        color: _selected == _kPU
-                            ? orange
-                            : AppColors.themedWhite54,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            // Other tariffs
-            ...widget.tariffs
-                .where((t) => t.code != widget.codigoTarifaCliente)
-                .map((t) {
-              final key = t.code.toString();
-              return _buildRow(
-                selKey: key,
-                leading: Text(
-                  '${t.code}',
-                  style: TextStyle(
-                    color: _selected == key ? orange : AppColors.themedWhite54,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close,
+                        color: AppColors.themedWhite70, size: 26),
+                    tooltip: 'Cerrar selector de tarifa',
+                    constraints:
+                        const BoxConstraints(minWidth: 56, minHeight: 56),
                   ),
-                ),
-                content: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _abbreviate(t.description),
-                            style: TextStyle(
-                              color: AppColors.themedWhite70,
-                              fontSize: 12,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            '${_fmt(t.price)} €/cj',
-                            style: TextStyle(
-                              color: AppColors.themedWhite54,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (p.unitsPerBox > 1)
-                      Text(
-                        '(${_fmt(t.precioUnitario)} €/$unitAbbr)',
-                        style: TextStyle(
-                          color: AppColors.themedWhite38,
-                          fontSize: 11,
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            }),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                p.name,
+                style: TextStyle(color: AppColors.themedWhite70, fontSize: 18),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: Responsive.useCompactTiles(context) ? 8 : 14),
 
-            const SizedBox(height: 8),
-
-            // Cancel button
-            SizedBox(
-              width: double.infinity,
-              height: 44,
-              child: OutlinedButton(
-                onPressed: () => Navigator.pop(context),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.themedWhite54,
-                  side: BorderSide(color: AppTheme.borderColor),
-                  shape: RoundedRectangleBorder(
+              if (!hasTariffs) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.softPanel,
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: AppColors.themedWhite54, size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Sin tarifa disponible',
+                        style: TextStyle(
+                            color: AppColors.themedWhite70, fontSize: 18),
+                      ),
+                    ],
                   ),
                 ),
-                child: const Text('CANCELAR', style: TextStyle(fontSize: 13)),
-              ),
-            ),
+                const SizedBox(height: 12),
+              ],
 
-            if (hasTariffs) ...[
+              // PT row – client's assigned tariff
+              if (ct != null)
+                _buildRow(
+                  selKey: _kPT,
+                  isClientTariff: true,
+                  label: 'Tarifa del cliente',
+                  supportingLabel: ct.description,
+                  priceLabel: p.unitsPerBox > 1
+                      ? '${_fmt(ct.price)} €/caja · ${_fmt(ct.precioUnitario)} €/$unitAbbr'
+                      : '${_fmt(ct.price)} €/$unitAbbr',
+                ),
+
+              // PU row – per-unit breakdown of PT
+              if (_showPU && ct != null)
+                _buildRow(
+                  selKey: _kPU,
+                  label: 'Precio por unidad',
+                  supportingLabel: 'Desglose de la tarifa del cliente',
+                  priceLabel: '${_fmt(ct.precioUnitario)} €/$unitAbbr',
+                ),
+
+              // Other tariffs
+              ...widget.tariffs
+                  .where((t) => t.code != widget.codigoTarifaCliente)
+                  .map((t) {
+                final key = t.code.toString();
+                return _buildRow(
+                  selKey: key,
+                  label: 'Tarifa ${t.code}',
+                  supportingLabel: t.description,
+                  priceLabel: p.unitsPerBox > 1
+                      ? '${_fmt(t.price)} €/caja · ${_fmt(t.precioUnitario)} €/$unitAbbr'
+                      : '${_fmt(t.price)} €/$unitAbbr',
+                );
+              }),
+
               const SizedBox(height: 8),
+
+              // Cancel button
               SizedBox(
                 width: double.infinity,
-                height: 46,
-                child: ElevatedButton.icon(
-                  onPressed: () =>
-                      Navigator.pop(context, _priceForSelection(_selected)),
-                  icon: const Icon(Icons.check, size: 18),
-                  label: Text(
-                    'ACEPTAR  ${_fmt(_priceForSelection(_selected))} €/${_unitAbbr(p.displayUnit)}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.warning,
-                    foregroundColor: AppColors.themedWhite,
+                height: 56,
+                child: OutlinedButton(
+                  key: const Key('tarifa_cancel_button'),
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.themedWhite54,
+                    side: BorderSide(color: AppTheme.borderColor),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
+                  child: const Text('CANCELAR', style: TextStyle(fontSize: 18)),
                 ),
               ),
+
+              if (hasTariffs) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    key: const Key('tarifa_accept_button'),
+                    onPressed: _acceptSelection,
+                    icon: const Icon(Icons.check, size: 24),
+                    label: Text(
+                      'ACEPTAR  ${_fmt(_priceForSelection(_selected))} €/${_unitAbbr(p.displayUnit)}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.warning,
+                      foregroundColor: AppColors.themedWhite,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
-  }
-
-  static String _abbreviate(String s) {
-    if (s.length <= 20) return s;
-    return '${s.substring(0, 18)}…';
   }
 }

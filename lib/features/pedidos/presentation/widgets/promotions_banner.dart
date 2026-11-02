@@ -204,6 +204,8 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
     }
     if (_promotions.isEmpty) return const SizedBox.shrink();
     final groups = PromotionItem.campaignGroups(_promotions);
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final basePromoHeight = Responsive.isLandscape(context) ? 110.0 : 168.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,51 +216,53 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
           child: Semantics(
             button: true,
             label: _isExpanded
-                ? 'Ocultar ${groups.length} promociones nuevas'
-                : 'Mostrar ${groups.length} promociones nuevas',
+                ? 'Ocultar ofertas activas. ${groups.length} campañas'
+                : 'Mostrar ofertas activas. ${groups.length} campañas',
             child: Container(
+              constraints: const BoxConstraints(minHeight: 56),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               child: Row(
                 children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.success.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppTheme.success.withValues(alpha: 0.4),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
                       ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.local_offer,
-                          color: AppTheme.success,
-                          size: 16,
+                      decoration: BoxDecoration(
+                        color: AppTheme.success.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppTheme.success.withValues(alpha: 0.4),
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${groups.length} nuevas',
-                          style: TextStyle(
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.local_offer,
                             color: AppTheme.success,
-                            fontWeight: FontWeight.w600,
-                            fontSize: Responsive.fontSize(
-                              context,
-                              small: 12,
-                              large: 14,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Ofertas activas (${groups.length})',
+                              style: const TextStyle(
+                                color: AppTheme.success,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 18,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   Icon(
                     _isExpanded ? Icons.expand_less : Icons.expand_more,
-                    color: AppColors.themedWhite38,
-                    size: 20,
+                    color: AppColors.themedWhite70,
+                    size: 26,
                   ),
                 ],
               ),
@@ -268,7 +272,7 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
         // Promo cards
         if (_isExpanded)
           SizedBox(
-            height: Responsive.isLandscape(context) ? 110 : 168,
+            height: basePromoHeight + ((textScale - 1).clamp(0, 1) * 80),
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -283,10 +287,12 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
   Widget _buildCampaignCard(List<PromotionItem> items) {
     final promo = items.first;
     final isGift = promo.promoType == 'GIFT';
-    final title =
-        promo.promoDesc.trim().isNotEmpty ? promo.promoDesc : promo.name;
     final several = items.length > 1;
+    final title = several && promo.promoDesc.trim().isNotEmpty
+        ? promo.promoDesc
+        : promo.name;
     final isGlobal = items.any((item) => item.isGlobal);
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
     return Semantics(
       button: true,
       label: several
@@ -297,7 +303,7 @@ class _PromotionsBannerState extends ConsumerState<PromotionsBanner> {
             ? widget.onOpenList
             : () => widget.onProductTap?.call(promo.code, promo.name),
         child: Container(
-          width: 180,
+          width: 180 + ((textScale - 1).clamp(0, 1) * 80),
           margin: const EdgeInsets.only(right: 8, bottom: 4),
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(

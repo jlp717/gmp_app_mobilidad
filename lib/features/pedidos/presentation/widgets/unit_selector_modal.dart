@@ -318,47 +318,45 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     final availableLabel = '$availableValue ${_unitAbbr(_selectedUnit)}';
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-      child: Row(
+      child: Column(
         children: [
           if (canAdjust) ...[
-            Expanded(
-              child: SizedBox(
-                height: 40,
-                child: OutlinedButton.icon(
-                  onPressed: _acceptMaxAvailable,
-                  icon: const Icon(Icons.tune, size: 16),
-                  label: Text(
-                    'Usar $availableLabel',
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.success,
-                    side: const BorderSide(color: AppTheme.success),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: OutlinedButton.icon(
+                onPressed: _acceptMaxAvailable,
+                icon: const Icon(Icons.tune, size: 24),
+                label: Text(
+                  'Usar disponible: $availableLabel',
+                  style: const TextStyle(fontSize: 18),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.success,
+                  side: const BorderSide(color: AppTheme.success),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
               ),
             ),
             const SizedBox(width: 8),
           ],
-          Expanded(
-            child: SizedBox(
-              height: 40,
-              child: ElevatedButton.icon(
-                onPressed: _showAlternatives,
-                icon: const Icon(Icons.auto_awesome, size: 16),
-                label: const Text(
-                  'Alternativas',
-                  overflow: TextOverflow.ellipsis,
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.warning,
-                  foregroundColor: AppColors.systemBlack,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton.icon(
+              onPressed: _showAlternatives,
+              icon: const Icon(Icons.auto_awesome, size: 24),
+              label: const Text(
+                'Alternativas',
+                style: TextStyle(fontSize: 18),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.warning,
+                foregroundColor: AppColors.systemBlack,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
             ),
@@ -378,273 +376,292 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: EdgeInsets.symmetric(
         horizontal: Responsive.useCompactTiles(context) ? 16 : 24,
-        vertical: Responsive.useCompactTiles(context) ? 16 : 40,
+        vertical: 16,
       ),
-      child: Padding(
-        padding: EdgeInsets.all(Responsive.useCompactTiles(context) ? 12 : 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                const Icon(
-                  Icons.straighten,
-                  color: AppTheme.info,
-                  size: 22,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Seleccionar unidad y cantidad',
-                    style: TextStyle(
-                      color: AppColors.themedWhite,
-                      fontWeight: FontWeight.bold,
-                      fontSize:
-                          Responsive.fontSize(context, small: 15, large: 17),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height - 32,
+        ),
+        child: SingleChildScrollView(
+          padding:
+              EdgeInsets.all(Responsive.useCompactTiles(context) ? 12 : 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  const Icon(
+                    Icons.straighten,
+                    color: AppTheme.info,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Seleccionar unidad y cantidad',
+                      style: TextStyle(
+                        color: AppColors.themedWhite,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                      ),
                     ),
                   ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: Icon(Icons.close,
-                      color: AppColors.themedWhite54, size: 20),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close,
+                        color: AppColors.themedWhite70, size: 26),
+                    tooltip: 'Cerrar selector de unidad',
+                    constraints:
+                        const BoxConstraints(minWidth: 56, minHeight: 56),
+                  ),
+                ],
+              ),
+
+              // Product name if available
+              if (widget.product != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  widget.product!.name,
+                  style:
+                      TextStyle(color: AppColors.themedWhite70, fontSize: 18),
                 ),
               ],
-            ),
 
-            // Product name if available
-            if (widget.product != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                widget.product!.name,
-                style: TextStyle(color: AppColors.themedWhite70, fontSize: 13),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-
-            // Equivalences row
-            if (equiv != null || netoUr != null) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.info.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(8),
-                  border:
-                      Border.all(color: AppTheme.info.withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  children: [
-                    if (equiv != null)
-                      Expanded(
-                        child: Text(
-                          equiv,
+              // Equivalences row
+              if (equiv != null || netoUr != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.info.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border:
+                        Border.all(color: AppTheme.info.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      if (equiv != null)
+                        Expanded(
+                          child: Text(
+                            equiv,
+                            style: const TextStyle(
+                              color: AppTheme.info,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      if (netoUr != null)
+                        Text(
+                          netoUr,
                           style: const TextStyle(
-                            color: AppTheme.info,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                            color: AppTheme.success,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
-                    if (netoUr != null)
-                      Text(
-                        netoUr,
-                        style: const TextStyle(
-                          color: AppTheme.success,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
 
-            const SizedBox(height: 14),
+              const SizedBox(height: 14),
 
-            // Unit buttons with stock + price info
-            ..._units.map((unit) {
-              final selected = _selectedUnit == unit;
-              final stockStr = _stockForUnit(unit);
-              final priceStr = _priceForUnit(unit);
-              final subtitle = _subtitleForUnit(unit);
+              // Unit buttons with stock + price info
+              ..._units.map((unit) {
+                final selected = _selectedUnit == unit;
+                final stockStr = _stockForUnit(unit);
+                final priceStr = _priceForUnit(unit);
+                final subtitle = _subtitleForUnit(unit);
 
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Material(
-                  color: selected
-                      ? AppTheme.info.withValues(alpha: 0.15)
-                      : AppTheme.softPanel,
-                  borderRadius: BorderRadius.circular(10),
-                  child: InkWell(
-                    onTap: () => setState(() {
-                      _selectedUnit = unit;
-                      _validationMessage = null;
-                      _showStockActions = false;
-                    }),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Semantics(
+                    button: true,
+                    selected: selected,
+                    label:
+                        '${_unitLabel(unit)}${selected ? '. Seleccionada' : ''}',
+                    child: Material(
+                      color: selected
+                          ? AppTheme.info.withValues(alpha: 0.15)
+                          : AppTheme.softPanel,
+                      borderRadius: BorderRadius.circular(10),
+                      child: InkWell(
+                        onTap: () => setState(() {
+                          _selectedUnit = unit;
+                          _validationMessage = null;
+                          _showStockActions = false;
+                        }),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color:
-                              selected ? AppTheme.info : AppTheme.borderColor,
-                          width: selected ? 1.5 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            selected
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_off,
-                            color: selected
-                                ? AppTheme.info
-                                : AppColors.themedWhite38,
-                            size: 20,
+                        child: Container(
+                          constraints: const BoxConstraints(minHeight: 56),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _unitLabel(unit),
-                                  style: TextStyle(
-                                    color: selected
-                                        ? AppColors.themedWhite
-                                        : AppColors.themedWhite70,
-                                    fontWeight: selected
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                if (subtitle != null)
-                                  Text(
-                                    subtitle,
-                                    style: TextStyle(
-                                      color: AppColors.themedWhite38,
-                                      fontSize: 11,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: selected
+                                  ? AppTheme.info
+                                  : AppTheme.borderColor,
+                              width: selected ? 2 : 1,
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                selected
+                                    ? Icons.check_circle
+                                    : Icons.circle_outlined,
+                                color: selected
+                                    ? AppTheme.info
+                                    : AppColors.themedWhite54,
+                                size: 26,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _unitLabel(unit),
+                                      style: TextStyle(
+                                        color: selected
+                                            ? AppColors.themedWhite
+                                            : AppColors.themedWhite70,
+                                        fontWeight: selected
+                                            ? FontWeight.bold
+                                            : FontWeight.w600,
+                                        fontSize: 18,
+                                      ),
                                     ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (stockStr.isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.success.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                stockStr,
-                                style: const TextStyle(
-                                  color: AppTheme.success,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
+                                    if (selected)
+                                      const Text(
+                                        'Seleccionada',
+                                        style: TextStyle(
+                                          color: AppTheme.info,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    if (subtitle != null)
+                                      Text(
+                                        subtitle,
+                                        style: TextStyle(
+                                          color: AppColors.themedWhite60,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 10,
+                                      runSpacing: 4,
+                                      children: [
+                                        if (stockStr.isNotEmpty)
+                                          Text(
+                                            'Stock: $stockStr',
+                                            style: const TextStyle(
+                                              color: AppTheme.success,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        if (priceStr.isNotEmpty)
+                                          Text(
+                                            priceStr,
+                                            style: TextStyle(
+                                              color: AppColors.themedWhite70,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
-                          if (priceStr.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              priceStr,
-                              style: TextStyle(
-                                color: AppColors.themedWhite54,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ],
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-            }),
+                );
+              }),
 
-            const SizedBox(height: 8),
-
-            // Quantity input
-            TextField(
-              controller: _qtyController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              style: TextStyle(
-                color: AppColors.themedWhite,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-              autofocus: true,
-              onChanged: (_) {
-                if (_validationMessage != null || _showStockActions) {
-                  setState(() {
-                    _validationMessage = null;
-                    _showStockActions = false;
-                  });
-                }
-              },
-              decoration: InputDecoration(
-                labelText: 'Cantidad (${_unitLabel(_selectedUnit)})',
-                labelStyle:
-                    TextStyle(color: AppColors.themedWhite54, fontSize: 13),
-                filled: true,
-                fillColor: AppTheme.softPanel,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: AppTheme.borderColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: AppTheme.borderColor),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide:
-                      const BorderSide(color: AppTheme.info, width: 1.5),
-                ),
-                contentPadding:
-                    const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-              ),
-            ),
-            if (_validationMessage != null) ...[
               const SizedBox(height: 8),
-              Text(
-                _validationMessage!,
-                style: const TextStyle(
-                  color: AppTheme.error,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+
+              // Quantity input
+              TextField(
+                controller: _qtyController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                style: TextStyle(
+                  color: AppColors.themedWhite,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+                autofocus: true,
+                onChanged: (_) {
+                  if (_validationMessage != null || _showStockActions) {
+                    setState(() {
+                      _validationMessage = null;
+                      _showStockActions = false;
+                    });
+                  }
+                },
+                decoration: InputDecoration(
+                  labelText: 'Cantidad (${_unitLabel(_selectedUnit)})',
+                  labelStyle:
+                      TextStyle(color: AppColors.themedWhite70, fontSize: 18),
+                  filled: true,
+                  fillColor: AppTheme.softPanel,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: AppTheme.borderColor),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: AppTheme.borderColor),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        const BorderSide(color: AppTheme.info, width: 1.5),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                 ),
               ),
-              _buildStockActions(),
-            ],
-            const SizedBox(height: 16),
+              if (_validationMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _validationMessage!,
+                  style: const TextStyle(
+                    color: AppTheme.error,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                _buildStockActions(),
+              ],
+              const SizedBox(height: 16),
 
-            // Action buttons
-            Row(
-              children: [
-                // Clear button
-                Expanded(
-                  child: SizedBox(
-                    height: 46,
+              // Action buttons
+              Column(
+                children: [
+                  // Clear button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
                     child: OutlinedButton.icon(
+                      key: const Key('unit_clear_button'),
                       onPressed: () {
                         Navigator.pop(context, {
                           'unit': _selectedUnit,
@@ -652,9 +669,9 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                           'cleared': true,
                         });
                       },
-                      icon: const Icon(Icons.delete_outline, size: 16),
+                      icon: const Icon(Icons.delete_outline, size: 24),
                       label:
-                          const Text('LIMPIAR', style: TextStyle(fontSize: 13)),
+                          const Text('LIMPIAR', style: TextStyle(fontSize: 18)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.error,
                         side: const BorderSide(color: AppTheme.error),
@@ -664,20 +681,19 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                // Confirm button
-                Expanded(
-                  flex: 2,
-                  child: SizedBox(
-                    height: 46,
+                  const SizedBox(width: 12),
+                  // Confirm button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
                     child: ElevatedButton.icon(
+                      key: const Key('unit_accept_button'),
                       onPressed: _acceptSelection,
-                      icon: const Icon(Icons.check, size: 18),
+                      icon: const Icon(Icons.check, size: 24),
                       label: const Text(
                         'ACEPTAR',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -690,10 +706,10 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
