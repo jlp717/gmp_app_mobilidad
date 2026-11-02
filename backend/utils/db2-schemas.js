@@ -16,6 +16,21 @@ const { db2Schema, db2QualifiedTable } = require('./db2-identifiers');
 
 const ERP_NUMERIC_10_2_MAX = 99999999.99;
 
+const ISOLATED_APP_TABLES = new Set([
+  'COBROS',
+  'REPARTIDOR_COBROS',
+  'PEDIDOS_CAB',
+  'PEDIDOS_LIN',
+  'PEDIDOS_SEQ',
+  'PEDIDO_IDEMPOTENCY',
+  'PEDIDOS_STOCK_RESERVE',
+  'BOLSA_COMERCIAL',
+  'MOVIMIENTOS_BOLSA',
+  'REPARTO_CONFIRMACIONES',
+  'REPARTO_EVIDENCIAS',
+  'REPARTO_CONFIRM_EVIDENCIAS',
+]);
+
 /** B3 — accepted semantic mismatch (JAVIER.COBROS.ID UUID vs DSEDAC.CRC.ID integer). */
 const ACCEPTED_SEMANTIC_TYPE_MISMATCHES = Object.freeze([
   {
@@ -126,13 +141,13 @@ function db2AppTable(table) {
   const name = String(table || '').trim().toUpperCase();
   // Never fall back to shared buffers when isolated mode is requested, even
   // when an unrelated runtime validation or import fails.
-  const isolatedTables = new Set([
-    'COBROS', 'REPARTIDOR_COBROS', 'PEDIDOS_CAB', 'PEDIDOS_LIN',
-    'PEDIDOS_SEQ', 'PEDIDO_IDEMPOTENCY', 'PEDIDOS_STOCK_RESERVE',
-    'BOLSA_COMERCIAL', 'MOVIMIENTOS_BOLSA',
-  ]);
-  if (String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test'
-      && isolatedTables.has(name)) return db2QualifiedTable('JAVIER', `TEST_${name}`);
+  const appEnv = String(process.env.APP_ENV || '').trim().toLowerCase();
+  const isolatedProfile = appEnv === 'test'
+    || appEnv === 'demo'
+    || String(process.env.REPARTO_TABLE_SET || '').trim().toLowerCase() === 'isolated_test';
+  if (isolatedProfile && ISOLATED_APP_TABLES.has(name)) {
+    return db2QualifiedTable('JAVIER', `TEST_${name}`);
+  }
   try {
     const { resolveRepartoRuntime } = require('../config/reparto-runtime');
     const runtime = resolveRepartoRuntime(process.env);
