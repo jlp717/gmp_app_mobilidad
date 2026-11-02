@@ -2,16 +2,14 @@
 
 const mockQuery = jest.fn();
 const mockClose = jest.fn();
-const mockConnect = jest.fn();
-const mockGetPool = jest.fn();
-const mockInitDb = jest.fn();
+const mockOpenDedicatedConnection = jest.fn();
 const mockBeginTransaction = jest.fn();
 const mockCommit = jest.fn();
 const mockRollback = jest.fn();
 
-jest.mock('../config/db', () => ({
-  getPool: (...args) => mockGetPool(...args),
-  initDb: (...args) => mockInitDb(...args),
+jest.mock('../adapters/pedidos-transaction-connection', () => ({
+  openDedicatedPedidosTransactionConnection: (...args) =>
+    mockOpenDedicatedConnection(...args),
 }));
 
 jest.mock('../middleware/logger', () => ({
@@ -32,15 +30,13 @@ beforeEach(() => {
   mockBeginTransaction.mockResolvedValue(undefined);
   mockCommit.mockResolvedValue(undefined);
   mockRollback.mockResolvedValue(undefined);
-  mockConnect.mockResolvedValue({
+  mockOpenDedicatedConnection.mockResolvedValue({
     query: mockQuery,
     beginTransaction: mockBeginTransaction,
     commit: mockCommit,
     rollback: mockRollback,
     close: mockClose,
   });
-  mockGetPool.mockReturnValue({ connect: mockConnect });
-  mockInitDb.mockResolvedValue(undefined);
 });
 
 test('uses one connection and locks reservations before the local confirmation mutation', async () => {
@@ -85,15 +81,17 @@ test.each(['stock reservation failed', 'bolsa movement failed'])(
   },
 );
 
-test('fails closed when no pool is available', async () => {
-  mockGetPool.mockReturnValue(null);
-  mockInitDb.mockResolvedValue(undefined);
+test('fails closed when no dedicated connection is available', async () => {
+  const unavailable = new Error('dedicated connection unavailable');
+  unavailable.code = 'LOCAL_CONFIRMATION_TRANSACTION_UNAVAILABLE';
+  unavailable.status = 503;
+  mockOpenDedicatedConnection.mockRejectedValue(unavailable);
 
   await expect(withLocalConfirmationTransaction(jest.fn())).rejects.toMatchObject({
     code: 'LOCAL_CONFIRMATION_TRANSACTION_UNAVAILABLE',
     status: 503,
   });
-  expect(mockConnect).not.toHaveBeenCalled();
+  expect(mockOpenDedicatedConnection).toHaveBeenCalledTimes(1);
 });
 
 test('draft purge locks reservations then order headers in one transaction', async () => {

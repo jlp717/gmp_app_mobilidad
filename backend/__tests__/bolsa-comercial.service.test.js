@@ -4,6 +4,8 @@
  */
 'use strict';
 
+const mockOpenDedicatedConnection = jest.fn();
+
 jest.mock('../config/db', () => ({
     queryWithParams: jest.fn(),
     getPool: jest.fn(() => null),
@@ -17,9 +19,15 @@ jest.mock('../middleware/logger', () => ({
     debug: jest.fn()
 }));
 
+jest.mock('../adapters/pedidos-transaction-connection', () => ({
+    openDedicatedPedidosTransactionConnection: (...args) =>
+        mockOpenDedicatedConnection(...args),
+}));
+
 const SCHEMA = 'JAVIER';
 
 beforeEach(() => {
+    mockOpenDedicatedConnection.mockReset();
     const db = require('../config/db');
     if (db.getPool && db.getPool.mockReturnValue) db.getPool.mockReturnValue(null);
     if (db.initDb && db.initDb.mockReset) db.initDb.mockReset();
@@ -37,6 +45,7 @@ function installTransactionalPool(db) {
         close: jest.fn().mockResolvedValue(undefined),
     };
     db.getPool.mockReturnValue({ connect: jest.fn().mockResolvedValue(conn) });
+    mockOpenDedicatedConnection.mockResolvedValue(conn);
     return conn;
 }
 

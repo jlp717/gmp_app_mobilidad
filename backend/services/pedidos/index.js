@@ -4604,7 +4604,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             err.status = 500;
             throw err;
         }
-    } else if (Number(options._bolsaGlobalDiscountPct || 0) > 0) {
+    } else if (consumoAmount <= 0 && Number(options._bolsaGlobalDiscountPct || 0) > 0) {
         logger.info(`[PEDIDOS] Confirm #${id} with dto=${options._bolsaGlobalDiscountPct} and no bolsa consumo (tariff-neutral after discounts)`);
     }
 

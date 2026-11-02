@@ -1,6 +1,8 @@
 'use strict';
 
-const { getPool, initDb } = require('../../config/db');
+const {
+  openDedicatedPedidosTransactionConnection,
+} = require('../../adapters/pedidos-transaction-connection');
 const logger = require('../../middleware/logger');
 const {
   PEDIDOS_CAB_TABLE,
@@ -33,16 +35,7 @@ async function withLockedPedidosTransaction(callback, { lockOrderHeaders = false
     throw new TypeError('callback transaccional requerido');
   }
 
-  let pool = getPool();
-  if (!pool && typeof initDb === 'function') {
-    await initDb();
-    pool = getPool();
-  }
-  if (!pool || typeof pool.connect !== 'function') {
-    throw transactionUnavailableError();
-  }
-
-  const conn = await pool.connect();
+  const conn = await openDedicatedPedidosTransactionConnection();
   const requiredMethods = ['query', 'beginTransaction', 'commit', 'rollback'];
   if (!conn || requiredMethods.some((method) => typeof conn[method] !== 'function')) {
     if (conn && typeof conn.close === 'function') {

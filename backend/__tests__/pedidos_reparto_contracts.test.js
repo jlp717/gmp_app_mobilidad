@@ -5,12 +5,17 @@ const mockQueryWithParams = jest.fn();
 const mockGetClientDays = jest.fn();
 const mockConnQuery = jest.fn();
 const mockConnClose = jest.fn();
+const mockBeginTransaction = jest.fn();
+const mockCommit = jest.fn();
+const mockRollback = jest.fn();
+const mockOpenDedicatedConnection = jest.fn();
 let mockPool = null;
 
 jest.mock('../config/db', () => ({
   query: mockQuery,
   queryWithParams: mockQueryWithParams,
   getPool: () => mockPool,
+  initDb: jest.fn(),
 }));
 
 jest.mock('../middleware/logger', () => ({
@@ -18,6 +23,11 @@ jest.mock('../middleware/logger', () => ({
   error: jest.fn(),
   warn: jest.fn(),
   debug: jest.fn(),
+}));
+
+jest.mock('../adapters/pedidos-transaction-connection', () => ({
+  openDedicatedPedidosTransactionConnection: (...args) =>
+    mockOpenDedicatedConnection(...args),
 }));
 
 jest.mock('../services/query-optimizer', () => ({
@@ -175,8 +185,34 @@ beforeEach(() => {
   mockGetClientDays.mockReset();
   mockConnQuery.mockReset();
   mockConnClose.mockReset();
+  mockBeginTransaction.mockReset();
+  mockCommit.mockReset();
+  mockRollback.mockReset();
+  mockOpenDedicatedConnection.mockReset();
   mockConnClose.mockResolvedValue();
-  mockPool = null;
+  mockBeginTransaction.mockResolvedValue();
+  mockCommit.mockResolvedValue();
+  mockRollback.mockResolvedValue();
+  mockConnQuery.mockImplementation(async (sql, params) => {
+    if (/^(SET TRANSACTION|LOCK TABLE)/i.test(String(sql).trim())) return [];
+    return mockQueryWithParams(sql, params);
+  });
+  mockPool = {
+    connect: jest.fn().mockResolvedValue({
+      query: (...args) => mockConnQuery(...args),
+      beginTransaction: mockBeginTransaction,
+      commit: mockCommit,
+      rollback: mockRollback,
+      close: mockConnClose,
+    }),
+  };
+  mockOpenDedicatedConnection.mockResolvedValue({
+    query: (...args) => mockConnQuery(...args),
+    beginTransaction: mockBeginTransaction,
+    commit: mockCommit,
+    rollback: mockRollback,
+    close: mockConnClose,
+  });
   delete process.env.PEDIDOS_CONFIRMATION_SCHEMA;
   delete process.env.PEDIDOS_EXPORT_TO_SYSTEM;
   delete process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED;
@@ -312,7 +348,8 @@ describe('pedidos reparto confirmation contract', () => {
 
     const sqlText = mockQueryWithParams.mock.calls.map(([sql]) => sql).join('\n');
     expect(sqlText).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
-    expect(mockConnQuery).not.toHaveBeenCalled();
+    const txSql = mockConnQuery.mock.calls.map(([sql]) => sql).join('\n');
+    expect(txSql).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
   });
 
   test('PEDIDOS_EXPORT_TO_SYSTEM=false disables DSEDAC order export', async () => {
@@ -328,7 +365,8 @@ describe('pedidos reparto confirmation contract', () => {
 
     const sqlText = mockQueryWithParams.mock.calls.map(([sql]) => sql).join('\n');
     expect(sqlText).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
-    expect(mockConnQuery).not.toHaveBeenCalled();
+    const txSql = mockConnQuery.mock.calls.map(([sql]) => sql).join('\n');
+    expect(txSql).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
   });
 
   test('PEDIDOS_EXPORT_TO_SYSTEM=true still needs explicit DSEDAC export approval', async () => {
@@ -344,7 +382,8 @@ describe('pedidos reparto confirmation contract', () => {
 
     const sqlText = mockQueryWithParams.mock.calls.map(([sql]) => sql).join('\n');
     expect(sqlText).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
-    expect(mockConnQuery).not.toHaveBeenCalled();
+    const txSql = mockConnQuery.mock.calls.map(([sql]) => sql).join('\n');
+    expect(txSql).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
   });
 
   test('DSEDAC target exports commercial order to CPC/LPC with ERP column names', async () => {
