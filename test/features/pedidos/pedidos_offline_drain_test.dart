@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -90,7 +91,9 @@ void main() {
       clientRequestId: 'drainhit${DateTime.now().millisecondsSinceEpoch}',
     );
 
-    expect(PedidosOfflineService.getPendingSyncs(), hasLength(1));
+    final queued = PedidosOfflineService.getPendingSyncs();
+    expect(queued, hasLength(1));
+    expect((queued.single as Map)['kind'], 'orderSync');
 
     final result = await PedidosOfflineService.syncPendingOrdersWithResult(
       maxBatchSize: 5,
@@ -104,6 +107,152 @@ void main() {
     expect(createCalls, 1);
     expect(confirmCalls, 1);
     expect(PedidosOfflineService.getPendingSyncs(), isEmpty);
+  });
+
+  test('offline create transmits the immutable original UTC queue timestamp',
+      () async {
+    final queuedAt = DateTime(2026, 11, 2, 9, 9, 10, 123);
+    String? transmittedOriginal;
+    PedidosOfflineService.debugSetClockForTesting(() => queuedAt);
+    PedidosOfflineService.debugSetCreateOrderWithOriginalTimestampForTesting(({
+      required String clientCode,
+      required String clientName,
+      required String vendedorCode,
+      required String tipoVenta,
+      required List lines,
+      required String observaciones,
+      required String? clientRequestId,
+      required String? originalCreatedAt,
+      double descuentoGlobal = 0,
+    }) async {
+      transmittedOriginal = originalCreatedAt;
+      return {'id': 9002, 'estado': 'BORRADOR'};
+    });
+    PedidosOfflineService.debugSetConfirmOrderForTesting(
+      (
+        int orderId,
+        String saleType, {
+        String? deliveryDate,
+        String? vehicleCode,
+        String? driverCode,
+        String? routeCode,
+        bool cobroPropio = false,
+      }) async =>
+          {'id': orderId, 'estado': 'CONFIRMADO'},
+    );
+
+    await PedidosOfflineService.queueOrderForSync(
+      clientCode: '4300000001',
+      clientName: 'Marca temporal original',
+      vendedorCode: '35',
+      saleType: 'CC',
+      lines: [
+        OrderLine(
+          codigoArticulo: '1412',
+          descripcion: 'HIT',
+          cantidadEnvases: 1,
+          cantidadUnidades: 0,
+          unidadMedida: 'CAJAS',
+          precioVenta: 10,
+        ),
+      ],
+      observaciones: 'off06-original-time',
+      clientRequestId: 'off06-original-time-0001',
+    );
+
+    final result = await PedidosOfflineService.syncPendingOrdersWithResult();
+
+    expect(result['synced'], 1);
+    expect(transmittedOriginal, queuedAt.toUtc().toIso8601String());
+    expect(transmittedOriginal, endsWith('Z'));
+  });
+
+  test(
+      'legacy local queuedAt migrates once and retry after reopen reuses the exact UTC instant',
+      () async {
+    final originalLocal = DateTime(2026, 11, 2, 9, 9, 10, 123);
+    const legacyRaw = '2026-11-02T09:09:10.123';
+    final expectedUtc = originalLocal.toUtc().toIso8601String();
+    var clock = DateTime.utc(2026, 11, 2, 10);
+    var createCalls = 0;
+    final transmitted = <String?>[];
+    PedidosOfflineService.debugSetClockForTesting(() => clock);
+    PedidosOfflineService.debugSetCreateOrderWithOriginalTimestampForTesting(({
+      required String clientCode,
+      required String clientName,
+      required String vendedorCode,
+      required String tipoVenta,
+      required List lines,
+      required String observaciones,
+      required String? clientRequestId,
+      required String? originalCreatedAt,
+      double descuentoGlobal = 0,
+    }) async {
+      transmitted.add(originalCreatedAt);
+      createCalls += 1;
+      if (createCalls == 1) throw StateError('network offline');
+      return {'id': 9003, 'estado': 'BORRADOR'};
+    });
+    PedidosOfflineService.debugSetConfirmOrderForTesting(
+      (
+        int orderId,
+        String saleType, {
+        String? deliveryDate,
+        String? vehicleCode,
+        String? driverCode,
+        String? routeCode,
+        bool cobroPropio = false,
+      }) async =>
+          {'id': orderId, 'estado': 'CONFIRMADO'},
+    );
+
+    await PedidosOfflineService.queueOrderForSync(
+      clientCode: '4300000001',
+      clientName: 'Cola legacy UTC',
+      vendedorCode: '35',
+      saleType: 'CC',
+      lines: [
+        OrderLine(
+          codigoArticulo: '1412',
+          descripcion: 'HIT',
+          cantidadEnvases: 1,
+          cantidadUnidades: 0,
+          unidadMedida: 'CAJAS',
+          precioVenta: 10,
+        ),
+      ],
+      observaciones: 'off06-legacy-time',
+      clientRequestId: 'off06legacytime0001',
+    );
+    final queued = Map<String, dynamic>.from(
+      PedidosOfflineService.getPendingSyncs().single as Map,
+    );
+    final syncKey = queued['syncKey'].toString();
+    final box = Hive.box<dynamic>('pedidos_sync_queue');
+    final persisted = Map<String, dynamic>.from(
+      jsonDecode(box.get(syncKey).toString()) as Map,
+    )
+      ..remove('kind')
+      ..['queuedAt'] = legacyRaw;
+    await box.put(syncKey, jsonEncode(persisted));
+
+    final first = await PedidosOfflineService.syncPendingOrdersWithResult();
+    expect(first['transientFailed'], 1);
+    final afterFirst = Map<String, dynamic>.from(
+      jsonDecode(box.get(syncKey).toString()) as Map,
+    );
+    expect(afterFirst['queuedAtOriginalRaw'], legacyRaw);
+    expect(afterFirst['queuedAt'], expectedUtc);
+
+    // Reinitialize the service as application bootstrap would. The encrypted
+    // box remains durable; closing it in this host-only harness regenerates the
+    // flutter_secure_storage fallback key, which is not production behaviour.
+    await PedidosOfflineService.init();
+    clock = DateTime.utc(2026, 11, 2, 12);
+    final second = await PedidosOfflineService.syncPendingOrdersWithResult();
+
+    expect(second['synced'], 1);
+    expect(transmitted, [expectedUtc, expectedUtc]);
   });
 
   test('default drain preserves FIFO create and confirm order', () async {
@@ -548,7 +697,159 @@ void main() {
     expect(createdClients, ['4300000101', '4300000102', '4300000103']);
     expect(confirmedIds, [9700, 9701, 9702]);
     expect(PedidosOfflineService.getPendingSyncs(), isEmpty);
+    expect(PedidosOfflineService.getFailedSyncs(), isEmpty);
     expect(PedidosOfflineService.getDrafts(), hasLength(1));
+
+    final box = Hive.box<dynamic>('pedidos_sync_queue');
+    final thresholdKey = box.keys.singleWhere(
+      (key) => key.toString().contains('config_threshold_35'),
+    );
+    final thresholdConfig = Map<String, dynamic>.from(
+      jsonDecode(box.get(thresholdKey).toString()) as Map,
+    );
+    expect(thresholdConfig['kind'], 'autoSyncThreshold');
+    expect(thresholdConfig['threshold'], 3);
+    expect(thresholdConfig['vendedorCode'], '35');
+    expect(thresholdConfig.containsKey('status'), isFalse);
+    expect(thresholdConfig.containsKey('error'), isFalse);
+    expect(thresholdConfig.containsKey('failedAt'), isFalse);
+    expect(thresholdConfig.containsKey('attempts'), isFalse);
+  });
+
+  test(
+      'contaminated threshold metadata is healed without retry or HTTP mutation',
+      () async {
+    PedidosOfflineService.setScope('sales-rep-threshold-contaminated');
+    var createCalls = 0;
+    var confirmCalls = 0;
+    PedidosOfflineService.debugSetCreateOrderForTesting(({
+      required String clientCode,
+      required String clientName,
+      required String vendedorCode,
+      required String tipoVenta,
+      required List lines,
+      required String observaciones,
+      required String? clientRequestId,
+      double descuentoGlobal = 0,
+    }) async {
+      createCalls++;
+      return {'id': 9800, 'estado': 'BORRADOR'};
+    });
+    PedidosOfflineService.debugSetConfirmOrderForTesting((
+      int orderId,
+      String saleType, {
+      String? deliveryDate,
+      String? vehicleCode,
+      String? driverCode,
+      String? routeCode,
+      bool cobroPropio = false,
+    }) async {
+      confirmCalls++;
+      return {'id': orderId, 'estado': 'CONFIRMADO'};
+    });
+
+    await PedidosOfflineService.configureAutoSyncThreshold(
+      vendedorCode: '35',
+      threshold: 3,
+    );
+    final box = Hive.box<dynamic>('pedidos_sync_queue');
+    final thresholdKey = box.keys.singleWhere(
+      (key) => key.toString().contains('config_threshold_35'),
+    );
+    final contaminated = Map<String, dynamic>.from(
+      jsonDecode(box.get(thresholdKey).toString()) as Map,
+    )
+      ..['status'] = 'failed'
+      ..['error'] = 'Pedido offline sin fecha original.'
+      ..['failedAt'] = '2026-11-02T10:00:00.000Z'
+      ..['attempts'] = 2
+      ..['futureField'] = {'preserve': true};
+    await box.put(thresholdKey, jsonEncode(contaminated));
+
+    expect(
+      await PedidosOfflineService.retryFailedSync(thresholdKey.toString()),
+      isFalse,
+    );
+    expect(PedidosOfflineService.getPendingSyncs(), isEmpty);
+    expect(PedidosOfflineService.getFailedSyncs(), isEmpty);
+
+    final result = await PedidosOfflineService.syncPendingOrdersWithResult();
+    final healed = Map<String, dynamic>.from(
+      jsonDecode(box.get(thresholdKey).toString()) as Map,
+    );
+
+    expect(result['selectedForRun'], 0);
+    expect(createCalls, 0);
+    expect(confirmCalls, 0);
+    expect(healed['kind'], 'autoSyncThreshold');
+    expect(healed['threshold'], 3);
+    expect(healed['futureField'], {'preserve': true});
+    for (final key in ['status', 'error', 'failedAt', 'attempts']) {
+      expect(healed.containsKey(key), isFalse, reason: key);
+    }
+  });
+
+  test('unknown queue metadata is excluded and preserved byte-for-byte',
+      () async {
+    PedidosOfflineService.setScope('sales-rep-future-metadata');
+    var createCalls = 0;
+    var confirmCalls = 0;
+    PedidosOfflineService.debugSetCreateOrderForTesting(({
+      required String clientCode,
+      required String clientName,
+      required String vendedorCode,
+      required String tipoVenta,
+      required List lines,
+      required String observaciones,
+      required String? clientRequestId,
+      double descuentoGlobal = 0,
+    }) async {
+      createCalls++;
+      return {'id': 9801, 'estado': 'BORRADOR'};
+    });
+    PedidosOfflineService.debugSetConfirmOrderForTesting((
+      int orderId,
+      String saleType, {
+      String? deliveryDate,
+      String? vehicleCode,
+      String? driverCode,
+      String? routeCode,
+      bool cobroPropio = false,
+    }) async {
+      confirmCalls++;
+      return {'id': orderId, 'estado': 'CONFIRMADO'};
+    });
+
+    final box = Hive.box<dynamic>('pedidos_sync_queue');
+    final scope = PedidosOfflineService.currentScopeId;
+    final pendingKey = '$scope::future_pending';
+    final failedKey = '$scope::future_failed';
+    final orderLikeMetadata = {
+      'kind': 'futureMetadata',
+      'scope': scope,
+      'clientCode': '4300000999',
+      'vendedorCode': '35',
+      'saleType': 'CC',
+      'lines': <Object>[],
+      'queuedAt': '2026-11-02T10:00:00.000Z',
+      'futureField': {'preserve': true},
+    };
+    final pendingRaw = jsonEncode({...orderLikeMetadata, 'status': 'pending'});
+    final failedRaw = jsonEncode({...orderLikeMetadata, 'status': 'failed'});
+    await box.put(pendingKey, pendingRaw);
+    await box.put(failedKey, failedRaw);
+
+    expect(await PedidosOfflineService.retryFailedSync(failedKey), isFalse);
+    expect(PedidosOfflineService.getPendingSyncs(), isEmpty);
+    expect(PedidosOfflineService.getFailedSyncs(), isEmpty);
+
+    final result = await PedidosOfflineService.syncPendingOrdersWithResult();
+
+    expect(result['selectedForRun'], 0);
+    expect(createCalls, 0);
+    expect(confirmCalls, 0);
+    expect(box.get(pendingKey), pendingRaw);
+    expect(box.get(failedKey), failedRaw);
   });
 
   test('retry for A is rearmed once after its deadline passes under B',

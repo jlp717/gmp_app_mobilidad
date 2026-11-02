@@ -25,6 +25,13 @@ class PedidosOfflineService {
   static const _defaultYieldEvery = 5;
   static const _maxTransientAttempts = 8;
   static const String _anonymousScope = 'anon';
+  static const String _orderSyncKind = 'orderSync';
+  static const String _autoSyncThresholdKind = 'autoSyncThreshold';
+  static const Set<String> _queueStatuses = {
+    'pending',
+    'syncing',
+    'failed',
+  };
 
   static Box<dynamic>? _draftsBox;
   static Box<dynamic>? _syncQueueBox;
@@ -52,6 +59,7 @@ class PedidosOfflineService {
     required List lines,
     required String observaciones,
     required String? clientRequestId,
+    required String? originalCreatedAt,
     double descuentoGlobal,
   }) _createOrder = _defaultCreateOrder;
   static Future<Map<String, dynamic>> Function(
@@ -271,6 +279,7 @@ class PedidosOfflineService {
       lineJson.add((line as OrderLine).toJson());
     }
     final data = {
+      'kind': _orderSyncKind,
       'scope': capturedScope,
       'clientCode': clientCode,
       'clientName': clientName,
@@ -287,7 +296,7 @@ class PedidosOfflineService {
       'clientRequestId': _isValidClientRequestId(clientRequestId)
           ? clientRequestId!.trim()
           : _clientRequestIdForSyncKey(key),
-      'queuedAt': _now().toIso8601String(),
+      'queuedAt': _now().toUtc().toIso8601String(),
       'status': 'pending',
       'attempts': 0,
     };
@@ -345,7 +354,7 @@ class PedidosOfflineService {
     final capturedScope = _scope;
     final box = await _syncQueue();
     final data = _decodeScopedSyncItem(box, syncKey, capturedScope);
-    if (data == null) return false;
+    if (data == null || !_isOrderQueueRecord(data)) return false;
     if (data['status'] == 'failed') {
       data['status'] = 'pending';
     } else {
@@ -403,6 +412,7 @@ class PedidosOfflineService {
     required int yieldEvery,
   }) async {
     final box = await _syncQueue();
+    await _migrateLegacyQueuedAtForScope(box, capturedScope);
     final pending = _getSyncsByStatusForScope('pending', capturedScope);
     final now = _now();
     final eligible = pending
@@ -437,6 +447,7 @@ class PedidosOfflineService {
               lines: _decodeOrderLines(prepared['lines']),
               observaciones: prepared['observaciones']?.toString() ?? '',
               clientRequestId: prepared['clientRequestId'] as String?,
+              originalCreatedAt: prepared['queuedAt'] as String?,
               descuentoGlobal:
                   (prepared['globalDiscountPct'] as num?)?.toDouble() ?? 0,
             ),
@@ -593,7 +604,7 @@ class PedidosOfflineService {
     await box.put(
       key,
       jsonEncode({
-        'kind': 'autoSyncThreshold',
+        'kind': _autoSyncThresholdKind,
         'scope': capturedScope,
         'vendedorCode': vendor,
         'threshold': threshold,
@@ -662,6 +673,47 @@ class PedidosOfflineService {
       double descuentoGlobal,
     }) createOrder,
   ) {
+    _createOrder = ({
+      required clientCode,
+      required clientName,
+      required vendedorCode,
+      required tipoVenta,
+      required lines,
+      required observaciones,
+      required clientRequestId,
+      required originalCreatedAt,
+      descuentoGlobal = 0,
+    }) =>
+        createOrder(
+          clientCode: clientCode,
+          clientName: clientName,
+          vendedorCode: vendedorCode,
+          tipoVenta: tipoVenta,
+          lines: lines,
+          observaciones: observaciones,
+          clientRequestId: clientRequestId,
+          descuentoGlobal: descuentoGlobal,
+        );
+  }
+
+  /// Variant used by the OFF-06 contract to assert that the immutable local
+  /// queue timestamp crosses the API boundary. Existing test doubles keep the
+  /// legacy callback above, so the production contract can evolve without
+  /// forcing unrelated offline tests to know about transport metadata.
+  @visibleForTesting
+  static void debugSetCreateOrderWithOriginalTimestampForTesting(
+    Future Function({
+      required String clientCode,
+      required String clientName,
+      required String vendedorCode,
+      required String tipoVenta,
+      required List lines,
+      required String observaciones,
+      required String? clientRequestId,
+      required String? originalCreatedAt,
+      double descuentoGlobal,
+    }) createOrder,
+  ) {
     _createOrder = createOrder;
   }
 
@@ -698,6 +750,7 @@ class PedidosOfflineService {
     required List lines,
     required String observaciones,
     required String? clientRequestId,
+    required String? originalCreatedAt,
     double descuentoGlobal = 0,
   }) {
     return PedidosService.createOrder(
@@ -708,6 +761,7 @@ class PedidosOfflineService {
       lines: lines.cast(),
       observaciones: observaciones,
       clientRequestId: clientRequestId,
+      originalCreatedAt: originalCreatedAt,
       descuentoGlobal: descuentoGlobal,
     );
   }
@@ -760,7 +814,7 @@ class PedidosOfflineService {
       box,
       _thresholdConfigKey(scope, vendedorCode),
     );
-    if (data == null || data['kind'] != 'autoSyncThreshold') return 0;
+    if (data == null || data['kind'] != _autoSyncThresholdKind) return 0;
     return _asInt(data['threshold']);
   }
 
@@ -818,7 +872,9 @@ class PedidosOfflineService {
       try {
         final data = _decodeSyncItem(box, key.toString());
         if (data == null) {
-        } else if (data['scope'] == scope && data['status'] == status) {
+        } else if (data['scope'] == scope &&
+            _isOrderQueueRecord(data) &&
+            data['status'] == status) {
           data['syncKey'] = key;
           items.add(data);
         }
@@ -883,8 +939,12 @@ class PedidosOfflineService {
     if (current == null) {
       throw StateError('Pedido offline no disponible para esta cuenta.');
     }
+    if (!_isOrderQueueRecord(current)) {
+      throw StateError('El registro offline no es un pedido sincronizable.');
+    }
     final data = Map.from(current);
     data.remove('syncKey');
+    _normalizeQueuedAtInPlace(data);
     final existingRequestId = data['clientRequestId']?.toString().trim();
     if (!_isValidClientRequestId(existingRequestId)) {
       data['clientRequestId'] = _clientRequestIdForSyncKey(syncKey);
@@ -895,6 +955,85 @@ class PedidosOfflineService {
     data.remove('nextRetryAt');
     await box.put(syncKey, jsonEncode(data));
     return Map<String, dynamic>.from(data);
+  }
+
+  /// Older app versions persisted a local ISO timestamp without an offset.
+  /// DateTime parses that legacy value in the device timezone; converting that
+  /// same instant to UTC is the best recoverable representation. The raw value
+  /// is retained because the missing historical offset cannot be reconstructed
+  /// independently after the device timezone changes.
+  static bool _normalizeQueuedAtInPlace(Map data) {
+    final raw = data['queuedAt']?.toString().trim() ?? '';
+    if (raw.isEmpty) {
+      throw const FormatException('Pedido offline sin fecha original.');
+    }
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) {
+      throw const FormatException(
+          'Fecha original del pedido offline invalida.');
+    }
+    final normalized = parsed.toUtc().toIso8601String();
+    if (raw == normalized) return false;
+    data['queuedAtOriginalRaw'] ??= raw;
+    data['queuedAt'] = normalized;
+    return true;
+  }
+
+  static Future<void> _migrateLegacyQueuedAtForScope(
+    Box box,
+    String scope,
+  ) async {
+    for (final key in box.keys.toList(growable: false)) {
+      final syncKey = key.toString();
+      final current = _decodeScopedSyncItem(box, syncKey, scope);
+      if (current == null) continue;
+      final data = Map<String, dynamic>.from(current);
+      data.remove('syncKey');
+      if (_isAutoSyncThresholdRecord(data)) {
+        if (_healAutoSyncThresholdRecord(data)) {
+          await box.put(syncKey, jsonEncode(data));
+        }
+        continue;
+      }
+      if (!_isOrderQueueRecord(data)) continue;
+      try {
+        if (_normalizeQueuedAtInPlace(data)) {
+          await box.put(syncKey, jsonEncode(data));
+        }
+      } on FormatException catch (error) {
+        data
+          ..['status'] = 'failed'
+          ..['error'] = error.message
+          ..['failedAt'] = _now().toUtc().toIso8601String();
+        await box.put(syncKey, jsonEncode(data));
+      }
+    }
+  }
+
+  static bool _isAutoSyncThresholdRecord(Map data) =>
+      data['kind'] == _autoSyncThresholdKind;
+
+  static bool _isOrderQueueRecord(Map data) {
+    final kind = data['kind'];
+    if (kind != null) return kind == _orderSyncKind;
+
+    final status = data['status']?.toString();
+    return _queueStatuses.contains(status) &&
+        data['clientCode'] != null &&
+        data['vendedorCode'] != null &&
+        data['saleType'] != null &&
+        data['lines'] is List;
+  }
+
+  static bool _healAutoSyncThresholdRecord(Map data) {
+    var changed = false;
+    for (final key in const ['status', 'error', 'failedAt', 'attempts']) {
+      if (data.containsKey(key)) {
+        data.remove(key);
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   static List _decodeOrderLines(Object? rawLines) {

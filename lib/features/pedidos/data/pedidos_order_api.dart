@@ -14,6 +14,7 @@ abstract class PedidosOrderApi {
     required List<OrderLine> lines,
     required String observaciones,
     String? clientRequestId,
+    String? originalCreatedAt,
     double descuentoGlobal = 0,
   });
 
@@ -43,6 +44,7 @@ class PedidosServiceOrderApi implements PedidosOrderApi {
     required List<OrderLine> lines,
     required String observaciones,
     String? clientRequestId,
+    String? originalCreatedAt,
     double descuentoGlobal = 0,
   }) {
     return PedidosService.createOrder(
@@ -53,6 +55,7 @@ class PedidosServiceOrderApi implements PedidosOrderApi {
       lines: lines,
       observaciones: observaciones,
       clientRequestId: clientRequestId,
+      originalCreatedAt: originalCreatedAt,
       descuentoGlobal: descuentoGlobal,
     );
   }

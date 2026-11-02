@@ -65,6 +65,7 @@ class _RecordingOrderApi implements PedidosOrderApi {
     required List<OrderLine> lines,
     required String observaciones,
     String? clientRequestId,
+    String? originalCreatedAt,
     double descuentoGlobal = 0,
   }) async {
     createdClientRequestId = clientRequestId;
@@ -122,6 +123,7 @@ class _BlockingOrderApi implements PedidosOrderApi {
     required List<OrderLine> lines,
     required String observaciones,
     String? clientRequestId,
+    String? originalCreatedAt,
     double descuentoGlobal = 0,
   }) {
     createOrderCalls++;
@@ -159,6 +161,7 @@ class _QueuedCreateOrderApi implements PedidosOrderApi {
     required List<OrderLine> lines,
     required String observaciones,
     String? clientRequestId,
+    String? originalCreatedAt,
     double descuentoGlobal = 0,
   }) async {
     createOrderCalls++;

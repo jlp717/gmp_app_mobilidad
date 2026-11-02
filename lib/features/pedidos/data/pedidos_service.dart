@@ -2093,6 +2093,7 @@ class PedidosService {
     int tarifa = 1,
     String observaciones = '',
     String? clientRequestId,
+    String? originalCreatedAt,
     double descuentoGlobal = 0,
   }) async {
     try {
@@ -2110,6 +2111,9 @@ class PedidosService {
       };
       if (clientRequestId != null && clientRequestId.trim().isNotEmpty) {
         payload['clientRequestId'] = clientRequestId.trim();
+      }
+      if (originalCreatedAt != null && originalCreatedAt.trim().isNotEmpty) {
+        payload['originalCreatedAt'] = originalCreatedAt.trim();
       }
       final response = await ApiClient.post(
         '$_base/create',
@@ -2474,10 +2478,14 @@ class PedidosService {
     }
   }
 
-  static Future<void> deleteDraftOrder(int orderId) async {
+  static Future<void> deleteDraftOrder(
+    int orderId, {
+    String reason = 'Borrador descartado por el comercial',
+  }) async {
     try {
       await OfflineAwareApi.put(
         '$_base/$orderId/cancel',
+        data: {'reason': reason.trim()},
         syncType: 'delete_draft_order',
       );
       await invalidateOrderMutationCaches(orderId: orderId);
