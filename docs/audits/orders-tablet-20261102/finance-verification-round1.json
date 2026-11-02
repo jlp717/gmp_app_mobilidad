@@ -1,0 +1,74 @@
+{
+  "run_id": "orders-tablet-20261102",
+  "round": 1,
+  "verifier": "/root/finance_verifier",
+  "verdict": "FAIL",
+  "veto": true,
+  "product_commit_created": false,
+  "findings": [
+    {
+      "id": "FIN-P1-001",
+      "severity": "P1",
+      "source": "backend/services/comercial-devoluciones-service.js:1170",
+      "reproduction": "Existing SAVED, new token, current revision and unchanged bank/handed amounts returns old record before reading new collections.",
+      "observed": {"cobrosRead": false, "sqlCount": 4, "returnedToken": "old-token", "newTokenPersisted": false, "idempotent": true}
+    },
+    {
+      "id": "FIN-P1-002",
+      "severity": "P1",
+      "source": "backend/routes/comercial-liquidacion.js:262",
+      "reproduction": "Authenticated simulated REPARTIDOR role with own vendor reaches commercial summary and save.",
+      "observed": {"get_summary_status": 200, "post_save_status": 201},
+      "expected": "403 before invoking services; COMERCIAL/JEFE_VENTAS/ADMIN only according to existing ownership scope"
+    },
+    {
+      "id": "FIN-P1-003",
+      "severity": "P1",
+      "source": "lib/features/liquidacion_comercial/presentation/pages/comercial_liquidacion_diaria_page.dart:135",
+      "reproduction": "Refresh replaces the optimistic base revision while retaining edited local action fields.",
+      "expected": "Keep original base revision for dirty actions; conflict requires explicit reload/discard"
+    },
+    {
+      "id": "FIN-P1-004",
+      "severity": "P1",
+      "source": "backend/services/comercial-devoluciones-service.js:1299",
+      "reproduction": "Successful INSERT mock plus empty persisted re-read returns a fabricated success payload with revision null.",
+      "observed": {"didInsert": true, "returnedTotalAIngresar": 500, "revision": null},
+      "expected": "Rollback and typed error if the expected persisted row/token is not recovered"
+    },
+    {
+      "id": "FIN-QA-P1-005",
+      "severity": "P1",
+      "source": "backend/__tests__/comercial-devoluciones-service.test.js:467",
+      "reproduction": "Two registerReturn query doubles return synchronous arrays while the service requires a Promise and calls catch.",
+      "observed": {"tests_passed": 40, "tests_failed": 2, "exit_code": 1},
+      "note": "Producer previously reported 42/42; that does not describe the independently verified tree. Assertions must be preserved when repairing async doubles."
+    },
+    {
+      "id": "FIN-P2-001",
+      "severity": "P2",
+      "source": "backend/services/comercial-devoluciones-service.js:50",
+      "reproduction": "parseIsoDate accepts impossible dates 2026-02-31 and 2026-11-31."
+    }
+  ],
+  "commands": [
+    {
+      "command": "npm.cmd run test:targeted -- __tests__/comercial-devoluciones-service.test.js __tests__/comercial-liquidacion-route.test.js --silent",
+      "exit_code": 1,
+      "tests_passed": 40,
+      "tests_failed": 2
+    },
+    {
+      "command": "C:\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe --packages=C:\\flutter\\packages\\flutter_tools\\.dart_tool\\package_config.json C:\\flutter\\bin\\cache\\flutter_tools.snapshot test --no-pub --reporter compact test/features/liquidacion_comercial/domain/liquidacion_domain_test.dart test/features/liquidacion_comercial/data/comercial_liquidacion_service_test.dart test/features/liquidacion_comercial/presentation/comercial_liquidacion_diaria_page_states_test.dart test/widgets/comercial_liquidacion_diaria_page_test.dart",
+      "exit_code": 0,
+      "tests_passed": 32,
+      "tests_failed": 0
+    }
+  ],
+  "real_db_scope_that_did_pass": [
+    "Latest live ERP carry: 29.15, read-only",
+    "Empty-period save rejects with LIQUIDACION_NO_COMMERCIAL_COLLECTIONS; 10 rows before/after, zero DML",
+    "Unique indexes verified on vendor/date and token"
+  ],
+  "next": "config_maker is sole product writer for repair round 2; BAG writer paused at a syntax-valid checkpoint. No production mutations."
+}

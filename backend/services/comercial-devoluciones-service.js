@@ -1,11 +1,18 @@
 'use strict';
 
 const { queryWithParams } = require('../config/db');
+const {
+  openDedicatedPedidosTransactionConnection,
+} = require('../adapters/pedidos-transaction-connection');
 const { db2AppTable } = require('../utils/db2-schemas');
 const { db2InsertSql } = require('../utils/db2-identifiers');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
-const { comercialErpTable, comercialErpSchemaAndName, isIsolatedCommercialTest, comercialErpSnapshotTable } = require('../utils/comercial-erp-tables');
+const {
+  comercialErpTable,
+  comercialErpLiveTable,
+  comercialErpSchemaAndName,
+} = require('../utils/comercial-erp-tables');
 const logger = require('../middleware/logger');
 const {
   buildReturnPdfPath,
@@ -21,6 +28,8 @@ const RETURN_TIPO_VENTA = 'DV';
 const FORMAS_PAGO_REPARTIDOR = new Set(['01', 'CO', 'CTR', 'EF']);
 const FORMAS_PAGO_CHEQUE = new Set(['CHEQUE', 'TALON', 'TALON BANCARIO', 'CH']);
 const FORMAS_PAGO_POSTDATADO = new Set(['POSTDATADO', 'POSTDATADOS', 'PD']);
+const FORMAS_PAGO_TARJETA = new Set(['TJ', 'TARJETA', 'TPV']);
+const FORMAS_PAGO_TRANSFERENCIA = new Set(['TR', 'T0', 'TRANSFER', 'TRANSFERENCIA']);
 const FORMAS_PAGO_PAGARE = new Set([
   'PG', 'P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9',
   'PB', 'PC', 'Q1', 'Q2', 'PAGARE',
@@ -46,6 +55,12 @@ function parseIsoDate(value) {
   const month = Number(match[2]);
   const day = Number(match[3]);
   if (year < 2000 || year > 2035 || month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+  const calendarDate = new Date(Date.UTC(year, month - 1, day));
+  if (calendarDate.getUTCFullYear() !== year
+    || calendarDate.getUTCMonth() !== month - 1
+    || calendarDate.getUTCDate() !== day) {
     return null;
   }
   return { year, month, day, iso: raw };
@@ -86,6 +101,8 @@ function classifyFormaPago(code) {
   const normalized = String(code || '').trim().toUpperCase();
   if (!normalized) return 'EFECTIVO';
   if (FORMAS_PAGO_REPARTIDOR.has(normalized)) return 'REPARTIDOR';
+  if (FORMAS_PAGO_TARJETA.has(normalized)) return 'TARJETA';
+  if (FORMAS_PAGO_TRANSFERENCIA.has(normalized)) return 'TRANSFERENCIA';
   if (FORMAS_PAGO_CHEQUE.has(normalized)) return 'CHEQUES';
   if (FORMAS_PAGO_PAGARE.has(normalized) || FORMAS_PAGO_POSTDATADO.has(normalized)) {
     return 'POSTDATADOS';
@@ -110,6 +127,8 @@ function buildVendorInClause(columnSql, vendorCodes) {
 
 function buildComercialLiquidacionSummary({
   totalEfectivo = 0,
+  totalTarjeta = 0,
+  totalTransferencia = 0,
   totalCheques = 0,
   totalPostdatados = 0,
   saldoActual = 0,
@@ -118,13 +137,20 @@ function buildComercialLiquidacionSummary({
   source = 'COBROS',
 } = {}) {
   const efectivo = money(totalEfectivo);
+  const tarjeta = money(totalTarjeta);
+  const transferencia = money(totalTransferencia);
   const cheques = money(totalCheques);
   const postdatados = money(totalPostdatados);
   const saldo = money(saldoActual);
   const devoluciones = Math.abs(money(devolucionesYaCobradas));
-  const computed = money(efectivo + cheques + postdatados + saldo);
+  // Solo el efectivo físico y el residual de la última LQD forman caja.
+  // Tarjeta, transferencia, cheques y postdatados siguen visibles, pero no
+  // deben entregarse ni ingresarse de nuevo por el comercial.
+  const computed = money(efectivo + saldo);
   return {
     totalEfectivo: efectivo,
+    totalTarjeta: tarjeta,
+    totalTransferencia: transferencia,
     totalCheques: cheques,
     totalPostdatados: postdatados,
     saldoActual: saldo,
@@ -672,11 +698,13 @@ async function getDailyCobrosByFormaPago({
   const vendorFilter = buildVendorInClause('CODIGO_USUARIO', vendorCodes);
   const sql = `
     SELECT TRIM(FORMA_PAGO) AS FORMA_PAGO,
-           SUM(IMPORTE) AS TOTAL
+           SUM(IMPORTE) AS TOTAL,
+           COUNT(*) AS FILAS
     FROM ${cobrosTable}
     WHERE YEAR(FECHA) = ?
       AND MONTH(FECHA) = ?
       AND DAY(FECHA) = ?
+      AND UPPER(TRIM(TIPO_USUARIO)) = CAST(? AS VARCHAR(20))
       ${vendorFilter.clause}
     GROUP BY TRIM(FORMA_PAGO)
   `;
@@ -684,25 +712,35 @@ async function getDailyCobrosByFormaPago({
     parsedDate.year,
     parsedDate.month,
     parsedDate.day,
+    'COMERCIAL',
     ...vendorFilter.params,
   ]);
 
   const totals = {
+    count: 0,
     totalEfectivo: 0,
+    totalTarjeta: 0,
+    totalTransferencia: 0,
     totalCheques: 0,
     totalPostdatados: 0,
     totalRepartidorExcluded: 0,
   };
   for (const row of rows || []) {
+    totals.count += Number(row.FILAS) || 0;
     const amount = money(row.TOTAL);
     const kind = classifyFormaPago(row.FORMA_PAGO);
     if (kind === 'REPARTIDOR') totals.totalRepartidorExcluded += amount;
+    else if (kind === 'TARJETA') totals.totalTarjeta += amount;
+    else if (kind === 'TRANSFERENCIA') totals.totalTransferencia += amount;
     else if (kind === 'CHEQUES') totals.totalCheques += amount;
     else if (kind === 'POSTDATADOS') totals.totalPostdatados += amount;
     else totals.totalEfectivo += amount;
   }
   return {
+    count: totals.count,
     totalEfectivo: money(totals.totalEfectivo),
+    totalTarjeta: money(totals.totalTarjeta),
+    totalTransferencia: money(totals.totalTransferencia),
     totalCheques: money(totals.totalCheques),
     totalPostdatados: money(totals.totalPostdatados),
     totalRepartidorExcluded: money(totals.totalRepartidorExcluded),
@@ -724,45 +762,92 @@ async function getLqdForVendorDay({
 
   const codes = sanitizeVendorCodes(vendorCodes);
   if (codes.length === 0) {
-    return null;
+    return {
+      totalEfectivo: 0,
+      totalCheques: 0,
+      totalPostdatados: 0,
+      totalTarjeta: 0,
+      saldoActual: 0,
+      totalAIngresar: 0,
+      ingresoBanco: 0,
+      gastos: 0,
+      efectivo2: 0,
+      entregado2: 0,
+      filas: 0,
+      latestRows: [],
+      source: 'DSEDAC.LQD',
+    };
   }
 
-  // En isolated_test la liquidación comercial se alinea a JAVIER.TEST_LQD
-  // (volcado prod→test), no a DSEDAC.LQD vivo — evita discordancia cobros TEST vs LQD prod.
-  const lqdTable = isIsolatedCommercialTest()
-    ? comercialErpSnapshotTable('LQD')
-    : comercialErpTable('LQD');
+  // El arrastre se deriva siempre de la pizarra ERP viva. TEST_LQD es una
+  // instantánea y no representa el último ingreso en banco del vendedor.
+  const lqdTable = comercialErpLiveTable('LQD');
+  const dateKey = parsedDate.year * 10000 + parsedDate.month * 100 + parsedDate.day;
   const sql = `
-    SELECT COALESCE(SUM(LQD.IMPORTEEFECTIVO), 0) AS TOTAL_EFECTIVO,
-           COALESCE(SUM(LQD.IMPORTECHEQUES), 0) AS TOTAL_CHEQUES,
-           COALESCE(SUM(LQD.IMPORTEPOSTDATADOS), 0) AS TOTAL_POSTDATADOS,
-           COALESCE(SUM(LQD.IMPORTESALDOACTUAL), 0) AS SALDO_ACTUAL,
-           COALESCE(SUM(LQD.IMPORTETOTALAINGRESAR), 0) AS TOTAL_A_INGRESAR,
-           COUNT(*) AS FILAS
-      FROM ${lqdTable} LQD
-     WHERE TRIM(LQD.CODIGOVENDEDOR) IN (${codes.map(() => 'CAST(? AS VARCHAR(2))').join(',')})
-       AND LQD.ANOLIQUIDACION = ?
-       AND LQD.MESLIQUIDACION = ?
-       AND LQD.DIALIQUIDACION = ?
+    WITH RANKED AS (
+      SELECT TRIM(LQD.CODIGOVENDEDOR) AS VENDEDOR,
+             COALESCE(LQD.IMPORTEEFECTIVO, 0) AS TOTAL_EFECTIVO,
+             COALESCE(LQD.IMPORTECHEQUES, 0) AS TOTAL_CHEQUES,
+             COALESCE(LQD.IMPORTEPOSTDATADOS, 0) AS TOTAL_POSTDATADOS,
+             COALESCE(LQD.IMPORTETARJETA, 0) AS TOTAL_TARJETA,
+             COALESCE(LQD.IMPORTETOTALAINGRESAR, 0) AS TOTAL_A_INGRESAR,
+             COALESCE(LQD.IMPORTEINGRESOENBANCO, 0) AS INGRESO_BANCO,
+             COALESCE(LQD.IMPORTEGASTOS, 0) AS GASTOS,
+             COALESCE(LQD.IMPORTEEFECTIVO2, 0) AS EFECTIVO_2,
+             COALESCE(LQD.IMPORTEENTREGADO2, 0) AS ENTREGADO_2,
+             LQD.NUMEROLIQUIDACION AS NUMERO_LIQUIDACION,
+             LQD.ID,
+             ROW_NUMBER() OVER (
+               PARTITION BY TRIM(LQD.CODIGOVENDEDOR)
+               ORDER BY LQD.ANOLIQUIDACION DESC,
+                        LQD.MESLIQUIDACION DESC,
+                        LQD.DIALIQUIDACION DESC,
+                        LQD.HORALIQUIDACION DESC,
+                        LQD.NUMEROLIQUIDACION DESC,
+                        LQD.ID DESC
+             ) AS RN
+        FROM ${lqdTable} LQD
+       WHERE TRIM(LQD.CODIGOVENDEDOR) IN (${codes.map(() => 'CAST(? AS VARCHAR(2))').join(',')})
+         AND (LQD.ANOLIQUIDACION * 10000
+              + LQD.MESLIQUIDACION * 100
+              + LQD.DIALIQUIDACION) <= ?
+    )
+    SELECT VENDEDOR, TOTAL_EFECTIVO, TOTAL_CHEQUES, TOTAL_POSTDATADOS,
+           TOTAL_TARJETA, TOTAL_A_INGRESAR, INGRESO_BANCO, GASTOS,
+           EFECTIVO_2, ENTREGADO_2, NUMERO_LIQUIDACION, ID
+      FROM RANKED
+     WHERE RN = 1
   `;
-  let rows;
-  try {
-    rows = await run(sql, [...codes, parsedDate.year, parsedDate.month, parsedDate.day]);
-  } catch (error) {
-    if (!isTableMissingError(error) || !String(lqdTable).startsWith('JAVIER.TEST_')) throw error;
-    logger.warn('[COMERCIAL_LIQUIDACION] TEST LQD missing; cobros fallback', { error: error.message });
-    return null;
-  }
-  const row = rows?.[0];
-  const filas = Number(row?.FILAS) || 0;
-  if (!row || filas <= 0) return null;
-  return {
+  const rows = await run(sql, [...codes, dateKey]);
+  const latestRows = (rows || []).map((row) => ({
+    vendedor: String(row.VENDEDOR || '').trim(),
     totalEfectivo: money(row.TOTAL_EFECTIVO),
     totalCheques: money(row.TOTAL_CHEQUES),
     totalPostdatados: money(row.TOTAL_POSTDATADOS),
-    saldoActual: money(row.SALDO_ACTUAL),
+    totalTarjeta: money(row.TOTAL_TARJETA),
     totalAIngresar: money(row.TOTAL_A_INGRESAR),
-    filas,
+    ingresoBanco: money(row.INGRESO_BANCO),
+    saldoActual: money(money(row.TOTAL_A_INGRESAR) - money(row.INGRESO_BANCO)),
+    gastos: money(row.GASTOS),
+    efectivo2: money(row.EFECTIVO_2),
+    entregado2: money(row.ENTREGADO_2),
+    numeroLiquidacion: Number(row.NUMERO_LIQUIDACION) || 0,
+    id: Number(row.ID) || 0,
+  }));
+  const sum = (field) => money(latestRows.reduce((total, row) => total + row[field], 0));
+  return {
+    totalEfectivo: sum('totalEfectivo'),
+    totalCheques: sum('totalCheques'),
+    totalPostdatados: sum('totalPostdatados'),
+    totalTarjeta: sum('totalTarjeta'),
+    saldoActual: sum('saldoActual'),
+    totalAIngresar: sum('totalAIngresar'),
+    ingresoBanco: sum('ingresoBanco'),
+    gastos: sum('gastos'),
+    efectivo2: sum('efectivo2'),
+    entregado2: sum('entregado2'),
+    filas: latestRows.length,
+    latestRows,
     source: lqdTable,
   };
 }
@@ -774,38 +859,20 @@ function hasAppCobrosActivity(cobros = {}) {
     || money(cobros.totalRepartidorExcluded) > 0;
 }
 
-/**
- * Prod: LQD ERP is the whiteboard of truth when the day exists.
- * isolated_test: TEST_LQD is only a DSEDAC snapshot copy — it never absorbs
- * JAVIER.TEST_COBROS writes. Prefer app cobros whenever the commercial
- * registered anything that day so the UI does not show a stale ERP total.
- */
+/** Combines today's TEST commercial collections with the last live ERP carry. */
 function chooseLiquidacionSummarySource({ lqd, cobros, saldoActual = 0 } = {}) {
-  const preferAppCobros = isIsolatedCommercialTest() && hasAppCobrosActivity(cobros);
-  const useLqd = Boolean(lqd) && !preferAppCobros;
-  if (useLqd) {
-    return {
-      useLqd: true,
-      totalEfectivo: lqd.totalEfectivo,
-      totalCheques: lqd.totalCheques,
-      totalPostdatados: lqd.totalPostdatados,
-      saldoActual: lqd.saldoActual,
-      totalAIngresar: lqd.totalAIngresar,
-      source: lqd.source,
-      lqdIgnoredReason: null,
-    };
-  }
+  const carry = lqd ? money(lqd.saldoActual) : money(saldoActual);
   return {
-    useLqd: false,
-    totalEfectivo: cobros.totalEfectivo,
-    totalCheques: cobros.totalCheques,
-    totalPostdatados: cobros.totalPostdatados,
-    saldoActual,
+    useLqd: Boolean(lqd?.filas),
+    totalEfectivo: money(cobros?.totalEfectivo),
+    totalTarjeta: money(cobros?.totalTarjeta),
+    totalTransferencia: money(cobros?.totalTransferencia),
+    totalCheques: money(cobros?.totalCheques),
+    totalPostdatados: money(cobros?.totalPostdatados),
+    saldoActual: carry,
     totalAIngresar: undefined,
-    source: preferAppCobros ? db2AppTable('COBROS') : 'COBROS',
-    lqdIgnoredReason: preferAppCobros && lqd
-      ? 'isolated_test_prefers_app_cobros_over_lqd_snapshot'
-      : null,
+    source: `${db2AppTable('COBROS')}+${lqd?.source || 'DSEDAC.LQD'}`,
+    lqdIgnoredReason: null,
   };
 }
 
@@ -834,27 +901,23 @@ async function getDailySummary({
     (sum, item) => sum + (item.yaCobrada === true ? Math.abs(item.amount || 0) : 0),
     0,
   );
-  const chosen = chooseLiquidacionSummarySource({ lqd, cobros, saldoActual });
   const summary = buildComercialLiquidacionSummary({
-    totalEfectivo: chosen.totalEfectivo,
-    totalCheques: chosen.totalCheques,
-    totalPostdatados: chosen.totalPostdatados,
-    saldoActual: chosen.saldoActual,
+    totalEfectivo: cobros.totalEfectivo,
+    totalTarjeta: cobros.totalTarjeta,
+    totalTransferencia: cobros.totalTransferencia,
+    totalCheques: cobros.totalCheques,
+    totalPostdatados: cobros.totalPostdatados,
+    saldoActual: lqd?.saldoActual ?? saldoActual,
     devolucionesYaCobradas,
-    totalAIngresar: chosen.totalAIngresar,
-    source: chosen.source,
+    source: `${db2AppTable('COBROS')}+${lqd?.source || 'DSEDAC.LQD'}`,
   });
-  if (chosen.lqdIgnoredReason) {
-    summary.lqdIgnoredReason = chosen.lqdIgnoredReason;
-  }
 
   logger.info('[COMERCIAL_LIQUIDACION] daily summary built', {
     date: parsedDate.iso,
     vendors: sanitizeVendorCodes(vendorCodes).length,
     returns: returns.length,
-    lqd: Boolean(lqd),
-    useLqd: chosen.useLqd,
-    lqdIgnoredReason: chosen.lqdIgnoredReason || undefined,
+    lqdRows: lqd?.filas || 0,
+    registeredCollections: cobros.count || 0,
     saved: Boolean(savedDraft),
   });
 
@@ -891,6 +954,7 @@ async function getSavedDraft({
            TOTAL_ESPERADO,
            TOTAL_A_INGRESAR,
            STATUS,
+           CAST(UPDATED_AT AS VARCHAR(26)) AS REVISION,
            UPDATED_AT
       FROM ${TEST_LIQUIDACION_TABLE}
      WHERE TRIM(CODIGO_VENDEDOR) = CAST(? AS VARCHAR(2))
@@ -909,6 +973,7 @@ async function getSavedDraft({
       totalEsperado: money(row.TOTAL_ESPERADO),
       totalAIngresar: money(row.TOTAL_A_INGRESAR),
       status: String(row.STATUS || 'SAVED').trim(),
+      revision: String(row.REVISION || '').trim() || null,
       savedAt: row.UPDATED_AT || null,
       source: TEST_LIQUIDACION_TABLE,
     };
@@ -918,18 +983,131 @@ async function getSavedDraft({
   }
 }
 
+function parseLiquidacionActionAmount(value) {
+  if (value === undefined || value === null || value === '') return 0;
+  const parsed = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw typedError('importes de liquidacion invalidos', 'VALIDATION_ERROR', 400);
+  }
+  return money(parsed);
+}
+
+function normalizeExpectedRevision(value) {
+  const revision = String(value || '').trim();
+  if (!revision) return null;
+  if (revision.length > 64 || !/^[0-9 .:+-]+$/.test(revision)) {
+    throw typedError('revision de liquidacion invalida', 'VALIDATION_ERROR', 400);
+  }
+  return revision;
+}
+
+function dbDateIso(value) {
+  const text = String(value || '').trim();
+  const match = /(\d{4}-\d{2}-\d{2})/.exec(text);
+  if (match) return match[1];
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  }
+  return text;
+}
+
+const SAVED_LIQUIDACION_SELECT = `
+  SELECT TRIM(CODIGO_VENDEDOR) AS VENDEDOR,
+         FECHA,
+         INGRESO_BANCO,
+         ENTREGADO,
+         TOTAL_ESPERADO,
+         TOTAL_EFECTIVO,
+         TOTAL_CHEQUES,
+         TOTAL_POSTDATADOS,
+         SALDO_ACTUAL,
+         DEVOLUCIONES_YA_COBRADAS,
+         TOTAL_A_INGRESAR,
+         STATUS,
+         IDEMPOTENCY_TOKEN AS TOKEN,
+         CAST(UPDATED_AT AS VARCHAR(26)) AS REVISION
+    FROM ${TEST_LIQUIDACION_TABLE}`;
+
+function mapSavedLiquidacionRow(row, { idempotent = false } = {}) {
+  return {
+    vendedor: String(row.VENDEDOR || '').trim(),
+    date: dbDateIso(row.FECHA),
+    ingresoBanco: money(row.INGRESO_BANCO),
+    entregado: money(row.ENTREGADO),
+    totalEsperado: money(row.TOTAL_ESPERADO),
+    totalEfectivo: money(row.TOTAL_EFECTIVO),
+    totalCheques: money(row.TOTAL_CHEQUES),
+    totalPostdatados: money(row.TOTAL_POSTDATADOS),
+    saldoActual: money(row.SALDO_ACTUAL),
+    devolucionesYaCobradas: Math.abs(money(row.DEVOLUCIONES_YA_COBRADAS)),
+    totalAIngresar: money(row.TOTAL_A_INGRESAR),
+    status: String(row.STATUS || 'SAVED').trim(),
+    token: String(row.TOKEN || '').trim(),
+    revision: String(row.REVISION || '').trim() || null,
+    idempotent,
+    source: TEST_LIQUIDACION_TABLE,
+  };
+}
+
+function sameLiquidacionActions(row, { vendedor, date, ingresoBanco, entregado }) {
+  return String(row.VENDEDOR || '').trim() === vendedor
+    && dbDateIso(row.FECHA) === date
+    && money(row.INGRESO_BANCO) === ingresoBanco
+    && money(row.ENTREGADO) === entregado;
+}
+
+async function withLiquidacionTransaction(callback, deps = {}) {
+  const openConnection = deps.openDedicatedConnection
+    || openDedicatedPedidosTransactionConnection;
+  const conn = await openConnection();
+  const required = ['query', 'beginTransaction', 'commit', 'rollback'];
+  if (!conn || required.some((method) => typeof conn[method] !== 'function')) {
+    if (conn && typeof conn.close === 'function') await conn.close().catch(() => undefined);
+    throw typedError(
+      'No hay una conexion transaccional para guardar la liquidacion',
+      'LIQUIDACION_TRANSACTION_UNAVAILABLE',
+      503,
+    );
+  }
+  try {
+    await conn.beginTransaction();
+    await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+    await conn.query(`LOCK TABLE ${TEST_LIQUIDACION_TABLE} IN EXCLUSIVE MODE`);
+    const result = await callback((sql, params) => (
+      params === undefined ? conn.query(sql) : conn.query(sql, params)
+    ));
+    await conn.commit();
+    return result;
+  } catch (error) {
+    try {
+      await conn.rollback();
+    } catch (rollbackError) {
+      logger.error(`[COMERCIAL_LIQUIDACION] rollback failed: ${rollbackError.message}`);
+    }
+    throw error;
+  } finally {
+    if (typeof conn.close === 'function') {
+      try {
+        await conn.close();
+      } catch {
+        // COMMIT/ROLLBACK result takes precedence over a close failure.
+      }
+    }
+  }
+}
+
+// Async keeps validation failures on the same rejected-Promise API as DB errors.
+// eslint-disable-next-line require-await
 async function saveLiquidacion({
   vendorCodes,
   date,
   ingresoBanco,
   entregado,
-  expectedTotal,
-  totals = {},
+  expectedRevision,
   createdBy,
   idempotencyToken,
 } = {}, deps = {}) {
   assertIsolatedTestWrites();
-  const run = deps.queryWithParams || queryWithParams;
   const parsedDate = parseIsoDate(date);
   if (!parsedDate) {
     throw typedError('fecha invalida; usa YYYY-MM-DD', 'VALIDATION_ERROR', 400);
@@ -938,137 +1116,201 @@ async function saveLiquidacion({
   if (codes.length !== 1) {
     throw typedError('COMERCIAL debe guardar la liquidacion de un solo vendedor', 'VALIDATION_ERROR', 400);
   }
-  const banco = money(ingresoBanco);
-  const hand = money(entregado);
-  if (banco < 0 || hand < 0) {
-    throw typedError('importes de liquidacion invalidos', 'VALIDATION_ERROR', 400);
+  const actions = {
+    vendedor: codes[0],
+    date: parsedDate.iso,
+    ingresoBanco: parseLiquidacionActionAmount(ingresoBanco),
+    entregado: parseLiquidacionActionAmount(entregado),
+  };
+  const revision = normalizeExpectedRevision(expectedRevision);
+  if (!String(idempotencyToken || '').trim()) {
+    throw typedError(
+      'idempotencyToken requerido para guardar la liquidacion',
+      'LIQUIDACION_IDEMPOTENCY_REQUIRED',
+      400,
+    );
   }
   const token = normalizeIdempotencyToken(
     idempotencyToken,
-    `liq-${codes[0]}-${parsedDate.iso}`,
+    `liq-${actions.vendedor}-${actions.date}`,
   );
-  const expected = money(expectedTotal);
-  const payload = {
-    vendedor: codes[0],
-    date: parsedDate.iso,
-    ingresoBanco: banco,
-    entregado: hand,
-    totalEsperado: expected,
-    totalEfectivo: money(totals.totalEfectivo),
-    totalCheques: money(totals.totalCheques),
-    totalPostdatados: money(totals.totalPostdatados),
-    saldoActual: money(totals.saldoActual),
-    devolucionesYaCobradas: Math.abs(money(totals.devolucionesYaCobradas)),
-    totalAIngresar: money(totals.totalAIngresar == null ? expected : totals.totalAIngresar),
-    createdBy: String(createdBy || codes[0]).trim().substring(0, 20),
-    token,
-  };
 
-  const existingByToken = await run(
-    `SELECT TRIM(CODIGO_VENDEDOR) AS VENDEDOR, FECHA, INGRESO_BANCO, ENTREGADO
-       FROM ${TEST_LIQUIDACION_TABLE}
-      WHERE IDEMPOTENCY_TOKEN = ?
-      FETCH FIRST 1 ROW ONLY`,
-    [token],
-  ).catch((error) => {
-    if (isTableMissingError(error)) {
-      throw typedError(
-        'Tabla TEST de liquidacion comercial no disponible',
-        'TEST_TABLE_UNAVAILABLE',
-        503,
+  return withLiquidacionTransaction(async (run) => {
+    let existingByToken;
+    try {
+      existingByToken = await run(
+        `${SAVED_LIQUIDACION_SELECT}
+          WHERE IDEMPOTENCY_TOKEN = ?
+          FETCH FIRST 1 ROW ONLY`,
+        [token],
       );
+    } catch (error) {
+      if (isTableMissingError(error)) {
+        throw typedError(
+          'Tabla TEST de liquidacion comercial no disponible',
+          'TEST_TABLE_UNAVAILABLE',
+          503,
+        );
+      }
+      throw error;
     }
-    throw error;
-  });
-  if (existingByToken?.[0]) {
-    const row = existingByToken[0];
-    const same = String(row.VENDEDOR || '').trim() === payload.vendedor
-      && money(row.INGRESO_BANCO) === payload.ingresoBanco
-      && money(row.ENTREGADO) === payload.entregado;
-    if (!same) {
-      throw typedError('Token de idempotencia reutilizado con otro payload', 'IDEMPOTENCY_CONFLICT', 409);
+    if (existingByToken?.[0]) {
+      const row = existingByToken[0];
+      if (!sameLiquidacionActions(row, actions)) {
+        throw typedError(
+          'Token de idempotencia reutilizado con otra liquidacion',
+          'IDEMPOTENCY_CONFLICT',
+          409,
+        );
+      }
+      return mapSavedLiquidacionRow(row, { idempotent: true });
     }
-    return { ...payload, idempotent: true, source: TEST_LIQUIDACION_TABLE };
-  }
 
-  const existingDay = await run(
-    `SELECT ID FROM ${TEST_LIQUIDACION_TABLE}
-      WHERE TRIM(CODIGO_VENDEDOR) = CAST(? AS VARCHAR(2))
-        AND FECHA = ?
-      FETCH FIRST 1 ROW ONLY`,
-    [payload.vendedor, payload.date],
-  );
-  if (existingDay?.[0]) {
-    await run(
-      `UPDATE ${TEST_LIQUIDACION_TABLE}
-          SET INGRESO_BANCO = ?,
-              ENTREGADO = ?,
-              TOTAL_ESPERADO = ?,
-              TOTAL_EFECTIVO = ?,
-              TOTAL_CHEQUES = ?,
-              TOTAL_POSTDATADOS = ?,
-              SALDO_ACTUAL = ?,
-              DEVOLUCIONES_YA_COBRADAS = ?,
-              TOTAL_A_INGRESAR = ?,
-              STATUS = 'SAVED',
-              IDEMPOTENCY_TOKEN = ?,
-              CREATED_BY = ?,
-              UPDATED_AT = CURRENT TIMESTAMP
+    const existingDayRows = await run(
+      `${SAVED_LIQUIDACION_SELECT}
         WHERE TRIM(CODIGO_VENDEDOR) = CAST(? AS VARCHAR(2))
-          AND FECHA = ?`,
-      [
-        payload.ingresoBanco,
-        payload.entregado,
-        payload.totalEsperado,
-        payload.totalEfectivo,
-        payload.totalCheques,
-        payload.totalPostdatados,
-        payload.saldoActual,
-        payload.devolucionesYaCobradas,
-        payload.totalAIngresar,
-        payload.token,
-        payload.createdBy,
-        payload.vendedor,
-        payload.date,
-      ],
+          AND FECHA = ?
+        FETCH FIRST 1 ROW ONLY`,
+      [actions.vendedor, actions.date],
     );
-    return { ...payload, idempotent: false, source: TEST_LIQUIDACION_TABLE };
-  }
-
-  const insert = db2InsertSql(TEST_LIQUIDACION_TABLE, [
-    'CODIGO_VENDEDOR', 'FECHA', 'INGRESO_BANCO', 'ENTREGADO', 'TOTAL_ESPERADO',
-    'TOTAL_EFECTIVO', 'TOTAL_CHEQUES', 'TOTAL_POSTDATADOS', 'SALDO_ACTUAL',
-    'DEVOLUCIONES_YA_COBRADAS', 'TOTAL_A_INGRESAR', 'STATUS',
-    'IDEMPOTENCY_TOKEN', 'CREATED_BY',
-  ]);
-  try {
-    await run(insert, [
-      payload.vendedor,
-      payload.date,
-      payload.ingresoBanco,
-      payload.entregado,
-      payload.totalEsperado,
-      payload.totalEfectivo,
-      payload.totalCheques,
-      payload.totalPostdatados,
-      payload.saldoActual,
-      payload.devolucionesYaCobradas,
-      payload.totalAIngresar,
-      'SAVED',
-      payload.token,
-      payload.createdBy,
-    ]);
-  } catch (error) {
-    if (isTableMissingError(error)) {
+    const existingDay = existingDayRows?.[0] || null;
+    if (existingDay) {
+      const storedRevision = String(existingDay.REVISION || '').trim();
+      if (!revision) {
+        throw typedError(
+          'Recarga la liquidacion antes de modificar un guardado existente',
+          'LIQUIDACION_REVISION_REQUIRED',
+          409,
+        );
+      }
+      if (revision !== storedRevision) {
+        throw typedError(
+          'La liquidacion cambio en otro dispositivo; recarga antes de guardar',
+          'LIQUIDACION_STALE_REVISION',
+          409,
+        );
+      }
+    } else if (revision) {
       throw typedError(
-        'Tabla TEST de liquidacion comercial no disponible',
-        'TEST_TABLE_UNAVAILABLE',
+        'La liquidacion guardada ya no existe; recarga antes de guardar',
+        'LIQUIDACION_STALE_REVISION',
+        409,
+      );
+    }
+
+    // Una conexión ODBC física no debe ejecutar sentencias solapadas.
+    const cobros = await getDailyCobrosByFormaPago(
+      { vendorCodes: codes, date: actions.date },
+      { queryWithParams: run },
+    );
+    const lqd = await getLqdForVendorDay(
+      { vendorCodes: codes, date: actions.date },
+      { queryWithParams: run },
+    );
+    const returns = await listReturns(
+      { vendorCodes: codes, date: actions.date },
+      { queryWithParams: run },
+    );
+    if ((Number(cobros.count) || 0) < 1) {
+      throw typedError(
+        'No hay cobros comerciales registrados en el periodo',
+        'LIQUIDACION_NO_COMMERCIAL_COLLECTIONS',
+        409,
+      );
+    }
+    const unsupportedLqd = (lqd.latestRows || []).some((row) => (
+      money(row.gastos) !== 0 || money(row.efectivo2) !== 0 || money(row.entregado2) !== 0
+    ));
+    if (unsupportedLqd) {
+      throw typedError(
+        'La ultima liquidacion ERP contiene importes auxiliares y requiere revision',
+        'LIQUIDACION_ERP_AUXILIARY_UNSUPPORTED',
+        409,
+      );
+    }
+    const devolucionesYaCobradas = returns.reduce(
+      (sum, item) => sum + (item.yaCobrada === true ? Math.abs(item.amount || 0) : 0),
+      0,
+    );
+    const summary = buildComercialLiquidacionSummary({
+      totalEfectivo: cobros.totalEfectivo,
+      totalTarjeta: cobros.totalTarjeta,
+      totalTransferencia: cobros.totalTransferencia,
+      totalCheques: cobros.totalCheques,
+      totalPostdatados: cobros.totalPostdatados,
+      saldoActual: lqd.saldoActual,
+      devolucionesYaCobradas,
+      source: `${db2AppTable('COBROS')}+${lqd.source}`,
+    });
+    const payload = {
+      ...actions,
+      totalEsperado: summary.totalAIngresar,
+      totalEfectivo: summary.totalEfectivo,
+      totalCheques: summary.totalCheques,
+      totalPostdatados: summary.totalPostdatados,
+      saldoActual: summary.saldoActual,
+      devolucionesYaCobradas: summary.devolucionesYaCobradas,
+      totalAIngresar: summary.totalAIngresar,
+      createdBy: String(createdBy || actions.vendedor).trim().substring(0, 20),
+      token,
+    };
+
+    if (existingDay) {
+      await run(
+        `UPDATE ${TEST_LIQUIDACION_TABLE}
+            SET INGRESO_BANCO = ?, ENTREGADO = ?, TOTAL_ESPERADO = ?,
+                TOTAL_EFECTIVO = ?, TOTAL_CHEQUES = ?, TOTAL_POSTDATADOS = ?,
+                SALDO_ACTUAL = ?, DEVOLUCIONES_YA_COBRADAS = ?,
+                TOTAL_A_INGRESAR = ?, STATUS = 'SAVED', IDEMPOTENCY_TOKEN = ?,
+                CREATED_BY = ?, UPDATED_AT = CURRENT TIMESTAMP
+          WHERE TRIM(CODIGO_VENDEDOR) = CAST(? AS VARCHAR(2))
+            AND FECHA = ?
+            AND CAST(UPDATED_AT AS VARCHAR(26)) = ?`,
+        [
+          payload.ingresoBanco, payload.entregado, payload.totalEsperado,
+          payload.totalEfectivo, payload.totalCheques, payload.totalPostdatados,
+          payload.saldoActual, payload.devolucionesYaCobradas,
+          payload.totalAIngresar, payload.token, payload.createdBy,
+          payload.vendedor, payload.date, revision,
+        ],
+      );
+    } else {
+      const insert = db2InsertSql(TEST_LIQUIDACION_TABLE, [
+        'CODIGO_VENDEDOR', 'FECHA', 'INGRESO_BANCO', 'ENTREGADO', 'TOTAL_ESPERADO',
+        'TOTAL_EFECTIVO', 'TOTAL_CHEQUES', 'TOTAL_POSTDATADOS', 'SALDO_ACTUAL',
+        'DEVOLUCIONES_YA_COBRADAS', 'TOTAL_A_INGRESAR', 'STATUS',
+        'IDEMPOTENCY_TOKEN', 'CREATED_BY',
+      ]);
+      await run(insert, [
+        payload.vendedor, payload.date, payload.ingresoBanco, payload.entregado,
+        payload.totalEsperado, payload.totalEfectivo, payload.totalCheques,
+        payload.totalPostdatados, payload.saldoActual, payload.devolucionesYaCobradas,
+        payload.totalAIngresar, 'SAVED', payload.token, payload.createdBy,
+      ]);
+    }
+
+    const persistedRows = await run(
+      `${SAVED_LIQUIDACION_SELECT}
+        WHERE TRIM(CODIGO_VENDEDOR) = CAST(? AS VARCHAR(2))
+          AND FECHA = ?
+        FETCH FIRST 1 ROW ONLY`,
+      [payload.vendedor, payload.date],
+    );
+    const persisted = persistedRows?.[0];
+    const persistedToken = String(persisted?.TOKEN || '').trim();
+    const persistedRevision = String(persisted?.REVISION || '').trim();
+    if (!persisted
+      || persistedToken !== token
+      || !persistedRevision
+      || !sameLiquidacionActions(persisted, actions)) {
+      throw typedError(
+        'No se pudo confirmar la liquidacion guardada',
+        'LIQUIDACION_PERSISTENCE_NOT_CONFIRMED',
         503,
       );
     }
-    throw error;
-  }
-  return { ...payload, idempotent: false, source: TEST_LIQUIDACION_TABLE };
+    return mapSavedLiquidacionRow(persisted, { idempotent: false });
+  }, deps);
 }
 
 async function nextTestReturnNumero({ vendor, date } = {}, deps = {}) {

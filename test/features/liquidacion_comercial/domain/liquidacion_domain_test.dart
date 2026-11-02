@@ -56,7 +56,8 @@ void main() {
   });
 
   group('ComercialLiquidacionSummary', () {
-    test('sums total by default and respects an override', () {
+    test('derives cash total from cash plus carry and respects an override',
+        () {
       const calculated = ComercialLiquidacionSummary(
         totalEfectivo: 10,
         totalCheques: 20,
@@ -68,7 +69,7 @@ void main() {
         totalAIngresar: 75,
       );
 
-      expect(calculated.totalAIngresar, 100);
+      expect(calculated.totalAIngresar, 50);
       expect(overridden.totalAIngresar, 75);
     });
 
@@ -85,7 +86,8 @@ void main() {
     });
   });
 
-  group('classifyLiquidacionStatus', () {    test('returns each status kind', () {
+  group('classifyLiquidacionStatus', () {
+    test('returns each status kind', () {
       final balanced = draft();
       final mismatch = draft(entregado: 20);
 
@@ -184,18 +186,19 @@ void main() {
       expect(draft.isBalancedExact, isFalse);
     });
 
-    test('summary fromMoney derives total and exposes Money views', () {
+    test('summary fromMoney derives cash plus carry and exposes Money views',
+        () {
       final summary = ComercialLiquidacionSummary.fromMoney(
         totalEfectivo: Money.fromDouble(10),
         totalCheques: Money.fromDouble(20),
         totalPostdatados: Money.fromDouble(30),
         saldoActual: Money.fromDouble(40),
       );
-      expect(summary.totalAIngresarMoney, Money.fromCents(10000));
+      expect(summary.totalAIngresarMoney, Money.fromCents(5000));
       expect(summary.totalEfectivoMoney, Money.fromCents(1000));
       // Wire compat: legacy doubles unchanged.
       // ignore: deprecated_member_use
-      expect(summary.totalAIngresar, 100);
+      expect(summary.totalAIngresar, 50);
 
       final overridden = ComercialLiquidacionSummary.fromMoney(
         totalEfectivo: Money.fromDouble(10),

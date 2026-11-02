@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/features/liquidacion_comercial/data/comercial_liquidacion_service.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/presentation/pages/comercial_liquidacion_diaria_page.dart';
 
 Future<void> _pumpPage(
   WidgetTester tester, {
   ComercialLiquidacionSummary summary = const ComercialLiquidacionSummary(),
   FutureOr<void> Function(ComercialLiquidacionDraft)? onSubmit,
+  Future<ComercialLiquidacionDailySnapshot> Function()? snapshotLoader,
   Future<ComercialDevolucionItem> Function({
     required String clientCode,
     required double amount,
@@ -27,6 +30,7 @@ Future<void> _pumpPage(
           employeeCode: '57',
           initialSummary: summary,
           onSubmit: onSubmit,
+          snapshotLoader: snapshotLoader,
           onRegisterReturn: onRegisterReturn,
           pgCollectedLoader: pgCollectedLoader,
         ),
@@ -123,6 +127,121 @@ void main() {
     expect(find.text('Liquidación guardada.'), findsNothing);
     expect(find.text('Guardar'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('muestra un error accionable cuando no hay cobros comerciales',
+      (tester) async {
+    const summary = ComercialLiquidacionSummary(totalAIngresar: 200);
+    await _pumpPage(
+      tester,
+      summary: summary,
+      onSubmit: (_) async => throw ApiException(
+        'No hay cobros comerciales registrados en el periodo',
+        statusCode: 409,
+        code: 'LIQUIDACION_NO_COMMERCIAL_COLLECTIONS',
+      ),
+    );
+    await fillBalanced(tester);
+    await tester
+        .tap(find.byKey(const ValueKey('comercial-liquidacion-save-button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+          'No hay cobros comerciales registrados hoy. Registra al menos un cobro antes de guardar.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('propaga la revision completa al editar un guardado SAVED',
+      (tester) async {
+    ComercialLiquidacionDraft? submitted;
+    await _pumpPage(
+      tester,
+      snapshotLoader: () async => ComercialLiquidacionDailySnapshot(
+        summary: const ComercialLiquidacionSummary(totalAIngresar: 200),
+        savedDraft: ComercialLiquidacionDraft(
+          employeeCode: '57',
+          date: DateTime(2026, 11, 2),
+          expectedTotal: 200,
+          ingresoBanco: 120,
+          entregado: 80,
+          expectedRevision: '2026-11-02-10.11.12.123456',
+        ),
+      ),
+      onSubmit: (draft) async => submitted = draft,
+    );
+    await tester.enterText(find.byType(TextFormField).at(0), '110');
+    await tester.enterText(find.byType(TextFormField).at(1), '90');
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.byKey(const ValueKey('comercial-liquidacion-save-button')));
+    await tester.pumpAndSettle();
+    expect(submitted?.expectedRevision, '2026-11-02-10.11.12.123456');
+  });
+
+  testWidgets(
+      'refresh concurrente conserva edición y exige aceptar la revisión remota',
+      (tester) async {
+    var loads = 0;
+    ComercialLiquidacionDraft? submitted;
+    Future<ComercialLiquidacionDailySnapshot> load() async {
+      loads += 1;
+      final remoteRevision = loads == 1
+          ? '2026-11-02-10.11.12.000001'
+          : '2026-11-02-10.11.13.000002';
+      return ComercialLiquidacionDailySnapshot(
+        summary: const ComercialLiquidacionSummary(totalAIngresar: 200),
+        savedDraft: ComercialLiquidacionDraft(
+          employeeCode: '57',
+          date: DateTime(2026, 11, 2),
+          expectedTotal: 200,
+          ingresoBanco: loads == 1 ? 120 : 130,
+          entregado: loads == 1 ? 80 : 70,
+          expectedRevision: remoteRevision,
+        ),
+      );
+    }
+
+    await _pumpPage(
+      tester,
+      snapshotLoader: load,
+      onSubmit: (draft) async => submitted = draft,
+    );
+    await tester.enterText(find.byType(TextFormField).at(0), '110');
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.refresh_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hay una versión más reciente'), findsOneWidget);
+    expect(find.text('110'), findsOneWidget);
+    final blockedSave = tester.widget<ButtonStyleButton>(
+      find.byKey(const ValueKey('comercial-liquidacion-save-button')),
+    );
+    expect(blockedSave.onPressed, isNull);
+
+    final acceptRemote =
+        find.byKey(const ValueKey('comercial-liquidacion-accept-remote'));
+    await tester.ensureVisible(acceptRemote);
+    await tester.tap(acceptRemote);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(0)).controller?.text,
+      '130.00',
+    );
+    expect(
+      tester.widget<TextField>(find.byType(TextField).at(1)).controller?.text,
+      '70.00',
+    );
+    expect(find.text('Hay una versión más reciente'), findsNothing);
+
+    await tester.enterText(find.byType(TextFormField).at(0), '125');
+    await tester.enterText(find.byType(TextFormField).at(1), '75');
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('comercial-liquidacion-save-button')),
+    );
+    await tester.pumpAndSettle();
+    expect(submitted?.expectedRevision, '2026-11-02-10.11.13.000002');
   });
 
   testWidgets('Devuelve registra overlay TEST y lo muestra en la lista',

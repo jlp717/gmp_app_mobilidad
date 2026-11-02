@@ -18,12 +18,27 @@ const router = express.Router();
 
 function getContext(req) {
   const user = req.user || {};
-  const role = user.role || user.userRole || 'COMERCIAL';
+  const role = String(user.role || user.userRole || '').trim().toUpperCase();
   return {
     userId: user.code || user.codigo || user.codigoVendedor || user.userId || user.id,
+    role,
     isJefeVentas: user.isJefeVentas === true || role === 'JEFE_VENTAS' || role === 'ADMIN',
     vendorCodes: user.vendorCodes || user.vendedorCodes || [],
   };
+}
+
+const LIQUIDACION_ALLOWED_ROLES = new Set(['COMERCIAL', 'JEFE_VENTAS', 'ADMIN']);
+
+function requireCommercialLiquidacionRole(req, res, next) {
+  const { role } = getContext(req);
+  if (!LIQUIDACION_ALLOWED_ROLES.has(role)) {
+    return res.status(403).json({
+      success: false,
+      code: 'FORBIDDEN_ROLE',
+      error: 'La liquidacion comercial solo esta disponible para perfiles comerciales',
+    });
+  }
+  return next();
 }
 
 function codesMatch(left, right) {
@@ -153,6 +168,8 @@ function sendPdf(res, buffer, fileName) {
   return res.send(buffer);
 }
 
+router.use(requireCommercialLiquidacionRole);
+
 router.get('/devoluciones/pdf', async (req, res) => {
   try {
     const vendors = resolveVendorCodes(req);
@@ -273,8 +290,7 @@ router.post('/guardar', async (req, res) => {
       date: fecha.date,
       ingresoBanco: body.ingresoBanco,
       entregado: body.entregado,
-      expectedTotal: body.expectedTotal ?? body.totalEsperado,
-      totals: body.totals || {},
+      expectedRevision: body.expectedRevision,
       createdBy: getContext(req).userId,
       idempotencyToken: req.get('Idempotency-Key') || body.idempotencyToken,
     });

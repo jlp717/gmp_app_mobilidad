@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -73,6 +74,10 @@ class _ComercialLiquidacionDiariaPageState
   bool _isLoadingRemote = false;
   String? _loadError;
   DateTime? _lastSavedAt;
+  String? _expectedRevision;
+  bool _isApplyingSnapshot = false;
+  bool _isDirty = false;
+  ComercialLiquidacionDailySnapshot? _pendingRemoteSnapshot;
 
   @override
   void initState() {
@@ -101,7 +106,8 @@ class _ComercialLiquidacionDiariaPageState
   }
 
   void _markDirty() {
-    if (mounted) setState(() {});
+    if (_isApplyingSnapshot) return;
+    if (mounted) setState(() => _isDirty = true);
   }
 
   ComercialLiquidacionDraft get _draft => ComercialLiquidacionDraft.fromMoney(
@@ -112,6 +118,7 @@ class _ComercialLiquidacionDiariaPageState
         expectedTotal: _summary.totalAIngresarMoney,
         ingresoBanco: _amountValue(_ingresoBancoController.text),
         entregado: _amountValue(_entregadoController.text),
+        expectedRevision: _expectedRevision,
       );
 
   Future<void> _loadRemote() async {
@@ -124,26 +131,52 @@ class _ComercialLiquidacionDiariaPageState
     try {
       final snapshot = await loader();
       if (!mounted) return;
-      setState(() {
-        _summary = snapshot.summary;
-        _returns = snapshot.returns;
-        _isLoadingRemote = false;
-        final saved = snapshot.savedDraft;
-        if (saved != null && !_hasInput) {
-          // Wire/render doubles identical via the canonical Money getters.
-          _ingresoBancoController.text =
-              saved.ingresoBancoMoney.toDouble().toStringAsFixed(2);
-          _entregadoController.text =
-              saved.entregadoMoney.toDouble().toStringAsFixed(2);
-          _lastSavedAt = saved.date;
-        }
-      });
+      if (_isDirty) {
+        setState(() {
+          _isLoadingRemote = false;
+          _pendingRemoteSnapshot = snapshot;
+        });
+        return;
+      }
+      _applyRemoteSnapshot(snapshot);
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _isLoadingRemote = false;
         _loadError = error.toString();
       });
+    }
+  }
+
+  void _applyRemoteSnapshot(ComercialLiquidacionDailySnapshot snapshot) {
+    final saved = snapshot.savedDraft;
+    _isApplyingSnapshot = true;
+    if (saved == null) {
+      _ingresoBancoController.clear();
+      _entregadoController.clear();
+    } else {
+      _ingresoBancoController.text =
+          saved.ingresoBancoMoney.toDouble().toStringAsFixed(2);
+      _entregadoController.text =
+          saved.entregadoMoney.toDouble().toStringAsFixed(2);
+    }
+    _isApplyingSnapshot = false;
+    setState(() {
+      _summary = snapshot.summary;
+      _returns = snapshot.returns;
+      _expectedRevision = saved?.expectedRevision;
+      _lastSavedAt = saved?.date;
+      _isLoadingRemote = false;
+      _isDirty = false;
+      _pendingRemoteSnapshot = null;
+    });
+  }
+
+  void _discardLocalChangesAndApplyRemote() {
+    final snapshot = _pendingRemoteSnapshot;
+    if (snapshot != null) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      _applyRemoteSnapshot(snapshot);
     }
   }
 
@@ -155,7 +188,11 @@ class _ComercialLiquidacionDiariaPageState
       parseMoney(_ingresoBancoController.text) != null &&
       parseMoney(_entregadoController.text) != null;
 
-  bool get _canSave => _hasInput && _amountsAreValid && !_isSaving;
+  bool get _canSave =>
+      _hasInput &&
+      _amountsAreValid &&
+      !_isSaving &&
+      _pendingRemoteSnapshot == null;
 
   @override
   Widget build(BuildContext context) {
@@ -225,6 +262,11 @@ class _ComercialLiquidacionDiariaPageState
                                 _DevolucionesLoadError(
                                   onRetry: _loadRemote,
                                 ),
+                              if (_pendingRemoteSnapshot != null)
+                                _LiquidacionRemoteConflict(
+                                  onAcceptRemote:
+                                      _discardLocalChangesAndApplyRemote,
+                                ),
                               _LiquidacionHero(
                                 date: _sessionDate,
                                 employeeCode: widget.employeeCode,
@@ -247,6 +289,20 @@ class _ComercialLiquidacionDiariaPageState
                                     color: AppTheme.info,
                                   ),
                                   _MetricData(
+                                    icon: Icons.credit_card_outlined,
+                                    label: 'Tarjeta (informativo)',
+                                    value:
+                                        _summary.totalTarjetaMoney.toDouble(),
+                                    color: AppTheme.info,
+                                  ),
+                                  _MetricData(
+                                    icon: Icons.account_balance_outlined,
+                                    label: 'Transferencia (informativo)',
+                                    value: _summary.totalTransferenciaMoney
+                                        .toDouble(),
+                                    color: AppTheme.accentIndigo,
+                                  ),
+                                  _MetricData(
                                     icon: Icons.event_repeat_outlined,
                                     label: 'Total postdatados',
                                     value: _summary.totalPostdatados,
@@ -254,7 +310,7 @@ class _ComercialLiquidacionDiariaPageState
                                   ),
                                   _MetricData(
                                     icon: Icons.account_balance_wallet_outlined,
-                                    label: 'Saldo actual',
+                                    label: 'Arrastre anterior',
                                     value: _summary.saldoActual,
                                     color: AppTheme.accentIndigo,
                                   ),
@@ -337,6 +393,9 @@ class _ComercialLiquidacionDiariaPageState
       }
       await submit(draft);
       if (!mounted) return;
+      setState(() => _isDirty = false);
+      await _loadRemote();
+      if (!mounted) return;
       setState(() => _lastSavedAt = DateTime.now());
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Liquidación guardada.')),
@@ -349,15 +408,35 @@ class _ComercialLiquidacionDiariaPageState
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text('No se pudo guardar la liquidación. Inténtalo de nuevo.'),
+          SnackBar(
+            content: Text(_liquidacionSaveErrorMessage(error)),
           ),
         );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  String _liquidacionSaveErrorMessage(Object error) {
+    if (error is ApiException) {
+      switch (error.code) {
+        case 'LIQUIDACION_NO_COMMERCIAL_COLLECTIONS':
+          return 'No hay cobros comerciales registrados hoy. '
+              'Registra al menos un cobro antes de guardar.';
+        case 'LIQUIDACION_ERP_AUXILIARY_UNSUPPORTED':
+          return 'La última liquidación del sistema contiene importes '
+              'auxiliares. Solicita revisión antes de cerrar el día.';
+        case 'LIQUIDACION_REVISION_REQUIRED':
+        case 'LIQUIDACION_STALE_REVISION':
+          return 'La liquidación cambió en otro dispositivo. '
+              'Recarga los datos y vuelve a intentarlo.';
+        case 'IDEMPOTENCY_CONFLICT':
+          return 'Este guardado ya se utilizó con otros importes. '
+              'Recarga antes de continuar.';
+      }
+    }
+    return 'No se pudo guardar la liquidación. Inténtalo de nuevo.';
   }
 
   Future<void> _openReturnDialog() async {
@@ -410,7 +489,62 @@ class _ComercialLiquidacionDiariaPageState
     _ingresoBancoController.clear();
     _entregadoController.clear();
     _lastSavedAt = null;
-    setState(() {});
+    setState(() => _isDirty = true);
+  }
+}
+
+class _LiquidacionRemoteConflict extends StatelessWidget {
+  const _LiquidacionRemoteConflict({required this.onAcceptRemote});
+
+  final VoidCallback onAcceptRemote;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label: 'Conflicto de liquidacion con cambios de otro dispositivo',
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.warning.withValues(alpha: 0.16),
+          border: Border.all(color: AppTheme.warning),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Hay una versión más reciente',
+              style: TextStyle(
+                color: AppColors.themedWhite,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tus importes no se han sustituido. Para continuar, descarta '
+              'los cambios locales y carga la versión actual.',
+              style: TextStyle(
+                color: AppColors.themedWhite70,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 56,
+              child: ElevatedButton.icon(
+                key: const ValueKey('comercial-liquidacion-accept-remote'),
+                onPressed: onAcceptRemote,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Descartar cambios y cargar actualización'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -1274,7 +1408,6 @@ class _SaveBar extends StatelessWidget {
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 160),
               child: Row(
-                key: ValueKey('${status.label}_${draft.diferencia}_$savedAt'),
                 children: [
                   Icon(status.icon, color: status.color, size: 16),
                   const SizedBox(width: 8),

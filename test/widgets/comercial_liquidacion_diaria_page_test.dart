@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/presentation/pages/comercial_liquidacion_diaria_page.dart';
 
@@ -40,15 +41,19 @@ void main() {
       (tester) async {
     await tester.pumpWidget(
       buildPage(
-        summary: const ComercialLiquidacionSummary(
-          totalEfectivo: 1000,
-          devolucionesYaCobradas: 1000,
+        summary: ComercialLiquidacionSummary.fromMoney(
+          totalEfectivo: Money.fromDouble(1000),
+          totalTarjeta: Money.fromDouble(250),
+          totalTransferencia: Money.fromDouble(125),
+          devolucionesYaCobradas: Money.fromDouble(1000),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('Devoluciones (aparte)'), findsWidgets);
+    expect(find.text('Tarjeta (informativo)'), findsOneWidget);
+    expect(find.text('Transferencia (informativo)'), findsOneWidget);
     expect(
         find.text('Sin devoluciones de mercancía en el día'), findsOneWidget);
   });

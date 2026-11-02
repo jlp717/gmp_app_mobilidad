@@ -14,6 +14,8 @@ class ComercialLiquidacionSummary {
   /// Creates settlement totals, deriving [totalAIngresar] when omitted.
   const ComercialLiquidacionSummary({
     @Deprecated('Usar totalEfectivoMoney') this.totalEfectivo = 0,
+    @Deprecated('Usar totalTarjetaMoney') this.totalTarjeta = 0,
+    @Deprecated('Usar totalTransferenciaMoney') this.totalTransferencia = 0,
     @Deprecated('Usar totalChequesMoney') this.totalCheques = 0,
     @Deprecated('Usar totalPostdatadosMoney') this.totalPostdatados = 0,
     @Deprecated('Usar saldoActualMoney') this.saldoActual = 0,
@@ -22,13 +24,13 @@ class ComercialLiquidacionSummary {
     this.source = 'COBROS',
     this.porcentajeMinimoVendedor = 0,
     @Deprecated('Usar totalAIngresarMoney') double? totalAIngresar,
-  }) : totalAIngresar =
-            totalAIngresar ??
-            totalEfectivo + totalCheques + totalPostdatados + saldoActual;
+  }) : totalAIngresar = totalAIngresar ?? totalEfectivo + saldoActual;
 
   /// Canonical constructor: exact cent math, no float drift.
   factory ComercialLiquidacionSummary.fromMoney({
     Money totalEfectivo = Money.zero,
+    Money totalTarjeta = Money.zero,
+    Money totalTransferencia = Money.zero,
     Money totalCheques = Money.zero,
     Money totalPostdatados = Money.zero,
     Money saldoActual = Money.zero,
@@ -37,12 +39,14 @@ class ComercialLiquidacionSummary {
     double porcentajeMinimoVendedor = 0,
     Money? totalAIngresar,
   }) {
-    final total =
-        totalAIngresar ??
-        totalEfectivo + totalCheques + totalPostdatados + saldoActual;
+    final total = totalAIngresar ?? totalEfectivo + saldoActual;
     return ComercialLiquidacionSummary(
       // ignore: deprecated_member_use_from_same_package
       totalEfectivo: totalEfectivo.toDouble(),
+      // ignore: deprecated_member_use_from_same_package
+      totalTarjeta: totalTarjeta.toDouble(),
+      // ignore: deprecated_member_use_from_same_package
+      totalTransferencia: totalTransferencia.toDouble(),
       // ignore: deprecated_member_use_from_same_package
       totalCheques: totalCheques.toDouble(),
       // ignore: deprecated_member_use_from_same_package
@@ -61,6 +65,14 @@ class ComercialLiquidacionSummary {
   /// Cash collected during the settlement period.
   @Deprecated('Usar totalEfectivoMoney. Solo render/compat.')
   final double totalEfectivo;
+
+  /// Card payments shown for reconciliation; never added to physical cash.
+  @Deprecated('Usar totalTarjetaMoney. Solo render/compat.')
+  final double totalTarjeta;
+
+  /// Bank transfers shown for reconciliation; never added to physical cash.
+  @Deprecated('Usar totalTransferenciaMoney. Solo render/compat.')
+  final double totalTransferencia;
 
   /// Cheques collected during the settlement period.
   @Deprecated('Usar totalChequesMoney. Solo render/compat.')
@@ -92,6 +104,14 @@ class ComercialLiquidacionSummary {
 
   /// Canonical money views (exact; derived from cent-rounded values).
   Money get totalEfectivoMoney => Money.fromDouble(totalEfectivo);
+
+  /// Canonical informational card total.
+  // ignore: deprecated_member_use_from_same_package
+  Money get totalTarjetaMoney => Money.fromDouble(totalTarjeta);
+
+  /// Canonical informational transfer total.
+  // ignore: deprecated_member_use_from_same_package
+  Money get totalTransferenciaMoney => Money.fromDouble(totalTransferencia);
 
   /// Canonical money views (exact; derived from cent-rounded values).
   Money get totalChequesMoney => Money.fromDouble(totalCheques);
@@ -214,6 +234,7 @@ class ComercialLiquidacionDraft {
     @Deprecated('Usar expectedTotalMoney') required this.expectedTotal,
     @Deprecated('Usar ingresoBancoMoney') required this.ingresoBanco,
     @Deprecated('Usar entregadoMoney') required this.entregado,
+    this.expectedRevision,
   });
 
   /// Canonical constructor: exact cent math, no float drift.
@@ -223,6 +244,7 @@ class ComercialLiquidacionDraft {
     required Money expectedTotal,
     required Money ingresoBanco,
     required Money entregado,
+    String? expectedRevision,
   }) {
     return ComercialLiquidacionDraft(
       employeeCode: employeeCode,
@@ -233,6 +255,7 @@ class ComercialLiquidacionDraft {
       ingresoBanco: ingresoBanco.toDouble(),
       // ignore: deprecated_member_use_from_same_package
       entregado: entregado.toDouble(),
+      expectedRevision: expectedRevision,
     );
   }
 
@@ -253,6 +276,10 @@ class ComercialLiquidacionDraft {
   /// Amount physically handed over.
   @Deprecated('Usar entregadoMoney. Solo render/compat.')
   final double entregado;
+
+  /// Exact DB2 `UPDATED_AT` revision used for optimistic SAVED edits.
+  /// It is kept verbatim, including microseconds.
+  final String? expectedRevision;
 
   /// Canonical money views (exact; derived from cent-rounded values).
   Money get expectedTotalMoney => Money.fromDouble(expectedTotal);

@@ -49,6 +49,55 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+describe('commercial settlement role guard', () => {
+  test.each([
+    ['GET', '/devoluciones'],
+    ['GET', '/devoluciones/pdf?serie=D&numero=1'],
+    ['GET', '/resumen-diario'],
+    ['GET', '/ya-cobrados-pg'],
+    ['POST', '/guardar'],
+    ['POST', '/devoluciones'],
+  ])('blocks REPARTIDOR before services for %s %s', async (method, path) => {
+    const agent = request(makeApp({ code: '94', role: 'REPARTIDOR' }));
+    const res = method === 'GET'
+      ? await agent.get(path)
+      : await agent.post(path).send({ fecha: '2026-11-02' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_ROLE');
+    expect(mockListReturns).not.toHaveBeenCalled();
+    expect(mockListPgCollectedDocuments).not.toHaveBeenCalled();
+    expect(mockGetDailySummary).not.toHaveBeenCalled();
+    expect(mockSaveLiquidacion).not.toHaveBeenCalled();
+    expect(mockRegisterReturn).not.toHaveBeenCalled();
+  });
+
+  test('blocks an unknown role before resolving vendor scope', async () => {
+    const res = await request(makeApp({ code: '94' })).get('/resumen-diario');
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_ROLE');
+    expect(mockGetDailySummary).not.toHaveBeenCalled();
+  });
+
+  test.each(['COMERCIAL', 'JEFE_VENTAS', 'ADMIN'])(
+    'allows the explicit %s role into the route',
+    async (role) => {
+      mockGetDailySummary.mockResolvedValueOnce({
+        summary: { totalAIngresar: 0 },
+        returns: [],
+      });
+      const user = role === 'COMERCIAL'
+        ? { code: '80', role }
+        : { code: '99', role, vendorCodes: ['80'] };
+      const res = await request(makeApp(user))
+        .get('/resumen-diario')
+        .query(role === 'COMERCIAL' ? {} : { vendedor: '80' });
+      expect(res.status).toBe(200);
+      expect(mockGetDailySummary).toHaveBeenCalled();
+    },
+  );
+});
+
 describe('GET /devoluciones', () => {
   test('forbids a commercial from querying another vendor', async () => {
     const res = await request(makeApp({ code: '80', role: 'COMERCIAL' }))
@@ -135,6 +184,16 @@ describe('GET /devoluciones', () => {
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('VALIDATION_ERROR');
   });
+
+  test('rejects impossible calendar dates before services', async () => {
+    const res = await request(makeApp({ code: '80', role: 'COMERCIAL' }))
+      .get('/devoluciones')
+      .query({ fecha: '2026-02-31' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+    expect(mockListReturns).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /resumen-diario', () => {
@@ -198,6 +257,9 @@ describe('POST /guardar', () => {
         ingresoBanco: 120,
         entregado: 80,
         expectedTotal: 200,
+        totals: { totalAIngresar: 999999 },
+        saldoCliente: 999999,
+        expectedRevision: '2026-11-02-10.11.12.123456',
       });
 
     expect(res.status).toBe(201);
@@ -207,6 +269,24 @@ describe('POST /guardar', () => {
       date: '2026-09-11',
       ingresoBanco: 120,
       entregado: 80,
+      expectedRevision: '2026-11-02-10.11.12.123456',
+    }));
+    expect(mockSaveLiquidacion.mock.calls[0][0]).not.toHaveProperty('expectedTotal');
+    expect(mockSaveLiquidacion.mock.calls[0][0]).not.toHaveProperty('totals');
+  });
+
+  test('preserves typed 409 codes without leaking internal details', async () => {
+    mockSaveLiquidacion.mockRejectedValueOnce(Object.assign(
+      new Error('La última liquidación necesita revisión administrativa.'),
+      { code: 'LIQUIDACION_ERP_AUXILIARY_UNSUPPORTED', status: 409 },
+    ));
+    const res = await request(makeApp({ code: '80', role: 'COMERCIAL' }))
+      .post('/guardar')
+      .send({ fecha: '2026-11-02', ingresoBanco: 10, entregado: 0 });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual(expect.objectContaining({
+      success: false,
+      code: 'LIQUIDACION_ERP_AUXILIARY_UNSUPPORTED',
     }));
   });
 

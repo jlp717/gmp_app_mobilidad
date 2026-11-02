@@ -65,6 +65,12 @@ La reconciliación inicial de nueve bolsas dio diferencia cero en consumido/acum
 
 Los importes de tarjeta, cheque y postdatado aparecen separados del efectivo ingresable. Ejemplo: LQD 167 muestra efectivo 586,95, saldo 2,37, cheque 826,99 y tarjeta 232,20; total a ingresar 589,32. Los campos gastos, efectivo2 y entregado2 fueron cero en toda la muestra; su semántica con importes no nulos permanece sin acreditar y no se debe inventar una fórmula.
 
+La primera revisión independiente del cambio FIN fue **FAIL**: identificó frescura incorrecta de SAVED, autorización de rol insuficiente, revisión optimista perdida al refrescar y éxito sin relectura persistida. Su ejecución Node dio 40/42 y Flutter 32/32; el resultado previo 42/42 informado por el productor no describe ese árbol. El veto, reproducciones y reparación se conservan en `finance-verification-round1.json`. No se hizo commit de ese cambio de producto antes de repararlo.
+
+La segunda revisión independiente levantó el veto del código FIN: **56/56 Node y 34/34 Flutter, exit 0**, con reproducciones de los cuatro defectos y fechas de calendario válidas. El nuevo token con revisión vigente recalcula; el replay del mismo token devuelve lo persistido; REPARTIDOR queda rechazado; una edición local no adopta una revisión remota al refrescar; una relectura ausente o incoherente provoca rollback. El resultado está en `finance-verification-round2.json`. La aceptación sigue limitada a ese código y esas pruebas; faltan las escrituras DB2 reales y los tres métodos completos.
+
+Dos sondas con la fuente nueva en memoria sí pasaron dentro de su alcance: el resumen real obtuvo 29,15 € en 723 ms y sólo ejecutó SELECT/WITH; el guardado vacío devolvió `LIQUIDACION_NO_COMMERCIAL_COLLECTIONS`, con diez filas antes y después y toda DML bloqueada en la conexión. Estas sondas no cierran los defectos detectados por QA.
+
 TEST_COBROS contiene 16 filas COMERCIAL/CONTADO por 15.154,43 €. Este conteo anterior es una lectura; todavía no prueba tres métodos de cobro ni una liquidación nueva.
 
 La liquidación TEST conserva diez filas previas sin duplicados de vendedor/fecha ni token. `SYSINDEXES` y `SYSKEYS` acreditan dos índices únicos ya existentes: `UX_TEST_LIQCOM_VENDOR_DAY` sobre CODIGO_VENDEDOR/FECHA y `UX_TEST_LIQCOM_TOKEN` sobre IDEMPOTENCY_TOKEN. `SYSCST` por sí solo sólo mostraba la PK y no bastaba para concluir que faltaban garantías de unicidad. No se ejecutó ningún ALTER redundante.

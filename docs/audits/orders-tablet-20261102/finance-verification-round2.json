@@ -1,0 +1,40 @@
+{
+  "run_id": "orders-tablet-20261102",
+  "round": 2,
+  "verifier": "/root/finance_verifier",
+  "verdict": "PASS_SCOPED",
+  "veto": false,
+  "resolved": [
+    "New token and current revision recalculate SAVED even with the same bank/handed amounts; exact-token replay returns the persisted result.",
+    "COMERCIAL/JEFE_VENTAS/ADMIN have positive tests; REPARTIDOR and unknown roles receive 403 before any of six commercial handlers.",
+    "Dirty refresh preserves action fields and their base revision, disables save on conflict and only adopts the remote revision after explicit discard/reload.",
+    "Missing or wrong-token persistence read-back returns LIQUIDACION_PERSISTENCE_NOT_CONFIRMED/503, rollback once, commit zero.",
+    "registerReturn doubles respect the Promise contract and preserve the original assertions.",
+    "Impossible calendar dates are rejected; 2024-02-29 is accepted."
+  ],
+  "commands": [
+    {
+      "command": "npm.cmd run test:targeted -- __tests__/comercial-devoluciones-service.test.js __tests__/comercial-liquidacion-route.test.js --silent",
+      "cwd": "backend",
+      "exit_code": 0,
+      "output": "Test Suites: 2 passed, 2 total\nTests: 56 passed, 56 total\nSnapshots: 0 total\nTime: 3.004 s"
+    },
+    {
+      "command": "C:\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe --packages=C:\\flutter\\packages\\flutter_tools\\.dart_tool\\package_config.json C:\\flutter\\bin\\cache\\flutter_tools.snapshot test --no-pub --reporter compact test/features/liquidacion_comercial/domain/liquidacion_domain_test.dart test/features/liquidacion_comercial/data/comercial_liquidacion_service_test.dart test/features/liquidacion_comercial/presentation/comercial_liquidacion_diaria_page_states_test.dart test/widgets/comercial_liquidacion_diaria_page_test.dart",
+      "exit_code": 0,
+      "tests_passed": 34,
+      "output": "All tests passed!"
+    },
+    {
+      "command": "git diff --check -- <11 FIN files>",
+      "exit_code": 0,
+      "output": "No whitespace errors; informational LF/CRLF notices only"
+    }
+  ],
+  "runtime": {"node": "v20.2.0", "dart": "3.9.2", "sdk_released": true},
+  "limitations": [
+    "No full suites in this checkpoint.",
+    "No real DML, DB2 concurrency, device profiling or three-method collection/settlement E2E by this verifier.",
+    "The two real root probes cover carry and rejection of an empty period, not successful persistence or all workstream acceptance criteria."
+  ]
+}

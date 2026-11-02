@@ -1,0 +1,26 @@
+{
+  "scope": "exact current FIN source+dedicated adapter, DB2 real; mutation SQL physically blocked",
+  "before": [
+    {
+      "FILAS": 10
+    }
+  ],
+  "after": [
+    {
+      "FILAS": 10
+    }
+  ],
+  "errorCode": "LIQUIDACION_NO_COMMERCIAL_COLLECTIONS",
+  "passed": true,
+  "statements": [
+    "SET TRANSACTION ISOLATION",
+    "LOCK TABLE JAVIER.TEST_LIQUIDACION_COMERCIAL",
+    "SELECT TRIM(CODIGO_VENDEDOR) AS",
+    "SELECT TRIM(CODIGO_VENDEDOR) AS",
+    "SELECT TRIM(FORMA_PAGO) AS",
+    "WITH RANKED AS",
+    "SELECT L.LCAADC AS",
+    "SELECT YEAR(FECHA) AS"
+  ],
+  "dmlExecuted": 0
+}

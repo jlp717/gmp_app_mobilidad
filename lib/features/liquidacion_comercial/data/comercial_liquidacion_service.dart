@@ -4,6 +4,24 @@ import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/domain/liquidacion_domain.dart';
 import 'package:intl/intl.dart';
 
+/// Stable identity for one settlement operation.
+///
+/// The persisted revision distinguishes a new edit from a retry of the same
+/// in-flight request. A retry before acknowledgement therefore keeps the same
+/// key, while a subsequent edit after refresh receives a different key.
+String buildLiquidacionIdempotencyKey(ComercialLiquidacionDraft draft) {
+  final fecha = DateFormat('yyyy-MM-dd').format(draft.date);
+  final vendors = draft.employeeCode
+      .split(',')
+      .map((code) => code.trim())
+      .where((code) => code.isNotEmpty)
+      .join(',');
+  final safeRevision = (draft.expectedRevision ?? 'new')
+      .replaceAll(RegExp('[^A-Za-z0-9_.:-]'), '-');
+  return 'liq-$vendors-$fecha-${draft.ingresoBancoMoney.cents}-'
+      '${draft.entregadoMoney.cents}-$safeRevision';
+}
+
 /// Loads commercial daily settlement totals including merchandise returns.
 class ComercialLiquidacionService {
   /// Creates a reader of the commercial settlement API.
@@ -51,9 +69,9 @@ class ComercialLiquidacionService {
         // Wire boundary: identical doubles via the canonical Money getters.
         'ingresoBanco': draft.ingresoBancoMoney.toDouble(),
         'entregado': draft.entregadoMoney.toDouble(),
-        'expectedTotal': draft.expectedTotalMoney.toDouble(),
-        // ignore: deprecated_member_use_from_same_package
-        'idempotencyToken': 'liq-$vendors-$fecha-${draft.registrado}',
+        if (draft.expectedRevision != null)
+          'expectedRevision': draft.expectedRevision,
+        'idempotencyToken': buildLiquidacionIdempotencyKey(draft),
       },
     );
     await CacheService.invalidateByPrefix(
@@ -159,13 +177,15 @@ class ComercialLiquidacionDailySnapshot {
       // exactly; domain math downstream runs in integer cents.
       summary: ComercialLiquidacionSummary.fromMoney(
         totalEfectivo: Money.fromDouble(_num(summaryJson['totalEfectivo'])),
+        totalTarjeta: Money.fromDouble(_num(summaryJson['totalTarjeta'])),
+        totalTransferencia:
+            Money.fromDouble(_num(summaryJson['totalTransferencia'])),
         totalCheques: Money.fromDouble(_num(summaryJson['totalCheques'])),
         totalPostdatados:
             Money.fromDouble(_num(summaryJson['totalPostdatados'])),
         saldoActual: Money.fromDouble(_num(summaryJson['saldoActual'])),
         devolucionesYaCobradas:
-            Money.fromDouble(_num(summaryJson['devolucionesYaCobradas']))
-                .abs(),
+            Money.fromDouble(_num(summaryJson['devolucionesYaCobradas'])).abs(),
         totalAIngresar: summaryJson['totalAIngresar'] == null
             ? null
             : Money.fromDouble(_num(summaryJson['totalAIngresar'])),
@@ -191,9 +211,9 @@ class ComercialLiquidacionDailySnapshot {
                   savedJson['totalEsperado'] ?? savedJson['totalAIngresar'],
                 ),
               ),
-              ingresoBanco:
-                  Money.fromDouble(_num(savedJson['ingresoBanco'])),
+              ingresoBanco: Money.fromDouble(_num(savedJson['ingresoBanco'])),
               entregado: Money.fromDouble(_num(savedJson['entregado'])),
+              expectedRevision: savedJson['revision']?.toString(),
             ),
     );
   }

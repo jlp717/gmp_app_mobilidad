@@ -1,0 +1,89 @@
+{
+  "readOnly": true,
+  "elapsedMs": 723,
+  "date": "2026-11-02",
+  "cobros": {
+    "count": 0,
+    "totalEfectivo": 0,
+    "totalTarjeta": 0,
+    "totalTransferencia": 0,
+    "totalCheques": 0,
+    "totalPostdatados": 0,
+    "totalRepartidorExcluded": 0
+  },
+  "lqd": {
+    "totalEfectivo": 100,
+    "totalCheques": 0,
+    "totalPostdatados": 0,
+    "totalTarjeta": 0,
+    "saldoActual": 29.15,
+    "totalAIngresar": 1314.15,
+    "ingresoBanco": 1285,
+    "gastos": 0,
+    "efectivo2": 0,
+    "entregado2": 0,
+    "filas": 1,
+    "latestRows": [
+      {
+        "vendedor": "35",
+        "totalEfectivo": 100,
+        "totalCheques": 0,
+        "totalPostdatados": 0,
+        "totalTarjeta": 0,
+        "totalAIngresar": 1314.15,
+        "ingresoBanco": 1285,
+        "saldoActual": 29.15,
+        "gastos": 0,
+        "efectivo2": 0,
+        "entregado2": 0,
+        "numeroLiquidacion": 170,
+        "id": 13178742
+      }
+    ],
+    "source": "DSEDAC.LQD"
+  },
+  "summary": {
+    "totalEfectivo": 0,
+    "totalTarjeta": 0,
+    "totalTransferencia": 0,
+    "totalCheques": 0,
+    "totalPostdatados": 0,
+    "saldoActual": 29.15,
+    "devolucionesYaCobradas": 0,
+    "totalAIngresar": 29.15,
+    "source": "JAVIER.TEST_COBROS+DSEDAC.LQD",
+    "cashImpactHypothesis": "lqd_importetotalaingresar_no_subtract_returns"
+  },
+  "savedDraft": null,
+  "returnsCount": 0,
+  "queries": [
+    {
+      "kind": "SELECT",
+      "bindings": 5
+    },
+    {
+      "kind": "SELECT",
+      "bindings": 6
+    },
+    {
+      "kind": "WITH",
+      "bindings": 2
+    },
+    {
+      "kind": "SELECT",
+      "bindings": 2
+    },
+    {
+      "kind": "SELECT",
+      "bindings": 3
+    },
+    {
+      "kind": "SELECT",
+      "bindings": 2
+    },
+    {
+      "kind": "SELECT",
+      "bindings": 1
+    }
+  ]
+}

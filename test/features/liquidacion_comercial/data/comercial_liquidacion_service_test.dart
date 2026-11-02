@@ -1,12 +1,45 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/core/money/money.dart';
 import 'package:gmp_app_mobilidad/features/liquidacion_comercial/data/comercial_liquidacion_service.dart';
+import 'package:gmp_app_mobilidad/features/liquidacion_comercial/domain/liquidacion_domain.dart';
 
 void main() {
+  test('idempotency key changes only after the persisted revision changes', () {
+    ComercialLiquidacionDraft draft(String revision) =>
+        ComercialLiquidacionDraft.fromMoney(
+          employeeCode: '57',
+          date: DateTime(2026, 11, 2),
+          expectedTotal: Money.fromDouble(200),
+          ingresoBanco: Money.fromDouble(120),
+          entregado: Money.fromDouble(80),
+          expectedRevision: revision,
+        );
+
+    final beforeAck = buildLiquidacionIdempotencyKey(
+      draft('2026-11-02 10:11:12.123456'),
+    );
+    expect(
+      buildLiquidacionIdempotencyKey(
+        draft('2026-11-02 10:11:12.123456'),
+      ),
+      beforeAck,
+    );
+    expect(
+      buildLiquidacionIdempotencyKey(
+        draft('2026-11-02 10:11:13.000002'),
+      ),
+      isNot(beforeAck),
+    );
+    expect(beforeAck, isNot(contains(' ')));
+  });
+
   test('parses daily settlement JSON including already-collected returns', () {
     final snapshot = ComercialLiquidacionDailySnapshot.fromJson({
       'date': '2026-05-31',
       'summary': {
         'totalEfectivo': 1000,
+        'totalTarjeta': 250,
+        'totalTransferencia': 125,
         'totalCheques': 0,
         'totalPostdatados': 0,
         'saldoActual': 0,
@@ -27,6 +60,8 @@ void main() {
 
     expect(snapshot.date, '2026-05-31');
     expect(snapshot.summary.totalEfectivo, 1000);
+    expect(snapshot.summary.totalTarjetaMoney.toDouble(), 250);
+    expect(snapshot.summary.totalTransferenciaMoney.toDouble(), 125);
     expect(snapshot.summary.devolucionesYaCobradas, 1000);
     expect(snapshot.summary.totalAIngresar, 0);
     expect(snapshot.returns.single.documento, 'D-1');
@@ -75,6 +110,7 @@ void main() {
         'ingresoBanco': 100,
         'entregado': 2400,
         'totalEsperado': 2500,
+        'revision': '2026-11-02-10.11.12.123456',
       },
       'returns': const [],
     });
@@ -83,5 +119,9 @@ void main() {
     expect(snapshot.summary.devolucionesYaCobradas, 400);
     expect(snapshot.savedDraft?.ingresoBanco, 100);
     expect(snapshot.savedDraft?.entregado, 2400);
+    expect(
+      snapshot.savedDraft?.expectedRevision,
+      '2026-11-02-10.11.12.123456',
+    );
   });
 }
