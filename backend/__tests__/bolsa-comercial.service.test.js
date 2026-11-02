@@ -33,20 +33,99 @@ beforeEach(() => {
     if (db.initDb && db.initDb.mockReset) db.initDb.mockReset();
 });
 
-function installTransactionalPool(db) {
+function installTransactionalPool(db, { initialState = 'BORRADOR' } = {}) {
+    let state = initialState;
+    let transactionState = initialState;
     const conn = {
-        query: jest.fn(async (sql, params) => {
-            if (/^(SET TRANSACTION|LOCK TABLE)/i.test(String(sql).trim())) return [];
+        query: jest.fn((sql, params) => {
+            const statement = String(sql).trim();
+            if (/^(SET TRANSACTION|LOCK TABLE)/i.test(statement)) return Promise.resolve([]);
+            if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO/i.test(statement)) {
+                return Promise.resolve([{ ESTADO: state }]);
+            }
+            if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(statement)
+                && /SET\s+ESTADO\s*=\s*'CONFIRMANDO'/i.test(statement)) {
+                if (state !== 'BORRADOR') return Promise.resolve({ count: 0 });
+                state = 'CONFIRMANDO';
+                return Promise.resolve({ count: 1 });
+            }
+            if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(statement)
+                && /SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(statement)) {
+                if (state !== 'CONFIRMANDO') return Promise.resolve({ count: 0 });
+                state = 'CONFIRMADO';
+                return Promise.resolve({ count: 1 });
+            }
             return db.queryWithParams(sql, params);
         }),
-        beginTransaction: jest.fn().mockResolvedValue(undefined),
+        beginTransaction: jest.fn(() => {
+            transactionState = state;
+            return Promise.resolve();
+        }),
         commit: jest.fn().mockResolvedValue(undefined),
-        rollback: jest.fn().mockResolvedValue(undefined),
+        rollback: jest.fn(() => {
+            state = transactionState;
+            return Promise.resolve();
+        }),
         close: jest.fn().mockResolvedValue(undefined),
+        getState: () => state,
     };
     db.getPool.mockReturnValue({ connect: jest.fn().mockResolvedValue(conn) });
     mockOpenDedicatedConnection.mockResolvedValue(conn);
     return conn;
+}
+
+function installSerializedTransactionalConnections(db) {
+    let state = 'BORRADOR';
+    let lockTail = Promise.resolve();
+    const connections = [];
+
+    mockOpenDedicatedConnection.mockImplementation(() => {
+        let releaseLock;
+        let transactionState = state;
+        const conn = {
+            query: jest.fn(async (sql, params) => {
+                const statement = String(sql).trim();
+                if (/^SET TRANSACTION/i.test(statement)) return [];
+                if (/LOCK TABLE .*PEDIDOS_STOCK_RESERVE/i.test(statement)) {
+                    const previous = lockTail;
+                    lockTail = new Promise((resolve) => { releaseLock = resolve; });
+                    await previous;
+                    transactionState = state;
+                    return [];
+                }
+                if (/^LOCK TABLE/i.test(statement)) return [];
+                if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO/i.test(statement)) {
+                    return [{ ESTADO: state }];
+                }
+                if (/SET\s+ESTADO\s*=\s*'CONFIRMANDO'/i.test(statement)) {
+                    if (state !== 'BORRADOR') return { count: 0 };
+                    state = 'CONFIRMANDO';
+                    return { count: 1 };
+                }
+                if (/SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(statement)) {
+                    if (state !== 'CONFIRMANDO') return { count: 0 };
+                    state = 'CONFIRMADO';
+                    return { count: 1 };
+                }
+                return db.queryWithParams(sql, params);
+            }),
+            beginTransaction: jest.fn().mockResolvedValue(undefined),
+            commit: jest.fn(() => {
+                releaseLock?.();
+                return Promise.resolve();
+            }),
+            rollback: jest.fn(() => {
+                state = transactionState;
+                releaseLock?.();
+                return Promise.resolve();
+            }),
+            close: jest.fn().mockResolvedValue(undefined),
+        };
+        connections.push(conn);
+        return Promise.resolve(conn);
+    });
+
+    return { connections, getState: () => state };
 }
 
 describe('BolsaComercial Service', () => {
@@ -477,7 +556,7 @@ describe("pedidos confirmation bolsa contract", () => {
     db.queryWithParams.mockReset();
     db.queryWithParams.mockImplementation(async (sql) => {
       if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMANDO")) return { count: 1 };
-      if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ID: 42, ESTADO: "CONFIRMANDO", EJERCICIO: 2026, NUMEROPEDIDO: 1001, SERIEPEDIDO: "M", TERMINAL: 1, DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 233639, CODIGOCLIENTE: "C001", NOMBRECLIENTE: "Cliente Test", CODIGOVENDEDOR: "10", CODIGOFORMAPAGO: "01", CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: "CC", IMPORTETOTAL: 7, IMPORTEBASE: 7, IMPORTEIVA: 0, IMPORTECOSTO: 4, IMPORTEMARGEN: 3, OBSERVACIONES: "" }];
+      if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ID: 42, ESTADO: "BORRADOR", EJERCICIO: 2026, NUMEROPEDIDO: 1001, SERIEPEDIDO: "M", TERMINAL: 1, DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 233639, CODIGOCLIENTE: "C001", NOMBRECLIENTE: "Cliente Test", CODIGOVENDEDOR: "10", CODIGOFORMAPAGO: "01", CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: "CC", IMPORTETOTAL: 7, IMPORTEBASE: 7, IMPORTEIVA: 0, IMPORTECOSTO: 4, IMPORTEMARGEN: 3, OBSERVACIONES: "" }];
       if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return [{ CODIGOVEHICULO: "02", CODIGOREPARTIDOR: "10" }];
       if (/FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return [{ ID: 7, PEDIDO_ID: 42, SECUENCIA: 1, CODIGOARTICULO: "ART-UNDER", DESCRIPCION: "Producto bajo minimo", CANTIDADENVASES: 1, CANTIDADUNIDADES: 0, UNIDADMEDIDA: "CAJAS", UNIDADESCAJA: 1, PRECIOVENTA: 7, PRECIOCOSTO: 4, PRECIOTARIFA: 10, PRECIOTARIFACLIENTE: 10, PRECIOMINIMO: 10, IMPORTEVENTA: 7, IMPORTECOSTO: 4, IMPORTEMARGEN: 3, PORCENTAJEMARGEN: 42.85, TIPOLINEA: "R", TIPOVENTA: "CC", CLASELINEA: "VT", ORDEN: 1 }];
       if (/FROM\s+DSEDAC\.ARO/i.test(sql)) return [{ CODE: "ART-UNDER", ENVASES: 100, UNIDADES: 0 }];
@@ -488,19 +567,27 @@ describe("pedidos confirmation bolsa contract", () => {
     jest.doMock("../services/query-optimizer", () => ({ cachedQuery: jest.fn((fn, sql, _key, _ttl, params) => fn(sql, params)) }));
     jest.doMock("../services/redis-cache", () => ({ redisCache: { get: jest.fn(), set: jest.fn(), del: jest.fn(), invalidatePattern: jest.fn() }, TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 } }));
     jest.doMock("../services/laclae", () => ({ getClientDays: jest.fn(() => ({ deliveryDays: ["martes"], deliveryDaysShort: "M" })) }));
+    const applyOrderMovementsWith = jest.fn()
+      .mockRejectedValueOnce(new Error("movement write failed"))
+      .mockResolvedValueOnce({ allowed: true, saldo: 297 });
     jest.doMock("../services/bolsa-comercial.service", () => ({
       validateOrderWithBolsa: jest.fn().mockResolvedValue({ valid: true, consumo: 3, saldo: 297 }),
-      applyOrderMovementsWith: jest.fn().mockRejectedValue(new Error("movement write failed")),
+      applyOrderMovementsWith,
     }));
     const pedidosService = require("../services/pedidos.service");
     await expect(pedidosService.confirmOrder(42, "CC", { deliveryDate: "2026-06-09" })).rejects.toThrow(/movement write failed|bolsa/i);
     expect(db.queryWithParams.mock.calls.some(([sql]) =>
-      /UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) &&
-      /SET\s+ESTADO\s*=\s*'BORRADOR'/i.test(sql) &&
-      /ESTADO\s*=\s*'CONFIRMANDO'/i.test(sql)
-    )).toBe(true);
+      /SET\s+ESTADO\s*=\s*'BORRADOR'/i.test(sql)
+    )).toBe(false);
+    expect(conn.getState()).toBe('BORRADOR');
     expect(conn.rollback).toHaveBeenCalledTimes(1);
     expect(conn.commit).not.toHaveBeenCalled();
+
+    await expect(pedidosService.confirmOrder(42, "CC", { deliveryDate: "2026-06-09" }))
+      .resolves.toMatchObject({ header: { id: 42, estado: 'CONFIRMADO' } });
+    expect(conn.getState()).toBe('CONFIRMADO');
+    expect(conn.commit).toHaveBeenCalledTimes(1);
+    expect(applyOrderMovementsWith).toHaveBeenCalledTimes(2);
   });
 
   test("confirmOrder returns refreshed bolsa summary after movement write", async () => {
@@ -512,7 +599,7 @@ describe("pedidos confirmation bolsa contract", () => {
     db.queryWithParams.mockReset();
     db.queryWithParams.mockImplementation(async (sql) => {
       if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMANDO")) return { count: 1 };
-      if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ...header, ESTADO: "CONFIRMANDO" }];
+      if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ...header, ESTADO: "BORRADOR" }];
       if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return [{ CODIGOVEHICULO: "02", CODIGOREPARTIDOR: "10" }];
       if (/FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return [line];
       if (/FROM\s+DSEDAC\.ARO/i.test(sql)) return [{ CODE: "ART-OVER", ENVASES: 100, UNIDADES: 0 }];
@@ -579,6 +666,7 @@ describe("pedidos confirmation bolsa contract", () => {
 
   test('confirmOrder replay returns the existing confirmed order without repeating writes', async () => {
     const db = require('../config/db');
+    const conn = installTransactionalPool(db, { initialState: 'CONFIRMADO' });
     const header = {
       ID: 42, EJERCICIO: 2026, NUMEROPEDIDO: 1001, SERIEPEDIDO: 'M', TERMINAL: 1,
       DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 120000,
@@ -617,10 +705,244 @@ describe("pedidos confirmation bolsa contract", () => {
       header: { id: 42, estado: 'CONFIRMADO' },
     });
     expect(applyOrderMovementsWith).not.toHaveBeenCalled();
-    expect(db.getPool).not.toHaveBeenCalled();
+    expect(conn.commit).toHaveBeenCalledTimes(1);
     expect(db.queryWithParams.mock.calls.some(([sql]) =>
       /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql)
     )).toBe(false);
+  });
+
+  test('two concurrent local confirmations commit once and replay without duplicate ledger or history', async () => {
+    const db = require('../config/db');
+    const serialized = installSerializedTransactionalConnections(db);
+    const header = {
+      ID: 44, EJERCICIO: 2026, NUMEROPEDIDO: 1003, SERIEPEDIDO: 'M', TERMINAL: 1,
+      DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 120000,
+      CODIGOCLIENTE: 'C001', NOMBRECLIENTE: 'Cliente Test', CODIGOVENDEDOR: '10',
+      CODIGOFORMAPAGO: '01', CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: 'CC',
+      IMPORTETOTAL: 7, IMPORTEBASE: 7, IMPORTEIVA: 0, IMPORTECOSTO: 4,
+      IMPORTEMARGEN: 3, OBSERVACIONES: '',
+    };
+    const line = {
+      ID: 9, PEDIDO_ID: 44, SECUENCIA: 1, CODIGOARTICULO: 'ART-CONCURRENT',
+      DESCRIPCION: 'Producto', CANTIDADENVASES: 1, CANTIDADUNIDADES: 0,
+      UNIDADMEDIDA: 'CAJAS', UNIDADESCAJA: 1, PRECIOVENTA: 7, PRECIOCOSTO: 4,
+      PRECIOTARIFA: 10, PRECIOTARIFACLIENTE: 10, PRECIOMINIMO: 10,
+      IMPORTEVENTA: 7, IMPORTECOSTO: 4, IMPORTEMARGEN: 3,
+      PORCENTAJEMARGEN: 42.85, TIPOLINEA: 'R', TIPOVENTA: 'CC', CLASELINEA: 'VT',
+      CODIGOIVA: '2', ORDEN: 1,
+    };
+    db.queryWithParams.mockReset();
+    db.queryWithParams.mockImplementation((sql) => {
+      if (/SELECT\s+ESTADO,/i.test(sql)) return Promise.resolve([{ ...header, ESTADO: 'BORRADOR' }]);
+      if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return Promise.resolve([{ CODIGOVEHICULO: '02', CODIGOREPARTIDOR: '10' }]);
+      if (/FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return Promise.resolve([line]);
+      if (/DESCUENTO_GLOBAL/i.test(sql) && /PEDIDOS_CAB/i.test(sql)) return Promise.resolve([{ DESCUENTO_GLOBAL: 0, PORCENTAJEDESCUENTO1: 0 }]);
+      if (/FROM\s+DSEDAC\.ARO/i.test(sql)) return Promise.resolve([{ CODE: 'ART-CONCURRENT', ENVASES: 100, UNIDADES: 0 }]);
+      if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return Promise.resolve([{ ...header, ESTADO: 'CONFIRMADO' }]);
+      return Promise.resolve([]);
+    });
+    jest.doMock('../services/query-optimizer', () => ({
+      cachedQuery: jest.fn((fn, sql, _key, _ttl, params) => fn(sql, params)),
+    }));
+    jest.doMock('../services/redis-cache', () => ({
+      redisCache: { get: jest.fn(), set: jest.fn(), del: jest.fn(), invalidatePattern: jest.fn() },
+      TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 },
+    }));
+    jest.doMock('../services/laclae', () => ({
+      getClientDays: jest.fn(() => ({ deliveryDays: ['martes'], deliveryDaysShort: 'M' })),
+    }));
+    const applyOrderMovementsWith = jest.fn().mockResolvedValue({ allowed: true, saldo: 297 });
+    jest.doMock('../services/bolsa-comercial.service', () => ({
+      validateOrderWithBolsa: jest.fn().mockResolvedValue({ valid: true, consumo: 3, acumulacion: 0 }),
+      applyOrderMovementsWith,
+    }));
+
+    const pedidosService = require('../services/pedidos.service');
+    const results = await Promise.all([
+      pedidosService.confirmOrder(44, 'CC', { deliveryDate: '2026-06-09' }),
+      pedidosService.confirmOrder(44, 'CC', { deliveryDate: '2026-06-09' }),
+    ]);
+
+    expect(serialized.getState()).toBe('CONFIRMADO');
+    expect(serialized.connections).toHaveLength(2);
+    expect(serialized.connections.filter((conn) => conn.commit.mock.calls.length === 1)).toHaveLength(2);
+    expect(applyOrderMovementsWith).toHaveBeenCalledTimes(1);
+    expect(results.filter((result) => result.idempotentReplay === true)).toHaveLength(1);
+    expect(db.queryWithParams.mock.calls.filter(([sql]) =>
+      /INSERT\s+INTO\s+JAVIER\.TEST_PRECIO_HISTORICO/i.test(sql)
+    )).toHaveLength(1);
+  });
+
+  test('confirmation uses the locked line and header-discount snapshot after a concurrent draft edit', async () => {
+    const db = require('../config/db');
+    const conn = installTransactionalPool(db);
+    const header = {
+      ID: 45, EJERCICIO: 2026, NUMEROPEDIDO: 1004, SERIEPEDIDO: 'M', TERMINAL: 1,
+      DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 120000,
+      CODIGOCLIENTE: 'C001', NOMBRECLIENTE: 'Cliente Test', CODIGOVENDEDOR: '10',
+      CODIGOFORMAPAGO: '01', CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: 'CC',
+      IMPORTETOTAL: 7, IMPORTEBASE: 7, IMPORTEIVA: 0, IMPORTECOSTO: 4,
+      IMPORTEMARGEN: 3, OBSERVACIONES: '',
+    };
+    const baseLine = {
+      ID: 10, PEDIDO_ID: 45, SECUENCIA: 1, CODIGOARTICULO: 'ART-EDIT', DESCRIPCION: 'Producto',
+      CANTIDADENVASES: 1, CANTIDADUNIDADES: 0, UNIDADMEDIDA: 'CAJAS', UNIDADESCAJA: 1,
+      PRECIOVENTA: 9, PRECIOCOSTO: 4, PRECIOTARIFA: 10, PRECIOTARIFACLIENTE: 10,
+      PRECIOMINIMO: 8, IMPORTEVENTA: 9, IMPORTECOSTO: 4, IMPORTEMARGEN: 5,
+      PORCENTAJEMARGEN: 55.55, DESCUENTO_LINEA: 0, PORCENTAJEDESCUENTO: 0,
+      TIPOLINEA: 'R', TIPOVENTA: 'CC', CLASELINEA: 'VT', CODIGOIVA: '2', ORDEN: 1,
+    };
+    const lockedLine = {
+      ...baseLine,
+      CANTIDADENVASES: 2,
+      PRECIOVENTA: 8,
+      IMPORTEVENTA: 14.4,
+      DESCUENTO_LINEA: 10,
+      PORCENTAJEDESCUENTO: 10,
+    };
+    let lineReads = 0;
+    let discountReads = 0;
+    db.queryWithParams.mockReset();
+    db.queryWithParams.mockImplementation((sql) => {
+      if (/SELECT\s+ESTADO,/i.test(sql)) return Promise.resolve([{ ...header, ESTADO: 'BORRADOR' }]);
+      if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return Promise.resolve([{ CODIGOVEHICULO: '02', CODIGOREPARTIDOR: '10' }]);
+      if (/FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) {
+        lineReads += 1;
+        return Promise.resolve([lineReads === 1 ? baseLine : lockedLine]);
+      }
+      if (/DESCUENTO_GLOBAL/i.test(sql) && /PEDIDOS_CAB/i.test(sql)) {
+        discountReads += 1;
+        return Promise.resolve([{ DESCUENTO_GLOBAL: discountReads === 1 ? 0 : 5, PORCENTAJEDESCUENTO1: 0 }]);
+      }
+      if (/FROM\s+DSEDAC\.ARO/i.test(sql)) return Promise.resolve([{ CODE: 'ART-EDIT', ENVASES: 100, UNIDADES: 0 }]);
+      if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return Promise.resolve([{ ...header, ESTADO: 'CONFIRMADO' }]);
+      return Promise.resolve([]);
+    });
+    jest.doMock('../services/query-optimizer', () => ({
+      cachedQuery: jest.fn((fn, sql, _key, _ttl, params) => fn(sql, params)),
+    }));
+    jest.doMock('../services/redis-cache', () => ({
+      redisCache: { get: jest.fn(), set: jest.fn(), del: jest.fn(), invalidatePattern: jest.fn() },
+      TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 },
+    }));
+    jest.doMock('../services/laclae', () => ({
+      getClientDays: jest.fn(() => ({ deliveryDays: ['martes'], deliveryDaysShort: 'M' })),
+    }));
+    const validateOrderWithBolsa = jest.fn((_vendor, currentLines, options) => Promise.resolve({
+      valid: true,
+      consumo: currentLines[0].CANTIDADENVASES * 2,
+      acumulacion: 0,
+      lineMovements: [{
+        tipo: 'CONSUMO', lineId: 10, codigoArticulo: 'ART-EDIT',
+        cantidad: currentLines[0].CANTIDADENVASES,
+        precioVenta: currentLines[0].PRECIOVENTA,
+        importe: currentLines[0].CANTIDADENVASES * 2,
+        descuento: options.globalDiscountPct,
+      }],
+    }));
+    const applyOrderMovementsWith = jest.fn().mockResolvedValue({ allowed: true });
+    jest.doMock('../services/bolsa-comercial.service', () => ({
+      validateOrderWithBolsa,
+      applyOrderMovementsWith,
+    }));
+
+    const pedidosService = require('../services/pedidos.service');
+    await pedidosService.confirmOrder(45, 'CC', { deliveryDate: '2026-06-09' });
+
+    expect(validateOrderWithBolsa).toHaveBeenLastCalledWith(
+      '10',
+      [expect.objectContaining({ CANTIDADENVASES: 2, PRECIOVENTA: 8, DESCUENTO_LINEA: 10 })],
+      { globalDiscountPct: 5 },
+    );
+    expect(applyOrderMovementsWith).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        pedidoId: 45,
+        consumoAmount: 4,
+        consumoMovements: [expect.objectContaining({ cantidad: 2, precioVenta: 8 })],
+      }),
+    );
+    const reservationInsert = conn.query.mock.calls.find(([sql]) =>
+      /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql)
+    );
+    expect(reservationInsert?.[1]).toEqual(expect.arrayContaining([45, 'ART-EDIT', 2, 0]));
+  });
+
+  test('a line edit that starts after the confirmation claim waits and is rejected without writes', async () => {
+    const db = require('../config/db');
+    const serialized = installSerializedTransactionalConnections(db);
+    const header = {
+      ID: 46, EJERCICIO: 2026, NUMEROPEDIDO: 1005, SERIEPEDIDO: 'M', TERMINAL: 1,
+      DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 120000,
+      CODIGOCLIENTE: 'C001', NOMBRECLIENTE: 'Cliente Test', CODIGOVENDEDOR: '10',
+      CODIGOFORMAPAGO: '01', CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: 'CC',
+      IMPORTETOTAL: 10, IMPORTEBASE: 10, IMPORTEIVA: 0, IMPORTECOSTO: 4,
+      IMPORTEMARGEN: 6, OBSERVACIONES: '',
+    };
+    const line = {
+      ID: 11, PEDIDO_ID: 46, SECUENCIA: 1, CODIGOARTICULO: 'ART-LOCK', DESCRIPCION: 'Producto',
+      CANTIDADENVASES: 1, CANTIDADUNIDADES: 0, UNIDADMEDIDA: 'CAJAS', UNIDADESCAJA: 1,
+      PRECIOVENTA: 10, PRECIOCOSTO: 4, PRECIOTARIFA: 10, PRECIOTARIFACLIENTE: 10,
+      PRECIOMINIMO: 8, IMPORTEVENTA: 10, IMPORTECOSTO: 4, IMPORTEMARGEN: 6,
+      PORCENTAJEMARGEN: 60, DESCUENTO_LINEA: 0, PORCENTAJEDESCUENTO: 0,
+      TIPOLINEA: 'R', TIPOVENTA: 'CC', CLASELINEA: 'VT', CODIGOIVA: '2', ORDEN: 1,
+    };
+    db.queryWithParams.mockReset();
+    db.queryWithParams.mockImplementation((sql) => {
+      if (/SELECT\s+ESTADO,/i.test(sql)) return Promise.resolve([{ ...header, ESTADO: 'BORRADOR' }]);
+      if (/SELECT\s+PEDIDO_ID,\s+CANTIDADENVASES/i.test(sql)) return Promise.resolve([line]);
+      if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return Promise.resolve([{ CODIGOVEHICULO: '02', CODIGOREPARTIDOR: '10' }]);
+      if (/FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return Promise.resolve([line]);
+      if (/DESCUENTO_GLOBAL/i.test(sql) && /PEDIDOS_CAB/i.test(sql)) return Promise.resolve([{ DESCUENTO_GLOBAL: 0, PORCENTAJEDESCUENTO1: 0 }]);
+      if (/FROM\s+DSEDAC\.ARO/i.test(sql)) return Promise.resolve([{ CODE: 'ART-LOCK', ENVASES: 100, UNIDADES: 0 }]);
+      if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return Promise.resolve([{ ...header, ESTADO: 'CONFIRMADO' }]);
+      return Promise.resolve([]);
+    });
+    jest.doMock('../services/query-optimizer', () => ({
+      cachedQuery: jest.fn((fn, sql, _key, _ttl, params) => fn(sql, params)),
+    }));
+    jest.doMock('../services/redis-cache', () => ({
+      redisCache: { get: jest.fn(), set: jest.fn(), del: jest.fn(), invalidatePattern: jest.fn() },
+      TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 },
+    }));
+    jest.doMock('../services/laclae', () => ({
+      getClientDays: jest.fn(() => ({ deliveryDays: ['martes'], deliveryDaysShort: 'M' })),
+    }));
+    let validateCalls = 0;
+    let releaseLockedValidation;
+    let signalLockedValidation;
+    const lockedValidationEntered = new Promise((resolve) => { signalLockedValidation = resolve; });
+    const lockedValidationGate = new Promise((resolve) => { releaseLockedValidation = resolve; });
+    const validateOrderWithBolsa = jest.fn(() => {
+      validateCalls += 1;
+      if (validateCalls === 2) {
+        signalLockedValidation();
+        return lockedValidationGate.then(() => ({ valid: true, consumo: 0, acumulacion: 0 }));
+      }
+      return Promise.resolve({ valid: true, consumo: 0, acumulacion: 0 });
+    });
+    jest.doMock('../services/bolsa-comercial.service', () => ({
+      validateOrderWithBolsa,
+      applyOrderMovementsWith: jest.fn(),
+    }));
+
+    const pedidosService = require('../services/pedidos.service');
+    const confirmPromise = pedidosService.confirmOrder(46, 'CC', { deliveryDate: '2026-06-09' });
+    await lockedValidationEntered;
+    const editPromise = pedidosService.updateOrderLine(11, { cantidadEnvases: 2 });
+    const editExpectation = expect(editPromise).rejects.toMatchObject({
+      code: 'ORDER_NOT_EDITABLE',
+      status: 409,
+    });
+    releaseLockedValidation();
+
+    await expect(confirmPromise).resolves.toBeDefined();
+    await editExpectation;
+    expect(serialized.getState()).toBe('CONFIRMADO');
+    expect(serialized.connections).toHaveLength(2);
+    expect(serialized.connections.some((connection) => connection.query.mock.calls.some(([sql]) =>
+      /UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_LIN\s+SET\s+CANTIDADENVASES/i.test(sql)
+    ))).toBe(false);
   });
 
   test('authorized force confirmation still blocks when locked stock is insufficient', async () => {
@@ -631,7 +953,7 @@ describe("pedidos confirmation bolsa contract", () => {
       DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 120000,
       CODIGOCLIENTE: 'C001', NOMBRECLIENTE: 'Cliente Test', CODIGOVENDEDOR: '10',
       CODIGOFORMAPAGO: '01', CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: 'CC',
-      ESTADO: 'CONFIRMANDO', IMPORTETOTAL: 10, IMPORTEBASE: 10, IMPORTEIVA: 0,
+      ESTADO: 'BORRADOR', IMPORTETOTAL: 10, IMPORTEBASE: 10, IMPORTEIVA: 0,
       IMPORTECOSTO: 5, IMPORTEMARGEN: 5, OBSERVACIONES: '',
     };
     const line = {
@@ -929,7 +1251,7 @@ describe('confirmOrder DESCUENTO_GLOBAL write-path contract', () => {
     db.queryWithParams.mockReset();
     db.queryWithParams.mockImplementation(async (sql) => {
       if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql) && sql.includes('CONFIRMANDO')) return { count: 1 };
-      if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ...header, ESTADO: 'CONFIRMANDO' }];
+      if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ...header, ESTADO: 'BORRADOR' }];
       if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return [{ CODIGOVEHICULO: '02', CODIGOREPARTIDOR: '05' }];
       if (/FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return lines;
       if (/DESCUENTO_GLOBAL/i.test(sql) && /PEDIDOS_CAB/i.test(sql)) {

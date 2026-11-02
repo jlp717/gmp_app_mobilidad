@@ -54,6 +54,7 @@ test('uses one connection and locks reservations before the local confirmation m
   expect(mockQuery.mock.calls.map(([sql]) => sql)).toEqual([
     'SET TRANSACTION ISOLATION LEVEL READ COMMITTED',
     STOCK_RESERVATION_LOCK_SQL,
+    ORDERS_HEADER_LOCK_SQL,
     'UPDATE JAVIER.TEST_PEDIDOS_CAB SET ESTADO = ? WHERE ID = ?',
     'INSERT INTO JAVIER.TEST_PEDIDOS_STOCK_RESERVE (PEDIDO_ID) VALUES (?)',
     'INSERT INTO JAVIER.TEST_MOVIMIENTOS_BOLSA (PEDIDO_ID) VALUES (?)',
@@ -66,7 +67,7 @@ test('uses one connection and locks reservations before the local confirmation m
 test.each(['stock reservation failed', 'bolsa movement failed'])(
   'rolls back and never commits when %s',
   async (message) => {
-    await expect(withLocalConfirmationTransaction(async () => {
+    await expect(withLocalConfirmationTransaction(() => {
       throw new Error(message);
     })).rejects.toThrow(message);
 
@@ -74,6 +75,7 @@ test.each(['stock reservation failed', 'bolsa movement failed'])(
     expect(statements).toEqual([
       'SET TRANSACTION ISOLATION LEVEL READ COMMITTED',
       STOCK_RESERVATION_LOCK_SQL,
+      ORDERS_HEADER_LOCK_SQL,
     ]);
     expect(mockRollback).toHaveBeenCalledTimes(1);
     expect(mockCommit).not.toHaveBeenCalled();

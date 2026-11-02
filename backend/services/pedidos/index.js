@@ -16,6 +16,8 @@ const {
 const { roundPrice, trimString, OrderStateError, MAX_ORDER_LINES, DB2_BULK_INSERT_CHUNK_SIZE, STOCK_RESERVE_BULK_INSERT_CHUNK_SIZE, ORDER_TRANSITIONS, numberValue, integerValue, truncate, ERP_SCHEMA, PEDIDOS_CAB_TABLE, PEDIDOS_LIN_TABLE, PEDIDOS_SEQ_TABLE, PEDIDOS_STOCK_RESERVE_TABLE, DRAFT_STOCK_RESERVATION_HOURS, DRAFT_STOCK_RESERVATION_STATES_SQL, ACTIVE_STOCK_RESERVATION_CONDITION } = require('./_shared');
 const orderLifecycle = require('./order-lifecycle');
 const {
+    withDraftCreationTransaction,
+    withDraftMutationTransaction,
     withDraftPurgeTransaction,
     withLocalConfirmationTransaction,
 } = require('./local-confirmation-transaction');
@@ -315,7 +317,12 @@ function isColumnNotFound(err) {
 
 function isDuplicateKeyError(err) {
     const msg = String(err?.message || '');
-    return /DUPLICATE|PRIMARY|UNIQUE|SQL0803/i.test(msg);
+    const odbcErrors = Array.isArray(err?.odbcErrors) ? err.odbcErrors : [];
+    const hasDuplicateState = odbcErrors.some((item) =>
+        String(item?.state || '').toUpperCase() === '23505'
+        || Number(item?.code) === -803
+    );
+    return hasDuplicateState || /DUPLICATE|PRIMARY|UNIQUE|SQL0803/i.test(msg);
 }
 
 let orderSequenceTail = Promise.resolve();
@@ -1566,6 +1573,116 @@ function buildConfirmOrderUpdate({ id, deliveryPlan, vehicleCode, driverCode, ro
     return { sql, params };
 }
 
+function affectedRowCount(result) {
+    if (result && typeof result.count === 'number') return result.count;
+    return typeof result === 'number' ? result : null;
+}
+
+function confirmationStateError(state) {
+    const confirming = state === 'CONFIRMANDO';
+    const error = new Error(confirming
+        ? 'Pedido ya confirmado o en proceso de confirmacion por otra sesion'
+        : `Solo se pueden confirmar pedidos en estado BORRADOR (estado actual: ${state})`);
+    error.code = confirming ? 'PEDIDO_ALREADY_CONFIRMING' : 'PEDIDO_INVALID_STATE';
+    error.status = 409;
+    return error;
+}
+
+async function readConfirmationState(queryFn, id) {
+    const rows = await queryFn(
+        `SELECT TRIM(ESTADO) AS ESTADO FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
+        [id],
+    );
+    if (!Array.isArray(rows) || rows.length === 0) {
+        const error = new Error('Pedido no encontrado');
+        error.code = 'PEDIDO_NOT_FOUND';
+        error.status = 404;
+        throw error;
+    }
+    return trimString(rows[0].ESTADO).toUpperCase();
+}
+
+async function claimLocalOrderForConfirmation(queryFn, id) {
+    const initialState = await readConfirmationState(queryFn, id);
+    if (initialState === 'CONFIRMADO') {
+        return { idempotentReplay: true };
+    }
+    if (!['BORRADOR', 'PEND_APROB'].includes(initialState)) {
+        throw confirmationStateError(initialState);
+    }
+
+    const claimResult = await queryFn(
+        `UPDATE ${PEDIDOS_CAB_TABLE}
+            SET ESTADO = 'CONFIRMANDO', UPDATED_AT = CURRENT_TIMESTAMP
+          WHERE ID = ? AND ESTADO IN ('BORRADOR', 'PEND_APROB')`,
+        [id],
+    );
+    const claimedRows = affectedRowCount(claimResult);
+    if (claimedRows === 0) {
+        const currentState = await readConfirmationState(queryFn, id);
+        if (currentState === 'CONFIRMADO') return { idempotentReplay: true };
+        throw confirmationStateError(currentState);
+    }
+    if (claimedRows === null) {
+        const currentState = await readConfirmationState(queryFn, id);
+        if (currentState !== 'CONFIRMANDO') {
+            if (currentState === 'CONFIRMADO') return { idempotentReplay: true };
+            throw confirmationStateError(currentState);
+        }
+    }
+    return { idempotentReplay: false };
+}
+
+function readOrderLinesForMutation(queryFn, id) {
+    return queryFn(
+        `SELECT ID, PEDIDO_ID, SECUENCIA,
+                TRIM(CODIGOARTICULO) AS CODIGOARTICULO,
+                TRIM(DESCRIPCION) AS DESCRIPCION,
+                CANTIDADENVASES, CANTIDADUNIDADES,
+                TRIM(UNIDADMEDIDA) AS UNIDADMEDIDA, UNIDADESCAJA,
+                PRECIOVENTA, PRECIOCOSTO, PRECIOTARIFA, PRECIOTARIFACLIENTE, PRECIOMINIMO,
+                IMPORTEVENTA, IMPORTECOSTO, IMPORTEMARGEN, PORCENTAJEMARGEN,
+                COALESCE(DESCUENTO_LINEA, 0) AS DESCUENTO_LINEA,
+                COALESCE(PORCENTAJEDESCUENTO, 0) AS PORCENTAJEDESCUENTO,
+                TRIM(TIPOLINEA) AS TIPOLINEA,
+                TRIM(TIPOVENTA) AS TIPOVENTA,
+                TRIM(CLASELINEA) AS CLASELINEA,
+                TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA,
+                ORDEN
+           FROM ${PEDIDOS_LIN_TABLE}
+          WHERE PEDIDO_ID = ?
+          ORDER BY SECUENCIA, ID`,
+        [id],
+    );
+}
+
+async function refreshDraftReservationWithStockCheck(queryFn, id) {
+    const lines = await readOrderLinesForMutation(queryFn, id);
+    const stock = await getStockBatch(
+        lines.map((line) => line.CODIGOARTICULO),
+        1,
+        { excludePedidoId: id, queryFn },
+    );
+    const availability = evaluateStockAvailability(lines, stock);
+    if (availability.stockWarnings.length > 0) {
+        const error = new Error('Stock insuficiente para guardar los cambios del borrador.');
+        error.code = 'STOCK_CHANGED_DURING_DRAFT_EDIT';
+        error.status = 409;
+        error.stockWarnings = availability.stockWarnings;
+        throw error;
+    }
+    await refreshDraftStockReservation(id, queryFn);
+    return lines;
+}
+
+function withEditableDraftMutation(orderId, callback) {
+    return withDraftMutationTransaction(async (conn) => {
+        const queryFn = (sql, params) => conn.query(sql, params);
+        await assertOrderEditable(orderId, queryFn);
+        return callback(queryFn);
+    });
+}
+
 async function reserveStockLines(executor, lines, orderId) {
     const byCode = new Map();
     for (const line of lines) {
@@ -2435,17 +2552,23 @@ function evaluateStockAvailability(lines, stockByCode) {
 // ORDER SEQUENCE
 // ============================================================================
 
-async function tryAtomicNextOrderNumber(ejercicio) {
+function pedidosMutationExecutor(queryFn) {
+    return typeof queryFn === 'function'
+        ? queryFn
+        : (sql, params) => queryWithParams(sql, params, false, false);
+}
+
+async function tryAtomicNextOrderNumber(ejercicio, queryFn) {
     if (atomicSequenceUpdateSupported === false) return null;
 
     try {
-        const rows = await queryWithParams(
+        const rows = await pedidosMutationExecutor(queryFn)(
             `SELECT ULTIMO_NUMERO FROM FINAL TABLE (
                 UPDATE ${PEDIDOS_SEQ_TABLE}
                    SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1
                  WHERE EJERCICIO = ?
             )`,
-            [ejercicio], false, false
+            [ejercicio],
         );
         atomicSequenceUpdateSupported = true;
         return rows?.[0]?.ULTIMO_NUMERO ? integerValue(rows[0].ULTIMO_NUMERO) : null;
@@ -2457,38 +2580,40 @@ async function tryAtomicNextOrderNumber(ejercicio) {
     }
 }
 
-async function updateAndReadNextOrderNumber(ejercicio) {
-    await queryWithParams(
+async function updateAndReadNextOrderNumber(ejercicio, queryFn) {
+    const execute = pedidosMutationExecutor(queryFn);
+    await execute(
         `UPDATE ${PEDIDOS_SEQ_TABLE} SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
-        [ejercicio], false
+        [ejercicio],
     );
-    const rows = await queryWithParams(
+    const rows = await execute(
         `SELECT ULTIMO_NUMERO FROM ${PEDIDOS_SEQ_TABLE} WHERE EJERCICIO = ?`,
-        [ejercicio], false
+        [ejercicio],
     );
     return rows?.[0]?.ULTIMO_NUMERO ? integerValue(rows[0].ULTIMO_NUMERO) : null;
 }
 
-function getNextOrderNumber(ejercicio) {
+function getNextOrderNumber(ejercicio, queryFn) {
     return withOrderSequenceLock(async () => {
-        const atomicValue = await tryAtomicNextOrderNumber(ejercicio);
+        const execute = pedidosMutationExecutor(queryFn);
+        const atomicValue = await tryAtomicNextOrderNumber(ejercicio, execute);
         if (atomicValue) return atomicValue;
 
-        const fallbackValue = await updateAndReadNextOrderNumber(ejercicio);
+        const fallbackValue = await updateAndReadNextOrderNumber(ejercicio, execute);
         if (fallbackValue) return fallbackValue;
 
         try {
-            await queryWithParams(
+            await execute(
                 `INSERT INTO ${PEDIDOS_SEQ_TABLE} (EJERCICIO, ULTIMO_NUMERO) VALUES (?, 1)`,
-                [ejercicio], false
+                [ejercicio],
             );
             return 1;
         } catch (insErr) {
             if (!isDuplicateKeyError(insErr)) throw insErr;
             logger.warn(`[PEDIDOS] SEQ INSERT race: ${insErr.message}`);
-            const retryAtomicValue = await tryAtomicNextOrderNumber(ejercicio);
+            const retryAtomicValue = await tryAtomicNextOrderNumber(ejercicio, execute);
             if (retryAtomicValue) return retryAtomicValue;
-            const retryFallbackValue = await updateAndReadNextOrderNumber(ejercicio);
+            const retryFallbackValue = await updateAndReadNextOrderNumber(ejercicio, execute);
             return retryFallbackValue || 1;
         }
     });
@@ -2924,10 +3049,7 @@ async function createOrder({
     const ano = now.getFullYear();
     const hora = parseInt(`${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`, 10);
 
-    const nextOrderT0 = Date.now();
-    const numeroPedido = await getNextOrderNumber(ejercicio);
     const terminal = resolvePedidoTerminal(effectiveVendedorCode, userId);
-    logger.info(`[PEDIDOS] createOrder stage=getNextOrderNumber lineCount=${lineCount} durationMs=${Date.now() - nextOrderT0}`);
 
     const tariffT0 = Date.now();
     const [clientTariffs, articleIvaCodes, minPrices] = await Promise.all([
@@ -2949,71 +3071,7 @@ async function createOrder({
     }
     logger.info(`[PEDIDOS] createOrder stage=line_price_validate lineCount=${lineCount} durationMs=${Date.now() - tariffT0}`);
 
-    // Insert header; ORIGEN column may not exist in older installs
-    const headerT0 = Date.now();
-    let cabSql, cabParams;
-    try {
-        ({ sql: cabSql, params: cabParams } = buildLocalPedidoCabInsert({
-            ejercicio,
-            numeroPedido,
-            dia,
-            mes,
-            ano,
-            hora,
-            clientCode: effectiveClientCode,
-            clientName: effectiveClientName,
-            vendedorCode: effectiveVendedorCode,
-            formaPago: effectiveFormaPago,
-            tarifa: effectiveTarifa,
-            almacen: effectiveAlmacen,
-            tipoventa: effectiveSaleType,
-            observaciones,
-            descuentoGlobal: effectiveDescuentoGlobal,
-            origen,
-            userId,
-        }));
-        await queryWithParams(cabSql, cabParams, false);
-    } catch (cabErr) {
-        // If column not found (42S22), retry without ORIGEN
-        if (isColumnNotFound(cabErr)) {
-            logger.warn(`[PEDIDOS] ERP-compatible columns missing in ${PEDIDOS_CAB_TABLE}, using legacy insert`);
-            ({ sql: cabSql, params: cabParams } = buildLegacyPedidoCabInsert({
-                ejercicio,
-                numeroPedido,
-                dia,
-                mes,
-                ano,
-                hora,
-                clientCode: effectiveClientCode,
-                clientName: effectiveClientName,
-                vendedorCode: effectiveVendedorCode,
-                formaPago: effectiveFormaPago,
-                tarifa: effectiveTarifa,
-                almacen: effectiveAlmacen,
-                tipoventa: effectiveSaleType,
-                observaciones,
-                descuentoGlobal: effectiveDescuentoGlobal,
-                origen,
-                includeOrigen: true,
-            }));
-            await queryWithParams(cabSql, cabParams, false);
-        } else {
-            throw cabErr;
-        }
-    }
-    logger.info(`[PEDIDOS] createOrder stage=header_insert lineCount=${lineCount} durationMs=${Date.now() - headerT0}`);
-
-    // Retrieve the generated ID
-    const idLookupT0 = Date.now();
-    const idRows = await queryWithParams(
-        `SELECT ID FROM ${PEDIDOS_CAB_TABLE} WHERE EJERCICIO = ? AND NUMEROPEDIDO = ? ORDER BY ID DESC FETCH FIRST 1 ROW ONLY`,
-        [ejercicio, numeroPedido]
-    );
-    const pedidoId = idRows[0]?.ID;
-    logger.info(`[PEDIDOS] createOrder stage=id_lookup pedidoId=${pedidoId ?? 'n/a'} lineCount=${lineCount} durationMs=${Date.now() - idLookupT0}`);
-    if (!pedidoId) throw new Error('Failed to retrieve created order ID');
-
-    logger.info(`[PEDIDOS] createOrder stage=line_defaults_prefetch pedidoId=${pedidoId} lineCount=${lineCount} durationMs=0`);
+    logger.info(`[PEDIDOS] createOrder stage=line_defaults_prefetch lineCount=${lineCount} durationMs=0`);
     const lineContexts = lines.map((ln, index) => {
         const articleCode = truncate(ln.codigoArticulo || ln.CODIGOARTICULO, 10);
         const clientTariff = clientTariffs.get(articleCode) || 0;
@@ -3083,148 +3141,178 @@ async function createOrder({
         };
     });
 
-    // Insert lines with compensation pattern: if any line fails, delete the header
-    const lineInsertT0 = Date.now();
+    const reservationLines = buildReservationLinesFromCreateContexts(lineContexts);
+    let transactionResult;
     try {
-        const lineInserts = lineContexts.map(({ line, amounts, sequence }) => buildLocalPedidoLineInsert({
-            pedidoId,
-            sequence,
-            ejercicio,
-            numeroPedido,
-            dia,
-            mes,
-            ano,
-            hora,
-            clientCode: effectiveClientCode,
-            vendedorCode: effectiveVendedorCode,
-            formaPago: effectiveFormaPago,
-            tarifa: effectiveTarifa,
-            almacen: effectiveAlmacen,
-            tipoventa: effectiveSaleType,
-            line,
-            amounts,
-            terminal,
-            userId,
-        }));
+        transactionResult = await withDraftCreationTransaction(async (conn) => {
+            const queryFn = (sql, params) => conn.query(sql, params);
 
-        try {
-            await executeBulkInsert((sql, params) => queryWithParams(sql, params, false), lineInserts, {
-                chunkSize: DB2_BULK_INSERT_CHUNK_SIZE,
-                label: `${PEDIDOS_LIN_TABLE}`,
-            });
-        } catch (lineInsertErr) {
-            if (!isColumnNotFound(lineInsertErr)) throw lineInsertErr;
-            logger.warn(`[PEDIDOS] ERP-compatible columns missing in ${PEDIDOS_LIN_TABLE}, using legacy line bulk insert`);
-            const legacyLineInserts = lineContexts.map(({ line, amounts, sequence }) => buildLegacyPedidoLineInsert({
+            // Recheck after the global locks: a concurrent retry may have
+            // committed while catalog/pricing data was being prepared.
+            const existing = await lookupPedidoIdempotency(normalizedIdempotencyKey, queryFn);
+            if (existing) {
+                if (existing.payloadHash !== idempotencyState.payloadHash) {
+                    throw createIdempotencyConflictError();
+                }
+                return { pedidoId: existing.pedidoId, idempotent: true };
+            }
+
+            // The global reservation mutex is already held. This uncached DB2
+            // read is the authoritative anti-overselling check for the draft.
+            const lockedStock = await getStockBatch(
+                reservationLines.map((line) => line.CODIGOARTICULO),
+                effectiveAlmacen,
+                { queryFn },
+            );
+            const lockedAvailability = evaluateStockAvailability(reservationLines, lockedStock);
+            if (lockedAvailability.stockWarnings.length > 0) {
+                const stockError = new Error('El stock cambió mientras se creaba el borrador.');
+                stockError.code = 'STOCK_CHANGED_DURING_DRAFT_CREATE';
+                stockError.status = 409;
+                stockError.stockWarnings = lockedAvailability.stockWarnings;
+                throw stockError;
+            }
+
+            const nextOrderT0 = Date.now();
+            const numeroPedido = await getNextOrderNumber(ejercicio, queryFn);
+            logger.info(`[PEDIDOS] createOrder stage=getNextOrderNumber lineCount=${lineCount} durationMs=${Date.now() - nextOrderT0}`);
+
+            let cabSql;
+            let cabParams;
+            try {
+                ({ sql: cabSql, params: cabParams } = buildLocalPedidoCabInsert({
+                    ejercicio,
+                    numeroPedido,
+                    dia,
+                    mes,
+                    ano,
+                    hora,
+                    clientCode: effectiveClientCode,
+                    clientName: effectiveClientName,
+                    vendedorCode: effectiveVendedorCode,
+                    formaPago: effectiveFormaPago,
+                    tarifa: effectiveTarifa,
+                    almacen: effectiveAlmacen,
+                    tipoventa: effectiveSaleType,
+                    observaciones,
+                    descuentoGlobal: effectiveDescuentoGlobal,
+                    origen,
+                    userId,
+                }));
+                await queryFn(cabSql, cabParams);
+            } catch (cabErr) {
+                if (!isColumnNotFound(cabErr)) throw cabErr;
+                logger.warn(`[PEDIDOS] ERP-compatible columns missing in ${PEDIDOS_CAB_TABLE}, using legacy insert`);
+                ({ sql: cabSql, params: cabParams } = buildLegacyPedidoCabInsert({
+                    ejercicio,
+                    numeroPedido,
+                    dia,
+                    mes,
+                    ano,
+                    hora,
+                    clientCode: effectiveClientCode,
+                    clientName: effectiveClientName,
+                    vendedorCode: effectiveVendedorCode,
+                    formaPago: effectiveFormaPago,
+                    tarifa: effectiveTarifa,
+                    almacen: effectiveAlmacen,
+                    tipoventa: effectiveSaleType,
+                    observaciones,
+                    descuentoGlobal: effectiveDescuentoGlobal,
+                    origen,
+                    includeOrigen: true,
+                }));
+                await queryFn(cabSql, cabParams);
+            }
+
+            const idRows = await queryFn(
+                `SELECT ID FROM ${PEDIDOS_CAB_TABLE} WHERE EJERCICIO = ? AND NUMEROPEDIDO = ? ORDER BY ID DESC FETCH FIRST 1 ROW ONLY`,
+                [ejercicio, numeroPedido],
+            );
+            const pedidoId = idRows?.[0]?.ID;
+            if (!pedidoId) throw new Error('Failed to retrieve created order ID');
+
+            const lineInserts = lineContexts.map(({ line, amounts, sequence }) => buildLocalPedidoLineInsert({
                 pedidoId,
                 sequence,
+                ejercicio,
+                numeroPedido,
+                dia,
+                mes,
+                ano,
+                hora,
+                clientCode: effectiveClientCode,
+                vendedorCode: effectiveVendedorCode,
+                formaPago: effectiveFormaPago,
+                tarifa: effectiveTarifa,
+                almacen: effectiveAlmacen,
                 tipoventa: effectiveSaleType,
                 line,
                 amounts,
+                terminal,
+                userId,
             }));
-            await executeBulkInsert((sql, params) => queryWithParams(sql, params, false), legacyLineInserts, {
-                chunkSize: DB2_BULK_INSERT_CHUNK_SIZE,
-                label: `${PEDIDOS_LIN_TABLE}_LEGACY`,
-            });
-        }
-        logger.info(`[PEDIDOS] createOrder stage=line_inserts pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - lineInsertT0}`);
-    } catch (linErr) {
-        // COMPENSATION: If lines fail, delete the header to avoid orphaned orders
-        logger.error(`[PEDIDOS] Failed to insert lines for order ${pedidoId}, rolling back header: ${linErr.message}`);
-        try {
-            await queryWithParams(`DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
-            await queryWithParams(`DELETE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`, [pedidoId], false);
-            logger.info(`[PEDIDOS] Successfully rolled back orphaned header ID=${pedidoId}`);
-        } catch (delErr) {
-            logger.error(`[PEDIDOS] CRITICAL: Failed to rollback orphaned header ID=${pedidoId}: ${delErr.message}`);
-        }
-        throw linErr;
-    }
+            try {
+                await executeBulkInsert(queryFn, lineInserts, {
+                    chunkSize: DB2_BULK_INSERT_CHUNK_SIZE,
+                    label: `${PEDIDOS_LIN_TABLE}`,
+                });
+            } catch (lineInsertErr) {
+                if (!isColumnNotFound(lineInsertErr)) throw lineInsertErr;
+                logger.warn(`[PEDIDOS] ERP-compatible columns missing in ${PEDIDOS_LIN_TABLE}, using legacy line bulk insert`);
+                const legacyLineInserts = lineContexts.map(({ line, amounts, sequence }) => buildLegacyPedidoLineInsert({
+                    pedidoId,
+                    sequence,
+                    tipoventa: effectiveSaleType,
+                    line,
+                    amounts,
+                }));
+                await executeBulkInsert(queryFn, legacyLineInserts, {
+                    chunkSize: DB2_BULK_INSERT_CHUNK_SIZE,
+                    label: `${PEDIDOS_LIN_TABLE}_LEGACY`,
+                });
+            }
 
-    // Recalculate totals. If this fails, compensate the created draft so the
-    // API never leaves a half-created order after returning 500.
-    const totalsT0 = Date.now();
-    try {
-        await recalculateOrderTotals(pedidoId);
-        logger.info(`[PEDIDOS] createOrder stage=recalculate_totals pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - totalsT0}`);
-    } catch (totalErr) {
-        logger.error(`[PEDIDOS] Failed to recalculate totals for order ${pedidoId}, rolling back draft: ${totalErr.message}`);
-        try {
-            await queryWithParams(`DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
-            await queryWithParams(`DELETE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`, [pedidoId], false);
-            logger.info(`[PEDIDOS] Successfully rolled back draft ID=${pedidoId} after totals failure`);
-        } catch (rollbackErr) {
-            logger.error(`[PEDIDOS] CRITICAL: Failed to rollback draft ID=${pedidoId} after totals failure: ${rollbackErr.message}`);
-        }
-        throw totalErr;
-    }
-
-    const reserveT0 = Date.now();
-    try {
-        const reservationLines = buildReservationLinesFromCreateContexts(lineContexts);
-        await replaceStockReservationLines(
-            (sql, params) => queryWithParams(sql, params, false),
-            reservationLines,
-            pedidoId
-        );
-        await invalidatePedidosStockCache('draft_create');
-        logger.info(`[PEDIDOS] createOrder stage=stock_reservation pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - reserveT0} statusPath=draft_reserved`);
-    } catch (reserveErr) {
-        logger.error(`[PEDIDOS] Failed to reserve stock for draft ${pedidoId}, rolling back draft: ${reserveErr.message}`);
-        try {
-            await queryWithParams(`DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
-            await queryWithParams(`DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
-            await queryWithParams(`DELETE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`, [pedidoId], false);
-            logger.info(`[PEDIDOS] Successfully rolled back draft ID=${pedidoId} after stock reservation failure`);
-        } catch (rollbackErr) {
-            logger.error(`[PEDIDOS] CRITICAL: Failed to rollback draft ID=${pedidoId} after stock reservation failure: ${rollbackErr.message}`);
-        }
-        throw reserveErr;
-    }
-
-    logger.info(`[PEDIDOS] createOrder stage=stock_validation pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - reserveT0} stock_ms=${Date.now() - reserveT0} stock=draft_reserved statusPath=created`);
-
-    // Invalida cache de listados de pedidos para reflejar el nuevo borrador.
-    invalidatePedidosCache(pedidoId);
-
-    if (normalizedIdempotencyKey && idempotencyState?.payloadHash) {
-        const storeT0 = Date.now();
-        try {
-            await storePedidoIdempotency({
-                idempotencyKey: normalizedIdempotencyKey,
-                pedidoId,
-                payloadHash: idempotencyState.payloadHash,
-                clientCode: effectiveClientCode,
-                vendedorCode: effectiveVendedorCode,
-            });
-            logger.info(`[PEDIDOS] createOrder stage=idempotency_store pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - storeT0}`);
-        } catch (storeErr) {
-            if (isDuplicateKeyError(storeErr)) {
+            await recalculateOrderTotals(pedidoId, queryFn);
+            await replaceStockReservationLines(queryFn, reservationLines, pedidoId);
+            try {
+                await storePedidoIdempotency({
+                    idempotencyKey: normalizedIdempotencyKey,
+                    pedidoId,
+                    payloadHash: idempotencyState.payloadHash,
+                    clientCode: effectiveClientCode,
+                    vendedorCode: effectiveVendedorCode,
+                }, queryFn);
+            } catch (storeErr) {
+                storeErr.pedidoCreationStage = 'idempotency_store';
+                throw storeErr;
+            }
+            return { pedidoId, idempotent: false };
+        });
+    } catch (creationError) {
+        if (creationError.pedidoCreationStage === 'idempotency_store') {
+            if (isDuplicateKeyError(creationError)) {
                 const raced = await lookupPedidoIdempotency(normalizedIdempotencyKey);
                 if (raced && raced.payloadHash === idempotencyState.payloadHash) {
-                    const detailT0 = Date.now();
-                    const order = await getOrderDetail(raced.pedidoId);
-                    logger.info(`[PEDIDOS] createOrder stage=getOrderDetail pedidoId=${raced.pedidoId} lineCount=${lineCount} durationMs=${Date.now() - detailT0} statusPath=idempotent_race`);
-                    logger.info(`[PEDIDOS] createOrder stage=stock_validation lineCount=${lineCount} durationMs=0 stock_ms=0 stock=not_applicable statusPath=not_applicable`);
-                    logger.info(`[PEDIDOS] createOrder stage=service_total pedidoId=${raced.pedidoId} lineCount=${lineCount} statusPath=idempotent_race totalMs=${Date.now() - serviceT0}`);
+                    const order = await getOrderDetail(raced.pedidoId, { includeBolsa: false });
                     return { ...order, idempotent: true };
                 }
                 throw createIdempotencyConflictError();
             }
-            logger.error(`[PEDIDOS] Failed to persist dedupe key for draft ${pedidoId}, rolling back draft: ${storeErr.message}`);
-            try {
-                await queryWithParams(`DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
-                await queryWithParams(`DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [pedidoId], false);
-                await queryWithParams(`DELETE FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`, [pedidoId], false);
-                logger.info(`[PEDIDOS] Successfully rolled back draft ID=${pedidoId} after idempotency store failure`);
-            } catch (rollbackErr) {
-                logger.error(`[PEDIDOS] CRITICAL: Failed to rollback draft ID=${pedidoId} after idempotency store failure: ${rollbackErr.message}`);
-            }
             throw createIdempotencyUnavailableError();
         }
-    } else {
-        logger.info(`[PEDIDOS] createOrder stage=idempotency_store lineCount=${lineCount} skipped=1 durationMs=0`);
+        throw creationError;
     }
+
+    const pedidoId = transactionResult.pedidoId;
+    if (transactionResult.idempotent) {
+        const replay = await getOrderDetail(pedidoId, { includeBolsa: false });
+        return { ...replay, idempotent: true };
+    }
+
+    await invalidatePedidosStockCache('draft_create');
+    invalidatePedidosCache(pedidoId);
+    logger.info(`[PEDIDOS] createOrder stage=stock_validation pedidoId=${pedidoId} lineCount=${lineCount} stock=draft_reserved statusPath=created`);
 
     // Return created order
     const detailT0 = Date.now();
@@ -3860,15 +3948,6 @@ async function addOrderLine(pedidoId, lineData) {
         throw new OrderStateError('INVALID_LINE_PAYLOAD', 'claseLinea inválida', 400);
     }
 
-    await assertOrderEditable(id);
-
-    // Get next secuencia
-    const seqRows = await queryWithParams(
-        `SELECT COALESCE(MAX(SECUENCIA), 0) + 1 AS NEXT_SEQ FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`,
-        [id]
-    );
-    const nextSeq = seqRows[0]?.NEXT_SEQ || 1;
-
     const cantidadEnvases = parseFloat(lineData.cantidadEnvases) || 0;
     const cantidadUnidades = parseFloat(lineData.cantidadUnidades || lineData.cantidad) || 0;
     const precioBase = parseFloat(lineData.precio || lineData.precioVenta) || 0;
@@ -3900,23 +3979,29 @@ async function addOrderLine(pedidoId, lineData) {
             TIPOLINEA, TIPOVENTA, CLASELINEA, ORDEN, CODIGOIVA
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-    const params = [
-        id, nextSeq,
-        codigoArticulo, (lineData.descripcion || '').substring(0, 40),
-        cantidadEnvases, cantidadUnidades,
-        unidadMedida, unidadesCaja,
-        precio, precioCosto,
-        parseFloat(lineData.precioTarifa) || 0, parseFloat(lineData.precioTarifaCliente) || 0,
-        parseFloat(lineData.precioMinimo) || 0,
-        importeVenta, importeCosto, importeMargen,
-        Math.round(pctMargen * 100) / 100,
-        descuentoLinea,
-        lineData.tipoLinea || 'R', lineData.tipoventa || 'CC', claseLinea, nextSeq, iva.codigoIva
-    ];
-
-    await queryWithParams(sql, params, false);
-    await recalculateOrderTotals(id);
-    await refreshDraftStockReservation(id);
+    await withEditableDraftMutation(id, async (queryFn) => {
+        const seqRows = await queryFn(
+            `SELECT COALESCE(MAX(SECUENCIA), 0) + 1 AS NEXT_SEQ FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`,
+            [id],
+        );
+        const nextSeq = seqRows[0]?.NEXT_SEQ || 1;
+        const params = [
+            id, nextSeq,
+            codigoArticulo, (lineData.descripcion || '').substring(0, 40),
+            cantidadEnvases, cantidadUnidades,
+            unidadMedida, unidadesCaja,
+            precio, precioCosto,
+            parseFloat(lineData.precioTarifa) || 0, parseFloat(lineData.precioTarifaCliente) || 0,
+            parseFloat(lineData.precioMinimo) || 0,
+            importeVenta, importeCosto, importeMargen,
+            Math.round(pctMargen * 100) / 100,
+            descuentoLinea,
+            lineData.tipoLinea || 'R', lineData.tipoventa || 'CC', claseLinea, nextSeq, iva.codigoIva,
+        ];
+        await queryFn(sql, params);
+        await recalculateOrderTotals(id, queryFn);
+        await refreshDraftReservationWithStockCheck(queryFn, id);
+    });
     await invalidatePedidosStockCache('draft_line_add');
 
     return getOrderDetail(id);
@@ -3948,61 +4033,66 @@ async function updateOrderLine(lineId, {
     );
     if (!currentRows || currentRows.length === 0) throw new Error('Line not found');
 
-    const current = currentRows[0];
-    const pedidoId = current.PEDIDO_ID;
-
-    await assertOrderEditable(pedidoId);
-
-    const newClase = claseLinea !== undefined ? claseLinea : (current.CLASELINEA || 'VT');
-    const newEnvases = cantidadEnvases != null ? parseFloat(cantidadEnvases) : parseFloat(current.CANTIDADENVASES) || 0;
-    const newUnidades = cantidadUnidades != null
-        ? parseFloat(cantidadUnidades)
-        : (cantidad != null ? parseFloat(cantidad) : parseFloat(current.CANTIDADUNIDADES) || 0);
-    // SC lines always have 0 price and importe
-    const newPrecio = newClase === 'SC' ? 0
-        : (precioVenta != null ? parseFloat(precioVenta) : (precio != null ? parseFloat(precio) : parseFloat(current.PRECIOVENTA) || 0));
-    const newCosto = precioCosto != null ? parseFloat(precioCosto) : parseFloat(current.PRECIOCOSTO) || 0;
-    const newUM = unidadMedida || current.UNIDADMEDIDA;
-    const unidadesCaja = parseFloat(current.UNIDADESCAJA) || 1;
-    const newDiscount = (descuentoLinea != null || lineDiscountPct != null)
-        ? parseLineDiscountPct({ descuentoLinea, lineDiscountPct })
-        : parseLineDiscountPct({ DESCUENTO_LINEA: current.DESCUENTO_LINEA });
-
-    const importeBruto = newClase === 'SC' ? 0 : calculateLineImporte({
-        unidadMedida: newUM,
-        cantidadEnvases: newEnvases,
-        cantidadUnidades: newUnidades,
-        unidadesCaja,
-        precioVenta: newPrecio,
-    });
-    const importeVenta = applyPctToAmount(importeBruto, newDiscount);
-    const billingQty = newUM === 'CAJAS' ? newEnvases : newUnidades;
-    const importeCosto = billingQty * newCosto;
-    const importeMargen = importeVenta - importeCosto;
-    const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
-
-    await queryWithParams(
-        `UPDATE ${PEDIDOS_LIN_TABLE} SET
-            CANTIDADENVASES = ?, CANTIDADUNIDADES = ?, PRECIOVENTA = ?, PRECIOCOSTO = ?, UNIDADMEDIDA = ?,
-            IMPORTEVENTA = ?, IMPORTECOSTO = ?, IMPORTEMARGEN = ?, PORCENTAJEMARGEN = ?,
-            CLASELINEA = ?, DESCUENTO_LINEA = ?
-        WHERE ID = ?`,
-        [newEnvases, newUnidades, newPrecio, newCosto, newUM, importeVenta, importeCosto, importeMargen,
-            Math.round(pctMargen * 100) / 100, newClase, newDiscount, id],
-        false
-    );
-    try {
-        await queryWithParams(
-            `UPDATE ${PEDIDOS_LIN_TABLE} SET PORCENTAJEDESCUENTO = ? WHERE ID = ?`,
-            [newDiscount, id],
-            false
+    const pedidoId = currentRows[0].PEDIDO_ID;
+    await withEditableDraftMutation(pedidoId, async (queryFn) => {
+        const lockedRows = await queryFn(
+            `SELECT PEDIDO_ID, CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO,
+                    UNIDADMEDIDA, UNIDADESCAJA, CLASELINEA,
+                    COALESCE(DESCUENTO_LINEA, 0) AS DESCUENTO_LINEA,
+                    TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA
+               FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ? AND PEDIDO_ID = ?`,
+            [id, pedidoId],
         );
-    } catch (erpDiscountErr) {
-        if (!isColumnNotFound(erpDiscountErr)) throw erpDiscountErr;
-    }
+        if (!lockedRows || lockedRows.length === 0) {
+            throw new OrderStateError('LINE_NOT_FOUND', 'Línea de pedido no encontrada', 404);
+        }
+        const current = lockedRows[0];
+        const newClase = claseLinea !== undefined ? claseLinea : (current.CLASELINEA || 'VT');
+        const newEnvases = cantidadEnvases != null ? parseFloat(cantidadEnvases) : parseFloat(current.CANTIDADENVASES) || 0;
+        const newUnidades = cantidadUnidades != null
+            ? parseFloat(cantidadUnidades)
+            : (cantidad != null ? parseFloat(cantidad) : parseFloat(current.CANTIDADUNIDADES) || 0);
+        const newPrecio = newClase === 'SC' ? 0
+            : (precioVenta != null ? parseFloat(precioVenta) : (precio != null ? parseFloat(precio) : parseFloat(current.PRECIOVENTA) || 0));
+        const newCosto = precioCosto != null ? parseFloat(precioCosto) : parseFloat(current.PRECIOCOSTO) || 0;
+        const newUM = unidadMedida || current.UNIDADMEDIDA;
+        const unidadesCaja = parseFloat(current.UNIDADESCAJA) || 1;
+        const newDiscount = (descuentoLinea != null || lineDiscountPct != null)
+            ? parseLineDiscountPct({ descuentoLinea, lineDiscountPct })
+            : parseLineDiscountPct({ DESCUENTO_LINEA: current.DESCUENTO_LINEA });
+        const importeBruto = newClase === 'SC' ? 0 : calculateLineImporte({
+            unidadMedida: newUM,
+            cantidadEnvases: newEnvases,
+            cantidadUnidades: newUnidades,
+            unidadesCaja,
+            precioVenta: newPrecio,
+        });
+        const importeVenta = applyPctToAmount(importeBruto, newDiscount);
+        const billingQty = newUM === 'CAJAS' ? newEnvases : newUnidades;
+        const importeCosto = billingQty * newCosto;
+        const importeMargen = importeVenta - importeCosto;
+        const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
 
-    await recalculateOrderTotals(pedidoId);
-    await refreshDraftStockReservation(pedidoId);
+        await queryFn(
+            `UPDATE ${PEDIDOS_LIN_TABLE} SET
+                CANTIDADENVASES = ?, CANTIDADUNIDADES = ?, PRECIOVENTA = ?, PRECIOCOSTO = ?, UNIDADMEDIDA = ?,
+                IMPORTEVENTA = ?, IMPORTECOSTO = ?, IMPORTEMARGEN = ?, PORCENTAJEMARGEN = ?,
+                CLASELINEA = ?, DESCUENTO_LINEA = ?
+            WHERE ID = ? AND PEDIDO_ID = ?`,
+            [newEnvases, newUnidades, newPrecio, newCosto, newUM, importeVenta, importeCosto, importeMargen,
+                Math.round(pctMargen * 100) / 100, newClase, newDiscount, id, pedidoId],
+        );
+        try {
+            await queryFn(
+                `UPDATE ${PEDIDOS_LIN_TABLE} SET PORCENTAJEDESCUENTO = ? WHERE ID = ? AND PEDIDO_ID = ?`,
+                [newDiscount, id, pedidoId],
+            );
+        } catch (erpDiscountErr) {
+            if (!isColumnNotFound(erpDiscountErr)) throw erpDiscountErr;
+        }
+        await recalculateOrderTotals(pedidoId, queryFn);
+        await refreshDraftReservationWithStockCheck(queryFn, pedidoId);
+    });
     await invalidatePedidosStockCache('draft_line_update');
     invalidatePedidosCache(pedidoId);
     return getOrderDetail(pedidoId);
@@ -4013,23 +4103,21 @@ async function deleteOrderLine(lineId, pedidoId) {
     const pid = parseInt(pedidoId, 10);
     if (isNaN(lid) || isNaN(pid)) throw new Error('Invalid lineId or pedidoId');
 
-    await assertOrderEditable(pid);
-
-    const lineRows = await queryWithParams(
-        `SELECT ID FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ? AND PEDIDO_ID = ?`,
-        [lid, pid], false
-    );
-    if (!lineRows || lineRows.length === 0) {
-        throw new OrderStateError('LINE_NOT_FOUND', 'Línea de pedido no encontrada', 404);
-    }
-
-    await queryWithParams(
-        `DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ? AND PEDIDO_ID = ?`,
-        [lid, pid], false
-    );
-
-    await recalculateOrderTotals(pid);
-    await refreshDraftStockReservation(pid);
+    await withEditableDraftMutation(pid, async (queryFn) => {
+        const lineRows = await queryFn(
+            `SELECT ID FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ? AND PEDIDO_ID = ?`,
+            [lid, pid],
+        );
+        if (!lineRows || lineRows.length === 0) {
+            throw new OrderStateError('LINE_NOT_FOUND', 'Línea de pedido no encontrada', 404);
+        }
+        await queryFn(
+            `DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ? AND PEDIDO_ID = ?`,
+            [lid, pid],
+        );
+        await recalculateOrderTotals(pid, queryFn);
+        await refreshDraftReservationWithStockCheck(queryFn, pid);
+    });
     await invalidatePedidosStockCache('draft_line_delete');
     invalidatePedidosCache(pid);
     return getOrderDetail(pid);
@@ -4039,10 +4127,11 @@ async function deleteOrderLine(lineId, pedidoId) {
 // RECALCULATE TOTALS
 // ============================================================================
 
-async function recalculateOrderTotals(pedidoId) {
+async function recalculateOrderTotals(pedidoId, queryFn) {
     const id = parseInt(pedidoId, 10);
-    
-    const rows = await queryWithParams(
+    const execute = pedidosMutationExecutor(queryFn);
+
+    const rows = await execute(
         `SELECT 
             COALESCE(SUM(L.IMPORTEVENTA), 0) as RAW_BASE,
             COALESCE(SUM(L.IMPORTECOSTO), 0) as RAW_COSTO,
@@ -4061,7 +4150,7 @@ async function recalculateOrderTotals(pedidoId) {
          FROM ${PEDIDOS_CAB_TABLE} C
          LEFT JOIN ${PEDIDOS_LIN_TABLE} L ON L.PEDIDO_ID = C.ID
          WHERE C.ID = ?`,
-        [id]
+        [id],
     );
     const rawBase = parseFloat(rows[0]?.RAW_BASE) || 0;
     const rawCosto = parseFloat(rows[0]?.RAW_COSTO) || 0;
@@ -4081,7 +4170,7 @@ async function recalculateOrderTotals(pedidoId) {
     assertMoneyFitsWriteSchema(importeTotal, 'IMPORTETOTAL', `pedido ${id}`);
     assertMoneyFitsWriteSchema(importeMargen, 'IMPORTEMARGEN', `pedido ${id}`);
 
-    await queryWithParams(
+    await execute(
         `UPDATE ${PEDIDOS_CAB_TABLE} SET
             IMPORTEBASE = ?,
             IMPORTECOSTO = ?,
@@ -4090,11 +4179,11 @@ async function recalculateOrderTotals(pedidoId) {
             IMPORTEIVA = ?,
             UPDATED_AT = CURRENT_TIMESTAMP
         WHERE ID = ?`,
-        [importeBase, importeCosto, importeTotal, importeMargen, importeIva, id], false
+        [importeBase, importeCosto, importeTotal, importeMargen, importeIva, id],
     );
 
-        try {
-        await queryWithParams(
+    try {
+        await execute(
             `UPDATE ${PEDIDOS_CAB_TABLE} SET
                 IMPORTEBASEIMPONIBLEBRUTA1 = ?,
                 IMPORTEBASEIMPONIBLE1 = ?,
@@ -4103,7 +4192,7 @@ async function recalculateOrderTotals(pedidoId) {
                 IMPORTEDESCUENTO1 = ?
              WHERE ID = ?`,
             [importeBaseBruta, importeBase, importeBaseBruta, descuentoGlobal,
-                roundMoney(importeBaseBruta - importeBase), id], false
+                roundMoney(importeBaseBruta - importeBase), id],
         );
     } catch (erpColumnErr) {
         if (!isColumnNotFound(erpColumnErr)) throw erpColumnErr;
@@ -4117,6 +4206,8 @@ async function recalculateOrderTotals(pedidoId) {
 
 async function confirmOrder(orderId, saleType, options = {}) {
     const id = parseInt(orderId, 10);
+    const target = getPedidosConfirmationTarget();
+    const localConfirmationRequested = !target.shouldExportToSystem || isCobroPropio(options);
     const effectiveForceConfirm = isAuthorizedForceConfirm(options);
     if (options.forceConfirm === true && !effectiveForceConfirm) {
         logger.warn(`[PEDIDOS] forceConfirm ignored for order #${id}: missing server-side admin override, role, or audit reason`);
@@ -4127,17 +4218,20 @@ async function confirmOrder(orderId, saleType, options = {}) {
     // a estado intermedio CONFIRMANDO en una sola sentencia (compare-and-swap).
     // Si el UPDATE no afecta filas, otro request ya tomo el pedido (o el estado
     // no es BORRADOR), y abortamos con un error claro.
-    const reserveResult = await queryWithParams(
-        `UPDATE ${PEDIDOS_CAB_TABLE}
-            SET ESTADO = 'CONFIRMANDO',
-                UPDATED_AT = CURRENT_TIMESTAMP
-          WHERE ID = ?
-            AND ESTADO IN ('BORRADOR', 'PEND_APROB')`,
-        [id], false
-    );
-    const rowsAffected = (reserveResult && typeof reserveResult.count === 'number')
-        ? reserveResult.count
-        : (typeof reserveResult === 'number' ? reserveResult : null);
+    // La exportación ERP conserva el claim histórico. La rama local reclama
+    // la cabecera dentro de la misma transacción dedicada que stock y bolsa.
+    // Así un rollback nunca deja un CONFIRMANDO persistente.
+    const reserveResult = localConfirmationRequested
+        ? null
+        : await queryWithParams(
+            `UPDATE ${PEDIDOS_CAB_TABLE}
+                SET ESTADO = 'CONFIRMANDO',
+                    UPDATED_AT = CURRENT_TIMESTAMP
+              WHERE ID = ?
+                AND ESTADO IN ('BORRADOR', 'PEND_APROB')`,
+            [id], false
+        );
+    const rowsAffected = affectedRowCount(reserveResult);
 
     // STATE READ (siempre): trae payload + estado actual tras el intento de reserva.
     const currentRows = await queryWithParams(
@@ -4166,6 +4260,14 @@ async function confirmOrder(orderId, saleType, options = {}) {
     // confirmación. El estado confirmado es el resultado idempotente: devolvemos
     // el detalle existente sin volver a reservar stock ni escribir en bolsa.
     if (currentState === 'CONFIRMADO') {
+        if (localConfirmationRequested) {
+            const replay = await withLocalConfirmationTransaction((conn) =>
+                claimLocalOrderForConfirmation((sql, params) => conn.query(sql, params), id)
+            );
+            if (!replay.idempotentReplay) {
+                throw confirmationStateError(currentState);
+            }
+        }
         const existingOrder = await getOrderDetail(id);
         return {
             ...existingOrder,
@@ -4206,6 +4308,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     // fallo deja el pedido bloqueado en estado intermedio. Best-effort: si falla
     // se loguea pero NO se propaga, para no enmascarar el error original.
     const revertConfirming = async (reasonTag) => {
+        if (localConfirmationRequested) return;
         try {
             await queryWithParams(
                 `UPDATE ${PEDIDOS_CAB_TABLE}
@@ -4246,7 +4349,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     const routeCode = trimString(options.routeCode || inferredAssignment.routeCode).substring(0, 10);
 
     // P0-C: Validate stock BEFORE confirming - block if insufficient
-    const lines = await queryWithParams(
+    let lines = await queryWithParams(
         `SELECT ID, PEDIDO_ID, SECUENCIA,
                 TRIM(CODIGOARTICULO) AS CODIGOARTICULO,
                 TRIM(DESCRIPCION) AS DESCRIPCION,
@@ -4369,9 +4472,9 @@ async function confirmOrder(orderId, saleType, options = {}) {
     }
 
     const bolsaService = require('../bolsa-comercial.service');
-    const consumoAmount = Number(options._bolsaConsumo || 0);
-    const acumulacionAmount = Number(options._bolsaAcumulacion || 0);
-    const mustWriteBolsaLedger =
+    let consumoAmount = Number(options._bolsaConsumo || 0);
+    let acumulacionAmount = Number(options._bolsaAcumulacion || 0);
+    let mustWriteBolsaLedger =
         (consumoAmount > 0 || acumulacionAmount > 0)
         && !options.skipBolsaMovement;
     const lineMovements = Array.isArray(options._bolsaLineMovements)
@@ -4382,7 +4485,6 @@ async function confirmOrder(orderId, saleType, options = {}) {
     let bolsaWrittenInOrderTransaction = false;
 
     // Confirmación/reserva/bolsa local forman una única unidad de trabajo.
-    const target = getPedidosConfirmationTarget();
     let syncResult = {
         targetSchema: 'JAVIER',
         syncStatus: 'LOCAL',
@@ -4437,14 +4539,62 @@ async function confirmOrder(orderId, saleType, options = {}) {
         try {
             const txResult = await withLocalConfirmationTransaction(async (conn) => {
                 const queryFn = (sql, params) => conn.query(sql, params);
+                const claim = await claimLocalOrderForConfirmation(queryFn, id);
+                if (claim.idempotentReplay) {
+                    return {
+                        idempotentReplay: true,
+                        stockWarnings: [],
+                        outOfStockProducts: [],
+                    };
+                }
+                const lockedLines = await readOrderLinesForMutation(queryFn, id);
+                const lockedDiscountRows = await queryFn(
+                    `SELECT COALESCE(DESCUENTO_GLOBAL, 0) AS DESCUENTO_GLOBAL,
+                            COALESCE(PORCENTAJEDESCUENTO1, 0) AS PORCENTAJEDESCUENTO1
+                       FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
+                    [id],
+                );
+                const lockedHeader = lockedDiscountRows?.[0] || {};
+                const lockedGlobalDiscountPct = Math.max(
+                    Number.parseFloat(lockedHeader.DESCUENTO_GLOBAL) || 0,
+                    Number.parseFloat(lockedHeader.PORCENTAJEDESCUENTO1) || 0,
+                );
+                const lockedBolsa = await bolsaService.validateOrderWithBolsa(
+                    vendedorCode,
+                    lockedLines,
+                    { globalDiscountPct: lockedGlobalDiscountPct },
+                );
+                if (!lockedBolsa.valid && !effectiveForceConfirm) {
+                    const bolsaError = new Error(
+                        lockedBolsa.message || 'La bolsa comercial cambió mientras se confirmaba el pedido.',
+                    );
+                    bolsaError.code = lockedBolsa.reason || 'BOLSA_INSUFICIENTE';
+                    bolsaError.status = 409;
+                    bolsaError.bolsaResult = lockedBolsa;
+                    throw bolsaError;
+                }
+                const lockedConsumo = Number(lockedBolsa.consumo || 0);
+                const lockedAcumulacion = Number(lockedBolsa.acumulacion || 0);
+                const lockedLineMovements = Array.isArray(lockedBolsa.lineMovements)
+                    ? lockedBolsa.lineMovements
+                    : [];
+                const lockedConsumoMovements = lockedLineMovements.filter((movement) =>
+                    movement && movement.tipo === 'CONSUMO'
+                );
+                const lockedAcumulacionMovements = lockedLineMovements.filter((movement) =>
+                    movement && movement.tipo === 'ACUMULACION'
+                );
+                const lockedMustWriteBolsa =
+                    (lockedConsumo > 0 || lockedAcumulacion > 0)
+                    && !options.skipBolsaMovement;
                 // Relee stock sin cache DESPUÉS del lock de reservas. Esta es
                 // la comprobación autoritativa frente a dos dispositivos.
                 const lockedStock = await getStockBatch(
-                    lines.map(line => line.CODIGOARTICULO),
+                    lockedLines.map(line => line.CODIGOARTICULO),
                     1,
                     { excludePedidoId: id, queryFn },
                 );
-                const lockedAvailability = evaluateStockAvailability(lines, lockedStock);
+                const lockedAvailability = evaluateStockAvailability(lockedLines, lockedStock);
                 if (lockedAvailability.stockWarnings.length > 0) {
                     const stockError = new Error('El stock cambió mientras se confirmaba el pedido.');
                     stockError.code = 'STOCK_CHANGED_DURING_CONFIRM';
@@ -4453,17 +4603,28 @@ async function confirmOrder(orderId, saleType, options = {}) {
                     throw stockError;
                 }
 
-                await conn.query(update.sql, update.params);
-                await replaceStockReservationLines(queryFn, lines, id);
+                const guardedUpdateSql = `${update.sql} AND ESTADO = 'CONFIRMANDO'`;
+                const confirmedResult = await conn.query(guardedUpdateSql, update.params);
+                const confirmedRows = affectedRowCount(confirmedResult);
+                if (confirmedRows === 0) {
+                    throw confirmationStateError(await readConfirmationState(queryFn, id));
+                }
+                if (confirmedRows === null) {
+                    const confirmedState = await readConfirmationState(queryFn, id);
+                    if (confirmedState !== 'CONFIRMADO') {
+                        throw confirmationStateError(confirmedState);
+                    }
+                }
+                await replaceStockReservationLines(queryFn, lockedLines, id);
 
-                if (mustWriteBolsaLedger) {
+                if (lockedMustWriteBolsa) {
                     const bolsaResult = await bolsaService.applyOrderMovementsWith(queryFn, {
                         vendedorCode,
                         pedidoId: id,
-                        consumoAmount,
-                        acumulacionAmount,
-                        consumoMovements,
-                        acumulacionMovements,
+                        consumoAmount: lockedConsumo,
+                        acumulacionAmount: lockedAcumulacion,
+                        consumoMovements: lockedConsumoMovements,
+                        acumulacionMovements: lockedAcumulacionMovements,
                     });
                     if (bolsaResult && bolsaResult.allowed === false) {
                         const bolsaError = new Error(
@@ -4475,14 +4636,35 @@ async function confirmOrder(orderId, saleType, options = {}) {
                     }
                 }
 
-                return lockedAvailability;
+                return {
+                    ...lockedAvailability,
+                    idempotentReplay: false,
+                    lines: lockedLines,
+                    consumoAmount: lockedConsumo,
+                    acumulacionAmount: lockedAcumulacion,
+                    globalDiscountPct: lockedGlobalDiscountPct,
+                    bolsaWritten: lockedMustWriteBolsa,
+                };
             });
+            if (txResult.idempotentReplay) {
+                const existingOrder = await getOrderDetail(id);
+                return {
+                    ...existingOrder,
+                    stockWarnings: [],
+                    cobroPropio,
+                    idempotentReplay: true,
+                };
+            }
+            lines = txResult.lines;
+            consumoAmount = txResult.consumoAmount;
+            acumulacionAmount = txResult.acumulacionAmount;
+            options._bolsaGlobalDiscountPct = txResult.globalDiscountPct;
             stockWarnings = txResult.stockWarnings;
             outOfStockProducts = txResult.outOfStockProducts;
-            bolsaWrittenInOrderTransaction = mustWriteBolsaLedger;
+            mustWriteBolsaLedger = txResult.bolsaWritten;
+            bolsaWrittenInOrderTransaction = txResult.bolsaWritten;
             logger.info(`[PEDIDOS] Pedido #${id}, reserva y bolsa confirmados en una transacción`);
         } catch (localError) {
-            await revertConfirming(localError.code || 'LOCAL_CONFIRMATION_FAILED');
             if (localError.code === 'STOCK_CHANGED_DURING_CONFIRM') {
                 return {
                     blocked: true,
@@ -4494,6 +4676,16 @@ async function confirmOrder(orderId, saleType, options = {}) {
             }
             if (localError.code === 'BOLSA_MOVEMENT_WRITE_FAILED') {
                 throw localError;
+            }
+            if (localError.bolsaResult) {
+                return {
+                    blocked: true,
+                    reason: localError.code,
+                    deficit: localError.bolsaResult.deficit,
+                    saldoBolsa: localError.bolsaResult.saldo,
+                    warnings: localError.bolsaResult.warnings || [],
+                    message: localError.message,
+                };
             }
             const error = new Error(
                 `No se pudo confirmar pedido, reserva y bolsa de forma atómica. Error: ${localError.message}`,
@@ -4645,7 +4837,7 @@ async function purgeExpiredDraftReservations({ limit = 50 } = {}) {
             `SELECT C.ID
                FROM ${PEDIDOS_CAB_TABLE} C
               WHERE TRIM(C.ESTADO) IN (${PURGEABLE_DRAFT_STATES_SQL})
-                AND C.CREATED_AT < CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS
+                AND C.CREATED_AT <= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS
               ORDER BY C.CREATED_AT ASC
               FETCH FIRST ${maxRows} ROWS ONLY`,
             [],
@@ -4670,7 +4862,7 @@ async function purgeExpiredDraftReservations({ limit = 50 } = {}) {
                        FROM ${PEDIDOS_CAB_TABLE}
                       WHERE ID = ?
                         AND TRIM(ESTADO) IN (${PURGEABLE_DRAFT_STATES_SQL})
-                        AND CREATED_AT < CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS`,
+                        AND CREATED_AT <= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS`,
                     [id],
                 );
                 if (!Array.isArray(currentRows) || currentRows.length === 0) {
@@ -4691,7 +4883,7 @@ async function purgeExpiredDraftReservations({ limit = 50 } = {}) {
                     `DELETE FROM ${PEDIDOS_CAB_TABLE}
                       WHERE ID = ?
                         AND TRIM(ESTADO) IN (${PURGEABLE_DRAFT_STATES_SQL})
-                        AND CREATED_AT < CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS`,
+                        AND CREATED_AT <= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS`,
                     [id],
                 );
                 let affected = (headerDelete && typeof headerDelete.count === 'number')
@@ -5448,5 +5640,6 @@ module.exports = {
         resolvePedidoTerminal: orderLifecycle.resolvePedidoTerminal,
         exportCommercialOrderToSystem,
         withSystemExportLock,
+        isDuplicateKeyError,
     },
 };

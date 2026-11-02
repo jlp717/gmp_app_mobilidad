@@ -10,6 +10,7 @@ const mockCommit = jest.fn();
 const mockRollback = jest.fn();
 const mockOpenDedicatedConnection = jest.fn();
 let mockPool = null;
+let mockLocalState = 'BORRADOR';
 
 jest.mock('../config/db', () => ({
   query: mockQuery,
@@ -189,12 +190,29 @@ beforeEach(() => {
   mockCommit.mockReset();
   mockRollback.mockReset();
   mockOpenDedicatedConnection.mockReset();
+  mockLocalState = 'BORRADOR';
   mockConnClose.mockResolvedValue();
   mockBeginTransaction.mockResolvedValue();
   mockCommit.mockResolvedValue();
   mockRollback.mockResolvedValue();
   mockConnQuery.mockImplementation(async (sql, params) => {
-    if (/^(SET TRANSACTION|LOCK TABLE)/i.test(String(sql).trim())) return [];
+    const statement = String(sql).trim();
+    if (/^(SET TRANSACTION|LOCK TABLE)/i.test(statement)) return [];
+    if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO/i.test(statement)) {
+      return [{ ESTADO: mockLocalState }];
+    }
+    if (/SET\s+ESTADO\s*=\s*'CONFIRMANDO'/i.test(statement)) {
+      await mockQueryWithParams(sql, params);
+      if (mockLocalState !== 'BORRADOR') return { count: 0 };
+      mockLocalState = 'CONFIRMANDO';
+      return { count: 1 };
+    }
+    if (/SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(statement)) {
+      await mockQueryWithParams(sql, params);
+      if (mockLocalState !== 'CONFIRMANDO') return { count: 0 };
+      mockLocalState = 'CONFIRMADO';
+      return { count: 1 };
+    }
     return mockQueryWithParams(sql, params);
   });
   mockPool = {
@@ -255,7 +273,8 @@ describe('pedidos reparto confirmation contract', () => {
     });
     await expect(pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' }))
       .rejects.toMatchObject({ code: 'STOCK_VALIDATION_FAILED', status: 503 });
-    expect(mockQueryWithParams.mock.calls.some(([sql]) => /SET\s+ESTADO\s*=\s*'BORRADOR'/i.test(sql))).toBe(true);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /SET\s+ESTADO\s*=\s*'BORRADOR'/i.test(sql))).toBe(false);
+    expect(mockLocalState).toBe('BORRADOR');
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql))).toBe(false);
   });
 

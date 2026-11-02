@@ -12,11 +12,23 @@ const mockQueryWithParams = jest.fn();
 const mockPoolConnect = jest.fn();
 const mockConnQuery = jest.fn();
 const mockConnClose = jest.fn();
+const mockTxQuery = jest.fn();
+const mockTxBegin = jest.fn();
+const mockTxCommit = jest.fn();
+const mockTxRollback = jest.fn();
+const mockTxClose = jest.fn();
+const mockOpenDedicatedConnection = jest.fn();
+const mockTxQueryOverride = jest.fn();
 
 jest.mock('../config/db', () => ({
   query: mockQuery,
   queryWithParams: mockQueryWithParams,
   getPool: () => ({ connect: mockPoolConnect }),
+}));
+
+jest.mock('../adapters/pedidos-transaction-connection', () => ({
+  openDedicatedPedidosTransactionConnection: (...args) =>
+    mockOpenDedicatedConnection(...args),
 }));
 
 jest.mock('../middleware/logger', () => ({
@@ -44,6 +56,40 @@ beforeEach(() => {
   mockConnQuery.mockReset();
   mockConnClose.mockReset();
   mockPoolConnect.mockReset();
+  mockTxQuery.mockReset();
+  mockTxBegin.mockReset();
+  mockTxCommit.mockReset();
+  mockTxRollback.mockReset();
+  mockTxClose.mockReset();
+  mockOpenDedicatedConnection.mockReset();
+  mockTxQueryOverride.mockReset();
+  mockTxQuery.mockImplementation(async (sql, params = []) => {
+    const override = await mockTxQueryOverride(sql, params);
+    if (override !== undefined) return override;
+    const rows = await mockQueryWithParams(sql, params);
+    if (Array.isArray(rows) && rows.length === 0 && /FROM\s+DSEDAC\.ARO/i.test(sql)) {
+      const codes = params
+        .map((value) => String(value || '').trim())
+        .filter((value) => /^ART\d+$/i.test(value) || /^\d{4,}$/.test(value));
+      return [...new Set(codes)].map((code) => ({
+        CODE: code,
+        ENVASES: 999,
+        UNIDADES: 999,
+      }));
+    }
+    return rows;
+  });
+  mockTxBegin.mockResolvedValue(undefined);
+  mockTxCommit.mockResolvedValue(undefined);
+  mockTxRollback.mockResolvedValue(undefined);
+  mockTxClose.mockResolvedValue(undefined);
+  mockOpenDedicatedConnection.mockResolvedValue({
+    query: mockTxQuery,
+    beginTransaction: mockTxBegin,
+    commit: mockTxCommit,
+    rollback: mockTxRollback,
+    close: mockTxClose,
+  });
   mockPoolConnect.mockResolvedValue({
     query: mockConnQuery,
     close: mockConnClose,
@@ -370,7 +416,7 @@ describe('pedidos stock performance contract', () => {
     expect(sql).toContain('TRIM(SR.CODIGOARTICULO) IN (CAST(? AS VARCHAR(10)),CAST(? AS VARCHAR(10)))');
     expect(sql).toContain("TRIM(C.ESTADO) = 'CONFIRMADO'");
     expect(sql).toContain("TRIM(C.ESTADO) IN ('BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION', 'CONFIRMANDO')");
-    expect(sql).toContain('SR.CREATED_AT >= CURRENT TIMESTAMP - 24 HOURS');
+    expect(sql).toContain('C.CREATED_AT > CURRENT TIMESTAMP - 24 HOURS');
     expect(params).toEqual([1, 'ART001', 'ART002', 'ART001', 'ART002']);
     expect(result.get('ART001')).toEqual({ envases: 12, unidades: 24 });
     expect(result.get('ART002')).toEqual({ envases: 3, unidades: 6 });
@@ -834,7 +880,7 @@ describe('pedidos create order persistence contract', () => {
     expect(detail.lines[0].bolsaImpact).toEqual({ acumulacion: 0, consumo: 0, neto: 0, movementCount: 0, hasImpact: false });
   });
 
-  test('createOrder rolls back header and lines if totals update fails', async () => {
+  test('createOrder rolls back the dedicated transaction if totals update fails', async () => {
     mockCreateOrderFlow({ failTotalsUpdate: true });
 
     await expect(pedidosService.createOrder({
@@ -844,12 +890,91 @@ describe('pedidos create order persistence contract', () => {
       lines: [{ codigoArticulo: 'ART001', descripcion: 'Producto', cantidadEnvases: 3, precio: 10, precioCosto: 4 }],
     })).rejects.toThrow('numeric overflow');
 
+    expect(mockTxRollback).toHaveBeenCalledTimes(1);
+    expect(mockTxCommit).not.toHaveBeenCalled();
     expect(mockQueryWithParams.mock.calls.some(([sql]) =>
-      /DELETE\s+FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql),
-    )).toBe(true);
+      /DELETE\s+FROM\s+JAVIER\.PEDIDOS_(?:LIN|CAB)/i.test(sql),
+    )).toBe(false);
+  });
+
+  test.each([
+    ['reservation', /INSERT\s+INTO\s+JAVIER\.PEDIDOS_STOCK_RESERVE/i],
+    ['idempotency', /INSERT\s+INTO\s+JAVIER\.PEDIDO_IDEMPOTENCY/i],
+  ])('createOrder rolls back every prior write when %s persistence fails', async (_stage, failurePattern) => {
+    mockCreateOrderFlow();
+    mockTxQueryOverride.mockImplementation((sql) => {
+      if (failurePattern.test(sql)) throw new Error(`${_stage} failed`);
+      return undefined;
+    });
+
+    await expect(pedidosService.createOrder({
+      clientCode: 'C001',
+      clientName: 'Cliente',
+      vendedorCode: '01',
+      idempotencyKey: 'atomicretry01',
+      lines: [{ codigoArticulo: 'ART001', descripcion: 'Producto', cantidadEnvases: 3, precio: 10, precioCosto: 4 }],
+    })).rejects.toThrow();
+
+    expect(mockTxRollback).toHaveBeenCalledTimes(1);
+    expect(mockTxCommit).not.toHaveBeenCalled();
     expect(mockQueryWithParams.mock.calls.some(([sql]) =>
-      /DELETE\s+FROM\s+JAVIER\.PEDIDOS_CAB\s+WHERE\s+ID/i.test(sql),
-    )).toBe(true);
+      /DELETE\s+FROM\s+JAVIER\.PEDIDOS_(?:LIN|CAB)/i.test(sql),
+    )).toBe(false);
+  });
+
+  test('createOrder rechecks idempotency under the locks and replays without duplicate writes', async () => {
+    mockCreateOrderFlow();
+    const payload = {
+      clientCode: 'C001',
+      vendedorCode: '01',
+      idempotencyKey: 'atomicretry02',
+      lines: [{ codigoArticulo: 'ART001', descripcion: 'Producto', cantidadEnvases: 3, precio: 10, precioCosto: 4 }],
+    };
+    const { buildCreateOrderPayloadHash } = require('../services/pedidos/order-lifecycle');
+    const payloadHash = buildCreateOrderPayloadHash({
+      clientCode: payload.clientCode,
+      vendedorCode: payload.vendedorCode,
+      tipoventa: 'CC',
+      observaciones: '',
+      descuentoGlobal: 0,
+      lines: payload.lines,
+    });
+    mockTxQueryOverride.mockImplementation((sql) => {
+      if (/FROM\s+JAVIER\.PEDIDO_IDEMPOTENCY/i.test(sql)) {
+        return [{ PEDIDO_ID: 42, PAYLOAD_HASH: payloadHash }];
+      }
+      return undefined;
+    });
+
+    const replay = await pedidosService.createOrder(payload);
+
+    expect(replay.idempotent).toBe(true);
+    expect(mockTxCommit).toHaveBeenCalledTimes(1);
+    expect(mockTxRollback).not.toHaveBeenCalled();
+    const txSql = mockTxQuery.mock.calls.map(([sql]) => sql).join('\n');
+    expect(txSql).not.toMatch(/INSERT\s+INTO\s+JAVIER\.PEDIDOS_(?:CAB|LIN|STOCK_RESERVE)/i);
+    expect(txSql).not.toMatch(/INSERT\s+INTO\s+JAVIER\.PEDIDO_IDEMPOTENCY/i);
+  });
+
+  test('createOrder performs uncached stock recheck after locks and before header mutation', async () => {
+    mockCreateOrderFlow();
+
+    await pedidosService.createOrder({
+      clientCode: 'C001',
+      clientName: 'Cliente',
+      vendedorCode: '01',
+      idempotencyKey: 'atomicretry03',
+      lines: [{ codigoArticulo: 'ART001', descripcion: 'Producto', cantidadEnvases: 3, precio: 10, precioCosto: 4 }],
+    });
+
+    const txSql = mockTxQuery.mock.calls.map(([sql]) => sql);
+    const reserveLock = txSql.findIndex((sql) => /LOCK TABLE JAVIER\.PEDIDOS_STOCK_RESERVE/i.test(sql));
+    const stockRead = txSql.findIndex((sql) => /FROM\s+DSEDAC\.ARO/i.test(sql));
+    const headerInsert = txSql.findIndex((sql) => /INSERT\s+INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql));
+    expect(reserveLock).toBeGreaterThan(-1);
+    expect(stockRead).toBeGreaterThan(reserveLock);
+    expect(headerInsert).toBeGreaterThan(stockRead);
+    expect(mockTxCommit).toHaveBeenCalledTimes(1);
   });
 
   test('createOrder inserts order lines with a chunked bulk DB write', async () => {
@@ -1076,6 +1201,41 @@ describe('pedidos state machine contract', () => {
     })).rejects.toMatchObject({ code: 'ORDER_NOT_EDITABLE' });
 
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql))).toBe(false);
+  });
+
+  test('updateOrderLine rolls back when the uncached locked stock cannot cover the edited draft', async () => {
+    const line = {
+      ID: 7, PEDIDO_ID: 42, SECUENCIA: 1, CODIGOARTICULO: 'ART001', DESCRIPCION: 'Producto',
+      CANTIDADENVASES: 1, CANTIDADUNIDADES: 0, PRECIOVENTA: 10, PRECIOCOSTO: 4,
+      UNIDADMEDIDA: 'CAJAS', UNIDADESCAJA: 1, CLASELINEA: 'VT', DESCUENTO_LINEA: 0,
+      CODIGOIVA: '2', PRECIOTARIFA: 10, PRECIOTARIFACLIENTE: 10, PRECIOMINIMO: 0,
+      IMPORTEVENTA: 10, IMPORTECOSTO: 4, IMPORTEMARGEN: 6, PORCENTAJEMARGEN: 60,
+      TIPOLINEA: 'R', TIPOVENTA: 'CC', ORDEN: 1,
+    };
+    mockQueryWithParams.mockImplementation((sql) => {
+      if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO/i.test(sql)) return Promise.resolve([{ ESTADO: 'BORRADOR' }]);
+      if (/SELECT\s+PEDIDO_ID,\s+CANTIDADENVASES/i.test(sql)) return Promise.resolve([line]);
+      if (/RAW_BASE/i.test(sql)) return Promise.resolve([{ RAW_BASE: 20, RAW_COSTO: 8, RAW_IVA: 4.2, DESCUENTO_GLOBAL: 0 }]);
+      if (/SELECT\s+ID,\s+PEDIDO_ID,\s+SECUENCIA/i.test(sql)) {
+        return Promise.resolve([{ ...line, CANTIDADENVASES: 2, IMPORTEVENTA: 20 }]);
+      }
+      return Promise.resolve([]);
+    });
+    mockTxQueryOverride.mockImplementation((sql) => {
+      if (/FROM\s+DSEDAC\.ARO/i.test(sql)) {
+        return [{ CODE: 'ART001', ENVASES: 1, UNIDADES: 0 }];
+      }
+      return undefined;
+    });
+
+    await expect(pedidosService.updateOrderLine(7, { cantidadEnvases: 2 }))
+      .rejects.toMatchObject({ code: 'STOCK_CHANGED_DURING_DRAFT_EDIT', status: 409 });
+
+    expect(mockTxRollback).toHaveBeenCalledTimes(1);
+    expect(mockTxCommit).not.toHaveBeenCalled();
+    expect(mockTxQuery.mock.calls.some(([sql]) =>
+      /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql)
+    )).toBe(false);
   });
 
   test('updateOrderStatus rejects non-confirmed target statuses', async () => {

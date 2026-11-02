@@ -27,7 +27,7 @@ function isOrderTransitionAllowed(fromStatus, toStatus) {
 }
 
 async function getOrderVendorForAuth(orderId) {
-    const id = parseInt(orderId);
+    const id = parseInt(orderId, 10);
     if (isNaN(id)) throw new Error('Invalid orderId');
     const rows = await queryWithParams(
         SELECT_ORDER_VENDOR_FOR_AUTH_SQL,
@@ -42,19 +42,19 @@ async function getOrderVendorForAuth(orderId) {
     };
 }
 
-async function getOrderStatusForUpdate(orderId) {
-    const rows = await queryWithParams(
+async function getOrderStatusForUpdate(orderId, queryFn = queryWithParams) {
+    const rows = await queryFn(
         `SELECT TRIM(ESTADO) AS ESTADO FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
         [orderId],
     );
     if (!rows || rows.length === 0) {
         throw new OrderStateError('ORDER_NOT_FOUND', 'Pedido no encontrado', 404);
     }
-    return canonicalOrderStatus(rows[0].ESTADO);
+    return trimString(rows[0].ESTADO).toUpperCase();
 }
 
-async function assertOrderEditable(orderId) {
-    const status = await getOrderStatusForUpdate(orderId);
+async function assertOrderEditable(orderId, queryFn) {
+    const status = await getOrderStatusForUpdate(orderId, queryFn);
     if (status !== 'BORRADOR') {
         throw new OrderStateError(
             'ORDER_NOT_EDITABLE',

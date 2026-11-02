@@ -126,15 +126,19 @@ function buildCreateOrderPayloadHash({
     return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
-async function lookupPedidoIdempotency(idempotencyKey) {
+function resolveQueryExecutor(queryFn) {
+    return typeof queryFn === 'function'
+        ? queryFn
+        : (sql, params) => queryWithParams(sql, params, false, false);
+}
+
+async function lookupPedidoIdempotency(idempotencyKey, queryFn) {
     try {
-        const rows = await queryWithParams(
+        const rows = await resolveQueryExecutor(queryFn)(
             `SELECT PEDIDO_ID, PAYLOAD_HASH
                FROM ${PEDIDO_IDEMPOTENCY_TABLE}
               WHERE IDEMPOTENCY_KEY = ?`,
             [idempotencyKey],
-            false,
-            false,
         );
         if (!rows || rows.length === 0) return null;
         return {
@@ -157,10 +161,10 @@ async function storePedidoIdempotency({
     payloadHash,
     clientCode,
     vendedorCode,
-}) {
+}, queryFn) {
     const storedClientCode = truncate(clientCode, 10);
     const storedVendedorCode = resolvePedidoActorCodes({ CODIGOVENDEDOR: vendedorCode }).vendedor;
-    await queryWithParams(
+    await resolveQueryExecutor(queryFn)(
         `INSERT INTO ${PEDIDO_IDEMPOTENCY_TABLE}
             (IDEMPOTENCY_KEY, PEDIDO_ID, PAYLOAD_HASH, CLIENT_CODE, VENDEDOR_CODE)
          VALUES (?, ?, ?, ?, ?)`,
@@ -171,8 +175,6 @@ async function storePedidoIdempotency({
             storedClientCode,
             storedVendedorCode,
         ],
-        false,
-        false,
     );
 }
 

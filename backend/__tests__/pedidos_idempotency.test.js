@@ -5,11 +5,22 @@ const mockQueryWithParams = jest.fn();
 const mockPoolConnect = jest.fn();
 const mockConnQuery = jest.fn();
 const mockConnClose = jest.fn();
+const mockTxQuery = jest.fn();
+const mockTxBegin = jest.fn();
+const mockTxCommit = jest.fn();
+const mockTxRollback = jest.fn();
+const mockTxClose = jest.fn();
+const mockOpenDedicatedConnection = jest.fn();
 
 jest.mock('../config/db', () => ({
   query: (...args) => mockQuery(...args),
   queryWithParams: (...args) => mockQueryWithParams(...args),
   getPool: () => ({ connect: mockPoolConnect }),
+}));
+
+jest.mock('../adapters/pedidos-transaction-connection', () => ({
+  openDedicatedPedidosTransactionConnection: (...args) =>
+    mockOpenDedicatedConnection(...args),
 }));
 
 jest.mock('../middleware/logger', () => ({
@@ -79,8 +90,8 @@ function cabRow(id = 77) {
 }
 
 function setupCreateMocks({ existingIdempotency = null, clientDefaults = null } = {}) {
-  let nextOrderNumber = 100;
-  mockQueryWithParams.mockImplementation(async (sql, params) => {
+  const nextOrderNumber = 100;
+  mockQueryWithParams.mockImplementation((sql, _params) => {
     const normalized = String(sql).replace(/\s+/g, ' ').trim();
 
     if (/FROM\s+DSEDAC\.CLI\s+CLI\s+LEFT JOIN\s+DSEDAC\.CLC\s+CLC/i.test(normalized)) {
@@ -174,9 +185,40 @@ beforeEach(() => {
   mockConnQuery.mockReset();
   mockConnClose.mockReset();
   mockPoolConnect.mockReset();
+  mockTxQuery.mockReset();
+  mockTxBegin.mockReset();
+  mockTxCommit.mockReset();
+  mockTxRollback.mockReset();
+  mockTxClose.mockReset();
+  mockOpenDedicatedConnection.mockReset();
+  mockTxQuery.mockImplementation(async (sql, params = []) => {
+    const rows = await mockQueryWithParams(sql, params);
+    if (Array.isArray(rows) && rows.length === 0 && /FROM\s+DSEDAC\.ARO/i.test(sql)) {
+      return [{ CODE: 'ART001', ENVASES: 100, UNIDADES: 100 }];
+    }
+    return rows;
+  });
+  mockTxBegin.mockResolvedValue(undefined);
+  mockTxCommit.mockResolvedValue(undefined);
+  mockTxRollback.mockResolvedValue(undefined);
+  mockTxClose.mockResolvedValue(undefined);
+  mockOpenDedicatedConnection.mockResolvedValue({
+    query: mockTxQuery,
+    beginTransaction: mockTxBegin,
+    commit: mockTxCommit,
+    rollback: mockTxRollback,
+    close: mockTxClose,
+  });
 });
 
 describe('pedidos create idempotency', () => {
+  test.each([
+    [{ odbcErrors: [{ state: '23505', code: 0 }] }],
+    [{ odbcErrors: [{ state: 'HY000', code: -803 }] }],
+  ])('recognizes DB2 duplicate-key diagnostics without relying on message text', (error) => {
+    expect(pedidosService._private.isDuplicateKeyError(error)).toBe(true);
+  });
+
   test('normalizePedidoIdempotencyKey rejects short tokens', () => {
     expect(() => pedidosService.normalizePedidoIdempotencyKey('short')).toThrow(
       expect.objectContaining({ code: 'INVALID_IDEMPOTENCY_KEY' }),

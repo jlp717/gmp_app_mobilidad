@@ -77,8 +77,21 @@ async function withLockedPedidosTransaction(callback, { lockOrderHeaders = false
   }
 }
 
-async function withLocalConfirmationTransaction(callback) {
-  return withLockedPedidosTransaction(callback);
+function withLocalConfirmationTransaction(callback) {
+  return withLockedPedidosTransaction(callback, { lockOrderHeaders: true });
+}
+
+/**
+ * La creación de un borrador comparte el mismo mutex global de reservas que
+ * confirmación y purga. También bloquea cabeceras para serializar la asignación
+ * del número local y el registro de idempotencia dentro de la misma unidad.
+ */
+function withDraftCreationTransaction(callback) {
+  return withLockedPedidosTransaction(callback, { lockOrderHeaders: true });
+}
+
+function withDraftMutationTransaction(callback) {
+  return withLockedPedidosTransaction(callback, { lockOrderHeaders: true });
 }
 
 /**
@@ -86,13 +99,15 @@ async function withLocalConfirmationTransaction(callback) {
  * cabecera antes de releer el candidato. De este modo nunca borra los hijos de
  * un pedido que pasó a CONFIRMANDO/CONFIRMADO tras el SELECT inicial.
  */
-async function withDraftPurgeTransaction(callback) {
+function withDraftPurgeTransaction(callback) {
   return withLockedPedidosTransaction(callback, { lockOrderHeaders: true });
 }
 
 module.exports = {
   ORDERS_HEADER_LOCK_SQL,
   STOCK_RESERVATION_LOCK_SQL,
+  withDraftCreationTransaction,
+  withDraftMutationTransaction,
   withDraftPurgeTransaction,
   withLocalConfirmationTransaction,
 };
