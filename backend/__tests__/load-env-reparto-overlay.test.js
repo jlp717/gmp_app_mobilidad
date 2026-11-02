@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const { loadEnv, overlayRepartoFlags } = require('../config/load-env');
 
-test('REPARTO flags in .env override stale PM2 fail-closed values', () => {
+test('unapproved REPARTO flags in .env cannot override process safety gates', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gmp-load-env-'));
   fs.writeFileSync(
     path.join(dir, '.env'),
@@ -15,6 +15,7 @@ test('REPARTO flags in .env override stale PM2 fail-closed values', () => {
       'REPARTO_WRITES_ENABLED=true',
       'REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED=true',
       'REPARTO_FINANCE_DB2_CAPABILITY_APPROVED=true',
+      'REPARTO_PRODUCTION_WRITES_APPROVED=true',
       '',
     ].join('\n'),
   );
@@ -29,6 +30,8 @@ test('REPARTO flags in .env override stale PM2 fail-closed values', () => {
       process.env.REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED,
     REPARTO_FINANCE_DB2_CAPABILITY_APPROVED:
       process.env.REPARTO_FINANCE_DB2_CAPABILITY_APPROVED,
+    REPARTO_PRODUCTION_WRITES_APPROVED:
+      process.env.REPARTO_PRODUCTION_WRITES_APPROVED,
   };
 
   process.env.NODE_ENV = 'test';
@@ -38,15 +41,17 @@ test('REPARTO flags in .env override stale PM2 fail-closed values', () => {
   process.env.REPARTO_WRITES_ENABLED = 'false';
   process.env.REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED = 'false';
   process.env.REPARTO_FINANCE_DB2_CAPABILITY_APPROVED = 'false';
+  delete process.env.REPARTO_PRODUCTION_WRITES_APPROVED;
 
   try {
     const loaded = loadEnv(dir);
     expect(loaded).toBe(path.join(dir, '.env'));
-    expect(process.env.REPARTO_ENVIRONMENT).toBe('staging');
-    expect(process.env.REPARTO_TABLE_SET).toBe('isolated_test');
-    expect(process.env.REPARTO_WRITES_ENABLED).toBe('true');
-    expect(process.env.REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED).toBe('true');
-    expect(process.env.REPARTO_FINANCE_DB2_CAPABILITY_APPROVED).toBe('true');
+    expect(process.env.REPARTO_ENVIRONMENT).toBe('production');
+    expect(process.env.REPARTO_TABLE_SET).toBe('production');
+    expect(process.env.REPARTO_WRITES_ENABLED).toBe('false');
+    expect(process.env.REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED).toBe('false');
+    expect(process.env.REPARTO_FINANCE_DB2_CAPABILITY_APPROVED).toBe('false');
+    expect(process.env.REPARTO_PRODUCTION_WRITES_APPROVED).toBeUndefined();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];
@@ -63,7 +68,7 @@ test('overlayRepartoFlags ignores unrelated keys', () => {
   try {
     overlayRepartoFlags({ NODE_ENV: 'hacked', REPARTO_TABLE_SET: 'isolated_test' });
     expect(process.env.NODE_ENV).not.toBe('hacked');
-    expect(process.env.REPARTO_TABLE_SET).toBe('isolated_test');
+    expect(process.env.REPARTO_TABLE_SET).toBe(previousTable);
   } finally {
     if (previousNode === undefined) delete process.env.NODE_ENV;
     else process.env.NODE_ENV = previousNode;
@@ -96,6 +101,26 @@ test('routing capability flags in .env override stale PM2 fail-closed values', (
       ['REPARTIDOR_DAY_MOVE_ENABLED', previousDayMove],
       ['REPARTIDOR_FINANCE_READ_SCHEMA', previousReadSchema],
     ]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('overlay never enables production mutation approvals', () => {
+  const keys = [
+    'REPARTO_WRITES_ENABLED',
+    'REPARTO_PRODUCTION_WRITES_APPROVED',
+    'REPARTO_PRODUCTION_ERP_WRITES_APPROVED',
+    'REPARTO_PRODUCTION_CONFIRMATION_APPROVED',
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (const key of keys) process.env[key] = 'false';
+    overlayRepartoFlags(Object.fromEntries(keys.map((key) => [key, 'true'])));
+    for (const key of keys) expect(process.env[key]).toBe('false');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }

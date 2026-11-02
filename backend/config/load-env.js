@@ -3,13 +3,23 @@ const path = require('path');
 const cluster = require('cluster');
 const dotenv = require('dotenv');
 
-function candidateEnvFiles() {
-  if (process.env.GMP_ENV_FILE) {
-    return [process.env.GMP_ENV_FILE];
+function candidateEnvFiles(env = process.env) {
+  if (env.GMP_ENV_FILE) {
+    return [env.GMP_ENV_FILE];
   }
 
-  if (process.env.NODE_ENV === 'production') {
-    return ['.env.production', '.env.produccion', '.env'];
+  // APP_ENV is the routing authority. Once it is explicit, inherited
+  // NODE_ENV must not silently select a different file (for example a demo
+  // process inheriting NODE_ENV=production and reading production flags).
+  if (env.APP_ENV) {
+    return ['.env'];
+  }
+
+  // Migration compatibility only: inspect the canonical base file first so
+  // adding APP_ENV there is a genuine one-line switch. Legacy production
+  // filenames are considered only when the base file does not exist.
+  if (env.NODE_ENV === 'production') {
+    return ['.env', '.env.production', '.env.produccion'];
   }
 
   return ['.env'];
@@ -24,6 +34,20 @@ const ROUTING_CAPABILITY_OVERLAY_KEYS = [
   'REPARTIDOR_DAY_MOVE_ENABLED',
   'REPARTIDOR_TRACKING_ENABLED',
 ];
+
+// Approval gates are deployment-owned. A checked or stale .env file may not
+// create them; only values already present in the process environment survive.
+const PROFILE_PROTECTED_KEYS = Object.freeze([
+  'REPARTO_WRITES_ENABLED',
+  'REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED',
+  'REPARTO_FINANCE_DB2_CAPABILITY_APPROVED',
+  'REPARTO_PRODUCTION_WRITES_APPROVED',
+  'REPARTO_PRODUCTION_ERP_WRITES_APPROVED',
+  'REPARTO_PRODUCTION_CONFIRMATION_APPROVED',
+  'PEDIDOS_EXPORT_TO_SYSTEM',
+  'PEDIDOS_DSEDAC_EXPORT_APPROVED',
+  'PEDIDOS_DSEDAC_STORAGE_APPROVED',
+]);
 
 const MIN_ACCESS_TTL_MS = 24 * 60 * 60 * 1000;
 const MIN_REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -93,9 +117,24 @@ function enforceCommercialSessionTtlFloor({
 function overlayRepartoFlags(parsed) {
   if (!parsed || typeof parsed !== 'object') return;
   for (const [key, value] of Object.entries(parsed)) {
-    if (!key.startsWith('REPARTO_') && !ROUTING_CAPABILITY_OVERLAY_KEYS.includes(key)) continue;
+    if (!ROUTING_CAPABILITY_OVERLAY_KEYS.includes(key)) continue;
     if (value === undefined) continue;
     process.env[key] = String(value);
+  }
+}
+
+function captureProtectedProfileFlags(env = process.env) {
+  return Object.fromEntries(PROFILE_PROTECTED_KEYS.map((key) => [
+    key,
+    Object.prototype.hasOwnProperty.call(env, key) ? env[key] : undefined,
+  ]));
+}
+
+function restoreProtectedProfileFlags(before, parsed, env = process.env) {
+  for (const key of PROFILE_PROTECTED_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(parsed || {}, key)) continue;
+    if (before[key] === undefined) delete env[key];
+    else env[key] = before[key];
   }
 }
 
@@ -122,14 +161,25 @@ function enforceSharedAuthSessionStore() {
 }
 
 function loadEnv(baseDir = process.cwd()) {
+  // server.js applies the canonical APP_ENV contract before importing app/DB
+  // modules. Some legacy config modules call loadEnv() again; re-reading and
+  // overlaying the file there could undo the already-validated routing.
+  const { isAppProfileApplied } = require('./app-profile');
+  if (isAppProfileApplied()) {
+    enforceSharedAuthSessionStore();
+    enforceCommercialSessionTtlFloor();
+    return process.env.GMP_LOADED_ENV_FILE || null;
+  }
   for (const envFile of candidateEnvFiles()) {
     const fullPath = path.isAbsolute(envFile)
       ? envFile
       : path.resolve(baseDir, envFile);
     if (!fs.existsSync(fullPath)) continue;
     const parsed = dotenv.parse(fs.readFileSync(fullPath));
+    const protectedBefore = captureProtectedProfileFlags();
     dotenv.config({ path: fullPath });
-    // Stale PM2 fail-closed flags must not hide isolated_test from backend/.env.
+    restoreProtectedProfileFlags(protectedBefore, parsed);
+    // Only explicitly allowlisted non-mutation capabilities may overlay.
     overlayRepartoFlags(parsed);
     enforceSharedAuthSessionStore();
     enforceCommercialSessionTtlFloor();
@@ -142,8 +192,11 @@ function loadEnv(baseDir = process.cwd()) {
 }
 
 module.exports = {
+  candidateEnvFiles,
+  captureProtectedProfileFlags,
   loadEnv,
   overlayRepartoFlags,
+  restoreProtectedProfileFlags,
   enforceSharedAuthSessionStore,
   enforceCommercialSessionTtlFloor,
   parseTtlMs,

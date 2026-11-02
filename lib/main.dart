@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/environment/environment_banner.dart';
 import 'package:gmp_app_mobilidad/core/notifications/notification_orchestrator.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
@@ -429,6 +430,9 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
         Locale('en', 'US'),
       ],
       locale: const Locale('es', 'ES'),
+      builder: (context, child) => EnvironmentBanner(
+        child: child ?? const SizedBox.shrink(),
+      ),
       routerConfig: _router,
     );
   }

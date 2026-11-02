@@ -1,0 +1,69 @@
+{
+  "scope": "local current profile resolver/verifier compiled in remote memory; dedicated ODBC SELECT only; no deployment/production activation",
+  "exit_code": 0,
+  "results": [
+    {
+      "mode": "test",
+      "profile": {
+        "profile": "test",
+        "verified": true,
+        "readSchema": "DSEDAC",
+        "writeSchema": "JAVIER",
+        "tableSet": "isolated_test",
+        "erpExportEnabled": false,
+        "writesEnabled": true,
+        "productionWritesEnabled": false
+      },
+      "database": {
+        "readOnly": true,
+        "selectOne": true,
+        "catalogObjectsChecked": 8,
+        "catalogObjectsFound": 8,
+        "missing": [],
+        "valid": true
+      }
+    },
+    {
+      "mode": "demo",
+      "profile": {
+        "profile": "demo",
+        "verified": true,
+        "readSchema": "DSEDAC",
+        "writeSchema": "JAVIER",
+        "tableSet": "isolated_test",
+        "erpExportEnabled": false,
+        "writesEnabled": true,
+        "productionWritesEnabled": false
+      },
+      "database": {
+        "readOnly": true,
+        "selectOne": true,
+        "catalogObjectsChecked": 8,
+        "catalogObjectsFound": 8,
+        "missing": [],
+        "valid": true
+      }
+    },
+    {
+      "mode": "production",
+      "profile": {
+        "profile": "production",
+        "verified": true,
+        "readSchema": "DSEDAC",
+        "writeSchema": "JAVIER",
+        "tableSet": "production",
+        "erpExportEnabled": false,
+        "writesEnabled": false,
+        "productionWritesEnabled": false
+      },
+      "database": {
+        "readOnly": true,
+        "selectOne": true,
+        "catalogObjectsChecked": 8,
+        "catalogObjectsFound": 8,
+        "missing": [],
+        "valid": true
+      }
+    }
+  ]
+}

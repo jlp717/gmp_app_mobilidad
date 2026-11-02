@@ -2,6 +2,15 @@
 
 const path = require('path');
 require('./config/load-env').loadEnv(__dirname);
+const {
+  applyAppProfile,
+  formatStartupBanner,
+} = require('./config/app-profile');
+
+// The executable server has no implicit profile. Resolve and apply the single
+// APP_ENV contract before routes, DB adapters, telemetry or schedulers load.
+const appProfile = applyAppProfile(process.env);
+process.stdout.write(`${formatStartupBanner(appProfile)}\n`);
 
 const {
   resolveRepartoRuntime,
@@ -97,7 +106,11 @@ async function startServer() {
     try { await initCache(); } catch (error) { logger.warn(`Redis unavailable (using L1 only): ${error.message}`); }
     try { await preloadCache(PORT); } catch (error) { logger.warn(`LACLAE preload skipped: ${error.message}`); }
     try { await loadMetadataCache(); } catch (error) { logger.warn(`Metadata cache skipped: ${error.message}`); }
-    try { await require('./kpi').startKpiRuntime(); } catch (error) { logger.warn(`KPI Glacius runtime skipped: ${error.message}`); }
+    if (appProfile.writesEnabled) {
+      try { await require('./kpi').startKpiRuntime(); } catch (error) { logger.warn(`KPI Glacius runtime skipped: ${error.message}`); }
+    } else {
+      logger.warn('[APP_PROFILE] KPI mutation scheduler disabled by active profile');
+    }
   }
 
   startNetworkOptimizerCleanup();
@@ -105,15 +118,19 @@ async function startServer() {
   const server = app.listen(PORT, BIND_HOST, () => {
     global.__httpServer = server;
     if (process.send) process.send('ready');
-    try {
-      require('./services/reparto-notification-scheduler').startRepartoNotificationScheduler();
-    } catch (error) {
-      logger.warn(`Reparto notification scheduler unavailable: ${error.message}`);
-    }
-    try {
-      require('./services/pedidos-draft-purge-scheduler').startPedidosDraftPurgeScheduler();
-    } catch (error) {
-      logger.warn(`Pedidos draft purge scheduler unavailable: ${error.message}`);
+    if (appProfile.writesEnabled) {
+      try {
+        require('./services/reparto-notification-scheduler').startRepartoNotificationScheduler();
+      } catch (error) {
+        logger.warn(`Reparto notification scheduler unavailable: ${error.message}`);
+      }
+      try {
+        require('./services/pedidos-draft-purge-scheduler').startPedidosDraftPurgeScheduler();
+      } catch (error) {
+        logger.warn(`Pedidos draft purge scheduler unavailable: ${error.message}`);
+      }
+    } else {
+      logger.warn('[APP_PROFILE] Mutation schedulers disabled by active profile');
     }
   });
   server.requestTimeout = HTTP_SERVER_SOCKET_TIMEOUT_MS;
@@ -173,7 +190,11 @@ function scheduleDbInitRetry(delayMs = 5000) {
       try { await initCache(); } catch (error) { logger.warn(`Redis unavailable (using L1 only): ${error.message}`); }
       try { await preloadCache(PORT); } catch (error) { logger.warn(`LACLAE preload skipped: ${error.message}`); }
       try { await loadMetadataCache(); } catch (error) { logger.warn(`Metadata cache skipped: ${error.message}`); }
-      try { await require('./kpi').startKpiRuntime(); } catch (error) { logger.warn(`KPI Glacius runtime skipped: ${error.message}`); }
+      if (appProfile.writesEnabled) {
+        try { await require('./kpi').startKpiRuntime(); } catch (error) { logger.warn(`KPI Glacius runtime skipped: ${error.message}`); }
+      } else {
+        logger.warn('[APP_PROFILE] KPI mutation scheduler remains disabled after DB reconnect');
+      }
     } catch (error) {
       logger.warn(`Database retry failed: ${error.message}`);
       scheduleDbInitRetry(Math.min(60000, wait * 2));

@@ -4,8 +4,8 @@
   "description": "Backend API para GMP App Unified - Granja Mari Pepa (Optimized)",
   "main": "server.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "api": "ts-node src/api-server.ts",
+    "dev": "node --watch server.js",
+    "api": "node server.js",
     "build": "tsc",
     "build:ts": "tsc",
     "start": "node server.js",
@@ -16,7 +16,9 @@
     "stop": "pm2 stop ecosystem.config.js",
     "restart": "pm2 restart ecosystem.config.js",
     "explore": "node db_explorer.js",
-    "lint": "eslint src/**/*.ts --quiet",
+    "lint": "npm run lint:js && npm run lint:ts",
+    "lint:js": "eslint . --quiet",
+    "lint:ts": "node scripts/tools/lint-typescript.js",
     "test": "jest --forceExit",
     "test:targeted": "jest --runInBand --forceExit",
     "test:ci": "jest --ci --runInBand --forceExit",
@@ -39,7 +41,8 @@
     "db2:align-javier-dsedac:additive": "node scripts/tools/align-javier-dsedac-additive.js",
     "db2:align-javier-dsedac:apply": "node scripts/tools/align-javier-dsedac-additive.js --apply",
     "finance:verify-schema": "node scripts/tools/verify-repartidor-finance-schema.js",
-    "flutter:test": "node scripts/flutterTestRunner.js"
+    "flutter:test": "node scripts/flutterTestRunner.js",
+    "env:verify": "node scripts/tools/verify-app-environment.js"
   },
   "dependencies": {
     "@sentry/node": "^10.62.0",

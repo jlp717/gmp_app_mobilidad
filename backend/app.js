@@ -82,6 +82,10 @@ const {
     bruteForceIpTracker
 } = require('./middleware/security');
 const { MIN_YEAR } = require('./utils/common');
+const {
+  createAppProfileWriteGuard,
+  createRuntimeProfileHandler,
+} = require('./config/app-profile');
 
 // ==================== OPTIMIZATION IMPORTS ====================
 const { getCacheStats } = require('./services/redis-cache');
@@ -101,6 +105,7 @@ const { checkAuthPinHashReadiness } = require('./services/auth-pin-readiness');
 // docs/archive/ts-routes-7239f17/. Solo quedan legacy JS + DDD (USE_DDD_ROUTES).
 // =============================================================================
 const repartoDiagnostic = sanitizedRepartoDiagnostic(repartoRuntime, repartoRouteMode);
+const appProfileWriteGuard = createAppProfileWriteGuard();
 logger.info(`[REPARTO_RUNTIME] ${JSON.stringify(repartoDiagnostic)}`);
 if (!repartoRuntime.valid && process['env'].NODE_ENV !== 'test') {
   logger.warn(`[REPARTO_RUNTIME] Writes blocked: ${repartoRuntime.errors.join('; ')}`);
@@ -484,6 +489,14 @@ app.get('/api/admin/cache-stats', verifyToken, requireOperationalAdmin, (req, re
 // =============================================================================
 // PUBLIC ROUTES (No Auth Required)
 // =============================================================================
+// Deliberately exposes only the validated routing summary. No DSN, host,
+// connection string, credentials or table names are part of this contract.
+app.get('/api/runtime-profile', createRuntimeProfileHandler());
+
+// Login/refresh can persist audit/PIN/session support rows. A production
+// profile advertised as read-only must block them before either auth family.
+app.use('/api/auth', appProfileWriteGuard);
+
 if (USE_DDD_ROUTES && dddAuthRoutes) {
   app.use('/api/auth', dddAuthRoutes);
   // Fall-through to legacy for routes DDD doesn't implement yet
@@ -764,14 +777,15 @@ app.get('/api/app/version', (req, res) => {
 // Reparto has exactly one canonical write contract, independent of the
 // selected application route family. Keep the guard before every reparto
 // family mount so an invalid runtime can never fall through to legacy writes.
-app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);
-app.use('/api/repartidor', verifyToken, repartoFamilyWriteGuard);
-app.use('/api/entregas', verifyToken, repartoConfirmationWriteGuard);
+app.use('/api/repartidor-finanzas', verifyToken, appProfileWriteGuard, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);
+app.use('/api/repartidor', verifyToken, appProfileWriteGuard, repartoFamilyWriteGuard);
+app.use('/api/entregas', verifyToken, appProfileWriteGuard, repartoConfirmationWriteGuard);
 
 // WS2: solo familia JS legacy + DDD (TS archivado). Sin branching TS.
 {
   // Legacy JavaScript routes
   app.use('/api', verifyToken);
+  app.use('/api', appProfileWriteGuard);
   app.use('/api', cacheMiddleware); // Authenticated HTTP cache; requires req.user from verifyToken
   app.use('/api/telemetry', telemetryRoutes);
   app.use('/api/notifications', notificationsRoutes);
