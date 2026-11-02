@@ -1216,7 +1216,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
     final metadata = Map<String, Product>.from(state.productMetadataByCode);
     final listed = _productByCodeIn(state.products, line.codigoArticulo);
     if (listed != null) _rememberProductMetadataInto(metadata, listed);
-    final product = listed;
+    final product = listed ?? metadata[line.codigoArticulo];
 
     if (product != null && product.isDualFieldProduct) {
       final nextEnvases = cantidadEnvases ?? line.cantidadEnvases;
@@ -1280,7 +1280,13 @@ class PedidosNotifier extends Notifier<PedidosState> {
     if (product != null) {
       line.unidadesCaja = product.quantityPerBoxForUnit(nextUnit);
       line.precioCosto = product.costForUnit(nextUnit);
+      line.precioTarifa = product.catalogTariffForUnit(nextUnit);
+      line.precioTarifaCliente = product.clientTariffForUnit(nextUnit);
       line.precioMinimo = product.minimumPriceForUnit(nextUnit);
+      line.precioClienteSource = product.precioClienteSource;
+      line.precioMinimoSource = product.precioMinimoSource;
+      line.precioEspecialCliente = product.precioEspecialCliente;
+      line.permiteBajoMinimo = product.permiteBajoMinimo;
     }
     line.recalculate();
     if (shouldSyncGifts) {

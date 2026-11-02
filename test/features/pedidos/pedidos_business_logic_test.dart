@@ -630,6 +630,52 @@ void main() {
     });
 
     test(
+        'unit change recalculates current PES reference and retains ERP authority',
+        () async {
+      final container = _newContainer();
+      final provider = _newNotifier(container);
+      provider.setClient('4300032888', 'Cliente especial');
+      final product = Product(
+        code: '2974',
+        name: 'Pizza jamón y queso',
+        stockEnvases: 117,
+        stockUnidades: 126,
+        unitsPerBox: 10,
+        unitType: 'ambos',
+        precioTarifa1: 39.4,
+        precioCliente: 29.28,
+        precioTarifaCliente: 29.28,
+        precioMinimo: 36.198,
+        precioClienteSource: 'DSEDAC.PES',
+        precioMinimoSource: 'JAVIER.BOLSA_PRODUCTO_PRECIO',
+        precioEspecialCliente: true,
+        permiteBajoMinimo: true,
+      );
+      provider.addLine(product, 1, 0, 'CAJAS', 29.28);
+      await _flushNotifier();
+
+      final result = provider.updateLine(
+        0,
+        cantidadUnidades: 2,
+        precioVenta: 2.8,
+        unidadMedida: 'UNIDADES',
+      );
+      final line = provider.lines.single;
+
+      expect(result, isNull);
+      expect(line.unidadMedida, 'UNIDADES');
+      expect(line.precioVenta, closeTo(2.8, 0.0001));
+      expect(line.precioTarifa, closeTo(3.94, 0.0001));
+      expect(line.precioTarifaCliente, closeTo(2.928, 0.0001));
+      expect(line.precioMinimo, closeTo(3.6198, 0.0001));
+      expect(line.precioClienteSource, 'DSEDAC.PES');
+      expect(line.precioMinimoSource, 'JAVIER.BOLSA_PRODUCTO_PRECIO');
+      expect(line.precioEspecialCliente, isTrue);
+      expect(line.permiteBajoMinimo, isTrue);
+      expect(line.estimatedBolsaImpact.consumo, closeTo(0.26, 0.0001));
+    });
+
+    test(
         'updateLine rejects dual-field quantities above stock without mutation',
         () async {
       final container = _newContainer();

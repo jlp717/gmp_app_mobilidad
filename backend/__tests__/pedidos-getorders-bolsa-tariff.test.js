@@ -27,7 +27,7 @@ describe('getOrders bolsaGenerada', () => {
         jest.resetModules();
         mockQuery = require('../config/db').queryWithParams;
         mockQuery.mockReset();
-        pedidosService = require('../services/pedidos.service');
+        pedidosService = require('../services/pedidos/index');
     });
 
     test('maps bolsaGenerada true when MOV exists for pedido', async () => {
@@ -135,7 +135,7 @@ describe('tariff deviation guard', () => {
 
     beforeEach(() => {
         jest.resetModules();
-        pedidosService = require('../services/pedidos.service');
+        pedidosService = require('../services/pedidos/index');
     });
 
     test('assertPrecioWithinClientTariff rejects >50% deviation for COMERCIAL', () => {
@@ -156,26 +156,14 @@ describe('tariff deviation guard', () => {
         })).not.toThrow();
     });
 
-    test('resolveServerLineUnitPrice rejects 0.01 below minimo', () => {
-        expect(() => pedidosService.resolveServerLineUnitPrice({
+    test('resolveServerLineUnitPrice preserves a positive commercial price for Bolsa validation', () => {
+        expect(pedidosService.resolveServerLineUnitPrice({
             clientTariff: 10,
             precioMinimo: 8,
             requestedPrice: 0.01,
             userRole: 'COMERCIAL',
             articleCode: 'ART1',
-        })).toThrow(/bajo minimo/);
-        try {
-            pedidosService.resolveServerLineUnitPrice({
-                clientTariff: 10,
-                precioMinimo: 8,
-                requestedPrice: 0.01,
-                userRole: 'COMERCIAL',
-                articleCode: 'ART1',
-            });
-        } catch (err) {
-            expect(err.status).toBe(422);
-            expect(err.code).toBe('PRICE_UNDER_MINIMO');
-        }
+        })).toBe(0.01);
     });
 
     test('resolveServerLineUnitPrice overwrites with tariff when request is valid', () => {
@@ -197,6 +185,172 @@ describe('tariff deviation guard', () => {
             articleCode: 'ART1',
             isGift: true,
         })).toBe(0);
+    });
+
+    test.each(['CAJAS', 'UNIDADES'])(
+        'freezes real PES reference for article 2974 in %s and ignores forged client policy flags',
+        (unidadMedida) => {
+            const resolved = pedidosService._private.resolveAuthoritativeLinePricing({
+                line: {
+                    codigoArticulo: '2974',
+                    unidadMedida,
+                    cantidadEnvases: unidadMedida === 'CAJAS' ? 1 : 0,
+                    cantidadUnidades: unidadMedida === 'UNIDADES' ? 1 : 0,
+                    precioEspecialCliente: false,
+                    permiteBajoMinimo: false,
+                    precioClienteSource: 'CLIENT_FORGED',
+                    precioMinimo: 0.01,
+                    precioCosto: 0.01,
+                    importeCosto: 999,
+                },
+                articleCode: '2974',
+                clientTariff: 39.4,
+                serverMin: 39.4,
+                productPricing: {
+                    PRECIO_MINIMO: 36.198,
+                    COSTE_FABRICACION: 26.065,
+                    MARGEN_OBJETIVO_PCT: 20,
+                },
+                clientPrice: {
+                    PRECIO_ESPECIAL: 29.28,
+                    IS_SPECIAL_PRICE: 'S',
+                    PERMITE_BAJO_MINIMO: 'S',
+                    SOURCE: 'DSEDAC.PES',
+                    MOTIVO: 'Precio especial ERP',
+                },
+                userRole: 'COMERCIAL',
+            });
+
+            expect(resolved.price).toBe(29.28);
+            expect(resolved.referencePrice).toBe(29.28);
+            expect(resolved.line).toMatchObject({
+                unidadMedida,
+                precioTarifa: 39.4,
+                precioTarifaCliente: 29.28,
+                precioMinimo: 36.198,
+                precioEspecialCliente: true,
+                permiteBajoMinimo: true,
+                precioClienteSource: 'DSEDAC.PES',
+                precioCosto: 26.065,
+                precioCostoVerificado: true,
+            });
+        },
+    );
+
+    test('rejects a non-gift line when no authoritative ERP price exists', () => {
+        expect(() => pedidosService._private.resolveAuthoritativeLinePricing({
+            line: {
+                codigoArticulo: 'NO-PRICE',
+                precio: 0.01,
+                precioCosto: 0.01,
+                importeCosto: 0.01,
+            },
+            articleCode: 'NO-PRICE',
+            clientTariff: 0,
+            serverMin: 0,
+            productPricing: null,
+            clientPrice: null,
+            userRole: 'COMERCIAL',
+        })).toThrow(expect.objectContaining({
+            code: 'ORDER_PRICE_UNAVAILABLE',
+            status: 503,
+            articleCode: 'NO-PRICE',
+        }));
+    });
+
+    test('unknown server cost never produces a fake one-hundred-percent margin', () => {
+        const resolved = pedidosService._private.resolveAuthoritativeLinePricing({
+            line: {
+                codigoArticulo: 'ART-NO-COST',
+                precio: 10,
+                precioCosto: 0.01,
+                importeCosto: 0.01,
+            },
+            articleCode: 'ART-NO-COST',
+            clientTariff: 10,
+            serverMin: 0,
+            productPricing: null,
+            clientPrice: null,
+            userRole: 'COMERCIAL',
+        });
+        const metrics = pedidosService._private.calculateVerifiedCostMetrics({
+            importeVenta: 10,
+            billingQty: 1,
+            precioCosto: resolved.line.precioCosto,
+            costVerified: resolved.line.precioCostoVerificado,
+        });
+
+        expect(resolved.line).toMatchObject({
+            precioCosto: 0,
+            precioCostoVerificado: false,
+            precioCostoSource: '',
+        });
+        expect(resolved.line.importeCosto).toBeUndefined();
+        expect(metrics).toEqual({ importeCosto: 0, importeMargen: 0, pctMargen: 0 });
+    });
+
+    test('rejects a stale offline reference with an actionable typed conflict', () => {
+        expect(() => pedidosService._private.resolveAuthoritativeLinePricing({
+            line: { codigoArticulo: '2974', precioTarifaCliente: 39.4 },
+            articleCode: '2974',
+            clientTariff: 39.4,
+            serverMin: 39.4,
+            productPricing: { PRECIO_MINIMO: 36.198 },
+            clientPrice: {
+                PRECIO_ESPECIAL: 29.28,
+                IS_SPECIAL_PRICE: 'S',
+                PERMITE_BAJO_MINIMO: 'S',
+                SOURCE: 'DSEDAC.PES',
+            },
+            userRole: 'COMERCIAL',
+        })).toThrow(expect.objectContaining({
+            code: 'ORDER_PRICE_SNAPSHOT_STALE',
+            status: 409,
+            articleCode: '2974',
+            quotedPrice: 39.4,
+            currentPrice: 29.28,
+        }));
+    });
+
+    test('does not accept forged special-price authority without a current ERP special row', () => {
+        const resolved = pedidosService._private.resolveAuthoritativeLinePricing({
+            line: {
+                codigoArticulo: '2974',
+                precioEspecialCliente: true,
+                permiteBajoMinimo: true,
+                precioClienteSource: 'DSEDAC.PES',
+            },
+            articleCode: '2974',
+            clientTariff: 39.4,
+            serverMin: 36.198,
+            productPricing: { PRECIO_MINIMO: 36.198 },
+            clientPrice: null,
+            userRole: 'COMERCIAL',
+        });
+
+        expect(resolved.line).toMatchObject({
+            precioTarifaCliente: 39.4,
+            precioEspecialCliente: false,
+            permiteBajoMinimo: false,
+            precioClienteSource: '',
+        });
+    });
+
+    test('reads confirmed price history from canonical order tables, never a missing duplicate table', async () => {
+        const queryWithParams = require('../config/db').queryWithParams;
+        queryWithParams.mockResolvedValueOnce([{ PRECIOVENTA: 29.28, FECHA: '2026-11-02' }]);
+
+        await expect(pedidosService.getPrecioHistoricoTEST({
+            clientCode: '4300032888',
+            articleCode: '2974',
+        })).resolves.toEqual([{ PRECIOVENTA: 29.28, FECHA: '2026-11-02' }]);
+
+        const [sql, params] = queryWithParams.mock.calls[0];
+        expect(sql).toMatch(/FROM\s+JAVIER\.PEDIDOS_CAB\s+C/i);
+        expect(sql).toMatch(/JOIN\s+JAVIER\.PEDIDOS_LIN\s+L/i);
+        expect(sql).toMatch(/TRIM\(C\.ESTADO\) = 'CONFIRMADO'/i);
+        expect(sql).not.toMatch(/PRECIO_HISTORICO/i);
+        expect(params).toEqual(['4300032888', '2974']);
     });
 });
 

@@ -10,6 +10,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_detail_sheet.dart';
 
 class _FakeAdapter implements HttpClientAdapter {
@@ -32,7 +33,9 @@ class _FakeAdapter implements HttpClientAdapter {
 ResponseBody _json(Map<String, dynamic> body) => ResponseBody.fromString(
       jsonEncode(body),
       200,
-      headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
     );
 
 // PNG 1x1: Image.network decodifica sin errorBuilder ni carreras de layout.
@@ -141,6 +144,7 @@ void main() {
           'name': 'Producto 28',
           'precioTarifa1': 9.5,
           'precioCompetitivo': 9.5,
+          'margenCompetitivoPct': 24.69,
         },
         'tariffs': [],
         'stockByWarehouse': [],
@@ -153,7 +157,8 @@ void main() {
     ApiClient.dio.httpClientAdapter = previousAdapter;
   });
 
-  testWidgets('ficha muestra historico por defecto: Ultimo, subida, Competitivo',
+  testWidgets(
+      'ficha muestra historico por defecto: Ultimo, subida, Competitivo',
       (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -179,5 +184,26 @@ void main() {
     expect(find.textContaining('10,50'), findsWidgets);
     expect(find.textContaining('5.0%'), findsOneWidget);
     expect(find.textContaining('9,50'), findsWidgets);
+    expect(find.text('Margen 24.69%'), findsOneWidget);
+  });
+
+  test('Product does not invent a competitive price from tariff one', () {
+    final withoutCompetitive = Product.fromJson({
+      'code': 'P28',
+      'name': 'Producto 28',
+      'precioTarifa1': 39.4,
+    });
+    final withCompetitive = Product.fromJson({
+      'code': '3519',
+      'name': 'Producto real',
+      'precioTarifa1': 40,
+      'precioCompetitivo': 27.54,
+      'margenCompetitivoPct': 24.69,
+    });
+
+    expect(withoutCompetitive.precioCompetitivo, 0);
+    expect(withoutCompetitive.margenCompetitivoPct, 0);
+    expect(withCompetitive.precioCompetitivo, 27.54);
+    expect(withCompetitive.margenCompetitivoPct, 24.69);
   });
 }

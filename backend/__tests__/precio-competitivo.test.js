@@ -4,6 +4,7 @@ const express = require('express');
 const request = require('supertest');
 const {
   LOOKUP_SQL,
+  LOOKUP_BATCH_SQL,
   INSERT_SQL,
   emptyState,
   parseCreateInput,
@@ -12,6 +13,14 @@ const {
   createPrecioCompetitivoService,
 } = require('../services/precio-competitivo-service');
 const { createPrecioCompetitivoRouter } = require('../routes/precio-competitivo');
+const {
+  ROWS: SEED_ROWS,
+  SEED_LOCK_SQL,
+  SOURCE_ORDER_SQL,
+  UPSERT_SQL,
+  canonicalSeedRows,
+  seedPrecioCompetitivo,
+} = require('../scripts/seed-precio-competitivo-test');
 
 const base = {
   codigoArticulo: 'ART0000001',
@@ -92,6 +101,156 @@ describe('competitive price selection', () => {
       codigoCliente: '4300000354',
     })).resolves.toMatchObject({ found: true, margenPct: 0, precioCompetitivo: 4.5 });
   });
+
+  test('batch lookup uses one ROW_NUMBER query and preserves real price and stored margin', async () => {
+    expect(LOOKUP_BATCH_SQL).toMatch(/ROW_NUMBER\(\)\s+OVER/i);
+    expect(LOOKUP_BATCH_SQL).toMatch(/PARTITION BY TRIM\(P\.CODIGOARTICULO\), TRIM\(P\.CODIGOCLIENTE\)/i);
+    const query = jest.fn().mockResolvedValue([
+      {
+        ID: 1, CODIGOARTICULO: '3519', CODIGOCLIENTE: '4300032160', CODIGOTARIFA: 1,
+        PRECIO_COMPETITIVO: 27.54, MARGEN_PCT: 24.69,
+        VALIDO_DESDE: '2026-09-01', VALIDO_HASTA: null, USUARIO: 'pedido-106',
+      },
+      {
+        ID: 2, CODIGOARTICULO: '3075', CODIGOCLIENTE: '4300032160', CODIGOTARIFA: 1,
+        PRECIO_COMPETITIVO: 49.572, MARGEN_PCT: 24.71,
+        VALIDO_DESDE: '2026-09-01', VALIDO_HASTA: null, USUARIO: 'pedido-106',
+      },
+    ]);
+    const service = createPrecioCompetitivoService({
+      queryWithParams: query,
+      clock: () => new Date('2026-11-02T10:00:00.000Z'),
+    });
+
+    const rows = await service.lookupBatch({
+      articleCodes: ['3519', '3075', '3519'],
+      codigoCliente: '4300032160',
+    });
+
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][0]).toMatch(/IN \(\?, \?\)/);
+    expect(query.mock.calls[0][1]).toEqual([
+      '4300032160', '3519', '3075', '2026-11-02', '2026-11-02',
+    ]);
+    expect(rows).toEqual([
+      expect.objectContaining({ codigoArticulo: '3519', precioCompetitivo: 27.54, margenPct: 24.69 }),
+      expect.objectContaining({ codigoArticulo: '3075', precioCompetitivo: 49.572, margenPct: 24.71 }),
+    ]);
+  });
+
+  test('batch lookup has an explicit empty result and does not invent tariff-one prices', async () => {
+    const query = jest.fn().mockResolvedValue([]);
+    const service = createPrecioCompetitivoService({ queryWithParams: query });
+
+    await expect(service.lookupBatch({
+      articleCodes: ['3519', '3075'],
+      codigoCliente: '4300032160',
+      onDate: '2026-11-02',
+    })).resolves.toEqual([]);
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+});
+
+test('real-order TEST seed is repeatable through a parameterized MERGE', async () => {
+  expect(UPSERT_SQL).toMatch(/^MERGE INTO JAVIER\.TEST_PRECIO_COMPETITIVO/i);
+  expect(UPSERT_SQL).not.toMatch(/DSEDAC|DSED\./i);
+  expect(SEED_ROWS).toEqual([
+    ['3519', '4300032160', 1, 27.54, 24.69, '2026-09-28', null, 'pedido-106'],
+    ['3075', '4300032160', 1, 49.572, 24.71, '2026-09-28', null, 'pedido-106'],
+  ]);
+  const stored = new Map();
+  const connection = {
+    beginTransaction: jest.fn().mockResolvedValue(undefined),
+    commit: jest.fn().mockResolvedValue(undefined),
+    rollback: jest.fn().mockResolvedValue(undefined),
+    query: jest.fn((sql, params) => {
+      if (sql === SOURCE_ORDER_SQL) {
+        return Promise.resolve([
+          {
+            CODIGOARTICULO: '3519', CODIGOCLIENTE: '4300032160', CODIGOTARIFA: 1,
+            PRECIOVENTA: 27.54, PORCENTAJEMARGEN: 24.69, VALIDO_DESDE: '2026-09-28',
+          },
+          {
+            CODIGOARTICULO: '3075', CODIGOCLIENTE: '4300032160', CODIGOTARIFA: 1,
+            PRECIOVENTA: 49.572, PORCENTAJEMARGEN: 24.71, VALIDO_DESDE: '2026-09-28',
+          },
+        ]);
+      }
+      if (sql === UPSERT_SQL) {
+        stored.set(`${params[0]}|${params[1]}|${params[5]}`, params);
+      }
+      return Promise.resolve([]);
+    }),
+  };
+  const env = {
+    APP_ENV: 'test',
+    REPARTO_TABLE_SET: 'isolated_test',
+    REPARTO_ENVIRONMENT: 'test',
+    DB2_WRITE_SCHEMA: 'JAVIER',
+  };
+
+  await seedPrecioCompetitivo(connection, env);
+  await seedPrecioCompetitivo(connection, env);
+
+  expect(connection.beginTransaction).toHaveBeenCalledTimes(2);
+  expect(connection.commit).toHaveBeenCalledTimes(2);
+  expect(connection.rollback).not.toHaveBeenCalled();
+  expect(connection.query.mock.calls.filter(([sql]) => sql === SEED_LOCK_SQL)).toHaveLength(2);
+  expect(connection.query.mock.calls.filter(([sql]) => sql === SOURCE_ORDER_SQL)).toHaveLength(2);
+  expect(connection.query.mock.calls.filter(([sql]) => sql === UPSERT_SQL)).toHaveLength(4);
+  expect(stored.size).toBe(2);
+});
+
+test('canonical seed fails closed if confirmed order 106 is missing or changed', () => {
+  expect(() => canonicalSeedRows([])).toThrow(/canonical confirmed order 106/i);
+  expect(() => canonicalSeedRows([{
+    CODIGOARTICULO: '3519', CODIGOCLIENTE: '4300032160', CODIGOTARIFA: 1,
+    PRECIOVENTA: 27.54, PORCENTAJEMARGEN: 24.69, VALIDO_DESDE: '2026-09-27',
+  }])).toThrow(/canonical confirmed order 106/i);
+  expect(() => canonicalSeedRows([
+    {
+      CODIGOARTICULO: '3519', CODIGOCLIENTE: '4300032160', CODIGOTARIFA: 1,
+      PRECIOVENTA: 27.55, PORCENTAJEMARGEN: 24.69, VALIDO_DESDE: '2026-09-28',
+    },
+    {
+      CODIGOARTICULO: '3075', CODIGOCLIENTE: '4300032160', CODIGOTARIFA: 1,
+      PRECIOVENTA: 49.572, PORCENTAJEMARGEN: 24.71, VALIDO_DESDE: '2026-09-28',
+    },
+  ])).toThrow(/canonical confirmed order 106/i);
+});
+
+test('TEST seed rolls back the whole locked batch on any MERGE failure', async () => {
+  const connection = {
+    beginTransaction: jest.fn().mockResolvedValue(undefined),
+    commit: jest.fn().mockResolvedValue(undefined),
+    rollback: jest.fn().mockResolvedValue(undefined),
+    query: jest.fn((sql) => {
+      if (sql === SOURCE_ORDER_SQL) {
+        return Promise.resolve([
+          {
+            CODIGOARTICULO: '3519', CODIGOCLIENTE: '4300032160', CODIGOTARIFA: 1,
+            PRECIOVENTA: 27.54, PORCENTAJEMARGEN: 24.69, VALIDO_DESDE: '2026-09-28',
+          },
+          {
+            CODIGOARTICULO: '3075', CODIGOCLIENTE: '4300032160', CODIGOTARIFA: 1,
+            PRECIOVENTA: 49.572, PORCENTAJEMARGEN: 24.71, VALIDO_DESDE: '2026-09-28',
+          },
+        ]);
+      }
+      if (sql === UPSERT_SQL) return Promise.reject(new Error('merge failed'));
+      return Promise.resolve([]);
+    }),
+  };
+  const env = {
+    APP_ENV: 'test',
+    REPARTO_TABLE_SET: 'isolated_test',
+    REPARTO_ENVIRONMENT: 'test',
+    DB2_WRITE_SCHEMA: 'JAVIER',
+  };
+
+  await expect(seedPrecioCompetitivo(connection, env)).rejects.toThrow('merge failed');
+  expect(connection.rollback).toHaveBeenCalledTimes(1);
+  expect(connection.commit).not.toHaveBeenCalled();
 });
 
 test('GET returns the empty state instead of zero when the service has no row', async () => {

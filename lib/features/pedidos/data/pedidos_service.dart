@@ -49,6 +49,7 @@ class Product {
     this.costeFabricacion = 0,
     this.margenObjetivoPct = 0,
     this.precioCompetitivo = 0,
+    this.margenCompetitivoPct = 0,
     this.precioMinimoPolitica = 0,
     this.nameExt = '',
     this.familyName = '',
@@ -117,9 +118,8 @@ class Product {
       precioMinimoCalculado: _toDouble(json['precioMinimoCalculado']),
       costeFabricacion: _toDouble(json['costeFabricacion']),
       margenObjetivoPct: _toDouble(json['margenObjetivoPct']),
-      precioCompetitivo: _toDouble(
-        json['precioCompetitivo'] ?? json['precioTarifa1'],
-      ),
+      precioCompetitivo: _toDouble(json['precioCompetitivo']),
+      margenCompetitivoPct: _toDouble(json['margenCompetitivoPct']),
       precioMinimoPolitica: _toDouble(json['precioMinimoPolitica']),
       nameExt: (json['nameExt'] ?? '').toString().trim(),
       familyName: (json['familyName'] ?? '').toString().trim(),
@@ -193,6 +193,7 @@ class Product {
       costeFabricacion: costeFabricacion,
       margenObjetivoPct: margenObjetivoPct,
       precioCompetitivo: precioCompetitivo,
+      margenCompetitivoPct: margenCompetitivoPct,
       precioMinimoPolitica: precioMinimoPolitica,
       nameExt: nameExt,
       familyName: familyName,
@@ -255,6 +256,7 @@ class Product {
   final double costeFabricacion;
   final double margenObjetivoPct;
   final double precioCompetitivo;
+  final double margenCompetitivoPct;
   final double precioMinimoPolitica;
   // Extended fields from ART table
   final String nameExt;

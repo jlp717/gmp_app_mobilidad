@@ -499,16 +499,20 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         ? (history['competitivo'] as num).toDouble()
         : p.precioCompetitivo > 0
             ? p.precioCompetitivo
-            : p.precioTarifa1;
+            : 0.0;
     final ultimo = history != null && history['ultimoPrecio'] is num
         ? (history['ultimoPrecio'] as num).toDouble()
         : 0.0;
     final pct = history != null && history['pctSubida'] is num
         ? (history['pctSubida'] as num).toDouble()
         : 0.0;
+    final margenCompetitivo = p.margenCompetitivoPct;
     return Semantics(
-      label:
-          'Histórico precios: último ${ultimo.toStringAsFixed(2)}, subida ${pct.toStringAsFixed(1)} por ciento, competitivo ${competitivo.toStringAsFixed(2)}',
+      label: 'Histórico precios: último ${ultimo.toStringAsFixed(2)}, '
+          'subida ${pct.toStringAsFixed(1)} por ciento, '
+          'competitivo ${competitivo.toStringAsFixed(2)}, '
+          'margen competitivo ${margenCompetitivo.toStringAsFixed(2)} '
+          'por ciento',
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
@@ -518,8 +522,10 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             color: AppColors.themedWhite.withValues(alpha: 0.06),
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+        child: Wrap(
+          alignment: WrapAlignment.spaceAround,
+          spacing: 12,
+          runSpacing: 12,
           children: [
             _historyStat(
               Icons.history,
@@ -537,6 +543,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                   ? PedidosFormatters.money(competitivo, decimals: 2)
                   : '—',
               'Competitivo',
+              detail: margenCompetitivo > 0
+                  ? 'Margen ${margenCompetitivo.toStringAsFixed(2)}%'
+                  : null,
             ),
           ],
         ),
@@ -544,27 +553,47 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     );
   }
 
-  Widget _historyStat(IconData icon, String value, String label) {
-    return Column(
-      children: [
-        Icon(icon, color: AppTheme.info, size: 14),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppTheme.info,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
+  Widget _historyStat(
+    IconData icon,
+    String value,
+    String label, {
+    String? detail,
+  }) {
+    return SizedBox(
+      width: 104,
+      child: Column(
+        children: [
+          Icon(icon, color: AppTheme.info, size: 22),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppTheme.info,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            color: AppTheme.textSecondary,
-            fontSize: 10,
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 18,
+            ),
           ),
-        ),
-      ],
+          if (detail != null)
+            Text(
+              detail,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
     );
   }
 

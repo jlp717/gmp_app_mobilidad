@@ -6,6 +6,10 @@
 
 const mockOpenDedicatedConnection = jest.fn();
 
+function promisedImplementation(implementation) {
+    return (...args) => Promise.resolve(implementation(...args));
+}
+
 jest.mock('../config/db', () => ({
     queryWithParams: jest.fn(),
     getPool: jest.fn(() => null),
@@ -319,6 +323,57 @@ describe('BolsaComercial Service', () => {
             expect(result.valid).toBe(true);
             expect(result.acumulacion).toBe(1);
             expect(result.lineMovements[0].tipo).toBe('ACUMULACION');
+        });
+
+        test.each([
+            ['CAJAS', { cantidadEnvases: 1 }],
+            ['UNIDADES', { cantidadUnidades: 1 }],
+        ])('real PES default price has zero bolsa impact in %s', async (unidadMedida, quantity) => {
+            mockQuery.mockResolvedValueOnce([{
+                ID: 1, CODIGOVENDEDOR: '73', EJERCICIO: 2026, MES: 11,
+                LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 300,
+                CONSUMIDO: 0, ACUMULADO: 0,
+            }]);
+
+            const result = await bolsaService.validateOrderWithBolsa('73', [{
+                codigoArticulo: '2974',
+                unidadMedida,
+                ...quantity,
+                precioTarifaCliente: 29.28,
+                precioMinimo: 36.198,
+                precioVenta: 29.28,
+                precioEspecialCliente: true,
+                permiteBajoMinimo: true,
+                precioClienteSource: 'DSEDAC.PES',
+            }]);
+
+            expect(result).toMatchObject({ valid: true, consumo: 0, acumulacion: 0 });
+            expect(result.lineMovements).toEqual([]);
+        });
+
+        test('commercial price below current PES reference consumes bolsa without being replaced', async () => {
+            mockQuery.mockResolvedValueOnce([{
+                ID: 1, CODIGOVENDEDOR: '73', EJERCICIO: 2026, MES: 11,
+                LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 300,
+                CONSUMIDO: 0, ACUMULADO: 0,
+            }]);
+
+            const result = await bolsaService.validateOrderWithBolsa('73', [{
+                codigoArticulo: '2974',
+                unidadMedida: 'CAJAS',
+                cantidadEnvases: 2,
+                precioTarifaCliente: 29.28,
+                precioMinimo: 36.198,
+                precioVenta: 28,
+                precioEspecialCliente: true,
+                permiteBajoMinimo: true,
+                precioClienteSource: 'DSEDAC.PES',
+            }]);
+
+            expect(result).toMatchObject({ valid: true, consumo: 2.56, acumulacion: 0 });
+            expect(result.lineMovements).toEqual([
+                expect.objectContaining({ tipo: 'CONSUMO', importe: 2.56, precioMinimoCongelado: 29.28 }),
+            ]);
         });
     });
 
@@ -676,14 +731,14 @@ describe("pedidos confirmation bolsa contract", () => {
       IMPORTECOSTO: 4, IMPORTEMARGEN: 3, OBSERVACIONES: '',
     };
     db.queryWithParams.mockReset();
-    db.queryWithParams.mockImplementation(async (sql) => {
+    db.queryWithParams.mockImplementation(promisedImplementation((sql) => {
       if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql) && sql.includes('CONFIRMANDO')) {
         return { count: 0 };
       }
       if (/SELECT\s+ESTADO,/i.test(sql)) return [header];
       if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return [header];
       return [];
-    });
+    }));
     jest.doMock('../services/query-optimizer', () => ({
       cachedQuery: jest.fn((fn, sql, _key, _ttl, params) => fn(sql, params)),
     }));
@@ -769,8 +824,8 @@ describe("pedidos confirmation bolsa contract", () => {
     expect(applyOrderMovementsWith).toHaveBeenCalledTimes(1);
     expect(results.filter((result) => result.idempotentReplay === true)).toHaveLength(1);
     expect(db.queryWithParams.mock.calls.filter(([sql]) =>
-      /INSERT\s+INTO\s+JAVIER\.TEST_PRECIO_HISTORICO/i.test(sql)
-    )).toHaveLength(1);
+      /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?JAVIER\.TEST_PRECIO_HISTORICO/i.test(sql)
+    )).toHaveLength(0);
   });
 
   test('confirmation uses the locked line and header-discount snapshot after a concurrent draft edit', async () => {
@@ -967,7 +1022,7 @@ describe("pedidos confirmation bolsa contract", () => {
     };
     let stockReads = 0;
     db.queryWithParams.mockReset();
-    db.queryWithParams.mockImplementation(async (sql) => {
+    db.queryWithParams.mockImplementation(promisedImplementation((sql) => {
       if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql) && sql.includes('CONFIRMANDO')) return { count: 1 };
       if (/SELECT\s+ESTADO,/i.test(sql)) return [header];
       if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return [{ CODIGOVEHICULO: '02', CODIGOREPARTIDOR: '10' }];
@@ -978,7 +1033,7 @@ describe("pedidos confirmation bolsa contract", () => {
         return [{ CODE: 'ART-STOCK', ENVASES: stockReads === 1 ? 10 : 1, UNIDADES: 0 }];
       }
       return [];
-    });
+    }));
     jest.doMock('../services/query-optimizer', () => ({
       cachedQuery: jest.fn((fn, sql, _key, _ttl, params) => fn(sql, params)),
     }));
@@ -1020,11 +1075,11 @@ describe('expired draft purge transaction contract', () => {
     const db = require('../config/db');
     const conn = installTransactionalPool(db);
     db.queryWithParams.mockReset();
-    db.queryWithParams.mockImplementation(async (sql) => {
+    db.queryWithParams.mockImplementation(promisedImplementation((sql) => {
       if (/SELECT\s+C\.ID/i.test(sql)) return [{ ID: 77 }];
       if (/SELECT\s+ID,\s+TRIM\(ESTADO\)/i.test(sql)) return [];
       return [];
-    });
+    }));
 
     const pedidos = require('../services/pedidos/index');
     const result = await pedidos.purgeExpiredDraftReservations({ limit: 1 });
@@ -1043,13 +1098,13 @@ describe('expired draft purge transaction contract', () => {
     const db = require('../config/db');
     const conn = installTransactionalPool(db);
     db.queryWithParams.mockReset();
-    db.queryWithParams.mockImplementation(async (sql) => {
+    db.queryWithParams.mockImplementation(promisedImplementation((sql) => {
       if (/SELECT\s+C\.ID/i.test(sql)) return [{ ID: 78 }];
       if (/SELECT\s+ID,\s+TRIM\(ESTADO\)/i.test(sql)) return [{ ID: 78, ESTADO: 'BORRADOR' }];
       if (/DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql)) return {};
       if (/SELECT\s+ID\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB\s+WHERE\s+ID/i.test(sql)) return [{ ID: 78 }];
       return { count: 1 };
-    });
+    }));
 
     const pedidos = require('../services/pedidos/index');
     const result = await pedidos.purgeExpiredDraftReservations({ limit: 1 });

@@ -147,7 +147,7 @@ describe('pedidos product catalog contract', () => {
     const seenSql = [];
     mockQueryWithParams.mockImplementation(async (sql) => {
       seenSql.push(sql);
-      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql)) return [];
+      if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql)) return [];
       if (/DSEDAC\.PES/i.test(sql)) {
         return [{
           CODIGOARTICULO: 'ART001',
@@ -197,7 +197,7 @@ describe('pedidos product catalog contract', () => {
           STOCKUNIDADES: 0,
         }];
       }
-      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql)) return [];
+      if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql)) return [];
       if (/DSEDAC\.PES/i.test(sql)) {
         return [{
           CODIGOARTICULO: 'ART002',
@@ -227,7 +227,7 @@ describe('pedidos product catalog contract', () => {
     let capturedSql = '';
     let capturedParams = [];
     mockQueryWithParams.mockImplementation(async (sql, params) => {
-      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
+      if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
         return [];
       }
       capturedSql = sql;
@@ -283,7 +283,7 @@ describe('pedidos product catalog contract', () => {
   test('getProducts sortBy=purchases DESC ranks most purchased first', async () => {
     let capturedSql = '';
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
+      if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
         return [];
       }
       capturedSql = sql;
@@ -306,7 +306,7 @@ describe('pedidos product catalog contract', () => {
   test('getProducts sortBy=name ASC ranks alphabetically', async () => {
     let capturedSql = '';
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
+      if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
         return [];
       }
       capturedSql = sql;
@@ -330,7 +330,7 @@ describe('pedidos product catalog contract', () => {
     let capturedSql = '';
     let capturedParams = [];
     mockQueryWithParams.mockImplementation(async (sql, params) => {
-      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
+      if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
         return [];
       }
       capturedSql = sql;
@@ -354,7 +354,7 @@ describe('pedidos product catalog contract', () => {
   test('getProducts exposes client tariff code and price from CLC/ARA', async () => {
     let capturedSql = '';
     mockQueryWithParams.mockImplementation(async (sql) => {
-      if (/JAVIER\.BOLSA_PRODUCTO_PRECIO/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
+      if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
         return [];
       }
       capturedSql = sql;
@@ -532,6 +532,12 @@ describe('pedidos create order persistence contract', () => {
           { CODIGOARTICULO: '4311', PRECIOTARIFA: 49.572 },
         ];
       }
+      if (/BOLSA_PRODUCTO_PRECIO/i.test(sql)) {
+        return [
+          { CODIGOARTICULO: 'ART001', COSTE_FABRICACION: 4, PRECIO_MINIMO: 0 },
+          { CODIGOARTICULO: '4311', COSTE_FABRICACION: 4, PRECIO_MINIMO: 0 },
+        ];
+      }
       if (/UPDATE\s+JAVIER\.PEDIDOS_SEQ\s+SET\s+ULTIMO_NUMERO/i.test(sql)) return [];
       if (/SELECT\s+ULTIMO_NUMERO\s+FROM\s+JAVIER\.PEDIDOS_SEQ/i.test(sql)) return [{ ULTIMO_NUMERO: 100 }];
       if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) return [];
@@ -559,7 +565,14 @@ describe('pedidos create order persistence contract', () => {
       clientCode: 'C001',
       clientName: 'Cliente',
       vendedorCode: '01',
-      lines: [{ codigoArticulo: 'ART001', descripcion: 'Producto', cantidadEnvases: 3, precio: 10, precioCosto: 4 }],
+      lines: [{
+        codigoArticulo: 'ART001',
+        descripcion: 'Producto',
+        cantidadEnvases: 3,
+        precio: 10,
+        precioCosto: 0.01,
+        importeCosto: 999,
+      }],
     });
 
     const updateCall = mockQueryWithParams.mock.calls.find(([sql]) =>
@@ -568,6 +581,33 @@ describe('pedidos create order persistence contract', () => {
     expect(updateCall).toBeDefined();
     expect(updateCall[0]).not.toMatch(/ROUND\(/i);
     expect(updateCall[1]).toEqual([27, 12, 32.67, 15, 5.67, 42]);
+  });
+
+  test('createOrder fails before opening a transaction when ERP has no authoritative price', async () => {
+    mockQueryWithParams.mockResolvedValue([]);
+
+    await expect(pedidosService.createOrder({
+      clientCode: 'C001',
+      clientName: 'Cliente',
+      vendedorCode: '01',
+      lines: [{
+        codigoArticulo: 'NO-PRICE',
+        descripcion: 'Sin precio ERP',
+        cantidadEnvases: 1,
+        precio: 0.01,
+        precioCosto: 0.01,
+        importeCosto: 0.01,
+      }],
+    })).rejects.toMatchObject({
+      code: 'ORDER_PRICE_UNAVAILABLE',
+      status: 503,
+      articleCode: 'NO-PRICE',
+    });
+
+    expect(mockOpenDedicatedConnection).not.toHaveBeenCalled();
+    expect(mockQueryWithParams.mock.calls.some(([sql]) =>
+      /\b(?:INSERT|UPDATE|DELETE)\b/i.test(sql)
+    )).toBe(false);
   });
 
   test('createOrder reserves draft stock after persisting complete order lines', async () => {
@@ -1228,9 +1268,17 @@ describe('pedidos state machine contract', () => {
       return undefined;
     });
 
-    await expect(pedidosService.updateOrderLine(7, { cantidadEnvases: 2 }))
+    await expect(pedidosService.updateOrderLine(7, {
+      cantidadEnvases: 2,
+      precioCosto: 0.01,
+    }))
       .rejects.toMatchObject({ code: 'STOCK_CHANGED_DURING_DRAFT_EDIT', status: 409 });
 
+    const updateCall = mockTxQuery.mock.calls.find(([sql]) =>
+      /UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_LIN\s+SET\s+CANTIDADENVASES/i.test(sql)
+    );
+    expect(updateCall).toBeDefined();
+    expect(updateCall[1].slice(3, 9)).toEqual([0, 'CAJAS', 20, 0, 0, 0]);
     expect(mockTxRollback).toHaveBeenCalledTimes(1);
     expect(mockTxCommit).not.toHaveBeenCalled();
     expect(mockTxQuery.mock.calls.some(([sql]) =>

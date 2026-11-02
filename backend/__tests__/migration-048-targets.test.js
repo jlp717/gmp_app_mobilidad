@@ -19,6 +19,7 @@ test('apply statements stay on JAVIER.TEST_ and refuse production', () => {
     REPARTO_ENVIRONMENT: 'production',
   })).toThrow(/isolated_test/);
   expect(() => assertSeedAllowed({
+    APP_ENV: 'test',
     REPARTO_TABLE_SET: 'production',
     REPARTO_ENVIRONMENT: 'production',
   })).toThrow(/isolated_test/);

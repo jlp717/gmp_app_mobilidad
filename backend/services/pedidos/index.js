@@ -127,7 +127,7 @@ async function getPedidosRouteCacheVersion() {
         if (remote != null && remote !== '') return String(remote);
         const local = await redisCache.get(PEDIDOS_ROUTE_CACHE_VERSION_NS, PEDIDOS_ROUTE_CACHE_VERSION_KEY);
         return local == null || local === '' ? '0' : String(local);
-    } catch (_err) {
+    } catch {
         return '0';
     }
 }
@@ -405,21 +405,9 @@ function resolveServerLineUnitPrice({
     const tariff = roundPrice(clientTariff);
     const min = roundPrice(precioMinimo);
     const requested = roundPrice(requestedPrice);
-    const role = String(userRole || '').trim().toUpperCase();
-    const isManager = role === 'JEFE_VENTAS' || role === 'ADMIN';
-    const hasMotivo = Boolean(String(motivo || '').trim());
-
-    if (min > 0 && requested > 0 && requested + 1e-9 < min && !(isManager && hasMotivo)) {
-        const err = new Error(`Precio bajo minimo para ${articleCode || 'articulo'}`);
-        err.status = 422;
-        err.code = 'PRICE_UNDER_MINIMO';
-        throw err;
-    }
-
-    let unit = tariff > 0 ? tariff : (min > 0 ? min : 0);
-    if (isManager && hasMotivo && requested > 0) {
-        unit = requested;
-    }
+    void userRole;
+    void motivo;
+    const unit = requested > 0 ? requested : (tariff > 0 ? tariff : (min > 0 ? min : 0));
     if (unit <= 0) {
         const err = new Error(`Sin tarifa servidor para ${articleCode || 'articulo'}`);
         err.status = 422;
@@ -914,38 +902,28 @@ function resolvePrecioMinimoPolitica(competitivo, margenPct) {
     return roundPrice(comp / (1 - margin / 100));
 }
 
-const PRECIO_HISTORICO_TEST_TABLE = 'JAVIER.TEST_PRECIO_HISTORICO';
+const PRECIO_HISTORICO_TEST_TABLE = null;
 
-async function savePrecioHistoricoTEST({ clientCode, lines }) {
-    const client = truncate(clientCode, 10);
-    const rows = Array.isArray(lines) ? lines : [];
-    if (!client || rows.length === 0) return 0;
-    let saved = 0;
-    for (const line of rows) {
-        const article = truncate(line.CODIGOARTICULO || line.codigoArticulo, 10);
-        const price = roundPrice(line.PRECIOVENTA ?? line.precioVenta ?? line.precio);
-        if (!article || !(price > 0)) continue;
-        const tipo = String(line.CLASELINEA || line.claseLinea || 'VT').trim().toUpperCase();
-        if (tipo === 'G' || line.isAutoGift === true) continue;
-        try {
-            await queryWithParams(
-                `INSERT INTO ${PRECIO_HISTORICO_TEST_TABLE} (CODIGOCLIENTE, CODIGOARTICULO, PRECIOVENTA, FECHA) VALUES (?, ?, ?, CURRENT TIMESTAMP)`,
-                [client, article, price],
-                false,
-            );
-            saved += 1;
-        } catch (err) {
-            logger.warn(`[PEDIDOS] TEST historico precios skip ${client}/${article}: ${err.message}`);
-            return saved;
-        }
-    }
-    return saved;
+function savePrecioHistoricoTEST({ clientCode, lines }) {
+    void clientCode;
+    void lines;
+    return Promise.resolve(0);
 }
 
 async function getPrecioHistoricoTEST({ clientCode, articleCode }) {
     try {
         const rows = await queryWithParams(
-            `SELECT PRECIOVENTA, FECHA FROM ${PRECIO_HISTORICO_TEST_TABLE} WHERE CODIGOCLIENTE = CAST(? AS CHAR(10)) AND TRIM(CODIGOARTICULO) = ? ORDER BY FECHA DESC FETCH FIRST 2 ROWS ONLY`,
+            `SELECT L.PRECIOVENTA,
+                    C.CREATED_AT AS FECHA
+               FROM ${PEDIDOS_CAB_TABLE} C
+               JOIN ${PEDIDOS_LIN_TABLE} L ON L.PEDIDO_ID = C.ID
+              WHERE TRIM(C.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
+                AND TRIM(L.CODIGOARTICULO) = ?
+                AND TRIM(C.ESTADO) = 'CONFIRMADO'
+                AND L.PRECIOVENTA > 0
+                AND TRIM(COALESCE(L.CLASELINEA, 'VT')) NOT IN ('G', 'SC')
+              ORDER BY C.CREATED_AT DESC, C.ID DESC, L.ID DESC
+              FETCH FIRST 2 ROWS ONLY`,
             [truncate(clientCode, 10), truncate(articleCode, 10)],
             false,
         );
@@ -956,10 +934,8 @@ async function getPrecioHistoricoTEST({ clientCode, articleCode }) {
     }
 }
 
-function mergeConfiguredPricing(product, productPricing, clientPrice) {
+function mergeConfiguredPricing(product, productPricing, clientPrice, competitivePrice) {
     const next = { ...product };
-    const competitivo = roundPrice(product.precioTarifa1 ?? product.PRECIOTARIFA1 ?? 0);
-    if (competitivo > 0) next.precioCompetitivo = competitivo;
 
     if (productPricing) {
         const configuredMin = effectiveMinPriceFromRow(productPricing);
@@ -975,25 +951,14 @@ function mergeConfiguredPricing(product, productPricing, clientPrice) {
 
         if (configuredMin > 0) next.precioMinimo = configuredMin;
         if (manufacturingCost > 0) next.precioCosto = manufacturingCost;
-    } else if (competitivo > 0) {
-        next.margenObjetivoPct = resolveMargenObjetivoPct({});
     }
-    const isPesEspecial = Boolean(
-        clientPrice && String(clientPrice.IS_SPECIAL_PRICE || '').trim().toUpperCase() === 'S',
-    );
-    if (!isPesEspecial && competitivo > 0) {
-        const marginPct = Number(next.margenObjetivoPct) || resolveMargenObjetivoPct(productPricing || {});
-        const politicaMin = resolvePrecioMinimoPolitica(competitivo, marginPct);
-        if (politicaMin > 0) {
-            next.precioCompetitivo = competitivo;
-            next.margenObjetivoPct = marginPct;
-            next.precioMinimoPolitica = politicaMin;
-            const currentMin = roundPrice(next.precioMinimo);
-            if (politicaMin > currentMin) {
-                next.precioMinimo = politicaMin;
-                next.precioMinimoSource = 'POLITICA_MARGEN_TARIFA1';
-            }
-        }
+
+    if (competitivePrice?.found === true) {
+        next.precioCompetitivo = roundPrice(competitivePrice.precioCompetitivo);
+        next.margenCompetitivoPct = Number(competitivePrice.margenPct);
+        next.precioCompetitivoSource = 'JAVIER.TEST_PRECIO_COMPETITIVO';
+        next.precioCompetitivoValidoDesde = competitivePrice.validoDesde;
+        next.precioCompetitivoValidoHasta = competitivePrice.validoHasta;
     }
 
     if (clientPrice) {
@@ -1013,12 +978,115 @@ function mergeConfiguredPricing(product, productPricing, clientPrice) {
     return next;
 }
 
+function resolveAuthoritativeLinePricing({
+    line,
+    articleCode,
+    clientTariff,
+    serverMin,
+    productPricing,
+    clientPrice,
+    userRole,
+}) {
+    const submitted = line && typeof line === 'object' ? line : {};
+    const normalizedArticleCode = truncate(articleCode, 10);
+    const authoritativePricing = mergeConfiguredPricing(
+        {
+            code: normalizedArticleCode,
+            precioTarifa1: clientTariff,
+            precioCliente: clientTariff,
+            precioTarifaCliente: clientTariff,
+            precioMinimo: serverMin,
+        },
+        productPricing,
+        clientPrice,
+    );
+    const authoritativeReference = roundPrice(
+        authoritativePricing.precioTarifaCliente || clientTariff,
+    );
+    const giftLine = isGiftLine(submitted);
+    if (!giftLine && authoritativeReference <= 0) {
+        const error = new Error(
+            `No hay un precio ERP vigente para ${normalizedArticleCode}. Actualiza el catálogo antes de continuar.`,
+        );
+        error.code = 'ORDER_PRICE_UNAVAILABLE';
+        error.status = 503;
+        error.articleCode = normalizedArticleCode;
+        throw error;
+    }
+    const quotedReference = roundPrice(submitted.precioTarifaCliente);
+    if (quotedReference > 0 && authoritativeReference > 0
+        && Math.abs(quotedReference - authoritativeReference) > 0.0001) {
+        const error = new Error(
+            `El precio de referencia de ${normalizedArticleCode} cambió de ${quotedReference} a ${authoritativeReference}. Revisa el pedido.`,
+        );
+        error.code = 'ORDER_PRICE_SNAPSHOT_STALE';
+        error.status = 409;
+        error.articleCode = normalizedArticleCode;
+        error.quotedPrice = quotedReference;
+        error.currentPrice = authoritativeReference;
+        throw error;
+    }
+
+    const configuredCost = roundPrice(productPricing?.COSTE_FABRICACION);
+    const verifiedGiftCost = giftLine && submitted.precioCostoVerificado === true
+        ? roundPrice(submitted.precioCosto)
+        : 0;
+    const verifiedCost = configuredCost > 0 ? configuredCost : verifiedGiftCost;
+    const authoritativeLine = {
+        ...submitted,
+        precioTarifa: roundPrice(clientTariff),
+        precioTarifaCliente: authoritativeReference,
+        precioMinimo: authoritativePricing.precioMinimo || roundPrice(serverMin),
+        precioEspecialCliente: authoritativePricing.precioEspecialCliente === true,
+        permiteBajoMinimo: authoritativePricing.permiteBajoMinimo === true,
+        precioClienteSource: authoritativePricing.precioClienteSource || '',
+        precioEspecialMotivo: authoritativePricing.precioEspecialMotivo || '',
+        precioCosto: verifiedCost,
+        importeCosto: undefined,
+        precioCostoVerificado: verifiedCost > 0,
+        precioCostoSource: configuredCost > 0
+            ? BOLSA_PRODUCT_PRICE_TABLE
+            : (verifiedGiftCost > 0 ? comercialErpTable('LAC') : ''),
+    };
+    const salePrice = resolveServerLineUnitPrice({
+        clientTariff: authoritativeReference,
+        precioMinimo: authoritativeLine.precioMinimo,
+        requestedPrice: parseFloat(submitted.precio) || parseFloat(submitted.precioVenta) || 0,
+        userRole,
+        motivo: submitted.motivoPrecio || submitted.motivo,
+        articleCode: normalizedArticleCode,
+        isGift: giftLine,
+    });
+
+    return {
+        line: authoritativeLine,
+        price: salePrice,
+        referencePrice: authoritativeReference,
+        pricing: authoritativePricing,
+    };
+}
+
+function calculateVerifiedCostMetrics({ importeVenta, billingQty, precioCosto, costVerified }) {
+    if (costVerified !== true) {
+        return { importeCosto: 0, importeMargen: 0, pctMargen: 0 };
+    }
+    const importeCosto = Math.round(
+        ((Number(billingQty) || 0) * (Number(precioCosto) || 0)) * 100,
+    ) / 100;
+    const importeMargen = roundMoney((Number(importeVenta) || 0) - importeCosto);
+    const pctMargen = Number(importeVenta) > 0
+        ? (importeMargen / Number(importeVenta)) * 100
+        : 0;
+    return { importeCosto, importeMargen, pctMargen };
+}
+
 async function getConfiguredPricingMaps(articleCodes, clientCode) {
     const codes = [...new Set((articleCodes || []).map(code => truncate(code, 10)).filter(Boolean))];
-    if (codes.length === 0) return { productPricing: new Map(), clientPrices: new Map() };
+    if (codes.length === 0) return { productPricing: new Map(), clientPrices: new Map(), competitivePrices: new Map() };
 
     const productPricing = new Map();
     const clientPrices = new Map();
+    const competitivePrices = new Map();
     const placeholders = pricingPlaceholders(codes);
 
     const productSql = `
@@ -1068,7 +1136,7 @@ async function getConfiguredPricingMaps(articleCodes, clientCode) {
     }
 
     const trimClient = clientCode ? truncate(clientCode, 10) : '';
-    if (!trimClient) return { productPricing, clientPrices };
+    if (!trimClient) return { productPricing, clientPrices, competitivePrices };
 
     const promoPriceSql = `
         SELECT
@@ -1181,7 +1249,18 @@ async function getConfiguredPricingMaps(articleCodes, clientCode) {
         }
     }
 
-    return { productPricing, clientPrices };
+    try {
+        const competitiveService = require('../precio-competitivo-service').createPrecioCompetitivoService();
+        const rows = await competitiveService.lookupBatch({
+            articleCodes: codes,
+            codigoCliente: trimClient,
+        });
+        for (const row of rows) competitivePrices.set(row.codigoArticulo, row);
+    } catch (error) {
+        logger.warn(`[PEDIDOS] Precio competitivo TEST no disponible: ${error.code || 'UNKNOWN'}`);
+    }
+
+    return { productPricing, clientPrices, competitivePrices };
 }
 
 async function applyConfiguredPricingToProducts(products, clientCode) {
@@ -1192,7 +1271,8 @@ async function applyConfiguredPricingToProducts(products, clientCode) {
         return mergeConfiguredPricing(
             product,
             maps.productPricing.get(code),
-            maps.clientPrices.get(code)
+            maps.clientPrices.get(code),
+            maps.competitivePrices.get(code),
         );
     });
 }
@@ -2952,6 +3032,8 @@ async function hydrateGiftArticles(lines) {
         return { ...line, descripcion: `${trimString(article.NAME).slice(0, 31)} (Regalo)`,
             unidadesCaja: Number(article.UNIDADESCAJA) || 1, codigoIva: trimString(article.CODIGOIVA),
             precioCosto: Number(article.PRECIOCOSTO) || 0,
+            precioCostoVerificado: Number(article.PRECIOCOSTO) > 0,
+            precioCostoSource: comercialErpTable('LAC'),
             precioTarifa: undefined, precioTarifaCliente: undefined, precioMinimo: undefined };
     });
 }
@@ -3052,23 +3134,13 @@ async function createOrder({
     const terminal = resolvePedidoTerminal(effectiveVendedorCode, userId);
 
     const tariffT0 = Date.now();
-    const [clientTariffs, articleIvaCodes, minPrices] = await Promise.all([
+    const articleCodes = lines.map((line) => truncate(line.codigoArticulo || line.CODIGOARTICULO, 10));
+    const [clientTariffs, articleIvaCodes, minPrices, configuredPricing] = await Promise.all([
         getClientTariffsForLines(effectiveClientCode, lines),
         getArticleIvaCodesForLines(lines),
         getMinPricesForLines(lines),
+        getConfiguredPricingMaps(articleCodes, effectiveClientCode),
     ]);
-    for (const ln of lines) {
-        const articleCode = truncate(ln.codigoArticulo || ln.CODIGOARTICULO, 10);
-        resolveServerLineUnitPrice({
-            clientTariff: clientTariffs.get(articleCode) || 0,
-            precioMinimo: minPrices.get(articleCode) || 0,
-            requestedPrice: parseFloat(ln.precio) || parseFloat(ln.precioVenta) || 0,
-            userRole,
-            motivo: ln.motivoPrecio || ln.motivo,
-            articleCode,
-            isGift: isGiftLine(ln),
-        });
-    }
     logger.info(`[PEDIDOS] createOrder stage=line_price_validate lineCount=${lineCount} durationMs=${Date.now() - tariffT0}`);
 
     logger.info(`[PEDIDOS] createOrder stage=line_defaults_prefetch lineCount=${lineCount} durationMs=0`);
@@ -3076,39 +3148,30 @@ async function createOrder({
         const articleCode = truncate(ln.codigoArticulo || ln.CODIGOARTICULO, 10);
         const clientTariff = clientTariffs.get(articleCode) || 0;
         const serverMin = minPrices.get(articleCode) || 0;
+        const resolvedPricing = resolveAuthoritativeLinePricing({
+            line: ln,
+            articleCode,
+            clientTariff,
+            serverMin,
+            productPricing: configuredPricing.productPricing.get(articleCode),
+            clientPrice: configuredPricing.clientPrices.get(articleCode),
+            userRole,
+        });
         const productIvaCode = articleIvaCodes.get(articleCode);
         const iva = productIvaCode
             ? resolveIvaFromCodigo(productIvaCode)
             : resolveIvaFromLine(ln);
-        const line = clientTariff > 0
-            ? {
-                ...ln,
-                precioTarifa: ln.precioTarifa ?? clientTariff,
-                precioTarifaCliente: ln.precioTarifaCliente ?? clientTariff,
-                precioMinimo: serverMin || ln.precioMinimo,
-                codigoIva: iva.codigoIva,
-                ivaRate: iva.ivaRate,
-            }
-            : {
-                ...ln,
-                precioMinimo: serverMin || ln.precioMinimo,
-                codigoIva: iva.codigoIva,
-                ivaRate: iva.ivaRate,
-            };
+        const line = {
+            ...resolvedPricing.line,
+            codigoIva: iva.codigoIva,
+            ivaRate: iva.ivaRate,
+        };
         const cantidadEnvases = parseFloat(line.cantidadEnvases) || 0;
         const cantidadUnidades = parseFloat(line.cantidadUnidades) || parseFloat(line.cantidad) || 0;
         const unidadesCaja = parseFloat(line.unidadesCaja) || 1;
         const unidadMedida = line.unidadMedida || 'CAJAS';
         const descuentoLinea = parseLineDiscountPct(line);
-        const precio = resolveServerLineUnitPrice({
-            clientTariff,
-            precioMinimo: serverMin,
-            requestedPrice: parseFloat(line.precio) || parseFloat(line.precioVenta) || 0,
-            userRole,
-            motivo: ln.motivoPrecio || ln.motivo,
-            articleCode,
-            isGift: isGiftLine(line),
-        });
+        const precio = resolvedPricing.price;
 
         const importeBruto = calculateLineImporte({
             unidadMedida,
@@ -3119,9 +3182,12 @@ async function createOrder({
         });
         const importeVenta = applyPctToAmount(importeBruto, descuentoLinea);
         const billingQty = isBoxUnidadMedida(unidadMedida) ? cantidadEnvases : cantidadUnidades;
-        const importeCosto = parseFloat(line.importeCosto) || Math.round((billingQty * (parseFloat(line.precioCosto) || 0)) * 100) / 100;
-        const importeMargen = importeVenta - importeCosto;
-        const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
+        const { importeCosto, importeMargen, pctMargen } = calculateVerifiedCostMetrics({
+            importeVenta,
+            billingQty,
+            precioCosto: line.precioCosto,
+            costVerified: line.precioCostoVerificado,
+        });
 
         return {
             line,
@@ -3953,7 +4019,10 @@ async function addOrderLine(pedidoId, lineData) {
     const precioBase = parseFloat(lineData.precio || lineData.precioVenta) || 0;
     const descuentoLinea = parseLineDiscountPct(lineData);
     const precio = precioBase;
-    const precioCosto = parseFloat(lineData.precioCosto) || 0;
+    const configuredPricing = await getConfiguredPricingMaps([codigoArticulo], '');
+    const productPricing = configuredPricing.productPricing.get(codigoArticulo);
+    const precioCosto = roundPrice(productPricing?.COSTE_FABRICACION);
+    const costVerified = precioCosto > 0;
     const unidadesCaja = parseFloat(lineData.unidadesCaja) || 1;
     const unidadMedida = lineData.unidadMedida || 'CAJAS';
     const articleIvaCodes = await getArticleIvaCodesForLines([lineData]);
@@ -3965,9 +4034,12 @@ async function addOrderLine(pedidoId, lineData) {
     const importeBruto = calculateLineImporte({ unidadMedida, cantidadEnvases, cantidadUnidades, unidadesCaja, precioVenta: precio });
     const importeVenta = applyPctToAmount(importeBruto, descuentoLinea);
     const billingQty = isBoxUnidadMedida(unidadMedida) ? cantidadEnvases : cantidadUnidades;
-    const importeCosto = Math.round((billingQty * precioCosto) * 100) / 100;
-    const importeMargen = importeVenta - importeCosto;
-    const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
+    const { importeCosto, importeMargen, pctMargen } = calculateVerifiedCostMetrics({
+        importeVenta,
+        billingQty,
+        precioCosto,
+        costVerified,
+    });
 
     const sql = `
         INSERT INTO ${PEDIDOS_LIN_TABLE} (
@@ -4014,7 +4086,6 @@ async function updateOrderLine(lineId, {
     precio,
     precioVenta,
     unidadMedida,
-    precioCosto,
     claseLinea,
     descuentoLinea,
     lineDiscountPct,
@@ -4028,18 +4099,29 @@ async function updateOrderLine(lineId, {
 
     // Fetch current line to get pedidoId and defaults
     const currentRows = await queryWithParams(
-        `SELECT PEDIDO_ID, CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO, UNIDADMEDIDA, UNIDADESCAJA, CLASELINEA, COALESCE(DESCUENTO_LINEA, 0) AS DESCUENTO_LINEA, TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ?`,
+        `SELECT PEDIDO_ID, CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO,
+                UNIDADMEDIDA, UNIDADESCAJA, CLASELINEA,
+                COALESCE(DESCUENTO_LINEA, 0) AS DESCUENTO_LINEA,
+                TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA,
+                TRIM(CODIGOARTICULO) AS CODIGOARTICULO
+           FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ?`,
         [id]
     );
     if (!currentRows || currentRows.length === 0) throw new Error('Line not found');
 
     const pedidoId = currentRows[0].PEDIDO_ID;
+    const codigoArticulo = truncate(currentRows[0].CODIGOARTICULO, 10);
+    const configuredPricing = await getConfiguredPricingMaps([codigoArticulo], '');
+    const productPricing = configuredPricing.productPricing.get(codigoArticulo);
+    const verifiedCost = roundPrice(productPricing?.COSTE_FABRICACION);
+    const costVerified = verifiedCost > 0;
     await withEditableDraftMutation(pedidoId, async (queryFn) => {
         const lockedRows = await queryFn(
             `SELECT PEDIDO_ID, CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO,
                     UNIDADMEDIDA, UNIDADESCAJA, CLASELINEA,
                     COALESCE(DESCUENTO_LINEA, 0) AS DESCUENTO_LINEA,
-                    TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA
+                    TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA,
+                    TRIM(CODIGOARTICULO) AS CODIGOARTICULO
                FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ? AND PEDIDO_ID = ?`,
             [id, pedidoId],
         );
@@ -4047,6 +4129,13 @@ async function updateOrderLine(lineId, {
             throw new OrderStateError('LINE_NOT_FOUND', 'Línea de pedido no encontrada', 404);
         }
         const current = lockedRows[0];
+        if (truncate(current.CODIGOARTICULO, 10) !== codigoArticulo) {
+            throw new OrderStateError(
+                'LINE_CHANGED_DURING_EDIT',
+                'El artículo de la línea cambió mientras se editaba.',
+                409,
+            );
+        }
         const newClase = claseLinea !== undefined ? claseLinea : (current.CLASELINEA || 'VT');
         const newEnvases = cantidadEnvases != null ? parseFloat(cantidadEnvases) : parseFloat(current.CANTIDADENVASES) || 0;
         const newUnidades = cantidadUnidades != null
@@ -4054,7 +4143,7 @@ async function updateOrderLine(lineId, {
             : (cantidad != null ? parseFloat(cantidad) : parseFloat(current.CANTIDADUNIDADES) || 0);
         const newPrecio = newClase === 'SC' ? 0
             : (precioVenta != null ? parseFloat(precioVenta) : (precio != null ? parseFloat(precio) : parseFloat(current.PRECIOVENTA) || 0));
-        const newCosto = precioCosto != null ? parseFloat(precioCosto) : parseFloat(current.PRECIOCOSTO) || 0;
+        const newCosto = verifiedCost;
         const newUM = unidadMedida || current.UNIDADMEDIDA;
         const unidadesCaja = parseFloat(current.UNIDADESCAJA) || 1;
         const newDiscount = (descuentoLinea != null || lineDiscountPct != null)
@@ -4069,9 +4158,12 @@ async function updateOrderLine(lineId, {
         });
         const importeVenta = applyPctToAmount(importeBruto, newDiscount);
         const billingQty = newUM === 'CAJAS' ? newEnvases : newUnidades;
-        const importeCosto = billingQty * newCosto;
-        const importeMargen = importeVenta - importeCosto;
-        const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
+        const { importeCosto, importeMargen, pctMargen } = calculateVerifiedCostMetrics({
+            importeVenta,
+            billingQty,
+            precioCosto: newCosto,
+            costVerified,
+        });
 
         await queryFn(
             `UPDATE ${PEDIDOS_LIN_TABLE} SET
@@ -4800,12 +4892,6 @@ async function confirmOrder(orderId, saleType, options = {}) {
         logger.info(`[PEDIDOS] Confirm #${id} with dto=${options._bolsaGlobalDiscountPct} and no bolsa consumo (tariff-neutral after discounts)`);
     }
 
-    // REQ-28: guarda precioVenta confirmado en historico TEST (best-effort, nunca bloquea confirm).
-    try {
-        await savePrecioHistoricoTEST({ clientCode, lines });
-    } catch (histErr) {
-        logger.warn(`[PEDIDOS] TEST historico precios no guardado #${id}: ${histErr.message}`);
-    }
     // Invalida cache tras confirmacion (cambia ESTADO, importes y stock reservas).
     invalidatePedidosCache(id);
     await invalidateRuteroCachesAfterPedido(
@@ -5641,5 +5727,7 @@ module.exports = {
         exportCommercialOrderToSystem,
         withSystemExportLock,
         isDuplicateKeyError,
+        resolveAuthoritativeLinePricing,
+        calculateVerifiedCostMetrics,
     },
 };

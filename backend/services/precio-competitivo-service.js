@@ -22,6 +22,24 @@ SELECT ID,
  ORDER BY VALIDO_DESDE DESC, UPDATED_AT DESC, ID DESC
  FETCH FIRST 1 ROW ONLY`;
 
+const LOOKUP_BATCH_SQL = `
+SELECT ID, CODIGOARTICULO, CODIGOCLIENTE, CODIGOTARIFA,
+       PRECIO_COMPETITIVO, MARGEN_PCT, VALIDO_DESDE, VALIDO_HASTA,
+       USUARIO, UPDATED_AT
+  FROM (
+    SELECT P.*,
+           ROW_NUMBER() OVER (
+             PARTITION BY TRIM(P.CODIGOARTICULO), TRIM(P.CODIGOCLIENTE)
+             ORDER BY P.VALIDO_DESDE DESC, P.UPDATED_AT DESC, P.ID DESC
+           ) AS RN
+      FROM ${TABLE} P
+     WHERE TRIM(P.CODIGOCLIENTE) = ?
+       AND TRIM(P.CODIGOARTICULO) IN (__ARTICLE_PLACEHOLDERS__)
+       AND P.VALIDO_DESDE <= ?
+       AND (P.VALIDO_HASTA IS NULL OR P.VALIDO_HASTA >= ?)
+  ) X
+ WHERE RN = 1`;
+
 const INSERT_SQL = `
 INSERT INTO ${TABLE} (
   CODIGOARTICULO, CODIGOCLIENTE, CODIGOTARIFA, PRECIO_COMPETITIVO, MARGEN_PCT,
@@ -307,12 +325,34 @@ function createPrecioCompetitivoService({ queryWithParams, clock = () => new Dat
     });
   }
 
-  return Object.freeze({ lookup, create });
+  async function lookupBatch({ articleCodes, codigoCliente, onDate }) {
+    const client = assertCode(codigoCliente, 'El cliente');
+    const articles = [...new Set((articleCodes || []).map((code) => assertCode(code, 'El artículo')))];
+    if (articles.length === 0) return [];
+    const day = onDate || madridToday(clock());
+    const sql = LOOKUP_BATCH_SQL.replace(
+      '__ARTICLE_PLACEHOLDERS__',
+      articles.map(() => '?').join(', '),
+    );
+    try {
+      const rows = await query(sql, [client, ...articles, day, day], false, false);
+      return (rows || []).map((row) => toPublic(row, column(row, 'CODIGOARTICULO'), client));
+    } catch {
+      throw new PrecioCompetitivoError(
+        'PRECIO_COMPETITIVO_UNAVAILABLE',
+        'No se pudo consultar el precio competitivo. Reinténtalo más tarde.',
+        503,
+      );
+    }
+  }
+
+  return Object.freeze({ lookup, lookupBatch, create });
 }
 
 module.exports = {
   TABLE,
   LOOKUP_SQL,
+  LOOKUP_BATCH_SQL,
   INSERT_SQL,
   PrecioCompetitivoError,
   asDateOnly,
