@@ -139,27 +139,57 @@ async function seedPrecioCompetitivo(connection, env = process.env) {
   }
 }
 
-async function main() {
-  assertSeedAllowed(process.env);
-  if (!process.argv.includes('--apply')) {
-    console.log(JSON.stringify({ dryRun: true, rows: ROWS.length, table: TABLE }));
+async function main({
+  env = process.env,
+  argv = process.argv,
+  loadEnvironment,
+  applyProfile,
+  openConnection,
+  stdout = console.log,
+} = {}) {
+  const path = require('path');
+  const load = loadEnvironment
+    || (() => require('../config/load-env').loadEnv(path.resolve(__dirname, '..')));
+  const apply = applyProfile
+    || ((targetEnv) => require('../config/app-profile').applyAppProfile(targetEnv));
+  load();
+  apply(env);
+  assertSeedAllowed(env);
+  if (!argv.includes('--apply')) {
+    stdout(JSON.stringify({ dryRun: true, rows: ROWS.length, table: TABLE }));
     return;
   }
-  const {
-    openDedicatedPedidosTransactionConnection,
-  } = require('../adapters/pedidos-transaction-connection');
-  const connection = await openDedicatedPedidosTransactionConnection();
+  const connect = openConnection
+    || (() => require('../adapters/pedidos-transaction-connection')
+      .openDedicatedPedidosTransactionConnection());
+  const connection = await connect();
   try {
-    const count = await seedPrecioCompetitivo(connection);
-    console.log(JSON.stringify({ seeded: count, table: 'JAVIER.TEST_PRECIO_COMPETITIVO' }));
+    const count = await seedPrecioCompetitivo(connection, env);
+    stdout(JSON.stringify({ seeded: count, table: 'JAVIER.TEST_PRECIO_COMPETITIVO' }));
   } finally {
     await connection.close();
   }
 }
 
+function safeCliError(error) {
+  const diagnostic = Array.isArray(error?.odbcErrors) && error.odbcErrors.length > 0
+    ? error.odbcErrors[0]
+    : error;
+  const state = String(
+    diagnostic?.state || diagnostic?.sqlState || diagnostic?.sqlstate || '',
+  ).trim().toUpperCase();
+  const rawCode = diagnostic?.code ?? diagnostic?.nativeCode ?? diagnostic?.nativeError;
+  const code = String(rawCode ?? '').trim().toUpperCase();
+  return {
+    error: 'COMPETITIVE_SEED_FAILED',
+    ...(state && /^[0-9A-Z]{5}$/.test(state) ? { odbcState: state } : {}),
+    ...(code && /^(?:-?\d{1,8}|SQL\d{4})$/.test(code) ? { odbcCode: code } : {}),
+  };
+}
+
 if (require.main === module) {
   main().catch((error) => {
-    console.error(String(error && error.message || error).slice(0, 300));
+    console.error(JSON.stringify(safeCliError(error)));
     process.exit(1);
   });
 }
@@ -172,5 +202,7 @@ module.exports = {
   UPSERT_SQL,
   assertSeedAllowed,
   canonicalSeedRows,
+  main,
+  safeCliError,
   seedPrecioCompetitivo,
 };
