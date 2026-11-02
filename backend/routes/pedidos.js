@@ -629,7 +629,7 @@ router.get('/families/detailed', async (req, res) => {
 /**
  * Req #8: GET /api/pedidos/draft-status/:vendedorCode
  * Umbral: VDDX.PEDIDOSPENDIENTESSINCRONIZAR (TEST_VDDX si REPARTO_TABLE_SET=isolated_test).
- * Lectura. El app llama POST .../auto-confirm al superar N (auto-envío).
+ * Solo lectura. El cliente drena pedidos locales ya finalizados al superar N.
  */
 router.get('/draft-status/:vendedorCode', async (req, res) => {
     try {
@@ -660,11 +660,12 @@ router.post('/draft-status/:vendedorCode/auto-confirm', async (req, res) => {
         if (!vendorAccess.ok) {
             return res.status(vendorAccess.status).json(vendorAccess.body);
         }
-        const result = await pedidosService.checkDraftAccumulation(vendorAccess.vendedorCode, {
-            autoConfirm: true,
-            options: { userId: req.user?.codigo || req.user?.userId || 'API' },
+        return res.status(409).json({
+            success: false,
+            blocked: true,
+            code: 'DRAFT_AUTO_CONFIRM_DISABLED',
+            message: 'No se pueden confirmar borradores editables automaticamente. Finalice el pedido en el dispositivo para enviarlo.',
         });
-        res.json({ success: true, ...result });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in POST /draft-status/auto-confirm: ${error.message}`);
         return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');

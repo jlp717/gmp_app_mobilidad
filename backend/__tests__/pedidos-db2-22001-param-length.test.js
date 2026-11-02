@@ -334,15 +334,14 @@ describe('AppSec: draft-status auto-confirm vendor scope', () => {
     expect(mockCheckDraftAccumulation).not.toHaveBeenCalled();
   });
 
-  test('legacy POST auto-confirm allows COMERCIAL for own vendor', async () => {
+  test('legacy POST auto-confirm rejects even the own vendor draft', async () => {
     const res = await request(makeLegacyApp({ code: '01', role: 'COMERCIAL' }))
       .post('/draft-status/01/auto-confirm');
 
-    expect(res.status).toBe(200);
-    expect(mockCheckDraftAccumulation).toHaveBeenCalledWith(
-      '01',
-      expect.objectContaining({ autoConfirm: true }),
-    );
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('DRAFT_AUTO_CONFIRM_DISABLED');
+    expect(res.body.blocked).toBe(true);
+    expect(mockCheckDraftAccumulation).not.toHaveBeenCalled();
   });
 
   test('DDD POST auto-confirm returns 403 when COMERCIAL targets another vendor', async () => {
@@ -354,15 +353,14 @@ describe('AppSec: draft-status auto-confirm vendor scope', () => {
     expect(mockCheckDraftAccumulation).not.toHaveBeenCalled();
   });
 
-  test('DDD POST auto-confirm allows COMERCIAL for own vendor', async () => {
+  test('DDD POST auto-confirm rejects even the own vendor draft', async () => {
     const res = await request(makeDddApp({ id: '01', code: '01', role: 'COMERCIAL' }))
       .post('/draft-status/01/auto-confirm');
 
-    expect(res.status).toBe(200);
-    expect(mockCheckDraftAccumulation).toHaveBeenCalledWith(
-      '01',
-      expect.objectContaining({ autoConfirm: true }),
-    );
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('DRAFT_AUTO_CONFIRM_DISABLED');
+    expect(res.body.blocked).toBe(true);
+    expect(mockCheckDraftAccumulation).not.toHaveBeenCalled();
   });
 });
 

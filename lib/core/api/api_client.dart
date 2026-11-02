@@ -27,6 +27,7 @@ class ApiClient {
   static Future<bool>? _refreshInFlight;
   static int _authEpoch = 0;
   static int _sessionGeneration = 0;
+  static final Object _expectedAuthEpochZoneKey = Object();
   static String? _authMode;
   static bool _lastTokenRefreshFailedDueToConnectivity = false;
 
@@ -307,6 +308,20 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
+          final expectedAuthEpoch = options.extra['expectedAuthEpoch'];
+          if (expectedAuthEpoch is int && expectedAuthEpoch != _authEpoch) {
+            options.extra['skipRetry'] = true;
+            options.extra['authContextChanged'] = true;
+            options.headers.remove('Authorization');
+            handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.cancel,
+                error: const _AuthContextChangedMarker(),
+              ),
+            );
+            return;
+          }
           final token = _savedAuthToken;
           options.extra['authEpoch'] = _authEpoch;
           options.extra['sessionGeneration'] = _sessionGeneration;
@@ -449,6 +464,42 @@ class ApiClient {
   /// Get current auth token (for Image.network headers etc.)
   static String? get authToken {
     return _savedAuthToken;
+  }
+
+  /// Opaque generation for work that must not cross an authentication change.
+  ///
+  /// This deliberately exposes neither the bearer token nor user data. A
+  /// queued mutation can capture the generation and stop before its next HTTP
+  /// call when login, logout, account switch or token rotation changed the
+  /// authorization context underneath it.
+  static int get authMutationEpoch => _authEpoch;
+
+  /// Runs an HTTP mutation bound to the current opaque authentication epoch.
+  /// Requests created by [action] are rejected before attaching a bearer when
+  /// login, logout or account switching changed the epoch.
+  static Future<T> runForAuthEpoch<T>(
+    int expectedAuthEpoch,
+    Future<T> Function() action,
+  ) {
+    if (expectedAuthEpoch != _authEpoch) {
+      return Future<T>.error(
+        ApiException(
+          'La cuenta cambio antes de enviar la operacion.',
+          statusCode: 0,
+          code: 'AUTH_CONTEXT_CHANGED',
+        ),
+      );
+    }
+    return runZoned(
+      action,
+      zoneValues: {_expectedAuthEpochZoneKey: expectedAuthEpoch},
+    );
+  }
+
+  static Map<String, dynamic> get _authBoundRequestExtra {
+    final expectedAuthEpoch = Zone.current[_expectedAuthEpochZoneKey];
+    if (expectedAuthEpoch is! int) return const <String, dynamic>{};
+    return <String, dynamic>{'expectedAuthEpoch': expectedAuthEpoch};
   }
 
   /// Auth headers map for Image.network, url_launcher, etc.
@@ -1049,6 +1100,7 @@ class ApiClient {
             'idempotent': idempotent,
             if (maxRetries != null) 'maxRetries': maxRetries,
             ...?extra,
+            ..._authBoundRequestExtra,
           },
         ),
       );
@@ -1080,7 +1132,10 @@ class ApiClient {
         data: data,
         options: Options(
           receiveTimeout: receiveTimeout,
-          extra: {'skipRetry': skipRetry},
+          extra: {
+            'skipRetry': skipRetry,
+            ..._authBoundRequestExtra,
+          },
         ),
       );
       return response.data!;
@@ -1178,7 +1233,14 @@ class ApiClient {
       '[ApiClient] Request failed: type=${e.type} '
       'status=${e.response?.statusCode ?? 0}',
     );
-    if (e.type == DioExceptionType.cancel) {
+    if (e.requestOptions.extra['authContextChanged'] == true ||
+        e.error is _AuthContextChangedMarker) {
+      return ApiException(
+        'La cuenta cambio antes de enviar la operacion.',
+        statusCode: 0,
+        code: 'AUTH_CONTEXT_CHANGED',
+      );
+    } else if (e.type == DioExceptionType.cancel) {
       return ApiException(
         'Solicitud cancelada.',
         statusCode: 0,
@@ -1357,6 +1419,10 @@ class ApiClient {
 
   /// Get count of pending requests (for debugging)
   static int get pendingRequestCount => _pendingRequests.length;
+}
+
+class _AuthContextChangedMarker {
+  const _AuthContextChangedMarker();
 }
 
 /// Retry interceptor for handling transient failures

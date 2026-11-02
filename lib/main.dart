@@ -212,6 +212,14 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
       final authState = ref.read(authProvider).value;
       return authState?.isAuthenticated ?? false;
     };
+    OfflineSyncBridge.bindPedidosQueueHooks(
+      canAutoSync: () {
+        final authState = ref.read(authProvider).value;
+        return (authState?.isAuthenticated ?? false) &&
+            ConnectivityService.instance.currentStatus ==
+                ConnectivityStatus.online;
+      },
+    );
     // Notifications on online; sync itself runs via OfflineSyncBridge hook.
     _connectivitySubscription =
         ConnectivityService.instance.stream.listen((status) {

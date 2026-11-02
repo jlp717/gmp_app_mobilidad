@@ -95,4 +95,35 @@ describe('checkDraftAccumulation VDDX threshold', () => {
     expect(result.autoSendEnabled).toBe(false);
     expect(result.count).toBe(5);
   });
+
+  test('never confirms editable server drafts when an old client requests auto-confirm', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/PEDIDOSPENDIENTESSINCRONIZAR/i.test(sql)) return [{ THRESHOLD: 3 }];
+      if (/BORRADOR/i.test(sql)) {
+        return Array.from({ length: 3 }, (_, i) => ({
+          ID: i + 1,
+          NUMEROPEDIDO: i + 10,
+          CODIGOCLIENTE: `C${i + 1}`,
+          NOMBRECLIENTE: `Cliente ${i + 1}`,
+          IMPORTETOTAL: 100 + i,
+          CREATED_AT: '2026-11-02',
+        }));
+      }
+      return [];
+    });
+
+    const result = await pedidosService.checkDraftAccumulation('15', {
+      autoConfirm: true,
+      options: { userId: 'OLD_CLIENT' },
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      blocked: true,
+      autoConfirmed: false,
+      code: 'DRAFT_AUTO_CONFIRM_DISABLED',
+      count: 3,
+      threshold: 3,
+    }));
+    expect(mockConfirmOrder).not.toHaveBeenCalled();
+  });
 });

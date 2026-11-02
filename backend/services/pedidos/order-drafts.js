@@ -174,8 +174,8 @@ function deliveryDaysFromRows(rows, columnMap) {
     return DELIVERY_DAY_ORDER.filter(day => present.has(day));
 }
 
-async function checkDraftAccumulation(vendedorCode, { autoConfirm = false, threshold = null, options = {} } = {}) {
-    const { getPedidosPendientesSyncThreshold, confirmOrder } = require('./index'); // puente split: def vive en index
+async function checkDraftAccumulation(vendedorCode, { autoConfirm = false, threshold = null } = {}) {
+    const { getPedidosPendientesSyncThreshold } = require('./index'); // puente split: def vive en index
     const code = truncate(vendedorCode, 2);
     if (!code) return { warning: false, drafts: [], threshold: 0, count: 0 };
 
@@ -225,39 +225,20 @@ async function checkDraftAccumulation(vendedorCode, { autoConfirm = false, thres
         };
     }
 
-    try {
-        await confirmOrder(oldest.ID, 'CC', {
-            ...options,
-            userId: options.userId || 'AUTO_DRAFT_GUARD',
-            forceConfirm: true,
-        });
-        logger.warn(`[PEDIDOS] Auto-confirmed draft #${oldest.NUMEROPEDIDO} (id=${oldest.ID}) por acumulacion (${count}, umbral=${resolvedThreshold})`);
-        return {
-            warning: true,
-            autoConfirmed: true,
-            autoConfirmedId: oldest.ID,
-            autoConfirmedNumber: oldest.NUMEROPEDIDO,
-            count,
-            threshold: resolvedThreshold,
-            autoSendEnabled: true,
-            message: `Tenias ${count} borradores (umbral ${resolvedThreshold}). El mas antiguo (#${oldest.NUMEROPEDIDO}) se ha confirmado automaticamente.`,
-            drafts,
-        };
-    } catch (confirmErr) {
-        logger.error(`[PEDIDOS] checkDraftAccumulation auto-confirm failed for #${oldest.NUMEROPEDIDO}: ${confirmErr.message}`);
-        return {
-            warning: true,
-            autoConfirmed: false,
-            autoConfirmError: confirmErr.message,
-            count,
-            threshold: resolvedThreshold,
-            autoSendEnabled: true,
-            oldestId: oldest.ID,
-            oldestNumber: oldest.NUMEROPEDIDO,
-            drafts,
-            message: `${count} borradores acumulados. No se pudo auto-confirmar el mas antiguo (${confirmErr.code || confirmErr.message}).`,
-        };
-    }
+    logger.warn(`[PEDIDOS] Rejected unsafe draft auto-confirm for vendor ${code}`);
+    return {
+        warning: true,
+        autoConfirmed: false,
+        blocked: true,
+        code: 'DRAFT_AUTO_CONFIRM_DISABLED',
+        count,
+        threshold: resolvedThreshold,
+        autoSendEnabled: true,
+        oldestId: oldest.ID,
+        oldestNumber: oldest.NUMEROPEDIDO,
+        drafts,
+        message: 'Los borradores editables no se confirman automaticamente. Finalice el pedido en el dispositivo para enviarlo.',
+    };
 }
 
 module.exports = {

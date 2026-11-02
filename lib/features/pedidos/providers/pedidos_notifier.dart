@@ -718,8 +718,9 @@ class PedidosNotifier extends Notifier<PedidosState> {
     );
   }
 
-  /// Consulta umbral VDDX; si count ≥ N (>0) auto-confirma el borrador más
-  /// antiguo. Resultado vía state.draftWarningMessage / accumulatedDraftCount.
+  /// Consulta el umbral VDDX y, al alcanzarlo, drena todos los pedidos locales
+  /// que el comercial ya finalizo. Los borradores editables del servidor no se
+  /// confirman automaticamente.
   Future<void> refreshDraftStatus(
     String vendedorCode, {
     bool autoConfirmIfOverThreshold = true,
@@ -733,48 +734,27 @@ class PedidosNotifier extends Notifier<PedidosState> {
         cacheTTL: CacheService.realtimeTTL,
       );
       final data = raw;
-      var warning = data['warning'] == true;
-      var count = (data['count'] ?? 0) is num
-          ? (data['count'] as num).toInt()
-          : int.tryParse((data['count'] ?? '0').toString()) ?? 0;
       final threshold = (data['threshold'] ?? 0) is num
           ? (data['threshold'] as num).toInt()
           : int.tryParse((data['threshold'] ?? '0').toString()) ?? 0;
-      var next = state.copyWith(
-        accumulatedDraftCount: count,
+      await PedidosOfflineService.configureAutoSyncThreshold(
+        vendedorCode: code,
+        threshold: threshold,
+      );
+      final localPending = PedidosOfflineService.pendingSyncCount;
+      final warning = autoConfirmIfOverThreshold &&
+          threshold > 0 &&
+          localPending >= threshold;
+      final next = state.copyWith(
+        accumulatedDraftCount: localPending,
         draftAutoSendThreshold: threshold,
-        draftWarningMessage: warning ? data['message']?.toString() : null,
+        draftWarningMessage: warning
+            ? '$localPending pedidos finalizados pendientes. '
+                'Se enviaran ahora por haber alcanzado el umbral $threshold.'
+            : null,
         clearDraftWarningMessage: !warning,
       );
 
-      if (autoConfirmIfOverThreshold &&
-          warning &&
-          threshold > 0 &&
-          count >= threshold) {
-        try {
-          final confirmed = await ApiClient.post(
-            '/pedidos/draft-status/$code/auto-confirm',
-            {},
-          );
-          warning = confirmed['warning'] == true;
-          count = (confirmed['count'] ?? count) is num
-              ? (confirmed['count'] as num).toInt()
-              : int.tryParse((confirmed['count'] ?? '$count').toString()) ??
-                  count;
-          next = next.copyWith(
-            accumulatedDraftCount: count,
-            draftWarningMessage:
-                confirmed['message']?.toString() ?? next.draftWarningMessage,
-          );
-          if (confirmed['autoConfirmed'] == true) {
-            unawaited(
-              loadOrders(vendedorCodes: code, forceRefresh: true),
-            );
-          }
-        } catch (_) {
-          // Mantener warning GET si el auto-confirm falla.
-        }
-      }
       _setState(next, immediate: true);
     } catch (_) {
       // Silencioso: no crítico

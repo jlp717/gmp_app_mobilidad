@@ -1503,12 +1503,12 @@ function createPedidosRoutes() {
       const code = String(req.params.vendedorCode || '').trim();
       const vendorAccess = authorizePedidoVendorCode(req, code, 'auto-confirmar');
       if (!vendorAccess.ok) return res.status(vendorAccess.status).json(vendorAccess.body);
-      const pedidosService = require('../../../services/pedidos.service');
-      const result = await pedidosService.checkDraftAccumulation(vendorAccess.vendedorCode, {
-        autoConfirm: true,
-        options: { userId: req.user?.code || req.user?.id || 'API' },
+      return res.status(409).json({
+        success: false,
+        blocked: true,
+        code: 'DRAFT_AUTO_CONFIRM_DISABLED',
+        message: 'No se pueden confirmar borradores editables automaticamente. Finalice el pedido en el dispositivo para enviarlo.',
       });
-      res.json({ success: true, ...result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in POST /draft-status/auto-confirm: ${error.message}`);
       sendInternalServerError(res);
