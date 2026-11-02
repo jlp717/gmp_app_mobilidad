@@ -1,0 +1,49 @@
+{
+  "sourceCommit": "0e135d1",
+  "readOnly": true,
+  "batchQueryCount": 1,
+  "totalQueryCount": 3,
+  "batch": [
+    {
+      "success": true,
+      "found": true,
+      "codigoArticulo": "3075",
+      "codigoCliente": "4300032160",
+      "codigoTarifa": 1,
+      "precioCompetitivo": 49.572,
+      "margenPct": 24.71,
+      "validoDesde": "2026-09-28",
+      "validoHasta": null,
+      "usuario": "pedido-106",
+      "updatedAt": "2026-11-02 20:39:39.778990"
+    },
+    {
+      "success": true,
+      "found": true,
+      "codigoArticulo": "3519",
+      "codigoCliente": "4300032160",
+      "codigoTarifa": 1,
+      "precioCompetitivo": 27.54,
+      "margenPct": 24.69,
+      "validoDesde": "2026-09-28",
+      "validoHasta": null,
+      "usuario": "pedido-106",
+      "updatedAt": "2026-11-02 20:39:39.762031"
+    }
+  ],
+  "otherClientRows": [],
+  "absent": {
+    "success": true,
+    "found": false,
+    "codigoArticulo": "2974",
+    "codigoCliente": "4300032160",
+    "codigoTarifa": null,
+    "precioCompetitivo": null,
+    "margenPct": null,
+    "validoDesde": null,
+    "validoHasta": null,
+    "usuario": null,
+    "updatedAt": null
+  },
+  "passed": true
+}

@@ -1,0 +1,161 @@
+{
+  "sourceCommit": "0e135d1e897d9a5d708d97bf758ad374f224005e",
+  "sourceWorktreeSha256": "e2e36216104a6aca873b78c308c4fdbdc2604d7cf637a1298d064f1549368332",
+  "sourceBytes": "Windows worktree CRLF; normalized Git diff matches fixed commit",
+  "profile": {
+    "profile": "test",
+    "verified": true,
+    "readSchema": "DSEDAC",
+    "writeSchema": "JAVIER",
+    "tableSet": "isolated_test",
+    "erpExportEnabled": false,
+    "writesEnabled": true,
+    "productionWritesEnabled": false
+  },
+  "daemonChanged": false,
+  "retainedSeedRows": true,
+  "target": "JAVIER.TEST_PRECIO_COMPETITIVO",
+  "commits": [
+    {
+      "label": "initial",
+      "deltaVerifiedBeforeCommit": true,
+      "targetIds": [
+        3,
+        2
+      ],
+      "beforeCount": 0,
+      "afterCount": 2
+    },
+    {
+      "label": "replay",
+      "deltaVerifiedBeforeCommit": true,
+      "targetIds": [
+        3,
+        2
+      ],
+      "beforeCount": 2,
+      "afterCount": 2
+    },
+    {
+      "label": "workerB",
+      "deltaVerifiedBeforeCommit": true,
+      "targetIds": [
+        3,
+        2
+      ],
+      "beforeCount": 2,
+      "afterCount": 2
+    },
+    {
+      "label": "workerA",
+      "deltaVerifiedBeforeCommit": true,
+      "targetIds": [
+        3,
+        2
+      ],
+      "beforeCount": 2,
+      "afterCount": 2
+    }
+  ],
+  "scope": "two authorised real-sale rows only; unrelated rows represented by count/hash; no order/bag/payment writes",
+  "journal": [
+    {
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    }
+  ],
+  "before": {
+    "count": 0,
+    "rows": [],
+    "unrelatedRowsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "reference": [
+    [
+      "3075",
+      "4300032160",
+      1,
+      49.572,
+      24.71,
+      "2026-09-28",
+      null,
+      "pedido-106"
+    ],
+    [
+      "3519",
+      "4300032160",
+      1,
+      27.54,
+      24.69,
+      "2026-09-28",
+      null,
+      "pedido-106"
+    ]
+  ],
+  "afterFirst": [
+    {
+      "ID": 3,
+      "CODIGOARTICULO": "3075      ",
+      "CODIGOCLIENTE": "4300032160",
+      "CODIGOTARIFA": 1,
+      "PRECIO_COMPETITIVO": 49.572,
+      "MARGEN_PCT": 24.71,
+      "VALIDO_DESDE": "2026-09-28",
+      "VALIDO_HASTA": null,
+      "USUARIO": "pedido-106",
+      "CREATED_AT": "2026-11-02 20:39:28.878160",
+      "UPDATED_AT": "2026-11-02 20:39:28.878160"
+    },
+    {
+      "ID": 2,
+      "CODIGOARTICULO": "3519      ",
+      "CODIGOCLIENTE": "4300032160",
+      "CODIGOTARIFA": 1,
+      "PRECIO_COMPETITIVO": 27.54,
+      "MARGEN_PCT": 24.69,
+      "VALIDO_DESDE": "2026-09-28",
+      "VALIDO_HASTA": null,
+      "USUARIO": "pedido-106",
+      "CREATED_AT": "2026-11-02 20:39:28.804723",
+      "UPDATED_AT": "2026-11-02 20:39:28.804723"
+    }
+  ],
+  "serialIdempotencyPassed": true,
+  "afterConcurrent": [
+    {
+      "ID": 3,
+      "CODIGOARTICULO": "3075      ",
+      "CODIGOCLIENTE": "4300032160",
+      "CODIGOTARIFA": 1,
+      "PRECIO_COMPETITIVO": 49.572,
+      "MARGEN_PCT": 24.71,
+      "VALIDO_DESDE": "2026-09-28",
+      "VALIDO_HASTA": null,
+      "USUARIO": "pedido-106",
+      "CREATED_AT": "2026-11-02 20:39:28.878160",
+      "UPDATED_AT": "2026-11-02 20:39:39.778990"
+    },
+    {
+      "ID": 2,
+      "CODIGOARTICULO": "3519      ",
+      "CODIGOCLIENTE": "4300032160",
+      "CODIGOTARIFA": 1,
+      "PRECIO_COMPETITIVO": 27.54,
+      "MARGEN_PCT": 24.69,
+      "VALIDO_DESDE": "2026-09-28",
+      "VALIDO_HASTA": null,
+      "USUARIO": "pedido-106",
+      "CREATED_AT": "2026-11-02 20:39:28.804723",
+      "UPDATED_AT": "2026-11-02 20:39:39.762031"
+    }
+  ],
+  "concurrentIdempotencyPassed": true,
+  "unrelatedRowsUnchanged": true,
+  "after": {
+    "count": 2,
+    "targetCount": 2,
+    "unrelatedRowsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "passed": true
+}

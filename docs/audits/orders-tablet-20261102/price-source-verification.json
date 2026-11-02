@@ -1,0 +1,49 @@
+{
+  "origin": "Root-normalized summary of native independent verifiers; paraphrased claims, not verbatim source quotes",
+  "source_commit": "466b0e63329cf71c01214a1397284b8f1a1413d9",
+  "status": "PASS_SCOPED",
+  "producer": {
+    "node_suites": 6,
+    "node_tests": 141,
+    "exit": 0,
+    "flutter_tests": 43
+  },
+  "independent": {
+    "node_suites": 6,
+    "node_tests": 148,
+    "exit": 0,
+    "flutter_tests": 43,
+    "selection_difference": "Independent set used 10-test state-DDL suite instead of 3-test split-facade suite; no tests removed to obtain lower counts"
+  },
+  "lint_delta": {
+    "scope": "8 changed JS; root flat ESLint; lintText filePath; fingerprints ignore line movement",
+    "baseline_commit": "4a36ddd",
+    "baseline_errors": 1,
+    "baseline_warnings": 28,
+    "current_errors": 0,
+    "current_warnings": 28,
+    "new_fingerprints": []
+  },
+  "closed_findings": [
+    "Non-gift line without authoritative reference rejects503 before mutation",
+    "Client cost/cost total cannot fabricate persisted margin; unavailable verified cost has explicit safe0 metrics",
+    "PES reference retained through UOM changes; valid manual discount still consumes Bolsa",
+    "No fake competitive price from tariff1",
+    "Standalone seed CLI redacts errors and applies canonical environment before connect"
+  ],
+  "followup_cli_commit": "0e135d1e897d9a5d708d97bf758ad374f224005e",
+  "cli_security_tests": {
+    "suites": 2,
+    "tests": 16,
+    "exit": 0
+  },
+  "actual_db_evidence": [
+    "db2-competitive-seed.json",
+    "db2-competitive-read-path.json"
+  ],
+  "remaining": [
+    "Latest confirmed TEST price shown only in detail history, not new-order sheet/card",
+    "PES versus independent global PRD precedence unverified",
+    "No new-device end-to-end or full global suite acceptance in this slice"
+  ]
+}

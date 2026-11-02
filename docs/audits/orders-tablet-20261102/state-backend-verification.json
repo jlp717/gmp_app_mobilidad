@@ -1,0 +1,29 @@
+{
+  "unit": "STATE backend",
+  "status": "PASS_SOURCE_SCOPED",
+  "source": "worktree after repair 3; backend only; OFF06 separate BLOCKED",
+  "independent_verifier": "integrity_verifier",
+  "tests": {
+    "command": "npm test -- --runInBand __tests__/pedidos-order-state-events.test.js __tests__/pedidos-local-order-state-guard.test.js __tests__/bolsa-order-reversal.test.js __tests__/pedidos_contracts.test.js __tests__/bolsa-comercial.service.test.js __tests__/cobros-commercial.test.js __tests__/reparto-confirmation-bootstrap.test.js __tests__/reparto-confirmation-db2-repository.test.js __tests__/reparto-confirmation-service.test.js __tests__/pedidos-local-confirmation-transaction.test.js __tests__/pedidos-create-transaction.test.js __tests__/pedidos_idempotency.test.js __tests__/pedidos_reparto_contracts.test.js __tests__/pedidos-state-events-ddl-contract.test.js",
+    "exit_code": 0,
+    "suites_passed": 14,
+    "tests_passed": 350,
+    "elapsed_seconds": 62.895
+  },
+  "lint": {
+    "reviewer": "pricing",
+    "files": 25,
+    "current_errors": 0,
+    "current_warnings": 165,
+    "baseline_0e135d1_warnings": 170,
+    "new_fingerprints_vs_0e135d1": 0,
+    "new_warning_fingerprints_vs_4a36ddd": 2,
+    "baseline_note": "Two require-await warnings already present in 0e135d1; final zero-new goal remains outstanding."
+  },
+  "limits": [
+    "No live state flow proof yet",
+    "DDL installer remains separately BLOCKED after three attempts",
+    "OFF06 metadata corruption remains BLOCKED despite 16 passing tests",
+    "Full suites/analyze/lint not final"
+  ]
+}

@@ -123,3 +123,24 @@ No hay PNG de pantalla ni capturas físicas en este checkpoint. Las pruebas de l
 `/api/ready` respondió HTTP 503 por falta de hash PIN de B2 (67 de 68 vendedores activos con hash); DB2 respondió en 2 ms y Redis estaba conectado. Resolver ese bloqueo requiere el procedimiento de autenticación autorizado, sin editar los archivos protegidos ni copiar secretos.
 
 El código está en una rama dedicada. Los cambios previos del usuario en AGENTS.md, artefactos de build borrados y scripts de ventas no forman parte de los commits de este trabajo. La comprobación final deberá conservar `git status`, diff por unidad, suites completas, analyze, lint, loop gate, reconciliación y el resultado de cada paso de demo; hasta entonces no hay aceptación global.
+
+
+## Checkpoint posterior a c9a99bd
+
+El backend de estados/anulación se ha incorporado en `c9a99bd`: 24 archivos, 2352 inserciones y 338 eliminaciones. La revisión independiente reprodujo 14 suites y 350/350 pruebas con exit 0; `state-backend-verification.json` delimita el alcance. Aún no acredita el flujo real DB2 de CLOB/TIMESTAMP ni el recorrido UI. El instalador DDL bloqueado y el cliente OFF06 no forman parte del commit.
+
+OFF06 queda **BLOCKED**, después del tercer intento: `kind=autoSyncThreshold` puede pasar por la migración de `queuedAt`, aparecer como un pedido fallido y reintentarse. Las 16 pruebas focales pasan pero no cubren esa separación. Se ha preparado una reparación concreta y se ha solicitado una sola excepción al límite; no se aplica mientras no exista respuesta expresa. Los demás contratos siguen avanzando.
+
+La ampliación independiente de lint cubrió 25 JS: actual 0 errores/165 avisos, frente a 0/170 en 0e135d1, sin huellas nuevas. Frente a 4a36ddd siguen apareciendo dos avisos `require-await` de callbacks ya introducidos en commits anteriores de esta rama; el objetivo global de cero nuevos avisos aún no está cerrado. El gate portable devuelve WARN porque no descubre los lanzadores Windows de Flutter/npm; las pruebas focales reales tienen su evidencia separada.
+
+PRICE quedó en `466b0e6`: referencia/coste autoritativos, precio competitivo informativo y fallo tipado cuando falta referencia. El productor pasó 141 Node; la comprobación independiente pasó 148 Node y 43 Flutter, con scopes distintos documentados en `price-source-verification.json`. No se equiparan ambas listas de suites.
+
+La semilla competitiva revisada se ejecutó con la fuente fija `0e135d1`: tabla vacía antes, dos filas reales después, IDs 2 y 3, cliente 4300032160/artículos 3519 y 3075. Precios 27,54 y 49,572; márgenes 24,69 % y 24,71 %, procedentes del pedido confirmado 106. Replay y dos trabajadores conservaron IDs/valores; sólo cambió UPDATED_AT. `db2-competitive-seed.json` conserva las filas y restricciones. La sonda requiere tabla inicialmente vacía y no debe repetirse ahora.
+
+La lectura competitiva real encontró esos dos artículos mediante una consulta batch; cliente ajeno y artículo ausente devolvieron ausencia explícita, sin precio ficticio cero. `db2-competitive-read-path.json` acredita el helper/DB, no la pantalla completa ni el último precio del formulario nuevo, cuyo cableado sigue pendiente.
+
+### Salud y hallazgo de seguridad preexistente
+
+`db2-b2-eligibility.json` acredita sin devolver credenciales que B2 pertenece tanto a la población de readiness como a los usuarios elegibles de login, tiene VDD y no tiene hash. No procede excluirlo ni relajar el health check. El CLI heredado de backfill no se ha ejecutado ni se recomienda: su dry-run puede hacer DDL antes de comprobar el modo y sus errores pueden imprimir información nativa. La intervención de autenticación requiere un procedimiento específico revisado y autorización manual; no es una escritura TEST de este mandato.
+
+La revisión encontró datos de PIN en un archivo versionado preexistente: `docs/archive/audits/db2-discovery/agent1-dsedac-mapping.json`. No se ha abierto para copiar valores, no se incluyen en esta evidencia y no se ha realizado rotación ni reescritura de historia. El incidente se comunicó al propietario. La ausencia de patrones del scanner sobre archivos cambiados no acredita que el histórico completo esté libre de secretos.

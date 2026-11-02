@@ -1,0 +1,54 @@
+{
+  "origin": "Root-normalized native independent review outcome; not a retained checkout of intermediate uncommitted tree",
+  "head_at_review": "0e135d1",
+  "status": "FAIL_BEFORE_COMMIT",
+  "source_state": "HOLD, third combined repair authorised",
+  "independent_backend": {
+    "suites": 14,
+    "passed_suites": 13,
+    "failed_suites": 1,
+    "passed_tests": 333,
+    "failed_tests": 12,
+    "total_tests": 345,
+    "exit": 1,
+    "failed_suite": "pedidos_reparto_contracts.test.js",
+    "failure": "BOLSA_MONTHLY_ROW_UNAVAILABLE from stale fixtures without confirmed monthly read-back"
+  },
+  "findings": [
+    {
+      "severity": "P1",
+      "claim": "Cancellation guard missed real PEDIDO:id:series-number commercial payment reference",
+      "path": "backend/adapters/pedidos-local-order-state-guard.js"
+    },
+    {
+      "severity": "P1",
+      "claim": "Legacy Hive queuedAt without Z still forwarded unchanged and rejected",
+      "path": "lib/features/pedidos/data/pedidos_offline_service.dart"
+    },
+    {
+      "severity": "P1",
+      "claim": "Expanded legacy order/reparto suite had12 failures; failclosed source must stay, fixtures must model actual persisted monthly row"
+    },
+    {
+      "severity": "P2",
+      "claim": "Audit header from pre-lock read can contain stale totals after edit-before-claim",
+      "path": "backend/services/pedidos/index.js"
+    },
+    {
+      "severity": "P2",
+      "claim": "Neutral REGISTRO cancellation lacked a zero-impact reverse trace",
+      "path": "backend/services/bolsa-comercial.service.js"
+    }
+  ],
+  "offline_intermediate": {
+    "tests": 15,
+    "exit": 0,
+    "scope": "13 offline plus2 auth-epoch after enqueue UTC fix; legacy migration still failed by source",
+    "device_sentinel": "Producer fixed genuine-or-NULL; final independent recheck pending"
+  },
+  "root_additional_checks_in_combined_repair": [
+    "Preserve replay of pre-upgrade idempotency hashes without allowing repeated timestamp changes",
+    "Validate calendar and retain Dart UTC microsecond precision"
+  ],
+  "runtime_db": "NOT_RUN for new STATE source until independent PASS; existing schema/data probes are separate"
+}

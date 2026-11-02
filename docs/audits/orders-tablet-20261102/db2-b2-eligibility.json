@@ -1,0 +1,12 @@
+{
+  "readOnly": true,
+  "metadataVerifiedInPriorAttempt": true,
+  "vendorCode": "B2",
+  "flags": {
+    "readinessPopulation": true,
+    "loginEligible": true,
+    "hashPresent": false,
+    "vddPresent": true
+  },
+  "credentialValuesReturned": false
+}
