@@ -15,6 +15,10 @@ const {
 } = require('./discounts');
 const { roundPrice, trimString, OrderStateError, MAX_ORDER_LINES, DB2_BULK_INSERT_CHUNK_SIZE, STOCK_RESERVE_BULK_INSERT_CHUNK_SIZE, ORDER_TRANSITIONS, numberValue, integerValue, truncate, ERP_SCHEMA, PEDIDOS_CAB_TABLE, PEDIDOS_LIN_TABLE, PEDIDOS_SEQ_TABLE, PEDIDOS_STOCK_RESERVE_TABLE, DRAFT_STOCK_RESERVATION_HOURS, DRAFT_STOCK_RESERVATION_STATES_SQL, ACTIVE_STOCK_RESERVATION_CONDITION } = require('./_shared');
 const orderLifecycle = require('./order-lifecycle');
+const {
+    withDraftPurgeTransaction,
+    withLocalConfirmationTransaction,
+} = require('./local-confirmation-transaction');
 const promotions = require('./promotions');
 const catalogAux = require('./catalog-aux');
 const discovery = require('./discovery');
@@ -48,6 +52,14 @@ const CLIENT_UNIT_AMOUNT_PROMO_TABLE = comercialErpTable('PPU');
 // (SELECT_ORDER_VENDOR_FOR_AUTH_SQL era orphan sin uso aqui: single-source en ./_shared, consumida por order-states.)
 const DELETE_STOCK_RESERVE_BY_PEDIDO_SQL =
     `DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`;
+const PURGEABLE_DRAFT_STATES = new Set([
+    'BORRADOR',
+    'PENDIENTE',
+    'PEND_APROB',
+    'PENDIENTE_APROBACION',
+]);
+const PURGEABLE_DRAFT_STATES_SQL =
+    "'BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION'";
 const logger = require('../../middleware/logger');
 const { cachedQuery, invalidateOnMutation, patternFor } = require('../query-optimizer');
 const { redisCache, TTL, deleteCachePattern } = require('../redis-cache');
@@ -2352,7 +2364,10 @@ async function getStockBatch(codes, almacen = 1, options = {}) {
         const params = Number.isInteger(excludedPedidoId) && excludedPedidoId > 0
             ? [almacen, ...chunk, ...chunk, excludedPedidoId]
             : [almacen, ...chunk, ...chunk];
-        const rows = await queryWithParams(sql, params, false);
+        const queryFn = typeof options.queryFn === 'function'
+            ? options.queryFn
+            : (statement, bindParams) => queryWithParams(statement, bindParams, false);
+        const rows = await queryFn(sql, params);
         for (const row of rows || []) {
             const code = trimString(row.CODE);
             if (!code) continue;
@@ -2364,6 +2379,56 @@ async function getStockBatch(codes, almacen = 1, options = {}) {
     }
 
     return stockByCode;
+}
+
+function evaluateStockAvailability(lines, stockByCode) {
+    const requestedByCode = new Map();
+    for (const line of lines || []) {
+        const code = trimString(line.CODIGOARTICULO || line.codigoArticulo);
+        if (!code) continue;
+        const current = requestedByCode.get(code) || {
+            envases: 0,
+            unidades: 0,
+            description: '',
+        };
+        current.envases += parseFloat(line.CANTIDADENVASES ?? line.cantidadEnvases) || 0;
+        current.unidades += parseFloat(line.CANTIDADUNIDADES ?? line.cantidadUnidades) || 0;
+        current.description ||= trimString(line.DESCRIPCION || line.descripcion);
+        requestedByCode.set(code, current);
+    }
+
+    const stockWarnings = [];
+    const outOfStockProducts = [];
+    for (const [code, requested] of requestedByCode) {
+        const stock = stockByCode.get(code) || { envases: 0, unidades: 0 };
+        if (requested.envases > 0 && requested.envases > stock.envases) {
+            stockWarnings.push({
+                product: code,
+                description: requested.description,
+                requested: requested.envases,
+                available: stock.envases,
+                unit: 'envases',
+            });
+            if (stock.envases <= 0) outOfStockProducts.push(code);
+        }
+        if (requested.unidades > 0 && requested.unidades > stock.unidades) {
+            stockWarnings.push({
+                product: code,
+                description: requested.description,
+                requested: requested.unidades,
+                available: stock.unidades,
+                unit: 'unidades',
+            });
+            if (stock.unidades <= 0 && requested.envases <= 0) {
+                outOfStockProducts.push(code);
+            }
+        }
+    }
+
+    return {
+        stockWarnings,
+        outOfStockProducts: [...new Set(outOfStockProducts)],
+    };
 }
 
 // ============================================================================
@@ -4097,12 +4162,25 @@ async function confirmOrder(orderId, saleType, options = {}) {
 
     const currentState = canonicalOrderStatus(currentRows[0].ESTADO);
 
+    // Un ACK perdido tras COMMIT puede hacer que el cliente repita la misma
+    // confirmación. El estado confirmado es el resultado idempotente: devolvemos
+    // el detalle existente sin volver a reservar stock ni escribir en bolsa.
+    if (currentState === 'CONFIRMADO') {
+        const existingOrder = await getOrderDetail(id);
+        return {
+            ...existingOrder,
+            stockWarnings: [],
+            cobroPropio: isCobroPropio(options, currentRows[0]),
+            idempotentReplay: true,
+        };
+    }
+
     // Si rowsAffected es 0 y el estado NO es CONFIRMANDO de este request,
     // significa que otro proceso lo tomo (CONFIRMADO) o estaba en
     // estado invalido. Algunos drivers ODBC no reportan rowsAffected, por
     // eso confiamos en el estado leido.
     if (rowsAffected === 0) {
-        if (currentState === 'CONFIRMADO' || currentState === 'CONFIRMANDO') {
+        if (currentState === 'CONFIRMANDO') {
             const err = new Error('Pedido ya confirmado o en proceso de confirmacion por otra sesion');
             err.code = 'PEDIDO_ALREADY_CONFIRMING';
             err.status = 409;
@@ -4185,8 +4263,8 @@ async function confirmOrder(orderId, saleType, options = {}) {
                 ORDEN
          FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`, [id]);
 
-    const stockWarnings = [];
-    const outOfStockProducts = [];
+    let stockWarnings = [];
+    let outOfStockProducts = [];
 
     // P0-BOLSA: Validate bolsa comercial before confirming
     try {
@@ -4262,47 +4340,11 @@ async function confirmOrder(orderId, saleType, options = {}) {
         error.cause = cause;
         throw error;
     }
-    const requestedByCode = new Map();
-    for (const line of lines) {
-        const code = (line.CODIGOARTICULO || '').trim();
-        if (!code) continue;
-        const current = requestedByCode.get(code) || { envases: 0, unidades: 0, description: '' };
-        current.envases += parseFloat(line.CANTIDADENVASES) || 0;
-        current.unidades += parseFloat(line.CANTIDADUNIDADES) || 0;
-        current.description ||= (line.DESCRIPCION || '').trim();
-        requestedByCode.set(code, current);
-    }
-    for (const [code, requested] of requestedByCode) {
-        if (!code) continue;
-            const stock = stockByCode.get(code) || { envases: 0, unidades: 0 };
-            const reqEnvases = requested.envases;
-            const reqUnidades = requested.unidades;
-            if (reqEnvases > 0 && reqEnvases > stock.envases) {
-                const warning = {
-                    product: code,
-                    description: requested.description,
-                    requested: reqEnvases,
-                    available: stock.envases,
-                    unit: 'envases'
-                };
-                stockWarnings.push(warning);
-                if (stock.envases <= 0) outOfStockProducts.push(code);
-            }
-            if (reqUnidades > 0 && reqUnidades > stock.unidades) {
-                const warning = {
-                    product: code,
-                    description: requested.description,
-                    requested: reqUnidades,
-                    available: stock.unidades,
-                    unit: 'unidades'
-                };
-                stockWarnings.push(warning);
-                if (stock.unidades <= 0 && reqEnvases <= 0) outOfStockProducts.push(code);
-            }
-    }
+    ({ stockWarnings, outOfStockProducts } = evaluateStockAvailability(lines, stockByCode));
 
-    // P0-C: BLOCK confirmation if stock would go negative (unless force-approved)
-    if (stockWarnings.length > 0 && !effectiveForceConfirm) {
+    // P0-C: stock is an absolute invariant. Administrative force may override
+    // commercial bolsa policy, never physical availability/overselling.
+    if (stockWarnings.length > 0) {
         // Fetch similar products for out-of-stock items
         const alternatives = [];
         for (const code of outOfStockProducts.slice(0, 5)) {
@@ -4326,7 +4368,20 @@ async function confirmOrder(orderId, saleType, options = {}) {
         };
     }
 
-    // P0-B: Confirm + reserve in sequence, rollback estado if reserves fail
+    const bolsaService = require('../bolsa-comercial.service');
+    const consumoAmount = Number(options._bolsaConsumo || 0);
+    const acumulacionAmount = Number(options._bolsaAcumulacion || 0);
+    const mustWriteBolsaLedger =
+        (consumoAmount > 0 || acumulacionAmount > 0)
+        && !options.skipBolsaMovement;
+    const lineMovements = Array.isArray(options._bolsaLineMovements)
+        ? options._bolsaLineMovements
+        : [];
+    const consumoMovements = lineMovements.filter(m => m && m.tipo === 'CONSUMO');
+    const acumulacionMovements = lineMovements.filter(m => m && m.tipo === 'ACUMULACION');
+    let bolsaWrittenInOrderTransaction = false;
+
+    // Confirmación/reserva/bolsa local forman una única unidad de trabajo.
     const target = getPedidosConfirmationTarget();
     let syncResult = {
         targetSchema: 'JAVIER',
@@ -4379,25 +4434,75 @@ async function confirmOrder(orderId, saleType, options = {}) {
             saleType: effectiveSaleType,
             syncResult,
         });
-        await queryWithParams(update.sql, update.params, false);
+        try {
+            const txResult = await withLocalConfirmationTransaction(async (conn) => {
+                const queryFn = (sql, params) => conn.query(sql, params);
+                // Relee stock sin cache DESPUÉS del lock de reservas. Esta es
+                // la comprobación autoritativa frente a dos dispositivos.
+                const lockedStock = await getStockBatch(
+                    lines.map(line => line.CODIGOARTICULO),
+                    1,
+                    { excludePedidoId: id, queryFn },
+                );
+                const lockedAvailability = evaluateStockAvailability(lines, lockedStock);
+                if (lockedAvailability.stockWarnings.length > 0) {
+                    const stockError = new Error('El stock cambió mientras se confirmaba el pedido.');
+                    stockError.code = 'STOCK_CHANGED_DURING_CONFIRM';
+                    stockError.status = 409;
+                    stockError.stockWarnings = lockedAvailability.stockWarnings;
+                    throw stockError;
+                }
 
-        try {
-            await replaceStockReservationLines((sql, params) => queryWithParams(sql, params, false), lines, id);
-            logger.info(`[PEDIDOS] Stock reserved for order #${id}`);
-        } catch (resErr) {
-        logger.error(`[PEDIDOS] CRITICAL: Stock reservation failed for order #${id}, rolling back: ${resErr.message}`);
-        // P0-B: Rollback order status if stock reservation fails after confirmation.
-        try {
-            await queryWithParams(
-                `UPDATE ${PEDIDOS_CAB_TABLE} SET ESTADO = 'BORRADOR', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
-                [id], false
+                await conn.query(update.sql, update.params);
+                await replaceStockReservationLines(queryFn, lines, id);
+
+                if (mustWriteBolsaLedger) {
+                    const bolsaResult = await bolsaService.applyOrderMovementsWith(queryFn, {
+                        vendedorCode,
+                        pedidoId: id,
+                        consumoAmount,
+                        acumulacionAmount,
+                        consumoMovements,
+                        acumulacionMovements,
+                    });
+                    if (bolsaResult && bolsaResult.allowed === false) {
+                        const bolsaError = new Error(
+                            `Bolsa insuficiente al registrar consumo. Deficit: ${bolsaResult.deficit}`,
+                        );
+                        bolsaError.code = 'BOLSA_MOVEMENT_WRITE_FAILED';
+                        bolsaError.status = 409;
+                        throw bolsaError;
+                    }
+                }
+
+                return lockedAvailability;
+            });
+            stockWarnings = txResult.stockWarnings;
+            outOfStockProducts = txResult.outOfStockProducts;
+            bolsaWrittenInOrderTransaction = mustWriteBolsaLedger;
+            logger.info(`[PEDIDOS] Pedido #${id}, reserva y bolsa confirmados en una transacción`);
+        } catch (localError) {
+            await revertConfirming(localError.code || 'LOCAL_CONFIRMATION_FAILED');
+            if (localError.code === 'STOCK_CHANGED_DURING_CONFIRM') {
+                return {
+                    blocked: true,
+                    reason: localError.code,
+                    stockWarnings: localError.stockWarnings || [],
+                    alternatives: [],
+                    message: 'El stock cambió mientras confirmabas. Revisa las cantidades e inténtalo de nuevo.',
+                };
+            }
+            if (localError.code === 'BOLSA_MOVEMENT_WRITE_FAILED') {
+                throw localError;
+            }
+            const error = new Error(
+                `No se pudo confirmar pedido, reserva y bolsa de forma atómica. Error: ${localError.message}`,
             );
-            await queryWithParams(`DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`, [id], false);
-        } catch (rollbackErr) {
-            logger.error(`[PEDIDOS] CRITICAL: Rollback also failed for order #${id}: ${rollbackErr.message}`);
+            error.code = localError.code || 'LOCAL_CONFIRMATION_FAILED';
+            error.status = localError.status || 503;
+            error.cause = localError;
+            throw error;
         }
-        throw new Error(`No se pudo completar la reserva de stock. El pedido no ha sido confirmado. Error: ${resErr.message}`);
-    }
     }
 
     if (cobroPropio) {
@@ -4446,16 +4551,10 @@ async function confirmOrder(orderId, saleType, options = {}) {
         logger.info(`[AUDIT] âœ… ORDER_CONFIRMED #${id} | Client:${auditEntry.clientCode} | Total:${auditEntry.total} | Lines:${lines.length}`);
     } catch { /* silent */ }
 
-    // P0-BOLSA: Persist ledger after confirmation. Blocking: no silent success on write failure.
-    const consumoAmount = Number(options._bolsaConsumo || 0);
-    const acumulacionAmount = Number(options._bolsaAcumulacion || 0);
-    const mustWriteBolsaLedger = (consumoAmount > 0 || acumulacionAmount > 0) && !options.skipBolsaMovement;
-    if (mustWriteBolsaLedger) {
+    // La exportación ERP conserva su flujo existente; en confirmación local la
+    // bolsa ya quedó incluida en la transacción de pedido + reserva.
+    if (mustWriteBolsaLedger && !bolsaWrittenInOrderTransaction) {
         try {
-            const bolsaService = require('../bolsa-comercial.service');
-            const lineMovements = Array.isArray(options._bolsaLineMovements) ? options._bolsaLineMovements : [];
-            const consumoMovements = lineMovements.filter(m => m && m.tipo === 'CONSUMO');
-            const acumulacionMovements = lineMovements.filter(m => m && m.tipo === 'ACUMULACION');
             if (consumoAmount > 0) {
                 const consumoResult = await bolsaService.consumirBolsa(vendedorCode, id, consumoAmount, consumoMovements.length ? consumoMovements : undefined);
                 if (consumoResult && consumoResult.allowed === false) {
@@ -4545,7 +4644,7 @@ async function purgeExpiredDraftReservations({ limit = 50 } = {}) {
         const rows = await queryWithParams(
             `SELECT C.ID
                FROM ${PEDIDOS_CAB_TABLE} C
-              WHERE TRIM(C.ESTADO) IN (${DRAFT_STOCK_RESERVATION_STATES_SQL})
+              WHERE TRIM(C.ESTADO) IN (${PURGEABLE_DRAFT_STATES_SQL})
                 AND C.CREATED_AT < CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS
               ORDER BY C.CREATED_AT ASC
               FETCH FIRST ${maxRows} ROWS ONLY`,
@@ -4563,28 +4662,61 @@ async function purgeExpiredDraftReservations({ limit = 50 } = {}) {
     let purged = 0;
     for (const id of expiredIds) {
         try {
-            await queryWithParams(
-                `DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`,
-                [id],
-                false,
-            );
-            await queryWithParams(
-                `DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`,
-                [id],
-                false,
-            );
-            const deleted = await queryWithParams(
-                `DELETE FROM ${PEDIDOS_CAB_TABLE}
-                  WHERE ID = ?
-                    AND TRIM(ESTADO) IN (${DRAFT_STOCK_RESERVATION_STATES_SQL})
-                    AND CREATED_AT < CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS`,
-                [id],
-                false,
-            );
-            const affected = (deleted && typeof deleted.count === 'number')
-                ? deleted.count
-                : (typeof deleted === 'number' ? deleted : 1);
-            if (affected > 0) purged += 1;
+            const deleted = await withDraftPurgeTransaction(async (conn) => {
+                // El SELECT inicial solo acota candidatos. Esta relectura ocurre
+                // bajo locks de reserva -> cabecera y es la decisión autoritativa.
+                const currentRows = await conn.query(
+                    `SELECT ID, TRIM(ESTADO) AS ESTADO
+                       FROM ${PEDIDOS_CAB_TABLE}
+                      WHERE ID = ?
+                        AND TRIM(ESTADO) IN (${PURGEABLE_DRAFT_STATES_SQL})
+                        AND CREATED_AT < CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS`,
+                    [id],
+                );
+                if (!Array.isArray(currentRows) || currentRows.length === 0) {
+                    return false;
+                }
+                const currentState = canonicalOrderStatus(currentRows?.[0]?.ESTADO);
+                if (!PURGEABLE_DRAFT_STATES.has(currentState)) return false;
+
+                await conn.query(
+                    `DELETE FROM ${PEDIDOS_STOCK_RESERVE_TABLE} WHERE PEDIDO_ID = ?`,
+                    [id],
+                );
+                await conn.query(
+                    `DELETE FROM ${PEDIDOS_LIN_TABLE} WHERE PEDIDO_ID = ?`,
+                    [id],
+                );
+                const headerDelete = await conn.query(
+                    `DELETE FROM ${PEDIDOS_CAB_TABLE}
+                      WHERE ID = ?
+                        AND TRIM(ESTADO) IN (${PURGEABLE_DRAFT_STATES_SQL})
+                        AND CREATED_AT < CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS`,
+                    [id],
+                );
+                let affected = (headerDelete && typeof headerDelete.count === 'number')
+                    ? headerDelete.count
+                    : (typeof headerDelete === 'number' ? headerDelete : null);
+                if (affected === null) {
+                    const remainingRows = await conn.query(
+                        `SELECT ID FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
+                        [id],
+                    );
+                    if (!Array.isArray(remainingRows)) {
+                        const verifyError = new Error('No se pudo verificar la eliminación del borrador.');
+                        verifyError.code = 'DRAFT_PURGE_DELETE_UNVERIFIED';
+                        throw verifyError;
+                    }
+                    affected = remainingRows.length === 0 ? 1 : 0;
+                }
+                if (affected < 1) {
+                    const raceError = new Error('El borrador cambió durante la purga.');
+                    raceError.code = 'DRAFT_PURGE_STATE_CHANGED';
+                    throw raceError;
+                }
+                return true;
+            });
+            if (deleted) purged += 1;
         } catch (err) {
             logger.warn(`[PEDIDOS] purgeExpiredDraftReservations #${id}: ${err.message}`);
         }

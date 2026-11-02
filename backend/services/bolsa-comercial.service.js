@@ -129,9 +129,9 @@ async function withBolsaTransaction(callback) {
             try {
                 // IBM i ODBC rejects BEGIN WORK (-104); mirror pedidos export transaction pattern.
                 await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
-                await conn.query(LOCK_BOLSA_COMERCIAL_SQL);
-                await conn.query(LOCK_MOVIMIENTOS_BOLSA_SQL);
-                const result = await callback((sql, params) => runQuery(conn.query.bind(conn), sql, params));
+                const queryFn = (sql, params) => runQuery(conn.query.bind(conn), sql, params);
+                await lockBolsaLedger(queryFn);
+                const result = await callback(queryFn);
                 await conn.query('COMMIT');
                 return result;
             } catch (error) {
@@ -150,6 +150,14 @@ async function withBolsaTransaction(callback) {
     }
 
     return callback(queryWithParams);
+}
+
+async function lockBolsaLedger(queryFn) {
+    if (typeof queryFn !== 'function') {
+        throw new TypeError('queryFn transaccional requerido para bloquear bolsa');
+    }
+    await runQuery(queryFn, LOCK_BOLSA_COMERCIAL_SQL);
+    await runQuery(queryFn, LOCK_MOVIMIENTOS_BOLSA_SQL);
 }
 
 async function getOrCreateBolsaWith(queryFn, vendedorCode, year, month) {
@@ -261,64 +269,128 @@ async function getBolsaStatus(vendedorCode, year, month) {
 
 // -- Accumulate margin into bolsa -------------------------------------
 
-async function acumularBolsa(vendedorCode, pedidoId, importeAcumulado, descripcion) {
-    const now = new Date();
+async function acumularBolsaWith(queryFn, vendedorCode, pedidoId, importeAcumulado, descripcion, now = new Date()) {
     const movements = normalizeBolsaMovements(descripcion, 'ACUMULACION', importeAcumulado, descripcion, pedidoId);
-    return withBolsaTransaction(async (queryFn) => {
-        const bolsa = await getOrCreateBolsaWith(queryFn, vendedorCode, now.getFullYear(), now.getMonth() + 1);
-        const saldoAnterior = bolsa.saldoDisponible;
-        const pendingMovements = await filterPendingBolsaMovements(movements, queryFn);
-        const pendingImporte = sumMovementImporte(pendingMovements);
-        if (pendingImporte <= 0) {
-            return saldoAnterior;
-        }
-        const nuevoSaldo = saldoAnterior + pendingImporte;
+    const bolsa = await getOrCreateBolsaWith(queryFn, vendedorCode, now.getFullYear(), now.getMonth() + 1);
+    const saldoAnterior = bolsa.saldoDisponible;
+    const pendingMovements = await filterPendingBolsaMovements(movements, queryFn);
+    const pendingImporte = sumMovementImporte(pendingMovements);
+    if (pendingImporte <= 0) {
+        return saldoAnterior;
+    }
+    const nuevoSaldo = saldoAnterior + pendingImporte;
 
-        await runQuery(
-            queryFn,
-            BOLSA_UPDATE_ACCUMULATE_SQL,
-            [nuevoSaldo, pendingImporte, bolsa.id]
-        );
+    await runQuery(
+        queryFn,
+        BOLSA_UPDATE_ACCUMULATE_SQL,
+        [nuevoSaldo, pendingImporte, bolsa.id]
+    );
 
-        await insertBolsaMovements('ACUMULACION', pendingMovements, bolsa.id, vendedorCode, pedidoId, saldoAnterior, nuevoSaldo, queryFn);
+    await insertBolsaMovements('ACUMULACION', pendingMovements, bolsa.id, vendedorCode, pedidoId, saldoAnterior, nuevoSaldo, queryFn);
 
-        logger.info(`[BOLSA] Acumulado ${importeAcumulado}EUR para ${vendedorCode}. Saldo: ${nuevoSaldo}EUR`);
-        return nuevoSaldo;
-    });
+    logger.info(`[BOLSA] Acumulado ${importeAcumulado}EUR para ${vendedorCode}. Saldo: ${nuevoSaldo}EUR`);
+    return nuevoSaldo;
+}
+
+async function acumularBolsa(vendedorCode, pedidoId, importeAcumulado, descripcion) {
+    return withBolsaTransaction(
+        (queryFn) => acumularBolsaWith(queryFn, vendedorCode, pedidoId, importeAcumulado, descripcion),
+    );
 }
 
 // -- Consume from bolsa (when selling below minimum) ------------------
 
-async function consumirBolsa(vendedorCode, pedidoId, importeConsumo, codigoArticulo) {
-    const now = new Date();
+async function consumirBolsaWith(queryFn, vendedorCode, pedidoId, importeConsumo, codigoArticulo, now = new Date()) {
     const movements = normalizeBolsaMovements(codigoArticulo, 'CONSUMO', importeConsumo, codigoArticulo, pedidoId);
-    return withBolsaTransaction(async (queryFn) => {
-        const bolsa = await getOrCreateBolsaWith(queryFn, vendedorCode, now.getFullYear(), now.getMonth() + 1);
-        const saldoDisponible = bolsa.saldoDisponible;
-        const pendingMovements = await filterPendingBolsaMovements(movements, queryFn);
-        const pendingImporte = sumMovementImporte(pendingMovements);
+    const bolsa = await getOrCreateBolsaWith(queryFn, vendedorCode, now.getFullYear(), now.getMonth() + 1);
+    const saldoDisponible = bolsa.saldoDisponible;
+    const pendingMovements = await filterPendingBolsaMovements(movements, queryFn);
+    const pendingImporte = sumMovementImporte(pendingMovements);
 
-        if (pendingImporte <= 0) {
-            return { allowed: true, saldo: saldoDisponible, duplicate: true };
-        }
+    if (pendingImporte <= 0) {
+        return { allowed: true, saldo: saldoDisponible, duplicate: true };
+    }
 
-        if (pendingImporte > saldoDisponible) {
-            return { allowed: false, deficit: pendingImporte - saldoDisponible, saldo: saldoDisponible };
-        }
+    if (pendingImporte > saldoDisponible) {
+        return { allowed: false, deficit: pendingImporte - saldoDisponible, saldo: saldoDisponible };
+    }
 
-        const nuevoSaldo = saldoDisponible - pendingImporte;
+    const nuevoSaldo = saldoDisponible - pendingImporte;
 
-        await runQuery(
+    await runQuery(
+        queryFn,
+        BOLSA_UPDATE_CONSUME_SQL,
+        [nuevoSaldo, pendingImporte, bolsa.id]
+    );
+
+    await insertBolsaMovements('CONSUMO', pendingMovements, bolsa.id, vendedorCode, pedidoId, saldoDisponible, nuevoSaldo, queryFn);
+
+    logger.info(`[BOLSA] Consumido ${importeConsumo}EUR para ${vendedorCode}. Saldo: ${nuevoSaldo}EUR`);
+    return { allowed: true, saldo: nuevoSaldo };
+}
+
+async function consumirBolsa(vendedorCode, pedidoId, importeConsumo, codigoArticulo) {
+    return withBolsaTransaction(
+        (queryFn) => consumirBolsaWith(queryFn, vendedorCode, pedidoId, importeConsumo, codigoArticulo),
+    );
+}
+
+/**
+ * Aplica todo el impacto de un pedido usando la conexión/transaction que el
+ * llamante ya abrió. No hace COMMIT ni ROLLBACK: así pedido, stock y bolsa son
+ * una sola unidad atómica.
+ */
+async function applyOrderMovementsWith(queryFn, {
+    vendedorCode,
+    pedidoId,
+    consumoAmount = 0,
+    acumulacionAmount = 0,
+    consumoMovements,
+    acumulacionMovements,
+} = {}) {
+    if (typeof queryFn !== 'function') {
+        throw new TypeError('queryFn transaccional requerido para movimientos de bolsa');
+    }
+
+    await lockBolsaLedger(queryFn);
+    const now = new Date();
+    let consumoResult = null;
+    let saldoAcumulado = null;
+
+    if (Number(consumoAmount) > 0) {
+        consumoResult = await consumirBolsaWith(
             queryFn,
-            BOLSA_UPDATE_CONSUME_SQL,
-            [nuevoSaldo, pendingImporte, bolsa.id]
+            vendedorCode,
+            pedidoId,
+            Number(consumoAmount),
+            Array.isArray(consumoMovements) && consumoMovements.length > 0
+                ? consumoMovements
+                : undefined,
+            now,
         );
+        if (consumoResult && consumoResult.allowed === false) {
+            return { allowed: false, ...consumoResult };
+        }
+    }
 
-        await insertBolsaMovements('CONSUMO', pendingMovements, bolsa.id, vendedorCode, pedidoId, saldoDisponible, nuevoSaldo, queryFn);
+    if (Number(acumulacionAmount) > 0) {
+        saldoAcumulado = await acumularBolsaWith(
+            queryFn,
+            vendedorCode,
+            pedidoId,
+            Number(acumulacionAmount),
+            Array.isArray(acumulacionMovements) && acumulacionMovements.length > 0
+                ? acumulacionMovements
+                : undefined,
+            now,
+        );
+    }
 
-        logger.info(`[BOLSA] Consumido ${importeConsumo}EUR para ${vendedorCode}. Saldo: ${nuevoSaldo}EUR`);
-        return { allowed: true, saldo: nuevoSaldo };
-    });
+    return {
+        allowed: true,
+        consumo: consumoResult,
+        saldoAcumulado,
+    };
 }
 
 // -- Validate order lines against bolsa -------------------------------
@@ -1000,6 +1072,7 @@ module.exports = {
     getBolsaStatus,
     acumularBolsa,
     consumirBolsa,
+    applyOrderMovementsWith,
     validateOrderWithBolsa,
     resolveBolsaReferencePrice,
     resolveConfiguredMinFloor,

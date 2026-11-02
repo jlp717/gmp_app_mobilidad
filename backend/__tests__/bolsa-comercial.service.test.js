@@ -25,6 +25,21 @@ beforeEach(() => {
     if (db.initDb && db.initDb.mockReset) db.initDb.mockReset();
 });
 
+function installTransactionalPool(db) {
+    const conn = {
+        query: jest.fn(async (sql, params) => {
+            if (/^(SET TRANSACTION|LOCK TABLE)/i.test(String(sql).trim())) return [];
+            return db.queryWithParams(sql, params);
+        }),
+        beginTransaction: jest.fn().mockResolvedValue(undefined),
+        commit: jest.fn().mockResolvedValue(undefined),
+        rollback: jest.fn().mockResolvedValue(undefined),
+        close: jest.fn().mockResolvedValue(undefined),
+    };
+    db.getPool.mockReturnValue({ connect: jest.fn().mockResolvedValue(conn) });
+    return conn;
+}
+
 describe('BolsaComercial Service', () => {
     let bolsaService;
     let mockQuery;
@@ -449,6 +464,7 @@ describe("pedidos confirmation bolsa contract", () => {
   beforeEach(() => { jest.resetModules(); jest.clearAllMocks(); jest.dontMock("../services/bolsa-comercial.service"); });
   test("confirmOrder rejects instead of silently succeeding when bolsa movement write fails", async () => {
     const db = require("../config/db");
+    const conn = installTransactionalPool(db);
     db.queryWithParams.mockReset();
     db.queryWithParams.mockImplementation(async (sql) => {
       if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMANDO")) return { count: 1 };
@@ -463,18 +479,24 @@ describe("pedidos confirmation bolsa contract", () => {
     jest.doMock("../services/query-optimizer", () => ({ cachedQuery: jest.fn((fn, sql, _key, _ttl, params) => fn(sql, params)) }));
     jest.doMock("../services/redis-cache", () => ({ redisCache: { get: jest.fn(), set: jest.fn(), del: jest.fn(), invalidatePattern: jest.fn() }, TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 } }));
     jest.doMock("../services/laclae", () => ({ getClientDays: jest.fn(() => ({ deliveryDays: ["martes"], deliveryDaysShort: "M" })) }));
-    jest.doMock("../services/bolsa-comercial.service", () => ({ validateOrderWithBolsa: jest.fn().mockResolvedValue({ valid: true, consumo: 3, saldo: 297 }), consumirBolsa: jest.fn().mockRejectedValue(new Error("movement write failed")) }));
+    jest.doMock("../services/bolsa-comercial.service", () => ({
+      validateOrderWithBolsa: jest.fn().mockResolvedValue({ valid: true, consumo: 3, saldo: 297 }),
+      applyOrderMovementsWith: jest.fn().mockRejectedValue(new Error("movement write failed")),
+    }));
     const pedidosService = require("../services/pedidos.service");
     await expect(pedidosService.confirmOrder(42, "CC", { deliveryDate: "2026-06-09" })).rejects.toThrow(/movement write failed|bolsa/i);
     expect(db.queryWithParams.mock.calls.some(([sql]) =>
       /UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) &&
       /SET\s+ESTADO\s*=\s*'BORRADOR'/i.test(sql) &&
-      /ESTADO\s+IN\s*\(\s*'CONFIRMANDO'\s*,\s*'CONFIRMADO'\s*\)/i.test(sql)
+      /ESTADO\s*=\s*'CONFIRMANDO'/i.test(sql)
     )).toBe(true);
+    expect(conn.rollback).toHaveBeenCalledTimes(1);
+    expect(conn.commit).not.toHaveBeenCalled();
   });
 
   test("confirmOrder returns refreshed bolsa summary after movement write", async () => {
     const db = require("../config/db");
+    installTransactionalPool(db);
     const header = { ID: 42, EJERCICIO: 2026, NUMEROPEDIDO: 1001, SERIEPEDIDO: "M", TERMINAL: 1, DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 233639, CODIGOCLIENTE: "C001", NOMBRECLIENTE: "Cliente Test", CODIGOVENDEDOR: "10", CODIGOFORMAPAGO: "01", CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: "CC", IMPORTETOTAL: 36, IMPORTEBASE: 36, IMPORTEIVA: 0, IMPORTECOSTO: 24, IMPORTEMARGEN: 12, OBSERVACIONES: "" };
     const line = { ID: 7, PEDIDO_ID: 42, SECUENCIA: 1, CODIGOARTICULO: "ART-OVER", DESCRIPCION: "Producto sobre minimo", CANTIDADENVASES: 3, CANTIDADUNIDADES: 0, UNIDADMEDIDA: "CAJAS", UNIDADESCAJA: 1, PRECIOVENTA: 12, PRECIOCOSTO: 8, PRECIOTARIFA: 10, PRECIOTARIFACLIENTE: 10, PRECIOMINIMO: 10, IMPORTEVENTA: 36, IMPORTECOSTO: 24, IMPORTEMARGEN: 12, PORCENTAJEMARGEN: 33.33, TIPOLINEA: "R", TIPOVENTA: "CC", CLASELINEA: "VT", CODIGOIVA: "2", ORDEN: 1 };
     let movementReads = 0;
@@ -490,7 +512,7 @@ describe("pedidos confirmation bolsa contract", () => {
       if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return [{ ...header, ESTADO: "CONFIRMADO" }];
       if (/FROM\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql)) {
         movementReads += 1;
-        return movementReads === 1 ? [] : [{
+        return [{
           ID: 99,
           TIPO: "ACUMULACION",
           IMPORTE: 6,
@@ -521,19 +543,189 @@ describe("pedidos confirmation bolsa contract", () => {
       lineMovements: [{ tipo: "ACUMULACION", lineId: 7, codigoArticulo: "ART-OVER", precioMinimoCongelado: 10, precioVenta: 12, cantidad: 3, unidadMedida: "CAJAS", importe: 6, idempotencyKey: "pedido-42-line-7-over-min" }],
     });
     const mockAcumularBolsa = jest.fn().mockResolvedValue(306);
+    const mockApplyOrderMovementsWith = jest.fn().mockResolvedValue({ allowed: true, saldoAcumulado: 306 });
     jest.doMock("../services/bolsa-comercial.service", () => ({
       validateOrderWithBolsa: mockValidateOrderWithBolsa,
       acumularBolsa: mockAcumularBolsa,
       consumirBolsa: jest.fn(),
+      applyOrderMovementsWith: mockApplyOrderMovementsWith,
     }));
 
     const pedidosService = require("../services/pedidos.service");
     const result = await pedidosService.confirmOrder(42, "CC", { deliveryDate: "2026-06-09" });
 
-    expect(mockAcumularBolsa).toHaveBeenCalledWith("10", 42, 6, [expect.objectContaining({ lineId: 7, importe: 6 })]);
-    expect(movementReads).toBe(2);
+    expect(mockApplyOrderMovementsWith).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        vendedorCode: "10",
+        pedidoId: 42,
+        acumulacionAmount: 6,
+        acumulacionMovements: [expect.objectContaining({ lineId: 7, importe: 6 })],
+      }),
+    );
+    expect(movementReads).toBe(1);
     expect(result.bolsaSummary).toMatchObject({ acumulacion: 6, consumo: 0, neto: 6, movementCount: 1 });
     expect(result.lines[0].bolsaImpact).toMatchObject({ acumulacion: 6, hasImpact: true });
+  });
+
+  test('confirmOrder replay returns the existing confirmed order without repeating writes', async () => {
+    const db = require('../config/db');
+    const header = {
+      ID: 42, EJERCICIO: 2026, NUMEROPEDIDO: 1001, SERIEPEDIDO: 'M', TERMINAL: 1,
+      DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 120000,
+      CODIGOCLIENTE: 'C001', NOMBRECLIENTE: 'Cliente Test', CODIGOVENDEDOR: '10',
+      CODIGOFORMAPAGO: '01', CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: 'CC',
+      ESTADO: 'CONFIRMADO', IMPORTETOTAL: 7, IMPORTEBASE: 7, IMPORTEIVA: 0,
+      IMPORTECOSTO: 4, IMPORTEMARGEN: 3, OBSERVACIONES: '',
+    };
+    db.queryWithParams.mockReset();
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql) && sql.includes('CONFIRMANDO')) {
+        return { count: 0 };
+      }
+      if (/SELECT\s+ESTADO,/i.test(sql)) return [header];
+      if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return [header];
+      return [];
+    });
+    jest.doMock('../services/query-optimizer', () => ({
+      cachedQuery: jest.fn((fn, sql, _key, _ttl, params) => fn(sql, params)),
+    }));
+    jest.doMock('../services/redis-cache', () => ({
+      redisCache: { get: jest.fn(), set: jest.fn(), del: jest.fn(), invalidatePattern: jest.fn() },
+      TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 },
+    }));
+    const applyOrderMovementsWith = jest.fn();
+    jest.doMock('../services/bolsa-comercial.service', () => ({
+      validateOrderWithBolsa: jest.fn(),
+      applyOrderMovementsWith,
+    }));
+
+    const pedidosService = require('../services/pedidos.service');
+    const result = await pedidosService.confirmOrder(42, 'CC');
+
+    expect(result).toMatchObject({
+      idempotentReplay: true,
+      header: { id: 42, estado: 'CONFIRMADO' },
+    });
+    expect(applyOrderMovementsWith).not.toHaveBeenCalled();
+    expect(db.getPool).not.toHaveBeenCalled();
+    expect(db.queryWithParams.mock.calls.some(([sql]) =>
+      /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql)
+    )).toBe(false);
+  });
+
+  test('authorized force confirmation still blocks when locked stock is insufficient', async () => {
+    const db = require('../config/db');
+    const conn = installTransactionalPool(db);
+    const header = {
+      ID: 43, EJERCICIO: 2026, NUMEROPEDIDO: 1002, SERIEPEDIDO: 'M', TERMINAL: 1,
+      DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 120000,
+      CODIGOCLIENTE: 'C001', NOMBRECLIENTE: 'Cliente Test', CODIGOVENDEDOR: '10',
+      CODIGOFORMAPAGO: '01', CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: 'CC',
+      ESTADO: 'CONFIRMANDO', IMPORTETOTAL: 10, IMPORTEBASE: 10, IMPORTEIVA: 0,
+      IMPORTECOSTO: 5, IMPORTEMARGEN: 5, OBSERVACIONES: '',
+    };
+    const line = {
+      ID: 8, PEDIDO_ID: 43, SECUENCIA: 1, CODIGOARTICULO: 'ART-STOCK',
+      DESCRIPCION: 'Producto', CANTIDADENVASES: 2, CANTIDADUNIDADES: 0,
+      UNIDADMEDIDA: 'CAJAS', UNIDADESCAJA: 1, PRECIOVENTA: 5, PRECIOCOSTO: 2,
+      PRECIOTARIFA: 5, PRECIOTARIFACLIENTE: 5, PRECIOMINIMO: 5,
+      IMPORTEVENTA: 10, IMPORTECOSTO: 4, IMPORTEMARGEN: 6,
+      PORCENTAJEMARGEN: 60, TIPOLINEA: 'R', TIPOVENTA: 'CC', CLASELINEA: 'VT',
+      CODIGOIVA: '2', ORDEN: 1,
+    };
+    let stockReads = 0;
+    db.queryWithParams.mockReset();
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql) && sql.includes('CONFIRMANDO')) return { count: 1 };
+      if (/SELECT\s+ESTADO,/i.test(sql)) return [header];
+      if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return [{ CODIGOVEHICULO: '02', CODIGOREPARTIDOR: '10' }];
+      if (/FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return [line];
+      if (/DESCUENTO_GLOBAL/i.test(sql) && /PEDIDOS_CAB/i.test(sql)) return [{ DESCUENTO_GLOBAL: 0, PORCENTAJEDESCUENTO1: 0 }];
+      if (/FROM\s+DSEDAC\.ARO/i.test(sql)) {
+        stockReads++;
+        return [{ CODE: 'ART-STOCK', ENVASES: stockReads === 1 ? 10 : 1, UNIDADES: 0 }];
+      }
+      return [];
+    });
+    jest.doMock('../services/query-optimizer', () => ({
+      cachedQuery: jest.fn((fn, sql, _key, _ttl, params) => fn(sql, params)),
+    }));
+    jest.doMock('../services/redis-cache', () => ({
+      redisCache: { get: jest.fn(), set: jest.fn(), del: jest.fn(), invalidatePattern: jest.fn() },
+      TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 },
+    }));
+    jest.doMock('../services/laclae', () => ({
+      getClientDays: jest.fn(() => ({ deliveryDays: ['martes'], deliveryDaysShort: 'M' })),
+    }));
+    jest.doMock('../services/bolsa-comercial.service', () => ({
+      validateOrderWithBolsa: jest.fn().mockResolvedValue({ valid: true, consumo: 0, acumulacion: 0 }),
+      applyOrderMovementsWith: jest.fn(),
+    }));
+
+    const pedidosService = require('../services/pedidos.service');
+    const result = await pedidosService.confirmOrder(43, 'CC', {
+      forceConfirm: true,
+      adminOverride: true,
+      userRole: 'JEFE_VENTAS',
+      forceConfirmReason: 'Validacion stock demo',
+      deliveryDate: '2026-06-09',
+    });
+
+    expect(result).toMatchObject({ blocked: true, reason: 'STOCK_CHANGED_DURING_CONFIRM' });
+    expect(stockReads).toBe(2);
+    expect(conn.rollback).toHaveBeenCalledTimes(1);
+    expect(conn.commit).not.toHaveBeenCalled();
+    expect(conn.query.mock.calls.some(([sql]) =>
+      /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql)
+    )).toBe(false);
+  });
+});
+
+describe('expired draft purge transaction contract', () => {
+  beforeEach(() => { jest.resetModules(); jest.clearAllMocks(); });
+
+  test('rechecks a stale candidate under locks and preserves a no-longer-eligible order', async () => {
+    const db = require('../config/db');
+    const conn = installTransactionalPool(db);
+    db.queryWithParams.mockReset();
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/SELECT\s+C\.ID/i.test(sql)) return [{ ID: 77 }];
+      if (/SELECT\s+ID,\s+TRIM\(ESTADO\)/i.test(sql)) return [];
+      return [];
+    });
+
+    const pedidos = require('../services/pedidos/index');
+    const result = await pedidos.purgeExpiredDraftReservations({ limit: 1 });
+
+    expect(result).toMatchObject({ purged: 0, candidates: 1 });
+    expect(conn.beginTransaction).toHaveBeenCalledTimes(1);
+    expect(conn.commit).toHaveBeenCalledTimes(1);
+    expect(conn.query.mock.calls.map(([sql]) => String(sql))).toEqual(expect.arrayContaining([
+      expect.stringMatching(/LOCK TABLE JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE IN EXCLUSIVE MODE/i),
+      expect.stringMatching(/LOCK TABLE JAVIER\.(?:TEST_)?PEDIDOS_CAB IN EXCLUSIVE MODE/i),
+    ]));
+    expect(conn.query.mock.calls.some(([sql]) => /DELETE\s+FROM/i.test(sql))).toBe(false);
+  });
+
+  test('rolls back when the driver omits delete count and the header still exists', async () => {
+    const db = require('../config/db');
+    const conn = installTransactionalPool(db);
+    db.queryWithParams.mockReset();
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/SELECT\s+C\.ID/i.test(sql)) return [{ ID: 78 }];
+      if (/SELECT\s+ID,\s+TRIM\(ESTADO\)/i.test(sql)) return [{ ID: 78, ESTADO: 'BORRADOR' }];
+      if (/DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql)) return {};
+      if (/SELECT\s+ID\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB\s+WHERE\s+ID/i.test(sql)) return [{ ID: 78 }];
+      return { count: 1 };
+    });
+
+    const pedidos = require('../services/pedidos/index');
+    const result = await pedidos.purgeExpiredDraftReservations({ limit: 1 });
+
+    expect(result).toMatchObject({ purged: 0, candidates: 1 });
+    expect(conn.rollback).toHaveBeenCalledTimes(1);
+    expect(conn.commit).not.toHaveBeenCalled();
   });
 });
 
@@ -638,11 +830,12 @@ describe('confirmOrder DESCUENTO_GLOBAL write-path contract', () => {
     expect(source).toMatch(/globalDiscountPct/);
     expect(source).toMatch(/BOLSA_DISCOUNT_CONSUMO_MISMATCH/);
     expect(source).toMatch(/mustWriteBolsaLedger/);
-    expect(source).toMatch(/consumirBolsa\(/);
+    expect(source).toMatch(/applyOrderMovementsWith\(/);
   });
 
-  test('confirmOrder calls consumirBolsa when pie discount undercuts client tariff', async () => {
+  test('confirmOrder applies bolsa in the caller transaction when pie discount undercuts client tariff', async () => {
     const db = require('../config/db');
+    installTransactionalPool(db);
     const header = {
       ID: 67,
       EJERCICIO: 2026,
@@ -771,12 +964,14 @@ describe('confirmOrder DESCUENTO_GLOBAL write-path contract', () => {
     }));
 
     const realBolsa = jest.requireActual('../services/bolsa-comercial.service');
-    const consumirBolsa = jest.fn().mockResolvedValue({ allowed: true, saldo: 295.66 });
+    const applyOrderMovementsWith = jest.fn().mockResolvedValue({
+      allowed: true,
+      consumo: { allowed: true, saldo: 295.66 },
+    });
     jest.doMock('../services/bolsa-comercial.service', () => ({
       ...realBolsa,
       validateOrderWithBolsa: realBolsa.validateOrderWithBolsa,
-      consumirBolsa,
-      acumularBolsa: jest.fn(),
+      applyOrderMovementsWith,
       resolveBolsaReferencePrice: realBolsa.resolveBolsaReferencePrice,
       getLineQuantity: realBolsa.getLineQuantity,
       resolveEffectiveSalePrice: realBolsa.resolveEffectiveSalePrice,
@@ -785,10 +980,11 @@ describe('confirmOrder DESCUENTO_GLOBAL write-path contract', () => {
     const pedidosService = require('../services/pedidos.service');
     await pedidosService.confirmOrder(67, 'CC', { deliveryDate: '2026-09-22' });
 
-    expect(consumirBolsa).toHaveBeenCalled();
-    const [, pedidoId, importe, movements] = consumirBolsa.mock.calls[0];
-    expect(pedidoId).toBe(67);
-    expect(Number(importe)).toBeGreaterThan(0);
-    expect(Array.isArray(movements) ? movements.length : 0).toBeGreaterThan(0);
+    expect(applyOrderMovementsWith).toHaveBeenCalled();
+    const [queryFn, payload] = applyOrderMovementsWith.mock.calls[0];
+    expect(typeof queryFn).toBe('function');
+    expect(payload.pedidoId).toBe(67);
+    expect(Number(payload.consumoAmount)).toBeGreaterThan(0);
+    expect(payload.consumoMovements.length).toBeGreaterThan(0);
   });
 });
