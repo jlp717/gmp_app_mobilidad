@@ -1,0 +1,604 @@
+{
+  "readOnly": true,
+  "columns": [
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "DIADOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "MESDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "ANODOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "HORADOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "CODIGOCLIENTEALBARAN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "CODIGOCLIENTEFACTURA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "CODIGOCLIENTECADENA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "CODIGOVENDEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "CODIGOVENDEDORCOBRO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "CODIGOFORMAPAGO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "CODIGOVENDEDORUSUARIO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "CODIGOVENDEDORPUNTEO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "CONFORMADOSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "DOCUMENTOORIGINAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10
+    },
+    {
+      "TABLE_NAME": "CPC",
+      "COLUMN_NAME": "TIPODOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "TIPODOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "ORIGENDOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "SUBEMPRESADOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "EJERCICIODOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "SERIEDOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "TERMINALDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "NUMERODOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "XDEDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "DEXDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "CODIGOFORMATOIMPRESION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "CODIGOCLIENTEALBARAN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "CODIGOCLIENTEFACTURA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "CODIGOCLIENTECADENA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "CODIGOVENDEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "CODIGOVENDEDORCOBRO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "CODIGOFORMAPAGO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "IMPORTEPENDIENTE",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "EJERCICIODELDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "DOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 20
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "SUBEMPRESADOCUMENTOASOCIADO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "EJERCICIODOCUMENTOASOCIADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "SERIEDOCUMENTOASOCIADO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "TERMINALDOCUMENTOASOCIADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "NUMERODOCUMENTOASOCIADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "REFERENCIATIPODOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 5
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "CODIGOFORMAPAGOORIGINAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "CVC",
+      "COLUMN_NAME": "CODIGOVENDEDORPOSEEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "CODIGOFORMAPAGO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "DESCRIPCIONFORMAPAGO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 40
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "NUMEROPAGOS",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "PRIMERPAGO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "ENTREPAGOS",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "VENCIMIENTOFIJO1",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "VENCIMIENTOFIJO2",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "VENCIMIENTOFIJO3",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "IMPRIMIRVENCIMIENTOSSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "GENERARVENCIMIENTOSSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "CONTADOSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "IMPORTEMAXIMOFACTURA",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "PAGARESN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "CONFIRMINGSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "CONTROLEFECTOSSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "SERIENUEVOVENCIMIENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "CONTROLARVCTOPREVCOBROPAGOSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "FACTURAPAGADASN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "CODIGOMETODOPAGO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "IMPRIMIRIBANSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "IBAN01",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "IBAN02",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "IBAN03",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "IBAN04",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "IBAN05",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "IBAN06",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "PORCENTAJEGASTOFINANCIERO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 5
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "TRANSFERENCIASN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "EFECTIVOSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "PAGAREBANCOSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "TIPOPAGARE",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "COBROPAGOANTICIPADOSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "ID",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4
+    },
+    {
+      "TABLE_NAME": "FPG",
+      "COLUMN_NAME": "MARCAACTUALIZACION",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 50
+    }
+  ],
+  "indexes": [
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "INDEX_NAME": "IXT_TEST_COBROS_BF49807A68",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "INDEX_NAME": "IXT_TEST_COBROS_DAA8F52636",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "CODIGO_CLIENTE",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_ABA2E262F1",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "CODIGOVENDEDOR",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_ABA2E262F1",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "NUMEROLIQUIDACION",
+      "ORDINAL_POSITION": 2
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_ABA2E262F1",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "DIACOBRO",
+      "ORDINAL_POSITION": 3
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_ABA2E262F1",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "MESCOBRO",
+      "ORDINAL_POSITION": 4
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_ABA2E262F1",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "ANOCOBRO",
+      "ORDINAL_POSITION": 5
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_B8A450B372",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "CODIGOVENDEDOR",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_B8A450B372",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "CODIGOVENDEDORCOBRO",
+      "ORDINAL_POSITION": 2
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_FB912726D8",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "SUBEMPRESADOCUMENTO",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_FB912726D8",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "EJERCICIODOCUMENTO",
+      "ORDINAL_POSITION": 2
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_FB912726D8",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "SERIEDOCUMENTO",
+      "ORDINAL_POSITION": 3
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_FB912726D8",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "TERMINALDOCUMENTO",
+      "ORDINAL_POSITION": 4
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_FB912726D8",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "NUMERODOCUMENTO",
+      "ORDINAL_POSITION": 5
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_0A93BDB4DD",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "CODIGOCLIENTEALBARAN",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "IXT_TEST_REPARTIDOR_COBROS_0A93BDB4DD",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "CODIGOCLIENTEFACTURA",
+      "ORDINAL_POSITION": 2
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "UXT_TEST_REPARTIDOR_COBROS_E3600C8932",
+      "IS_UNIQUE": "U",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "ORDINAL_POSITION": 1
+    }
+  ],
+  "constraints": [
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "CONSTRAINT_NAME": "CKT_TEST_COBROS_286D235C1A",
+      "CONSTRAINT_TYPE": "CHECK"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "CONSTRAINT_NAME": "PKT_TEST_COBROS_E14EFC7086",
+      "CONSTRAINT_TYPE": "PRIMARY KEY"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "CONSTRAINT_NAME": "Q_JAVIER_TEST_00019_PRIKEYCHK_00001",
+      "CONSTRAINT_TYPE": "CHECK"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "CONSTRAINT_NAME": "PKT_TEST_REPARTIDOR_COBROS_E14EFC7086",
+      "CONSTRAINT_TYPE": "PRIMARY KEY"
+    }
+  ]
+}

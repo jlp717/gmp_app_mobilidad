@@ -1,0 +1,12 @@
+{
+  "readOnly": true,
+  "rows": [
+    {
+      "OBJNAME": "TEST_00019",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    }
+  ]
+}

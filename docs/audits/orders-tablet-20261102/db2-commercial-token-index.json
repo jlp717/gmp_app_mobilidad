@@ -1,0 +1,95 @@
+{
+  "index": "JAVIER.UX_TEST_COBROS_TOKEN",
+  "target": "JAVIER.TEST_COBROS",
+  "profile": {
+    "profile": "test",
+    "verified": true,
+    "readSchema": "DSEDAC",
+    "writeSchema": "JAVIER",
+    "tableSet": "isolated_test",
+    "erpExportEnabled": false,
+    "writesEnabled": true,
+    "productionWritesEnabled": false
+  },
+  "daemonChanged": false,
+  "sql": "CREATE UNIQUE WHERE NOT NULL INDEX JAVIER.UX_TEST_COBROS_TOKEN ON JAVIER.TEST_COBROS (IDEMPOTENCY_TOKEN)",
+  "profileHash": "3341baffc9aa208457c2241fb2fd80bd998591789cc62ebecb1b376e86d773af",
+  "probes": [
+    {
+      "kind": "duplicate_token",
+      "insideCount": 0,
+      "diagnostics": {
+        "code": "NATIVE_OPERATION_FAILED",
+        "odbc": [
+          {
+            "state": "23000",
+            "code": -803
+          }
+        ]
+      },
+      "afterRollbackRows": [],
+      "passed": true
+    },
+    {
+      "kind": "multiple_null_tokens",
+      "insideCount": 2,
+      "diagnostics": null,
+      "afterRollbackRows": [],
+      "passed": true
+    }
+  ],
+  "created": true,
+  "rowsCommitted": false,
+  "tokenCoverage": [
+    {
+      "N": 16,
+      "WITH_TOKEN": 16,
+      "DISTINCT_TOKENS": 16
+    }
+  ],
+  "primaryKey": [
+    {
+      "CONSTRAINT_NAME": "PKT_TEST_COBROS_E14EFC7086",
+      "COLUMN_NAME": "ID",
+      "ORDINAL_POSITION": 1
+    }
+  ],
+  "previousTokenIndex": [
+    {
+      "INDEX_NAME": "IXT_TEST_COBROS_BF49807A68",
+      "IS_UNIQUE": "D",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "ORDINAL_POSITION": 1
+    }
+  ],
+  "journal": [
+    {
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    }
+  ],
+  "before": {
+    "count": 16,
+    "rowsHash": "c4ab121a9d4034399cc38e6aaf77dadb7d7376bc02ea0ce2b5674050ef635b21",
+    "duplicates": 0
+  },
+  "indexCatalog": [
+    {
+      "INDEX_SCHEMA": "JAVIER",
+      "INDEX_NAME": "UX_TEST_COBROS_TOKEN",
+      "TABLE_SCHEMA": "JAVIER",
+      "TABLE_NAME": "TEST_COBROS",
+      "IS_UNIQUE": "V",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "ORDINAL_POSITION": 1
+    }
+  ],
+  "after": {
+    "count": 16,
+    "rowsHash": "c4ab121a9d4034399cc38e6aaf77dadb7d7376bc02ea0ce2b5674050ef635b21"
+  },
+  "existingRowsUnchanged": true,
+  "passed": true
+}

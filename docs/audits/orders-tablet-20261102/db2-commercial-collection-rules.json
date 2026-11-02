@@ -1,0 +1,2252 @@
+{
+  "readOnly": true,
+  "fpg": [
+    {
+      "CODIGOFORMAPAGO": "A0",
+      "DESCRIPCIONFORMAPAGO": "ANTICIPO                                ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "CF",
+      "DESCRIPCIONFORMAPAGO": "CONFIRMING                              ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "CF",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "C0",
+      "DESCRIPCIONFORMAPAGO": "CONTADO                                 ",
+      "CONTADOSN": "S",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "C2",
+      "DESCRIPCIONFORMAPAGO": "RECIBO AL COBRO 15 DFF                  ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 15,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RC",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": "N"
+    },
+    {
+      "CODIGOFORMAPAGO": "C5",
+      "DESCRIPCIONFORMAPAGO": "RECIBO AL COBRO 90 DFF                  ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 90,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RC",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": "N"
+    },
+    {
+      "CODIGOFORMAPAGO": "DA",
+      "DESCRIPCIONFORMAPAGO": "RECIBO DOMICILIADO 5 DFF                ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 5,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RD",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": "N"
+    },
+    {
+      "CODIGOFORMAPAGO": "D1",
+      "DESCRIPCIONFORMAPAGO": "RECIBO DOMICILIADO 0 DIAS               ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 2,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RD",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "D2",
+      "DESCRIPCIONFORMAPAGO": "RECIBO DOMICILIADO 15 DFF               ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 15,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RD",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "D3",
+      "DESCRIPCIONFORMAPAGO": "RECIBO DOMICILIADO 30 DFF               ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 30,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RD",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "D4",
+      "DESCRIPCIONFORMAPAGO": "RECIBO DOMICILIADO 45 DFF               ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 45,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RD",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "D5",
+      "DESCRIPCIONFORMAPAGO": "RECIBO DOMICILIADO 60 DFF               ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 60,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RD",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "D6",
+      "DESCRIPCIONFORMAPAGO": "RECIDO DOMICILIADO 10 DFF               ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 10,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RD",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "D7",
+      "DESCRIPCIONFORMAPAGO": "RECIBO DOMICILIADO 28 DFF               ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 28,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RD",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "D8",
+      "DESCRIPCIONFORMAPAGO": "RECIBO DOMICILIADO 20 DFF               ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 20,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RD",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "D9",
+      "DESCRIPCIONFORMAPAGO": "RECIBO DOMICILIADO 25 DFF               ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 25,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "RD",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "EN",
+      "DESCRIPCIONFORMAPAGO": "ENDOSO                                  ",
+      "CONTADOSN": "S",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "E0",
+      "DESCRIPCIONFORMAPAGO": "COBRO 48 DFF                            ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 48,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "E1",
+      "DESCRIPCIONFORMAPAGO": "COBRO 5 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 5,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "E2",
+      "DESCRIPCIONFORMAPAGO": "COBRO 4 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 4,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "E3",
+      "DESCRIPCIONFORMAPAGO": "COBRO 8 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 8,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "E4",
+      "DESCRIPCIONFORMAPAGO": "COBRO 60 Y 90                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 30,
+      "ENTREPAGOS": 60,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "E5",
+      "DESCRIPCIONFORMAPAGO": "COBRO 40 DFF                            ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 40,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "E6",
+      "DESCRIPCIONFORMAPAGO": "COBRO 15 DFF100                         ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 15,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "E7",
+      "DESCRIPCIONFORMAPAGO": "COBRO INMEDIATO                         ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 1,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "E8",
+      "DESCRIPCIONFORMAPAGO": "COBRO 05 Y 15                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 5,
+      "ENTREPAGOS": 15,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "E9",
+      "DESCRIPCIONFORMAPAGO": "COBRO 7 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 7,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "FP",
+      "DESCRIPCIONFORMAPAGO": "FACTURA PAGADA                          ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "F0",
+      "DESCRIPCIONFORMAPAGO": "EFECTIVO                                ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": "S"
+    },
+    {
+      "CODIGOFORMAPAGO": "G0",
+      "DESCRIPCIONFORMAPAGO": "GIRO                                    ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "G1",
+      "DESCRIPCIONFORMAPAGO": "GIRO 30 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 30,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "G2",
+      "DESCRIPCIONFORMAPAGO": "GIRO 7 DFF                              ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 7,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "G3",
+      "DESCRIPCIONFORMAPAGO": "TRES PAGOS                              ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 30,
+      "ENTREPAGOS": 30,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "G4",
+      "DESCRIPCIONFORMAPAGO": "GIRO 15 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 15,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "G5",
+      "DESCRIPCIONFORMAPAGO": "GIRO 90 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 90,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "G6",
+      "DESCRIPCIONFORMAPAGO": "GIRO 60 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 60,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "G7",
+      "DESCRIPCIONFORMAPAGO": "GIRO 30-60-90                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 30,
+      "ENTREPAGOS": 30,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "G8",
+      "DESCRIPCIONFORMAPAGO": "GIRO 75 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 75,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "G9",
+      "DESCRIPCIONFORMAPAGO": "GIRO 45 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 45,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "H1",
+      "DESCRIPCIONFORMAPAGO": "GIRO 30-60                              ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 30,
+      "ENTREPAGOS": 30,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "H2",
+      "DESCRIPCIONFORMAPAGO": "GIRO 10 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 10,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "H3",
+      "DESCRIPCIONFORMAPAGO": "GIRO 60-90                              ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 60,
+      "ENTREPAGOS": 30,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "H4",
+      "DESCRIPCIONFORMAPAGO": "GIRO 48 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 48,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "H6",
+      "DESCRIPCIONFORMAPAGO": "GIRO - 6 CUOTAS                         ",
+      "CONTADOSN": "S",
+      "PRIMERPAGO": 30,
+      "ENTREPAGOS": 15,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "PB",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 65 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 65,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "PC",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 80 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 80,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "PG",
+      "DESCRIPCIONFORMAPAGO": "PAGARE                                  ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": "S",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "PV",
+      "DESCRIPCIONFORMAPAGO": "PAGARE A/V                              ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 1,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "P0",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 20 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 20,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "P1",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 30 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 30,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "P2",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 75 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 75,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "P3",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 50 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 50,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "P4",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 30-40-50                         ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 30,
+      "ENTREPAGOS": 10,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "P5",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 45-50                            ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 45,
+      "ENTREPAGOS": 5,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "P6",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 60 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 60,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "P7",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 90 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 90,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "P8",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 45 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 45,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "P9",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 40 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 40,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "Q1",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 55 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 55,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "Q2",
+      "DESCRIPCIONFORMAPAGO": "PAGARE 15 DFF                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 15,
+      "ENTREPAGOS": 0,
+      "PAGARESN": "S",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "RC",
+      "DESCRIPCIONFORMAPAGO": "REMESA CONFIRMING                       ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "CF",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "RT",
+      "DESCRIPCIONFORMAPAGO": "REMESA TRANSFERENCIAS                   ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "TR",
+      "TRANSFERENCIASN": "S",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "R1",
+      "DESCRIPCIONFORMAPAGO": "COBRO 5 DFF                             ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 5,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "R2",
+      "DESCRIPCIONFORMAPAGO": "COBRO 15 DFF                            ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 15,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "R3",
+      "DESCRIPCIONFORMAPAGO": "COBRO 30 DFF                            ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 30,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "R4",
+      "DESCRIPCIONFORMAPAGO": "COBRO 60 Y 90                           ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 60,
+      "ENTREPAGOS": 30,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "R6",
+      "DESCRIPCIONFORMAPAGO": "COBRO 10 DFF                            ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 10,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "R7",
+      "DESCRIPCIONFORMAPAGO": "COBRO 28 DFF                            ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 28,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "R8",
+      "DESCRIPCIONFORMAPAGO": "COBRO 20 DFF                            ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 20,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "R9",
+      "DESCRIPCIONFORMAPAGO": "COBRO 45 DFF                            ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 45,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "TJ",
+      "DESCRIPCIONFORMAPAGO": "TARJETA                                 ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "TR",
+      "DESCRIPCIONFORMAPAGO": "TRANSFER.60DFF                          ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 60,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "TR",
+      "TRANSFERENCIASN": "S",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "T0",
+      "DESCRIPCIONFORMAPAGO": "TRANSFERENCIA                           ",
+      "CONTADOSN": "S",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "TR",
+      "TRANSFERENCIASN": "S",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "T3",
+      "DESCRIPCIONFORMAPAGO": "TRANSFER.30DFF                          ",
+      "CONTADOSN": "S",
+      "PRIMERPAGO": 30,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "TR",
+      "TRANSFERENCIASN": "S",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "T4",
+      "DESCRIPCIONFORMAPAGO": "TRANSFERENCIA 45 DIAS FF                ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 45,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "TR",
+      "TRANSFERENCIASN": "S",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "01",
+      "DESCRIPCIONFORMAPAGO": "CONTADO                                 ",
+      "CONTADOSN": "S",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    },
+    {
+      "CODIGOFORMAPAGO": "02",
+      "DESCRIPCIONFORMAPAGO": "REPOSICION                              ",
+      "CONTADOSN": "N",
+      "PRIMERPAGO": 0,
+      "ENTREPAGOS": 0,
+      "PAGARESN": " ",
+      "FACTURAPAGADASN": " ",
+      "CODIGOMETODOPAGO": "  ",
+      "TRANSFERENCIASN": " ",
+      "EFECTIVOSN": " "
+    }
+  ],
+  "columns": [
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "ID",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 36,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGO_CLIENTE",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "REFERENCIA",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 100,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "IMPORTE",
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 15,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "FORMA_PAGO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TIPO_VENTA",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 5,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TIPO_MODO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TIPO_USUARIO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGO_USUARIO",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "OBSERVACIONES",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 255,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "FECHA",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CREATED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "SUBEMPRESARECIBO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "EJERCICIORECIBO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "SERIERECIBO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TERMINALRECIBO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "NUMERORECIBO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGOCLIENTEFACTURA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGOSUBDISTRIBUIDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGOVENDEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TIPORECIBO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "DIADOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "MESDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "ANODOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "HORADOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "IMPORTECOBRADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "IMPORTEREDONDEO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "EFECTIVOTALON",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "NUMEROTALON",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "DIAVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "MESVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "ANOVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGOENTIDADBANCARIA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "OFICINIEXTERIOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "CODIGOVENDEDORUSUARIO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "SUBEMPRESALIQUIDACION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "EJERCICIOLIQUIDACION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "SERIELIQUIDACION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "TERMINALLIQUIDACION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "NUMEROLIQUIDACION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "IDMARCALIQUIDACION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 30,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "COLUMN_NAME": "MARCAACTUALIZACION",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 50,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "TIPODOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ORIGENDOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SUBEMPRESADOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EJERCICIODOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SERIEDOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "TERMINALDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMERODOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "XDEDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DEXDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SITUACION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CLAVEAGRUPAMIENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOFORMATOIMPRESION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTABANCOREMESA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIAREMESABANCO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MESREMESABANCO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANOREMESABANCO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIAREMESACLIENTE",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MESREMESACLIENTE",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANOREMESACLIENTE",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTALIBRADO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTAPAGO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTABANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTABANCOEFECTOSDESCONTADOS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTAEFECTOSDESCONTADOS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCLIENTEALBARAN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCLIENTEFACTURA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCLIENTECADENA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOVENDEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOVENDEDORCOBRO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGORUTA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOFORMAPAGO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIAVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MESVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANOVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIAEMISION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MESEMISION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANOEMISION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTEVENCIMIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTECANCELADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTEPENDIENTE",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN01",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN02",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN03",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN04",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN05",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IBAN06",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 20,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CLAUSULASBANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 20,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIRECCIONBANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 60,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOPOSTALBANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 5,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SECUENCIACODIGOPOSTALBANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "POBLACIONBANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 25,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "PROVINCIABANCO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 34,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "OBSERVACIONES",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 60,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EMPRESACONTABLE",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EMPRESACONTABLE2",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DIACOBRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MESCOBRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANOCOBRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROLIQUIDACION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EJERCICIODELDOCUMENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 20,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "LUGAREMISION",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 15,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESDESERIENROPAG",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESDENUMERONROPAG",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 7,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESDECTRLNUMERONROPAG",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESDENUMERO2NROPAG",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESDECTRLNUMERO2NROPAG",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCONCEPTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESCRIPCIONCONCEPTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 40,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESCRIPCIONCONCEPTO_1",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 30,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROASIGNADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SUBEMPRESADOCUMENTOASOCIADO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EJERCICIODOCUMENTOASOCIADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SERIEDOCUMENTOASOCIADO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "TERMINALDOCUMENTOASOCIADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMERODOCUMENTOASOCIADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOMETODOPAGO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "REFERENCIACARTERA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 20,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "REFERENCIATIPODOCUMENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 5,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "COMISIONESSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTECOMISION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOIVA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTEIVACOMISION",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTEOTROS",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTEGASTOS",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPUTARGASTOSSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTAACREEDORA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTAGASTOS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTAOTROS",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCANAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 5,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ANULADOSN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOFORMAPAGOORIGINAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOMETODOPAGOORIGINAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTACARGOABONO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SUBEMPRESAASIENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EJERCICIOASIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SERIEASIENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "TERMINALASIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROASIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SECUENCIAASIENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SITUACIONORIGINAL",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOVENDEDORPOSEEDOR",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "ID",
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "MARCAACTUALIZACION",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 50,
+      "IS_NULLABLE": "N"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CREATED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "UPDATED_AT",
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "STATUS",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "OPERADOR",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 50,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "PANTALLA_ORIGEN",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "LIQUIDADO_SN",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "LIQUIDACION_TOKEN",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SUBEMPRESAREGISTRO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 3,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EJERCICIOREGISTRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 4,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "SERIEREGISTRO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "TERMINALREGISTRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 3,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROREGISTRO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROREGISTROORIGINAL",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 6,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTACOBRADO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTATALONES",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CUENTADESCUENTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTETOTALCOBRADO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTETOTALTALONES",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTETOTALOTROS",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTETOTALDESCUENTO",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "IMPORTETOTALPENDIENTE",
+      "DATA_TYPE": "NUMERIC",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EXTENSIONCONCEPTO",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 40,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOCONCEPTOCONTRAPARTIDA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "DESCCONCEPTOCONTRAPARTIDA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 40,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EXTCONCEPTOCONTRAPARTIDA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 40,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NUMEROTALON",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "CODIGOENTIDADBANCARIA",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "NOMBREENTIDADBANCARIA",
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 40,
+      "IS_NULLABLE": "Y"
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "COLUMN_NAME": "EFECTIVOTALON",
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 1,
+      "IS_NULLABLE": "Y"
+    }
+  ],
+  "duplicates": [],
+  "coverage": [
+    {
+      "N": 16,
+      "WITH_TOKEN": 16,
+      "DISTINCT_TOKENS": 16
+    }
+  ],
+  "keys": [
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "CONSTRAINT_NAME": "PKT_TEST_COBROS_E14EFC7086",
+      "COLUMN_NAME": "ID",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "CONSTRAINT_NAME": "PKT_TEST_REPARTIDOR_COBROS_E14EFC7086",
+      "COLUMN_NAME": "ID",
+      "ORDINAL_POSITION": 1
+    }
+  ],
+  "candidates": [
+    {
+      "CODIGOCLIENTEFACTURA": "4300040687",
+      "CODIGOVENDEDOR": "35",
+      "CODIGOVENDEDORCOBRO": "35",
+      "CODIGOFORMAPAGO": "C5",
+      "TIPODOCUMENTO": "COB",
+      "SUBEMPRESADOCUMENTO": "GMP",
+      "EJERCICIODOCUMENTO": 2026,
+      "SERIEDOCUMENTO": "F",
+      "TERMINALDOCUMENTO": 0,
+      "NUMERODOCUMENTO": 13427,
+      "IMPORTEPENDIENTE": 738.46,
+      "DOCUMENTO": "                    "
+    },
+    {
+      "CODIGOCLIENTEFACTURA": "4300032925",
+      "CODIGOVENDEDOR": "35",
+      "CODIGOVENDEDORCOBRO": "35",
+      "CODIGOFORMAPAGO": "02",
+      "TIPODOCUMENTO": "COB",
+      "SUBEMPRESADOCUMENTO": "GMP",
+      "EJERCICIODOCUMENTO": 2026,
+      "SERIEDOCUMENTO": "F",
+      "TERMINALDOCUMENTO": 0,
+      "NUMERODOCUMENTO": 13425,
+      "IMPORTEPENDIENTE": 5.79,
+      "DOCUMENTO": "                    "
+    },
+    {
+      "CODIGOCLIENTEFACTURA": "4300032575",
+      "CODIGOVENDEDOR": "35",
+      "CODIGOVENDEDORCOBRO": "35",
+      "CODIGOFORMAPAGO": "02",
+      "TIPODOCUMENTO": "COB",
+      "SUBEMPRESADOCUMENTO": "GMP",
+      "EJERCICIODOCUMENTO": 2026,
+      "SERIEDOCUMENTO": "F",
+      "TERMINALDOCUMENTO": 0,
+      "NUMERODOCUMENTO": 13423,
+      "IMPORTEPENDIENTE": 139.02,
+      "DOCUMENTO": "                    "
+    },
+    {
+      "CODIGOCLIENTEFACTURA": "4300032572",
+      "CODIGOVENDEDOR": "35",
+      "CODIGOVENDEDORCOBRO": "35",
+      "CODIGOFORMAPAGO": "02",
+      "TIPODOCUMENTO": "COB",
+      "SUBEMPRESADOCUMENTO": "GMP",
+      "EJERCICIODOCUMENTO": 2026,
+      "SERIEDOCUMENTO": "F",
+      "TERMINALDOCUMENTO": 0,
+      "NUMERODOCUMENTO": 13422,
+      "IMPORTEPENDIENTE": 1031.53,
+      "DOCUMENTO": "                    "
+    },
+    {
+      "CODIGOCLIENTEFACTURA": "4300032336",
+      "CODIGOVENDEDOR": "35",
+      "CODIGOVENDEDORCOBRO": "35",
+      "CODIGOFORMAPAGO": "02",
+      "TIPODOCUMENTO": "COB",
+      "SUBEMPRESADOCUMENTO": "GMP",
+      "EJERCICIODOCUMENTO": 2026,
+      "SERIEDOCUMENTO": "F",
+      "TERMINALDOCUMENTO": 0,
+      "NUMERODOCUMENTO": 13420,
+      "IMPORTEPENDIENTE": 138.94,
+      "DOCUMENTO": "                    "
+    }
+  ]
+}

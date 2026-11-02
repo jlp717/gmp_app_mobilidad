@@ -88,6 +88,12 @@ Dos sondas con la fuente nueva en memoria sí pasaron dentro de su alcance: el r
 
 TEST_COBROS contiene 16 filas COMERCIAL/CONTADO por 15.154,43 €. Este conteo anterior es una lectura; todavía no prueba tres métodos de cobro ni una liquidación nueva.
 
+La revisión adicional de cobros encontró que `TEST_COBROS` tenía una PK en ID y un índice **no único** en IDEMPOTENCY_TOKEN. Las 16 filas contenían 16 tokens distintos, pero eso no era una garantía para el siguiente cobro. La operación independiente revisada `apply-reviewed-collection-index.ps1` añadió únicamente `JAVIER.UX_TEST_COBROS_TOKEN`, un índice UNIQUE WHERE NOT NULL. `db2-commercial-token-index.json` conserva catálogo, pruebas y hashes reales: token duplicado rechazado con 23000/-803; dos NULL admitidos dentro de transacción; cero filas propias tras cada rollback. Las 16 filas existentes conservaron SHA-256 `c4ab121a9d4034399cc38e6aaf77dadb7d7376bc02ea0ce2b5674050ef635b21` antes y después. Exit 0; ningún cobro quedó registrado por esta comprobación.
+
+IBM i representa este índice nullable único con `IS_UNIQUE=V`; `U` corresponde a unicidad ordinaria. La revisión inicialmente pidió U; se corrigió con la documentación primaria antes de ejecutar el DDL. Véanse [SYSINDEXES de IBM](https://www.ibm.com/docs/en/i/7.4.0?topic=views-sysindexes) y [CREATE INDEX de IBM](https://www.ibm.com/docs/en/i/7.4.0?topic=statements-create-index). La operación está sellada para una sola aplicación y se detiene si ya existe el índice; no se debe repetir.
+
+`db2-commercial-collection-rules.json` acredita además que el instrumento no determina la condición original: FPG TR es transferencia a 60 días con CONTADOSN=N, mientras T0 es transferencia con CONTADOSN=S y cero días. C5 es recibo a 90 días. El candidato CVC del comercial 35, cliente 4300040687, referencia F-0-13427, tiene pendiente real 738,46 €; su elegibilidad frente a cobros de reparto todavía no se ha probado. No se ha usado como cobro registrado ni como escenario completado.
+
 La liquidación TEST conserva diez filas previas sin duplicados de vendedor/fecha ni token. `SYSINDEXES` y `SYSKEYS` acreditan dos índices únicos ya existentes: `UX_TEST_LIQCOM_VENDOR_DAY` sobre CODIGO_VENDEDOR/FECHA y `UX_TEST_LIQCOM_TOKEN` sobre IDEMPOTENCY_TOKEN. `SYSCST` por sí solo sólo mostraba la PK y no bastaba para concluir que faltaban garantías de unicidad. No se ejecutó ningún ALTER redundante.
 
 ## Auditoría de estados: esquema real y límite operativo
