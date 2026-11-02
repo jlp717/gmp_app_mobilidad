@@ -1,0 +1,16 @@
+{
+  "readOnly": true,
+  "client": "4300032888",
+  "activeProductsOnly": true,
+  "rows": [
+    {
+      "CLIENTE": "4300032888",
+      "ARTICULO": "2974",
+      "DESCRIPCION": "PIZZA JAMON Y QUESO 10UX340/380G........",
+      "PRECIO": 29.28,
+      "REGLA": 28,
+      "ENVASES": 117,
+      "UNIDADES": 126
+    }
+  ]
+}

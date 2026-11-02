@@ -1,0 +1,263 @@
+{
+  "sourceCommit": "9008cdf",
+  "scope": "transactional CREATE only; bundled pedidos/bolsa/adapter modules fixed to source commit, other dependencies from installed backend; real source order106/line121; auth/UI/confirm excluded; lazy purge disabled in memory to protect other fixtures",
+  "marker": "QAcreate20261102df879cc4",
+  "keys": [
+    "QAcbce6cd43fbdbc1110402c",
+    "QA5e6930e4fb3f7b9d635327"
+  ],
+  "before": {
+    "header": [],
+    "lines": [],
+    "reserve": [],
+    "idem": [],
+    "sequence": [
+      {
+        "EJERCICIO": 2026,
+        "ULTIMO_NUMERO": 34
+      }
+    ]
+  },
+  "beforeConcurrent": {
+    "header": [],
+    "lines": [],
+    "reserve": [],
+    "idem": [],
+    "sequence": [
+      {
+        "EJERCICIO": 2026,
+        "ULTIMO_NUMERO": 34
+      }
+    ]
+  },
+  "faultCode": "IDEMPOTENCY_UNAVAILABLE",
+  "afterFault": {
+    "header": [],
+    "lines": [],
+    "reserve": [],
+    "idem": [],
+    "sequence": [
+      {
+        "EJERCICIO": 2026,
+        "ULTIMO_NUMERO": 34
+      }
+    ]
+  },
+  "rollbackPassed": true,
+  "createElapsedMs": 324,
+  "createdId": 110,
+  "afterCreate": {
+    "header": [
+      {
+        "ID": 110,
+        "NUMEROPEDIDO": 35,
+        "ESTADO": "BORRADOR",
+        "CODIGOCLIENTE": "4300032160",
+        "CODIGOVENDEDOR": "35",
+        "IMPORTETOTAL": 30.29,
+        "CREATED_AT": "2026-11-02 19:01:30.884244"
+      }
+    ],
+    "lines": [
+      {
+        "ID": 126,
+        "PEDIDO_ID": 110,
+        "CODIGOARTICULO": "3519      ",
+        "CANTIDADENVASES": 1,
+        "CANTIDADUNIDADES": 1,
+        "PRECIOVENTA": 27.54,
+        "IMPORTEVENTA": 27.54
+      }
+    ],
+    "reserve": [
+      {
+        "PEDIDO_ID": 110,
+        "CODIGOARTICULO": "3519      ",
+        "CANTIDADENVASES": 1,
+        "CANTIDADUNIDADES": 1
+      }
+    ],
+    "idem": [
+      {
+        "IDEMPOTENCY_KEY": "QAcbce6cd43fbdbc1110402c",
+        "PEDIDO_ID": 110,
+        "PAYLOAD_HASH": "28b3bbaf1a72142d44ac84f01e1f4714f673545fd5bb940f022df5be5b714a0d"
+      }
+    ],
+    "sequence": [
+      {
+        "EJERCICIO": 2026,
+        "ULTIMO_NUMERO": 35
+      }
+    ]
+  },
+  "createSequencePassed": true,
+  "replayElapsedMs": 113,
+  "afterReplay": {
+    "header": [
+      {
+        "ID": 110,
+        "NUMEROPEDIDO": 35,
+        "ESTADO": "BORRADOR",
+        "CODIGOCLIENTE": "4300032160",
+        "CODIGOVENDEDOR": "35",
+        "IMPORTETOTAL": 30.29,
+        "CREATED_AT": "2026-11-02 19:01:30.884244"
+      }
+    ],
+    "lines": [
+      {
+        "ID": 126,
+        "PEDIDO_ID": 110,
+        "CODIGOARTICULO": "3519      ",
+        "CANTIDADENVASES": 1,
+        "CANTIDADUNIDADES": 1,
+        "PRECIOVENTA": 27.54,
+        "IMPORTEVENTA": 27.54
+      }
+    ],
+    "reserve": [
+      {
+        "PEDIDO_ID": 110,
+        "CODIGOARTICULO": "3519      ",
+        "CANTIDADENVASES": 1,
+        "CANTIDADUNIDADES": 1
+      }
+    ],
+    "idem": [
+      {
+        "IDEMPOTENCY_KEY": "QAcbce6cd43fbdbc1110402c",
+        "PEDIDO_ID": 110,
+        "PAYLOAD_HASH": "28b3bbaf1a72142d44ac84f01e1f4714f673545fd5bb940f022df5be5b714a0d"
+      }
+    ],
+    "sequence": [
+      {
+        "EJERCICIO": 2026,
+        "ULTIMO_NUMERO": 35
+      }
+    ]
+  },
+  "replayPassed": true,
+  "concurrentElapsedMs": 6955,
+  "concurrentResults": [
+    {
+      "id": 111,
+      "idempotent": false
+    },
+    {
+      "id": 111,
+      "idempotent": true
+    }
+  ],
+  "afterConcurrent": {
+    "header": [
+      {
+        "ID": 111,
+        "NUMEROPEDIDO": 36,
+        "ESTADO": "BORRADOR",
+        "CODIGOCLIENTE": "4300032160",
+        "CODIGOVENDEDOR": "35",
+        "IMPORTETOTAL": 30.29,
+        "CREATED_AT": "2026-11-02 19:01:33.697946"
+      }
+    ],
+    "lines": [
+      {
+        "ID": 126,
+        "PEDIDO_ID": 110,
+        "CODIGOARTICULO": "3519      ",
+        "CANTIDADENVASES": 1,
+        "CANTIDADUNIDADES": 1,
+        "PRECIOVENTA": 27.54,
+        "IMPORTEVENTA": 27.54
+      },
+      {
+        "ID": 127,
+        "PEDIDO_ID": 111,
+        "CODIGOARTICULO": "3519      ",
+        "CANTIDADENVASES": 1,
+        "CANTIDADUNIDADES": 1,
+        "PRECIOVENTA": 27.54,
+        "IMPORTEVENTA": 27.54
+      }
+    ],
+    "reserve": [
+      {
+        "PEDIDO_ID": 110,
+        "CODIGOARTICULO": "3519      ",
+        "CANTIDADENVASES": 1,
+        "CANTIDADUNIDADES": 1
+      },
+      {
+        "PEDIDO_ID": 111,
+        "CODIGOARTICULO": "3519      ",
+        "CANTIDADENVASES": 1,
+        "CANTIDADUNIDADES": 1
+      }
+    ],
+    "idem": [
+      {
+        "IDEMPOTENCY_KEY": "QA5e6930e4fb3f7b9d635327",
+        "PEDIDO_ID": 111,
+        "PAYLOAD_HASH": "fd2ca48e1fcc4dfc4f003ae2936ba4fd7f0bf42ba659dbcc13b91a9383570732"
+      }
+    ],
+    "sequence": [
+      {
+        "EJERCICIO": 2026,
+        "ULTIMO_NUMERO": 36
+      }
+    ]
+  },
+  "concurrentPassed": true,
+  "concurrentSequencePassed": true,
+  "passed": true,
+  "cleanup": {
+    "removedIds": [
+      109,
+      110,
+      111
+    ],
+    "identitiesRewound": false,
+    "sequenceRewound": false
+  },
+  "afterCleanup": {
+    "header": [],
+    "lines": [],
+    "reserve": [],
+    "idem": [],
+    "sequence": [
+      {
+        "EJERCICIO": 2026,
+        "ULTIMO_NUMERO": 36
+      }
+    ]
+  },
+  "afterCleanupConcurrent": {
+    "header": [],
+    "lines": [],
+    "reserve": [],
+    "idem": [],
+    "sequence": [
+      {
+        "EJERCICIO": 2026,
+        "ULTIMO_NUMERO": 36
+      }
+    ]
+  },
+  "cleanupPassed": true,
+  "writeTargets": [
+    "JAVIER.TEST_PEDIDOS_CAB",
+    "JAVIER.TEST_PEDIDOS_LIN",
+    "JAVIER.TEST_PEDIDOS_SEQ",
+    "JAVIER.TEST_PEDIDOS_STOCK_RESERVE",
+    "JAVIER.TEST_PEDIDO_IDEMPOTENCY"
+  ],
+  "dedicatedConnections": [
+    "fault",
+    "success",
+    "workerA",
+    "workerB"
+  ]
+}

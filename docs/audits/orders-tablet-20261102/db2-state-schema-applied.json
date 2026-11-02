@@ -1,0 +1,187 @@
+{
+  "target": "JAVIER.TEST_PEDIDO_STATE_EVENTS",
+  "migrationHash": "b73a426bea730fab91b033bebaf9a582163d60cefb5b4ebe8ad1809879cec616",
+  "statementsExecuted": 2,
+  "verified": true,
+  "journal": [
+    {
+      "OBJNAME": "TEST_00210",
+      "OBJLONGNAME": "TEST_PEDIDO_STATE_EVENTS",
+      "JOURNALED": "YES",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_IMAGES": "*BOTH"
+    }
+  ],
+  "inventory": {
+    "columns": [
+      {
+        "COLUMN_NAME": "ID",
+        "DATA_TYPE": "BIGINT",
+        "LENGTH": 8,
+        "IS_NULLABLE": "N",
+        "IS_IDENTITY": "YES",
+        "IDENTITY_GENERATION": "ALWAYS",
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "PEDIDO_ID",
+        "DATA_TYPE": "INTEGER",
+        "LENGTH": 4,
+        "IS_NULLABLE": "N",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "FROM_STATE",
+        "DATA_TYPE": "VARCHAR",
+        "LENGTH": 24,
+        "IS_NULLABLE": "Y",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "TO_STATE",
+        "DATA_TYPE": "VARCHAR",
+        "LENGTH": 24,
+        "IS_NULLABLE": "N",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "ACTOR_ID",
+        "DATA_TYPE": "VARCHAR",
+        "LENGTH": 80,
+        "IS_NULLABLE": "N",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "ACTOR_ROLE",
+        "DATA_TYPE": "VARCHAR",
+        "LENGTH": 32,
+        "IS_NULLABLE": "Y",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "DEVICE_ID",
+        "DATA_TYPE": "VARCHAR",
+        "LENGTH": 128,
+        "IS_NULLABLE": "Y",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "REASON",
+        "DATA_TYPE": "VARCHAR",
+        "LENGTH": 500,
+        "IS_NULLABLE": "Y",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "IDEMPOTENCY_KEY",
+        "DATA_TYPE": "VARCHAR",
+        "LENGTH": 128,
+        "IS_NULLABLE": "N",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "PAYLOAD_JSON",
+        "DATA_TYPE": "CLOB",
+        "LENGTH": 262144,
+        "IS_NULLABLE": "N",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "PAYLOAD_HASH",
+        "DATA_TYPE": "CHAR",
+        "LENGTH": 64,
+        "IS_NULLABLE": "N",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "ORIGINAL_CLIENT_AT",
+        "DATA_TYPE": "TIMESTMP",
+        "LENGTH": 10,
+        "IS_NULLABLE": "Y",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": null
+      },
+      {
+        "COLUMN_NAME": "SERVER_OCCURRED_AT",
+        "DATA_TYPE": "TIMESTMP",
+        "LENGTH": 10,
+        "IS_NULLABLE": "N",
+        "IS_IDENTITY": "NO",
+        "IDENTITY_GENERATION": null,
+        "COLUMN_DEFAULT": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "keys": [
+      {
+        "CONSTRAINT_NAME": "PK_TEST_PED_STATE_EVENTS",
+        "CONSTRAINT_TYPE": "PRIMARY KEY",
+        "COLUMN_NAME": "ID",
+        "ORDINAL_POSITION": 1
+      },
+      {
+        "CONSTRAINT_NAME": "UQ_TEST_PED_STATE_EVT_IDEMP",
+        "CONSTRAINT_TYPE": "UNIQUE",
+        "COLUMN_NAME": "IDEMPOTENCY_KEY",
+        "ORDINAL_POSITION": 1
+      }
+    ],
+    "checks": [
+      {
+        "CONSTRAINT_NAME": "CK_TEST_PED_STATE_FROM",
+        "CHECK_CLAUSE": "FROM_STATE IS NULL OR FROM_STATE IN ( 'BORRADOR' , 'CONFIRMANDO' , 'CONFIRMADO' , 'CANCELANDO' , 'CANCELADO' ) "
+      },
+      {
+        "CONSTRAINT_NAME": "CK_TEST_PED_STATE_TO",
+        "CHECK_CLAUSE": "TO_STATE IN ( 'BORRADOR' , 'CONFIRMANDO' , 'CONFIRMADO' , 'CANCELANDO' , 'CANCELADO' ) "
+      },
+      {
+        "CONSTRAINT_NAME": "CK_TEST_PED_STATE_INITIAL",
+        "CHECK_CLAUSE": "FROM_STATE IS NOT NULL OR TO_STATE = 'BORRADOR' "
+      },
+      {
+        "CONSTRAINT_NAME": "CK_TEST_PED_STATE_CANCEL_REASON",
+        "CHECK_CLAUSE": "TO_STATE <> 'CANCELADO' OR LENGTH ( TRIM ( COALESCE ( REASON , '' ) ) ) > 0 "
+      }
+    ],
+    "indexes": [
+      {
+        "INDEX_NAME": "IX_TEST_PED_STATE_EVENT_ORDER",
+        "IS_UNIQUE": "D"
+      }
+    ],
+    "indexKeys": [
+      {
+        "INDEX_NAME": "IX_TEST_PED_STATE_EVENT_ORDER",
+        "COLUMN_NAME": "PEDIDO_ID",
+        "ORDINAL_POSITION": 1
+      },
+      {
+        "INDEX_NAME": "IX_TEST_PED_STATE_EVENT_ORDER",
+        "COLUMN_NAME": "SERVER_OCCURRED_AT",
+        "ORDINAL_POSITION": 2
+      }
+    ]
+  }
+}

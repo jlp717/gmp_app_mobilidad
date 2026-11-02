@@ -7,13 +7,13 @@
 | Unidad | Estado del requisito completo | Evidencia conseguida | Pendiente |
 |---|---|---|---|
 | Descubrimiento y plan | DONE | `orders-audit.md`, `orders-plan.md`, grafo validado de 12 nodos; nueve especialistas y reducción con citas verificadas del commit base | Las mediciones posteriores se añaden sin sustituir la línea base |
-| Confirmación local, reserva y Bolsa | PARTIAL | Una conexión dedicada y una transacción; fallo después del movimiento real revierte las cuatro tablas; confirmación y replay reales correctos | Creación/edición/anulación, concurrencia completa entre confirmaciones y ramas de exportación |
+| Confirmación local, reserva y Bolsa | PARTIAL | Una conexión dedicada y una transacción; fallo después del movimiento real revierte las cuatro tablas; confirmación y replay reales correctos. Fuente `9008cdf`: revisión independiente 157/157, creación/edición serializadas con confirmación y relectura autoritativa bajo lock | Sonda real de la nueva creación/concurrencia, anulación y ramas de exportación |
 | Cola offline y umbral | PARTIAL | Verificador independiente: 14/14; regresión del maker: 90/90; backend: 23/23. FIFO, umbral 2+1, drafts separados, cambio de cuenta y retry durable | Fecha original en servidor y recorrido con red/dispositivo reales |
 | Perfil de entorno y aviso Flutter | PARTIAL | 80/80 Node, 4/4 Flutter, AppSec independiente; tres perfiles con ocho objetos DB2 correctos mediante SELECT | Instalar la versión, limpiar contradicciones heredadas y comprobar el entorno instalado; gates de producción sin activar |
 | Controles de precio y cantidad | PARTIAL | 25 pruebas: dos modales en 24 combinaciones y selección correcta entre tarifas de igual precio | Pantallas completas, PNG y validación física de safe area, teclado y fluidez |
 | Precios especiales y competitivo | PARTIAL | PES/CLP real vigente identificado; tabla competitiva TEST existe y estaba vacía | Precio autoritativo en creación, semilla real idempotente, lectura informativa en UI y pruebas completas |
-| Reservas de 24 h y estados | PARTIAL | Bloqueo de disponibilidad durante confirmación local y rollback real | Reloj único de expiración, recuperación tras caída, auditoría durable y cancelación local conservando historia |
-| Cobros y liquidación comercial | PARTIAL | Catálogo y 12 LQD reales; 11 pares de arrastre corroborados; errores de fórmula y confianza en totales del cliente identificados | Correcciones de servidor/UI, tres métodos, cierre y pruebas DB reales |
+| Reservas de 24 h y estados | PARTIAL | Disponibilidad y TTL derivan de la creación de cabecera, sin renovar al editar; fuente revisada. Tabla de auditoría real creada, journal activo y cinco probes revertidos correctos | Cableado de auditoría, recuperación tras caída y cancelación local conservando historia; instalador reutilizable BLOCKED |
+| Cobros y liquidación comercial | PARTIAL | Commit `7bc6344`, 56/56 Node y 34/34 Flutter independientes. Último LQD/arrastre del servidor, replay y revisión optimista, roles y guardado vacío comprobados | UI/API de tres métodos, cierre con cobros reales y documento/cabecera de liquidación |
 | Rendimiento | PARTIAL | Tiempos reales de servicio/DB2 y diagnóstico de bloqueo ODBC | Mejora del catálogo, índice local, render/transiciones/FPS y medición en jefe de ventas con móvil |
 | Guion de demo y reset | PARTIAL | `demo-script.md` contiene pasos, guardas y condiciones STOP explícitas | Scripts de semilla/reset del run y ejecución completa |
 
@@ -31,7 +31,7 @@ La salida completa está en `docs/audits/orders-tablet-20261102/`; los resúmene
 
 El lanzador `flutter.bat` no terminó correctamente en este entorno; se usó el snapshot de las mismas herramientas Flutter con Dart 3.9.2. El nuevo lint ejecuta JS y TS; conserva los 242 errores TS y devuelve exit 1. El PASS del lint JS aislado no se presenta como PASS global.
 
-Dos expectativas backend obsoletas se corrigieron por separado: formato español del correo de factura y export público ya existente de la fachada de pedidos. Ambas suites pasan, 13/13, exit 0, commit `7082547`. QA identificó otras tres expectativas/fixtures obsoletos; sus correcciones y ejecución siguen pendientes en este checkpoint. No se ha modificado comportamiento productivo de reparto para resolverlas.
+Dos expectativas backend obsoletas se corrigieron por separado: formato español del correo de factura y export público ya existente de la fachada de pedidos. Ambas suites pasan, 13/13, exit 0, commit `7082547`. Otras tres expectativas/fixtures obsoletos se corrigieron en `f760275`: 47/47 Node y 15/15 Flutter, exit 0; la paginación comprueba SQL y parámetros sin depender de una posición global, y el documento distingue pago total de remanente cobrable. No se modificó comportamiento productivo de reparto para resolverlas.
 
 ## Bolsa y reserva: filas reales antes/después
 
@@ -48,6 +48,19 @@ El rollback y el replay fueron comprobados mediante lecturas desde otra conexió
 
 La reconciliación inicial de nueve bolsas dio diferencia cero en consumido/acumulado, cero huérfanos y cero claves duplicadas. `QSYS2.SYSKEYCST` confirmó las restricciones `UQ_TEST_BOLSA_VND_MES`, `UQ_TEST_MOV_BOLSA_IDEMP` y `PK_TEST_PEDIDO_IDEMPOTENCY`. Esto acredita el estado observado, no una reconciliación posterior de todos los nuevos escenarios.
 
+La sonda posterior `db2-create-integrity.json` ejecutó CREATE del commit `9008cdf` con datos reales del pedido 106/línea 121. Se fijaron en memoria los módulos pedidos/Bolsa/adaptador; otras dependencias procedían de la versión instalada. La purga oportunista se desactivó únicamente en esa copia en memoria para proteger otros borradores TEST. El contrato transaccional probado no se modificó.
+
+| Momento CREATE | Cabecera | Hijos e idempotencia | Secuencia 2026 |
+|---|---|---|---:|
+| Antes | Ninguna con los dos marcadores aleatorios | Cero filas propias | 34 |
+| Fallo después del INSERT real de idempotencia | Ninguna; identidad 109 revertida | Cero líneas, reservas e idempotencia | 34 |
+| Reintento válido | ID 110, BORRADOR, número 35; 30,29 € | Una línea 3519 a 27,54; reserva 1/1; una clave ligada a ID 110 | 35 |
+| Replay | ID 110 sin cambios | Snapshot idéntico | 35 |
+| Dos trabajadores independientes, misma clave nueva | Ambos ID 111, número 36; exactamente un replay | Una nueva línea/reserva/clave; ID enlazado a cabecera | 36 |
+| Limpieza acotada | Cero cabeceras propias | Cero hijos y claves propias | 36, sin rebobinar |
+
+Exit 0; rollback, replay, concurrencia, incremento único de secuencia y limpieza PASS. Este ensayo no confirma Bolsa ni anula pedidos; no recorre login, HTTP o UI. La revisión independiente del script bloqueó previamente tres carencias de evidencia/limpieza; se corrigieron y se obtuvo PASS antes de ejecutarlo.
+
 ## Rendimiento medido
 
 | Métrica | Antes | Después observado | Método y límite |
@@ -57,6 +70,8 @@ La reconciliación inicial de nueve bolsas dio diferencia cero en consumido/acum
 | Lectura independiente después de rollback con locks | Tres SQL0913 tras aproximadamente 31,5 s cada uno | 2 / 3 / 2 ms después de rollback y cierre de conexión dedicada | Sonda ODBC real sin DML en la comparación final; no es tiempo de pantalla |
 | Confirmación local correcta | Sin referencia equivalente | 278 ms | Fuente nueva ejecutada en memoria con el fixture real; no incluye UI/red |
 | Replay de confirmación | Sin referencia equivalente | 12 ms | Mismas filas después de repetir |
+| Creación nueva / replay de creación | Sin referencia equivalente | 324 / 113 ms | Sonda CREATE real, sin HTTP/UI; una ejecución, no percentiles |
+| Dos trabajadores con la misma clave nueva | Sin referencia equivalente | 6955 ms | Una sola creación persistida; latencia elevada pendiente de atribución, no se considera objetivo cumplido |
 | Búsqueda visible, transición, guardado percibido y FPS | No medidos | No medidos | No se dispone de teléfono/tablet/emulador Android conectado |
 
 ## Finanzas: hechos acreditados
@@ -74,6 +89,24 @@ Dos sondas con la fuente nueva en memoria sí pasaron dentro de su alcance: el r
 TEST_COBROS contiene 16 filas COMERCIAL/CONTADO por 15.154,43 €. Este conteo anterior es una lectura; todavía no prueba tres métodos de cobro ni una liquidación nueva.
 
 La liquidación TEST conserva diez filas previas sin duplicados de vendedor/fecha ni token. `SYSINDEXES` y `SYSKEYS` acreditan dos índices únicos ya existentes: `UX_TEST_LIQCOM_VENDOR_DAY` sobre CODIGO_VENDEDOR/FECHA y `UX_TEST_LIQCOM_TOKEN` sobre IDEMPOTENCY_TOKEN. `SYSCST` por sí solo sólo mostraba la PK y no bastaba para concluir que faltaban garantías de unicidad. No se ejecutó ningún ALTER redundante.
+
+## Auditoría de estados: esquema real y límite operativo
+
+`db2-state-schema-applied.json` acredita `JAVIER.TEST_PEDIDO_STATE_EVENTS`: 13 columnas, PK, idempotencia única, cuatro CHECK y un índice pedido/fecha. El objeto físico `TEST_00210` está journaled en `JAVIER.QSQJRN`, imágenes `*BOTH`. La creación se hizo en una conexión dedicada con perfil TEST efímero y `CURRENT SCHEMA=JAVIER`; no cambió el proceso instalado. SQL049 conserva SHA-256 `b73a426bea730fab91b033bebaf9a582163d60cefb5b4ebe8ad1809879cec616`.
+
+El instalador `ensure-pedido-state-events-test-ddl.js` queda **BLOCKED tras tres reparaciones**: su preflight consulta columnas inexistentes en SYSKEYS. No se ejecutó su `apply` ni una cuarta reparación. La operación SQL separada y revisada creó los objetos y verificó el catálogo, pero terminó con exit 1 porque esperaba SQLSTATE 23513 y este driver devuelve HY000 con SQLCODE -545. Por tanto ese artefacto operativo queda PARTIAL y no debe repetirse sobre la tabla existente.
+
+La aceptación de datos se ejecutó después como cinco transacciones independientes, sin repetir DDL. `db2-audit-data-verification.json` contiene el resultado real:
+
+| Prueba | Resultado nativo | Filas después de rollback | Estado |
+|---|---|---:|---|
+| Evento inicial válido | Visible dentro de la transacción: 1 | 0 | PASS |
+| Sexto estado no permitido | HY000 / -545 | 0 | PASS |
+| Estado inicial inválido | HY000 / -545 | 0 | PASS |
+| Anulación sin motivo | HY000 / -545 | 0 | PASS |
+| Clave idempotente duplicada | 23000 / -803 | 0 | PASS |
+
+La tabla tenía cero filas antes y después; no hubo DELETE ni rebobinado de identidad, y el pedido real 106 no cambió. Esto prueba el esquema y sus restricciones; el registro de eventos desde el flujo de pedidos sigue pendiente.
 
 ## Capturas y dispositivo
 

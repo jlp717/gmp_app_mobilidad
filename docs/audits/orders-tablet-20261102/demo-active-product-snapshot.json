@@ -1,0 +1,549 @@
+{
+  "readOnly": true,
+  "source": "installed server catalog code; no new source deployment",
+  "elapsedMs": 314,
+  "clientCode": "4300032888",
+  "vendorCode": "73",
+  "product": {
+    "code": "2974",
+    "name": "PIZZA JAMON Y QUESO 10UX340/380G........",
+    "nameExt": "",
+    "brand": "300031",
+    "family": "0040",
+    "familyName": "NESTLE PRECOCINADOS",
+    "ean": "",
+    "unitsPerBox": 1,
+    "unitsFraction": 1,
+    "unitsRetractil": 10,
+    "unitMeasure": "",
+    "weight": 1,
+    "prefamilia": "",
+    "subFamily": "",
+    "grupoGeneral": "100300",
+    "tipoProducto": "",
+    "claseArticulo": "",
+    "categoria": "07",
+    "gama": "3403",
+    "codigoIva": "1",
+    "ivaRate": 0.1,
+    "pesoNeto": 1,
+    "volumen": 0,
+    "grados": "",
+    "calibre": "",
+    "observacion1": "",
+    "observacion2": "",
+    "presentacion": "",
+    "formato": "P",
+    "productoPesado": false,
+    "trazable": true,
+    "unidadPale": 96,
+    "unidadFilaPale": 12,
+    "fechaAlta": "16/01/2014",
+    "anoBaja": 0,
+    "mesBaja": 0,
+    "tariffs": [
+      {
+        "code": 1,
+        "description": "TARIFA.1",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 2,
+        "description": "PRE.MINIMO",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 3,
+        "description": "TAR.MIN.VD",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 4,
+        "description": "TAR.ALMERI",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 5,
+        "description": "TAR.JL",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 6,
+        "description": "P.C.U.POLG",
+        "price": 26.0633,
+        "precioUnitario": 26.0633,
+        "priceSinIva": 26.0633,
+        "priceConIva": 28.6696,
+        "precioUnitarioSinIva": 26.0633,
+        "precioUnitarioConIva": 28.6696
+      },
+      {
+        "code": 7,
+        "description": "P.M.LINEAL",
+        "price": 26.063,
+        "precioUnitario": 26.063,
+        "priceSinIva": 26.063,
+        "priceConIva": 28.6693,
+        "precioUnitarioSinIva": 26.063,
+        "precioUnitarioConIva": 28.6693
+      },
+      {
+        "code": 9,
+        "description": "P.M.P.FIFO",
+        "price": 26.0633,
+        "precioUnitario": 26.0633,
+        "priceSinIva": 26.0633,
+        "priceConIva": 28.6696,
+        "precioUnitarioSinIva": 26.0633,
+        "precioUnitarioConIva": 28.6696
+      },
+      {
+        "code": 10,
+        "description": "P.U.C.BASE",
+        "price": 38.6,
+        "precioUnitario": 38.6,
+        "priceSinIva": 38.6,
+        "priceConIva": 42.46,
+        "precioUnitarioSinIva": 38.6,
+        "precioUnitarioConIva": 42.46
+      },
+      {
+        "code": 11,
+        "description": "TAR.BS.GMP",
+        "price": 26.584,
+        "precioUnitario": 26.584,
+        "priceSinIva": 26.584,
+        "priceConIva": 29.2424,
+        "precioUnitarioSinIva": 26.584,
+        "precioUnitarioConIva": 29.2424
+      },
+      {
+        "code": 12,
+        "description": "PR.U.PE.PR",
+        "price": 25.535,
+        "precioUnitario": 25.535,
+        "priceSinIva": 25.535,
+        "priceConIva": 28.0885,
+        "precioUnitarioSinIva": 25.535,
+        "precioUnitarioConIva": 28.0885
+      },
+      {
+        "code": 13,
+        "description": "TAR.CLI.ES",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 14,
+        "description": "TAR.CATALO",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 15,
+        "description": "GAMBRINO",
+        "price": 39.794,
+        "precioUnitario": 39.794,
+        "priceSinIva": 39.794,
+        "priceConIva": 43.7734,
+        "precioUnitarioSinIva": 39.794,
+        "precioUnitarioConIva": 43.7734
+      },
+      {
+        "code": 16,
+        "description": "TAR_03",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 17,
+        "description": "TAR_10",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 18,
+        "description": "REVISTA1TG",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 19,
+        "description": "REVISTA2TG",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 20,
+        "description": "TAR_PERSON",
+        "price": 30.572,
+        "precioUnitario": 30.572,
+        "priceSinIva": 30.572,
+        "priceConIva": 33.6292,
+        "precioUnitarioSinIva": 30.572,
+        "precioUnitarioConIva": 33.6292
+      },
+      {
+        "code": 21,
+        "description": "TAR.SIN IV",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 22,
+        "description": "TARIFA I.I",
+        "price": 43.34,
+        "precioUnitario": 43.34,
+        "priceSinIva": 43.34,
+        "priceConIva": 47.674,
+        "precioUnitarioSinIva": 43.34,
+        "precioUnitarioConIva": 47.674
+      },
+      {
+        "code": 23,
+        "description": "SUSHI TORO",
+        "price": 41.764,
+        "precioUnitario": 41.764,
+        "priceSinIva": 41.764,
+        "priceConIva": 45.9404,
+        "precioUnitarioSinIva": 41.764,
+        "precioUnitarioConIva": 45.9404
+      },
+      {
+        "code": 24,
+        "description": "DELFIN",
+        "price": 41.37,
+        "precioUnitario": 41.37,
+        "priceSinIva": 41.37,
+        "priceConIva": 45.507,
+        "precioUnitarioSinIva": 41.37,
+        "precioUnitarioConIva": 45.507
+      },
+      {
+        "code": 25,
+        "description": "DISTRIBUID",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 26,
+        "description": "VALERO",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 30,
+        "description": "GOYO",
+        "price": 33.23,
+        "precioUnitario": 33.23,
+        "priceSinIva": 33.23,
+        "priceConIva": 36.553,
+        "precioUnitarioSinIva": 33.23,
+        "precioUnitarioConIva": 36.553
+      },
+      {
+        "code": 31,
+        "description": "PONDE.FIFO",
+        "price": 26.584,
+        "precioUnitario": 26.584,
+        "priceSinIva": 26.584,
+        "priceConIva": 29.2424,
+        "precioUnitarioSinIva": 26.584,
+        "precioUnitarioConIva": 29.2424
+      },
+      {
+        "code": 32,
+        "description": "TARIFA PIN",
+        "price": 27.913,
+        "precioUnitario": 27.913,
+        "priceSinIva": 27.913,
+        "priceConIva": 30.7043,
+        "precioUnitarioSinIva": 27.913,
+        "precioUnitarioConIva": 30.7043
+      },
+      {
+        "code": 35,
+        "description": "DASA",
+        "price": 40.976,
+        "precioUnitario": 40.976,
+        "priceSinIva": 40.976,
+        "priceConIva": 45.0736,
+        "precioUnitarioSinIva": 40.976,
+        "precioUnitarioConIva": 45.0736
+      },
+      {
+        "code": 46,
+        "description": "REVTA1TG B",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 47,
+        "description": "REVIS2TG B",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 60,
+        "description": "NST_GMP_25",
+        "price": 40.188,
+        "precioUnitario": 40.188,
+        "priceSinIva": 40.188,
+        "priceConIva": 44.2068,
+        "precioUnitarioSinIva": 40.188,
+        "precioUnitarioConIva": 44.2068
+      },
+      {
+        "code": 70,
+        "description": "TARMAS02NS",
+        "price": 40.188,
+        "precioUnitario": 40.188,
+        "priceSinIva": 40.188,
+        "priceConIva": 44.2068,
+        "precioUnitarioSinIva": 40.188,
+        "precioUnitarioConIva": 44.2068
+      },
+      {
+        "code": 75,
+        "description": "PV-94-22",
+        "price": 32.432,
+        "precioUnitario": 32.432,
+        "priceSinIva": 32.432,
+        "priceConIva": 35.6752,
+        "precioUnitarioSinIva": 32.432,
+        "precioUnitarioConIva": 35.6752
+      },
+      {
+        "code": 77,
+        "description": "ENVASES",
+        "price": 26.584,
+        "precioUnitario": 26.584,
+        "priceSinIva": 26.584,
+        "priceConIva": 29.2424,
+        "precioUnitarioSinIva": 26.584,
+        "precioUnitarioConIva": 29.2424
+      },
+      {
+        "code": 79,
+        "description": "TOPGEL OF",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 87,
+        "description": "TARSPECIAL",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 88,
+        "description": "CT_NS_26",
+        "price": 24.6,
+        "precioUnitario": 24.6,
+        "priceSinIva": 24.6,
+        "priceConIva": 27.06,
+        "precioUnitarioSinIva": 24.6,
+        "precioUnitarioConIva": 27.06
+      },
+      {
+        "code": 89,
+        "description": "GTO",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 90,
+        "description": "NST_OF_25",
+        "price": 38.6,
+        "precioUnitario": 38.6,
+        "priceSinIva": 38.6,
+        "priceConIva": 42.46,
+        "precioUnitarioSinIva": 38.6,
+        "precioUnitarioConIva": 42.46
+      },
+      {
+        "code": 91,
+        "description": "OF_NESTLE",
+        "price": 38.6,
+        "precioUnitario": 38.6,
+        "priceSinIva": 38.6,
+        "priceConIva": 42.46,
+        "precioUnitarioSinIva": 38.6,
+        "precioUnitarioConIva": 42.46
+      },
+      {
+        "code": 92,
+        "description": "NST_OF_26",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      },
+      {
+        "code": 93,
+        "description": "TAR-GMP-NS",
+        "price": 40.188,
+        "precioUnitario": 40.188,
+        "priceSinIva": 40.188,
+        "priceConIva": 44.2068,
+        "precioUnitarioSinIva": 40.188,
+        "precioUnitarioConIva": 44.2068
+      },
+      {
+        "code": 94,
+        "description": "CARLOS_NO",
+        "price": 31.369,
+        "precioUnitario": 31.369,
+        "priceSinIva": 31.369,
+        "priceConIva": 34.5059,
+        "precioUnitarioSinIva": 31.369,
+        "precioUnitarioConIva": 34.5059
+      },
+      {
+        "code": 98,
+        "description": "TAR.BLANQU",
+        "price": 34.8,
+        "precioUnitario": 34.8,
+        "priceSinIva": 34.8,
+        "priceConIva": 38.28,
+        "precioUnitarioSinIva": 34.8,
+        "precioUnitarioConIva": 38.28
+      },
+      {
+        "code": 99,
+        "description": "TAR.DIPDAT",
+        "price": 39.4,
+        "precioUnitario": 39.4,
+        "priceSinIva": 39.4,
+        "priceConIva": 43.34,
+        "precioUnitarioSinIva": 39.4,
+        "precioUnitarioConIva": 43.34
+      }
+    ],
+    "stock": [
+      {
+        "almacen": 1,
+        "almacenDesc": "Lorca-Central",
+        "envases": 117,
+        "unidades": 126
+      }
+    ],
+    "stockEnvases": 117,
+    "stockUnidades": 126,
+    "precioCliente": 29.28,
+    "codigoTarifaCliente": 1,
+    "precioTarifaCliente": 29.28,
+    "precioMinimoBase": 36.198,
+    "costeFabricacion": 26.065,
+    "margenObjetivoPct": 20,
+    "precioMinimoCalculado": 36.198,
+    "precioMinimoSource": "JAVIER.BOLSA_PRODUCTO_PRECIO",
+    "precioMinimo": 36.198,
+    "precioCosto": 26.065,
+    "precioClienteSource": "DSEDAC.PES",
+    "precioEspecialCliente": true,
+    "permiteBajoMinimo": true,
+    "precioEspecialMotivo": "Precio especial ERP",
+    "includeIva": false,
+    "precioMinimoSinIva": 36.198,
+    "precioMinimoConIva": 39.8178,
+    "precioClienteSinIva": 29.28,
+    "precioClienteConIva": 32.208,
+    "precioTarifaClienteSinIva": 29.28,
+    "precioTarifaClienteConIva": 32.208
+  },
+  "netStock": [
+    [
+      "2974",
+      {
+        "envases": 117,
+        "unidades": 126
+      }
+    ]
+  ],
+  "queryCount": 8,
+  "dml": 0
+}

@@ -1,0 +1,86 @@
+{
+  "scope": "data-only acceptance; no DDL or provisioning rerun; sentinel events rolled back, real order106 unchanged",
+  "table": "JAVIER.TEST_PEDIDO_STATE_EVENTS",
+  "journal": [
+    {
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    }
+  ],
+  "before": [
+    {
+      "N": 0
+    }
+  ],
+  "after": [
+    {
+      "N": 0
+    }
+  ],
+  "results": [
+    {
+      "kind": "valid_rollback",
+      "expectedCode": null,
+      "diagnostics": [],
+      "seenInside": 1,
+      "afterRollback": 0,
+      "passed": true
+    },
+    {
+      "kind": "sixth_state",
+      "expectedCode": -545,
+      "diagnostics": [
+        {
+          "state": "HY000",
+          "code": -545
+        }
+      ],
+      "seenInside": 0,
+      "afterRollback": 0,
+      "passed": true
+    },
+    {
+      "kind": "invalid_initial",
+      "expectedCode": -545,
+      "diagnostics": [
+        {
+          "state": "HY000",
+          "code": -545
+        }
+      ],
+      "seenInside": 0,
+      "afterRollback": 0,
+      "passed": true
+    },
+    {
+      "kind": "cancel_reason",
+      "expectedCode": -545,
+      "diagnostics": [
+        {
+          "state": "HY000",
+          "code": -545
+        }
+      ],
+      "seenInside": 0,
+      "afterRollback": 0,
+      "passed": true
+    },
+    {
+      "kind": "unique",
+      "expectedCode": -803,
+      "diagnostics": [
+        {
+          "state": "23000",
+          "code": -803
+        }
+      ],
+      "seenInside": 0,
+      "afterRollback": 0,
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "identitiesRewound": false
+}
