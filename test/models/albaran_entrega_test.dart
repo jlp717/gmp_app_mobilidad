@@ -39,23 +39,45 @@ void main() {
       expect(albaran.formaPagoDesc, 'CREDITO');
     });
 
-    test('parses the server-owned collectible CVC balance', () {
+    test('clears stale balance metadata without hiding a live document', () {
       final albaran = AlbaranEntrega.fromJson({
         'id': 'cvc-1',
         'numero': 1,
         'ejercicio': 2026,
         'importe': 100,
+        'importePendienteCobro': 12.35,
         'importeDisponibleCobro': 12.35,
+        'importeCvcPendiente': 12.35,
+        'cobroSaldoCapped': true,
+        'cobroParcial': true,
+        'cobradoPorComercial': true,
         'codigoCliente': 'C1',
         'nombreCliente': 'Test',
       });
 
       expect(albaran.importeDisponibleCobro, 12.35);
-      expect(albaran.tieneSaldoCobrable, isTrue);
-      expect(
-        albaran.copyWith(clearPaymentBalance: true).tieneSaldoCobrable,
-        isFalse,
+      expect(albaran.tieneSaldoCobrable, isFalse);
+
+      final cleared = albaran.copyWith(clearPaymentBalance: true);
+      expect(cleared.importePendienteCobro, isNull);
+      expect(cleared.importeDisponibleCobro, 0);
+      expect(cleared.importeCvcPendiente, isNull);
+      expect(cleared.cobroSaldoCapped, isFalse);
+      expect(cleared.cobroParcial, isFalse);
+      expect(cleared.cobradoPorComercial, isFalse);
+      expect(cleared.tieneSaldoCobrable, isTrue);
+
+      final partialPayment = cleared.copyWith(
+        cobrado: true,
+        importeCobrado: 40,
       );
+      expect(partialPayment.tieneSaldoCobrable, isTrue);
+
+      final fullPayment = cleared.copyWith(
+        cobrado: true,
+        importeCobrado: 100,
+      );
+      expect(fullPayment.tieneSaldoCobrable, isFalse);
     });
 
     test(

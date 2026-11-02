@@ -103,7 +103,21 @@ void main() {
     await tester.pump();
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Error:'), findsOneWidget);
+    final retryFinder = find.widgetWithText(FilledButton, 'Reintentar');
+    final initialRetryButton = tester.widget<FilledButton>(retryFinder);
+    expect(initialRetryButton.onPressed, isNotNull);
+    await tester.tap(retryFinder);
+    await tester.pumpAndSettle();
+
+    expect(find.text('No hay conexión con el servidor.'), findsOneWidget);
+    expect(
+      find.text('Comprueba la cobertura y pulsa Reintentar.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('backend down'), findsNothing);
+    expect(find.textContaining('DioException'), findsNothing);
+    final retryButton = tester.widget<FilledButton>(retryFinder);
+    expect(retryButton.onPressed, isNotNull);
     expect(tester.takeException(), isNull);
   });
 }

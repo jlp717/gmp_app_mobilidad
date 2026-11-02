@@ -842,7 +842,11 @@ describe('Repartidor finanzas routes', () => {
 
     expect(second.status).toBe(200);
     expect(second.body.pagination).toMatchObject({ total: 101, hasMore: false });
-    expect(mockQueryWithParams.mock.calls[3][1]).toEqual([
+    const pagedCalls = mockQueryWithParams.mock.calls.filter(([sql]) =>
+      sql.includes('WHERE PAGED.RN > ? AND PAGED.RN <= ?')
+    );
+    expect(pagedCalls).toHaveLength(2);
+    expect(pagedCalls[1][1]).toEqual([
       '94', 20260401, 20260430, '4300001119', todayYmd, 100, 200,
     ]);
   });
