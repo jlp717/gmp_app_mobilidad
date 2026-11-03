@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
-import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/promotion_detail_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
@@ -119,26 +118,24 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
     return Scaffold(
       backgroundColor: AppColors.themedSurface,
       appBar: AppBar(
-        title: Row(
+        toolbarHeight: 88,
+        title: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Promociones'),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppTheme.success.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                antiguas > 0
-                    ? '$nuevas nuevas · $antiguas antiguas'
-                    : '$nuevas nuevas',
-                style: const TextStyle(
-                  color: AppTheme.success,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+            const Text(
+              'Promociones',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              antiguas > 0
+                  ? '$nuevas vigentes · $antiguas antiguas'
+                  : '$nuevas vigentes',
+              style: const TextStyle(
+                color: AppTheme.success,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -152,62 +149,66 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
               color: AppTheme.textSecondary,
             ),
             tooltip: _showFilters ? 'Ocultar filtros' : 'Mostrar filtros',
+            constraints: const BoxConstraints(minWidth: 56, minHeight: 56),
             onPressed: () => setState(() => _showFilters = !_showFilters),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_loadingHistory) const LinearProgressIndicator(minHeight: 2),
-          if (_historyError != null)
-            MaterialBanner(
-              content: Text(_historyError!),
-              leading: const Icon(Icons.warning_amber_rounded),
-              backgroundColor: AppColors.themedRaisedSurface,
-              actions: [
-                TextButton(
-                  onPressed: _loadHistory,
-                  child: const Text('Reintentar'),
-                ),
-              ],
+      body: CustomScrollView(
+        slivers: [
+          if (_loadingHistory)
+            const SliverToBoxAdapter(
+              child: LinearProgressIndicator(minHeight: 2),
             ),
-          if (_showFilters) _buildFilters(),
-          Expanded(
-            child: filtered.isEmpty
-                ? (_loadingHistory && _promotions.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
-                    : _buildEmptyState())
-                : LayoutBuilder(
-                    builder: (context, constraints) {
-                      final cols = Responsive.denseListCrossAxisCount(context);
-                      final gap = Responsive.denseListSpacing(context);
-                      final compact = Responsive.useCompactTiles(context);
+          if (_historyError != null)
+            SliverToBoxAdapter(child: _buildHistoryError()),
+          if (_showFilters) SliverToBoxAdapter(child: _buildFilters()),
+          if (filtered.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _loadingHistory && _promotions.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : _buildEmptyState(),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.all(12),
+              sliver: SliverList.builder(
+                itemCount: filtered.length,
+                itemBuilder: (context, index) {
+                  return _buildPromoCard(filtered[index]);
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
-                      if (cols <= 1) {
-                        return ListView.builder(
-                          padding: EdgeInsets.all(compact ? 8 : 12),
-                          itemCount: filtered.length,
-                          itemBuilder: (context, index) {
-                            return _buildPromoCard(filtered[index]);
-                          },
-                        );
-                      }
-
-                      return GridView.builder(
-                        padding: EdgeInsets.all(gap + 2),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: cols,
-                          mainAxisExtent: compact ? 112 : 136,
-                          mainAxisSpacing: gap,
-                          crossAxisSpacing: gap,
-                        ),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          return _buildPromoCard(filtered[index]);
-                        },
-                      );
-                    },
-                  ),
+  Widget _buildHistoryError() {
+    return Container(
+      color: AppColors.themedRaisedSurface,
+      padding: const EdgeInsets.all(12),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Icon(Icons.warning_amber_rounded, size: 24),
+          Text(
+            _historyError!,
+            style: const TextStyle(fontSize: 18),
+          ),
+          TextButton(
+            onPressed: _loadHistory,
+            style: TextButton.styleFrom(
+              minimumSize: const Size(56, 56),
+              textStyle: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            child: const Text('Reintentar'),
           ),
         ],
       ),
@@ -220,16 +221,16 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
       label: hasAnyPromos
           ? 'No hay promociones con esos filtros'
           : 'Sin promociones vigentes ni antiguas para este cliente',
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 hasAnyPromos ? Icons.search_off : Icons.local_offer_outlined,
                 size: 64,
-                color: AppTheme.textTertiary,
+                color: AppTheme.textSecondary,
               ),
               const SizedBox(height: 16),
               Text(
@@ -238,7 +239,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     : 'Sin promociones vigentes ni antiguas para este cliente',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
-                  fontSize: 16,
+                  fontSize: 20,
                   fontWeight: FontWeight.w500,
                 ),
                 textAlign: TextAlign.center,
@@ -249,8 +250,8 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     ? 'Prueba a cambiar los filtros o la busqueda'
                     : 'Cuando haya ofertas vigentes o antiguas de este cliente, apareceran aqui',
                 style: TextStyle(
-                  color: AppTheme.textTertiary,
-                  fontSize: 13,
+                  color: AppTheme.textSecondary,
+                  fontSize: 18,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -266,7 +267,13 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     });
                   },
                   icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Limpiar filtros'),
+                  label: const Text(
+                    'Limpiar filtros',
+                    style: TextStyle(fontSize: 18),
+                  ),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(56, 56),
+                  ),
                 ),
               ],
             ],
@@ -285,27 +292,29 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
           // Search bar
           TextField(
             onChanged: (value) => setState(() => _search = value.trim()),
-            style: TextStyle(color: AppTheme.textPrimary),
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 18),
             decoration: InputDecoration(
               hintText: 'Buscar por nombre, codigo o articulo...',
-              hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+              hintStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 18),
               prefixIcon:
                   const Icon(Icons.search, color: AppTheme.info, size: 20),
               suffixIcon: _search.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear, size: 18),
+                      constraints:
+                          const BoxConstraints(minWidth: 56, minHeight: 56),
                       onPressed: () => setState(() => _search = ''),
                     )
                   : null,
               filled: true,
               fillColor: AppTheme.softPanel,
+              constraints: const BoxConstraints(minHeight: 56),
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
               ),
-              isDense: true,
             ),
           ),
           const SizedBox(height: 8),
@@ -336,27 +345,29 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                   child: VerticalDivider(width: 1, color: AppTheme.borderColor),
                 ),
                 const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('Con stock'),
-                  selected: _onlyWithStock,
-                  selectedColor: AppTheme.success.withValues(alpha: 0.2),
-                  backgroundColor: AppTheme.softPanel,
-                  labelStyle: TextStyle(
-                    color: _onlyWithStock
-                        ? AppTheme.success
-                        : AppTheme.textSecondary,
-                    fontSize: 12,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 56),
+                  child: FilterChip(
+                    label: const Text('Con stock'),
+                    selected: _onlyWithStock,
+                    selectedColor: AppTheme.success.withValues(alpha: 0.2),
+                    backgroundColor: AppTheme.softPanel,
+                    labelStyle: TextStyle(
+                      color: _onlyWithStock
+                          ? AppTheme.success
+                          : AppTheme.textSecondary,
+                      fontSize: 18,
+                    ),
+                    side: BorderSide(
+                      color: _onlyWithStock
+                          ? AppTheme.success
+                          : AppTheme.borderColor,
+                    ),
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    onSelected: (_) {
+                      setState(() => _onlyWithStock = !_onlyWithStock);
+                    },
                   ),
-                  side: BorderSide(
-                    color: _onlyWithStock
-                        ? AppTheme.success
-                        : AppTheme.borderColor,
-                  ),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                  onSelected: (_) {
-                    setState(() => _onlyWithStock = !_onlyWithStock);
-                  },
                 ),
               ],
             ),
@@ -369,74 +380,80 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
   Widget _buildStatusChip(String value, String label) {
     final selected = _statusFilter == value;
     final color = value == 'NO_VIGENTES' ? AppTheme.warning : AppTheme.success;
-    return FilterChip(
-      label: Text(label),
-      selected: selected,
-      selectedColor: color.withValues(alpha: 0.2),
-      backgroundColor: AppTheme.softPanel,
-      labelStyle: TextStyle(
-        color: selected ? color : AppTheme.textSecondary,
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 56),
+      child: FilterChip(
+        label: Text(label),
+        selected: selected,
+        selectedColor: color.withValues(alpha: 0.2),
+        backgroundColor: AppTheme.softPanel,
+        labelStyle: TextStyle(
+          color: selected ? color : AppTheme.textSecondary,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+        ),
+        side: BorderSide(color: selected ? color : AppTheme.borderColor),
+        materialTapTargetSize: MaterialTapTargetSize.padded,
+        onSelected: (_) => setState(() => _statusFilter = value),
       ),
-      side: BorderSide(color: selected ? color : AppTheme.borderColor),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
-      onSelected: (_) => setState(() => _statusFilter = value),
     );
   }
 
   Widget _buildTypeChip(String value, String label, IconData icon) {
     final selected = _typeFilter == value;
-    return FilterChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 14,
-            color: selected ? AppTheme.info : AppTheme.textSecondary,
-          ),
-          const SizedBox(width: 4),
-          Text(label),
-        ],
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 56),
+      child: FilterChip(
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 20,
+              color: selected ? AppTheme.info : AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(label),
+          ],
+        ),
+        selected: selected,
+        selectedColor: AppTheme.info.withValues(alpha: 0.2),
+        backgroundColor: AppTheme.softPanel,
+        labelStyle: TextStyle(
+          color: selected ? AppTheme.info : AppTheme.textSecondary,
+          fontSize: 18,
+        ),
+        side: BorderSide(
+          color: selected ? AppTheme.info : AppTheme.borderColor,
+        ),
+        materialTapTargetSize: MaterialTapTargetSize.padded,
+        onSelected: (_) => setState(() => _typeFilter = value),
       ),
-      selected: selected,
-      selectedColor: AppTheme.info.withValues(alpha: 0.2),
-      backgroundColor: AppTheme.softPanel,
-      labelStyle: TextStyle(
-        color: selected ? AppTheme.info : AppTheme.textSecondary,
-        fontSize: 12,
-      ),
-      side: BorderSide(
-        color: selected ? AppTheme.info : AppTheme.borderColor,
-      ),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
-      onSelected: (_) => setState(() => _typeFilter = value),
     );
   }
 
   Widget _buildPromoCard(_PromotionGroup group) {
     final isGift = group.promoType == 'GIFT';
-    final accentColor = isGift ? AppTheme.accentIndigo : AppTheme.success;
+    final accentColor = isGift ? AppTheme.info : AppTheme.success;
     final first = group.items.first;
     final hasProducts = group.items.any((i) => i.code.isNotEmpty);
 
     final statusColor =
         group.active ? AppTheme.success : AppTheme.textSecondary;
-    return Opacity(
-      opacity: group.active ? 1 : 0.62,
-      child: Card(
-        color: AppTheme.softPanel,
-        margin: const EdgeInsets.only(bottom: 10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: (group.active ? accentColor : AppTheme.borderColor)
-                .withValues(alpha: 0.35),
-          ),
+    return Card(
+      color: AppTheme.softPanel,
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: (group.active ? accentColor : AppTheme.borderColor)
+              .withValues(alpha: 0.35),
         ),
+      ),
+      child: Semantics(
+        button: hasProducts,
+        label:
+            hasProducts ? 'Ver detalle de ${group.promoDesc}' : group.promoDesc,
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: hasProducts
@@ -469,8 +486,9 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header row
+                // Header adaptable: el título nunca compite con los estados.
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(6),
@@ -498,17 +516,15 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                             style: TextStyle(
                               color: accentColor,
                               fontWeight: FontWeight.w700,
-                              fontSize: 14,
+                              fontSize: 20,
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
                           ),
                           if (group.promoCode.isNotEmpty)
                             Text(
                               group.promoCode,
                               style: TextStyle(
-                                color: AppTheme.textTertiary,
-                                fontSize: 11,
+                                color: AppTheme.textSecondary,
+                                fontSize: 18,
                               ),
                             ),
                           if (group.isGlobal)
@@ -516,42 +532,57 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                               'General',
                               style: TextStyle(
                                 color: AppTheme.info,
-                                fontSize: 11,
+                                fontSize: 18,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                         ],
                       ),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
                     Container(
+                      key: ValueKey('promotion-status-${group.promoCode}'),
+                      constraints: const BoxConstraints(minHeight: 44),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.15),
+                        color: AppTheme.softPanel,
                         borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: statusColor, width: 2),
                       ),
                       child: Text(
                         group.active ? 'Vigente' : 'No vigente',
                         style: TextStyle(
-                          color: statusColor,
-                          fontSize: 10,
+                          color: AppTheme.textPrimary,
+                          fontSize: 18,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
                     Container(
+                      constraints: const BoxConstraints(minHeight: 44),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
-                        color: accentColor.withValues(alpha: 0.15),
+                        color: AppTheme.softPanel,
                         borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: accentColor, width: 2),
                       ),
                       child: Text(
                         isGift ? 'REGALO' : 'PRECIO',
                         style: TextStyle(
                           color: accentColor,
-                          fontSize: 10,
+                          fontSize: 18,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -597,34 +628,36 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                   ),
                 const SizedBox(height: 8),
                 // Footer info
-                Row(
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Icon(
                       Icons.inventory_2_outlined,
                       size: 14,
-                      color: AppTheme.textTertiary,
+                      color: AppTheme.textSecondary,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       '${group.items.length} producto(s)',
                       style: TextStyle(
                         color: AppTheme.textSecondary,
-                        fontSize: 12,
+                        fontSize: 18,
                       ),
                     ),
-                    const Spacer(),
                     if (group.dateTo.isNotEmpty && group.dateTo != '0/0/0') ...[
                       Icon(
                         Icons.calendar_today,
                         size: 12,
-                        color: AppTheme.textTertiary,
+                        color: AppTheme.textSecondary,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         'Hasta ${group.dateTo}',
                         style: TextStyle(
-                          color: AppTheme.textTertiary,
-                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                          fontSize: 18,
                         ),
                       ),
                     ],
@@ -633,57 +666,63 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                 // Product chips (if has products)
                 if (hasProducts) ...[
                   const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      ...group.items.take(8).map((item) {
-                        final hasStock =
-                            widget.hasStockResolver?.call(item.code) ??
-                                item.hasStock;
-                        final stockColor = hasStock == true
-                            ? AppTheme.success
-                            : hasStock == false
-                                ? AppTheme.error
-                                : AppTheme.textTertiary;
+                  LayoutBuilder(
+                    builder: (context, constraints) => Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        ...group.items.take(8).map((item) {
+                          final hasStock =
+                              widget.hasStockResolver?.call(item.code) ??
+                                  item.hasStock;
+                          final stockColor = hasStock == true
+                              ? AppTheme.success
+                              : hasStock == false
+                                  ? AppTheme.error
+                                  : AppTheme.textSecondary;
 
-                        return ActionChip(
-                          onPressed: () =>
-                              widget.onProductTap(item.code, item.name),
-                          backgroundColor: AppTheme.raisedSurface,
-                          side: BorderSide(
-                            color: stockColor.withValues(alpha: 0.45),
-                          ),
-                          avatar: Icon(
-                            hasStock == true
-                                ? Icons.inventory_2_outlined
-                                : Icons.inventory_2,
-                            size: 14,
-                            color: stockColor,
-                          ),
-                          label: Text(
-                            '${item.code} · ${item.name}',
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 11,
+                          return ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: 56,
+                              maxWidth: constraints.maxWidth,
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }),
-                      if (group.items.length > 8)
-                        Chip(
-                          backgroundColor: AppTheme.raisedSurface,
-                          side: BorderSide(color: AppTheme.borderColor),
-                          label: Text(
-                            '+${group.items.length - 8} mas',
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 11,
+                            child: OutlinedButton(
+                              onPressed: () =>
+                                  widget.onProductTap(item.code, item.name),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(56),
+                                alignment: Alignment.centerLeft,
+                                side: BorderSide(color: stockColor, width: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                              ),
+                              child: Text(
+                                '${hasStock == true ? 'Con stock' : 'Sin stock'} · ${item.code} · ${item.name}',
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 18,
+                                ),
+                                softWrap: true,
+                              ),
+                            ),
+                          );
+                        }),
+                        if (group.items.length > 8)
+                          Chip(
+                            backgroundColor: AppTheme.raisedSurface,
+                            side: BorderSide(color: AppTheme.borderColor),
+                            label: Text(
+                              '+${group.items.length - 8} mas',
+                              style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 18,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
                 // CTA button
@@ -692,8 +731,11 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: Container(
+                      constraints: const BoxConstraints(minHeight: 56),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         color: accentColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(999),
@@ -701,24 +743,15 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                           color: accentColor.withValues(alpha: 0.3),
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Ver detalle',
-                            style: TextStyle(
-                              color: accentColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.arrow_forward_ios,
-                            size: 10,
-                            color: accentColor,
-                          ),
-                        ],
+                      child: Text(
+                        'Ver detalle',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        textAlign: TextAlign.center,
+                        softWrap: true,
                       ),
                     ),
                   ),
@@ -737,26 +770,26 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
     required Color color,
     String? suffix,
   }) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 4),
+        Icon(icon, size: 20, color: color),
         Text(
           label,
           style: TextStyle(
             color: color,
-            fontSize: 12,
+            fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
         if (suffix != null) ...[
-          const SizedBox(width: 4),
           Text(
             suffix,
             style: TextStyle(
-              color: color.withValues(alpha: 0.7),
-              fontSize: 11,
+              color: color,
+              fontSize: 18,
               fontStyle: FontStyle.italic,
             ),
           ),

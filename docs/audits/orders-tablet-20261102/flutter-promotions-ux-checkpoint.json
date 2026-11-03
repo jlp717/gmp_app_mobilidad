@@ -1,0 +1,44 @@
+{
+  "unit": "COM-UX-PROMO repair2",
+  "scope": "presentation only, product and gift callback preserved",
+  "focal": {
+    "passed": 5,
+    "regressionPassed": 52,
+    "exitCode": 0
+  },
+  "fullTests": {
+    "passed": 1241,
+    "exitCode": 0,
+    "seconds": 288.3174382,
+    "log": "flutter-full-test-promotions-ui-repair2.log",
+    "sha256": "0db2d69d5bf3436397cc7ffc046d533aa17a50c24f57218c710831fef24db7a1"
+  },
+  "analyze": {
+    "exitCode": 1,
+    "errors": 0,
+    "warnings": 0,
+    "infos": 7635,
+    "seconds": 212.9485975,
+    "log": "flutter-analyze-default-promotions-ui-repair2.log",
+    "sha256": "8b7ee64bf37c5b7ef1ff3661d5f1fad0070ce5b83c1174aeac652a23e562e848"
+  },
+  "renderer": {
+    "sizes": [
+      "390x844",
+      "800x1280",
+      "1280x800"
+    ],
+    "scale": 2.0,
+    "contrast": [
+      4.691,
+      7.93,
+      5.169
+    ],
+    "device": false
+  },
+  "sourceHashes": {
+    "lib/features/pedidos/presentation/pages/promotions_list_page.dart": "FCE031774CD2C4181F25D72D96E1054178C0D2502F7675BB7D1652B744EB18BF",
+    "lib/features/pedidos/presentation/pages/promotion_detail_page.dart": "0A3638019A116205153A31B12CD17CD8F27EFA6FC8CC424FDCD2870109D98038",
+    "test/features/pedidos/presentation/promotions_commercial_responsive_test.dart": "DDA004882A4773F4290DDC26362B17EE401F8833FAAB25ADC840844F3C7D4E6A"
+  }
+}

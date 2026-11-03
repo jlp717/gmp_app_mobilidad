@@ -113,7 +113,10 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
     if (errors.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Regalos añadidos al pedido como lineas SC'),
+          content: Text(
+            'Regalos añadidos al pedido como lineas SC',
+            style: TextStyle(fontSize: 18),
+          ),
           backgroundColor: AppTheme.success,
         ),
       );
@@ -124,6 +127,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
       SnackBar(
         content: Text(
           errors.take(2).join(' | '),
+          style: const TextStyle(fontSize: 18),
         ),
         backgroundColor: AppTheme.warning,
       ),
@@ -148,7 +152,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
   @override
   Widget build(BuildContext context) {
     final accent =
-        widget.promoType == 'GIFT' ? AppTheme.accentIndigo : AppTheme.success;
+        widget.promoType == 'GIFT' ? AppTheme.info : AppTheme.success;
 
     // REQ-31 audit codigo (sin capturas dispositivo): Scaffold/AppBar opacos
     // alpha 1.0 via themedSurface (light=surface FFFFFFFF). Sin TabBar en esta
@@ -161,177 +165,191 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
         elevation: 0,
         title: Text(
           widget.promoType == 'GIFT' ? 'Promocion Regalo' : 'Promocion Precio',
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
         ),
       ),
-      body: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.themedRaisedSurface,
-              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-              border: Border.all(color: accent.withValues(alpha: 0.34)),
-              boxShadow: AppTheme.elevation1,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.promoDesc.isNotEmpty ? widget.promoDesc : 'Promocion',
-                  style: TextStyle(
-                    color: accent,
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                if (widget.promoCode.isNotEmpty)
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.themedRaisedSurface,
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                border: Border.all(color: accent.withValues(alpha: 0.34)),
+                boxShadow: AppTheme.elevation1,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    'Codigo: ${widget.promoCode}',
+                    widget.promoDesc.isNotEmpty
+                        ? widget.promoDesc
+                        : 'Promocion',
                     style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 12,
+                      color: accent,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                if (widget.dateFrom.isNotEmpty || widget.dateTo.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Vigencia: ${widget.dateFrom.isEmpty ? '-' : widget.dateFrom}  ->  ${widget.dateTo.isEmpty ? '-' : widget.dateTo}',
+                  const SizedBox(height: 4),
+                  if (widget.promoCode.isNotEmpty)
+                    Text(
+                      'Codigo: ${widget.promoCode}',
                       style: TextStyle(
                         color: AppTheme.textSecondary,
-                        fontSize: 11,
+                        fontSize: 18,
                       ),
                     ),
-                  ),
-                if (widget.promoType == 'GIFT') ...[
-                  const SizedBox(height: 8),
-                  if (widget.giftSelectionLocked) ...[
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppTheme.warning.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppTheme.warning.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.lock, color: AppTheme.warning, size: 18),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Esta promoción incluye un regalo fijo. Se aplica automáticamente al añadir el producto al pedido; no puedes elegir otro artículo.',
-                              style: TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ] else ...[
-                    // How the promo works
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppTheme.accentIndigo.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppTheme.accentIndigo.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Como funciona:',
-                            style: TextStyle(
-                              color:
-                                  AppTheme.accentIndigo.withValues(alpha: 0.8),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Por cada ${widget.minQty.toStringAsFixed(0)} uds que compres de los productos de esta promocion, llévate ${widget.giftQty.toStringAsFixed(0)} gratis.${widget.cumulative ? ' (Se acumula: si compras ${(widget.minQty * 2).toStringAsFixed(0)} uds, llévate ${(widget.giftQty * 2).toStringAsFixed(0)} gratis)' : ''}',
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Progress bar: how close to min purchase
-                    if (_purchasedQty > 0) ...[
-                      _buildProgressSection(),
-                    ] else ...[
-                      Text(
-                        'Añade al menos ${widget.minQty.toStringAsFixed(0)} uds de los productos de esta promocion para poder elegir tus regalos.',
+                  if (widget.dateFrom.isNotEmpty || widget.dateTo.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Vigencia: ${widget.dateFrom.isEmpty ? '-' : widget.dateFrom}  ->  ${widget.dateTo.isEmpty ? '-' : widget.dateTo}',
                         style: TextStyle(
                           color: AppTheme.textSecondary,
-                          fontSize: 11,
+                          fontSize: 18,
                         ),
                       ),
+                    ),
+                  if (widget.promoType == 'GIFT') ...[
+                    const SizedBox(height: 8),
+                    if (widget.giftSelectionLocked) ...[
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.warning.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppTheme.warning.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.lock, color: AppTheme.warning, size: 18),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Esta promoción incluye un regalo fijo. Se aplica automáticamente al añadir el producto al pedido; no puedes elegir otro artículo.',
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      // How the promo works
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.info.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppTheme.info,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Como funciona:',
+                              style: TextStyle(
+                                color: AppTheme.info,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Por cada ${widget.minQty.toStringAsFixed(0)} uds que compres de los productos de esta promocion, llévate ${widget.giftQty.toStringAsFixed(0)} gratis.${widget.cumulative ? ' (Se acumula: si compras ${(widget.minQty * 2).toStringAsFixed(0)} uds, llévate ${(widget.giftQty * 2).toStringAsFixed(0)} gratis)' : ''}',
+                              style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Progress bar: how close to min purchase
+                      if (_purchasedQty > 0) ...[
+                        _buildProgressSection(),
+                      ] else ...[
+                        Text(
+                          'Añade al menos ${widget.minQty.toStringAsFixed(0)} uds de los productos de esta promocion para poder elegir tus regalos.',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ],
                     ],
                   ],
                 ],
-              ],
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: TextField(
-              onChanged: (v) => setState(() => _search = v.trim()),
-              style: TextStyle(color: AppTheme.textPrimary),
-              decoration: InputDecoration(
-                hintText: 'Buscar articulo en promocion...',
-                hintStyle: TextStyle(color: AppTheme.textTertiary),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  color: AppTheme.info,
-                  size: 18,
-                ),
-                suffixIcon: IconButton(
-                  onPressed: () =>
-                      setState(() => _onlyWithStock = !_onlyWithStock),
-                  icon: Icon(
-                    _onlyWithStock
-                        ? Icons.inventory_2
-                        : Icons.inventory_2_outlined,
-                    color: _onlyWithStock
-                        ? AppTheme.success
-                        : AppTheme.textTertiary,
-                    size: 19,
-                  ),
-                  tooltip: 'Solo con stock',
-                ),
-                filled: true,
-                fillColor: AppTheme.softPanel,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
-          ),
-          Expanded(
-            child: _filteredItems.isEmpty
-                ? Center(
-                    child: Text(
-                      'No hay articulos para los filtros actuales.',
-                      style: TextStyle(color: AppTheme.textSecondary),
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: TextField(
+                onChanged: (v) => setState(() => _search = v.trim()),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 18),
+                decoration: InputDecoration(
+                  hintText: 'Buscar articulo en promocion...',
+                  hintStyle:
+                      TextStyle(color: AppTheme.textSecondary, fontSize: 18),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: AppTheme.info,
+                    size: 18,
+                  ),
+                  suffixIcon: IconButton(
+                    onPressed: () =>
+                        setState(() => _onlyWithStock = !_onlyWithStock),
+                    icon: Icon(
+                      _onlyWithStock
+                          ? Icons.inventory_2
+                          : Icons.inventory_2_outlined,
+                      color: _onlyWithStock
+                          ? AppTheme.success
+                          : AppTheme.textSecondary,
+                      size: 19,
                     ),
-                  )
+                    tooltip: 'Solo con stock',
+                    constraints:
+                        const BoxConstraints(minWidth: 56, minHeight: 56),
+                  ),
+                  filled: true,
+                  fillColor: AppTheme.softPanel,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  constraints: const BoxConstraints(minHeight: 56),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                ),
+              ),
+            ),
+            _filteredItems.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(
+                      child: Text(
+                        'No hay articulos para los filtros actuales.',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 18,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ))
                 : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                     itemCount: _filteredItems.length,
                     itemBuilder: (context, index) {
@@ -360,10 +378,8 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                             style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontWeight: FontWeight.w600,
-                              fontSize: 13,
+                              fontSize: 18,
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -373,7 +389,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                 item.code,
                                 style: TextStyle(
                                   color: AppTheme.textSecondary,
-                                  fontSize: 11,
+                                  fontSize: 18,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -385,7 +401,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                     'Stock: ${PedidosFormatters.number(item.stockEnvases)} cj',
                                     style: TextStyle(
                                       color: stockColor,
-                                      fontSize: 11,
+                                      fontSize: 18,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -394,7 +410,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                       'Oferta: ${PedidosFormatters.money(item.promoPrice, decimals: 3)}',
                                       style: const TextStyle(
                                         color: AppTheme.success,
-                                        fontSize: 11,
+                                        fontSize: 18,
                                       ),
                                     ),
                                   if (item.promoType == 'GIFT' &&
@@ -403,43 +419,21 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                     Text(
                                       '${widget.minQty.toStringAsFixed(0)}+${widget.giftQty.toStringAsFixed(0)}',
                                       style: const TextStyle(
-                                        color: AppTheme.accentIndigo,
-                                        fontSize: 11,
+                                        color: AppTheme.info,
+                                        fontSize: 18,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
                                 ],
                               ),
-                            ],
-                          ),
-                          trailing: ElevatedButton(
-                            onPressed: () =>
-                                widget.onProductTap(item.code, item.name),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  AppTheme.info.withValues(alpha: 0.18),
-                              foregroundColor: AppTheme.info,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: const Text(
-                              'Seleccionar',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          isThreeLine: widget.promoType == 'GIFT' &&
-                              !widget.giftSelectionLocked &&
-                              widget.onAddGift != null,
-                          leading: widget.promoType == 'GIFT' &&
+                              if (widget.promoType == 'GIFT' &&
                                   !widget.giftSelectionLocked &&
-                                  widget.onAddGift != null
-                              ? Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  widget.onAddGift != null) ...[
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
                                     IconButton(
                                       onPressed: () =>
@@ -447,92 +441,120 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                       icon: const Icon(
                                         Icons.remove_circle_outline,
                                         color: AppTheme.error,
-                                        size: 20,
                                       ),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
+                                      constraints: const BoxConstraints(
+                                        minWidth: 56,
+                                        minHeight: 56,
+                                      ),
+                                      tooltip: 'Quitar una unidad de regalo',
                                     ),
-                                    const SizedBox(height: 6),
                                     Text(
-                                      PedidosFormatters.number(
-                                        _giftSelection[item.code] ?? 0,
-                                      ),
+                                      'Regalos: ${PedidosFormatters.number(_giftSelection[item.code] ?? 0)}',
                                       style: TextStyle(
                                         color: AppTheme.textPrimary,
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 12,
+                                        fontSize: 18,
                                       ),
                                     ),
-                                    const SizedBox(height: 6),
                                     IconButton(
                                       onPressed: () =>
                                           _changeGiftQty(item.code, 1),
                                       icon: const Icon(
                                         Icons.add_circle_outline,
                                         color: AppTheme.success,
-                                        size: 20,
                                       ),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
+                                      constraints: const BoxConstraints(
+                                        minWidth: 56,
+                                        minHeight: 56,
+                                      ),
+                                      tooltip: 'Añadir una unidad de regalo',
                                     ),
                                   ],
-                                )
-                              : null,
+                                ),
+                              ],
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: () => widget.onProductTap(
+                                    item.code,
+                                    item.name,
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.info,
+                                    foregroundColor: AppColors.systemWhite,
+                                    elevation: 0,
+                                    minimumSize: const Size.fromHeight(56),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Seleccionar',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     },
                   ),
-          ),
-          if (widget.promoType == 'GIFT' &&
-              widget.onAddGift != null &&
-              !widget.giftSelectionLocked)
-            SafeArea(
-              top: false,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                child: Semantics(
-                  button: true,
-                  label: 'Añadir regalos seleccionados',
-                  child: ElevatedButton.icon(
-                    onPressed: _submittingGifts ||
-                            _giftSelection.isEmpty ||
-                            _eligibleGiftQty <= 0 ||
-                            (_eligibleGiftQty > 0 &&
-                                _selectedGiftQty > _eligibleGiftQty)
-                        ? null
-                        : _submitGiftSelection,
-                  icon: _submittingGifts
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.systemWhite,
-                          ),
-                        )
-                      : const Icon(Icons.card_giftcard),
-                  label: Text(
-                    _submittingGifts
-                        ? 'Aplicando regalos...'
-                        : 'Añadir regalos seleccionados',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+            if (widget.promoType == 'GIFT' &&
+                widget.onAddGift != null &&
+                !widget.giftSelectionLocked)
+              SafeArea(
+                top: false,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  child: Semantics(
+                    button: true,
+                    label: 'Añadir regalos seleccionados',
+                    child: ElevatedButton.icon(
+                      onPressed: _submittingGifts ||
+                              _giftSelection.isEmpty ||
+                              _eligibleGiftQty <= 0 ||
+                              (_eligibleGiftQty > 0 &&
+                                  _selectedGiftQty > _eligibleGiftQty)
+                          ? null
+                          : _submitGiftSelection,
+                      icon: _submittingGifts
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.systemWhite,
+                              ),
+                            )
+                          : const Icon(Icons.card_giftcard),
+                      label: Text(
+                        _submittingGifts
+                            ? 'Aplicando regalos...'
+                            : 'Añadir regalos seleccionados',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.warning,
+                        foregroundColor: AppColors.systemWhite,
+                        disabledBackgroundColor: AppTheme.softPanel,
+                        disabledForegroundColor: AppTheme.textTertiary,
+                        minimumSize: const Size.fromHeight(56),
+                      ),
                     ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.warning,
-                    foregroundColor: AppColors.systemWhite,
-                    disabledBackgroundColor: AppTheme.softPanel,
-                    disabledForegroundColor: AppTheme.textTertiary,
-                    minimumSize: const Size.fromHeight(46),
-                  ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -552,24 +574,26 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          spacing: 16,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
               'Comprado: ${PedidosFormatters.number(_purchasedQty, decimals: 2)}',
               style: TextStyle(
                 color: AppTheme.textSecondary,
-                fontSize: 11,
+                fontSize: 18,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const Spacer(),
             Text(
               'Min: ${widget.minQty.toStringAsFixed(0)}',
               style: TextStyle(
                 color: _purchasedQty >= widget.minQty
                     ? AppTheme.success
                     : AppTheme.textSecondary,
-                fontSize: 11,
+                fontSize: 18,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -587,15 +611,17 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
         ),
         const SizedBox(height: 6),
         if (_eligibleGiftQty > 0) ...[
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Icon(Icons.check_circle, color: AppTheme.success, size: 14),
-              const SizedBox(width: 4),
+              const Icon(Icons.check_circle, color: AppTheme.success, size: 20),
               Text(
                 'Tienes ${maxGifts.toStringAsFixed(0)} regalo(s) disponible(s)',
                 style: const TextStyle(
                   color: AppTheme.success,
-                  fontSize: 11,
+                  fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -607,8 +633,8 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
               child: Text(
                 'Faltan ${remaining.toStringAsFixed(0)} uds para otro regalo mas',
                 style: TextStyle(
-                  color: AppTheme.info.withValues(alpha: 0.8),
-                  fontSize: 10,
+                  color: AppTheme.info,
+                  fontSize: 18,
                 ),
               ),
             ),
@@ -619,20 +645,22 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
               color: _selectedGiftQty > _eligibleGiftQty
                   ? AppTheme.error
                   : AppTheme.textSecondary,
-              fontSize: 10,
+              fontSize: 18,
               fontWeight: FontWeight.w600,
             ),
           ),
         ] else ...[
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Icon(Icons.info_outline, color: AppTheme.warning, size: 14),
-              const SizedBox(width: 4),
+              const Icon(Icons.info_outline, color: AppTheme.warning, size: 20),
               Text(
                 'Faltan ${remaining.toStringAsFixed(0)} uds para desbloquear el regalo',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
-                  fontSize: 11,
+                  fontSize: 18,
                 ),
               ),
             ],
