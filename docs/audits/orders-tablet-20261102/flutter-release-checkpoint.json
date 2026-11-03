@@ -1,0 +1,39 @@
+{
+  "head": "7c2286de3ac822b9d04738c47cc898b3ee6ac383",
+  "scope": "Flutter committed source after exclusion of the UX candidate",
+  "tests": {
+    "command": "Flutter tools snapshot test --no-pub --reporter compact",
+    "exitCode": 0,
+    "passed": 1215,
+    "failed": 0,
+    "reportedTime": "05:45",
+    "log": "flutter-full-release-clean.log",
+    "sha256": "bcde6152b4f53a9c5b7e3bffa2a9fa4030781b26104c965d9b244a972c780f93"
+  },
+  "analyze": {
+    "command": "Flutter tools snapshot analyze --no-pub",
+    "exitCode": 1,
+    "errors": 0,
+    "warnings": 0,
+    "infos": 7624,
+    "seconds": 243.7,
+    "log": "flutter-analyze-release-clean.log",
+    "sha256": "7228523f74a6d033412648305d3108192892c0fec23e379c634f642878dbe40a"
+  },
+  "uxVeto": {
+    "stash": "95f7b85a60eb738c0c6c45e1c976be7a67527a1b",
+    "paths": 28,
+    "focalPassed": 81,
+    "goldensPassed": 6,
+    "matrixLayouts": 72,
+    "keyboardLayouts": 1,
+    "contrastTotal": 3.327,
+    "contrastMetrics": [
+      3.553,
+      3.836,
+      3.696
+    ],
+    "requiredContrast": 4.5,
+    "captures": "renderer-veto/"
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "unit": "UX03/04/05 + UX-FONT01",
+  "status": "VETO",
+  "sourceCount": 28,
+  "focalPassed": 81,
+  "focalExitCode": 0,
+  "goldensPassed": 6,
+  "goldenExitCode": 0,
+  "files": [
+    {
+      "path": "assets/fonts/inter/Inter-Black.ttf",
+      "sha256": "6342d3ea6dc088b43867f615e807d898adf100c93edb978b8e52c5eb71a264da"
+    },
+    {
+      "path": "assets/fonts/inter/Inter-Bold.ttf",
+      "sha256": "288316099b1e0a47a4716d159098005eef7c0066921f34e3200393dbdb01947f"
+    },
+    {
+      "path": "assets/fonts/inter/Inter-ExtraBold.ttf",
+      "sha256": "e6756ad5690b77606aa62249a7b420d9902d45cae4b0048a24911fd4324b0a22"
+    },
+    {
+      "path": "assets/fonts/inter/Inter-Medium.ttf",
+      "sha256": "97ad806f526e41546d46365bb3a393145f75b7b1568913db74549ad8b8dba872"
+    },
+    {
+      "path": "assets/fonts/inter/Inter-Regular.ttf",
+      "sha256": "40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
+    },
+    {
+      "path": "assets/fonts/inter/Inter-SemiBold.ttf",
+      "sha256": "78a843fade9d4612a5567302fb595b56976eb5fcebf4fea5a5912d638bafcde3"
+    },
+    {
+      "path": "assets/fonts/inter/LICENSE.txt",
+      "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a"
+    },
+    {
+      "path": "lib/core/theme/app_colors.dart",
+      "sha256": "14355e640ebe7d7b6f50634e9a184a43476da2c061c8e779ed979c8ada5ef878"
+    },
+    {
+      "path": "lib/core/theme/app_theme.dart",
+      "sha256": "64096ed08e1f98685984ac74c176a9e4931db13ba363a759d8a58874c3655ac7"
+    },
+    {
+      "path": "lib/features/bolsa/presentation/pages/bolsa_page.dart",
+      "sha256": "d083164dff1b55a05c78e5cfa77dc2046c5dc413c2512978fc0714b1b028e40e"
+    },
+    {
+      "path": "lib/features/bolsa/presentation/widgets/bolsa_movement_detail_sheet.dart",
+      "sha256": "4e02f35e09b0ef16dd199a090791fbeb6242164d3c1c7a0cdcaa1d787795606b"
+    },
+    {
+      "path": "lib/features/pedidos/data/pedidos_service.dart",
+      "sha256": "c6afaf0246ff1d0d9a54f0a98c1b3c739842e08a640a0f4d50353a83b270cc1e"
+    },
+    {
+      "path": "lib/features/pedidos/presentation/utils/pedidos_formatters.dart",
+      "sha256": "f055d7f9e52017345de5fe802764180855eb261ab691f574681dbcec1ef502b8"
+    },
+    {
+      "path": "lib/features/pedidos/presentation/widgets/add_to_order_sheet.dart",
+      "sha256": "0697bc2db5f20523ea6c2e16aa0e596be0c938a633d01237ca4bc03d9c3f9497"
+    },
+    {
+      "path": "lib/features/pedidos/presentation/widgets/order_detail_sheet.dart",
+      "sha256": "6e13bbfb5f929900fdf240005a271dee888457ee6f8afe9ed611cd3e35efac91"
+    },
+    {
+      "path": "pubspec.yaml",
+      "sha256": "160669021bc297edbe2fcf8b577e9737d98f5cabac9b5da43541aa5872d06a81"
+    },
+    {
+      "path": "test/features/pedidos/pedidos_bolsa_drilldown_test.dart",
+      "sha256": "15684e95121d8da7fe8d684ab1b0cead15d275ee1e8f88bbbf88a8f30e8f9736"
+    },
+    {
+      "path": "test/features/pedidos/pedidos_bolsa_layout_matrix_test.dart",
+      "sha256": "9e53e0110621300b965300c37b2d104ec38aceaf2061b27bfdfc9569e588ff0b"
+    },
+    {
+      "path": "test/features/pedidos/pedidos_ux_read_model_test.dart",
+      "sha256": "ccdc9b03d46851252c714646226c5eac9641905bd2247b8db198496e7850e333"
+    },
+    {
+      "path": "test/goldens/goldens/bolsa_movement_phone_landscape_text100.png",
+      "sha256": "c72eefe6ea2c6a2517dd972b1b62cd322656b26eae072526a7f6a5ed661dd74f"
+    },
+    {
+      "path": "test/goldens/goldens/bolsa_movement_tablet_portrait_text200.png",
+      "sha256": "1e6635fb27c78bb30f2b1044abbb46bef337b6f91565ad4f9350039f7a52c80c"
+    },
+    {
+      "path": "test/goldens/goldens/pedido_add_phone_portrait_text200.png",
+      "sha256": "3be634180e6bc84564cda54f0d2a230823704ac9148ed994fae84618288fb5b6"
+    },
+    {
+      "path": "test/goldens/goldens/pedido_add_tablet_landscape_text150.png",
+      "sha256": "5a4bd7b07338f9d6abcbcb4c61bb4145572568b31ab88920b1d173a30e1d806e"
+    },
+    {
+      "path": "test/goldens/goldens/pedido_detail_phone_portrait_text200.png",
+      "sha256": "3bcdf3e64b76e069b917a327373fd39b3d784b5989e52e2b088b3746cf77be2c"
+    },
+    {
+      "path": "test/goldens/goldens/pedido_detail_tablet_landscape_text150.png",
+      "sha256": "1d1800ba9708abfbcc95784d802702d3bf132f02011988be50fee0d8b2a98b5d"
+    },
+    {
+      "path": "test/goldens/pedidos_bolsa_ux_golden_test.dart",
+      "sha256": "c4427a44ba501f4cd23f5763c54464a855b62d69fadf9827e41082344dee06e2"
+    },
+    {
+      "path": "test/helpers/pedidos_ux_renderer_harness.dart",
+      "sha256": "444bbfd078e0d6c9adf70e40155808531a6585383612910073114b893c7bd1dd"
+    },
+    {
+      "path": "test/theme/pedidos_ux_contrast_test.dart",
+      "sha256": "49bfb04e02f8f6ba42bf4d23ff4d0238cac07d52fd96709416b573f2ee6d71c7"
+    }
+  ]
+}

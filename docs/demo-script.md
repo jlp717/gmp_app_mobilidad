@@ -1,6 +1,6 @@
 # Guion reproducible de demo comercial — 02/11/2026
 
-Estado de este run: consultar `docs/orders-evidence.md` antes de ejecutar. Un paso sin evidencia o con error es **STOP**, nunca una aceptación implícita. Usar comercial real y cliente/artículos reales; no usar importes de un céntimo. No utilizar el perfil repartidor para validar este recorrido.
+**Estado del ensayo al 03/11/2026 · BLOQUEADO en preparación.** El servidor instalado devolvió HTTP 503 en `/api/ready`. Consulta `docs/orders-evidence.md` antes de ejecutar. Cualquier paso con error o sin su evidencia detiene el ensayo. Usa un comercial y registros reales con sus importes documentales.
 
 El run comenzó el 02/11/2026 y la sesión continúa el 03/11/2026 Europe/Madrid. Los cobros y liquidaciones se validan con la fecha real del servidor. El día 02 es un periodo histórico; no cambiar el reloj ni retrofechar nuevos cobros para hacerlo pasar por «hoy».
 
@@ -69,3 +69,5 @@ El reset de pedidos debe invocar la anulación lógica autorizada y conservar ca
 ## Evidencia que se entrega a dirección
 
 Commit instalado, informe de pruebas con exit codes, reconciliación antes/después, 24 combinaciones visuales por pantalla, tiempos separados cliente/API/ODBC y resultado de cada fila de este guion. Un fallo de readiness, una cancelación no implementada o una regla de cobro no acreditada impiden aprobar el recorrido completo.
+
+Las seis imágenes de `docs/audits/orders-tablet-20261102/renderer-veto/` documentan el candidato revisado en escritorio. El contraste del total del pedido y de tres métricas de Bolsa quedó por debajo del mínimo. Las imágenes combinan fixtures con campos acreditados y sirven para reproducir la revisión visual. La validación en teléfono y tablet, los FPS y la ejecución completa de este guion quedan pendientes.
