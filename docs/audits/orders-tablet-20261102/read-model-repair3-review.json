@@ -1,0 +1,31 @@
+{
+  "runId": "orders-tablet-20261102",
+  "scope": "READ_MODEL repair3 frozen eight files",
+  "status": "BLOCKED",
+  "producer": { "suites": 6, "testsPassed": 146, "exitCode": 0 },
+  "qa": {
+    "suites": 6,
+    "testsPassed": 143,
+    "exitCode": 0,
+    "verdict": "VETO",
+    "finding": "P1: nullable sibling of $ref ignored by installed AJV6; legitimate snapshot:null and payload:null do not validate. Existing positive object tests omit these cases."
+  },
+  "appSec": {
+    "suites": 4,
+    "testsPassed": 128,
+    "exitCode": 0,
+    "verdict": "PASS_SCOPED",
+    "controls": ["Explicit commercial roles before DB ownership; canonical role priority; no flag elevation", "Paged metadata without CLOB; individual order-scoped snapshot", "Nested public allowlists exclude costs, margins, hashes and idempotency", "Strict TEST/demo profile; no production TEST audit read", "Six reviewed fictitious auth examples replaced with runtime placeholders without scanner exemption"]
+  },
+  "inMemoryProposal": {
+    "casesPassed": 7,
+    "casesTotal": 7,
+    "exitCode": 0,
+    "sourceEdits": 0,
+    "dbQueries": 0,
+    "representation": "anyOf [$ref, {type: object, nullable: true, enum: [null]}]",
+    "cases": ["snapshot:null/not_found", "payload:null/missing", "payload:null/corrupt", "valid objects", "nested extra rejected", "snapshot primitive rejected", "payload primitive rejected"]
+  },
+  "nextAction": "Await one explicit narrow exception documented in read-model-null-contract-proposal.md; do not apply fourth repair or reuse OFF06 authorization.",
+  "limitations": ["Tests are scoped, not the full suite", "No DB/runtime/device proof supplied by this review", "Producer/QA counts are distinct executed sets and are not added together", "Security PASS does not override the contract veto"]
+}

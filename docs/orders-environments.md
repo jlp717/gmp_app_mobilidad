@@ -25,7 +25,7 @@ npm run env:verify
 
 El primer comando sólo valida la configuración. El segundo abre una conexión dedicada y ejecuta `SELECT 1` y una consulta parametrizada a `QSYS2.SYSTABLES`; no inicia servidor, migraciones, trabajos ni escrituras. Imprime el perfil, los esquemas y los objetos ausentes; un fallo produce código de salida distinto de cero. Los errores ODBC se reducen a un código, sin imprimir credenciales.
 
-En esta sesión se ejecutaron los resolutores y el verificador locales en memoria en el servidor con la conexión existente. Los tres perfiles encontraron los ocho objetos esperados, con `SELECT 1` correcto. No se instaló el nuevo arranque en el servidor. La evidencia está en `docs/audits/orders-tablet-20261102/env-profile-db-evidence.json`.
+En la primera comprobación se ejecutaron los resolutores y el verificador locales en memoria en el servidor con la conexión existente. Los tres perfiles encontraron los ocho objetos que aquel verificador contemplaba, con `SELECT 1` correcto. Esa lista era incompleta: no incluía auditoría, liquidación ni devoluciones comerciales. No acredita que producción esté preparada. No se instaló el nuevo arranque en el servidor. La evidencia inicial está en `docs/audits/orders-tablet-20261102/env-profile-db-evidence.json`.
 
 Flutter consulta `GET /api/runtime-profile` y muestra TEST, DEMO o PRODUCCIÓN junto al estado de escritura. Una respuesta ausente, no verificada o fallida muestra «Entorno sin verificar». Una instalación antigua del servidor no puede producir una etiqueta falsa de producción verificada.
 
@@ -33,7 +33,9 @@ Flutter consulta `GET /api/runtime-profile` y muestra TEST, DEMO o PRODUCCIÓN j
 
 El cambio `APP_ENV=production` prepara un arranque de sólo lectura: no permite login mutante, pedidos, cobros ni tareas programadas de escritura. No equivale a aprobar la demo ni la producción.
 
-Las reglas PROD de `AGENTS.md` siguen vigentes: staging, QA, AppSec, salud y autorización explícita `/adelante-production`, registrada con TTL máximo de 30 minutos. Tras esos gates, el operador puede inyectar las aprobaciones ya existentes en el entorno protegido del proceso:
+**Activación bloqueada:** el catálogo real del 03/11/2026 confirma que faltan `JAVIER.PEDIDO_STATE_EVENTS`, `JAVIER.LIQUIDACION_COMERCIAL` y `JAVIER.DEVOLUCIONES_COMERCIAL`. Sus tres equivalentes TEST existen. No activar las variables siguientes mientras falten esos objetos, su compatibilidad y los gates de la aplicación. No se ha preparado ni ejecutado DDL de producción; su instalación requerirá un cambio separado revisado y autorizado. El perfil por sí solo no puede resolver ese bloqueo.
+
+Las reglas PROD de `AGENTS.md` siguen vigentes: staging, QA, AppSec, salud y autorización explícita `/adelante-production`, registrada con TTL máximo de 30 minutos. Sólo después de resolver esos bloqueos y gates, el operador podrá inyectar las aprobaciones ya existentes en el entorno protegido del proceso:
 
 ```sh
 APP_ENV=production
@@ -41,7 +43,7 @@ REPARTO_WRITES_ENABLED=true
 REPARTO_PRODUCTION_WRITES_APPROVED=true
 ```
 
-No se han activado esas variables. No es necesario un cambio posterior de código para que el perfil las reconozca. La exportación de pedidos al ERP requiere además las tres aprobaciones `PEDIDOS_EXPORT_TO_SYSTEM`, `PEDIDOS_DSEDAC_EXPORT_APPROVED` y `PEDIDOS_DSEDAC_STORAGE_APPROVED`; permanecen desactivadas. Las capacidades de reparto conservan sus propios gates y quedan fuera de esta activación comercial.
+No se han activado esas variables. El perfil las reconoce, pero eso no concede disponibilidad física ni supera los guards particulares de auditoría, cobros o liquidación: esos recorridos aún no tienen aprobación integral de producción. La exportación de pedidos al ERP requiere además las tres aprobaciones `PEDIDOS_EXPORT_TO_SYSTEM`, `PEDIDOS_DSEDAC_EXPORT_APPROVED` y `PEDIDOS_DSEDAC_STORAGE_APPROVED`; permanecen desactivadas. Las capacidades de reparto conservan sus propios gates y quedan fuera de esta activación comercial.
 
 Después de verificar la configuración, únicamente el procedimiento de despliegue aprobado puede ejecutar las mutaciones de producción permitidas:
 
@@ -69,3 +71,5 @@ APP_ENV=test encuentra dos contradicciones: NODE_ENV y REPARTO_ENVIRONMENT; el p
 APP_ENV=production encuentra cuatro selectores heredados que requieren la migración inicial antes de ser válido: NODE_ENV, REPARTO_ENVIRONMENT, REPARTO_TABLE_SET y REPARTIDOR_FINANCE_ERP_SCHEMA. El perfil espera respectivamente production, production, production y DSEDAC. El operador debe retirar esos selectores heredados de su configuración protegida para que APP_ENV derive la combinación, verificar el perfil de sólo lectura y completar los gates de activación. No se han retirado ni se han habilitado escrituras reales durante esta sesión.
 
 La sonda financiera fijó TEST en vez del DEMO compatible; su tercer intento se detuvo antes de DB2 con INVALID_APP_ENV_PROFILE. Es un bloqueo de esa instrumentación bajo su límite de reparaciones, no evidencia de un cobro fallido ni de que el perfil DEMO sea inválido. No se vuelve a ejecutar Run sin una autorización nueva para esa unidad.
+
+`db2-profile-app-buffer-catalog.json` conserva la comprobación posterior de seis destinos: 12 SELECT de catálogo, cero filas de negocio, cero mutaciones y conexión cerrada. TEST auditoría tiene 13 columnas; TEST liquidación tiene 17, incluyendo `UPDATED_AT TIMESTMP NOT NULL`; TEST devoluciones tiene 18. `db2-profile-app-buffer-indexes.json` conserva una consulta adicional con las composiciones reales de los índices únicos de liquidación y devoluciones y el índice temporal de auditoría. Las claves primarias y algunas restricciones UNIQUE de IBM i se consultan en SYSCST/SYSKEYCST; su ausencia en SYSINDEXES no significa ausencia de la restricción.

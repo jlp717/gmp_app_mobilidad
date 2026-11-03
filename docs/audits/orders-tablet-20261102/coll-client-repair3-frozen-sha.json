@@ -1,0 +1,74 @@
+[
+  {
+    "path": "backend/__tests__/cobros-commercial.test.js",
+    "sha256": "4af10694d939ad312e6fce63181dc3cdc718118b26caaf628cc0536cd4bcc957"
+  },
+  {
+    "path": "backend/src/modules/cobros/infrastructure/db2-cobros-repository.js",
+    "sha256": "051d97f826bc2b591e86c52b36aab8d0bcc3f41ce83b918751cedfa6137b4dbb"
+  },
+  {
+    "path": "lib/core/widgets/global_vendor_selector.dart",
+    "sha256": "03d54d1c0f76677b234e6469ca5d1d476de9bcdb83f51a5f6509d41559f9b3b5"
+  },
+  {
+    "path": "lib/features/cobros/data/models/cobros_models.dart",
+    "sha256": "812c54eddc4d732fb5dca4635a54dd48ce89f04cf109da4b11c81889389eced2"
+  },
+  {
+    "path": "lib/features/cobros/data/models/cobros_models.freezed.dart",
+    "sha256": "0ef7f90670d863889d606b8c502720552794516041f75caba2bd99403960ea4e"
+  },
+  {
+    "path": "lib/features/cobros/domain/commercial_payment_instrument.dart",
+    "sha256": "3dee74f1107b0710fbacc396c83b74e4514f7e8a2eff73a008999de8e6d68eb2"
+  },
+  {
+    "path": "lib/features/cobros/presentation/pages/cobro_detail_screen.dart",
+    "sha256": "00b10cb6bce1d3b4f384ae332f30e9d57899aec0ab7eedf02ca3047e18d06287"
+  },
+  {
+    "path": "lib/features/cobros/presentation/widgets/cobro_confirm_dialog.dart",
+    "sha256": "89155dc2bef53ed6b9161680358d9c0fedcbb40daf2de7619dddb8b2358a3008"
+  },
+  {
+    "path": "lib/features/cobros/providers/cobros_provider.dart",
+    "sha256": "cfc8197ab1a3059515436a23ca5381e121461159bba96fb15cdfc20888c3fb09"
+  },
+  {
+    "path": "lib/features/dashboard/presentation/pages/main_shell.dart",
+    "sha256": "6f4145e6a0480279eade6626a7dfb48b7ec8e08c33be99ba37e1762bd7203ee8"
+  },
+  {
+    "path": "lib/features/liquidacion_comercial/data/comercial_liquidacion_service.dart",
+    "sha256": "d921eee8c0b8d417262ae3a18b278418e95a8652be204e00909e558d9e61e292"
+  },
+  {
+    "path": "lib/features/liquidacion_comercial/presentation/pages/comercial_liquidacion_diaria_page.dart",
+    "sha256": "36ae5b276f1bbc38a6c51c8166a1d91abcf06ef6018c8475201c694f5795e510"
+  },
+  {
+    "path": "test/core/widgets/global_vendor_selector_guard_test.dart",
+    "sha256": "3d184081049972a53fc224d904921966e38ff7ff3b857c519dc653449f4bb9c3"
+  },
+  {
+    "path": "test/features/cobros/cobros_business_logic_test.dart",
+    "sha256": "2f3af3d20dab0cd3a78b1fee51755b9800f8e3b6aa02702d3a433df808cca852"
+  },
+  {
+    "path": "test/features/cobros/presentation/cobro_detail_screen_test.dart",
+    "sha256": "042e809ee9c3517c5051814b3b270fc980cf668e1cc2ccb3a986c0ea98f07645"
+  },
+  {
+    "path": "test/features/dashboard/main_shell_commercial_scope_test.dart",
+    "sha256": "6be19b10e55bc561c97d9ffc7a745250bcbbc8ac72f0bc6a91924b53be6110b7"
+  },
+  {
+    "path": "test/features/liquidacion_comercial/data/comercial_liquidacion_service_test.dart",
+    "sha256": "3f4f3eef370da804fe6248a4e30c117140161c9e1572e848644426f1b8854ca8"
+  },
+  {
+    "path": "test/features/liquidacion_comercial/presentation/comercial_liquidacion_diaria_page_states_test.dart",
+    "sha256": "54e977656b7ab4102d3c416286e27812e78b561b2ab3a04f248c915b41dd03c3"
+  }
+]
