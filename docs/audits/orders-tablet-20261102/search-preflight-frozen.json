@@ -1,0 +1,82 @@
+{
+  "stash": "bc939838e4cf081c9d926e30fb1f66dc79103fe8",
+  "paths": 18,
+  "searchProducerTests": 72,
+  "searchProducerExit": 0,
+  "preflight": "unfinished",
+  "independentReview": "blocked by agent usage limit",
+  "files": [
+    {
+      "path": "backend/__tests__/orders-tablet-demo-run.test.js",
+      "sha256": "958ba5b52d6e54cee31fbf6a584e823b4a09697d3bd5379afb0b2f8cfe69e9a0"
+    },
+    {
+      "path": "backend/scripts/tools/orders-tablet-demo-run.js",
+      "sha256": "88c5d6de64955f8278ec599d6487985bb0b5e49cef24d385cccdeb20a57aa114"
+    },
+    {
+      "path": "lib/features/pedidos/data/pedidos_catalog_context_service.dart",
+      "sha256": "81fc3f9131894dffab88f033aa5d2b81001fe12f70b6cf2699c82c4b79e15b81"
+    },
+    {
+      "path": "lib/features/pedidos/data/pedidos_catalog_index_service.dart",
+      "sha256": "58bc6879a6ef76f72067b9f0fdd78c05d8c9605d17f1139a23848a4e48b20e63"
+    },
+    {
+      "path": "lib/features/pedidos/data/pedidos_service.dart",
+      "sha256": "ac55f58f25beff8d822a0833c8ca8e41f644841b062a3dcf6a151b83ef8acf62"
+    },
+    {
+      "path": "lib/features/pedidos/domain/catalog_partition.dart",
+      "sha256": "e8274a4f1aedae9750011519e2e356049c10335eb53ad1592fb67b78532fd120"
+    },
+    {
+      "path": "lib/features/pedidos/domain/catalog_search_index.dart",
+      "sha256": "5d3e0b274982ac0a1a0ff14e3f7a571eeebf4f65c06586ec99c4ca49d7697557"
+    },
+    {
+      "path": "lib/features/pedidos/presentation/pages/pedidos_page.dart",
+      "sha256": "62bc395a9001ce40fb20fcd8ad258c30665cd1699f0215c6be8db5d5f2fea8a8"
+    },
+    {
+      "path": "lib/features/pedidos/presentation/widgets/product_card.dart",
+      "sha256": "d995a518250264809448838a62b10a69e0468955e6e554f21abea61106acfe05"
+    },
+    {
+      "path": "lib/features/pedidos/presentation/widgets/product_search_widget.dart",
+      "sha256": "1f8811e83f298ccbc79abfbd8560db7a1f43a7b2026ca1cb5a32b7286e0d1ccc"
+    },
+    {
+      "path": "lib/features/pedidos/providers/pedidos_notifier.dart",
+      "sha256": "b3499ab4e71eda9c64963c0a2640f2e8581363906b676efb7a7f92bb12c7a0b4"
+    },
+    {
+      "path": "test/features/pedidos/catalog_partition_test.dart",
+      "sha256": "b8112c1f0e9de473d93cef66243b5a90af74ceb20a9fab7b25b230136515b182"
+    },
+    {
+      "path": "test/features/pedidos/catalog_search_index_test.dart",
+      "sha256": "55ff455ea67703fa198076ef375ac584a1f2a191fe591c90a69265ca403ef4fc"
+    },
+    {
+      "path": "test/features/pedidos/pedidos_catalog_context_service_test.dart",
+      "sha256": "63e7092cc9d7703a798329b8916008cfaa7610085077175a9ae2dbb8d3a945dd"
+    },
+    {
+      "path": "test/features/pedidos/pedidos_catalog_index_service_test.dart",
+      "sha256": "20d26bb7895622ec2c2accc044d06f0af35cd1941503ac6f0e5980fb83fa88cd"
+    },
+    {
+      "path": "test/features/pedidos/pedidos_catalog_search_widget_test.dart",
+      "sha256": "ad91d28d145ce824f135861befd65a6802bc0d2aa045d4f15c23f6e3e00a17af"
+    },
+    {
+      "path": "test/features/pedidos/pedidos_catalog_stale_request_test.dart",
+      "sha256": "d9a9df788d129a618b29f2c5af04de1979c4f2a93ac36272d3c8a8103f8a4245"
+    },
+    {
+      "path": "test/features/pedidos/product_catalog_cache_codec_test.dart",
+      "sha256": "a76278531ccaf29987561e012cfa1b245f0bc3912b046eaa2fa76f92bb606ac4"
+    }
+  ]
+}

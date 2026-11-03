@@ -1,0 +1,35 @@
+{
+  "unit": "FIN-DOC01–03",
+  "status": "BLOCKED",
+  "review": "Independent read-only source and audited schema review",
+  "savedSource": "JAVIER.TEST_LIQUIDACION_COMERCIAL",
+  "revision": "CAST(UPDATED_AT AS VARCHAR(26))",
+  "stored": [
+    "owner and period",
+    "cash, cheques and postdated totals",
+    "cash carry, returns and total due",
+    "bank deposit and delivered cash",
+    "status, actor and revision"
+  ],
+  "missingImmutableInputs": [
+    "card total",
+    "bank transfer total",
+    "collection membership or cutoff hash",
+    "exact LQD source record",
+    "historical owner display name"
+  ],
+  "evidence": [
+    "backend/migrations/046_comercial_liquidacion_test_overlay.sql:9",
+    "backend/services/comercial-devoluciones-service.js:703",
+    "backend/services/comercial-devoluciones-service.js:966",
+    "backend/services/comercial-devoluciones-service.js:1041",
+    "backend/services/comercial-devoluciones-service.js:1058",
+    "backend/services/comercial-devoluciones-service.js:1128",
+    "docs/audits/orders-tablet-20261102/db2-environment-catalog-verification.json"
+  ],
+  "consequence": "A later consistent read can describe live data but cannot prove what the saved revision included. Rendering that mix as a historical settlement could misstate amounts.",
+  "required": "A reviewed transactional saved snapshot contract and native verification of a real eligible TEST settlement.",
+  "productCodeChanged": false,
+  "databaseWrites": 0,
+  "pdfGenerated": false
+}

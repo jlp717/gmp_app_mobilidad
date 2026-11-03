@@ -1,0 +1,38 @@
+{
+  "head": "eaf3214fbc0c04c2966b6f49296bc743c4d31bb6",
+  "filesChanged": 8,
+  "insertions": 1003,
+  "deletions": 253,
+  "independentFocal": {
+    "qaPassed": 339,
+    "qaExitCode": 0,
+    "appSecPassed": 260,
+    "appSecExitCode": 0
+  },
+  "tests": {
+    "command": "npm test -- --runInBand",
+    "exitCode": 0,
+    "suitesPassed": 316,
+    "suitesSkipped": 1,
+    "testsPassed": 3767,
+    "testsSkipped": 2,
+    "testsFailed": 0,
+    "seconds": 625.556,
+    "log": "backend-tests-after-ddd-repair2.log",
+    "sha256": "046a8fac55a666032a59caa83dd7333fb9e9fec8dfa98b1e3a5dc51f5db13969"
+  },
+  "lint": {
+    "command": "npm run lint",
+    "exitCode": 1,
+    "javascriptExitCode": 0,
+    "typescriptErrors": 242,
+    "typescriptWarnings": 0,
+    "unchangedLogSha": true,
+    "log": "backend-lint-after-ddd-repair2.log",
+    "sha256": "741f0b17a5451798bb8b657156bf7805632b382f95db9038cc4a802a1f090e5c"
+  },
+  "limitations": [
+    "No native DB2 or deployment for this slice",
+    "Two disabled routes still have stale OpenAPI operation descriptions"
+  ]
+}
