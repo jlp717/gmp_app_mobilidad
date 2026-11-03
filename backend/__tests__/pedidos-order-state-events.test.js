@@ -1,5 +1,9 @@
 'use strict';
 
+process.env.APP_ENV = 'test';
+process.env.REPARTO_TABLE_SET = 'isolated_test';
+process.env.DB2_WRITE_SCHEMA = 'JAVIER';
+
 jest.mock('../utils/db2-schemas', () => ({
   db2AppTable: (name) => `JAVIER.TEST_${name}`,
 }));

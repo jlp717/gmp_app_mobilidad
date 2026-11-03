@@ -1,5 +1,14 @@
 'use strict';
 
+const ORIGINAL_ENV = { ...process.env };
+process.env.APP_ENV = 'test';
+process.env.REPARTO_TABLE_SET = 'isolated_test';
+process.env.DB2_WRITE_SCHEMA = 'JAVIER';
+
+afterAll(() => {
+  process.env = ORIGINAL_ENV;
+});
+
 function expectDb2SafeBind(sql, bind, maxLen) {
   const text = bind == null ? '' : String(bind);
   const normalized = text.length <= maxLen;
@@ -20,9 +29,13 @@ const mockTxClose = jest.fn();
 const mockOpenDedicatedConnection = jest.fn();
 const mockTxQueryOverride = jest.fn();
 
+function mockNormalizeIsolatedFixtureSql(sql) {
+  return String(sql).replaceAll('JAVIER.TEST_', 'JAVIER.');
+}
+
 jest.mock('../config/db', () => ({
-  query: mockQuery,
-  queryWithParams: mockQueryWithParams,
+  query: (sql, ...args) => mockQuery(mockNormalizeIsolatedFixtureSql(sql), ...args),
+  queryWithParams: (sql, ...args) => mockQueryWithParams(mockNormalizeIsolatedFixtureSql(sql), ...args),
   getPool: () => ({ connect: mockPoolConnect }),
 }));
 
@@ -84,14 +97,14 @@ beforeEach(() => {
   mockTxRollback.mockResolvedValue(undefined);
   mockTxClose.mockResolvedValue(undefined);
   mockOpenDedicatedConnection.mockResolvedValue({
-    query: mockTxQuery,
+    query: (sql, params) => mockTxQuery(mockNormalizeIsolatedFixtureSql(sql), params),
     beginTransaction: mockTxBegin,
     commit: mockTxCommit,
     rollback: mockTxRollback,
     close: mockTxClose,
   });
   mockPoolConnect.mockResolvedValue({
-    query: mockConnQuery,
+    query: (sql, params) => mockConnQuery(mockNormalizeIsolatedFixtureSql(sql), params),
     close: mockConnClose,
   });
 });
@@ -230,8 +243,10 @@ describe('pedidos product catalog contract', () => {
       if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
         return [];
       }
-      capturedSql = sql;
-      capturedParams = params;
+      if (/WITH PH AS/i.test(sql)) {
+        capturedSql = sql;
+        capturedParams = params;
+      }
       return [
         {
           CODE: 'P001',
@@ -286,7 +301,7 @@ describe('pedidos product catalog contract', () => {
       if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
         return [];
       }
-      capturedSql = sql;
+      if (/WITH PH AS/i.test(sql)) capturedSql = sql;
       return [];
     });
 
@@ -309,7 +324,7 @@ describe('pedidos product catalog contract', () => {
       if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
         return [];
       }
-      capturedSql = sql;
+      if (/WITH PH AS/i.test(sql)) capturedSql = sql;
       return [];
     });
 
@@ -333,8 +348,10 @@ describe('pedidos product catalog contract', () => {
       if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
         return [];
       }
-      capturedSql = sql;
-      capturedParams = params;
+      if (/WITH PH AS/i.test(sql)) {
+        capturedSql = sql;
+        capturedParams = params;
+      }
       return [];
     });
 
@@ -357,7 +374,7 @@ describe('pedidos product catalog contract', () => {
       if (/JAVIER\.(?:BOLSA_PRODUCTO_PRECIO|TEST_PRECIO_COMPETITIVO)/i.test(sql) || /DSEDAC\.PES/i.test(sql) || /FROM\s+DSEDAC\.LINDTO/i.test(sql)) {
         return [];
       }
-      capturedSql = sql;
+      if (/WITH PH AS/i.test(sql)) capturedSql = sql;
       return [
         {
           CODE: '0104',
@@ -1110,7 +1127,13 @@ describe('pedidos table initialization contract', () => {
       return [];
     });
 
-    await pedidosService.initPedidosTables();
+    const previousTableSet = process.env.REPARTO_TABLE_SET;
+    process.env.REPARTO_TABLE_SET = 'production';
+    try {
+      await pedidosService.initPedidosTables();
+    } finally {
+      process.env.REPARTO_TABLE_SET = previousTableSet;
+    }
 
     const sqls = mockConnQuery.mock.calls.map(([sql]) => sql).join('\\n');
     expect(sqls).toContain('QSYS2.SYSTABLES');
@@ -1383,7 +1406,7 @@ describe('pedidos mutation service error contract', () => {
       expect(result).toMatchObject({ cancelled: true, deleted: false, estado: 'CANCELADO' });
       expect(mockTxQuery.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql))).toBe(true);
       expect(mockTxQuery.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_(?:CAB|LIN)/i.test(sql))).toBe(false);
-      expect(mockTxQuery.mock.calls.filter(([sql]) => /INSERT\s+INTO\s+JAVIER\.TEST_PEDIDO_STATE_EVENTS/i.test(sql))).toHaveLength(2);
+      expect(mockTxQuery.mock.calls.filter(([sql]) => /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDO_STATE_EVENTS/i.test(sql))).toHaveLength(2);
       if (initialState === 'CONFIRMADO') {
         expect(mockTxQuery.mock.calls.some(([sql]) => /M\.TIPO\s+IN\s*\('CONSUMO',\s*'ACUMULACION',\s*'REGISTRO'\)/i.test(sql))).toBe(true);
       }
@@ -1690,6 +1713,105 @@ describe('pedidos mutation route ownership contract', function() {
     expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_VENDOR' });
     expect(mockService.getOrderVendorForAuth).toHaveBeenCalledWith(42);
     expect(mockService.getOrderDetail).not.toHaveBeenCalled();
+  });
+  test.each([
+    ['COMERCIAL', { code: '01', role: 'COMERCIAL' }],
+    ['JEFE_VENTAS', { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['01'] }],
+  ])('%s receives the same sanitized timeline contract and forwards bounded read options', async function(_label, user) {
+    const { request, app, mockService } = makeMutationApp({ user, orderVendor: '01' });
+    mockService.getOrderDetail.mockResolvedValueOnce({
+      header: { id: 42, vendedor: '01' },
+      lines: [],
+      timeline: {
+        status: 'available',
+        events: [{
+          id: '9',
+          orderId: '42',
+          fromState: 'BORRADOR',
+          toState: 'CONFIRMADO',
+          actorId: '01',
+          actorRole: 'COMERCIAL',
+          reason: 'Confirmado',
+          originalClientAtUtc: '2026-11-02T08:15:00.123456Z',
+          serverOccurredAtLocal: '2026-11-02T09:15:01.654321',
+          serverTimeZone: 'Europe/Madrid',
+        }],
+        hasMore: false,
+        nextCursor: null,
+        snapshot: {
+          id: '9',
+          payloadStatus: 'available',
+          payload: {
+            before: { lines: [{ codigoArticulo: '3075', precioVenta: 49.572 }] },
+            after: { lines: [{ codigoArticulo: '3075', precioVenta: 49.572 }] },
+          },
+        },
+      },
+    });
+
+    const res = await request(app)
+      .get('/api/pedidos/42')
+      .query({ timelineLimit: '25', timelineCursor: '99', timelineEventId: '9' });
+
+    expect(res.status).toBe(200);
+    expect(mockService.getOrderDetail).toHaveBeenCalledWith(42, {
+      includeReadModel: true,
+      timeline: { limit: 25, cursor: '99', eventId: '9' },
+    });
+    expect(JSON.stringify(res.body.order.timeline)).not.toMatch(/precioMinimo|precioCosto|importeCosto|margen|idempotency|PAYLOAD_HASH/i);
+  });
+  test.each([
+    ['timelineCursor', '12x', 'INVALID_TIMELINE_CURSOR'],
+    ['timelineCursor', '9223372036854775808', 'INVALID_TIMELINE_CURSOR'],
+    ['timelineEventId', '-1', 'INVALID_TIMELINE_EVENT_ID'],
+  ])('GET detail rejects invalid %s before ownership or DB-backed service access', async function(name, value, code) {
+    const { request, app, mockService } = makeMutationApp({
+      user: { code: '01', role: 'COMERCIAL' },
+      orderVendor: '01',
+    });
+
+    const res = await request(app).get('/api/pedidos/42').query({ [name]: value });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ success: false, code });
+    expect(mockService.getOrderVendorForAuth).not.toHaveBeenCalled();
+    expect(mockService.getOrderDetail).not.toHaveBeenCalled();
+  });
+  test('COMERCIAL isJefeVentas flag cannot elevate detail access to another vendor', async function() {
+    const { request, app, mockService } = makeMutationApp({
+      user: { code: '01', role: 'COMERCIAL', isJefeVentas: true },
+      orderVendor: '02',
+    });
+    const res = await request(app).get('/api/pedidos/42');
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_VENDOR');
+    expect(mockService.getOrderVendorForAuth).toHaveBeenCalledWith(42);
+    expect(mockService.getOrderDetail).not.toHaveBeenCalled();
+  });
+  test.each([
+    ['canonical REPARTIDOR overrides legacy COMERCIAL', { code: '01', role: 'REPARTIDOR', userRole: 'COMERCIAL' }],
+    ['unknown canonical role', { code: '01', role: 'DESCONOCIDO' }],
+    ['manager flag without an allowed role', { code: '01', isJefeVentas: true }],
+  ])('GET detail rejects %s before ownership lookup', async function(_label, user) {
+    const { request, app, mockService } = makeMutationApp({ user, orderVendor: '01' });
+    const res = await request(app).get('/api/pedidos/42');
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_ROLE');
+    expect(mockService.getOrderVendorForAuth).not.toHaveBeenCalled();
+    expect(mockService.getOrderDetail).not.toHaveBeenCalled();
+  });
+  test.each([
+    ['legacy JEF', { code: '80', userRole: 'JEF' }],
+    ['legacy ADMIN', { code: '80', tipo: 'ADMIN' }],
+    ['canonical ADMIN in reparto mode', { code: '80', role: 'ADMIN', activeMode: 'REPARTIDOR', isJefeVentas: false }],
+  ])('GET detail allows %s when canonical role is absent or explicitly ADMIN', async function(_label, user) {
+    const { request, app, mockService } = makeMutationApp({ user, orderVendor: '02' });
+    const res = await request(app).get('/api/pedidos/42');
+    expect(res.status).toBe(200);
+    expect(mockService.getOrderVendorForAuth).toHaveBeenCalledWith(42);
+    expect(mockService.getOrderDetail).toHaveBeenCalledWith(42, expect.objectContaining({
+      includeReadModel: true,
+    }));
   });
   test('COMERCIAL cannot add lines to another vendor order', async function() {
     const { request, app, mockService } = makeMutationApp({ user: { code: '01', role: 'COMERCIAL' }, orderVendor: '02' });

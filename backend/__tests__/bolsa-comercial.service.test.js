@@ -4,6 +4,15 @@
  */
 'use strict';
 
+const ORIGINAL_ENV = { ...process.env };
+process.env.APP_ENV = 'test';
+process.env.REPARTO_TABLE_SET = 'isolated_test';
+process.env.DB2_WRITE_SCHEMA = 'JAVIER';
+
+afterAll(() => {
+    process.env = ORIGINAL_ENV;
+});
+
 const mockOpenDedicatedConnection = jest.fn();
 
 function promisedImplementation(implementation) {
@@ -719,7 +728,7 @@ describe("pedidos confirmation bolsa contract", () => {
     const conn = installTransactionalPool(db);
     db.queryWithParams.mockReset();
     db.queryWithParams.mockImplementation(async (sql) => {
-      if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMANDO")) return { count: 1 };
+      if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMANDO")) return { count: 1 };
       if (/SELECT\s+ID,\s+TRIM\(ESTADO\).*DESCUENTO_GLOBAL/is.test(sql)) {
         return [{
           ID: 42, ESTADO: conn.getState(), EJERCICIO: 2026, NUMEROPEDIDO: 1001,
@@ -730,9 +739,9 @@ describe("pedidos confirmation bolsa contract", () => {
       }
       if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ID: 42, ESTADO: "BORRADOR", EJERCICIO: 2026, NUMEROPEDIDO: 1001, SERIEPEDIDO: "M", TERMINAL: 1, DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 233639, CODIGOCLIENTE: "C001", NOMBRECLIENTE: "Cliente Test", CODIGOVENDEDOR: "10", CODIGOFORMAPAGO: "01", CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: "CC", IMPORTETOTAL: 7, IMPORTEBASE: 7, IMPORTEIVA: 0, IMPORTECOSTO: 4, IMPORTEMARGEN: 3, OBSERVACIONES: "" }];
       if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return [{ CODIGOVEHICULO: "02", CODIGOREPARTIDOR: "10" }];
-      if (/FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return [{ ID: 7, PEDIDO_ID: 42, SECUENCIA: 1, CODIGOARTICULO: "ART-UNDER", DESCRIPCION: "Producto bajo minimo", CANTIDADENVASES: 1, CANTIDADUNIDADES: 0, UNIDADMEDIDA: "CAJAS", UNIDADESCAJA: 1, PRECIOVENTA: 7, PRECIOCOSTO: 4, PRECIOTARIFA: 10, PRECIOTARIFACLIENTE: 10, PRECIOMINIMO: 10, IMPORTEVENTA: 7, IMPORTECOSTO: 4, IMPORTEMARGEN: 3, PORCENTAJEMARGEN: 42.85, TIPOLINEA: "R", TIPOVENTA: "CC", CLASELINEA: "VT", ORDEN: 1 }];
+      if (/FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return [{ ID: 7, PEDIDO_ID: 42, SECUENCIA: 1, CODIGOARTICULO: "ART-UNDER", DESCRIPCION: "Producto bajo minimo", CANTIDADENVASES: 1, CANTIDADUNIDADES: 0, UNIDADMEDIDA: "CAJAS", UNIDADESCAJA: 1, PRECIOVENTA: 7, PRECIOCOSTO: 4, PRECIOTARIFA: 10, PRECIOTARIFACLIENTE: 10, PRECIOMINIMO: 10, IMPORTEVENTA: 7, IMPORTECOSTO: 4, IMPORTEMARGEN: 3, PORCENTAJEMARGEN: 42.85, TIPOLINEA: "R", TIPOVENTA: "CC", CLASELINEA: "VT", ORDEN: 1 }];
       if (/FROM\s+DSEDAC\.ARO/i.test(sql)) return [{ CODE: "ART-UNDER", ENVASES: 100, UNIDADES: 0 }];
-      if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMADO")) return [];
+      if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMADO")) return [];
       if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return [{ ID: 42, EJERCICIO: 2026, NUMEROPEDIDO: 1001, SERIEPEDIDO: "M", TERMINAL: 1, DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 233639, CODIGOCLIENTE: "C001", NOMBRECLIENTE: "Cliente Test", CODIGOVENDEDOR: "10", CODIGOFORMAPAGO: "01", CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: "CC", ESTADO: "CONFIRMADO", IMPORTETOTAL: 7, IMPORTEBASE: 7, IMPORTEIVA: 0, IMPORTECOSTO: 4, IMPORTEMARGEN: 3, OBSERVACIONES: "" }];
       return [];
     });
@@ -770,7 +779,7 @@ describe("pedidos confirmation bolsa contract", () => {
     let movementReads = 0;
     db.queryWithParams.mockReset();
     db.queryWithParams.mockImplementation(async (sql) => {
-      if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMANDO")) return { count: 1 };
+      if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMANDO")) return { count: 1 };
       if (/SELECT\s+ID,\s+TRIM\(ESTADO\).*DESCUENTO_GLOBAL/is.test(sql)) {
         return [{
           ...header,
@@ -781,10 +790,10 @@ describe("pedidos confirmation bolsa contract", () => {
       }
       if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ...header, ESTADO: "BORRADOR" }];
       if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return [{ CODIGOVEHICULO: "02", CODIGOREPARTIDOR: "10" }];
-      if (/FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return [line];
+      if (/FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return [line];
       if (/FROM\s+DSEDAC\.ARO/i.test(sql)) return [{ CODE: "ART-OVER", ENVASES: 100, UNIDADES: 0 }];
-      if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_STOCK_RESERVE/i.test(sql)) return [];
-      if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMADO")) return [];
+      if (/INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql)) return [];
+      if (/UPDATE\s+JAVIER\.(?:TEST_)?PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMADO")) return [];
       if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return [{ ...header, ESTADO: "CONFIRMADO" }];
       if (/FROM\s+JAVIER\.(?:TEST_)?MOVIMIENTOS_BOLSA/i.test(sql)) {
         movementReads += 1;

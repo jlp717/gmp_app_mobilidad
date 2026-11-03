@@ -227,7 +227,7 @@ describe('runtime performance configuration', () => {
       source.indexOf('async function getProductDetail'),
     );
 
-    expect(getProductsBlock).toMatch(/pedidos:products_final_v3/);
+    expect(getProductsBlock).toMatch(/pedidos:products_final_v4/);
     expect(getProductsBlock).toMatch(/ART_RANKED AS/);
     expect(getProductsBlock).toMatch(/ART_PAGE AS/);
     expect(getProductsBlock).toMatch(/WHERE RN > \?/);

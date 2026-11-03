@@ -20,6 +20,7 @@ const {
     canonicalPayload,
     normalizeOriginalClientAt,
     payloadHash,
+    readOrderStateTimeline,
 } = require('./order-state-events');
 const {
     withDraftCreationTransaction,
@@ -2042,6 +2043,92 @@ function buildCatalogRankOrderClause(sortBy, sortOrder) {
     }
 }
 
+async function enrichProductsWithLastConfirmedSales(products, clientCode, queryFn = queryWithParams) {
+    if (!Array.isArray(products) || products.length === 0) return products;
+    const codes = [...new Set(products.map((product) => truncate(product.code, 10)).filter(Boolean))];
+    const client = truncate(clientCode, 10);
+    if (!client || codes.length === 0) {
+        return products.map((product) => ({
+            ...product,
+            lastSaleStatus: 'not_found',
+            lastSalePrice: null,
+            lastSaleOrderId: null,
+            lastSaleUnitMeasure: null,
+            lastSaleAtLocal: null,
+            lastSaleTimeZone: 'Europe/Madrid',
+            lastSaleSource: null,
+        }));
+    }
+    const placeholders = pricingPlaceholders(codes);
+    try {
+        const rows = await queryFn(
+            `/* LAST_CONFIRMED_SALES */
+             SELECT CODE, ORDER_ID, PRICE, UNIT_MEASURE, SOLD_AT_LOCAL
+               FROM (
+                 SELECT TRIM(L.CODIGOARTICULO) AS CODE,
+                        C.ID AS ORDER_ID,
+                        L.PRECIOVENTA AS PRICE,
+                        TRIM(L.UNIDADMEDIDA) AS UNIT_MEASURE,
+                        VARCHAR_FORMAT(C.CREATED_AT, 'YYYY-MM-DD"T"HH24:MI:SS.FF6') AS SOLD_AT_LOCAL,
+                        ROW_NUMBER() OVER (
+                          PARTITION BY TRIM(L.CODIGOARTICULO)
+                          ORDER BY C.CREATED_AT DESC, L.ID DESC
+                        ) AS RN
+                   FROM ${PEDIDOS_LIN_TABLE} L
+                   JOIN ${PEDIDOS_CAB_TABLE} C ON C.ID = L.PEDIDO_ID
+                  WHERE TRIM(C.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
+                    AND TRIM(C.ESTADO) = 'CONFIRMADO'
+                    AND L.PRECIOVENTA > 0
+                    AND TRIM(L.CODIGOARTICULO) IN (${placeholders})
+               ) LAST_SALE
+              WHERE RN = 1`,
+            [client, ...codes],
+            false,
+        );
+        const byCode = new Map((rows || []).map((row) => [
+            trimString(row.CODE),
+            row,
+        ]));
+        return products.map((product) => {
+            const row = byCode.get(trimString(product.code));
+            if (!row) {
+                return {
+                    ...product,
+                    lastSaleStatus: 'not_found',
+                    lastSalePrice: null,
+                    lastSaleOrderId: null,
+                    lastSaleUnitMeasure: null,
+                    lastSaleAtLocal: null,
+                    lastSaleTimeZone: 'Europe/Madrid',
+                    lastSaleSource: null,
+                };
+            }
+            return {
+                ...product,
+                lastSaleStatus: 'available',
+                lastSalePrice: roundPrice(row.PRICE),
+                lastSaleOrderId: row.ORDER_ID == null ? null : String(row.ORDER_ID).trim(),
+                lastSaleUnitMeasure: trimString(row.UNIT_MEASURE) || null,
+                lastSaleAtLocal: trimString(row.SOLD_AT_LOCAL) || null,
+                lastSaleTimeZone: 'Europe/Madrid',
+                lastSaleSource: 'CONFIRMED_ORDER',
+            };
+        });
+    } catch (error) {
+        logger.warn(`[PEDIDOS] Confirmed last-sale batch unavailable code=${error?.code || 'UNKNOWN'}`);
+        return products.map((product) => ({
+            ...product,
+            lastSaleStatus: 'unavailable',
+            lastSalePrice: null,
+            lastSaleOrderId: null,
+            lastSaleUnitMeasure: null,
+            lastSaleAtLocal: null,
+            lastSaleTimeZone: 'Europe/Madrid',
+            lastSaleSource: null,
+        }));
+    }
+}
+
 async function getProducts({ search, clientCode, family, marca, prefamily, includeIva = false, onlyStock = false, limit = 50, offset = 0, sortBy, sortOrder }) {
     const params = [];
     let where = "WHERE A.ANOBAJA = 0 AND TRIM(A.CODIGOARTICULO) <> ''";
@@ -2110,7 +2197,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
     const normalizedSortBy = String(sortBy || 'purchases').toLowerCase().trim();
     const normalizedSortOrder = String(sortOrder || 'ASC').toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
     const rankOrderClause = buildCatalogRankOrderClause(normalizedSortBy, normalizedSortOrder);
-    const resultCacheKey = `pedidos:products_final_v3:${await getPedidosRouteCacheVersion()}:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${includeIva ? 'iva' : 'net'}:${normalizedSortBy}:${normalizedSortOrder}:${onlyStock ? 'stock' : 'all'}`;
+    const resultCacheKey = `pedidos:products_final_v4:${await getPedidosRouteCacheVersion()}:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}:${includeIva ? 'iva' : 'net'}:${normalizedSortBy}:${normalizedSortOrder}:${onlyStock ? 'stock' : 'all'}`;
     const cachedProducts = await redisCache.get('route', resultCacheKey);
     if (cachedProducts) return cachedProducts;
 
@@ -2303,7 +2390,11 @@ async function getProducts({ search, clientCode, family, marca, prefamily, inclu
             return product;
         });
         const pricedProducts = await applyConfiguredPricingToProducts(products, clientCodeTrimmed);
-        let finalProducts = pricedProducts.map(product => applyProductPriceView(product, includeIva));
+        const productsWithLastSale = await enrichProductsWithLastConfirmedSales(
+            pricedProducts,
+            clientCodeTrimmed,
+        );
+        let finalProducts = productsWithLastSale.map(product => applyProductPriceView(product, includeIva));
         // REQ-04: server filters gross stock pre-pagination (EXISTS on ARO);
         // this local pass only removes net-zero rows eaten by active reserves.
         // Cache key already includes the flag, so filtered/unfiltered pages
@@ -3875,7 +3966,7 @@ function mapBolsaMovementRow(row) {
     };
 }
 
-async function getBolsaMovementsForOrder(orderId) {
+async function getBolsaTraceForOrder(orderId) {
     try {
         const rows = await queryWithParams(
             `SELECT ID, TIPO, IMPORTE, SALDO_ANTERIOR, SALDO_POSTERIOR,
@@ -3889,10 +3980,17 @@ async function getBolsaMovementsForOrder(orderId) {
             false,
             false
         );
-        return (rows || []).map(mapBolsaMovementRow);
+        return {
+            status: 'available',
+            movements: (rows || []).map(mapBolsaMovementRow),
+        };
     } catch (error) {
-        logger.warn(`[PEDIDOS] Bolsa trace unavailable for order ${orderId}: ${error.message}`);
-        return [];
+        logger.warn(`[PEDIDOS] Bolsa trace unavailable for order ${orderId} code=${error?.code || 'UNKNOWN'}`);
+        return {
+            status: 'unavailable',
+            code: 'BOLSA_TRACE_UNAVAILABLE',
+            movements: [],
+        };
     }
 }
 
@@ -3918,6 +4016,95 @@ function summarizeLineBolsaMovements(movements) {
     return {
         ...summary,
         hasImpact: summary.movementCount > 0,
+    };
+}
+
+async function getOrderInventoryReadModel(
+    orderId,
+    lines,
+    warehouseCode = 1,
+    queryFn = queryWithParams,
+) {
+    let reservationStatus = 'unavailable';
+    let reservationRows = [];
+    let reservation = {
+        status: 'UNAVAILABLE',
+        reservedUntilLocal: null,
+        serverNowLocal: null,
+    };
+    try {
+        reservationRows = await queryFn(
+            `/* ORDER_DETAIL_RESERVATION */
+             SELECT CASE
+                      WHEN TRIM(C.ESTADO) = 'CONFIRMADO' THEN 'CONFIRMED'
+                      WHEN TRIM(C.ESTADO) IN ('CANCELANDO', 'CANCELADO') THEN 'RELEASED'
+                      WHEN C.CREATED_AT <= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS THEN 'EXPIRED'
+                      WHEN COUNT(SR.ID) > 0 THEN 'ACTIVE'
+                      ELSE 'NONE'
+                    END AS STATUS,
+                    VARCHAR_FORMAT(CURRENT TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS.FF6') AS SERVER_NOW_LOCAL,
+                    CASE
+                      WHEN TRIM(C.ESTADO) IN ('CONFIRMADO', 'CANCELANDO', 'CANCELADO')
+                        THEN CAST(NULL AS VARCHAR(26))
+                      ELSE VARCHAR_FORMAT(C.CREATED_AT + ${DRAFT_STOCK_RESERVATION_HOURS} HOURS, 'YYYY-MM-DD"T"HH24:MI:SS.FF6')
+                    END AS RESERVED_UNTIL_LOCAL,
+                    TRIM(SR.CODIGOARTICULO) AS CODE,
+                    COALESCE(SUM(SR.CANTIDADENVASES), 0) AS RESERVED_ENVASES,
+                    COALESCE(SUM(SR.CANTIDADUNIDADES), 0) AS RESERVED_UNITS
+               FROM ${PEDIDOS_CAB_TABLE} C
+               LEFT JOIN ${PEDIDOS_STOCK_RESERVE_TABLE} SR ON SR.PEDIDO_ID = C.ID
+              WHERE C.ID = ?
+              GROUP BY C.ESTADO, C.CREATED_AT, SR.CODIGOARTICULO`,
+            [orderId],
+            false,
+        );
+        const first = reservationRows?.[0];
+        if (first) {
+            reservationStatus = 'available';
+            reservation = {
+                status: trimString(first.STATUS) || 'NONE',
+                reservedUntilLocal: trimString(first.RESERVED_UNTIL_LOCAL) || null,
+                serverNowLocal: trimString(first.SERVER_NOW_LOCAL) || null,
+            };
+        }
+    } catch (error) {
+        logger.warn(`[PEDIDOS] Reservation detail unavailable order=${orderId} code=${error?.code || 'UNKNOWN'}`);
+    }
+
+    const codes = [...new Set((lines || [])
+        .map((line) => truncate(line.codigoArticulo ?? line.CODIGOARTICULO, 10))
+        .filter(Boolean))];
+    let stockStatus = 'available';
+    let stock = new Map();
+    try {
+        const warehouse = integerValue(warehouseCode) > 0 ? integerValue(warehouseCode) : 1;
+        stock = await getStockBatch(codes, warehouse, { queryFn });
+    } catch (error) {
+        stockStatus = 'unavailable';
+        logger.warn(`[PEDIDOS] Stock detail unavailable order=${orderId} code=${error?.code || 'UNKNOWN'}`);
+    }
+
+    const reservationsByCode = new Map((reservationRows || [])
+        .filter((row) => trimString(row.CODE))
+        .map((row) => [trimString(row.CODE), {
+            status: reservation.status,
+            envases: Number(row.RESERVED_ENVASES) || 0,
+            unidades: Number(row.RESERVED_UNITS) || 0,
+            reservedUntilLocal: reservation.reservedUntilLocal,
+        }]));
+    const status = reservationStatus === 'available' && stockStatus === 'available'
+        ? 'available'
+        : reservationStatus === 'unavailable' && stockStatus === 'unavailable'
+            ? 'unavailable'
+            : 'partial';
+    return {
+        status,
+        code: status === 'available' ? undefined : 'ORDER_INVENTORY_READ_PARTIAL',
+        serverTimeZone: 'Europe/Madrid',
+        reservation,
+        stockStatus,
+        reservationsByCode,
+        stock,
     };
 }
 
@@ -3979,9 +4166,9 @@ async function getOrderDetail(orderId, options = {}) {
             queryWithParams(cabSql, [id]),
             queryWithParams(linSql, [id]),
         ];
-        if (includeBolsa) detailQueries.push(getBolsaMovementsForOrder(id));
-        const [cabRows, linRows, bolsaRows] = await Promise.all(detailQueries);
-        const bolsaMovements = includeBolsa ? bolsaRows : [];
+        if (includeBolsa) detailQueries.push(getBolsaTraceForOrder(id));
+        const [cabRows, linRows, bolsaTrace] = await Promise.all(detailQueries);
+        const bolsaMovements = includeBolsa ? bolsaTrace.movements : [];
 
         if (!cabRows || cabRows.length === 0) {
             throw new Error('Pedido no encontrado');
@@ -4002,7 +4189,7 @@ async function getOrderDetail(orderId, options = {}) {
             bolsaByLine.get(key).push(movement);
         }
 
-        return {
+        const detail = {
             header: {
                 id: cab.ID,
                 ejercicio: cab.EJERCICIO,
@@ -4082,7 +4269,41 @@ async function getOrderDetail(orderId, options = {}) {
             }),
             bolsaMovements,
             bolsaSummary: buildBolsaSummary(bolsaMovements),
+            bolsaRead: includeBolsa
+                ? {
+                    status: bolsaTrace.status,
+                    ...(bolsaTrace.code ? { code: bolsaTrace.code } : {}),
+                }
+                : { status: 'not_requested' },
         };
+        if (options.includeReadModel === true) {
+            const [timeline, inventory] = await Promise.all([
+                readOrderStateTimeline(queryWithParams, id, options.timeline),
+                getOrderInventoryReadModel(id, detail.lines, detail.header.almacen),
+            ]);
+            detail.timeline = timeline;
+            detail.inventoryRead = {
+                status: inventory.status,
+                ...(inventory.code ? { code: inventory.code } : {}),
+                serverTimeZone: inventory.serverTimeZone,
+                reservation: inventory.reservation,
+                stockStatus: inventory.stockStatus,
+            };
+            detail.lines = detail.lines.map((line) => {
+                const code = trimString(line.codigoArticulo);
+                return {
+                    ...line,
+                    stockAvailable: inventory.stock.get(code) || null,
+                    reservation: inventory.reservationsByCode.get(code) || {
+                        status: inventory.reservation.status,
+                        envases: 0,
+                        unidades: 0,
+                        reservedUntilLocal: inventory.reservation.reservedUntilLocal,
+                    },
+                };
+            });
+        }
+        return detail;
     } catch (error) {
         logger.error(`[PEDIDOS] getOrderDetail error: ${error.message}`);
         throw error;

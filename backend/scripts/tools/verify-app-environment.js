@@ -6,8 +6,12 @@ const path = require('path');
 const backendRoot = path.resolve(__dirname, '..', '..');
 const {
   applyAppProfile,
+  resolveAppProfile,
   sanitizeAppProfile,
 } = require('../../config/app-profile');
+const {
+  inspectAppBufferCapability,
+} = require('../../utils/db2-app-buffer-capability');
 
 function expectedCatalogObjects(profile) {
   const isolated = profile.tableSet === 'isolated_test';
@@ -21,6 +25,9 @@ function expectedCatalogObjects(profile) {
     Object.freeze({ schema: 'JAVIER', table: `${writePrefix}PEDIDOS_LIN`, purpose: 'order-lines-write' }),
     Object.freeze({ schema: 'JAVIER', table: `${writePrefix}BOLSA_COMERCIAL`, purpose: 'bag-write' }),
     Object.freeze({ schema: 'JAVIER', table: `${writePrefix}MOVIMIENTOS_BOLSA`, purpose: 'bag-ledger-write' }),
+    Object.freeze({ schema: 'JAVIER', table: `${writePrefix}PEDIDO_STATE_EVENTS`, purpose: 'order-state-audit' }),
+    Object.freeze({ schema: 'JAVIER', table: `${writePrefix}LIQUIDACION_COMERCIAL`, purpose: 'commercial-settlement-buffer' }),
+    Object.freeze({ schema: 'JAVIER', table: `${writePrefix}DEVOLUCIONES_COMERCIAL`, purpose: 'commercial-returns-buffer' }),
   ]);
 }
 
@@ -36,6 +43,29 @@ function returnedObjectKey(row) {
   const schema = String(row.TABLE_SCHEMA || row.table_schema || '').trim().toUpperCase();
   const table = String(row.TABLE_NAME || row.table_name || '').trim().toUpperCase();
   return `${schema}.${table}`;
+}
+
+function invalidVerifierProfile() {
+  const error = new Error('A coherent explicit APP_ENV profile is required.');
+  error.code = 'APP_BUFFER_PROFILE_INVALID';
+  return error;
+}
+
+function assertVerifiableProfile(profile) {
+  const appEnv = String(profile?.profile || '').trim().toLowerCase();
+  if (!appEnv || profile?.verified !== true) throw invalidVerifierProfile();
+  const resolved = resolveAppProfile({
+    APP_ENV: appEnv,
+    REPARTO_TABLE_SET: profile.tableSet,
+    DB2_READ_SCHEMA: profile.readSchema,
+    DB2_WRITE_SCHEMA: profile.writeSchema,
+  });
+  if (!resolved.valid) throw invalidVerifierProfile();
+  const canonical = sanitizeAppProfile(resolved);
+  for (const key of ['profile', 'readSchema', 'writeSchema', 'tableSet']) {
+    if (profile[key] !== canonical[key]) throw invalidVerifierProfile();
+  }
+  return canonical;
 }
 
 function createReadOnlyConnector(env = process.env) {
@@ -62,7 +92,8 @@ async function verifyDatabaseReadOnly(
   profile,
   { connect = createReadOnlyConnector() } = {},
 ) {
-  const expected = expectedCatalogObjects(profile);
+  const verifiedProfile = assertVerifiableProfile(profile);
+  const expected = expectedCatalogObjects(verifiedProfile);
   const catalogCheck = buildCatalogCheck(expected);
   let connection = null;
   try {
@@ -79,13 +110,25 @@ async function verifyDatabaseReadOnly(
     const missing = expected
       .filter((entry) => !found.has(`${entry.schema}.${entry.table}`))
       .map((entry) => `${entry.schema}.${entry.table}`);
+    const capabilityProfile = {
+      APP_ENV: verifiedProfile.profile,
+      REPARTO_TABLE_SET: verifiedProfile.tableSet,
+      DB2_WRITE_SCHEMA: verifiedProfile.writeSchema,
+    };
+    const appBufferCapability = await inspectAppBufferCapability({
+      family: 'profileBuffers',
+      env: capabilityProfile,
+      catalogQuery: (sql, params) => connection.query(sql, params),
+      forceMetadata: true,
+    });
     return Object.freeze({
       readOnly: true,
       selectOne: Number(pingRows?.[0]?.OK ?? pingRows?.[0]?.ok) === 1,
       catalogObjectsChecked: expected.length,
       catalogObjectsFound: found.size,
       missing: Object.freeze(missing),
-      valid: missing.length === 0,
+      appBufferCapability,
+      valid: missing.length === 0 && appBufferCapability.available,
     });
   } finally {
     if (connection) await connection.close().catch(() => {});
@@ -126,6 +169,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  assertVerifiableProfile,
   buildCatalogCheck,
   createReadOnlyConnector,
   expectedCatalogObjects,

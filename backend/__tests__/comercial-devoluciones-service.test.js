@@ -1,5 +1,27 @@
 'use strict';
 
+const ORIGINAL_PROCESS_ENV = { ...process.env };
+const { PROFILE_ASSIGNMENTS: APP_PROFILE_ASSIGNMENTS } = require('../config/app-profile');
+
+function installTestProfile() {
+  process.env = {
+    ...ORIGINAL_PROCESS_ENV,
+    APP_ENV: 'test',
+    ...APP_PROFILE_ASSIGNMENTS.test,
+  };
+  process.env.APP_ENV = 'test';
+}
+
+installTestProfile();
+
+beforeEach(() => {
+  installTestProfile();
+});
+
+afterAll(() => {
+  process.env = ORIGINAL_PROCESS_ENV;
+});
+
 const {
   classifyFormaPago,
   isPagareFormaPago,
@@ -42,7 +64,9 @@ jest.mock('../middleware/logger', () => ({
 }));
 
 jest.mock('../utils/db2-schemas', () => ({
-  db2AppTable: () => 'JAVIER.COBROS',
+  db2AppTable: (table) => (
+    table === 'COBROS' ? 'JAVIER.COBROS' : `JAVIER.TEST_${table}`
+  ),
 }));
 
 describe('comercial devoluciones domain', () => {
@@ -789,5 +813,54 @@ describe('pizarra PG ya cobrados', () => {
     expect(insertSql).toMatch(/JAVIER\.TEST_DEVOLUCIONES_COMERCIAL/);
     expect(insertSql).toMatch(/FORMA_PAGO/);
     expect(insertSql).not.toMatch(/DSEDAC/i);
+  });
+});
+
+describe('production commercial app-buffer capability', () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    mockQueryWithParams.mockReset();
+  });
+
+  test('fails before ERP or buffer SQL when the production overlay objects are absent', async () => {
+    const { PROFILE_ASSIGNMENTS } = require('../config/app-profile');
+    process.env = {
+      ...originalEnv,
+      APP_ENV: 'production',
+      ...PROFILE_ASSIGNMENTS.production,
+    };
+    process.env.APP_ENV = 'production';
+    mockQueryWithParams.mockResolvedValue([]);
+
+    await expect(listReturns({ vendorCodes: ['80'], date: '2026-11-03' }))
+      .rejects.toMatchObject({ code: 'APP_BUFFER_CAPABILITY_UNAVAILABLE', status: 503 });
+
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(5);
+    for (const [sql, params] of mockQueryWithParams.mock.calls) {
+      expect(sql).toContain('QSYS2.');
+      expect(sql).not.toContain('LACLAE');
+      expect(params).not.toContain('TEST_LIQUIDACION_COMERCIAL');
+      expect(params).not.toContain('TEST_DEVOLUCIONES_COMERCIAL');
+    }
+    expect(mockOpenDedicatedConnection).not.toHaveBeenCalled();
+  });
+
+  test('rejects an invalid profile before SQL even when capability was pre-verified', async () => {
+    const { PROFILE_ASSIGNMENTS } = require('../config/app-profile');
+    process.env = {
+      ...originalEnv,
+      APP_ENV: 'production',
+      ...PROFILE_ASSIGNMENTS.production,
+      REPARTO_TABLE_SET: 'isolated_test',
+    };
+    mockQueryWithParams.mockResolvedValue([]);
+
+    await expect(listReturns(
+      { vendorCodes: ['80'], date: '2026-11-03' },
+      { appBufferCapabilityVerified: true, queryWithParams: mockQueryWithParams },
+    )).rejects.toMatchObject({ code: 'APP_BUFFER_PROFILE_INVALID', status: 503 });
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 });

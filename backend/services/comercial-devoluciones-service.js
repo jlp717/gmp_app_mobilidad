@@ -5,6 +5,10 @@ const {
   openDedicatedPedidosTransactionConnection,
 } = require('../adapters/pedidos-transaction-connection');
 const { db2AppTable } = require('../utils/db2-schemas');
+const {
+  assertStrictAppBufferProfile,
+  requireAppBufferCapability,
+} = require('../utils/db2-app-buffer-capability');
 const { db2InsertSql } = require('../utils/db2-identifiers');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
 const { formatErpDocumentLabel } = require('../utils/erp-document-label');
@@ -20,8 +24,10 @@ const {
   devolucionPdfFileName,
 } = require('./comercial-devolucion-pdf-service');
 
-const TEST_LIQUIDACION_TABLE = 'JAVIER.TEST_LIQUIDACION_COMERCIAL';
-const TEST_DEVOLUCIONES_TABLE = 'JAVIER.TEST_DEVOLUCIONES_COMERCIAL';
+// Legacy export names are retained for route/test compatibility. The value is
+// now profile-resolved and never falls back from production to TEST.
+const TEST_LIQUIDACION_TABLE = db2AppTable('LIQUIDACION_COMERCIAL');
+const TEST_DEVOLUCIONES_TABLE = db2AppTable('DEVOLUCIONES_COMERCIAL');
 
 const RETURN_SERIE = 'D';
 const RETURN_TIPO_VENTA = 'DV';
@@ -315,6 +321,18 @@ function assertIsolatedTestWrites() {
   }
 }
 
+async function requireCommercialAppBufferRead(deps = {}) {
+  const profile = assertStrictAppBufferProfile(process.env);
+  if (profile.profile !== 'production') return;
+  if (deps.appBufferCapabilityVerified === true) return;
+  const catalogQuery = deps.catalogQuery || deps.queryWithParams || queryWithParams;
+  await requireAppBufferCapability({
+    family: 'commercialFinance',
+    env: process.env,
+    catalogQuery,
+  });
+}
+
 function normalizeIdempotencyToken(value, fallbackPrefix) {
   const token = String(value || '').trim().substring(0, 128);
   if (token) return token;
@@ -327,6 +345,7 @@ async function listReturns({
   clientCode,
   limit = 100,
 } = {}, deps = {}) {
+  await requireCommercialAppBufferRead(deps);
   const run = deps.queryWithParams || queryWithParams;
   const parsedDate = parseIsoDate(date);
   if (!parsedDate) {
@@ -886,6 +905,8 @@ async function getDailySummary({
   date,
   saldoActual = 0,
 } = {}, deps = {}) {
+  await requireCommercialAppBufferRead(deps);
+  const verifiedDeps = { ...deps, appBufferCapabilityVerified: true };
   const parsedDate = parseIsoDate(date);
   if (!parsedDate) {
     const error = new Error('fecha invalida; usa YYYY-MM-DD');
@@ -895,11 +916,11 @@ async function getDailySummary({
   }
 
   const [cobros, returns, lqd, savedDraft, porcentajeMinimoVendedor] = await Promise.all([
-    getDailyCobrosByFormaPago({ vendorCodes, date: parsedDate.iso }, deps),
-    listReturns({ vendorCodes, date: parsedDate.iso }, deps),
-    getLqdForVendorDay({ vendorCodes, date: parsedDate.iso }, deps),
-    getSavedDraft({ vendorCodes, date: parsedDate.iso }, deps),
-    getVendorMinimoCobro(vendorCodes, deps),
+    getDailyCobrosByFormaPago({ vendorCodes, date: parsedDate.iso }, verifiedDeps),
+    listReturns({ vendorCodes, date: parsedDate.iso }, verifiedDeps),
+    getLqdForVendorDay({ vendorCodes, date: parsedDate.iso }, verifiedDeps),
+    getSavedDraft({ vendorCodes, date: parsedDate.iso }, verifiedDeps),
+    getVendorMinimoCobro(vendorCodes, verifiedDeps),
   ]);
 
   const devolucionesYaCobradas = returns.reduce(
@@ -946,6 +967,7 @@ async function getSavedDraft({
   vendorCodes,
   date,
 } = {}, deps = {}) {
+  await requireCommercialAppBufferRead(deps);
   const run = deps.queryWithParams || queryWithParams;
   const parsedDate = parseIsoDate(date);
   if (!parsedDate) return null;

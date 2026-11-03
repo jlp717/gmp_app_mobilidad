@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const yaml = require("js-yaml");
+const Ajv = require("ajv");
 const { spawnSync } = require("child_process");
 
 const root = path.resolve(__dirname, "..", "..");
@@ -146,6 +147,7 @@ function runtimeDocsProbe(nodeEnv, extraEnv = {}) {
     "PEDIDOS_CONFIRMATION_SCHEMA",
   ]) delete env[name];
   Object.assign(env, {
+    APP_ENV: production ? "production" : "test",
     NODE_ENV: nodeEnv,
     DOCS_PUBLIC: "true",
     SKIP_PRODUCTION_CONFIG_VALIDATION: "true",
@@ -155,7 +157,7 @@ function runtimeDocsProbe(nodeEnv, extraEnv = {}) {
     REPARTO_ENVIRONMENT: production ? "production" : "test",
     REPARTO_TABLE_SET: production ? "production" : "isolated_test",
     REPARTO_EVIDENCE_PENDING_TTL_HOURS: "24",
-    REPARTO_WRITES_ENABLED: "false",
+    REPARTO_WRITES_ENABLED: production ? "false" : "true",
     REPARTO_PRODUCTION_WRITES_APPROVED: "false",
     REPARTO_PRODUCTION_ERP_WRITES_APPROVED: "false",
     REPARTO_PRODUCTION_CONFIRMATION_APPROVED: "false",
@@ -261,6 +263,173 @@ describe("OpenAPI documentation quality", () => {
         expect(Object.prototype.hasOwnProperty.call(media, "example")).toBe(true);
       }
     }
+  });
+
+  test("pedido timeline documents bounded pagination and closed sanitized snapshots", () => {
+    const operation = spec.paths["/pedidos/{id}"].get;
+    const queryParameters = Object.fromEntries((operation.parameters || [])
+      .filter(({ in: location }) => location === "query")
+      .map((parameter) => [parameter.name, parameter]));
+    expect(queryParameters.timelineLimit.schema).toMatchObject({
+      type: "integer", minimum: 1, maximum: 100, default: 25,
+    });
+    expect(queryParameters.timelineCursor.schema.pattern).toBe("^[1-9][0-9]{0,18}$");
+    expect(queryParameters.timelineEventId.schema.pattern).toBe("^[1-9][0-9]{0,18}$");
+
+    for (const name of [
+      "PedidoTimelineHeader",
+      "PedidoTimelineLine",
+      "PedidoTimelineStateSnapshot",
+      "PedidoTimelinePayload",
+      "PedidoTimelineEvent",
+      "PedidoTimelineSnapshot",
+    ]) {
+      expect(spec.components.schemas[name].additionalProperties).toBe(false);
+    }
+    const timelineSchemas = {
+      event: spec.components.schemas.PedidoTimelineEvent,
+      snapshot: spec.components.schemas.PedidoTimelineSnapshot,
+      payload: spec.components.schemas.PedidoTimelinePayload,
+      line: spec.components.schemas.PedidoTimelineLine,
+    };
+    const propertyNames = [];
+    const collectPropertyNames = (value) => {
+      if (!value || typeof value !== "object") return;
+      if (value.properties) propertyNames.push(...Object.keys(value.properties));
+      for (const child of Object.values(value)) collectPropertyNames(child);
+    };
+    collectPropertyNames(timelineSchemas);
+    expect(propertyNames.join(" ")).not.toMatch(/precioMinimo|precioCosto|coste|margen|idempotency|payloadHash/i);
+  });
+
+  test("pedido timeline schema accepts its DTO and rejects extras at every nested boundary", () => {
+    const ajv = new Ajv({
+      allErrors: true,
+      schemaId: "auto",
+      validateSchema: false,
+      unknownFormats: "ignore",
+      nullable: true,
+    });
+    ajv.addSchema(spec, "gmp-openapi");
+    const validate = ajv.compile({
+      $ref: "gmp-openapi#/components/schemas/PedidoDetailReadResponse",
+    });
+    const valid = {
+      success: true,
+      order: {
+        header: { id: 42, estado: "CONFIRMADO" },
+        lines: [],
+        timeline: {
+          status: "available",
+          events: [{
+            id: "9",
+            orderId: "42",
+            fromState: "BORRADOR",
+            toState: "CONFIRMADO",
+            actorId: "73",
+            actorRole: "COMERCIAL",
+            deviceId: null,
+            reason: "Confirmado",
+            originalClientAtUtc: "2026-11-02T08:15:00.123456Z",
+            serverOccurredAtLocal: "2026-11-02T09:15:01.654321",
+            serverTimeZone: "Europe/Madrid",
+          }],
+          hasMore: false,
+          nextCursor: null,
+          snapshotStatus: "available",
+          snapshot: {
+            id: "9",
+            orderId: "42",
+            fromState: "BORRADOR",
+            toState: "CONFIRMADO",
+            actorId: "73",
+            actorRole: "COMERCIAL",
+            deviceId: null,
+            reason: "Confirmado",
+            originalClientAtUtc: "2026-11-02T08:15:00.123456Z",
+            serverOccurredAtLocal: "2026-11-02T09:15:01.654321",
+            serverTimeZone: "Europe/Madrid",
+            payloadStatus: "available",
+            payload: {
+              event: "ORDER_CONFIRMED",
+              header: { estado: "CONFIRMADO", total: 49.572 },
+              lines: [{ codigoArticulo: "3075", cantidadEnvases: 1, precioVenta: 49.572 }],
+              before: {
+                header: { estado: "BORRADOR" },
+                lines: [{ codigoArticulo: "3075", precioVenta: 49.572 }],
+              },
+              after: {
+                header: { estado: "CONFIRMADO" },
+                lines: [{ codigoArticulo: "3075", precioVenta: 49.572 }],
+              },
+              bolsa: { consumo: 0, acumulacion: 0 },
+              originalClientAt: "2026-11-02T08:15:00.123456Z",
+            },
+          },
+        },
+      },
+    };
+    expect(validate(valid)).toBe(true);
+
+    const snapshotNotFound = JSON.parse(JSON.stringify(valid));
+    snapshotNotFound.order.timeline.snapshotStatus = "not_found";
+    snapshotNotFound.order.timeline.snapshot = null;
+    expect(validate(snapshotNotFound)).toBe(true);
+
+    for (const payloadStatus of ["missing", "corrupt"]) {
+      const payloadUnavailable = JSON.parse(JSON.stringify(valid));
+      payloadUnavailable.order.timeline.snapshot.payloadStatus = payloadStatus;
+      payloadUnavailable.order.timeline.snapshot.payload = null;
+      expect(validate(payloadUnavailable)).toBe(true);
+    }
+
+    for (const invalidValue of [false, 0, "invalid", []]) {
+      const invalidSnapshot = JSON.parse(JSON.stringify(valid));
+      invalidSnapshot.order.timeline.snapshot = invalidValue;
+      expect(validate(invalidSnapshot)).toBe(false);
+
+      const invalidPayload = JSON.parse(JSON.stringify(valid));
+      invalidPayload.order.timeline.snapshot.payload = invalidValue;
+      expect(validate(invalidPayload)).toBe(false);
+    }
+
+    const extraMutations = [
+      (dto) => { dto.order.timeline.extra = true; },
+      (dto) => { dto.order.timeline.snapshot.extra = true; },
+      (dto) => { dto.order.timeline.snapshot.payload.extra = true; },
+      (dto) => { dto.order.timeline.snapshot.payload.before.extra = true; },
+      (dto) => { dto.order.timeline.snapshot.payload.after.extra = true; },
+      (dto) => { dto.order.timeline.snapshot.payload.header.extra = true; },
+      (dto) => { dto.order.timeline.snapshot.payload.lines[0].extra = true; },
+      (dto) => { dto.order.timeline.snapshot.payload.bolsa.extra = true; },
+    ];
+    for (const mutate of extraMutations) {
+      const invalid = JSON.parse(JSON.stringify(valid));
+      mutate(invalid);
+      expect(validate(invalid)).toBe(false);
+      expect(validate.errors).toEqual(expect.arrayContaining([
+        expect.objectContaining({ keyword: "additionalProperties" }),
+      ]));
+    }
+  });
+
+  test("authentication examples use only the reviewed runtime placeholder", () => {
+    const login = spec.paths["/auth/login"].post;
+    const requestExample = login.requestBody.content["application/json"].example;
+    const responseExample = login.responses[200].content["application/json"].example;
+    const requestSchema = spec.components.schemas.AuthLoginRequest;
+    const responseSchema = spec.components.schemas.AuthLoginResponse;
+    const placeholders = [
+      requestExample.password,
+      responseExample.token,
+      responseExample.refreshToken,
+      requestSchema.properties.password.example,
+      responseSchema.properties.token.example,
+      responseSchema.properties.refreshToken.example,
+    ];
+    expect(placeholders).toEqual(Array(6).fill("<provided-at-runtime>"));
+    const rawSpec = fs.readFileSync(specPath, "utf8");
+    expect((rawSpec.match(/:\s*<provided-at-runtime>/g) || [])).toHaveLength(6);
   });
 });
 

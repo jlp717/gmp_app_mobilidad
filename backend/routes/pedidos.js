@@ -34,6 +34,7 @@ function sanitizeOrderForRole(order, role) {
 const express = require('express');
 const router = express.Router();
 const pedidosService = require('../services/pedidos.service');
+const { normalizeTimelineReadOptions } = require('../services/pedidos/order-state-events');
 const logger = require('../middleware/logger');
 const {
     buildClientVendorParamFilter,
@@ -238,6 +239,40 @@ function getPedidoUserContext(req) {
     };
 }
 
+function getPedidoDetailUserContext(req) {
+    const user = req.user || {};
+    const rawRole = [user.role, user.userRole, user.tipo]
+        .find((value) => value != null && String(value).trim() !== '');
+    const normalizedRole = String(rawRole || '').trim().toUpperCase();
+    const role = normalizedRole === 'JEF' ? 'JEFE_VENTAS'
+        : (normalizedRole === 'COM' ? 'COMERCIAL' : normalizedRole);
+    return {
+        role,
+        code: normalizePedidoCode(
+            user.code || user.codigo || user.codigoVendedor || user.vendedorCode || user.userId || user.id,
+        ),
+        isManager: role === 'JEFE_VENTAS' || role === 'ADMIN',
+        visibleVendorCodes: Array.isArray(user.vendorCodes || user.vendedorCodes)
+            ? (user.vendorCodes || user.vendedorCodes).map(normalizePedidoCode).filter(Boolean)
+            : [],
+    };
+}
+
+function authorizePedidoDetailRole(req) {
+    const context = getPedidoDetailUserContext(req);
+    if (!['COMERCIAL', 'JEFE_VENTAS', 'ADMIN'].includes(context.role)) {
+        return {
+            ok: false,
+            status: 403,
+            body: pedidoForbiddenBody(
+                'FORBIDDEN_ROLE',
+                'El rol autenticado no puede consultar el detalle comercial del pedido',
+            ),
+        };
+    }
+    return { ok: true, context };
+}
+
 function resolvePedidoVendorScope(req, requestedVendorCodes) {
     const requestedRaw = normalizePedidoCode(requestedVendorCodes || 'ALL');
     const requestedAll = !requestedRaw || requestedRaw.toUpperCase() === 'ALL';
@@ -269,8 +304,8 @@ function pedidoForbiddenBody(code, error) {
     return { success: false, code, error };
 }
 
-function authorizePedidoVendorCode(req, vendedorCode, action = 'consultar') {
-    const context = getPedidoUserContext(req);
+function authorizePedidoVendorCode(req, vendedorCode, action = 'consultar', contextOverride = null) {
+    const context = contextOverride || getPedidoUserContext(req);
     const vendor = normalizePedidoCode(vendedorCode);
     if (!vendor) {
         return { ok: false, status: 400, body: pedidoForbiddenBody('INVALID_VENDOR', 'vendedorCode invalido') };
@@ -382,12 +417,12 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
     return { ok: true, clientCode: client, vendorCodes: effectiveVendorCodes };
 }
 
-async function authorizePedidoAccess(req, orderId, action = 'consultar') {
+async function authorizePedidoAccess(req, orderId, action = 'consultar', contextOverride = null) {
     const ownership = await pedidosService.getOrderVendorForAuth(orderId);
     if (!ownership) {
         return { ok: false, status: 404, body: { success: false, code: 'ORDER_NOT_FOUND', error: 'Pedido no encontrado' } };
     }
-    const context = getPedidoUserContext(req);
+    const context = contextOverride || getPedidoUserContext(req);
     const orderVendor = normalizePedidoCode(ownership.vendedorCode);
     if (context.isManager) {
         if (context.visibleVendorCodes.length === 0 || context.visibleVendorCodes.some(code => pedidoCodesMatch(code, orderVendor))) {
@@ -1432,17 +1467,32 @@ router.get('/:id', async (req, res) => {
         if (id === null) {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
+        const detailRole = authorizePedidoDetailRole(req);
+        if (!detailRole.ok) {
+            return res.status(detailRole.status).json(detailRole.body);
+        }
+        const detailContext = detailRole.context;
+        const timeline = normalizeTimelineReadOptions({
+            limit: req.query.timelineLimit,
+            cursor: req.query.timelineCursor,
+            eventId: req.query.timelineEventId,
+        });
 
         const requestedVendorRaw = req.query.vendedorCode || req.query.vendedorCodes;
         if (requestedVendorRaw) {
             const requestedVendor = normalizePedidoCode(String(requestedVendorRaw).split(',')[0]);
-            const vendorAccess = authorizePedidoVendorCode(req, requestedVendor, 'consultar');
+            const vendorAccess = authorizePedidoVendorCode(
+                req,
+                requestedVendor,
+                'consultar',
+                detailContext,
+            );
             if (!vendorAccess.ok) {
                 return res.status(vendorAccess.status).json(vendorAccess.body);
             }
         }
 
-        const ownership = await authorizePedidoAccess(req, id, 'consultar');
+        const ownership = await authorizePedidoAccess(req, id, 'consultar', detailContext);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
@@ -1457,13 +1507,23 @@ router.get('/:id', async (req, res) => {
             }
         }
 
-        const order = await pedidosService.getOrderDetail(id);
+        const order = await pedidosService.getOrderDetail(id, {
+            includeReadModel: true,
+            timeline,
+        });
 
         if (!order) {
             return res.status(404).json({ success: false, error: 'Order not found' });
         }
 
-        res.json({ success: true, order: stripMarginFromOrder(order, req.user) });
+        res.json({
+            success: true,
+            order: stripMarginFromOrder(order, {
+                ...req.user,
+                role: detailContext.role,
+                isJefeVentas: detailContext.isManager,
+            }),
+        });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /${req.params.id}: ${error.message}`);
         return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');

@@ -200,6 +200,9 @@ describe('APP_ENV profile resolver', () => {
     expect(check.sql).toContain('QSYS2.SYSTABLES');
     expect(check.sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|MERGE|ALTER|DROP|CREATE)\b/);
     expect(check.params).toContain('TEST_PEDIDOS_CAB');
+    expect(check.params).toContain('TEST_PEDIDO_STATE_EVENTS');
+    expect(check.params).toContain('TEST_LIQUIDACION_COMERCIAL');
+    expect(check.params).toContain('TEST_DEVOLUCIONES_COMERCIAL');
     expect(check.params).toContain('DSEDAC');
     expect(check.params).toContain('DSED');
   });
@@ -212,31 +215,111 @@ describe('APP_ENV profile resolver', () => {
     const objects = expectedCatalogObjects({ tableSet: 'isolated_test' });
     const queries = [];
     const close = jest.fn().mockResolvedValue(undefined);
+    const { APP_BUFFER_REQUIREMENTS } = require('../utils/db2-app-buffer-capability');
+    const bufferObjects = objects.filter(({ table }) => (
+      /(?:PEDIDO_STATE_EVENTS|LIQUIDACION_COMERCIAL|DEVOLUCIONES_COMERCIAL)$/.test(table)
+    ));
     const connect = jest.fn().mockResolvedValue({
-      query: jest.fn().mockImplementation(async (sql, params) => {
+      query: jest.fn().mockImplementation((sql, params) => {
         queries.push({ sql, params });
-        if (queries.length === 1) return [{ OK: 1 }];
-        return objects.map(({ schema, table }) => ({
+        if (/SYSDUMMY1/.test(sql)) return Promise.resolve([{ OK: 1 }]);
+        if (/QSYS2\.SYSTABLES/.test(sql)) return Promise.resolve(objects.map(({ schema, table }) => ({
           TABLE_SCHEMA: schema,
           TABLE_NAME: table,
+        })));
+        if (/QSYS2\.SYSCOLUMNS/.test(sql)) return Promise.resolve(bufferObjects.flatMap(({ schema, table }) => {
+          const logical = table.replace(/^TEST_/, '');
+          return APP_BUFFER_REQUIREMENTS[logical].columns.map((spec) => ({
+            TABLE_SCHEMA: schema,
+            TABLE_NAME: table,
+            COLUMN_NAME: spec.name,
+            DATA_TYPE: spec.type,
+            LENGTH: spec.length,
+            NUMERIC_PRECISION: spec.precision,
+            NUMERIC_SCALE: spec.scale,
+            IS_NULLABLE: spec.nullable,
+          }));
         }));
+        if (/QSYS2\.SYSINDEXES/.test(sql)) return Promise.resolve(bufferObjects.flatMap(({ table }) => {
+          const logical = table.replace(/^TEST_/, '');
+          return [
+            ...APP_BUFFER_REQUIREMENTS[logical].uniqueKeys.map((columns, keyIndex) => (
+              columns.map((COLUMN_NAME, index) => ({
+                TABLE_NAME: table,
+                INDEX_NAME: `U_${keyIndex}`,
+                IS_UNIQUE: 'U',
+                COLUMN_NAME,
+                ORDINAL_POSITION: index + 1,
+              }))
+            )),
+            ...APP_BUFFER_REQUIREMENTS[logical].indexes.map((columns, keyIndex) => (
+              columns.map((COLUMN_NAME, index) => ({
+                TABLE_NAME: table,
+                INDEX_NAME: `I_${keyIndex}`,
+                IS_UNIQUE: 'D',
+                COLUMN_NAME,
+                ORDINAL_POSITION: index + 1,
+              }))
+            )),
+          ].flat();
+        }));
+        if (/QSYS2\.SYSCHKCST/.test(sql)) return Promise.resolve(bufferObjects.flatMap(({ table }) => {
+          const logical = table.replace(/^TEST_/, '');
+          return APP_BUFFER_REQUIREMENTS[logical].checks.map((CHECK_CLAUSE, index) => ({
+            TABLE_SCHEMA: 'JAVIER',
+            TABLE_NAME: table,
+            CONSTRAINT_NAME: `CK_${index}`,
+            CHECK_CLAUSE,
+          }));
+        }));
+        if (/QSYS2\.SYSCST/.test(sql)) return Promise.resolve(bufferObjects.flatMap(({ table }) => {
+          const logical = table.replace(/^TEST_/, '');
+          return APP_BUFFER_REQUIREMENTS[logical].primaryKey.map((COLUMN_NAME, index) => ({
+            TABLE_SCHEMA: 'JAVIER',
+            TABLE_NAME: table,
+            CONSTRAINT_NAME: `PK_${logical}`,
+            CONSTRAINT_TYPE: 'PRIMARY KEY',
+            ENABLED: 'YES',
+            COLUMN_NAME,
+            ORDINAL_POSITION: index + 1,
+          }));
+        }));
+        return Promise.resolve([]);
       }),
       close,
     });
 
     const result = await verifyDatabaseReadOnly(
-      { tableSet: 'isolated_test' },
+      sanitizeAppProfile(resolveAppProfile({ APP_ENV: 'test' })),
       { connect },
     );
 
     expect(result).toMatchObject({ valid: true, readOnly: true, selectOne: true });
     expect(connect).toHaveBeenCalledTimes(1);
     expect(close).toHaveBeenCalledTimes(1);
-    expect(queries).toHaveLength(2);
+    expect(queries).toHaveLength(7);
     for (const { sql } of queries) {
       expect(sql).toMatch(/^SELECT /);
       expect(sql).not.toMatch(/\b(CALL|INSERT|UPDATE|DELETE|MERGE|ALTER|DROP|CREATE)\b/);
     }
+  });
+
+  test.each([
+    ['missing APP_ENV', {}],
+    ['contradictory table family', {
+      profile: 'production',
+      verified: true,
+      readSchema: 'DSEDAC',
+      writeSchema: 'JAVIER',
+      tableSet: 'isolated_test',
+    }],
+  ])('database verifier rejects %s before opening a connection', async (_label, profile) => {
+    const { verifyDatabaseReadOnly } = require('../scripts/tools/verify-app-environment');
+    const connect = jest.fn();
+
+    await expect(verifyDatabaseReadOnly(profile, { connect }))
+      .rejects.toMatchObject({ code: 'APP_BUFFER_PROFILE_INVALID' });
+    expect(connect).not.toHaveBeenCalled();
   });
 
   test('runtime profile HTTP handler exposes only the sanitized no-store contract', async () => {

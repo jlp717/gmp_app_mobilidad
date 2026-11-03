@@ -1,5 +1,14 @@
 'use strict';
 
+const ORIGINAL_ENV = { ...process.env };
+process.env.APP_ENV = 'test';
+process.env.REPARTO_TABLE_SET = 'isolated_test';
+process.env.DB2_WRITE_SCHEMA = 'JAVIER';
+
+afterAll(() => {
+  process.env = ORIGINAL_ENV;
+});
+
 const mockQuery = jest.fn();
 const mockQueryWithParams = jest.fn();
 const mockPoolConnect = jest.fn();
@@ -12,9 +21,13 @@ const mockTxRollback = jest.fn();
 const mockTxClose = jest.fn();
 const mockOpenDedicatedConnection = jest.fn();
 
+function mockNormalizeIsolatedFixtureSql(sql) {
+  return String(sql).replaceAll('JAVIER.TEST_', 'JAVIER.');
+}
+
 jest.mock('../config/db', () => ({
-  query: (...args) => mockQuery(...args),
-  queryWithParams: (...args) => mockQueryWithParams(...args),
+  query: (sql, ...args) => mockQuery(mockNormalizeIsolatedFixtureSql(sql), ...args),
+  queryWithParams: (sql, ...args) => mockQueryWithParams(mockNormalizeIsolatedFixtureSql(sql), ...args),
   getPool: () => ({ connect: mockPoolConnect }),
 }));
 
@@ -216,7 +229,7 @@ beforeEach(() => {
   mockTxRollback.mockResolvedValue(undefined);
   mockTxClose.mockResolvedValue(undefined);
   mockOpenDedicatedConnection.mockResolvedValue({
-    query: mockTxQuery,
+    query: (sql, params) => mockTxQuery(mockNormalizeIsolatedFixtureSql(sql), params),
     beginTransaction: mockTxBegin,
     commit: mockTxCommit,
     rollback: mockTxRollback,
@@ -425,7 +438,7 @@ describe('pedidos create idempotency', () => {
       /LOCK TABLE\s+JAVIER\.PEDIDO_IDEMPOTENCY/i.test(sql)
     )).toBe(true);
     const eventInsert = mockTxQuery.mock.calls.find(([sql]) =>
-      /INSERT INTO\s+JAVIER\.TEST_PEDIDO_STATE_EVENTS/i.test(sql)
+      /INSERT INTO\s+JAVIER\.(?:TEST_)?PEDIDO_STATE_EVENTS/i.test(sql)
     );
     expect(eventInsert?.[1]?.[10]).toBe('2026-11-02 08:09:10.123456');
   });
