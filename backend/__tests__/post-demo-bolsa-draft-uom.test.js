@@ -138,14 +138,14 @@ describe('purgeExpiredDraftReservations export', () => {
   });
 });
 
-describe('comercial liquidacion isolated LQD', () => {
-  test('getLqdForVendorDay prefers TEST_LQD in isolated_test', () => {
+describe('comercial liquidacion ERP LQD read', () => {
+  test('getLqdForVendorDay reads the live ERP board and never a TEST_LQD shadow', () => {
     const source = require('fs').readFileSync(
       require('path').join(__dirname, '../services/comercial-devoluciones-service.js'),
       'utf8',
     );
-    expect(source).toMatch(/comercialErpSnapshotTable\('LQD'\)/);
-    expect(source).toMatch(/isIsolatedCommercialTest\(\)/);
+    expect(source).toMatch(/comercialErpLiveTable\('LQD'\)/);
+    expect(source).not.toMatch(/comercialErpSnapshotTable\('LQD'\)/);
   });
 });
 

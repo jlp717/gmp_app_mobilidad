@@ -1,6 +1,9 @@
 const path = require("path");
+const { resolveAppProfile } = require("../config/app-profile");
+const profile = resolveAppProfile({ APP_ENV: "test" });
 Object.assign(process.env, {
-  NODE_ENV: "test",
+  APP_ENV: "test",
+  ...profile.assignments,
   GMP_ENV_FILE: path.join(__dirname, "__missing-health-env"),
   REPARTO_ENVIRONMENT: "test",
   REPARTO_TABLE_SET: "isolated_test",

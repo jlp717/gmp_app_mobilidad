@@ -30,15 +30,20 @@ jest.mock('multer', () => {
   return multer;
 });
 
-jest.mock('fs', () => ({
-  existsSync: jest.fn(() => true),
-  mkdirSync: jest.fn(),
-  promises: {
-    mkdir: jest.fn().mockResolvedValue(undefined),
-    writeFile: (...args) => mockWriteFile(...args),
-    unlink: jest.fn().mockResolvedValue(undefined),
-  },
-}));
+jest.mock('fs', () => {
+  const actualFs = jest.requireActual('fs');
+  return {
+    ...actualFs,
+    existsSync: jest.fn(() => true),
+    mkdirSync: jest.fn(),
+    promises: {
+      ...actualFs.promises,
+      mkdir: jest.fn().mockResolvedValue(undefined),
+      writeFile: (...args) => mockWriteFile(...args),
+      unlink: jest.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 jest.mock('../config/db', () => ({
   query: (...args) => mockQuery(...args),

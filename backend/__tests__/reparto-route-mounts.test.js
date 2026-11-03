@@ -83,9 +83,9 @@ describe('canonical reparto app mounts', () => {
     expect(source).not.toContain("app.use('/api/rutero', verifyToken, repartoWriteGuard);");
     expect(countOccurrences(source, plannerMount)).toBe(1);
     expect(source.indexOf(plannerMount)).toBeGreaterThan(0);
-    expect(source).toContain("app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);");
-    expect(source).toContain("app.use('/api/repartidor', verifyToken, repartoFamilyWriteGuard);");
-    expect(source).toContain("app.use('/api/entregas', verifyToken, repartoConfirmationWriteGuard);");
+    expect(source).toContain("app.use('/api/repartidor-finanzas', verifyToken, appProfileWriteGuard, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);");
+    expect(source).toContain("app.use('/api/repartidor', verifyToken, appProfileWriteGuard, repartoFamilyWriteGuard);");
+    expect(source).toContain("app.use('/api/entregas', verifyToken, appProfileWriteGuard, repartoConfirmationWriteGuard);");
   });
 
   test('does not instantiate or mount parallel DDD reparto contracts', () => {
@@ -111,7 +111,7 @@ describe('canonical reparto app mounts', () => {
 
   test('mounts the canonical finance router exactly once before family selection', () => {
     const source = loadAppSource();
-    const financeMount = "app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);";
+    const financeMount = "app.use('/api/repartidor-finanzas', verifyToken, appProfileWriteGuard, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);";
     // WS2 DDD-CONSOLIDATION-001-FINAL: familia TS archivada, sin branching TS.
     // Marcador real vigente: bloque legacy JS + DDD.
     const firstFamilyMarker = source.indexOf('// WS2: solo familia JS legacy + DDD');

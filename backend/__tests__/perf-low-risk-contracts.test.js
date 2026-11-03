@@ -120,7 +120,9 @@ describe('perf low-risk contracts', () => {
             expect(end).toBeGreaterThan(start);
             const block = source.slice(start, end);
             expect(block).toMatch(/const lineInserts = lineContexts\.map/i);
-            expect(block).toMatch(/executeBulkInsert\(\(sql, params\) => queryWithParams\(sql, params, false\), lineInserts/i);
+            expect(block).toMatch(/withDraftCreationTransaction\(async \(conn\)/i);
+            expect(block).toMatch(/const queryFn = \(sql, params\) => conn\.query\(sql, params\)/i);
+            expect(block).toMatch(/executeBulkInsert\(queryFn, lineInserts/i);
             expect(block).toMatch(/chunkSize:\s*DB2_BULK_INSERT_CHUNK_SIZE/i);
             expect(block).not.toMatch(/for \(let i = 0; i < lines\.length; i\+\+\)[\s\S]*await queryWithParams\(lineInsert\.sql/);
             expect(block).not.toMatch(/await queryWithParams\(lineInsert\.sql/);

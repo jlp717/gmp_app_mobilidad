@@ -3,10 +3,26 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { resolveAppProfile } = require('../config/app-profile');
 
 const backendRoot = path.resolve(__dirname, '..');
 const serverPath = path.join(backendRoot, 'server.js');
 const appPath = path.join(backendRoot, 'app.js');
+
+function canonicalTestEnv(overrides = {}) {
+  const profile = resolveAppProfile({ APP_ENV: 'test' });
+  if (!profile.valid) throw new Error('Canonical test profile fixture is invalid');
+  return {
+    ...process.env,
+    APP_ENV: 'test',
+    ...profile.assignments,
+    ODBC_DSN: 'GMP',
+    REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+    USE_TS_ROUTES: 'false',
+    USE_DDD_ROUTES: 'false',
+    ...overrides,
+  };
+}
 
 function loadServerSource() {
   return fs.readFileSync(serverPath, 'utf8');
@@ -21,14 +37,12 @@ function invalidRouteModeProcess(overrides = {}) {
     cwd: backendRoot,
     encoding: 'utf8',
     timeout: 10000,
-    env: {
-      ...process.env,
-      NODE_ENV: 'test',
+    env: canonicalTestEnv({
       SKIP_PRODUCTION_CONFIG_VALIDATION: 'true',
       USE_TS_ROUTES: 'true',
       USE_DDD_ROUTES: 'true',
       ...overrides,
-    },
+    }),
   });
 }
 
@@ -37,26 +51,11 @@ function invalidStartupMutationProcess(overrides = {}) {
     cwd: backendRoot,
     encoding: 'utf8',
     timeout: 10000,
-    env: {
-      ...process.env,
-      NODE_ENV: 'test',
+    env: canonicalTestEnv({
       SKIP_PRODUCTION_CONFIG_VALIDATION: 'true',
-      USE_TS_ROUTES: 'false',
-      USE_DDD_ROUTES: 'false',
-      REPARTO_ENVIRONMENT: 'test',
-      REPARTO_TABLE_SET: 'isolated_test',
-      REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
-      REPARTO_WRITES_ENABLED: 'false',
-      REPARTO_PRODUCTION_WRITES_APPROVED: 'false',
-      REPARTO_PRODUCTION_ERP_WRITES_APPROVED: 'false',
-      REPARTO_CONFIRMATION_DB2_CAPABILITY_APPROVED: 'true',
-      REPARTIDOR_FINANCE_READ_SCHEMA: 'DSEDAC',
-      REPARTIDOR_FINANCE_APP_SCHEMA: 'JAVIER',
-      REPARTIDOR_FINANCE_ERP_SCHEMA: 'JAVIER',
-      ODBC_DSN: 'GMP',
       REPARTO_STARTUP_REPARTO_MIGRATIONS: 'true',
       ...overrides,
-    },
+    }),
   });
 }
 
@@ -106,7 +105,7 @@ describe('reparto server startup wiring', () => {
       cwd: backendRoot,
       encoding: 'utf8',
       timeout: 60000,
-      env: { ...process.env, NODE_ENV: 'test', USE_TS_ROUTES: 'false', USE_DDD_ROUTES: 'false' },
+      env: canonicalTestEnv(),
     });
 
     expect(result.error).toBeUndefined();
@@ -132,13 +131,14 @@ describe('reparto server startup wiring', () => {
     expect(policyPosition).toBeLessThan(appImportPosition);
   });
 
-  test('rejects contradictory startup mutation settings before initDb or listen', () => {
+  test('rejects profile-contradictory startup mutation settings before domain guards or listen', () => {
     const result = invalidStartupMutationProcess();
     const output = `${result.stdout || ''}${result.stderr || ''}`;
 
     expect(result.error).toBeUndefined();
     expect(result.status).not.toBe(0);
-    expect(output).toContain('Invalid reparto startup mutation policy');
+    expect(output).toContain('Invalid APP_ENV profile');
+    expect(output).toContain('REPARTO_STARTUP_REPARTO_MIGRATIONS=true contradicts APP_ENV=test');
     expect(output).not.toContain('Configuration validated successfully');
     expect(output).not.toContain('Listening on ALL interfaces');
   });
@@ -163,7 +163,7 @@ describe('reparto server startup wiring', () => {
   test('connects canonical app once and verifies finance catalog before listen', () => {
     const serverSource = loadServerSource();
     const appSource = loadAppSource();
-    const canonicalMount = "app.use('/api/repartidor-finanzas', verifyToken, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);";
+    const canonicalMount = "app.use('/api/repartidor-finanzas', verifyToken, appProfileWriteGuard, repartoFinanzasWriteGuard, canonicalRepartidorFinanzasRoutes);";
     // WS2 DDD-CONSOLIDATION-001-FINAL: familia TS archivada, sin branching TS.
     // Marcador real vigente: bloque legacy JS + DDD.
     const firstFamilyMarker = appSource.indexOf('// WS2: solo familia JS legacy + DDD');

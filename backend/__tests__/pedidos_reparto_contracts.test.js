@@ -49,7 +49,31 @@ jest.mock('../services/laclae', () => ({
   getClientDays: mockGetClientDays,
 }));
 
+const { resolveAppProfile } = require('../config/app-profile');
+const canonicalTestProfile = resolveAppProfile({ APP_ENV: 'test' });
+const canonicalTestEnv = {
+  APP_ENV: 'test',
+  ...canonicalTestProfile.assignments,
+  ODBC_DSN: 'GMP',
+  REPARTO_EVIDENCE_PENDING_TTL_HOURS: '24',
+};
+const originalProfileEnv = Object.fromEntries(
+  Object.keys(canonicalTestEnv).map((key) => [key, process.env[key]]),
+);
+
+function installCanonicalTestProfile() {
+  Object.assign(process.env, canonicalTestEnv);
+}
+
+installCanonicalTestProfile();
 const pedidosService = require('../services/pedidos.service');
+
+afterAll(() => {
+  for (const [key, value] of Object.entries(originalProfileEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
 
 function mockSuccessfulConfirmationQueries({
   vehicleCode = '02',
@@ -114,7 +138,7 @@ function mockSuccessfulConfirmationQueries({
     if (/SELECT\s+ID,\s+TRIM\(ESTADO\).*DESCUENTO_GLOBAL/is.test(sql)) {
       return [{ ...orderHeader, ESTADO: mockLocalState }];
     }
-    if (/FROM\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) {
+    if (/FROM\s+JAVIER\.TEST_BOLSA_COMERCIAL/i.test(sql)) {
       return [{
         ID: 9,
         CODIGOVENDEDOR: vendedorCode,
@@ -140,10 +164,10 @@ function mockSuccessfulConfirmationQueries({
     if (/FROM\s+DSEDAC\.ARO/i.test(sql)) {
       return [{ CODE: 'ART001', ENVASES: 999, UNIDADES: 999 }];
     }
-    if (/FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) {
+    if (/FROM\s+JAVIER\.TEST_PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) {
       return includeLine ? [orderLine] : [];
     }
-    if (/UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql)) {
+    if (/UPDATE\s+JAVIER\.TEST_PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql)) {
       return [];
     }
     if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) {
@@ -249,10 +273,7 @@ beforeEach(() => {
     rollback: mockRollback,
     close: mockConnClose,
   });
-  delete process.env.PEDIDOS_CONFIRMATION_SCHEMA;
-  delete process.env.PEDIDOS_EXPORT_TO_SYSTEM;
-  delete process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED;
-  delete process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED;
+  installCanonicalTestProfile();
   delete process.env.PEDIDOS_SYSTEM_TERMINAL;
 });
 
@@ -264,7 +285,7 @@ describe('pedidos reparto confirmation contract', () => {
     mockQueryWithParams.mockImplementation(async (sql, ...args) => {
       if (/FROM\s+DSEDAC\.ARO/i.test(sql)) return [{ CODE: 'ART001', ENVASES: 4, UNIDADES: 4 }];
       const rows = await original(sql, ...args);
-      if (/FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) {
+      if (/FROM\s+JAVIER\.TEST_PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) {
         return [3, 2].map((quantity, index) => ({ ...rows[0], ID: 7 + index,
           TIPOLINEA: index ? 'G' : 'R',
           CANTIDADENVASES: unit === 'envases' ? quantity : 0,
@@ -309,7 +330,7 @@ describe('pedidos reparto confirmation contract', () => {
     ).rejects.toThrow(/Fecha reparto.*miercoles.*martes, jueves/i);
 
     const updated = mockQueryWithParams.mock.calls.some(([sql]) =>
-      /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql),
+      /UPDATE\s+JAVIER\.TEST_PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql),
     );
     expect(updated).toBe(false);
   });
@@ -325,7 +346,7 @@ describe('pedidos reparto confirmation contract', () => {
     await pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' });
 
     const updateCall = mockQueryWithParams.mock.calls.find(([sql]) =>
-      /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql),
+      /UPDATE\s+JAVIER\.TEST_PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql),
     );
     expect(updateCall).toBeDefined();
     const [updateSql, params] = updateCall;
@@ -349,7 +370,7 @@ describe('pedidos reparto confirmation contract', () => {
     });
 
     const updateCall = mockQueryWithParams.mock.calls.find(([sql]) =>
-      /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql),
+      /UPDATE\s+JAVIER\.TEST_PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql),
     );
     expect(updateCall).toBeDefined();
     const params = updateCall[1];
@@ -365,7 +386,7 @@ describe('pedidos reparto confirmation contract', () => {
       year: 2026,
     });
     const overlayCall = mockQueryWithParams.mock.calls.find(([sql]) =>
-      /FROM\s+JAVIER\.PEDIDOS_CAB\s+C/i.test(sql) && /RUTERO_CONFIG/i.test(sql),
+      /FROM\s+JAVIER\.TEST_PEDIDOS_CAB\s+C/i.test(sql) && /RUTERO_CONFIG/i.test(sql),
     );
     expect(overlayCall).toBeDefined();
     expect(overlayCall[0]).toMatch(/TRIM\(C\.ESTADO\)\s*=\s*'CONFIRMADO'/i);
@@ -386,11 +407,15 @@ describe('pedidos reparto confirmation contract', () => {
     const sqlText = mockQueryWithParams.mock.calls.map(([sql]) => sql).join('\n');
     expect(sqlText).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
     const txSql = mockConnQuery.mock.calls.map(([sql]) => sql).join('\n');
+    expect(txSql).toMatch(/UPDATE\s+JAVIER\.TEST_PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i);
+    expect(txSql).toMatch(/INSERT\s+INTO\s+JAVIER\.TEST_PEDIDO_STATE_EVENTS/i);
+    expect(txSql).not.toMatch(
+      /(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+JAVIER\.(?:PEDIDOS_CAB|PEDIDOS_LIN|PEDIDO_STATE_EVENTS|BOLSA_COMERCIAL|MOVIMIENTOS_BOLSA)\b/i,
+    );
     expect(txSql).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
   });
 
   test('PEDIDOS_EXPORT_TO_SYSTEM=false disables DSEDAC order export', async () => {
-    process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'DSEDAC';
     process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'false';
     mockGetClientDays.mockReturnValue({
       deliveryDays: ['martes', 'jueves'],
@@ -406,7 +431,7 @@ describe('pedidos reparto confirmation contract', () => {
     expect(txSql).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
   });
 
-  test('PEDIDOS_EXPORT_TO_SYSTEM=true still needs explicit DSEDAC export approval', async () => {
+  test('rejects export flags that contradict the canonical TEST profile', async () => {
     process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'DSEDAC';
     process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
     mockGetClientDays.mockReturnValue({
@@ -415,7 +440,9 @@ describe('pedidos reparto confirmation contract', () => {
     });
     mockSuccessfulConfirmationQueries({ includeLine: true });
 
-    await pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' });
+    await expect(
+      pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' }),
+    ).rejects.toMatchObject({ code: 'APP_BUFFER_PROFILE_INVALID' });
 
     const sqlText = mockQueryWithParams.mock.calls.map(([sql]) => sql).join('\n');
     expect(sqlText).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
@@ -436,7 +463,7 @@ describe('pedidos reparto confirmation contract', () => {
     mockSuccessfulConfirmationQueries({ includeLine: true, vehicleCode: '11', driverCode: '57' });
     mockConnQuery.mockImplementation(async (sql) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 778 }];
-      if (/FROM\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) {
+      if (/FROM\s+JAVIER\.TEST_BOLSA_COMERCIAL/i.test(sql)) {
         return [{ ID: 9, CODIGOVENDEDOR: '57', EJERCICIO: 2026, MES: 5,
           SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
       }
@@ -472,7 +499,7 @@ describe('pedidos reparto confirmation contract', () => {
     expect(lpcInsert[1]).toEqual(expect.arrayContaining(['ART001', '1', 2, 20]));
 
     const localUpdate = mockConnQuery.mock.calls.find(([sql]) =>
-      /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql),
+      /UPDATE\s+JAVIER\.TEST_PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql),
     );
     expect(localUpdate).toBeDefined();
     expect(localUpdate[0]).toContain('TARGET_SCHEMA = ?');
@@ -495,7 +522,7 @@ describe('pedidos reparto confirmation contract', () => {
     mockSuccessfulConfirmationQueries({ includeLine: true, vehicleCode: '11', driverCode: '57' });
     mockConnQuery.mockImplementation(async (sql) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 779 }];
-      if (/FROM\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) {
+      if (/FROM\s+JAVIER\.TEST_BOLSA_COMERCIAL/i.test(sql)) {
         return [{ ID: 9, CODIGOVENDEDOR: '57', EJERCICIO: 2026, MES: 5,
           SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
       }
@@ -544,7 +571,7 @@ describe('pedidos reparto confirmation contract', () => {
     });
     mockConnQuery.mockImplementation(async (sql) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 780 }];
-      if (/FROM\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) {
+      if (/FROM\s+JAVIER\.TEST_BOLSA_COMERCIAL/i.test(sql)) {
         return [{ ID: 9, CODIGOVENDEDOR: '02', EJERCICIO: 2026, MES: 5,
           SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
       }
@@ -602,7 +629,7 @@ describe('pedidos reparto confirmation contract', () => {
     });
     mockConnQuery.mockImplementation(async (sql) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 781 }];
-      if (/FROM\s+JAVIER\.(?:TEST_)?BOLSA_COMERCIAL/i.test(sql)) {
+      if (/FROM\s+JAVIER\.TEST_BOLSA_COMERCIAL/i.test(sql)) {
         return [{ ID: 9, CODIGOVENDEDOR: 'A3', EJERCICIO: 2026, MES: 5,
           SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
       }
@@ -628,7 +655,7 @@ describe('pedidos reparto confirmation contract', () => {
   test('getOrderAlbaran resolves real CAC columns and document state', async () => {
     mockQueryWithParams.mockImplementation(async (sql, params) => {
       const normalized = String(sql).replace(/\s+/g, ' ').trim();
-      if (/FROM\s+JAVIER\.PEDIDOS_CAB\s+WHERE\s+ID\s*=\s*\?/i.test(normalized)) {
+      if (/FROM\s+JAVIER\.TEST_PEDIDOS_CAB\s+WHERE\s+ID\s*=\s*\?/i.test(normalized)) {
         expect(params).toEqual([42]);
         return [{
           CODIGOCLIENTE: '4300008381',
