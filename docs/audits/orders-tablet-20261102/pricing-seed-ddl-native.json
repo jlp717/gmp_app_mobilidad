@@ -1,0 +1,1 @@
+{"scope":"JAVIER.TEST_POLITICA_PRECIO_ART only","ddlAttempts":1,"dmlAttempts":0,"closed":true,"profile":"test","before":{"tableCount":0,"constraintCollisions":0},"created":true,"success":false,"code":"POLICY_TARGET_SCHEMA_MISMATCH","odbc":[]}

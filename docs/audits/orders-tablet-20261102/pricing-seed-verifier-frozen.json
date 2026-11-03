@@ -1,0 +1,19 @@
+{
+  "stash": "256e8568546e61b798c327ff15dcca66af6d983f",
+  "status": "BLOCKED",
+  "nativeCode": "POLICY_TARGET_SCHEMA_MISMATCH",
+  "tested": 21,
+  "rows": 0,
+  "assumedIntegerPrecision": 10,
+  "nativeIntegerPrecision": 9,
+  "files": [
+    {
+      "path": "backend/scripts/tools/seed-test-politica-precio-art.js",
+      "sha256": "93a004171bb95513432e439547173ce72d5b3a3c3cfa4771ba86bb9fb0b1f82e"
+    },
+    {
+      "path": "backend/__tests__/seed-test-politica-precio-art.test.js",
+      "sha256": "6a11d2537d4e3afd7e48456a85ca74bbe160f793abea73d0082185d326f27952"
+    }
+  ]
+}

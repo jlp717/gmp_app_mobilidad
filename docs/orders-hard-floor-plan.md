@@ -54,3 +54,11 @@ El modo jefe muestra Panel y las doce superficies de ventas. Comercial comparte 
 | Bolsa | Historial compacto de 10 sp, control de 32 dp y filas con densidad compacta en `bolsa_page.dart:986`, `:1161` y `:1431`. | Valores de saldo/consumo/límite con contraste medido en los widgets efectivos, etiquetas visibles y objetivos de 56 dp. |
 | Promociones | Chips compactos con `shrinkWrap` y rótulos de 10–13 sp en `promotions_list_page.dart:355` y `promotion_detail_page.dart:255`. | Selección explícita y legible con escala, precio y vigencia claros, sin cambiar la fuente ERP. |
 | Navegación | Los destinos dependen de label, índice y perfil. La matriz física completa permanece pendiente. | Validar todos los destinos, permisos, escala, orientación y safe area antes de tocar el shell compartido. |
+
+## Resultado del intento nativo TEST
+
+La tercera versión del seed pasó 21/21 pruebas independientes y revisión de seguridad. El motor aceptó la sentencia exacta `SET CURRENT SCHEMA JAVIER` en una sesión aislada. Se verificó ausencia previa de la tabla y de colisiones de restricciones, y el CREATE sellado creó `JAVIER.TEST_POLITICA_PRECIO_ART`.
+
+La comprobación inmediatamente posterior paró con `POLICY_TARGET_SCHEMA_MISMATCH` antes de cualquier INSERT. La conexión física se cerró. Un observador de sólo lectura confirmó que la tabla contiene **0 filas**, con 19 columnas, siete CHECK habilitados y journal `JAVIER.QSQJRN` con imágenes `*BOTH`. El catálogo IBM i declara `TARIFA_VARIANTES` como `INTEGER`, longitud física 4, precisión informada 9 y escala 0. La expectativa sellada asumía precisión informada 10. Las tres reparaciones normales del importador están agotadas. Una corrección posterior debe conservar las demás comparaciones estrictas y volver a validarse de forma independiente sobre esta tabla vacía.
+
+[Sesión de esquema](audits/orders-tablet-20261102/pricing-seed-schema-session.json) · [Creación y detención](audits/orders-tablet-20261102/pricing-seed-ddl-native.json) · [Postcheck físico](audits/orders-tablet-20261102/pricing-seed-target-after-ddl.json)
