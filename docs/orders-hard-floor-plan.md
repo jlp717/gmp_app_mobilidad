@@ -57,6 +57,10 @@ El modo jefe muestra Panel y las doce superficies de ventas. Comercial comparte 
 
 ## Resultado del intento nativo TEST
 
+**Carga completada en la segunda sesión del 03/11/2026.** La autorización posterior permitió corregir la precisión nativa del INTEGER. La primera ejecución con ese verificador abortó antes del INSERT porque la huella de DSEDAC había cambiado. La lectura fresca mantuvo las cardinalidades y selló `64f2a6c72049ea4d232c8e7b1862c7f48770f116d3ad7a3468dffa897843993b`. Una segunda ejecución descubrió que IBM i requiere tipar los tres NULL del SELECT de carga y volvió a dejar el destino vacío. La proyección corregida se probó primero en sólo lectura y devolvió 6.235 filas. QA pasó 23/23 pruebas focales sobre la fuente que se aplicó.
+
+La carga final fue de **0 a 6.235 filas**, con 6.235 claves distintas y una huella. La comparación nativa de material y claves fue exacta antes del commit. Un observador tras el cierre encontró los mismos recuentos y cuatro filas de muestra. Repetir el importador devolvió **0 inserciones, 0 actualizaciones y 6.235 filas intactas**. Se cerraron las seis conexiones. La escritura se limitó a `JAVIER.TEST_POLITICA_PRECIO_ART`; esta fase copia evidencia de tarifa y deja ausentes los costes, márgenes y unidades aún sin verificar. [Carga y replay nativos](audits/orders-tablet-20261102/pricing-seed-native-final.json)
+
 La tercera versión del seed pasó 21/21 pruebas independientes y revisión de seguridad. El motor aceptó la sentencia exacta `SET CURRENT SCHEMA JAVIER` en una sesión aislada. Se verificó ausencia previa de la tabla y de colisiones de restricciones, y el CREATE sellado creó `JAVIER.TEST_POLITICA_PRECIO_ART`.
 
 La comprobación inmediatamente posterior paró con `POLICY_TARGET_SCHEMA_MISMATCH` antes de cualquier INSERT. La conexión física se cerró. Un observador de sólo lectura confirmó que la tabla contiene **0 filas**, con 19 columnas, siete CHECK habilitados y journal `JAVIER.QSQJRN` con imágenes `*BOTH`. El catálogo IBM i declara `TARIFA_VARIANTES` como `INTEGER`, longitud física 4, precisión informada 9 y escala 0. La expectativa sellada asumía precisión informada 10. Las tres reparaciones normales del importador están agotadas. Una corrección posterior debe conservar las demás comparaciones estrictas y volver a validarse de forma independiente sobre esta tabla vacía.
@@ -74,8 +78,8 @@ El módulo de comparación exacta pasó 45/45 pruebas en revisión de seguridad 
 | Entrega | Estado | Verificación |
 |---|---|---|
 | Fórmula de margen sobre venta | DONE en fuente | `a0176f5`, 155 pruebas focales y 10.000 comparaciones exactas. |
-| DDL de catálogo TEST | DONE en DB2 | `87c2278`, tabla creada, clave y journal confirmados. La carga de catálogo es un paso separado y permanece bloqueada. |
-| Importador y aplicación del suelo en pedidos | BLOCKED | Carga detenida con 0 filas por el metadato INTEGER. El kernel exacto existe como candidato y pasó su revisión pura, con la integración de servidor pendiente. |
+| DDL y carga del catálogo TEST | DONE en DB2 | `87c2278` crea la tabla. La carga verificada posterior registra 6.235 claves únicas, con replay sin escrituras. |
+| Aplicación del suelo en pedidos | PARTIAL | El kernel exacto existe como candidato y pasó su revisión pura. Quedan pendientes los datos de política efectiva y el cableado de servidor. |
 | Cobros, presentación | DONE en fuente | `aa0ab18`, 44 pruebas del área y 1.228 Flutter. Montaje real de pantalla y estados en 390×844, 800×1280 y 1280×800 con texto al 200 %. |
 | Liquidación, presentación | DONE en fuente | `f22724c`, 37 pruebas del área y 1.236 Flutter. La revisión confirmó los mensajes vivos a 18 sp y los manejadores financieros existentes. |
 | Promociones, presentación | DONE en fuente | 5 pruebas focales y 52 de regresión. Verificación a 200 % en teléfono y tablet, contrastes efectivos de 4,691:1 y 7,930:1 en metadatos y 5,169:1 al seleccionar. Los callbacks de producto y regalo se ejecutaron con los mismos datos del flujo existente. |

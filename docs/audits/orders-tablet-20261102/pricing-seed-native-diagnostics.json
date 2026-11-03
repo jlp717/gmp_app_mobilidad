@@ -1,0 +1,1 @@
+{"readOnly":true,"checks":{"count":{"rows":1,"count":0},"insertProjection":{"errors":[{"state":"42S22","code":-206,"column":null}]},"nativeMismatch":{"rows":1,"count":6235},"initialMismatch":{"rows":1,"count":0}}}
