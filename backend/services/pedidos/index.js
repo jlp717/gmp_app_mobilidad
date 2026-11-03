@@ -1853,6 +1853,9 @@ function appendDraftMutationAudit(queryFn, {
 }) {
     const payload = { event, before, after };
     const digest = payloadHash(canonicalPayload(payload)).slice(0, 24);
+    const clientDigest = context.idempotencyKey
+        ? payloadHash(canonicalPayload({ clientKey: String(context.idempotencyKey) })).slice(0, 24)
+        : digest;
     return appendOrderStateEvent(queryFn, {
         pedidoId: orderId,
         fromState: 'BORRADOR',
@@ -1861,7 +1864,7 @@ function appendDraftMutationAudit(queryFn, {
         actorRole: context.actorRole || context.userRole,
         deviceId: context.deviceId,
         reason: context.reason,
-        idempotencyKey: context.idempotencyKey || `pedido-${orderId}-${event.toLowerCase()}-${digest}`,
+        idempotencyKey: `pedido-${orderId}-${event.toLowerCase()}-${clientDigest}`,
         originalClientAt: context.originalClientAt,
         payload,
     });
@@ -4464,9 +4467,12 @@ async function updateOrderLine(lineId, {
     descuentoLinea,
     lineDiscountPct,
     auditContext,
-}) {
+}, authorizedOrderId) {
     const id = parseInt(lineId, 10);
-    if (isNaN(id)) throw new Error('Invalid lineId');
+    const expectedOrderId = parseInt(authorizedOrderId, 10);
+    if (isNaN(id) || isNaN(expectedOrderId)) {
+        throw new OrderStateError('INVALID_LINE_PAYLOAD', 'lineId y pedidoId autorizados son obligatorios', 400);
+    }
 
     if (claseLinea !== undefined && !['VT', 'SC'].includes(claseLinea)) {
         throw new OrderStateError('INVALID_LINE_PAYLOAD', 'claseLinea inválida', 400);
@@ -4479,12 +4485,14 @@ async function updateOrderLine(lineId, {
                 COALESCE(DESCUENTO_LINEA, 0) AS DESCUENTO_LINEA,
                 TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA,
                 TRIM(CODIGOARTICULO) AS CODIGOARTICULO
-           FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ?`,
-        [id]
+           FROM ${PEDIDOS_LIN_TABLE} WHERE ID = ? AND PEDIDO_ID = ?`,
+        [id, expectedOrderId]
     );
-    if (!currentRows || currentRows.length === 0) throw new Error('Line not found');
+    if (!currentRows || currentRows.length === 0) {
+        throw new OrderStateError('LINE_NOT_FOUND', 'Línea de pedido no encontrada', 404);
+    }
 
-    const pedidoId = currentRows[0].PEDIDO_ID;
+    const pedidoId = expectedOrderId;
     const codigoArticulo = truncate(currentRows[0].CODIGOARTICULO, 10);
     const configuredPricing = await getConfiguredPricingMaps([codigoArticulo], '');
     const productPricing = configuredPricing.productPricing.get(codigoArticulo);
@@ -5502,7 +5510,10 @@ async function cancelOrder(orderId, options = {}) {
     }
     const clientCode = trimString(initial.CODIGOCLIENTE);
     const documentId = `PED-${id}-${clientCode}`;
-    const eventBaseKey = String(options.idempotencyKey || `pedido-${id}-cancel`).trim().slice(0, 96);
+    const eventBaseDigest = payloadHash(canonicalPayload({
+        clientKey: String(options.idempotencyKey || `pedido-${id}-cancel`),
+    })).slice(0, 24);
+    const eventBaseKey = `pedido-${id}-cancel-${eventBaseDigest}`;
     const bolsaService = require('../bolsa-comercial.service');
     const result = await withLocalConfirmationTransaction(async (conn) => {
         const queryFn = (sql, params) => conn.query(sql, params);

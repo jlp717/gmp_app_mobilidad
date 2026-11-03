@@ -1302,7 +1302,7 @@ describe('pedidos state machine contract', () => {
     await expect(pedidosService.updateOrderLine(7, {
       cantidadEnvases: 2,
       precioCosto: 0.01,
-    }))
+    }, 42))
       .rejects.toMatchObject({ code: 'STOCK_CHANGED_DURING_DRAFT_EDIT', status: 409 });
 
     const updateCall = mockTxQuery.mock.calls.find(([sql]) =>
@@ -1323,6 +1323,19 @@ describe('pedidos state machine contract', () => {
     ).rejects.toMatchObject({ code: 'ORDER_TRANSITION_ENDPOINT_DISABLED', status: 409 });
 
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO/i.test(sql))).toBe(false);
+  });
+
+  test('updateOrderLine binds authorized order before pricing or transactional work', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([]);
+
+    await expect(pedidosService.updateOrderLine(7, {
+      cantidadEnvases: 2,
+    }, 42)).rejects.toMatchObject({ code: 'LINE_NOT_FOUND', status: 404 });
+
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+    expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/WHERE\s+ID\s*=\s*\?\s+AND\s+PEDIDO_ID\s*=\s*\?/i);
+    expect(mockQueryWithParams.mock.calls[0][1]).toEqual([7, 42]);
+    expect(mockTxQuery).not.toHaveBeenCalled();
   });
 });
 
@@ -1406,7 +1419,15 @@ describe('pedidos mutation service error contract', () => {
       expect(result).toMatchObject({ cancelled: true, deleted: false, estado: 'CANCELADO' });
       expect(mockTxQuery.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_STOCK_RESERVE/i.test(sql))).toBe(true);
       expect(mockTxQuery.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.(?:TEST_)?PEDIDOS_(?:CAB|LIN)/i.test(sql))).toBe(false);
-      expect(mockTxQuery.mock.calls.filter(([sql]) => /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDO_STATE_EVENTS/i.test(sql))).toHaveLength(2);
+      const stateEventCalls = mockTxQuery.mock.calls.filter(([sql]) =>
+        /INSERT\s+INTO\s+JAVIER\.(?:TEST_)?PEDIDO_STATE_EVENTS/i.test(sql)
+      );
+      expect(stateEventCalls).toHaveLength(2);
+      const eventKeys = stateEventCalls.map(([, params]) => params[7]);
+      expect(eventKeys[0]).toMatch(/^pedido-42-cancel-[a-f0-9]{24}-start$/);
+      expect(eventKeys[1]).toMatch(/^pedido-42-cancel-[a-f0-9]{24}-done$/);
+      expect(eventKeys[0].replace(/-start$/, '')).toBe(eventKeys[1].replace(/-done$/, ''));
+      expect(eventKeys.join(' ')).not.toContain(`cancel-${initialState.toLowerCase()}-42`);
       if (initialState === 'CONFIRMADO') {
         expect(mockTxQuery.mock.calls.some(([sql]) => /M\.TIPO\s+IN\s*\('CONSUMO',\s*'ACUMULACION',\s*'REGISTRO'\)/i.test(sql))).toBe(true);
       }
@@ -1621,6 +1642,17 @@ describe('pedidos mutation route ownership contract', function() {
     const express = require('express');
     const mockService = {
       getOrderVendorForAuth: jest.fn().mockResolvedValue(orderVendor ? { id: 42, vendedorCode: orderVendor } : null),
+      normalizePedidoIdempotencyKey: jest.fn((value) => {
+        const normalized = String(value || '').trim();
+        if (!/^[A-Za-z0-9]{8,28}$/.test(normalized)) {
+          throw Object.assign(new Error('Clave de idempotencia invalida'), {
+            code: 'INVALID_IDEMPOTENCY_KEY', status: 400,
+          });
+        }
+        return normalized;
+      }),
+      ensurePedidoIdempotencyKeyFromRequest: jest.fn(() => 'mutationroute42'),
+      normalizePedidoSaleType: jest.fn((value) => String(value || 'CC').trim().toUpperCase()),
       createOrder: jest.fn().mockResolvedValue({ header: { id: 43, vendedor: user.code }, lines: [] }),
       getOrderDetail: jest.fn().mockResolvedValue({ header: { id: 42, vendedor: orderVendor }, lines: [] }),
       cloneOrder: jest.fn().mockResolvedValue({ clientCode: 'C001', lines: [] }),
@@ -1661,6 +1693,22 @@ describe('pedidos mutation route ownership contract', function() {
     expect(mockService.confirmOrder).toHaveBeenCalledWith(42, 'CC', expect.objectContaining({
       forceConfirm: false,
       userId: '01',
+    }));
+  });
+  test('legacy confirm does not elevate explicit COMERCIAL through isJefeVentas', async function() {
+    const { request, app, mockService } = makeMutationApp({
+      user: { code: '01', role: 'COMERCIAL', isJefeVentas: true }, orderVendor: '01',
+    });
+
+    const res = await request(app)
+      .put('/api/pedidos/42/confirm')
+      .send({ saleType: 'CC', forceConfirm: true, forceConfirmReason: 'Supervisor autoriza' });
+
+    expect(res.status).toBe(200);
+    expect(mockService.confirmOrder).toHaveBeenCalledWith(42, 'CC', expect.objectContaining({
+      forceConfirm: false,
+      adminOverride: false,
+      userRole: 'COMERCIAL',
     }));
   });
 
@@ -1821,7 +1869,7 @@ describe('pedidos mutation route ownership contract', function() {
     expect(mockService.getOrderVendorForAuth).toHaveBeenCalledWith(42);
     expect(mockService.addOrderLine).not.toHaveBeenCalled();
   });
-  test('PUT /api/pedidos/:id/lines/:lineId calls updateOrderLine(lineId, payload)', async function() {
+  test('PUT /api/pedidos/:id/lines/:lineId calls updateOrderLine(lineId, payload, authorizedOrderId)', async function() {
     const { request, app, mockService } = makeMutationApp({ user: { code: '01', role: 'COMERCIAL' }, orderVendor: '01' });
     const payload = {
       cantidadEnvases: 2,
@@ -1835,8 +1883,54 @@ describe('pedidos mutation route ownership contract', function() {
 
     expect(res.status).toBe(200);
     expect(mockService.getOrderVendorForAuth).toHaveBeenCalledWith(42);
-    expect(mockService.updateOrderLine).toHaveBeenCalledWith(7, expect.objectContaining(payload));
+    expect(mockService.updateOrderLine).toHaveBeenCalledWith(7, expect.objectContaining(payload), 42);
     expect(mockService.updateOrderLine).not.toHaveBeenCalledWith(42, 7, expect.anything());
+  });
+
+  test.each([
+    ['clone', 'get', '/api/pedidos/42/clone', 'cloneOrder'],
+    ['albaran', 'get', '/api/pedidos/42/albaran', 'getOrderAlbaran'],
+    ['pdf', 'get', '/api/pedidos/42/pdf', 'generateOrderPdf'],
+  ])('%s rejects REPARTIDOR before ownership lookup', async function(_label, method, path, serviceMethod) {
+    const { request, app, mockService } = makeMutationApp({
+      user: { code: '01', role: 'REPARTIDOR', isJefeVentas: true }, orderVendor: '01',
+    });
+    const res = await request(app)[method](path);
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_ROLE' });
+    expect(mockService.getOrderVendorForAuth).not.toHaveBeenCalled();
+    expect(mockService[serviceMethod]).not.toHaveBeenCalled();
+  });
+
+  test('legacy line update sanitizes costs for explicit COMERCIAL even with manager flag', async function() {
+    const { request, app, mockService } = makeMutationApp({
+      user: { code: '01', role: 'COMERCIAL', isJefeVentas: true }, orderVendor: '01',
+    });
+    mockService.updateOrderLine.mockResolvedValueOnce({
+      header: { id: 42, costo: 4, margen: 6, totalCosto: 4 },
+      lines: [{ id: 7, precioCosto: 4, importeCosto: 4, porcentajeMargen: 60 }],
+    });
+
+    const res = await request(app)
+      .put('/api/pedidos/42/lines/7')
+      .send({ cantidadEnvases: 2 });
+
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toMatch(/precioCosto|importeCosto|porcentajeMargen|totalCosto|"margen"|"costo"/);
+  });
+  test('legacy line update rejects malformed audit idempotency before service invocation', async function() {
+    const { request, app, mockService } = makeMutationApp({
+      user: { code: '01', role: 'COMERCIAL' }, orderVendor: '01',
+    });
+
+    const res = await request(app)
+      .put('/api/pedidos/42/lines/7')
+      .set('idempotency-key', 'bad-key')
+      .send({ cantidadEnvases: 2 });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ success: false, code: 'INVALID_IDEMPOTENCY_KEY' });
+    expect(mockService.updateOrderLine).not.toHaveBeenCalled();
   });
   test('DELETE /api/pedidos/:id/lines/:lineId calls deleteOrderLine(lineId, pedidoId)', async function() {
     const { request, app, mockService } = makeMutationApp({ user: { code: '01', role: 'COMERCIAL' }, orderVendor: '01' });
@@ -1857,10 +1951,14 @@ describe('pedidos mutation route ownership contract', function() {
     expect(mockService.getOrderVendorForAuth).toHaveBeenCalledWith(42);
     expect(mockService.cancelOrder).toHaveBeenCalledWith(42, expect.objectContaining({ userId: '01' }));
   });
-  test('JEFE_VENTAS can change cross-vendor order status', async function() {
+  test('generic status uses JWT actor and maps the disabled endpoint to 409', async function() {
     const { request, app, mockService } = makeMutationApp({ user: { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true }, orderVendor: '02' });
-    const res = await request(app).put('/api/pedidos/42/status').send({ status: 'CONFIRMADO' });
-    expect(res.status).toBe(200);
+    mockService.updateOrderStatus.mockRejectedValueOnce(Object.assign(
+      new Error('Use confirmacion o cancelacion explicita'),
+      { code: 'ORDER_TRANSITION_ENDPOINT_DISABLED', status: 409 },
+    ));
+    const res = await request(app).put('/api/pedidos/42/status').send({ status: 'CONFIRMADO', userId: '99' });
+    expect(res.status).toBe(409);
     expect(mockService.getOrderVendorForAuth).toHaveBeenCalledWith(42);
     expect(mockService.updateOrderStatus).toHaveBeenCalledWith(42, 'CONFIRMADO', expect.objectContaining({ userId: '80' }));
   });

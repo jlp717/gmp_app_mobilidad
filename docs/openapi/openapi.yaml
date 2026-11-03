@@ -11270,6 +11270,33 @@ paths:
             type: "string"
             example: "TEST-1"
           description: "Identificador id."
+        - name: "Idempotency-Key"
+          in: "header"
+          required: false
+          schema:
+            type: "string"
+            pattern: "^[A-Za-z0-9]{8,28}$"
+          description: "Clave opcional de idempotencia validada y acotada al pedido/acción."
+        - name: "X-Device-ID"
+          in: "header"
+          required: false
+          schema:
+            type: "string"
+            maxLength: 128
+          description: "Identificador del dispositivo autenticado para auditoría."
+        - name: "X-Device-Fingerprint"
+          in: "header"
+          required: false
+          schema:
+            type: "string"
+            maxLength: 128
+          description: "Alias compatible del identificador de dispositivo para auditoría."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PedidoCancellationRequest"
       responses:
         "200":
           description: "Solicitud completada"
@@ -11311,6 +11338,26 @@ paths:
                 success: false
                 error: "Acceso denegado"
                 code: "HTTP_403"
+        "404":
+          description: "Pedido no encontrado"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Pedido no encontrado"
+                code: "ORDER_NOT_FOUND"
+        "409":
+          description: "El estado o la integración ERP impiden cancelar el pedido"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "El pedido no se puede cancelar en su estado actual"
+                code: "PEDIDO_INVALID_STATE"
         "429":
           description: "Demasiadas solicitudes"
           content:
@@ -11552,6 +11599,33 @@ paths:
             type: "string"
             example: "TEST-1"
           description: "Identificador id."
+        - name: "Idempotency-Key"
+          in: "header"
+          required: false
+          schema:
+            type: "string"
+            pattern: "^[A-Za-z0-9]{8,28}$"
+          description: "Clave opcional de idempotencia validada y acotada al pedido/acción."
+        - name: "X-Device-ID"
+          in: "header"
+          required: false
+          schema:
+            type: "string"
+            maxLength: 128
+          description: "Identificador del dispositivo autenticado para auditoría."
+        - name: "X-Device-Fingerprint"
+          in: "header"
+          required: false
+          schema:
+            type: "string"
+            maxLength: 128
+          description: "Alias compatible del identificador de dispositivo para auditoría."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PedidoCancellationRequest"
       responses:
         "200":
           description: "Solicitud completada"
@@ -11593,6 +11667,26 @@ paths:
                 success: false
                 error: "Acceso denegado"
                 code: "HTTP_403"
+        "404":
+          description: "Pedido no encontrado"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "Pedido no encontrado"
+                code: "ORDER_NOT_FOUND"
+        "409":
+          description: "El estado o la integración ERP impiden cancelar el pedido"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                success: false
+                error: "El pedido no se puede cancelar en su estado actual"
+                code: "PEDIDO_INVALID_STATE"
         "429":
           description: "Demasiadas solicitudes"
           content:
@@ -21912,6 +22006,25 @@ components:
       scheme: "basic"
       description: "Basic Auth para documentación operativa protegida."
   schemas:
+    PedidoCancellationRequest:
+      type: "object"
+      additionalProperties: false
+      anyOf:
+        - required:
+            - "reason"
+        - required:
+            - "cancellationReason"
+      properties:
+        reason:
+          type: "string"
+          minLength: 3
+          maxLength: 500
+          description: "Motivo trazable de cancelación."
+        cancellationReason:
+          type: "string"
+          minLength: 3
+          maxLength: 500
+          description: "Alias compatible del motivo trazable de cancelación."
     PedidosProductCatalogResponse:
       type: "object"
       required:

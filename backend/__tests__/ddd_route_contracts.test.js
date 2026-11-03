@@ -24,12 +24,24 @@ const mockPedidosService = {
   }),
   getStockBatch: jest.fn(),
   deleteOrderLine: jest.fn(),
+  updateOrderLine: jest.fn(),
   createOrder: jest.fn(),
   extractIdempotencyKeyFromRequest: jest.fn(() => null),
   ensurePedidoIdempotencyKeyFromRequest: jest.fn(() => 'test-idempotency-key'),
+  normalizePedidoIdempotencyKey: jest.fn((value) => {
+    const normalized = String(value || '').trim();
+    if (!/^[A-Za-z0-9]{8,28}$/.test(normalized)) {
+      const error = new Error('Clave de idempotencia invalida');
+      error.code = 'INVALID_IDEMPOTENCY_KEY';
+      error.status = 400;
+      throw error;
+    }
+    return normalized;
+  }),
   confirmOrder: jest.fn(),
   updateOrderStatus: jest.fn(),
   cancelOrder: jest.fn(),
+  getOrderDetail: jest.fn(),
   cloneOrder: jest.fn(),
   getOrderAlbaran: jest.fn(),
   generateOrderPdf: jest.fn(),
@@ -145,6 +157,20 @@ function makeApp(router, user = { id: '01', code: '01', role: 'COMERCIAL' }) {
   return app;
 }
 
+function makeCanonicalPedidosApp(
+  router,
+  user = { id: '01', code: '01', role: 'COMERCIAL' },
+) {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.user = user;
+    next();
+  });
+  app.use('/api/pedidos', router);
+  return app;
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockCache.get.mockResolvedValue(null);
@@ -239,16 +265,26 @@ describe('DDD pedidos route contracts', () => {
 
     const res = await request(makeApp(createPedidosRoutes()))
       .post('/create')
+      .set('idempotency-key', 'create-route-22')
+      .set('x-device-id', 'tablet-route-01')
       .send({
         clientCode: 'C001',
         vendedorCode: '01',
         observaciones: 'nota',
+        originalCreatedAt: '2026-11-02T08:15:00.123456Z',
         lines: [{ codigoArticulo: 'P001', cantidadEnvases: 1 }],
       });
 
     expect(res.status).toBe(201);
     expect(mockPedidosService.createOrder).toHaveBeenCalledWith(
-      expect.objectContaining({ observaciones: 'nota' }),
+      expect.objectContaining({
+        observaciones: 'nota',
+        userId: '01',
+        userRole: 'COMERCIAL',
+        deviceId: 'tablet-route-01',
+        originalClientAt: '2026-11-02T08:15:00.123456Z',
+        idempotencyKey: 'test-idempotency-key',
+      }),
     );
     expect(res.body.id).toBe(22);
     expect(res.body.header).toEqual({ id: 22, estado: 'BORRADOR' });
@@ -313,6 +349,25 @@ describe('DDD pedidos route contracts', () => {
       });
 
     expect(res.status).toBe(403);
+    expect(mockPedidosService.createOrder).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['missing actor', { role: 'COMERCIAL' }, 401, 'AUTH_CONTEXT_MISSING'],
+    ['delivery role', { id: '01', code: '01', role: 'REPARTIDOR', isJefeVentas: true }, 403, 'FORBIDDEN_ROLE'],
+  ])('POST /create rejects %s before client/vendor lookups', async (_label, user, status, code) => {
+    const db = require('../config/db');
+    const res = await request(makeApp(createPedidosRoutes(), user))
+      .post('/create')
+      .send({
+        clientCode: 'C001',
+        vendedorCode: '01',
+        lines: [{ codigoArticulo: 'P001', cantidadEnvases: 1 }],
+      });
+
+    expect(res.status).toBe(status);
+    expect(res.body).toMatchObject({ success: false, code });
+    expect(db.queryWithParams).not.toHaveBeenCalled();
     expect(mockPedidosService.createOrder).not.toHaveBeenCalled();
   });
 
@@ -546,7 +601,7 @@ describe('DDD pedidos route contracts', () => {
   });
 
   test('GET /:id strips order margin fields for commercial users', async () => {
-    mockPedidosRepo.getOrderById.mockResolvedValue({
+    mockPedidosService.getOrderDetail.mockResolvedValue({
       id: 22,
       total: 100,
       costo: 60,
@@ -570,6 +625,101 @@ describe('DDD pedidos route contracts', () => {
     expect(res.body.order.header).not.toHaveProperty('margen');
     expect(res.body.order.lines[0]).not.toHaveProperty('precioCosto');
     expect(res.body.order.lines[0]).not.toHaveProperty('porcentajeMargen');
+  });
+
+  test('default DDD route at /api/pedidos forwards bounded timeline read-model options', async () => {
+    const { resolveRepartoRouteMode } = require('../config/reparto-runtime');
+    expect(resolveRepartoRouteMode({})).toMatchObject({
+      valid: true,
+      mode: 'ddd',
+      useDddRoutes: true,
+    });
+    mockPedidosService.getOrderDetail.mockResolvedValue({
+      header: { id: 22, vendedor: '01' },
+      lines: [],
+      timeline: { status: 'available', events: [], hasMore: false, nextCursor: null },
+    });
+
+    const res = await request(makeCanonicalPedidosApp(createPedidosRoutes()))
+      .get('/api/pedidos/22')
+      .query({ timelineLimit: '25', timelineCursor: '99', timelineEventId: '9' });
+
+    expect(res.status).toBe(200);
+    expect(mockPedidosService.getOrderDetail).toHaveBeenCalledWith(22, {
+      includeReadModel: true,
+      timeline: { limit: 25, cursor: '99', eventId: '9' },
+    });
+    expect(mockPedidosRepo.getOrderById).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['timelineLimit', '0', 'INVALID_TIMELINE_LIMIT'],
+    ['timelineCursor', '12x', 'INVALID_TIMELINE_CURSOR'],
+    ['timelineEventId', '9223372036854775808', 'INVALID_TIMELINE_EVENT_ID'],
+  ])('GET /:id rejects invalid %s before ownership or detail lookup', async (name, value, code) => {
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get('/22')
+      .query({ [name]: value });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ success: false, code });
+    expect(mockPedidosService.getOrderVendorForAuth).not.toHaveBeenCalled();
+    expect(mockPedidosService.getOrderDetail).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['REPARTIDOR', { id: '01', code: '01', role: 'REPARTIDOR' }],
+    ['unknown role', { id: '01', code: '01', role: 'DESCONOCIDO' }],
+  ])('GET /:id rejects %s before ownership lookup', async (_label, user) => {
+    const res = await request(makeApp(createPedidosRoutes(), user)).get('/22');
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_ROLE' });
+    expect(mockPedidosService.getOrderVendorForAuth).not.toHaveBeenCalled();
+    expect(mockPedidosService.getOrderDetail).not.toHaveBeenCalled();
+  });
+
+  test('GET /:id does not elevate an explicit COMERCIAL through isJefeVentas', async () => {
+    mockPedidosService.getOrderVendorForAuth.mockResolvedValueOnce({ vendedorCode: '99' });
+
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '01', code: '01', role: 'COMERCIAL', isJefeVentas: true,
+    })).get('/22');
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_VENDOR' });
+    expect(mockPedidosService.getOrderDetail).not.toHaveBeenCalled();
+  });
+
+  test('GET /:id keeps own-order COMERCIAL margin fields hidden despite isJefeVentas flag', async () => {
+    mockPedidosService.getOrderDetail.mockResolvedValue({
+      header: { id: 22, costo: 60, margen: 40 },
+      lines: [{ id: 1, precioVenta: 10, precioCosto: 6, porcentajeMargen: 40 }],
+    });
+
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '01', code: '01', role: 'COMERCIAL', isJefeVentas: true,
+    })).get('/22');
+
+    expect(res.status).toBe(200);
+    expect(res.body.order.header).not.toHaveProperty('costo');
+    expect(res.body.order.lines[0]).not.toHaveProperty('precioCosto');
+    expect(res.body.order.lines[0]).not.toHaveProperty('porcentajeMargen');
+  });
+
+  test.each([
+    ['legacy JEF', { id: '80', code: '80', userRole: 'JEF' }],
+    ['legacy ADMIN', { id: '80', code: '80', tipo: 'ADMIN' }],
+    ['canonical ADMIN in reparto mode', { id: '80', code: '80', role: 'ADMIN', activeMode: 'REPARTIDOR' }],
+  ])('GET /:id preserves authorized %s role compatibility', async (_label, user) => {
+    mockPedidosService.getOrderDetail.mockResolvedValue({ header: { id: 22 }, lines: [] });
+
+    const res = await request(makeApp(createPedidosRoutes(), user)).get('/22');
+
+    expect(res.status).toBe(200);
+    expect(mockPedidosService.getOrderDetail).toHaveBeenCalledWith(22, expect.objectContaining({
+      includeReadModel: true,
+    }));
   });
 
   test('GET /available-vehicles returns vehicles for Flutter truck assignment', async () => {
@@ -601,6 +751,8 @@ describe('DDD pedidos route contracts', () => {
 
     const blocked = await request(makeApp(createPedidosRoutes()))
       .put('/22/confirm')
+      .set('idempotency-key', 'confirmroute22')
+      .set('x-device-id', 'tablet-route-01')
       .send({ saleType: 'VC' });
 
     expect(blocked.status).toBe(409);
@@ -608,7 +760,12 @@ describe('DDD pedidos route contracts', () => {
     expect(mockPedidosService.confirmOrder).toHaveBeenCalledWith(
       22,
       'VC',
-      expect.objectContaining({ userId: '01' }),
+      expect.objectContaining({
+        userId: '01',
+        userRole: 'COMERCIAL',
+        deviceId: 'tablet-route-01',
+        idempotencyKey: 'confirmroute22',
+      }),
     );
 
     mockPedidosService.confirmOrder.mockResolvedValueOnce({
@@ -659,6 +816,26 @@ describe('DDD pedidos route contracts', () => {
     );
   });
 
+  test('PUT /:id/confirm does not elevate explicit COMERCIAL forceConfirm through isJefeVentas', async () => {
+    mockPedidosService.confirmOrder.mockResolvedValueOnce({
+      header: { id: 22, estado: 'CONFIRMADO' },
+      lines: [],
+    });
+
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '01', code: '01', role: 'COMERCIAL', isJefeVentas: true,
+    }))
+      .put('/22/confirm')
+      .send({ saleType: 'CC', forceConfirm: true, forceConfirmReason: 'Supervisor autoriza' });
+
+    expect(res.status).toBe(200);
+    expect(mockPedidosService.confirmOrder).toHaveBeenCalledWith(
+      22,
+      'CC',
+      expect.objectContaining({ forceConfirm: false, adminOverride: false, userRole: 'COMERCIAL' }),
+    );
+  });
+
   test('PUT /:id/lines validates codigoArticulo and claseLinea before service call', async () => {
     const missingArticle = await request(makeApp(createPedidosRoutes()))
       .put('/22/lines')
@@ -675,6 +852,87 @@ describe('DDD pedidos route contracts', () => {
     expect(invalidClass.status).toBe(400);
     expect(invalidClass.body).toMatchObject({ success: false, code: 'INVALID_LINE_PAYLOAD' });
     expect(mockPedidosService.addOrderLine).not.toHaveBeenCalled();
+  });
+
+  test('line add and update replace client auditContext with authenticated route metadata', async () => {
+    mockPedidosService.addOrderLine.mockResolvedValue({ id: 1 });
+    mockPedidosService.updateOrderLine.mockResolvedValue({ id: 7 });
+    const app = makeApp(createPedidosRoutes());
+    const headers = {
+      'idempotency-key': 'lineroute22',
+      'x-device-id': 'tablet-route-01',
+    };
+    const spoofedAudit = {
+      actorId: '99', actorRole: 'ADMIN', deviceId: 'spoofed', idempotencyKey: 'spoofed',
+    };
+
+    const added = await request(app)
+      .put('/22/lines')
+      .set(headers)
+      .send({ codigoArticulo: 'P001', cantidadEnvases: 1, auditContext: spoofedAudit });
+    const updated = await request(app)
+      .put('/22/lines/7')
+      .set(headers)
+      .send({ cantidadEnvases: 2, auditContext: spoofedAudit });
+
+    const expectedAudit = {
+      actorId: '01', actorRole: 'COMERCIAL', deviceId: 'tablet-route-01', idempotencyKey: 'lineroute22',
+    };
+    expect(added.status).toBe(200);
+    expect(updated.status).toBe(200);
+    expect(mockPedidosService.addOrderLine).toHaveBeenCalledWith(22, expect.objectContaining({ auditContext: expectedAudit }));
+    expect(mockPedidosService.updateOrderLine).toHaveBeenCalledWith(7, expect.objectContaining({ auditContext: expectedAudit }), 22);
+  });
+
+  test.each([
+    ['put alias', 'put', '/22/lines/7/delete'],
+    ['delete', 'delete', '/22/lines/7'],
+  ])('%s line delete forwards authenticated audit metadata', async (_label, method, path) => {
+    mockPedidosService.deleteOrderLine.mockResolvedValue({ id: 22 });
+
+    const res = await request(makeApp(createPedidosRoutes()))[method](path)
+      .set('idempotency-key', 'linedelroute22')
+      .set('x-device-fingerprint', 'tablet-fingerprint-01')
+      .send({ auditContext: { actorId: '99', actorRole: 'ADMIN' } });
+
+    expect(res.status).toBe(200);
+    expect(mockPedidosService.deleteOrderLine).toHaveBeenCalledWith(7, 22, {
+      actorId: '01',
+      actorRole: 'COMERCIAL',
+      deviceId: 'tablet-fingerprint-01',
+      idempotencyKey: 'linedelroute22',
+    });
+  });
+
+  test('mutation routes reject a malformed optional idempotency header before service invocation', async () => {
+    const res = await request(makeApp(createPedidosRoutes()))
+      .put('/22/lines/7')
+      .set('idempotency-key', 'bad-key')
+      .send({ cantidadEnvases: 2 });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ success: false, code: 'INVALID_IDEMPOTENCY_KEY' });
+    expect(mockPedidosService.updateOrderLine).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['confirm', 'put', '/22/confirm', { saleType: 'CC' }, 'confirmOrder'],
+    ['line add', 'put', '/22/lines', { codigoArticulo: 'P001', cantidadEnvases: 1 }, 'addOrderLine'],
+    ['line update', 'put', '/22/lines/7', { cantidadEnvases: 2 }, 'updateOrderLine'],
+    ['cancel', 'put', '/22/cancel', { reason: 'Pedido duplicado' }, 'cancelOrder'],
+  ])('%s strips cost and margin fields for canonical COMERCIAL even with manager flag', async (_label, method, path, body, serviceMethod) => {
+    mockPedidosService[serviceMethod].mockResolvedValueOnce({
+      header: { id: 22, costo: 4, margen: 6, totalCosto: 4 },
+      lines: [{ id: 7, precioCosto: 4, importeCosto: 4, porcentajeMargen: 60 }],
+      totalCosto: 4,
+      totalMargen: 6,
+    });
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '01', code: '01', role: 'COMERCIAL', isJefeVentas: true,
+    }))[method](path).send(body);
+
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toMatch(/precioCosto|importeCosto|porcentajeMargen|totalCosto|totalMargen|"margen"|"costo"/);
   });
 
   test('PUT /:id/confirm preserves typed service errors and hides public 500 detail', async () => {
@@ -729,6 +987,104 @@ describe('DDD pedidos route contracts', () => {
 
     expect(res.status).toBe(409);
     expect(res.body).toMatchObject({ success: false, code: 'PEDIDO_MANAGED_BY_ERP', error: 'El pedido confirmado ya lo gestiona el ERP' });
+  });
+
+  test('PUT /:id/cancel preserves typed cancellation-reason validation', async () => {
+    const reasonRequired = new Error('El motivo de cancelacion es obligatorio.');
+    reasonRequired.code = 'CANCELLATION_REASON_REQUIRED';
+    reasonRequired.status = 400;
+    mockPedidosService.cancelOrder.mockRejectedValueOnce(reasonRequired);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .put('/22/cancel')
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 'CANCELLATION_REASON_REQUIRED',
+      error: 'El motivo de cancelacion es obligatorio.',
+    });
+  });
+
+  test.each([
+    ['PUT cancel', 'put', '/22/cancel'],
+    ['DELETE alias', 'delete', '/22'],
+  ])('%s forwards cancellation reason and authenticated audit metadata', async (_label, method, path) => {
+    mockPedidosService.cancelOrder.mockResolvedValue({ header: { id: 22, estado: 'CANCELADO' } });
+
+    const res = await request(makeApp(createPedidosRoutes()))[method](path)
+      .set('idempotency-key', 'cancelroute22')
+      .set('x-device-id', 'tablet-route-01')
+      .send({ cancellationReason: 'Pedido duplicado por el cliente', userId: '99' });
+
+    expect(res.status).toBe(200);
+    expect(mockPedidosService.cancelOrder).toHaveBeenCalledWith(22, {
+      userId: '01',
+      userRole: 'COMERCIAL',
+      deviceId: 'tablet-route-01',
+      idempotencyKey: 'cancelroute22',
+      reason: 'Pedido duplicado por el cliente',
+    });
+    expect(mockPedidosRepo.deleteOrder).not.toHaveBeenCalled();
+  });
+
+  test('PUT /:id/status uses authenticated actor and returns the disabled transition as 409', async () => {
+    const disabled = Object.assign(new Error('Use confirmacion o cancelacion explicita'), {
+      code: 'ORDER_TRANSITION_ENDPOINT_DISABLED', status: 409,
+    });
+    mockPedidosService.updateOrderStatus.mockRejectedValueOnce(disabled);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .put('/22/status')
+      .send({ status: 'CONFIRMADO', userId: '99' });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ success: false, code: 'ORDER_TRANSITION_ENDPOINT_DISABLED' });
+    expect(mockPedidosService.updateOrderStatus).toHaveBeenCalledWith(22, 'CONFIRMADO', { userId: '01' });
+  });
+
+  test.each([
+    ['clone', '/22/clone', 'cloneOrder'],
+    ['albaran', '/22/albaran', 'getOrderAlbaran'],
+    ['pdf', '/22/pdf', 'generateOrderPdf'],
+  ])('GET %s rejects non-commercial role before ownership lookup', async (_label, path, serviceMethod) => {
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '01', code: '01', role: 'REPARTIDOR', isJefeVentas: true,
+    })).get(path);
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_ROLE' });
+    expect(mockPedidosService.getOrderVendorForAuth).not.toHaveBeenCalled();
+    expect(mockPedidosService[serviceMethod]).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['confirm', 'put', '/22/confirm', { saleType: 'CC' }],
+    ['line add', 'put', '/22/lines', { codigoArticulo: 'P001', cantidadEnvases: 1 }],
+    ['cancel', 'put', '/22/cancel', { reason: 'Pedido duplicado' }],
+  ])('%s rejects REPARTIDOR before ownership and mutation', async (_label, method, path, body) => {
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '01', code: '01', role: 'REPARTIDOR', isJefeVentas: true,
+    }))[method](path).send(body);
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_ROLE' });
+    expect(mockPedidosService.getOrderVendorForAuth).not.toHaveBeenCalled();
+    expect(mockPedidosService.confirmOrder).not.toHaveBeenCalled();
+    expect(mockPedidosService.addOrderLine).not.toHaveBeenCalled();
+    expect(mockPedidosService.cancelOrder).not.toHaveBeenCalled();
+  });
+
+  test('mutation rejects a missing authenticated actor before ownership lookup', async () => {
+    const res = await request(makeApp(createPedidosRoutes(), { role: 'COMERCIAL' }))
+      .put('/22/cancel')
+      .send({ reason: 'Pedido duplicado' });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ success: false, code: 'AUTH_CONTEXT_MISSING' });
+    expect(mockPedidosService.getOrderVendorForAuth).not.toHaveBeenCalled();
+    expect(mockPedidosService.cancelOrder).not.toHaveBeenCalled();
   });
 
   test('PUT /:id/confirm rejects invalid saleType and cross-vendor commercial ownership', async () => {

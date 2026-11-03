@@ -1142,7 +1142,7 @@ describe("pedidos confirmation bolsa contract", () => {
     const pedidosService = require('../services/pedidos.service');
     const confirmPromise = pedidosService.confirmOrder(46, 'CC', { deliveryDate: '2026-06-09' });
     await lockedValidationEntered;
-    const editPromise = pedidosService.updateOrderLine(11, { cantidadEnvases: 2 });
+    const editPromise = pedidosService.updateOrderLine(11, { cantidadEnvases: 2 }, 46);
     const editExpectation = expect(editPromise).rejects.toMatchObject({
       code: 'ORDER_NOT_EDITABLE',
       status: 409,

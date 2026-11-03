@@ -413,6 +413,36 @@ describe("OpenAPI documentation quality", () => {
     }
   });
 
+  test("pedido cancellation aliases document reason, audit headers and typed conflicts", () => {
+    const operations = [
+      spec.paths["/pedidos/{id}"].delete,
+      spec.paths["/pedidos/{id}/cancel"].put,
+    ];
+    for (const operation of operations) {
+      const parameterNames = operation.parameters.map((parameter) => parameter.name.toLowerCase());
+      expect(parameterNames).toEqual(expect.arrayContaining([
+        "id",
+        "idempotency-key",
+        "x-device-id",
+        "x-device-fingerprint",
+      ]));
+      expect(operation.requestBody.required).toBe(true);
+      expect(operation.requestBody.content["application/json"].schema).toEqual({
+        $ref: "#/components/schemas/PedidoCancellationRequest",
+      });
+      expect(Object.keys(operation.responses)).toEqual(expect.arrayContaining([
+        "200", "400", "401", "403", "404", "409", "500",
+      ]));
+    }
+
+    const ajv = new Ajv({ allErrors: true, schemaId: "auto", validateSchema: false });
+    const validate = ajv.compile(spec.components.schemas.PedidoCancellationRequest);
+    expect(validate({ reason: "Cliente solicita cancelar" })).toBe(true);
+    expect(validate({ cancellationReason: "Pedido duplicado" })).toBe(true);
+    expect(validate({})).toBe(false);
+    expect(validate({ reason: "Pedido duplicado", actorId: "99" })).toBe(false);
+  });
+
   test("authentication examples use only the reviewed runtime placeholder", () => {
     const login = spec.paths["/auth/login"].post;
     const requestExample = login.requestBody.content["application/json"].example;

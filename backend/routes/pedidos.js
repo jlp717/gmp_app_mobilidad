@@ -6,29 +6,7 @@
  */
 
 function sanitizeOrderForRole(order, role) {
-  if (role === 'JEFE_VENTAS' || role === 'ADMIN') return order;
-  // Eliminar campos sensibles para COMERCIAL/REPARTIDOR
-  if (!order) return order;
-  
-  // Create a deep copy to avoid mutating the original
-  const safe = JSON.parse(JSON.stringify(order));
-  
-  delete safe.importeCosto;
-  delete safe.importeMargen;
-  delete safe.porcentajeMargen;
-  delete safe.totalCosto;
-  delete safe.totalMargen;
-  
-  if (Array.isArray(safe.lines)) {
-    safe.lines = safe.lines.map(l => {
-      delete l.precioCosto;
-      delete l.importeCosto;
-      delete l.importeMargen;
-      delete l.porcentajeMargen;
-      return l;
-    });
-  }
-  return safe;
+  return stripMarginFromOrder(order, { role });
 }
 
 const express = require('express');
@@ -63,14 +41,13 @@ router.use(verifyToken);
 // Req #2: Margin visibility - only JEFE_VENTAS / ADMIN see cost/margin data.
 const MARGIN_VISIBLE_ROLES = ['JEFE_VENTAS', 'ADMIN'];
 function canSeeMargin(user) {
-    const role = (user?.role || '').toUpperCase();
-    return MARGIN_VISIBLE_ROLES.includes(role) || user?.isJefeVentas === true;
+    return MARGIN_VISIBLE_ROLES.includes(normalizePedidoActorRole(user));
 }
 
 function canUseServerForceConfirm(req, body = {}) {
     if (body.forceConfirm !== true) return false;
-    const role = String(req.user?.role || '').toUpperCase();
-    const isAdmin = req.user?.isJefeVentas === true || role === 'JEFE_VENTAS' || role === 'ADMIN';
+    const role = normalizePedidoActorRole(req.user);
+    const isAdmin = role === 'JEFE_VENTAS' || role === 'ADMIN';
     const reason = String(body.forceConfirmReason || body.auditReason || '').trim();
     return isAdmin && reason.length >= 8;
 }
@@ -130,29 +107,14 @@ function normalizePedidoSaleTypeForRoute(value) {
 
 function stripMarginFromOrder(order, user) {
     if (canSeeMargin(user)) return order;
-    const clean = { ...order };
-    delete clean.costo;
-    delete clean.margen;
-    delete clean.importeCosto;
-    delete clean.importeMargen;
-    if (clean.header) {
-        clean.header = { ...clean.header };
-        delete clean.header.costo;
-        delete clean.header.margen;
-        delete clean.header.importeCosto;
-        delete clean.header.importeMargen;
-    }
-    if (Array.isArray(clean.lines)) {
-        clean.lines = clean.lines.map(l => {
-            const lc = { ...l };
-            delete lc.precioCosto;
-            delete lc.importeCosto;
-            delete lc.importeMargen;
-            delete lc.porcentajeMargen;
-            return lc;
-        });
-    }
-    return clean;
+    const sanitize = (value) => {
+        if (Array.isArray(value)) return value.map(sanitize);
+        if (!value || typeof value !== 'object') return value;
+        return Object.fromEntries(Object.entries(value)
+            .filter(([key]) => !/(?:costo|coste|margen|precioMinimo)/i.test(key))
+            .map(([key, nested]) => [key, sanitize(nested)]));
+    };
+    return sanitize(order);
 }
 function stripMarginFromProduct(product, user) {
     if (canSeeMargin(user)) return product;
@@ -223,29 +185,18 @@ function pedidoCodesMatch(left, right) {
     return leftCode.replace(/^0+/, '') === rightCode.replace(/^0+/, '');
 }
 
-function getPedidoUserContext(req) {
-    const user = req.user || {};
-    const role = String(user.role || user.userRole || user.tipo || 'COMERCIAL')
-        .trim()
-        .toUpperCase();
-    return {
-        code: normalizePedidoCode(
-            user.code || user.codigo || user.codigoVendedor || user.vendedorCode || user.userId || user.id,
-        ),
-        isManager: user.isJefeVentas === true || role === 'JEFE_VENTAS' || role === 'ADMIN',
-        visibleVendorCodes: Array.isArray(user.vendorCodes || user.vendedorCodes)
-            ? (user.vendorCodes || user.vendedorCodes).map(normalizePedidoCode).filter(Boolean)
-            : [],
-    };
-}
-
-function getPedidoDetailUserContext(req) {
-    const user = req.user || {};
+function normalizePedidoActorRole(user = {}) {
     const rawRole = [user.role, user.userRole, user.tipo]
         .find((value) => value != null && String(value).trim() !== '');
-    const normalizedRole = String(rawRole || '').trim().toUpperCase();
-    const role = normalizedRole === 'JEF' ? 'JEFE_VENTAS'
-        : (normalizedRole === 'COM' ? 'COMERCIAL' : normalizedRole);
+    const normalized = String(rawRole || '').trim().toUpperCase();
+    if (normalized === 'JEF') return 'JEFE_VENTAS';
+    if (normalized === 'COM') return 'COMERCIAL';
+    return normalized;
+}
+
+function getPedidoUserContext(req) {
+    const user = req.user || {};
+    const role = normalizePedidoActorRole(user);
     return {
         role,
         code: normalizePedidoCode(
@@ -256,6 +207,10 @@ function getPedidoDetailUserContext(req) {
             ? (user.vendorCodes || user.vendedorCodes).map(normalizePedidoCode).filter(Boolean)
             : [],
     };
+}
+
+function getPedidoDetailUserContext(req) {
+    return getPedidoUserContext(req);
 }
 
 function authorizePedidoDetailRole(req) {
@@ -271,6 +226,39 @@ function authorizePedidoDetailRole(req) {
         };
     }
     return { ok: true, context };
+}
+
+function authorizePedidoActor(req) {
+    const context = getPedidoUserContext(req);
+    if (!context.code) {
+        return {
+            ok: false,
+            status: 401,
+            body: pedidoForbiddenBody('AUTH_CONTEXT_MISSING', 'Authentication required'),
+        };
+    }
+    if (!['COMERCIAL', 'JEFE_VENTAS', 'ADMIN'].includes(context.role)) {
+        return {
+            ok: false,
+            status: 403,
+            body: pedidoForbiddenBody('FORBIDDEN_ROLE', 'El rol autenticado no puede operar pedidos comerciales'),
+        };
+    }
+    return { ok: true, context };
+}
+
+function buildPedidoAuditContext(req, actorContext) {
+    const rawIdempotencyKey = req.headers['idempotency-key'];
+    let idempotencyKey;
+    if (rawIdempotencyKey != null && String(rawIdempotencyKey).trim() !== '') {
+        idempotencyKey = pedidosService.normalizePedidoIdempotencyKey(rawIdempotencyKey);
+    }
+    return {
+        actorId: actorContext.code,
+        actorRole: actorContext.role,
+        deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
+        idempotencyKey,
+    };
 }
 
 function resolvePedidoVendorScope(req, requestedVendorCodes) {
@@ -436,8 +424,8 @@ async function authorizePedidoAccess(req, orderId, action = 'consultar', context
     return { ok: false, status: 403, body: { success: false, code: 'FORBIDDEN_VENDOR', error: `COMERCIAL solo puede ${action} pedidos de su vendedor` } };
 }
 
-async function authorizePedidoMutation(req, orderId) {
-    return authorizePedidoAccess(req, orderId, 'mutar');
+async function authorizePedidoMutation(req, orderId, contextOverride = null) {
+    return authorizePedidoAccess(req, orderId, 'mutar', contextOverride);
 }
 
 function buildLaclaeVendorParamFilter(vendorCodes, alias = 'L') {
@@ -1162,12 +1150,17 @@ router.get('/:id/albaran', async (req, res) => {
     try {
         const id = parseIntSafe(req.params.id, null);
         if (id === null) return res.status(400).json({ success: false, error: 'Invalid order id' });
-        const ownership = await authorizePedidoAccess(req, id, 'consultar');
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) return res.status(actor.status).json(actor.body);
+        const ownership = await authorizePedidoAccess(req, id, 'consultar', actor.context);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
         const albaranes = await pedidosService.getOrderAlbaran(id);
-        res.json({ success: true, albaranes });
+        res.json({
+            success: true,
+            albaranes: stripMarginFromOrder(albaranes, { ...req.user, role: actor.context.role }),
+        });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /${req.params.id}/albaran: ${error.message}`);
         return sendPedidosError(error, res, 'Error procesando pedido', 'PEDIDOS_ERROR');
@@ -1182,12 +1175,14 @@ router.get('/:id/clone', async (req, res) => {
     try {
         const id = parseIntSafe(req.params.id, null);
         if (id === null) return res.status(400).json({ success: false, error: 'Invalid order id' });
-        const ownership = await authorizePedidoAccess(req, id, 'clonar');
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) return res.status(actor.status).json(actor.body);
+        const ownership = await authorizePedidoAccess(req, id, 'clonar', actor.context);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
         const data = await pedidosService.cloneOrder(id);
-        res.json({ success: true, order: data });
+        res.json({ success: true, order: stripMarginFromOrder(data, { ...req.user, role: actor.context.role }) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /${req.params.id}/clone: ${error.message}`);
         return sendPedidosError(error, res, 'Error clonando pedido', 'PEDIDOS_CLONE_ERROR');
@@ -1202,12 +1197,14 @@ router.get('/:id/pdf', async (req, res) => {
     try {
         const id = parseIntSafe(req.params.id, null);
         if (id === null) return res.status(400).json({ success: false, error: 'Invalid order id' });
-        const ownership = await authorizePedidoAccess(req, id, 'consultar');
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) return res.status(actor.status).json(actor.body);
+        const ownership = await authorizePedidoAccess(req, id, 'consultar', actor.context);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
         const detail = await pedidosService.generateOrderPdf(id);
-        res.json({ success: true, order: detail });
+        res.json({ success: true, order: stripMarginFromOrder(detail, { ...req.user, role: actor.context.role }) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /${req.params.id}/pdf: ${error.message}`);
         return sendPedidosError(error, res, 'Error generando PDF', 'PEDIDOS_PDF_ERROR');
@@ -1548,6 +1545,11 @@ router.post('/create', async (req, res) => {
         logger.info(parts.join(' '));
     };
     try {
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) {
+            logRouteTotal('auth_denied');
+            return res.status(actor.status).json(actor.body);
+        }
         const {
             clientCode, clientName, vendedorCode,
             tipoventa, almacen, tarifa, formaPago, observaciones,
@@ -1568,7 +1570,7 @@ router.post('/create', async (req, res) => {
             return res.status(400).json({ success: false, error: 'At least 1 order line is required' });
         }
 
-        const vendorAccess = authorizePedidoVendorCode(req, vendedorCode, 'crear pedidos para');
+        const vendorAccess = authorizePedidoVendorCode(req, vendedorCode, 'crear pedidos para', actor.context);
         if (!vendorAccess.ok) {
             logRouteTotal('auth_denied');
             return res.status(vendorAccess.status).json(vendorAccess.body);
@@ -1597,8 +1599,8 @@ router.post('/create', async (req, res) => {
                     : (globalDiscountPct != null ? parseFloat(globalDiscountPct) : 0),
                 observaciones: observaciones ? String(observaciones).trim() : '',
                 lines,
-                userId: vendorAccess.vendedorCode,
-                userRole: req.user?.role,
+                userId: actor.context.code,
+                userRole: actor.context.role,
                 deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
                 originalClientAt: originalCreatedAt,
                 idempotencyKey,
@@ -1613,12 +1615,12 @@ router.post('/create', async (req, res) => {
             return res.status(200).json({
                 success: true,
                 idempotent: true,
-                order: stripMarginFromOrder(order, req.user),
+                order: stripMarginFromOrder(order, { ...req.user, role: actor.context.role }),
             });
         }
 
         logRouteTotal('created', pedidoId);
-        res.status(201).json({ success: true, order: stripMarginFromOrder(order, req.user) });
+        res.status(201).json({ success: true, order: stripMarginFromOrder(order, { ...req.user, role: actor.context.role }) });
     } catch (error) {
         if (error.code === 'INVALID_IDEMPOTENCY_KEY') {
             logRouteTotal('invalid_idempotency');
@@ -1653,7 +1655,9 @@ router.put('/:id/lines', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
 
-        const ownership = await authorizePedidoMutation(req, id);
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) return res.status(actor.status).json(actor.body);
+        const ownership = await authorizePedidoMutation(req, id, actor.context);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
@@ -1687,15 +1691,10 @@ router.put('/:id/lines', async (req, res) => {
             precioTarifaCliente: parseFloat(precioTarifaCliente) || 0,
             precioMinimo: parseFloat(precioMinimo) || 0,
             claseLinea,
-            auditContext: {
-                actorId: req.user?.code || req.user?.id || ownership.ownership?.vendedorCode,
-                actorRole: req.user?.role,
-                deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
-                idempotencyKey: req.headers['idempotency-key'],
-            },
+            auditContext: buildPedidoAuditContext(req, actor.context),
         });
 
-        res.json({ success: true, line });
+        res.json({ success: true, line: stripMarginFromOrder(line, { ...req.user, role: actor.context.role }) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/lines: ${error.message}`);
         return sendPedidosError(error, res, 'Error anadiendo linea', 'PEDIDOS_LINE_ADD_ERROR');
@@ -1714,7 +1713,9 @@ router.put('/:id/lines/:lineId', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order or line id' });
         }
 
-        const ownership = await authorizePedidoMutation(req, id);
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) return res.status(actor.status).json(actor.body);
+        const ownership = await authorizePedidoMutation(req, id, actor.context);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
@@ -1731,15 +1732,10 @@ router.put('/:id/lines/:lineId', async (req, res) => {
             precioVenta: precioVenta !== undefined ? parseFloat(precioVenta) || 0 : undefined,
             unidadMedida: unidadMedida !== undefined ? String(unidadMedida).trim() : undefined,
             claseLinea: claseLinea !== undefined ? String(claseLinea).trim() : undefined,
-            auditContext: {
-                actorId: req.user?.code || req.user?.id || ownership.ownership?.vendedorCode,
-                actorRole: req.user?.role,
-                deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
-                idempotencyKey: req.headers['idempotency-key'],
-            },
-        });
+            auditContext: buildPedidoAuditContext(req, actor.context),
+        }, id);
 
-        res.json({ success: true, line });
+        res.json({ success: true, line: stripMarginFromOrder(line, { ...req.user, role: actor.context.role }) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/lines/${req.params.lineId}: ${error.message}`);
         return sendPedidosError(error, res, 'Error actualizando linea', 'PEDIDOS_LINE_UPDATE_ERROR');
@@ -1758,17 +1754,14 @@ router.delete('/:id/lines/:lineId', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order or line id' });
         }
 
-        const ownership = await authorizePedidoMutation(req, id);
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) return res.status(actor.status).json(actor.body);
+        const ownership = await authorizePedidoMutation(req, id, actor.context);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
 
-        await pedidosService.deleteOrderLine(lineId, id, {
-            actorId: req.user?.code || req.user?.id || ownership.ownership?.vendedorCode,
-            actorRole: req.user?.role,
-            deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
-            idempotencyKey: req.headers['idempotency-key'],
-        });
+        await pedidosService.deleteOrderLine(lineId, id, buildPedidoAuditContext(req, actor.context));
 
         res.json({ success: true });
     } catch (error) {
@@ -1792,7 +1785,9 @@ router.put('/:id/confirm', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
 
-        const ownership = await authorizePedidoMutation(req, id);
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) return res.status(actor.status).json(actor.body);
+        const ownership = await authorizePedidoMutation(req, id, actor.context);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
@@ -1805,19 +1800,20 @@ router.put('/:id/confirm', async (req, res) => {
             return res.status(400).json({ success: false, code: saleTypeErr.code || 'INVALID_SALE_TYPE', error: saleTypeErr.message });
         }
 
+        const auditContext = buildPedidoAuditContext(req, actor.context);
         const options = {
             forceConfirm: canUseServerForceConfirm(req, req.body),
             forceConfirmReason: String(req.body?.forceConfirmReason || req.body?.auditReason || '').trim(),
             adminOverride: canUseServerForceConfirm(req, req.body),
-            userRole: req.user?.role || 'COMERCIAL',
-            userId: ownership.ownership?.vendedorCode || req.user?.code || req.user?.codigo || req.user?.vendedorCode || req.user?.userId || 'SYSTEM',
+            userRole: actor.context.role,
+            userId: actor.context.code,
             deliveryDate: deliveryDate ? String(deliveryDate).trim() : undefined,
             vehicleCode: vehicleCode ? String(vehicleCode).trim() : undefined,
             driverCode: driverCode ? String(driverCode).trim() : undefined,
             routeCode: routeCode ? String(routeCode).trim() : undefined,
             cobroPropio: cobroPropio === true || cobroEnMano === true,
-            deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
-            idempotencyKey: req.headers['idempotency-key'],
+            deviceId: auditContext.deviceId,
+            idempotencyKey: auditContext.idempotencyKey,
         };
         const order = await pedidosService.confirmOrder(id, normalizedSaleType, options);
 
@@ -1855,7 +1851,7 @@ router.put('/:id/confirm', async (req, res) => {
         }
 
         logger.info(`[PEDIDOS] Order #${id} confirmed successfully`);
-        res.json({ success: true, order: sanitizeOrderForRole(order, req.user?.role || req.user?.tipo || 'COMERCIAL') });
+        res.json({ success: true, order: sanitizeOrderForRole(order, actor.context.role) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/confirm: ${error.message}`);
         return sendPedidosError(error, res, 'Error confirmando pedido', error.code || 'PEDIDOS_CONFIRM_ERROR');
@@ -1873,20 +1869,23 @@ router.delete('/:id', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
 
-        const ownership = await authorizePedidoMutation(req, id);
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) return res.status(actor.status).json(actor.body);
+        const ownership = await authorizePedidoMutation(req, id, actor.context);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
 
+        const auditContext = buildPedidoAuditContext(req, actor.context);
         const order = await pedidosService.cancelOrder(id, {
-            userId: req.user?.code || req.user?.id || 'SYSTEM',
-            userRole: req.user?.role,
-            deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
-            idempotencyKey: req.headers['idempotency-key'],
+            userId: auditContext.actorId,
+            userRole: auditContext.actorRole,
+            deviceId: auditContext.deviceId,
+            idempotencyKey: auditContext.idempotencyKey,
             reason: req.body?.reason || req.body?.cancellationReason,
         });
 
-        res.json({ success: true, order });
+        res.json({ success: true, order: stripMarginFromOrder(order, { ...req.user, role: actor.context.role }) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in DELETE /${req.params.id}: ${error.message}`);
         return sendPedidosError(error, res, 'Error eliminando pedido', 'PEDIDOS_DELETE_ERROR');
@@ -1901,16 +1900,13 @@ router.put('/:id/lines/:lineId/delete', async (req, res) => {
         if (id === null || lineId === null) {
             return res.status(400).json({ success: false, error: 'Invalid order or line id' });
         }
-        const ownership = await authorizePedidoMutation(req, id);
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) return res.status(actor.status).json(actor.body);
+        const ownership = await authorizePedidoMutation(req, id, actor.context);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
-        await pedidosService.deleteOrderLine(lineId, id, {
-            actorId: req.user?.code || req.user?.id || ownership.ownership?.vendedorCode,
-            actorRole: req.user?.role,
-            deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
-            idempotencyKey: req.headers['idempotency-key'],
-        });
+        await pedidosService.deleteOrderLine(lineId, id, buildPedidoAuditContext(req, actor.context));
         res.json({ success: true });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/lines/${req.params.lineId}/delete: ${error.message}`);
@@ -1924,19 +1920,22 @@ router.put('/:id/cancel', async (req, res) => {
         if (id === null) {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
-        const ownership = await authorizePedidoMutation(req, id);
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) return res.status(actor.status).json(actor.body);
+        const ownership = await authorizePedidoMutation(req, id, actor.context);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
 
+        const auditContext = buildPedidoAuditContext(req, actor.context);
         const order = await pedidosService.cancelOrder(id, {
-            userId: req.user?.code || req.user?.id || 'SYSTEM',
-            userRole: req.user?.role,
-            deviceId: req.headers['x-device-id'] || req.headers['x-device-fingerprint'],
-            idempotencyKey: req.headers['idempotency-key'],
+            userId: auditContext.actorId,
+            userRole: auditContext.actorRole,
+            deviceId: auditContext.deviceId,
+            idempotencyKey: auditContext.idempotencyKey,
             reason: req.body?.reason || req.body?.cancellationReason,
         });
-        res.json({ success: true, order });
+        res.json({ success: true, order: stripMarginFromOrder(order, { ...req.user, role: actor.context.role }) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/cancel: ${error.message}`);
         return sendPedidosError(error, res, 'Error cancelando pedido', 'PEDIDOS_CANCEL_ERROR');
@@ -1953,7 +1952,10 @@ router.put('/:id/status', async (req, res) => {
         if (id === null) {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
-        const ownership = await authorizePedidoMutation(req, id);
+        const actor = authorizePedidoActor(req);
+        if (!actor.ok) return res.status(actor.status).json(actor.body);
+        buildPedidoAuditContext(req, actor.context);
+        const ownership = await authorizePedidoMutation(req, id, actor.context);
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
         }
@@ -1962,8 +1964,8 @@ router.put('/:id/status', async (req, res) => {
         if (!status) {
             return res.status(400).json({ success: false, error: 'Status is required' });
         }
-        const result = await pedidosService.updateOrderStatus(id, status, { userId: req.user?.code || 'SYSTEM' });
-        res.json({ success: true, order: result });
+        const result = await pedidosService.updateOrderStatus(id, status, { userId: actor.context.code });
+        res.json({ success: true, order: stripMarginFromOrder(result, { ...req.user, role: actor.context.role }) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/status: ${error.message}`);
         return sendPedidosError(error, res, 'Error actualizando estado', 'PEDIDOS_STATUS_ERROR');
