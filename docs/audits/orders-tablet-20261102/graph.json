@@ -427,6 +427,7 @@
         "backend/utils/comercial-erp-tables.js",
         "backend/utils/db2-app-buffer-capability.js",
         "backend/utils/db2-schemas.js",
+        "docs/audits/orders-tablet-20261102/quarantine/**",
         "docs/demo-script.md",
         "docs/openapi/openapi.yaml",
         "docs/orders-audit.md",
@@ -435,6 +436,7 @@
         "lib/core/api/api_client.dart",
         "lib/core/environment/**",
         "lib/core/offline/offline_sync_bridge.dart",
+        "lib/core/providers/auth_notifier.dart",
         "lib/core/theme/app_theme.dart",
         "lib/core/widgets/shell_frame.dart",
         "lib/core/widgets/global_vendor_selector.dart",
@@ -460,6 +462,8 @@
         "test/goldens/pedidos_order_controls_golden_test.dart",
         "test/goldens/pedidos_order_flow_golden_test.dart",
         "test/models/albaran_entrega_test.dart",
+        "test/providers/auth_state_test.dart",
+        "test/features/dashboard/main_shell_auth_context_remount_test.dart",
         "test/widgets/comercial_liquidacion_diaria_page_test.dart"
       ],
       "requires_all_inputs": true

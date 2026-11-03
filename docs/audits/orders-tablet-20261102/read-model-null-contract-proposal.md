@@ -16,3 +16,5 @@ La revisión de seguridad separada pasó 128 pruebas en cuatro suites y no encon
 Origen de la petición de excepción: [loop-engineering/SKILL.md](C:/Users/Javier/.codex/skills/loop-engineering/SKILL.md) exige «Stop after three iterations, two consecutive no-progress rounds, a timeout, a budget limit, a security block, or unresolved ambiguity.» AGENTS.md también limita las reparaciones a tres. La autorización previa de OFF06 sólo cubría la cola offline y no se extiende a este contrato.
 
 La propuesta no modifica reglas de negocio, DB2, credenciales, autenticación ni producción. El escritor actual de cobros debe entregar HOLD antes de aplicarla.
+
+Javier autorizó expresamente «Autorizar esta reparación adicional de dos archivos» el 03/11/2026 a las 06:33 Europe/Madrid. El ledger registra `orders_read_model_exception=PASS`. La autorización se limita a una intervención en los dos archivos enumerados y exige detener el intento ante otro veto independiente.

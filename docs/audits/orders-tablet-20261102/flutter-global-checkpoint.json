@@ -1,0 +1,9 @@
+{
+  "status": "PASS_CHECKPOINT",
+  "scope": "Full Flutter checkpoint with COLL_CLIENT repair3 frozen, before the additional authorized repair",
+  "sdk": "Flutter 3.35.6, Dart 3.9.2",
+  "launcher": "Flutter tools snapshot invoked by the installed Dart SDK",
+  "test": {"arguments": "test --no-pub --reporter compact", "passed": 1227, "exitCode": 0, "durationMs": 319263, "log": "flutter-full-test-checkpoint.log"},
+  "analyze": {"arguments": "analyze --no-pub --no-fatal-infos", "errors": 0, "warnings": 0, "infos": 7636, "exitCode": 0, "durationMs": 421378, "log": "flutter-full-analyze-checkpoint.log"},
+  "limitations": ["Logs are locally ignored by git", "Info diagnostics remain", "No native DB2 payment or physical device verification", "The checkpoint predates the additional collection repair and the remaining frontend slices"]
+}

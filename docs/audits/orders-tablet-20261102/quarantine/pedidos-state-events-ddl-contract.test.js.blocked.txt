@@ -1,0 +1,254 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const ddl = require('../scripts/tools/ensure-pedido-state-events-test-ddl');
+
+function completeInventory(overrides = {}) {
+  return {
+    exists: true,
+    columns: Object.fromEntries(Object.entries(ddl.EXPECTED_COLUMNS).map(([name, spec]) => [
+      name,
+      {
+        type: spec.type,
+        length: spec.length || 0,
+        nullable: spec.nullable,
+        identity: spec.identity,
+        identityGeneration: spec.identityGeneration || '',
+        defaultValue: spec.defaultValue || '',
+      },
+    ])),
+    keyConstraints: Object.fromEntries(Object.entries(ddl.EXPECTED_KEY_CONSTRAINTS).map(([name, spec]) => [
+      name,
+      { type: spec.type, columns: [...spec.columns] },
+    ])),
+    checks: { ...ddl.EXPECTED_CHECKS },
+    indexNames: new Set(ddl.REQUIRED_INDEXES),
+    indexKeys: Object.fromEntries(Object.entries(ddl.EXPECTED_INDEXES).map(([name, keys]) => [name, [...keys]])),
+    ...overrides,
+  };
+}
+
+function rawColumnRows(inventory = completeInventory()) {
+  return Object.entries(inventory.columns).map(([name, spec]) => ({
+    COLUMN_NAME: name,
+    DATA_TYPE: spec.type === 'TIMESTAMP' ? 'TIMESTMP' : spec.type,
+    LENGTH: spec.length || (spec.type === 'BIGINT' ? 8 : (spec.type === 'INTEGER' ? 4 : 10)),
+    IS_NULLABLE: spec.nullable ? 'Y' : 'N',
+    IS_IDENTITY: spec.identity ? 'YES' : 'NO',
+    IDENTITY_GENERATION: spec.identityGeneration || null,
+    COLUMN_DEFAULT: spec.defaultValue || null,
+  }));
+}
+
+function rawKeyRows(inventory = completeInventory()) {
+  return Object.entries(inventory.keyConstraints).flatMap(([name, spec]) =>
+    spec.columns.map((column, index) => ({
+      CONSTRAINT_NAME: name,
+      CONSTRAINT_TYPE: spec.type,
+      COLUMN_NAME: column,
+      ORDINAL_POSITION: index + 1,
+    })));
+}
+
+function rawCheckRows(inventory = completeInventory()) {
+  return Object.entries(inventory.checks).map(([name, clause]) => ({
+    CONSTRAINT_NAME: name,
+    CHECK_CLAUSE: clause,
+  }));
+}
+
+describe('TEST_PEDIDO_STATE_EVENTS additive DDL proposal', () => {
+  test('migration is the single SQL source with atomic idempotency and immutable payload', () => {
+    const source = fs.readFileSync(ddl.MIGRATION_PATH, 'utf8');
+    expect(ddl.DDL_STATEMENTS).toEqual(ddl.parseMigrationStatements(source));
+    expect(ddl.DDL_STATEMENTS).toHaveLength(2);
+    expect(ddl.DDL_STATEMENTS[0]).toMatch(/CREATE TABLE JAVIER\.TEST_PEDIDO_STATE_EVENTS/i);
+    expect(ddl.DDL_STATEMENTS[0]).toMatch(/CONSTRAINT UQ_TEST_PED_STATE_EVT_IDEMP UNIQUE\s*\(IDEMPOTENCY_KEY\)/i);
+    expect(ddl.DDL_STATEMENTS[0]).toMatch(/PAYLOAD_JSON CLOB\(262144\) NOT NULL/i);
+    expect(ddl.DDL_STATEMENTS.join('\n')).not.toMatch(/CREATE\s+UNIQUE\s+INDEX/i);
+    expect(ddl.DDL_STATEMENTS.join('\n')).not.toMatch(/\b(?:DSEDAC|DSED)\./i);
+  });
+
+  test('state checks cover the exact five contracted states and cancellation reason', () => {
+    const sql = ddl.DDL_STATEMENTS[0];
+    for (const state of ['BORRADOR', 'CONFIRMANDO', 'CONFIRMADO', 'CANCELANDO', 'CANCELADO']) {
+      expect(sql).toContain(`'${state}'`);
+    }
+    expect(sql).toMatch(/FROM_STATE IS NOT NULL OR TO_STATE = 'BORRADOR'/i);
+    expect(sql).toMatch(/TO_STATE <> 'CANCELADO'[\s\S]*LENGTH\(TRIM\(COALESCE\(REASON, ''\)\)\) > 0/i);
+  });
+
+  test('default CLI mode is connection-free dry-run with migration fingerprint', () => {
+    const script = path.join(__dirname, '..', 'scripts', 'tools', 'ensure-pedido-state-events-test-ddl.js');
+    const result = spawnSync(process.execPath, [script], {
+      cwd: path.join(__dirname, '..'),
+      encoding: 'utf8',
+      env: { NODE_ENV: 'test' },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      mode: 'DRY_RUN',
+      target: 'JAVIER.TEST_PEDIDO_STATE_EVENTS',
+      connected: false,
+      migrationSha256: ddl.MIGRATION_SHA256,
+    });
+  });
+
+  test('apply guard requires explicit isolated test profile and DDL capability', () => {
+    expect(() => ddl.assertApplyEnvironment({ APP_ENV: 'production', ALLOW_DB2_DDL: 'true' }))
+      .toThrow(expect.objectContaining({ code: 'PEDIDO_STATE_EVENTS_TEST_PROFILE_REQUIRED' }));
+    expect(() => ddl.assertApplyEnvironment({ APP_ENV: 'test' }))
+      .toThrow(expect.objectContaining({ code: 'PEDIDO_STATE_EVENTS_DDL_CAPABILITY_REQUIRED' }));
+    expect(() => ddl.assertApplyEnvironment({ APP_ENV: 'test', ALLOW_DB2_DDL: 'true' }))
+      .not.toThrow();
+  });
+
+  test('typed verification rejects wrong type, unknown nullable flag and index order', () => {
+    expect(ddl.assertExistingTargetComplete(completeInventory())).toBe(true);
+
+    const wrongType = completeInventory();
+    wrongType.columns.PEDIDO_ID = { ...wrongType.columns.PEDIDO_ID, type: 'BIGINT' };
+    expect(() => ddl.assertExistingTargetComplete(wrongType)).toThrow(expect.objectContaining({
+      details: expect.arrayContaining(['column:PEDIDO_ID:type']),
+    }));
+
+    const unknownNullable = completeInventory();
+    unknownNullable.columns.FROM_STATE = { ...unknownNullable.columns.FROM_STATE, nullable: null };
+    expect(() => ddl.assertExistingTargetComplete(unknownNullable)).toThrow(expect.objectContaining({
+      details: expect.arrayContaining(['column:FROM_STATE:nullable']),
+    }));
+
+    const wrongKeys = completeInventory({
+      indexKeys: { IX_TEST_PED_STATE_EVENT_ORDER: ['SERVER_OCCURRED_AT', 'PEDIDO_ID'] },
+    });
+    expect(() => ddl.assertExistingTargetComplete(wrongKeys)).toThrow(expect.objectContaining({
+      details: expect.arrayContaining(['index:IX_TEST_PED_STATE_EVENT_ORDER:keys']),
+    }));
+  });
+
+  test('CHECK verification rejects a sixth state and permissive OR branch', () => {
+    const sixthState = completeInventory();
+    sixthState.checks.CK_TEST_PED_STATE_TO = `${ddl.EXPECTED_CHECKS.CK_TEST_PED_STATE_TO} OR TO_STATE = 'EXPIRADO'`;
+    expect(() => ddl.assertExistingTargetComplete(sixthState)).toThrow(expect.objectContaining({
+      details: expect.arrayContaining(['check:CK_TEST_PED_STATE_TO:clause']),
+    }));
+
+    const permissive = completeInventory();
+    permissive.checks.CK_TEST_PED_STATE_FROM = `${ddl.EXPECTED_CHECKS.CK_TEST_PED_STATE_FROM} OR 1 = 1`;
+    expect(() => ddl.assertExistingTargetComplete(permissive)).toThrow(expect.objectContaining({
+      details: expect.arrayContaining(['check:CK_TEST_PED_STATE_FROM:clause']),
+    }));
+  });
+
+  test('inspectTarget normalizes captured IBM i TIMESTMP and Y/N catalog values', async () => {
+    const connection = {
+      query: jest.fn((sql) => {
+        if (/FROM QSYS2\.SYSTABLES/i.test(sql)) return Promise.resolve([{ OK: 1 }]);
+        if (/FROM QSYS2\.SYSCOLUMNS/i.test(sql)) return Promise.resolve(rawColumnRows());
+        if (/FROM QSYS2\.SYSCST C[\s\S]*SYSKEYCST/i.test(sql)) return Promise.resolve(rawKeyRows());
+        if (/FROM QSYS2\.SYSCST C[\s\S]*SYSCHKCST/i.test(sql)) return Promise.resolve(rawCheckRows());
+        if (/FROM QSYS2\.SYSINDEXES/i.test(sql)) {
+          return Promise.resolve([{ INDEX_NAME: 'IX_TEST_PED_STATE_EVENT_ORDER', IS_UNIQUE: 'N' }]);
+        }
+        if (/FROM QSYS2\.SYSKEYS/i.test(sql)) {
+          return Promise.resolve([
+            { INDEX_NAME: 'IX_TEST_PED_STATE_EVENT_ORDER', COLUMN_NAME: 'PEDIDO_ID', ORDINAL_POSITION: 1 },
+            { INDEX_NAME: 'IX_TEST_PED_STATE_EVENT_ORDER', COLUMN_NAME: 'SERVER_OCCURRED_AT', ORDINAL_POSITION: 2 },
+          ]);
+        }
+        return Promise.resolve([]);
+      }),
+    };
+
+    const inventory = await ddl.inspectTarget(connection);
+    expect(inventory.columns.ORIGINAL_CLIENT_AT).toMatchObject({
+      type: 'TIMESTAMP', nullable: true, identity: false,
+    });
+    expect(inventory.columns.SERVER_OCCURRED_AT).toMatchObject({
+      type: 'TIMESTAMP', nullable: false, defaultValue: 'CURRENT_TIMESTAMP',
+    });
+    expect(inventory.columns.ID).toMatchObject({
+      type: 'BIGINT', identity: true, identityGeneration: 'ALWAYS',
+    });
+    expect(ddl.assertExistingTargetComplete(inventory)).toBe(true);
+  });
+
+  test('catalog queries bind exact schema/table and index-name preflight', async () => {
+    const calls = [];
+    const connection = {
+      query: jest.fn((sql, params) => {
+        calls.push({ sql, params });
+        return Promise.resolve([]);
+      }),
+    };
+    await expect(ddl.inspectTarget(connection)).resolves.toEqual({ exists: false });
+    await expect(ddl.assertAuxiliaryIndexNameAvailable(connection)).resolves.toBeUndefined();
+    expect(calls[0].params).toEqual(['JAVIER', 'TEST_PEDIDO_STATE_EVENTS']);
+    expect(calls[1].params).toEqual(['JAVIER', 'IX_TEST_PED_STATE_EVENT_ORDER']);
+  });
+
+  test('strictly additive recovery creates only the reviewed auxiliary index', async () => {
+    let indexPresent = false;
+    const connection = {
+      close: jest.fn(() => Promise.resolve()),
+      query: jest.fn((sql) => {
+        if (/^CREATE INDEX JAVIER\.IX_TEST_PED_STATE_EVENT_ORDER/i.test(sql.trim())) {
+          indexPresent = true;
+          return Promise.resolve([]);
+        }
+        if (/FROM QSYS2\.SYSTABLES/i.test(sql)) return Promise.resolve([{ OK: 1 }]);
+        if (/FROM QSYS2\.SYSCOLUMNS/i.test(sql)) return Promise.resolve(rawColumnRows());
+        if (/FROM QSYS2\.SYSCST C[\s\S]*SYSKEYCST/i.test(sql)) return Promise.resolve(rawKeyRows());
+        if (/FROM QSYS2\.SYSCST C[\s\S]*SYSCHKCST/i.test(sql)) return Promise.resolve(rawCheckRows());
+        if (/FROM QSYS2\.SYSINDEXES/i.test(sql) && /INDEX_NAME = \?/i.test(sql)) return Promise.resolve([]);
+        if (/FROM QSYS2\.SYSINDEXES/i.test(sql)) {
+          return Promise.resolve(indexPresent
+            ? [{ INDEX_NAME: 'IX_TEST_PED_STATE_EVENT_ORDER', IS_UNIQUE: 'N' }]
+            : []);
+        }
+        if (/FROM QSYS2\.SYSKEYS/i.test(sql)) {
+          return Promise.resolve(indexPresent
+            ? [
+              { INDEX_NAME: 'IX_TEST_PED_STATE_EVENT_ORDER', COLUMN_NAME: 'PEDIDO_ID', ORDINAL_POSITION: 1 },
+              { INDEX_NAME: 'IX_TEST_PED_STATE_EVENT_ORDER', COLUMN_NAME: 'SERVER_OCCURRED_AT', ORDINAL_POSITION: 2 },
+            ]
+            : []);
+        }
+        return Promise.resolve([]);
+      }),
+    };
+
+    const result = await ddl.apply({
+      env: { APP_ENV: 'test', ALLOW_DB2_DDL: 'true' },
+      connect: () => Promise.resolve(connection),
+    });
+    expect(result).toMatchObject({ changed: true, recoveredIndex: true, verified: true });
+    const sql = connection.query.mock.calls.map(([statement]) => statement).join('\n');
+    expect(sql).not.toMatch(/\b(?:DROP|ALTER)\b/i);
+    expect(connection.close).toHaveBeenCalledTimes(1);
+  });
+
+  test('partial schemas and raw ODBC messages fail closed with safe codes', () => {
+    expect(() => ddl.assertExistingTargetComplete({
+      exists: true,
+      columns: { ID: completeInventory().columns.ID },
+      keyConstraints: {}, checks: {}, indexNames: new Set(), indexKeys: {},
+    })).toThrow(expect.objectContaining({ code: 'PEDIDO_STATE_EVENTS_PARTIAL_SCHEMA' }));
+    expect(ddl.safeErrorCode({ code: '-204', message: 'DSN=secret;PWD=secret' }))
+      .toBe('PEDIDO_STATE_EVENTS_DDL_FAILED');
+
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', 'scripts', 'tools', 'ensure-pedido-state-events-test-ddl.js'),
+      'utf8',
+    );
+    expect(source).toContain("require('odbc')");
+    expect(source).not.toMatch(/require\(['\"]\.\.\/\.\.\/config\/db['\"]\)/);
+    expect(source.slice(source.indexOf('if (require.main === module)')))
+      .not.toContain('error.message');
+  });
+});
+

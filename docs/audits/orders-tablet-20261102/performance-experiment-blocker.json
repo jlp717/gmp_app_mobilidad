@@ -1,0 +1,18 @@
+{
+  "runId": "orders-tablet-20261102",
+  "status": "BLOCKED",
+  "scope": "Subsequent read-only SQL equivalence experiment; not the earlier deployed-service observations",
+  "attemptsWithoutUsableResults": 2,
+  "reportedFailureCode": "EXPERIMENT_FAILED",
+  "processExitCode": null,
+  "queryCount": null,
+  "phaseOfNativeFailure": null,
+  "sourceHash": null,
+  "resultEquivalenceHashes": null,
+  "validBeforeAfterPair": false,
+  "productSourceChanges": 0,
+  "ddlExecuted": 0,
+  "claimedOptimization": false,
+  "limitations": ["No reliable compact evidence of exit code, native failure phase or query count was retained", "Do not infer zero DB queries from absence of results", "No source, SQL plan, index change or device benchmark to report as improved", "Earlier five getProducts timings measure the complete deployed service; cache boundaries, SHA and deterministic client selection were not retained"],
+  "nextAction": "Stop after two no-progress rounds. Do not repair or rerun this experiment without a new authorized scope; retain native-device/performance acceptance as unmeasured."
+}

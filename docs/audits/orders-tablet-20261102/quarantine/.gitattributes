@@ -1,0 +1,2 @@
+# Preserve rejected artifacts byte-for-byte, including trailing blank lines.
+*.blocked.txt -text whitespace=-blank-at-eof

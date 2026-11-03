@@ -1,0 +1,18 @@
+{
+  "status": "BLOCKED_QUARANTINE",
+  "unit": "TINY_QUARANTINE_049",
+  "activeAliasRemoved": "ddl:pedido-state-events:test",
+  "migrationPreserved": "backend/migrations/049_javier_test_pedido_state_events.sql",
+  "files": [
+    {
+      "source": "backend/scripts/tools/ensure-pedido-state-events-test-ddl.js",
+      "quarantine": "docs/audits/orders-tablet-20261102/quarantine/ensure-pedido-state-events-test-ddl.js.blocked.txt",
+      "sha256": "B05B1EC84086262679768AF94662B87C5F4042E18B32A4ED894F26D9A740F964"
+    },
+    {
+      "source": "backend/__tests__/pedidos-state-events-ddl-contract.test.js",
+      "quarantine": "docs/audits/orders-tablet-20261102/quarantine/pedidos-state-events-ddl-contract.test.js.blocked.txt",
+      "sha256": "E2443847A03259D27A38D0516D5895E5A2D6E8A28C73B4D93490682C1957ED6B"
+    }
+  ]
+}

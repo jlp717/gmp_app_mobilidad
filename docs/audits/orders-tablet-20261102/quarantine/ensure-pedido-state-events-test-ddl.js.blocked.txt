@@ -1,0 +1,405 @@
+'use strict';
+
+/**
+ * Proposes or applies the additive TEST-only order state event ledger.
+ * Default execution is a connection-free dry-run. The mutation path is
+ * fail-closed and requires the canonical test profile plus ALLOW_DB2_DDL=true.
+ */
+
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+
+const TARGET = Object.freeze({ schema: 'JAVIER', table: 'TEST_PEDIDO_STATE_EVENTS' });
+const MIGRATION_PATH = path.resolve(
+  __dirname,
+  '..',
+  '..',
+  'migrations',
+  '049_javier_test_pedido_state_events.sql',
+);
+
+function parseMigrationStatements(source) {
+  return String(source || '')
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n')
+    .split(';')
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+}
+
+const MIGRATION_SOURCE = fs.readFileSync(MIGRATION_PATH, 'utf8');
+const MIGRATION_SHA256 = crypto.createHash('sha256').update(MIGRATION_SOURCE).digest('hex');
+const DDL_STATEMENTS = Object.freeze(parseMigrationStatements(MIGRATION_SOURCE));
+
+const EXPECTED_COLUMNS = Object.freeze({
+  ID: Object.freeze({
+    type: 'BIGINT', nullable: false, identity: true, identityGeneration: 'ALWAYS',
+  }),
+  PEDIDO_ID: Object.freeze({ type: 'INTEGER', nullable: false, identity: false }),
+  FROM_STATE: Object.freeze({ type: 'VARCHAR', length: 24, nullable: true, identity: false }),
+  TO_STATE: Object.freeze({ type: 'VARCHAR', length: 24, nullable: false, identity: false }),
+  ACTOR_ID: Object.freeze({ type: 'VARCHAR', length: 80, nullable: false, identity: false }),
+  ACTOR_ROLE: Object.freeze({ type: 'VARCHAR', length: 32, nullable: true, identity: false }),
+  DEVICE_ID: Object.freeze({ type: 'VARCHAR', length: 128, nullable: true, identity: false }),
+  REASON: Object.freeze({ type: 'VARCHAR', length: 500, nullable: true, identity: false }),
+  IDEMPOTENCY_KEY: Object.freeze({ type: 'VARCHAR', length: 128, nullable: false, identity: false }),
+  PAYLOAD_JSON: Object.freeze({ type: 'CLOB', length: 262144, nullable: false, identity: false }),
+  PAYLOAD_HASH: Object.freeze({ type: 'CHAR', length: 64, nullable: false, identity: false }),
+  ORIGINAL_CLIENT_AT: Object.freeze({ type: 'TIMESTAMP', nullable: true, identity: false }),
+  SERVER_OCCURRED_AT: Object.freeze({
+    type: 'TIMESTAMP', nullable: false, identity: false, defaultValue: 'CURRENT_TIMESTAMP',
+  }),
+});
+const REQUIRED_COLUMNS = Object.freeze(Object.keys(EXPECTED_COLUMNS));
+const EXPECTED_KEY_CONSTRAINTS = Object.freeze({
+  PK_TEST_PED_STATE_EVENTS: Object.freeze({ type: 'PRIMARY KEY', columns: Object.freeze(['ID']) }),
+  UQ_TEST_PED_STATE_EVT_IDEMP: Object.freeze({ type: 'UNIQUE', columns: Object.freeze(['IDEMPOTENCY_KEY']) }),
+});
+const EXPECTED_CHECKS = Object.freeze({
+  CK_TEST_PED_STATE_FROM: `FROM_STATE IS NULL OR FROM_STATE IN (
+    'BORRADOR', 'CONFIRMANDO', 'CONFIRMADO', 'CANCELANDO', 'CANCELADO'
+  )`,
+  CK_TEST_PED_STATE_TO: `TO_STATE IN (
+    'BORRADOR', 'CONFIRMANDO', 'CONFIRMADO', 'CANCELANDO', 'CANCELADO'
+  )`,
+  CK_TEST_PED_STATE_INITIAL: "FROM_STATE IS NOT NULL OR TO_STATE = 'BORRADOR'",
+  CK_TEST_PED_STATE_CANCEL_REASON:
+    "TO_STATE <> 'CANCELADO' OR LENGTH(TRIM(COALESCE(REASON, ''))) > 0",
+});
+const EXPECTED_INDEXES = Object.freeze({
+  IX_TEST_PED_STATE_EVENT_ORDER: Object.freeze(['PEDIDO_ID', 'SERVER_OCCURRED_AT']),
+});
+const REQUIRED_INDEXES = Object.freeze(Object.keys(EXPECTED_INDEXES));
+
+function isApplyRequested(argv = process.argv.slice(2)) {
+  return argv.includes('--apply');
+}
+
+function assertApplyEnvironment(env = process.env) {
+  const { applyAppProfile } = require('../../config/app-profile');
+  const profile = applyAppProfile(env);
+  if (
+    profile.profile !== 'test'
+    || profile.writeSchema !== 'JAVIER'
+    || profile.tableSet !== 'isolated_test'
+    || profile.writesEnabled !== true
+  ) {
+    const error = new Error('The canonical isolated TEST profile is required.');
+    error.code = 'PEDIDO_STATE_EVENTS_TEST_PROFILE_REQUIRED';
+    throw error;
+  }
+  if (String(env.ALLOW_DB2_DDL || '').trim().toLowerCase() !== 'true') {
+    const error = new Error('Explicit TEST DDL capability is required.');
+    error.code = 'PEDIDO_STATE_EVENTS_DDL_CAPABILITY_REQUIRED';
+    throw error;
+  }
+  return profile;
+}
+
+function createDdlConnector(env = process.env) {
+  return function connectDdl() {
+    const dsn = String(env.ODBC_DSN || '').trim();
+    const uid = String(env.ODBC_UID || '').trim();
+    const pwd = String(env.ODBC_PWD || '').trim();
+    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(dsn) || !uid || !pwd) {
+      const error = new Error('DB2 DDL configuration is unavailable.');
+      error.code = 'PEDIDO_STATE_EVENTS_DB_CONFIG_REQUIRED';
+      throw error;
+    }
+    const odbc = require('odbc');
+    return odbc.connect(`DSN=${dsn};UID=${uid};PWD=${pwd};NAM=1;CCSID=1208;CMPTDM=1;`);
+  };
+}
+
+function rowValue(row, key) {
+  return row?.[key] ?? row?.[key.toLowerCase()] ?? row?.[key.toUpperCase()];
+}
+
+function normalizedName(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function normalizeDb2Type(value) {
+  const type = normalizedName(value);
+  return type === 'TIMESTMP' ? 'TIMESTAMP' : type;
+}
+
+function normalizeDb2YesNo(value) {
+  const flag = normalizedName(value);
+  if (flag === 'Y' || flag === 'YES') return true;
+  if (flag === 'N' || flag === 'NO') return false;
+  return null;
+}
+
+function normalizeSqlExpression(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s()]+/g, '');
+}
+
+async function inspectTarget(connection) {
+  const tableRows = await connection.query(
+    `SELECT 1 AS OK FROM QSYS2.SYSTABLES
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+        AND TABLE_TYPE IN ('T', 'P')
+      FETCH FIRST 1 ROW ONLY`,
+    [TARGET.schema, TARGET.table],
+  );
+  if (!Array.isArray(tableRows) || tableRows.length === 0) {
+    return Object.freeze({ exists: false });
+  }
+
+  const [columnRows, constraintRows, checkRows, indexRows, indexKeyRows] = await Promise.all([
+    connection.query(
+      `SELECT COLUMN_NAME, DATA_TYPE, LENGTH, IS_NULLABLE, IS_IDENTITY,
+              IDENTITY_GENERATION, COLUMN_DEFAULT
+         FROM QSYS2.SYSCOLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+      [TARGET.schema, TARGET.table],
+    ),
+    connection.query(
+      `SELECT C.CONSTRAINT_NAME, C.CONSTRAINT_TYPE,
+              K.COLUMN_NAME, K.ORDINAL_POSITION
+         FROM QSYS2.SYSCST C
+         LEFT JOIN QSYS2.SYSKEYCST K
+           ON K.CONSTRAINT_SCHEMA = C.CONSTRAINT_SCHEMA
+          AND K.CONSTRAINT_NAME = C.CONSTRAINT_NAME
+          AND K.TABLE_SCHEMA = C.TABLE_SCHEMA
+          AND K.TABLE_NAME = C.TABLE_NAME
+        WHERE C.TABLE_SCHEMA = ? AND C.TABLE_NAME = ?
+          AND C.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE')
+        ORDER BY C.CONSTRAINT_NAME, K.ORDINAL_POSITION`,
+      [TARGET.schema, TARGET.table],
+    ),
+    connection.query(
+      `SELECT C.CONSTRAINT_NAME, H.CHECK_CLAUSE
+         FROM QSYS2.SYSCST C
+         JOIN QSYS2.SYSCHKCST H
+           ON H.CONSTRAINT_SCHEMA = C.CONSTRAINT_SCHEMA
+          AND H.CONSTRAINT_NAME = C.CONSTRAINT_NAME
+        WHERE C.TABLE_SCHEMA = ? AND C.TABLE_NAME = ?
+          AND C.CONSTRAINT_TYPE = 'CHECK'`,
+      [TARGET.schema, TARGET.table],
+    ),
+    connection.query(
+      `SELECT INDEX_NAME, IS_UNIQUE
+         FROM QSYS2.SYSINDEXES
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_SCHEMA = ?`,
+      [TARGET.schema, TARGET.table, TARGET.schema],
+    ),
+    connection.query(
+      `SELECT INDEX_NAME, COLUMN_NAME, ORDINAL_POSITION
+         FROM QSYS2.SYSKEYS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_SCHEMA = ?
+        ORDER BY INDEX_NAME, ORDINAL_POSITION`,
+      [TARGET.schema, TARGET.table, TARGET.schema],
+    ),
+  ]);
+
+  const columns = Object.fromEntries((columnRows || []).map((row) => [
+    normalizedName(rowValue(row, 'COLUMN_NAME')),
+    {
+      type: normalizeDb2Type(rowValue(row, 'DATA_TYPE')),
+      length: Number(rowValue(row, 'LENGTH')),
+      nullable: normalizeDb2YesNo(rowValue(row, 'IS_NULLABLE')),
+      identity: normalizeDb2YesNo(rowValue(row, 'IS_IDENTITY')),
+      identityGeneration: normalizedName(rowValue(row, 'IDENTITY_GENERATION')) || null,
+      defaultValue: normalizeSqlExpression(rowValue(row, 'COLUMN_DEFAULT')) || null,
+    },
+  ]));
+  const keyConstraints = {};
+  for (const row of constraintRows || []) {
+    const name = normalizedName(rowValue(row, 'CONSTRAINT_NAME'));
+    keyConstraints[name] ||= { type: normalizedName(rowValue(row, 'CONSTRAINT_TYPE')), columns: [] };
+    const column = normalizedName(rowValue(row, 'COLUMN_NAME'));
+    if (column) keyConstraints[name].columns.push(column);
+  }
+  const checks = Object.fromEntries((checkRows || []).map((row) => [
+    normalizedName(rowValue(row, 'CONSTRAINT_NAME')),
+    String(rowValue(row, 'CHECK_CLAUSE') || ''),
+  ]));
+  const indexNames = new Set((indexRows || []).map((row) => normalizedName(rowValue(row, 'INDEX_NAME'))));
+  const indexKeys = {};
+  for (const row of indexKeyRows || []) {
+    const name = normalizedName(rowValue(row, 'INDEX_NAME'));
+    indexKeys[name] ||= [];
+    indexKeys[name].push(normalizedName(rowValue(row, 'COLUMN_NAME')));
+  }
+  return Object.freeze({ exists: true, columns, keyConstraints, checks, indexNames, indexKeys });
+}
+
+function schemaMismatchError(details) {
+  const error = new Error('Existing TEST_PEDIDO_STATE_EVENTS schema is incomplete or incompatible.');
+  error.code = 'PEDIDO_STATE_EVENTS_PARTIAL_SCHEMA';
+  error.details = details;
+  return error;
+}
+
+function assertExistingTargetComplete(inventory, { requireIndexes = true } = {}) {
+  if (!inventory?.exists) throw schemaMismatchError(['table_missing']);
+  const mismatches = [];
+
+  for (const [name, expected] of Object.entries(EXPECTED_COLUMNS)) {
+    const actual = inventory.columns?.[name];
+    if (!actual) {
+      mismatches.push(`column:${name}:missing`);
+      continue;
+    }
+    if (actual.type !== expected.type) mismatches.push(`column:${name}:type`);
+    if (expected.length && actual.length !== expected.length) mismatches.push(`column:${name}:length`);
+    if (actual.nullable !== expected.nullable) mismatches.push(`column:${name}:nullable`);
+    if (actual.identity !== expected.identity) mismatches.push(`column:${name}:identity`);
+    if (
+      expected.identityGeneration
+      && actual.identityGeneration !== expected.identityGeneration
+    ) {
+      mismatches.push(`column:${name}:identity_generation`);
+    }
+    if (
+      expected.defaultValue
+      && actual.defaultValue !== normalizeSqlExpression(expected.defaultValue)
+    ) {
+      mismatches.push(`column:${name}:default`);
+    }
+  }
+  for (const [name, expected] of Object.entries(EXPECTED_KEY_CONSTRAINTS)) {
+    const actual = inventory.keyConstraints?.[name];
+    if (!actual) {
+      mismatches.push(`constraint:${name}:missing`);
+      continue;
+    }
+    if (actual.type !== expected.type) mismatches.push(`constraint:${name}:type`);
+    if (JSON.stringify(actual.columns) !== JSON.stringify(expected.columns)) {
+      mismatches.push(`constraint:${name}:keys`);
+    }
+  }
+  for (const [name, expectedClause] of Object.entries(EXPECTED_CHECKS)) {
+    const clause = inventory.checks?.[name];
+    if (!clause) mismatches.push(`check:${name}:missing`);
+    else if (normalizeSqlExpression(clause) !== normalizeSqlExpression(expectedClause)) {
+      mismatches.push(`check:${name}:clause`);
+    }
+  }
+  if (requireIndexes) {
+    for (const [name, expectedKeys] of Object.entries(EXPECTED_INDEXES)) {
+      if (!inventory.indexNames?.has(name)) mismatches.push(`index:${name}:missing`);
+      if (JSON.stringify(inventory.indexKeys?.[name] || []) !== JSON.stringify(expectedKeys)) {
+        mismatches.push(`index:${name}:keys`);
+      }
+    }
+  }
+  if (mismatches.length > 0) throw schemaMismatchError(mismatches);
+  return true;
+}
+
+async function assertAuxiliaryIndexNameAvailable(connection) {
+  const indexName = REQUIRED_INDEXES[0];
+  const rows = await connection.query(
+    `SELECT TABLE_SCHEMA, TABLE_NAME
+       FROM QSYS2.SYSINDEXES
+      WHERE INDEX_SCHEMA = ? AND INDEX_NAME = ?`,
+    [TARGET.schema, indexName],
+  );
+  if (Array.isArray(rows) && rows.length > 0) {
+    const error = new Error('The reviewed auxiliary index name is already in use.');
+    error.code = 'PEDIDO_STATE_EVENTS_INDEX_NAME_COLLISION';
+    throw error;
+  }
+}
+
+function dryRunResult() {
+  return Object.freeze({
+    mode: 'DRY_RUN',
+    target: `${TARGET.schema}.${TARGET.table}`,
+    connected: false,
+    migrationSha256: MIGRATION_SHA256,
+    statements: DDL_STATEMENTS,
+  });
+}
+
+async function apply({ connect = createDdlConnector(), env = process.env } = {}) {
+  const profile = assertApplyEnvironment(env);
+  let connection = null;
+  try {
+    connection = await connect();
+    const before = await inspectTarget(connection);
+    if (before.exists) {
+      assertExistingTargetComplete(before, { requireIndexes: false });
+      const auxiliaryIndexPresent = before.indexNames?.has(REQUIRED_INDEXES[0]);
+      if (auxiliaryIndexPresent) {
+        assertExistingTargetComplete(before);
+        return Object.freeze({
+          mode: 'APPLY', target: `${TARGET.schema}.${TARGET.table}`,
+          profile: profile.profile, changed: false, verified: true,
+        });
+      }
+      await assertAuxiliaryIndexNameAvailable(connection);
+      await connection.query(DDL_STATEMENTS[1], []);
+      const recovered = await inspectTarget(connection);
+      assertExistingTargetComplete(recovered);
+      return Object.freeze({
+        mode: 'APPLY', target: `${TARGET.schema}.${TARGET.table}`,
+        profile: profile.profile, changed: true, recoveredIndex: true, verified: true,
+      });
+    }
+
+    await assertAuxiliaryIndexNameAvailable(connection);
+    for (const statement of DDL_STATEMENTS) await connection.query(statement, []);
+    const after = await inspectTarget(connection);
+    assertExistingTargetComplete(after);
+    return Object.freeze({
+      mode: 'APPLY', target: `${TARGET.schema}.${TARGET.table}`,
+      profile: profile.profile, changed: true, verified: true,
+    });
+  } finally {
+    if (connection) await connection.close().catch(() => undefined);
+  }
+}
+
+async function main() {
+  const result = isApplyRequested() ? await apply() : dryRunResult();
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  return result;
+}
+
+function safeErrorCode(error) {
+  const code = String(error?.code || '').trim().toUpperCase();
+  return /^[A-Z][A-Z0-9_]{2,80}$/.test(code)
+    ? code
+    : 'PEDIDO_STATE_EVENTS_DDL_FAILED';
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    process.stderr.write(`${JSON.stringify({ success: false, code: safeErrorCode(error) })}\n`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  DDL_STATEMENTS,
+  EXPECTED_CHECKS,
+  EXPECTED_COLUMNS,
+  EXPECTED_INDEXES,
+  EXPECTED_KEY_CONSTRAINTS,
+  MIGRATION_PATH,
+  MIGRATION_SHA256,
+  REQUIRED_COLUMNS,
+  REQUIRED_INDEXES,
+  TARGET,
+  apply,
+  assertApplyEnvironment,
+  assertAuxiliaryIndexNameAvailable,
+  assertExistingTargetComplete,
+  createDdlConnector,
+  dryRunResult,
+  inspectTarget,
+  isApplyRequested,
+  main,
+  parseMigrationStatements,
+  safeErrorCode,
+};
+

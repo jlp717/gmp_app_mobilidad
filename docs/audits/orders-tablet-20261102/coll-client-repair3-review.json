@@ -1,0 +1,30 @@
+{
+  "runId": "orders-tablet-20261102",
+  "scope": "COLL_CLIENT repair3; 18 paths in coll-client-repair3-frozen-sha.json",
+  "status": "BLOCKED",
+  "qa": {
+    "verdict": "PASS_SCOPED",
+    "focal": {"suites": 7, "testsPassed": 73, "exitCode": 0},
+    "repartidorRegression": {"testsPassed": 232, "exitCode": 0},
+    "authEpoch": {"testsPassed": 2, "exitCode": 0},
+    "additionalRegression": {"testsPassed": 241, "exitCode": 0, "gateUsage": "Additional, not added to the exact regression count"},
+    "analyze": {"files": 16, "errors": 0, "warnings": 0, "infos": 391, "exitCode": 0},
+    "diffCheckExitCode": 0,
+    "closedReproductions": ["Stale screen and dialog monetary actions blocked before POST", "Owner35/36 stale responses ignored", "Auth-stale response releases only owned spinner", "Double-tap one Future/POST", "ACK remains terminal when refresh times out", "Unmount removes owned overlay", "Normalized return fingerprint matches body", "Latest-intent global selector", "Native errors sanitized"]
+  },
+  "appSec": {
+    "verdict": "VETO",
+    "nodeSuites": 2,
+    "nodeTestsPassed": 88,
+    "nodeExitCode": 0,
+    "sdkUsed": false,
+    "findings": [
+      {"severity": "P1", "code": "AUTH_REFRESH_PAGE_RETENTION", "description": "Direct cross-account A-to-B retention is refuted for public logout/login: dashboard remounts. A real same-subject access-token refresh does increment ApiClient authMutationEpoch while MainShell cached keys retain the financial State; origin epoch remains stale and later monetary actions block. Include same-claimsVersion refresh in the proposed regression."},
+      {"severity": "P1", "code": "AMBIGUOUS_PAYMENT_TOKEN_ROTATES_WITH_AUTH", "description": "Independent execution of the existing retry test passed1/1 EXIT0 and showed a NEW idempotency token after setAuthToken for the same actor. This also occurs on ordinary refresh. A committed partial payment with a lost ACK can therefore be retried with a second key. Stable subject/attempt identity must survive token rotation and app restart; auth epoch is a transport gate only."},
+      {"severity": "P2", "code": "UNBOUNDED_AMBIGUOUS_PAYMENT_ATTEMPTS", "description": "Static retry identity map retains failed ambiguous attempts and full observation-bearing fingerprint without a bound. Safe remediation must preserve unresolved tokens; TTL eviction followed by a new token can duplicate a committed partial payment whose ACK was lost and is not accepted as a solution."}
+    ]
+  },
+  "protocol": {"repairsUsed": 3, "maximumRepairs": 3, "fourthRepairApplied": false, "nativeFinanceHarnessReopened": false},
+  "limitations": ["QA used intercepted Dio transport and widget/unit tests", "No native payment, settlement write, device proof or end-to-end finance PASS", "QA PASS does not override AppSec VETO", "Producer last test hash transcription was corrected by root actual Get-FileHash in the frozen manifest; source bytes were unchanged"],
+  "nextAction": "Keep source frozen. Prepare one concrete exceptional repair proposal: durable encrypted bounded journal retaining UNKNOWN tokens, stable subject and document conflict scope, plus refresh-safe page lifecycle. No fourth repair or risk waiver applied; continue distinct ENV04 product unit with one writer."
+}

@@ -1,0 +1,23 @@
+{
+  "status": "PASS_SCOPED",
+  "scope": "Single authorized READ_MODEL nullable exception",
+  "authorizationMadrid": "2026-11-03T06:33",
+  "files": {
+    "docs/openapi/openapi.yaml": "46920ca8090eb28acf64610f5f5c66d26a7d29c1",
+    "backend/__tests__/openapi-contract.test.js": "8d53174fc0b418ac106f5105e7b78cac7b1a9213"
+  },
+  "hashAlgorithm": "git hash-object",
+  "producer": {"redExitCode": 1, "focalGreenExitCode": 0, "suites": 6, "testsPassed": 169, "exitCode": 0, "eslintExitCode": 0},
+  "independent": {
+    "cwd": "backend",
+    "command": "npm test -- --runInBand __tests__/pedidos-read-model.test.js __tests__/pedidos_contracts.test.js __tests__/runtime-performance-config.test.js __tests__/openapi-contract.test.js __tests__/pedidos-order-state-events.test.js __tests__/db2-isolated-control-tables.test.js",
+    "suites": 6,
+    "testsPassed": 150,
+    "exitCode": 0,
+    "durationSeconds": 136.057,
+    "validator": "AJV 6.14.0",
+    "hashesBeforeAfterMatch": true,
+    "cases": ["valid objects", "snapshot:null/not_found", "payload:null/missing", "payload:null/corrupt", "nested extras rejected", "snapshot primitives and arrays rejected", "payload primitives and arrays rejected"]
+  },
+  "limits": ["Jest forceExit/open handles warning", "Scoped suites, no HTTP runtime or DB2 exercise", "Shared ENV04 source integration still pending at verification"]
+}
