@@ -15,6 +15,7 @@
     "reproduction": "Source-level reproduction plan: alter only persisted token or status on an UNKNOWN record, reopen and reserve under the same subject. Existing test covers missing HMAC, not those mutations. No native duplicate payment was generated."
   },
   "commit": null,
+  "preservedWork": {"stashCommit": "78087e0618f097c4eb77cdf46c4c19290d59c317", "pathsVerified": 23, "workingScopeClean": true},
   "productionWrites": 0,
   "nativeFinancialWrites": 0,
   "nextAction": "Stop the authorized repair after veto. Keep source frozen and out of release commits."

@@ -1,0 +1,42 @@
+[
+  {
+    "path": "backend/services/pedidos-comercial-gates.js",
+    "sha256": "34c1269c555d87951b1081efdd5197cdebaf3076f892652471db743a35d3ffbc"
+  },
+  {
+    "path": "backend/services/pedidos/index.js",
+    "sha256": "29e303b744ddecb05910feb7958d5c1ac5e44e7a2c693aeaadfb9e36e46b13ca"
+  },
+  {
+    "path": "backend/services/pedidos/order-state-events.js",
+    "sha256": "6227b6028bee1fc50624a9ce259ded49b9325c9e7d9e8d30c039e1012cfbba1a"
+  },
+  {
+    "path": "backend/services/pedidos/promotions-v2.js",
+    "sha256": "e298882a107b483b741a71f9e52acf97142dec0dd99cdfb7ed2ab5b5b733652a"
+  },
+  {
+    "path": "backend/__tests__/pedidos-comercial-gates.test.js",
+    "sha256": "54851586e9d66b7665b433ec99e6c2b18a4d1d624cf0c4a22cdd86fc3aff8cc2"
+  },
+  {
+    "path": "backend/__tests__/pedidos-gift-authoritative-promotions.test.js",
+    "sha256": "5a0125e9d09ee33eddda8db4bdbdb1429fb8274447e63175f5fdada3a9510ad3"
+  },
+  {
+    "path": "backend/__tests__/pedidos-gift-transaction-contract.test.js",
+    "sha256": "2027c7623ba3992aa8694c2f915cb6880cf092c60e17a08c3d0eb0e52fdec482"
+  },
+  {
+    "path": "backend/__tests__/pedidos-order-state-events.test.js",
+    "sha256": "ece9438988be68136b65c172a8283f6c4510f4d16d7e80bd379f2d6f6af1b946"
+  },
+  {
+    "path": "backend/__tests__/pedidos_contracts.test.js",
+    "sha256": "1390cc744509fd05a20e9efe0cda9e299f495978ab5500e3dc5c2b45bf796a5c"
+  },
+  {
+    "path": "backend/__tests__/pedidos_reparto_contracts.test.js",
+    "sha256": "6a96fb44b3e5abd26e1f1aee4d428f9e0d4f8e1c710c73dd486c93e4aa3f36bc"
+  }
+]

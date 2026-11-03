@@ -1,0 +1,82 @@
+[
+  {
+    "path": "lib/core/api/api_client.dart",
+    "sha256": "fba17ba1d24cf7c62fa7e4ba9af55f13a3eec7181f4dcfa666ebc495bc577b9a"
+  },
+  {
+    "path": "lib/core/offline/offline_sync_bridge.dart",
+    "sha256": "c18eafa45e87b0d3747e49812e84e881f8a0ff5d3dc62015e32ee1b23083d0e3"
+  },
+  {
+    "path": "lib/core/offline/offline_sync_notifier.dart",
+    "sha256": "6bb3465a0d63b8b124a1fdb33a022e01b0a38345b521594feb488fc41476d175"
+  },
+  {
+    "path": "lib/core/offline/verified_pedido_refresh.dart",
+    "sha256": "67f1989d2710490999dac60b365ef62ce4d918b742feb909b34d938724f3bfc7"
+  },
+  {
+    "path": "lib/features/bolsa/providers/bolsa_provider.dart",
+    "sha256": "6626a7eefbe5e727085220379a1e31ef5c3d3b178a199d48e79d8a02a67b0c4b"
+  },
+  {
+    "path": "lib/features/pedidos/data/pedidos_offline_service.dart",
+    "sha256": "c6148e01c814623e1d1b6d9e2c5ce213e4dfa165e37ef2dc11f8b63155a3fcd3"
+  },
+  {
+    "path": "lib/features/pedidos/data/pedidos_service.dart",
+    "sha256": "d01b3ee8b6e0be68f5f4beb243156b5dc10dc0b9bef15925089d746a5bf8688d"
+  },
+  {
+    "path": "lib/features/pedidos/presentation/widgets/order_preview_sheet.dart",
+    "sha256": "89fa728383db062678bfe52c37d05a1c5f012c255529f43c8d84acb6d2ee44dc"
+  },
+  {
+    "path": "lib/features/pedidos/presentation/widgets/order_status_badge.dart",
+    "sha256": "a53191c92d3ab4127a26a40be47c0e6e22d44f52caea9aa31f9cb1e30dd6e28a"
+  },
+  {
+    "path": "lib/features/pedidos/presentation/widgets/order_summary_widget.dart",
+    "sha256": "88b61ed30f28d5307bd5c6b92a4336f145052ffacd1cd9a3785b89a2df4a7ce2"
+  },
+  {
+    "path": "lib/features/pedidos/providers/pedidos_notifier.dart",
+    "sha256": "5b8965b06106fa905924fce41cc40e445acdf9f0cc3b9b9b9708ed418eaaeb5f"
+  },
+  {
+    "path": "lib/main.dart",
+    "sha256": "ee03263dba17a29efd0b7933eb52c93b6ee457ed88dc86ed5f3499a6b8f2e06e"
+  },
+  {
+    "path": "test/api/api_client_auth_epoch_mutation_test.dart",
+    "sha256": "2608c2cb40e507a5e0911e37ed57cc8fc143c1c75589169530fe9aa8595544a3"
+  },
+  {
+    "path": "test/core/offline/verified_pedido_refresh_test.dart",
+    "sha256": "7bde0d515ca5f42c1afd9d46933f0195bd6457dabadb0fdc573c3336be4eb02d"
+  },
+  {
+    "path": "test/features/pedidos/pedidos_business_logic_test.dart",
+    "sha256": "bec5da3331b4f9bb6b3c4ac4ffe04f5a541d9cfb3dca5e7ecc194583b29d1f7a"
+  },
+  {
+    "path": "test/features/pedidos/pedidos_offline_ack_contract_test.dart",
+    "sha256": "d81ae9f878e389d77423c13659b32f6b967be0b6db163a3f24c03e66456d3b50"
+  },
+  {
+    "path": "test/features/pedidos/pedidos_offline_drain_test.dart",
+    "sha256": "4c25f3d01e9f307dba7153b23bae76c3b5acac8befb24101a0a30cce929a4cc2"
+  },
+  {
+    "path": "test/features/pedidos/pedidos_post_sync_epoch_guard_test.dart",
+    "sha256": "e90cd88b13bab46cff4291664fac92ac2527362a9762ecd6675390bb3c0226f4"
+  },
+  {
+    "path": "test/features/pedidos/tanda3_order_preview_sheet_test.dart",
+    "sha256": "7481e1e2efba0c8388e4d323d2a47e33f07abd7f712178850729243e8c6e371a"
+  },
+  {
+    "path": "test/widgets/order_status_badge_test.dart",
+    "sha256": "ca791952fac98956b7c0782f7e6c33b8e26c468e0695962c0fafc3cfad7a620c"
+  }
+]

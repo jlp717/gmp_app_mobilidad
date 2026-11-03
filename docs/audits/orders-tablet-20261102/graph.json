@@ -436,6 +436,8 @@
         "lib/core/api/api_client.dart",
         "lib/core/environment/**",
         "lib/core/offline/offline_sync_bridge.dart",
+        "lib/core/offline/offline_sync_notifier.dart",
+        "lib/core/offline/verified_pedido_refresh.dart",
         "lib/core/providers/auth_notifier.dart",
         "lib/core/theme/app_theme.dart",
         "lib/core/widgets/shell_frame.dart",
@@ -459,12 +461,14 @@
         "test/features/pedidos/presentation/pedidos_flow_accessibility_test.dart",
         "test/fixtures/pedidos_demo_fixture.dart",
         "test/goldens/goldens/pedidos_*.png",
+        "test/goldens/goldens/bolsa_movement_*.png",
         "test/goldens/pedidos_order_controls_golden_test.dart",
         "test/goldens/pedidos_order_flow_golden_test.dart",
         "test/models/albaran_entrega_test.dart",
         "test/providers/auth_state_test.dart",
         "test/features/dashboard/main_shell_auth_context_remount_test.dart",
-        "test/widgets/comercial_liquidacion_diaria_page_test.dart"
+        "test/widgets/comercial_liquidacion_diaria_page_test.dart",
+        "test/widgets/order_status_badge_test.dart"
       ],
       "requires_all_inputs": true
     },

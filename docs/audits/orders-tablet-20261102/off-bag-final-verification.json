@@ -1,0 +1,13 @@
+{
+  "status": "PASS_SCOPED",
+  "commit": "6a2f197",
+  "scope": "Local durable finalization, canonical ACK, idempotent drain and scoped post-sync refresh",
+  "changedFiles": 20,
+  "diff": {"insertions": 1624, "deletions": 275},
+  "sourceManifest": "off-bag-final-sha.json",
+  "qa": {"focalPassed": 9, "integratedPassed": 104, "focalIncludedInIntegrated": true, "exitCode": 0, "errors": 0, "warnings": 0},
+  "appSec": {"verdict": "PASS_SCOPED", "materialFindings": 0},
+  "fullFlutterCheckpoint": {"command": "Flutter tools snapshot test --no-pub", "passed": 1215, "failed": 0, "exitCode": 0, "durationMs": 343982, "log": "flutter-full-test-after-off.log"},
+  "collectionCodeExcluded": "78087e0618f097c4eb77cdf46c4c19290d59c317",
+  "limitations": ["No DB2 or physical device end-to-end run", "Full Flutter analyze pending after UI changes", "No real-device timing claim"]
+}

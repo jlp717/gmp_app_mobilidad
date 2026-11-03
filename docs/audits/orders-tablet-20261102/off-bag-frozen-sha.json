@@ -1,0 +1,58 @@
+[
+  {
+    "path": "lib/core/offline/offline_sync_bridge.dart",
+    "sha256": "c18eafa45e87b0d3747e49812e84e881f8a0ff5d3dc62015e32ee1b23083d0e3"
+  },
+  {
+    "path": "lib/core/offline/offline_sync_notifier.dart",
+    "sha256": "6bb3465a0d63b8b124a1fdb33a022e01b0a38345b521594feb488fc41476d175"
+  },
+  {
+    "path": "lib/features/pedidos/data/pedidos_offline_service.dart",
+    "sha256": "28bf544b5a4dd77e3d1d2ea26a39c9d3ddf3c917dfbfbe54096e7d6552a81a56"
+  },
+  {
+    "path": "lib/features/pedidos/data/pedidos_service.dart",
+    "sha256": "d01b3ee8b6e0be68f5f4beb243156b5dc10dc0b9bef15925089d746a5bf8688d"
+  },
+  {
+    "path": "lib/features/pedidos/presentation/widgets/order_preview_sheet.dart",
+    "sha256": "89fa728383db062678bfe52c37d05a1c5f012c255529f43c8d84acb6d2ee44dc"
+  },
+  {
+    "path": "lib/features/pedidos/presentation/widgets/order_status_badge.dart",
+    "sha256": "a53191c92d3ab4127a26a40be47c0e6e22d44f52caea9aa31f9cb1e30dd6e28a"
+  },
+  {
+    "path": "lib/features/pedidos/presentation/widgets/order_summary_widget.dart",
+    "sha256": "88b61ed30f28d5307bd5c6b92a4336f145052ffacd1cd9a3785b89a2df4a7ce2"
+  },
+  {
+    "path": "lib/features/pedidos/providers/pedidos_notifier.dart",
+    "sha256": "4e66971339922610563cbdd5bf69b4ce9f7a42ef1e041a9bd2b8275b7fe4af19"
+  },
+  {
+    "path": "lib/main.dart",
+    "sha256": "023c9d2a43d671640b8150be1686a4760db2ee8d74a2342eca23aa733cf7e702"
+  },
+  {
+    "path": "test/features/pedidos/pedidos_business_logic_test.dart",
+    "sha256": "bec5da3331b4f9bb6b3c4ac4ffe04f5a541d9cfb3dca5e7ecc194583b29d1f7a"
+  },
+  {
+    "path": "test/features/pedidos/pedidos_offline_drain_test.dart",
+    "sha256": "4c25f3d01e9f307dba7153b23bae76c3b5acac8befb24101a0a30cce929a4cc2"
+  },
+  {
+    "path": "test/features/pedidos/tanda3_order_preview_sheet_test.dart",
+    "sha256": "7481e1e2efba0c8388e4d323d2a47e33f07abd7f712178850729243e8c6e371a"
+  },
+  {
+    "path": "test/features/pedidos/pedidos_offline_ack_contract_test.dart",
+    "sha256": "3f55871fe16a54ce87ccaed31336487bd2288652e6b901cd09de18a48444c6f6"
+  },
+  {
+    "path": "test/widgets/order_status_badge_test.dart",
+    "sha256": "ca791952fac98956b7c0782f7e6c33b8e26c468e0695962c0fafc3cfad7a620c"
+  }
+]
