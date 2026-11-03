@@ -889,12 +889,57 @@ function pricingPlaceholders(values) {
     return values.map(() => '?').join(',');
 }
 
-function effectiveMinPriceFromRow(row) {
-    const configuredFloor = roundPrice(row.PRECIO_MINIMO ?? row.precioMinimo ?? 0);
-    const cost = roundPrice(row.COSTE_FABRICACION ?? row.costeFabricacion ?? 0);
-    const marginPct = parseFloat(row.MARGEN_OBJETIVO_PCT ?? row.margenObjetivoPct) || 0;
-    const marginFloor = cost > 0 ? roundPrice(cost * (1 + marginPct / 100)) : 0;
-    return Math.max(configuredFloor, marginFloor);
+const PRICE_SCALE_UNITS = 10000n;
+const PERCENT_100_SCALE_UNITS = 1000000n;
+const DECIMAL_11_4_MAX_UNITS = 99999999999n;
+
+function parseScaleFourUnits(value) {
+    if (value === null || value === undefined) return null;
+    const text = String(value).trim();
+    if (!text) return null;
+    const match = /^([+-]?)(\d+)(?:\.(\d{0,4}))?$/.exec(text);
+    if (!match) return null;
+
+    const fraction = (match[3] || '').padEnd(4, '0');
+    const absoluteUnits = (BigInt(match[2]) * PRICE_SCALE_UNITS) + BigInt(fraction || '0');
+    return match[1] === '-' ? -absoluteUnits : absoluteUnits;
+}
+
+function grossMarginFloorOverflowError() {
+    const error = new Error('El suelo de margen excede la precision monetaria admitida.');
+    error.code = 'GROSS_MARGIN_FLOOR_OVERFLOW';
+    error.status = 422;
+    return error;
+}
+
+function assertDecimalElevenFour(units) {
+    if (units > DECIMAL_11_4_MAX_UNITS) throw grossMarginFloorOverflowError();
+    return units;
+}
+
+function effectiveMinPriceFromRow(row = {}) {
+    const configuredUnits = parseScaleFourUnits(row.PRECIO_MINIMO ?? row.precioMinimo);
+    const safeConfiguredUnits = configuredUnits !== null && configuredUnits > 0n
+        ? assertDecimalElevenFour(configuredUnits)
+        : 0n;
+    const costUnits = parseScaleFourUnits(row.COSTE_FABRICACION ?? row.costeFabricacion);
+    const marginUnits = parseScaleFourUnits(row.MARGEN_OBJETIVO_PCT ?? row.margenObjetivoPct);
+
+    let marginFloorUnits = 0n;
+    if (costUnits !== null && costUnits > 0n
+        && marginUnits !== null && marginUnits >= 0n
+        && marginUnits < PERCENT_100_SCALE_UNITS) {
+        const denominator = PERCENT_100_SCALE_UNITS - marginUnits;
+        const numerator = costUnits * PERCENT_100_SCALE_UNITS;
+        marginFloorUnits = assertDecimalElevenFour(
+            (numerator + denominator - 1n) / denominator,
+        );
+    }
+
+    const effectiveUnits = safeConfiguredUnits > marginFloorUnits
+        ? safeConfiguredUnits
+        : marginFloorUnits;
+    return Number(effectiveUnits) / Number(PRICE_SCALE_UNITS);
 }
 
 function resolveMargenObjetivoPct(row) {

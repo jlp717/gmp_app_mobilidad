@@ -110,7 +110,7 @@ beforeEach(() => {
 });
 
 describe('pedidos IVA price view', () => {
-  test('effectiveMinPriceFromRow keeps locked floor above cost margin floor', () => {
+  test('effectiveMinPriceFromRow applies a four-decimal gross-margin hard floor', () => {
     expect(pedidosService.effectiveMinPriceFromRow({
       PRECIO_MINIMO: 1,
       COSTE_FABRICACION: 0.6,
@@ -121,7 +121,75 @@ describe('pedidos IVA price view', () => {
       PRECIO_MINIMO: 1,
       COSTE_FABRICACION: 0.9,
       MARGEN_OBJETIVO_PCT: 20,
-    })).toBe(1.08);
+    })).toBe(1.125);
+
+    expect(pedidosService.effectiveMinPriceFromRow({
+      COSTE_FABRICACION: 0.8,
+      MARGEN_OBJETIVO_PCT: 20,
+    })).toBe(1);
+
+    expect(pedidosService.effectiveMinPriceFromRow({
+      COSTE_FABRICACION: 1,
+      MARGEN_OBJETIVO_PCT: 30,
+    })).toBe(1.4286);
+
+    expect(pedidosService.effectiveMinPriceFromRow({
+      COSTE_FABRICACION: 0.9876,
+      MARGEN_OBJETIVO_PCT: 20,
+    })).toBe(1.2345);
+
+    expect(pedidosService.effectiveMinPriceFromRow({
+      COSTE_FABRICACION: '100000.0015',
+      MARGEN_OBJETIVO_PCT: '30',
+    })).toBe(142857.145);
+  });
+
+  test('effectiveMinPriceFromRow does not invent a floor for missing or invalid inputs', () => {
+    expect(pedidosService.effectiveMinPriceFromRow({
+      PRECIO_MINIMO: 1.5,
+      COSTE_FABRICACION: 0.8,
+      MARGEN_OBJETIVO_PCT: 20,
+    })).toBe(1.5);
+
+    expect(pedidosService.effectiveMinPriceFromRow({
+      COSTE_FABRICACION: 0.8,
+      MARGEN_OBJETIVO_PCT: 0,
+    })).toBe(0.8);
+
+    expect(pedidosService.effectiveMinPriceFromRow({
+      COSTE_FABRICACION: 0.8,
+    })).toBe(0);
+    expect(pedidosService.effectiveMinPriceFromRow({
+      PRECIO_MINIMO: 0.75,
+      COSTE_FABRICACION: 0.8,
+      MARGEN_OBJETIVO_PCT: 100,
+    })).toBe(0.75);
+    expect(pedidosService.effectiveMinPriceFromRow({
+      COSTE_FABRICACION: null,
+      MARGEN_OBJETIVO_PCT: 20,
+    })).toBe(0);
+    expect(pedidosService.effectiveMinPriceFromRow({
+      COSTE_FABRICACION: '   ',
+      MARGEN_OBJETIVO_PCT: 20,
+    })).toBe(0);
+    expect(pedidosService.effectiveMinPriceFromRow({
+      COSTE_FABRICACION: 0.8,
+      MARGEN_OBJETIVO_PCT: '   ',
+    })).toBe(0);
+    expect(pedidosService.effectiveMinPriceFromRow({
+      COSTE_FABRICACION: '0.80001',
+      MARGEN_OBJETIVO_PCT: 20,
+    })).toBe(0);
+  });
+
+  test('effectiveMinPriceFromRow fails closed before DECIMAL(11,4) overflow', () => {
+    expect(() => pedidosService.effectiveMinPriceFromRow({
+      COSTE_FABRICACION: '9999999.9999',
+      MARGEN_OBJETIVO_PCT: '0.0001',
+    })).toThrow(expect.objectContaining({
+      code: 'GROSS_MARGIN_FLOOR_OVERFLOW',
+      status: 422,
+    }));
   });
 
   test('applyProductPriceView returns base and IVA prices and switches display fields', () => {
