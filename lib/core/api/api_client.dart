@@ -502,6 +502,17 @@ class ApiClient {
     return <String, dynamic>{'expectedAuthEpoch': expectedAuthEpoch};
   }
 
+  static void _ensureExpectedAuthEpoch(RequestOptions options) {
+    final expectedAuthEpoch = options.extra['expectedAuthEpoch'];
+    if (expectedAuthEpoch is int && expectedAuthEpoch != _authEpoch) {
+      throw ApiException(
+        'La cuenta cambio durante la operacion.',
+        statusCode: 0,
+        code: 'AUTH_CONTEXT_CHANGED',
+      );
+    }
+  }
+
   /// Auth headers map for Image.network, url_launcher, etc.
   static Map<String, String> get authHeaders {
     final token = authToken;
@@ -796,11 +807,20 @@ class ApiClient {
     Duration? receiveTimeout,
     bool skipRetry = false,
   }) {
-    if (!forceRefresh && receiveTimeout == null && !skipRetry) return null;
+    final authBoundExtra = _authBoundRequestExtra;
+    if (!forceRefresh &&
+        receiveTimeout == null &&
+        !skipRetry &&
+        authBoundExtra.isEmpty) {
+      return null;
+    }
 
     return Options(
       receiveTimeout: receiveTimeout,
-      extra: {'skipRetry': skipRetry},
+      extra: {
+        'skipRetry': skipRetry,
+        ...authBoundExtra,
+      },
       headers: forceRefresh
           ? const {
               'Cache-Control': 'no-cache',
@@ -831,15 +851,16 @@ class ApiClient {
     CancelToken? cancelToken,
     bool skipRetry = false,
   }) async {
+    final isAuthBound = _authBoundRequestExtra.isNotEmpty;
     final requestKey = _buildRequestKey('GET_MAP', endpoint, queryParameters);
-    final effectiveCacheKey = cacheResponse
+    final effectiveCacheKey = cacheResponse && !isAuthBound
         ? cacheKey ??
             _autoCacheKey(
               endpoint,
               queryParameters,
             )
         : null;
-    final canDeduplicate = !forceRefresh && cancelToken == null;
+    final canDeduplicate = !isAuthBound && !forceRefresh && cancelToken == null;
 
     if (canDeduplicate) {
       final pending = _pendingRequests[requestKey];
@@ -877,6 +898,7 @@ class ApiClient {
             skipRetry: skipRetry,
           ),
         );
+        _ensureExpectedAuthEpoch(response.requestOptions);
         final rawData = response.data;
         if (rawData is List) {
           throw ApiException('Response is a List, use getList() instead');
@@ -887,6 +909,7 @@ class ApiClient {
           );
         }
         final data = await _castResponseMap(rawData);
+        _ensureExpectedAuthEpoch(response.requestOptions);
 
         // Cache the response if cacheKey provided
         if (effectiveCacheKey != null) {
@@ -937,13 +960,16 @@ class ApiClient {
     Duration maxStale = const Duration(hours: 24),
     CancelToken? cancelToken,
   }) async {
+    final isAuthBound = _authBoundRequestExtra.isNotEmpty;
     final requestKey = _buildRequestKey('GET_LIST', endpoint, queryParameters);
-    final effectiveCacheKey = cacheKey ??
-        _autoCacheKey(
-          endpoint,
-          queryParameters,
-        );
-    final canDeduplicate = !forceRefresh && cancelToken == null;
+    final effectiveCacheKey = isAuthBound
+        ? null
+        : cacheKey ??
+            _autoCacheKey(
+              endpoint,
+              queryParameters,
+            );
+    final canDeduplicate = !isAuthBound && !forceRefresh && cancelToken == null;
 
     if (canDeduplicate) {
       final pending = _pendingRequests[requestKey];
@@ -977,6 +1003,7 @@ class ApiClient {
           cancelToken: cancelToken,
           options: _getOptionsForRead(forceRefresh: forceRefresh),
         );
+        _ensureExpectedAuthEpoch(response.requestOptions);
 
         final data = response.data;
         List<dynamic> result;
@@ -995,6 +1022,7 @@ class ApiClient {
         } else {
           result = [data];
         }
+        _ensureExpectedAuthEpoch(response.requestOptions);
 
         // Cache the response if cacheKey provided
         if (effectiveCacheKey != null) {

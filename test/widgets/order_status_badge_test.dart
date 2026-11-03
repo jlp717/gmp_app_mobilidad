@@ -244,6 +244,25 @@ void main() {
   });
 
   group('OrderStatusConfig Tests', () {
+    test('keeps finalized local sync states distinct from editable drafts', () {
+      expect(
+        OrderStatusConfig.getLabel('PENDIENTE_SYNC'),
+        'Finalizado · pendiente de envío',
+      );
+      expect(
+        OrderStatusConfig.getLabel('SINCRONIZANDO'),
+        'Finalizado · sincronizando',
+      );
+      expect(
+        OrderStatusConfig.getLabel('ERROR_SYNC'),
+        'Finalizado · requiere revisión',
+      );
+      expect(
+        OrderStatusConfig.canonicalDisplayStatus('PENDIENTE_SYNC'),
+        isNot('BORRADOR'),
+      );
+    });
+
     test('getTheme returns correct theme for BORRADOR', () {
       final theme = OrderStatusConfig.getTheme('BORRADOR');
       expect(theme.label, 'Borrador');

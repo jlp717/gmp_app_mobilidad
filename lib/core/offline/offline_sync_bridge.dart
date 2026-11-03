@@ -161,6 +161,9 @@ class OfflineSyncBridge {
       final pedidosFailed = pedidosMap['failed'] as int? ?? 0;
       final pedidosPending = pedidosMap['remainingPending'] as int? ??
           PedidosOfflineService.pendingSyncCount;
+      if (pedidosMap['postSyncRefreshFailed'] == true) {
+        OfflineSyncNotifier.orderPostSyncRefreshFailed();
+      }
       final nextRetryAt =
           DateTime.tryParse(pedidosMap['nextRetryAt']?.toString() ?? '');
       if (nextRetryAt != null) {

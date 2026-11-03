@@ -18,7 +18,8 @@ class OrderTheme {
 }
 
 class OrderStatusConfig {
-  /// Estados visibles para comerciales: Borrador y Confirmado.
+  /// Estados visibles para comerciales. Los estados locales finalizados no
+  /// son borradores editables y nunca se presentan como confirmados.
   static const Map<String, OrderTheme> themes = {
     'BORRADOR': OrderTheme(
       primary: AppTheme.warning,
@@ -30,6 +31,21 @@ class OrderStatusConfig {
       icon: Icons.check_circle,
       label: 'Confirmado',
     ),
+    'PENDIENTE_SYNC': OrderTheme(
+      primary: AppTheme.info,
+      icon: Icons.cloud_upload_outlined,
+      label: 'Finalizado · pendiente de envío',
+    ),
+    'SINCRONIZANDO': OrderTheme(
+      primary: AppTheme.info,
+      icon: Icons.sync,
+      label: 'Finalizado · sincronizando',
+    ),
+    'ERROR_SYNC': OrderTheme(
+      primary: AppTheme.error,
+      icon: Icons.sync_problem,
+      label: 'Finalizado · requiere revisión',
+    ),
   };
 
   /// Colapsa estados intermedios/legacy a los 2 estados comerciales.
@@ -39,6 +55,10 @@ class OrderStatusConfig {
       case 'ENVIADO':
       case 'FACTURADO':
         return 'CONFIRMADO';
+      case 'PENDIENTE_SYNC':
+      case 'SINCRONIZANDO':
+      case 'ERROR_SYNC':
+        return (estado ?? '').trim().toUpperCase();
       case 'BORRADOR':
       case 'PENDIENTE':
       case 'PENDIENTE_APROBACION':

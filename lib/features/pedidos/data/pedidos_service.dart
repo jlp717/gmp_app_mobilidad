@@ -2347,6 +2347,8 @@ class PedidosService {
       CacheService.invalidateByPrefix('pedidos:stats:'),
       CacheService.invalidateByPrefix('pedidos:yoy:'),
       CacheService.invalidateByPrefix('pedidos:delivery:'),
+      CacheService.invalidateByPrefix('pedidos:products:'),
+      CacheService.invalidateByPrefix('pedidos:stock:'),
       CacheService.invalidateByPrefix('cobros:pending-summary:'),
       CacheService.invalidateByPrefix('cobros:pendientes:'),
       CacheService.invalidateByPrefix('cobros:estado:'),

@@ -1035,7 +1035,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         decoration: BoxDecoration(
           color: AppTheme.raisedSurface.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.2)),
+          border:
+              Border.all(color: AppTheme.borderColor.withValues(alpha: 0.2)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1198,14 +1199,14 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                       child: child,
                     );
                   },
-                      child: SizedBox(
-                        height: 52,
-                        child: ElevatedButton.icon(
-                          onPressed: _isConfirming ||
-                                  _isLoadingDeliveryOptions ||
-                                  _confirmSucceeded
-                              ? null
-                              : () => _askSecondConfirm(total),
+                  child: SizedBox(
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: _isConfirming ||
+                              _isLoadingDeliveryOptions ||
+                              _confirmSucceeded
+                          ? null
+                          : () => _askSecondConfirm(total),
                       icon: _isConfirming
                           ? SizedBox(
                               width: 18,
@@ -1354,9 +1355,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       helpText: 'Fecha reparto',
       confirmText: 'Aceptar',
       cancelText: 'Cancelar',
-      selectableDayPredicate: hasRule
-          ? (date) => allowed.contains(_dayNameForDate(date))
-          : null,
+      selectableDayPredicate:
+          hasRule ? (date) => allowed.contains(_dayNameForDate(date)) : null,
     );
 
     if (picked == null) return;
@@ -1710,7 +1710,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           _confirmSucceeded = true;
           _confirmStatusMessage = message != null && message.isNotEmpty
               ? message
-              : 'Pedido guardado localmente. Se enviara al recuperar conexion.';
+              : 'Pedido finalizado y guardado. Pendiente de envio al servidor.';
         });
         await Future<void>.delayed(const Duration(seconds: 2));
         if (!mounted) return;

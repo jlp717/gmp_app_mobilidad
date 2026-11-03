@@ -30,6 +30,7 @@ void main() {
     PedidosOfflineService.onRetryScheduled = null;
     PedidosOfflineService.onAutoSyncThresholdReached = null;
     PedidosOfflineService.onScopeActivated = null;
+    PedidosOfflineService.onVerifiedOrdersSynced = null;
     OfflineSyncBridge.debugResetRetryScheduler();
   });
 

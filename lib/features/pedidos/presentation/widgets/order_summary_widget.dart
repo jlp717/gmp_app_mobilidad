@@ -286,9 +286,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       future: future,
       builder: (ctx, snapshot) {
         final days = snapshot.data?.allowedDeliveryDaysShort.trim() ?? '';
-        final label = snapshot.hasError || days.isEmpty
-            ? 'Reparto: —'
-            : 'Reparto: $days';
+        final label =
+            snapshot.hasError || days.isEmpty ? 'Reparto: —' : 'Reparto: $days';
         return Semantics(
           label: 'Días de reparto del cliente, $label',
           child: Padding(
@@ -306,8 +305,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                     label,
                     style: TextStyle(
                       color: AppTheme.textSecondary,
-                      fontSize:
-                          Responsive.fontSize(ctx, small: 12, large: 13),
+                      fontSize: Responsive.fontSize(ctx, small: 12, large: 13),
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1604,7 +1602,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           content: Text(
             message != null && message.isNotEmpty
                 ? message
-                : 'Pedido guardado localmente. Se enviara al recuperar conexion.',
+                : 'Pedido finalizado y guardado. Pendiente de envio al servidor.',
           ),
           backgroundColor: AppTheme.warning,
         ),

@@ -157,12 +157,16 @@ void main() {
       expect(recorder.calls, 1);
     });
 
-    testWidgets('resultado en cola indica guardado local', (tester) async {
+    testWidgets('resultado en cola indica finalizado pendiente de envio',
+        (tester) async {
       final recorder = _OnConfirmRecorder({
         'queued': true,
         'pendingConfirmation': true,
+        'finalizedLocally': true,
+        'editableDraft': false,
+        'estado': 'PENDIENTE_SYNC',
         'message':
-            'Pedido guardado localmente. Se enviara al recuperar conexion.',
+            'Pedido finalizado y guardado. Pendiente de envio cuando vuelva internet.',
       });
       await _openSheet(tester, _providerWithLine().notifier, recorder.call);
 
@@ -173,7 +177,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(recorder.calls, 1);
-      expect(find.textContaining('guardado localmente'), findsOneWidget);
+      expect(find.textContaining('Pendiente de envio'), findsOneWidget);
       await tester.pump(const Duration(seconds: 3));
       await tester.pump();
     });

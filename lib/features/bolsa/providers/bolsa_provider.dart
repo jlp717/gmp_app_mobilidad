@@ -11,6 +11,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_service.dart';
 
@@ -258,7 +259,11 @@ class BolsaProvider extends Notifier<BolsaState> {
     );
   }
 
-  Future<void> load(String vendedorCode, {bool force = false}) async {
+  Future<void> load(
+    String vendedorCode, {
+    bool force = false,
+    int? expectedAuthEpoch,
+  }) async {
     final code = vendedorCode.trim();
     if (code.isEmpty || code.toUpperCase() == 'ALL') {
       _clearVendorSelection(
@@ -277,33 +282,40 @@ class BolsaProvider extends Notifier<BolsaState> {
       clearGroupedSummary: true,
     );
     try {
-      final results = await Future.wait([
-        BolsaService.getStatus(
-          code,
-          year: state.selectedYear,
-          month: state.selectedMonth,
-          forceRefresh: force,
-        ),
-        BolsaService.getMovements(
-          code,
-          limit: 150,
-          year: state.selectedYear,
-          month: state.selectedMonth,
-          dateFrom: state.dateFromFilter,
-          dateTo: state.dateToFilter,
-          documentQuery: state.documentFilter,
-          clientQuery: state.clientFilter,
-          forceRefresh: force || state.hasAdvancedFilters,
-        ),
-        BolsaService.getHistory(
-          code,
-          months: 12,
-          year: state.selectedYear,
-          month: state.selectedMonth,
-          forceRefresh: force,
-        ),
-      ]);
-      if (generation != _loadGeneration || state.currentVendor != code) return;
+      final results = await _readForAuthEpoch(
+        expectedAuthEpoch,
+        () => Future.wait([
+          BolsaService.getStatus(
+            code,
+            year: state.selectedYear,
+            month: state.selectedMonth,
+            forceRefresh: force,
+          ),
+          BolsaService.getMovements(
+            code,
+            limit: 150,
+            year: state.selectedYear,
+            month: state.selectedMonth,
+            dateFrom: state.dateFromFilter,
+            dateTo: state.dateToFilter,
+            documentQuery: state.documentFilter,
+            clientQuery: state.clientFilter,
+            forceRefresh: force || state.hasAdvancedFilters,
+          ),
+          BolsaService.getHistory(
+            code,
+            months: 12,
+            year: state.selectedYear,
+            month: state.selectedMonth,
+            forceRefresh: force,
+          ),
+        ]),
+      );
+      if (generation != _loadGeneration ||
+          state.currentVendor != code ||
+          !_isExpectedAuthEpochCurrent(expectedAuthEpoch)) {
+        return;
+      }
       state = state.copyWith(
         status: results[0] as BolsaStatus,
         movements: _dedupeMovements(
@@ -314,7 +326,8 @@ class BolsaProvider extends Notifier<BolsaState> {
         clearError: true,
       );
     } catch (e) {
-      if (generation == _loadGeneration) {
+      if (generation == _loadGeneration &&
+          _isExpectedAuthEpochCurrent(expectedAuthEpoch)) {
         state = state.copyWith(error: e.toString());
         _debugLog('[BolsaProvider] load error: $e');
       }
@@ -328,6 +341,7 @@ class BolsaProvider extends Notifier<BolsaState> {
   Future<void> loadGrouped({
     List<String>? vendedorCodes,
     bool force = false,
+    int? expectedAuthEpoch,
   }) async {
     final codes = (vendedorCodes ?? const <String>[])
         .map((code) => code.trim())
@@ -352,16 +366,24 @@ class BolsaProvider extends Notifier<BolsaState> {
       clearStatus: true,
     );
     try {
-      final grouped = await BolsaService.getGroupedStatus(
-        year: state.selectedYear,
-        month: state.selectedMonth,
-        vendedorCodes: codes,
-        forceRefresh: force,
+      final grouped = await _readForAuthEpoch(
+        expectedAuthEpoch,
+        () => BolsaService.getGroupedStatus(
+          year: state.selectedYear,
+          month: state.selectedMonth,
+          vendedorCodes: codes,
+          forceRefresh: force,
+        ),
       );
-      if (generation != _loadGeneration || !state.isGroupedView) return;
+      if (generation != _loadGeneration ||
+          !state.isGroupedView ||
+          !_isExpectedAuthEpochCurrent(expectedAuthEpoch)) {
+        return;
+      }
       state = state.copyWith(groupedSummary: grouped, clearError: true);
     } catch (e) {
-      if (generation == _loadGeneration) {
+      if (generation == _loadGeneration &&
+          _isExpectedAuthEpochCurrent(expectedAuthEpoch)) {
         state = state.copyWith(error: e.toString());
         _debugLog('[BolsaProvider] loadGrouped error: $e');
       }
@@ -394,16 +416,33 @@ class BolsaProvider extends Notifier<BolsaState> {
     }
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh({int? expectedAuthEpoch}) async {
     if (state.isGroupedView) {
       await loadGrouped(
         vendedorCodes: List<String>.unmodifiable(state.groupedVendorCodes),
         force: true,
+        expectedAuthEpoch: expectedAuthEpoch,
       );
       return;
     }
     if (state.currentVendor == null) return;
-    await load(state.currentVendor!, force: true);
+    await load(
+      state.currentVendor!,
+      force: true,
+      expectedAuthEpoch: expectedAuthEpoch,
+    );
+  }
+
+  bool _isExpectedAuthEpochCurrent(int? expectedAuthEpoch) =>
+      expectedAuthEpoch == null ||
+      expectedAuthEpoch == ApiClient.authMutationEpoch;
+
+  Future<T> _readForAuthEpoch<T>(
+    int? expectedAuthEpoch,
+    Future<T> Function() read,
+  ) {
+    if (expectedAuthEpoch == null) return read();
+    return ApiClient.runForAuthEpoch(expectedAuthEpoch, read);
   }
 
   Future<void> setPeriod({required int year, required int month}) async {

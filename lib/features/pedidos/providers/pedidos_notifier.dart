@@ -37,6 +37,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/providers/bolsa_provider.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
@@ -482,6 +483,7 @@ class PedidosState {
 class PedidosNotifier extends Notifier<PedidosState> {
   int _productsLoadGeneration = 0;
   int _ordersLoadGeneration = 0;
+  int _statsLoadGeneration = 0;
   int _clientBalanceLoadGeneration = 0;
   CancelToken? _productsCancelToken;
   // Guard post-dispose (mismo patron validado en cobros_provider.dart):
@@ -490,8 +492,6 @@ class PedidosNotifier extends Notifier<PedidosState> {
   bool _disposed = false;
 
   // Req #9 (port tramo 105-111): OrderApi inyectable para testabilidad.
-  PedidosOrderApi _orderApi = const PedidosServiceOrderApi();
-  bool _refreshAfterConfirm = true;
 
   PedidosState? _pendingState;
   bool _notifyScheduled = false;
@@ -514,14 +514,62 @@ class PedidosNotifier extends Notifier<PedidosState> {
   /// viejo `PedidosProvider(orderApi: ...)`).
   @visibleForTesting
   void debugSetOrderApi(PedidosOrderApi api) {
-    _orderApi = api;
+    PedidosOfflineService.debugSetCreateOrderWithOriginalTimestampForTesting(({
+      required clientCode,
+      required clientName,
+      required vendedorCode,
+      required tipoVenta,
+      required lines,
+      required observaciones,
+      required clientRequestId,
+      required originalCreatedAt,
+      descuentoGlobal = 0,
+    }) async {
+      final response = await api.createOrder(
+        clientCode: clientCode,
+        clientName: clientName,
+        vendedorCode: vendedorCode,
+        tipoVenta: tipoVenta,
+        lines: lines.cast<OrderLine>(),
+        observaciones: observaciones,
+        clientRequestId: clientRequestId,
+        originalCreatedAt: originalCreatedAt,
+        descuentoGlobal: descuentoGlobal,
+      );
+      if (response['success'] == null && response['id'] != null) {
+        return <String, dynamic>{'success': true, ...response};
+      }
+      return response;
+    });
+    PedidosOfflineService.debugSetConfirmOrderForTesting(
+      (
+        orderId,
+        saleType, {
+        deliveryDate,
+        vehicleCode,
+        driverCode,
+        routeCode,
+        cobroPropio = false,
+      }) async {
+        final response = await api.confirmOrder(
+          orderId,
+          saleType,
+          deliveryDate: deliveryDate,
+          vehicleCode: vehicleCode,
+          driverCode: driverCode,
+          routeCode: routeCode,
+          cobroPropio: cobroPropio,
+        );
+        return response['success'] == null
+            ? <String, dynamic>{'success': true, ...response}
+            : response;
+      },
+    );
   }
 
   /// Test-only: desactiva el refresh post-confirm para asserts aislados.
   @visibleForTesting
-  void debugSetRefreshAfterConfirm(bool value) {
-    _refreshAfterConfirm = value;
-  }
+  void debugSetRefreshAfterConfirm(bool _) {}
 
   /// Equivalente al viejo `_notify`: agrupa cambios rápidos en un microtask.
   /// En Notifier, asignar `state` ya notifica; el debounce evita rebuilds.
@@ -816,6 +864,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
     bool reset = false,
     bool forceRefresh = false,
     bool? onlyStock,
+    int? expectedAuthEpoch,
   }) async {
     if (state.clientCode == null || state.clientCode!.trim().isEmpty) {
       _setState(
@@ -859,22 +908,26 @@ class PedidosNotifier extends Notifier<PedidosState> {
     );
 
     try {
-      final results = await PedidosService.getProducts(
-        vendedorCodes: vendedorCodes,
-        search: search,
-        clientCode: requestClientCode,
-        family: requestFamily,
-        marca: requestBrand,
-        prefamily: requestPrefamily,
-        onlyStock: requestOnlyStock,
-        offset: requestOffset,
-        sortBy: state.catalogSort.apiSortBy,
-        sortOrder: state.catalogSort.apiSortOrder,
-        forceRefresh: forceRefresh,
-        cancelToken: cancelToken,
+      final results = await _readForAuthEpoch(
+        expectedAuthEpoch,
+        () => PedidosService.getProducts(
+          vendedorCodes: vendedorCodes,
+          search: search,
+          clientCode: requestClientCode,
+          family: requestFamily,
+          marca: requestBrand,
+          prefamily: requestPrefamily,
+          onlyStock: requestOnlyStock,
+          offset: requestOffset,
+          sortBy: state.catalogSort.apiSortBy,
+          sortOrder: state.catalogSort.apiSortOrder,
+          forceRefresh: forceRefresh,
+          cancelToken: cancelToken,
+        ),
       );
 
       if (generation != _productsLoadGeneration ||
+          !_isExpectedAuthEpochCurrent(expectedAuthEpoch) ||
           requestClientCode != state.clientCode ||
           requestFamily != state.selectedFamily ||
           requestBrand != state.selectedBrand ||
@@ -903,7 +956,8 @@ class PedidosNotifier extends Notifier<PedidosState> {
         immediate: true,
       );
     } catch (e) {
-      if (e is ApiException && e.code == 'CANCELLED') {
+      if ((e is ApiException && e.code == 'CANCELLED') ||
+          !_isExpectedAuthEpochCurrent(expectedAuthEpoch)) {
         return;
       }
       if (generation == _productsLoadGeneration) {
@@ -1623,122 +1677,34 @@ class PedidosNotifier extends Notifier<PedidosState> {
       );
 
       final connectivityStatus = ConnectivityService.instance.currentStatus;
-      if (connectivityStatus != ConnectivityStatus.online) {
-        _debugLog(
-          '[confirmOrder] offline/limited connectivity; order kept local',
-        );
-        PedidosOfflineService.notifyQueuedOrder(queuedSyncKey);
-        _clearSubmittedCartInto((next) {
-          _setState(next, immediate: true);
-          return next;
-        });
-        _setState(
-          state.copyWith(clearActiveCheckoutClientRequestId: true),
-          immediate: true,
-        );
-        return {
-          'queued': true,
-          'pendingConfirmation': true,
-          'localDraft': true,
-          'estado': 'BORRADOR_LOCAL',
-          'message': connectivityStatus == ConnectivityStatus.limited
-              ? 'Pedido guardado como borrador local. Se enviara al recuperar conexion con el servidor.'
-              : 'Pedido guardado como borrador local. Se enviara cuando vuelva internet.',
-        };
-      }
-
-      _debugLog(
-        '[confirmOrder] Step 2/3: Calling createOrder API (client=${state.clientCode}, lines=${linesForSubmit.length})',
-      );
-      final createResult = await _orderApi.createOrder(
-        clientCode: state.clientCode!,
-        clientName: state.clientName ?? '',
-        vendedorCode: vendedorCode,
-        tipoVenta: state.saleType,
-        lines: linesForSubmit,
-        observaciones: obs,
-        clientRequestId: clientRequestId,
-        descuentoGlobal: state.globalDiscountPct,
-      );
-      _debugLog('[confirmOrder] createOrder result id=${createResult['id']}');
-
-      if (createResult['queued'] == true) {
-        final pending = Map<String, dynamic>.from(createResult);
-        pending['pendingConfirmation'] = true;
-        pending['localDraft'] = true;
-        pending['estado'] ??= 'BORRADOR_LOCAL';
-        pending['message'] ??=
-            'Pedido guardado para sincronizar. No esta confirmado todavia.';
-        PedidosOfflineService.notifyQueuedOrder(queuedSyncKey);
-        _clearSubmittedCartInto((next) {
-          _setState(next, immediate: true);
-          return next;
-        });
-        _setState(
-          state.copyWith(clearActiveCheckoutClientRequestId: true),
-          immediate: true,
-        );
-        return pending;
-      }
-
-      if (createResult['id'] == null) {
-        _setState(
-          state.copyWith(error: 'Error al crear el pedido'),
-          immediate: true,
-        );
-        _debugLog('[confirmOrder] FAILED: createOrder returned null id');
-        return null;
-      }
-
-      final orderId = createResult['id'] as int;
-      _debugLog(
-        '[confirmOrder] Step 3/3: Calling confirmOrder API (orderId=$orderId, saleType=${state.saleType}, deliveryDate=$deliveryDate)',
-      );
-      final confirmedResult = await _orderApi.confirmOrder(
-        orderId,
-        state.saleType,
-        deliveryDate: deliveryDate,
-        vehicleCode: vehicleCode,
-        driverCode: driverCode,
-        routeCode: routeCode,
-        cobroPropio: cobroPropio,
-      );
-      _debugLog(
-        '[confirmOrder] confirmOrder result keys=${confirmedResult.keys.toList()}',
-      );
-
-      final result = helpers.normalizeConfirmOrderResultForProvider(
-        createResult: Map<String, dynamic>.from(createResult),
-        confirmedResult: Map<String, dynamic>.from(confirmedResult),
-      );
-
-      if (helpers.shouldClearCartAfterConfirmation(result)) {
-        _clearSubmittedCartInto((next) {
-          _setState(next, immediate: true);
-          return next;
-        });
-      }
-
-      if (_refreshAfterConfirm) {
-        await refreshOrdersAndStats();
-      }
-      if (helpers.isConfirmedOrderResultForProvider(result)) {
-        try {
-          unawaited(ref.read(bolsaProvider.notifier).refresh());
-        } catch (_) {
-          // Bolsa no disponible en tests puros: no crítico.
-        }
-      }
-
-      _debugLog(
-        '[confirmOrder] SUCCESS: order confirmed, result keys=${result.keys.toList()}',
-      );
-      await PedidosOfflineService.deleteQueuedOrder(queuedSyncKey);
+      PedidosOfflineService.notifyQueuedOrder(queuedSyncKey);
+      _clearSubmittedCartInto((next) {
+        _setState(next, immediate: true);
+        return next;
+      });
       _setState(
         state.copyWith(clearActiveCheckoutClientRequestId: true),
         immediate: true,
       );
-      return result;
+      if (connectivityStatus == ConnectivityStatus.online) {
+        // Durable local acceptance is the user-facing completion boundary.
+        // The network drain starts in the background and reports failures via
+        // OfflineSyncNotifier instead of delaying the save interaction.
+        unawaited(_drainFinalizedOrdersInBackground());
+      }
+      return {
+        'queued': true,
+        'pendingConfirmation': true,
+        'finalizedLocally': true,
+        'editableDraft': false,
+        'syncStatus': 'pending',
+        'estado': 'PENDIENTE_SYNC',
+        'message': connectivityStatus == ConnectivityStatus.limited
+            ? 'Pedido finalizado y guardado. Pendiente de envio al recuperar conexion completa.'
+            : connectivityStatus == ConnectivityStatus.online
+                ? 'Pedido finalizado y guardado. Sincronizacion en segundo plano.'
+                : 'Pedido finalizado y guardado. Pendiente de envio cuando vuelva internet.',
+      };
     } catch (e, st) {
       if (e is ApiException &&
           (e.code == 'MIN_COBRO_ORDER_BLOCKED' ||
@@ -1754,26 +1720,6 @@ class PedidosNotifier extends Notifier<PedidosState> {
           'message': e.message,
         };
       }
-      if (queuedSyncKey != null && e is ApiException && e.statusCode == 0) {
-        _debugLog('[confirmOrder] network error; order kept in offline queue');
-        PedidosOfflineService.notifyQueuedOrder(queuedSyncKey);
-        _clearSubmittedCartInto((next) {
-          _setState(next, immediate: true);
-          return next;
-        });
-        _setState(
-          state.copyWith(clearActiveCheckoutClientRequestId: true),
-          immediate: true,
-        );
-        return {
-          'queued': true,
-          'pendingConfirmation': true,
-          'localDraft': true,
-          'estado': 'BORRADOR_LOCAL',
-          'message':
-              'Pedido guardado localmente. Se enviara al recuperar conexion.',
-        };
-      }
       if (queuedSyncKey != null) {
         await PedidosOfflineService.markQueuedOrderFailed(queuedSyncKey, e);
       }
@@ -1783,6 +1729,30 @@ class PedidosNotifier extends Notifier<PedidosState> {
       return null;
     } finally {
       _setState(state.copyWith(isSaving: false), immediate: true);
+    }
+  }
+
+  Future<void> _drainFinalizedOrdersInBackground() async {
+    try {
+      final result = await PedidosOfflineService.syncPendingOrdersWithResult();
+      if (result['postSyncRefreshFailed'] == true) {
+        OfflineSyncNotifier.orderPostSyncRefreshFailed();
+      }
+      OfflineSyncNotifier.reportSyncRun(
+        queueSynced: 0,
+        queueFailed: 0,
+        queuePending: 0,
+        pedidosSynced: result['synced'] as int? ?? 0,
+        pedidosFailed: result['failed'] as int? ?? 0,
+        pedidosPending: result['remainingPending'] as int? ??
+            PedidosOfflineService.pendingSyncCount,
+      );
+    } catch (error) {
+      _debugLog('[confirmOrder] background drain could not start: $error');
+      OfflineSyncNotifier.refreshCounts(
+        pending: PedidosOfflineService.pendingSyncCount,
+        failed: PedidosOfflineService.getFailedSyncs().length,
+      );
     }
   }
 
@@ -1830,12 +1800,15 @@ class PedidosNotifier extends Notifier<PedidosState> {
         desiredStatus != 'BORRADOR' &&
         desiredStatus != 'BORRADOR_LOCAL' &&
         desiredStatus != 'PENDIENTE' &&
+        desiredStatus != 'PENDIENTE_SYNC' &&
+        desiredStatus != 'SINCRONIZANDO' &&
         desiredStatus != 'ERROR_SYNC') {
       return const <OrderSummary>[];
     }
 
     final items = [
       ...PedidosOfflineService.getPendingSyncs(),
+      ...PedidosOfflineService.getSyncingSyncs(),
       ...PedidosOfflineService.getFailedSyncs(),
     ];
     final summaries = <OrderSummary>[];
@@ -1859,12 +1832,18 @@ class PedidosNotifier extends Notifier<PedidosState> {
       }
       final queuedAt = item['queuedAt']?.toString() ?? '';
       final isFailed = item['status']?.toString() == 'failed';
-      final localStatus = isFailed ? 'ERROR_SYNC' : 'BORRADOR_LOCAL';
+      final isSyncing = item['status']?.toString() == 'syncing';
+      final localStatus = isFailed
+          ? 'ERROR_SYNC'
+          : isSyncing
+              ? 'SINCRONIZANDO'
+              : 'PENDIENTE_SYNC';
       if (desiredStatus != null &&
           desiredStatus.isNotEmpty &&
           desiredStatus != localStatus &&
-          !(desiredStatus == 'BORRADOR' && localStatus == 'BORRADOR_LOCAL') &&
-          !(desiredStatus == 'PENDIENTE' && localStatus == 'BORRADOR_LOCAL')) {
+          !(desiredStatus == 'PENDIENTE' &&
+              (localStatus == 'PENDIENTE_SYNC' ||
+                  localStatus == 'SINCRONIZANDO'))) {
         continue;
       }
       summaries.add(
@@ -1901,6 +1880,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
     double? maxAmount,
     String sortBy = 'fecha',
     String sortOrder = 'DESC',
+    int? expectedAuthEpoch,
   }) async {
     final generation = ++_ordersLoadGeneration;
     _setState(
@@ -1918,26 +1898,31 @@ class PedidosNotifier extends Notifier<PedidosState> {
     final effectiveForceRefresh = forceRefresh && canRefreshFromNetwork;
     if (effectiveForceRefresh) {
       await PedidosService.invalidateOrderCaches();
-      if (generation == _ordersLoadGeneration && !_disposed) {
+      if (generation == _ordersLoadGeneration &&
+          !_disposed &&
+          _isExpectedAuthEpochCurrent(expectedAuthEpoch)) {
         _setState(state.copyWith(orders: const []), immediate: true);
       }
     }
 
     try {
       final apiStatus = _isGroupedOrderStatusFilter(status) ? null : status;
-      var orders = await PedidosService.getOrders(
-        vendedorCodes: vendedorCodes,
-        status: apiStatus,
-        limit: 20,
-        page: 1,
-        forceRefresh: effectiveForceRefresh,
-        dateFrom: dateFrom,
-        dateTo: dateTo,
-        search: search,
-        minAmount: minAmount,
-        maxAmount: maxAmount,
-        sortBy: sortBy,
-        sortOrder: sortOrder,
+      var orders = await _readForAuthEpoch(
+        expectedAuthEpoch,
+        () => PedidosService.getOrders(
+          vendedorCodes: vendedorCodes,
+          status: apiStatus,
+          limit: 20,
+          page: 1,
+          forceRefresh: effectiveForceRefresh,
+          dateFrom: dateFrom,
+          dateTo: dateTo,
+          search: search,
+          minAmount: minAmount,
+          maxAmount: maxAmount,
+          sortBy: sortBy,
+          sortOrder: sortOrder,
+        ),
       );
       if (status != null &&
           status.isNotEmpty &&
@@ -1948,13 +1933,17 @@ class PedidosNotifier extends Notifier<PedidosState> {
       if (localOrders.isNotEmpty) {
         orders = [...localOrders, ...orders];
       }
-      if (generation != _ordersLoadGeneration) return;
+      if (generation != _ordersLoadGeneration ||
+          !_isExpectedAuthEpochCurrent(expectedAuthEpoch)) {
+        return;
+      }
       _setState(
         state.copyWith(orders: List.unmodifiable(orders)),
         immediate: true,
       );
     } catch (e) {
-      if (generation == _ordersLoadGeneration) {
+      if (generation == _ordersLoadGeneration &&
+          _isExpectedAuthEpochCurrent(expectedAuthEpoch)) {
         _setState(state.copyWith(error: e.toString()), immediate: true);
       }
     } finally {
@@ -1968,16 +1957,18 @@ class PedidosNotifier extends Notifier<PedidosState> {
   }
 
   /// Refresh stats + orders list after any order state change
-  Future<void> refreshOrdersAndStats() async {
+  Future<void> refreshOrdersAndStats({int? expectedAuthEpoch}) async {
     await Future.wait([
       loadOrders(
         vendedorCodes: state.vendedorCodes,
         status: state.orderStatusFilter,
         forceRefresh: true,
+        expectedAuthEpoch: expectedAuthEpoch,
       ),
       loadOrderStats(
         vendedorCodes: state.vendedorCodes,
         forceRefresh: true,
+        expectedAuthEpoch: expectedAuthEpoch,
       ),
     ]);
   }
@@ -1987,14 +1978,18 @@ class PedidosNotifier extends Notifier<PedidosState> {
     String? dateFrom,
     String? dateTo,
     bool forceRefresh = false,
+    int? expectedAuthEpoch,
   }) async {
+    final generation = ++_statsLoadGeneration;
     _setState(state.copyWith(isLoadingStats: true), immediate: true);
     final canRefreshFromNetwork =
         ConnectivityService.instance.currentStatus == ConnectivityStatus.online;
     final effectiveForceRefresh = forceRefresh && canRefreshFromNetwork;
     if (effectiveForceRefresh) {
       await CacheService.invalidateByPrefix('pedidos:stats:');
-      if (!_disposed) {
+      if (!_disposed &&
+          generation == _statsLoadGeneration &&
+          _isExpectedAuthEpochCurrent(expectedAuthEpoch)) {
         _setState(
           state.copyWith(
             orderStats: OrderStats(
@@ -2014,16 +2009,25 @@ class PedidosNotifier extends Notifier<PedidosState> {
       }
     }
     try {
-      final stats = await PedidosService.getOrderStats(
-        vendedorCodes: vendedorCodes,
-        dateFrom: dateFrom,
-        dateTo: dateTo,
-        forceRefresh: effectiveForceRefresh,
+      final stats = await _readForAuthEpoch(
+        expectedAuthEpoch,
+        () => PedidosService.getOrderStats(
+          vendedorCodes: vendedorCodes,
+          dateFrom: dateFrom,
+          dateTo: dateTo,
+          forceRefresh: effectiveForceRefresh,
+        ),
       );
+      if (generation != _statsLoadGeneration ||
+          !_isExpectedAuthEpochCurrent(expectedAuthEpoch)) {
+        return;
+      }
       _setState(state.copyWith(orderStats: stats), immediate: true);
     } catch (e) {
       _debugLog('[PedidosNotifier] loadOrderStats error: $e');
-      if (state.orderStats == null) {
+      if (generation == _statsLoadGeneration &&
+          _isExpectedAuthEpochCurrent(expectedAuthEpoch) &&
+          state.orderStats == null) {
         _setState(
           state.copyWith(
             orderStats: OrderStats(
@@ -2042,8 +2046,22 @@ class PedidosNotifier extends Notifier<PedidosState> {
         );
       }
     } finally {
-      _setState(state.copyWith(isLoadingStats: false), immediate: true);
+      if (generation == _statsLoadGeneration) {
+        _setState(state.copyWith(isLoadingStats: false), immediate: true);
+      }
     }
+  }
+
+  bool _isExpectedAuthEpochCurrent(int? expectedAuthEpoch) =>
+      expectedAuthEpoch == null ||
+      expectedAuthEpoch == ApiClient.authMutationEpoch;
+
+  Future<T> _readForAuthEpoch<T>(
+    int? expectedAuthEpoch,
+    Future<T> Function() read,
+  ) {
+    if (expectedAuthEpoch == null) return read();
+    return ApiClient.runForAuthEpoch(expectedAuthEpoch, read);
   }
 
   void setOrderStatusFilter(String? status) {

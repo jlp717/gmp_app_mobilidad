@@ -51,6 +51,15 @@ class PedidosOfflineService {
       onAutoSyncThresholdReached;
   static void Function(String scope)? onScopeActivated;
 
+  /// Runs only after one or more queued orders received a canonical
+  /// `CONFIRMADO` acknowledgement. The opaque scope prevents an account
+  /// switch from refreshing another commercial's UI.
+  static Future<void> Function(
+    String scope,
+    int authEpoch,
+    List<int> orderIds,
+  )? onVerifiedOrdersSynced;
+
   static Future Function({
     required String clientCode,
     required String clientName,
@@ -78,6 +87,7 @@ class PedidosOfflineService {
   static Future<void> init() async {
     _draftsBox = await _openDraftsBox();
     _syncQueueBox = await _openSyncQueueBox();
+    await _recoverInterruptedSyncs(_syncQueueBox!);
     onScopeActivated?.call(_scope);
   }
 
@@ -344,6 +354,12 @@ class PedidosOfflineService {
     return _getSyncsByStatus('pending');
   }
 
+  /// Orders currently owned by the active drain. Kept separate from editable
+  /// drafts so UI can render an explicit "Sincronizando" state.
+  static List getSyncingSyncs() {
+    return _getSyncsByStatus('syncing');
+  }
+
   /// Get failed sync items preserved for manual review or retry.
   static List getFailedSyncs() {
     return _getSyncsByStatus('failed');
@@ -425,6 +441,8 @@ class PedidosOfflineService {
     var transientFailures = 0;
     var processed = 0;
     var synced = 0;
+    final verifiedOrderIds = <int>[];
+    var postSyncRefreshFailed = false;
     var identityDeferred = 0;
     var nextIndex = 0;
 
@@ -457,11 +475,7 @@ class PedidosOfflineService {
               'Pedido no confirmado por servidor; conservado para revision.',
             );
           }
-          orderId =
-              _asIntOrNull((response as Map)['id'] ?? response['orderId']);
-          if (orderId == null) {
-            throw StateError('Pedido sincronizado sin id de servidor.');
-          }
+          orderId = _requireCreateAcknowledgement(response);
           prepared['serverOrderId'] = orderId;
           final preserved = await _putScopedSyncItem(
             box,
@@ -499,10 +513,12 @@ class PedidosOfflineService {
               'El servidor rechazo la confirmacion.';
           throw _ServerBlockedSyncException(reason.toString());
         }
+        _requireConfirmedAcknowledgement(confirmResult, orderId!);
         _ensureMutationIdentity(capturedScope, capturedAuthEpoch);
         if (_decodeScopedSyncItem(box, syncKey, capturedScope) != null) {
           await box.delete(syncKey);
         }
+        verifiedOrderIds.add(orderId);
         synced++;
       } on _SyncIdentityChanged catch (e) {
         await _deferForIdentityChange(
@@ -557,6 +573,25 @@ class PedidosOfflineService {
     if (processed > 0 || synced > 0 || failures.isNotEmpty) {
       _notifyChanged();
     }
+    if (verifiedOrderIds.isNotEmpty &&
+        _scope == capturedScope &&
+        _authEpoch() == capturedAuthEpoch) {
+      final callback = onVerifiedOrdersSynced;
+      if (callback != null) {
+        try {
+          await callback(
+            capturedScope,
+            capturedAuthEpoch,
+            List<int>.unmodifiable(verifiedOrderIds),
+          );
+        } catch (error) {
+          postSyncRefreshFailed = true;
+          debugPrint(
+            '[PedidosOffline] Post-sync refresh failed; server ACK remains valid: $error',
+          );
+        }
+      }
+    }
     return {
       'totalPendingAtStart': pending.length,
       'selectedForRun': selected.length,
@@ -573,6 +608,7 @@ class PedidosOfflineService {
       'isBackpressured': remainingPending == 0 ? false : true,
       'nextRetryAt': nextRetryAt?.toIso8601String(),
       'failures': failures,
+      'postSyncRefreshFailed': postSyncRefreshFailed,
     };
   }
 
@@ -584,7 +620,7 @@ class PedidosOfflineService {
 
   /// Get count of pending syncs
   static int get pendingSyncCount {
-    return getPendingSyncs().length;
+    return getPendingSyncs().length + getSyncingSyncs().length;
   }
 
   /// Stores the ERP auto-sync threshold for this account and seller.
@@ -683,6 +719,43 @@ class PedidosOfflineService {
       required clientRequestId,
       required originalCreatedAt,
       descuentoGlobal = 0,
+    }) async {
+      final response = await createOrder(
+        clientCode: clientCode,
+        clientName: clientName,
+        vendedorCode: vendedorCode,
+        tipoVenta: tipoVenta,
+        lines: lines,
+        observaciones: observaciones,
+        clientRequestId: clientRequestId,
+        descuentoGlobal: descuentoGlobal,
+      );
+      return _canonicalizeLegacyTestEnvelope(response);
+    };
+  }
+
+  static void debugSetRawCreateOrderForTesting(
+    Future Function({
+      required String clientCode,
+      required String clientName,
+      required String vendedorCode,
+      required String tipoVenta,
+      required List lines,
+      required String observaciones,
+      required String? clientRequestId,
+      double descuentoGlobal,
+    }) createOrder,
+  ) {
+    _createOrder = ({
+      required clientCode,
+      required clientName,
+      required vendedorCode,
+      required tipoVenta,
+      required lines,
+      required observaciones,
+      required clientRequestId,
+      required originalCreatedAt,
+      descuentoGlobal = 0,
     }) =>
         createOrder(
           clientCode: clientCode,
@@ -700,7 +773,6 @@ class PedidosOfflineService {
   /// queue timestamp crosses the API boundary. Existing test doubles keep the
   /// legacy callback above, so the production contract can evolve without
   /// forcing unrelated offline tests to know about transport metadata.
-  @visibleForTesting
   static void debugSetCreateOrderWithOriginalTimestampForTesting(
     Future Function({
       required String clientCode,
@@ -714,7 +786,30 @@ class PedidosOfflineService {
       double descuentoGlobal,
     }) createOrder,
   ) {
-    _createOrder = createOrder;
+    _createOrder = ({
+      required clientCode,
+      required clientName,
+      required vendedorCode,
+      required tipoVenta,
+      required lines,
+      required observaciones,
+      required clientRequestId,
+      required originalCreatedAt,
+      descuentoGlobal = 0,
+    }) async {
+      final response = await createOrder(
+        clientCode: clientCode,
+        clientName: clientName,
+        vendedorCode: vendedorCode,
+        tipoVenta: tipoVenta,
+        lines: lines,
+        observaciones: observaciones,
+        clientRequestId: clientRequestId,
+        originalCreatedAt: originalCreatedAt,
+        descuentoGlobal: descuentoGlobal,
+      );
+      return _canonicalizeLegacyTestEnvelope(response);
+    };
   }
 
   @visibleForTesting
@@ -722,8 +817,42 @@ class PedidosOfflineService {
     _createOrder = _defaultCreateOrder;
   }
 
-  @visibleForTesting
   static void debugSetConfirmOrderForTesting(
+    Future<Map<String, dynamic>> Function(
+      int orderId,
+      String saleType, {
+      String? deliveryDate,
+      String? vehicleCode,
+      String? driverCode,
+      String? routeCode,
+      bool cobroPropio,
+    }) confirmOrder,
+  ) {
+    _confirmOrder = (
+      orderId,
+      saleType, {
+      deliveryDate,
+      vehicleCode,
+      driverCode,
+      routeCode,
+      cobroPropio = false,
+    }) async {
+      final response = await confirmOrder(
+        orderId,
+        saleType,
+        deliveryDate: deliveryDate,
+        vehicleCode: vehicleCode,
+        driverCode: driverCode,
+        routeCode: routeCode,
+        cobroPropio: cobroPropio,
+      );
+      return Map<String, dynamic>.from(
+        _canonicalizeLegacyTestEnvelope(response) as Map,
+      );
+    };
+  }
+
+  static void debugSetRawConfirmOrderForTesting(
     Future<Map<String, dynamic>> Function(
       int orderId,
       String saleType, {
@@ -949,12 +1078,28 @@ class PedidosOfflineService {
     if (!_isValidClientRequestId(existingRequestId)) {
       data['clientRequestId'] = _clientRequestIdForSyncKey(syncKey);
     }
-    data['status'] = 'pending';
+    data['status'] = 'syncing';
     data['attempts'] = _asInt(data['attempts']);
     data['lastSyncStartedAt'] = _now().toIso8601String();
     data.remove('nextRetryAt');
     await box.put(syncKey, jsonEncode(data));
+    _notifyChanged();
     return Map<String, dynamic>.from(data);
+  }
+
+  static Future<void> _recoverInterruptedSyncs(Box box) async {
+    for (final key in box.keys.toList(growable: false)) {
+      final data = _decodeSyncItem(box, key.toString());
+      if (data == null ||
+          !_isOrderQueueRecord(data) ||
+          data['status'] != 'syncing') {
+        continue;
+      }
+      data
+        ..['status'] = 'pending'
+        ..['recoveredAfterInterruptionAt'] = _now().toIso8601String();
+      await box.put(key, jsonEncode(data));
+    }
   }
 
   /// Older app versions persisted a local ISO timestamp without an offset.
@@ -1169,6 +1314,143 @@ class PedidosOfflineService {
     return int.tryParse(value?.toString() ?? '');
   }
 
+  static int _requireCreateAcknowledgement(Object? response) {
+    if (response is! Map || response['success'] != true) {
+      throw const _InvalidServerAcknowledgement(
+        'El servidor no confirmo la creacion del pedido.',
+      );
+    }
+    final header = _canonicalResponseHeader(response);
+    final id = _canonicalOrderId(response);
+    final headerId = _asIntOrNull(header?['id'] ?? header?['orderId']);
+    if (header == null || id == null || id <= 0 || headerId != id) {
+      throw const _InvalidServerAcknowledgement(
+        'La creacion no devolvio un identificador canonico.',
+      );
+    }
+    return id;
+  }
+
+  static void _requireConfirmedAcknowledgement(
+    Map<String, dynamic> response,
+    int expectedOrderId,
+  ) {
+    if (response['success'] != true) {
+      throw const _InvalidServerAcknowledgement(
+        'El servidor no confirmo el pedido.',
+      );
+    }
+    final header = _canonicalResponseHeader(response);
+    final id = _canonicalOrderId(response);
+    final headerId = _asIntOrNull(header?['id'] ?? header?['orderId']);
+    if (header == null ||
+        id != expectedOrderId ||
+        headerId != expectedOrderId) {
+      throw const _InvalidServerAcknowledgement(
+        'La confirmacion no coincide con el pedido enviado.',
+      );
+    }
+    final statuses = _orderStatuses(response);
+    final headerStatus = (header['estado'] ?? header['estadoPedido'])
+        ?.toString()
+        .trim()
+        .toUpperCase();
+    if (statuses.length != 1 ||
+        statuses.single != 'CONFIRMADO' ||
+        headerStatus != 'CONFIRMADO') {
+      final rendered = statuses.isEmpty ? 'DESCONOCIDO' : statuses.join('/');
+      throw _InvalidServerAcknowledgement(
+        'El servidor devolvio el pedido en estado $rendered.',
+      );
+    }
+  }
+
+  static int? _canonicalOrderId(Map response) {
+    final candidates = <int>{};
+    void collect(Object? value) {
+      final parsed = _asIntOrNull(value);
+      if (parsed != null) candidates.add(parsed);
+    }
+
+    collect(response['id']);
+    collect(response['orderId']);
+    final header = response['header'];
+    if (header is Map) {
+      collect(header['id']);
+      collect(header['orderId']);
+    }
+    final order = response['order'];
+    if (order is Map) {
+      collect(order['id']);
+      collect(order['orderId']);
+      final orderHeader = order['header'];
+      if (orderHeader is Map) {
+        collect(orderHeader['id']);
+        collect(orderHeader['orderId']);
+      }
+    }
+    if (candidates.length != 1) return null;
+    return candidates.single;
+  }
+
+  static Map? _canonicalResponseHeader(Map response) {
+    final order = response['order'];
+    if (order is! Map) return null;
+    final header = order['header'];
+    return header is Map ? header : null;
+  }
+
+  static Object? _canonicalizeLegacyTestEnvelope(Object? response) {
+    if (response is! Map) return response;
+    final normalized = Map<String, dynamic>.from(response);
+    final rawHeader = normalized['header'];
+    final header = rawHeader is Map
+        ? Map<String, dynamic>.from(rawHeader)
+        : <String, dynamic>{
+            if (normalized['id'] != null) 'id': normalized['id'],
+            if (normalized['orderId'] != null) 'orderId': normalized['orderId'],
+            if (normalized['estado'] != null) 'estado': normalized['estado'],
+            if (normalized['estadoPedido'] != null)
+              'estadoPedido': normalized['estadoPedido'],
+          };
+    if (normalized['order'] is! Map && header.isNotEmpty) {
+      normalized['order'] = <String, dynamic>{'header': header};
+    }
+    if (normalized['success'] == null &&
+        _canonicalOrderId(normalized) != null) {
+      normalized['success'] = true;
+    }
+    return normalized;
+  }
+
+  static Set<String> _orderStatuses(Map response) {
+    final statuses = <String>{};
+
+    void collect(Object? value) {
+      final normalized = value?.toString().trim().toUpperCase() ?? '';
+      if (normalized.isNotEmpty) statuses.add(normalized);
+    }
+
+    collect(response['estado']);
+    collect(response['estadoPedido']);
+    final header = response['header'];
+    if (header is Map) {
+      collect(header['estado']);
+      collect(header['estadoPedido']);
+    }
+    final order = response['order'];
+    if (order is Map) {
+      collect(order['estado']);
+      collect(order['estadoPedido']);
+      final orderHeader = order['header'];
+      if (orderHeader is Map) {
+        collect(orderHeader['estado']);
+        collect(orderHeader['estadoPedido']);
+      }
+    }
+    return statuses;
+  }
+
   static void _notifyChanged() {
     final callback = onChanged;
     if (callback == null) return;
@@ -1191,4 +1473,13 @@ class _ServerBlockedSyncException implements Exception {
 
   @override
   String toString() => 'Pedido bloqueado por el servidor: $reason';
+}
+
+class _InvalidServerAcknowledgement implements Exception {
+  const _InvalidServerAcknowledgement(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'Respuesta de servidor no verificable: $message';
 }

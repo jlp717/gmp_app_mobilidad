@@ -45,6 +45,7 @@ PedidosNotifier _newNotifier(
 Future<void> _flushNotifier() => Future<void>.delayed(Duration.zero);
 
 class _RecordingOrderApi implements PedidosOrderApi {
+  int confirmOrderCalls = 0;
   int? confirmedOrderId;
   String? confirmedSaleType;
   String? confirmedDeliveryDate;
@@ -88,6 +89,7 @@ class _RecordingOrderApi implements PedidosOrderApi {
     String? routeCode,
     bool cobroPropio = false,
   }) async {
+    confirmOrderCalls++;
     confirmedOrderId = orderId;
     confirmedSaleType = saleType;
     confirmedDeliveryDate = deliveryDate;
@@ -230,6 +232,7 @@ void main() {
     await PedidosOfflineService.clearAll();
     PedidosOfflineService.debugResetCreateOrderForTesting();
     PedidosOfflineService.debugResetConfirmOrderForTesting();
+    PedidosOfflineService.onVerifiedOrdersSynced = null;
   });
 
   tearDownAll(() async {
@@ -1119,7 +1122,14 @@ void main() {
         routeCode: 'R9',
       );
 
+      for (var attempt = 0;
+          attempt < 100 && api.confirmOrderCalls == 0;
+          attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+
       expect(result, isNotNull);
+      expect(result!['estado'], 'PENDIENTE_SYNC');
       expect(api.confirmedOrderId, 42);
       expect(api.confirmedSaleType, 'CC');
       expect(api.confirmedDeliveryDate, '2026-05-05');
@@ -1167,6 +1177,12 @@ void main() {
         cobroPropio: true,
       );
 
+      for (var attempt = 0;
+          attempt < 100 && api.confirmOrderCalls == 0;
+          attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+
       expect(result, isNotNull);
       expect(api.createdDescuentoGlobal, 10);
       expect(api.confirmedCobroPropio, isTrue);
@@ -1175,7 +1191,7 @@ void main() {
       expect(api.createdLines!.single.lineDiscountPct, 5);
     });
 
-    test('keeps queued create as a local draft and does not confirm offline',
+    test('keeps finalized order pending and does not present an editable draft',
         () async {
       final api = _QueuedCreateOrderApi();
       final container = _newContainer();
@@ -1204,9 +1220,15 @@ void main() {
       expect(result, isNotNull);
       expect(result!['queued'], isTrue);
       expect(result['pendingConfirmation'], isTrue);
-      expect(result['localDraft'], isTrue);
-      expect(result['estado'], 'BORRADOR_LOCAL');
+      expect(result['finalizedLocally'], isTrue);
+      expect(result['editableDraft'], isFalse);
+      expect(result['estado'], 'PENDIENTE_SYNC');
       expect(isConfirmedOrderResultForProvider(result), isFalse);
+      for (var attempt = 0;
+          attempt < 100 && api.createOrderCalls == 0;
+          attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
       expect(api.createOrderCalls, 1);
       expect(api.confirmOrderCalls, 0);
       expect(
@@ -1242,7 +1264,12 @@ void main() {
       await _flushNotifier();
 
       final result = await provider.confirmOrder('57');
-      final pending = PedidosOfflineService.getPendingSyncs().single as Map;
+      final queuedRecords = [
+        ...PedidosOfflineService.getPendingSyncs(),
+        ...PedidosOfflineService.getSyncingSyncs(),
+        ...PedidosOfflineService.getFailedSyncs(),
+      ];
+      final pending = queuedRecords.single as Map;
       final lines = pending['lines'] as List;
       final queuedLine = lines.single as Map;
 
@@ -1254,7 +1281,7 @@ void main() {
       expect(pending['observaciones'].toString(), isNot(contains('[DTO')));
     });
 
-    test('guards reentrant confirmation while a save is already in progress',
+    test('durable finalization returns before a blocked transport completes',
         () async {
       final api = _BlockingOrderApi();
       final container = _newContainer();
@@ -1278,18 +1305,32 @@ void main() {
       );
       await _flushNotifier();
 
-      final first = provider.confirmOrder('57');
+      final first = await provider.confirmOrder('57');
+      expect(first, isNotNull);
+      expect(first!['estado'], 'PENDIENTE_SYNC');
+      expect(first['finalizedLocally'], isTrue);
       for (var attempt = 0;
           attempt < 100 && api.createOrderCalls == 0;
           attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
       expect(api.createOrderCalls, 1);
+      expect(api.createCompleter.isCompleted, isFalse);
+      expect(api.confirmOrderCalls, 0);
 
-      final second = provider.confirmOrder('57');
+      final second = await provider.confirmOrder('57');
+      expect(second, isNull, reason: 'the submitted cart is already cleared');
 
-      api.createCompleter.complete({'id': 42, 'estado': 'BORRADOR'});
-      await Future.wait([first, second]);
+      api.createCompleter.complete({
+        'success': true,
+        'id': 42,
+        'estado': 'BORRADOR',
+      });
+      for (var attempt = 0;
+          attempt < 100 && api.confirmOrderCalls == 0;
+          attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
 
       expect(api.createOrderCalls, 1);
       expect(api.confirmOrderCalls, 1);

@@ -83,8 +83,15 @@ class OfflineSyncNotifier {
     if (count <= 0) return;
     _show(
       count == 1
-          ? 'Un pedido offline quedo en borrador pendiente de revisar.'
-          : '$count pedidos offline quedaron pendientes de revisar.',
+          ? 'Un pedido finalizado requiere revision para sincronizarse.'
+          : '$count pedidos finalizados requieren revision para sincronizarse.',
+      backgroundColor: AppTheme.error,
+    );
+  }
+
+  static void orderPostSyncRefreshFailed() {
+    _show(
+      'Pedido confirmado, pero no se pudieron actualizar Bolsa, stock y pedidos. Pulsa Actualizar.',
       backgroundColor: AppTheme.error,
     );
   }

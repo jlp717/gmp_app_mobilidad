@@ -13,6 +13,7 @@ import 'package:gmp_app_mobilidad/core/notifications/notification_orchestrator.d
 import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_bridge.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_sync_notifier.dart';
+import 'package:gmp_app_mobilidad/core/offline/verified_pedido_refresh.dart';
 import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/telemetry/rum_buffer.dart';
@@ -21,7 +22,10 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/theme/theme_provider.dart';
 import 'package:gmp_app_mobilidad/core/widgets/premium_route.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/pages/login_page.dart';
+import 'package:gmp_app_mobilidad/features/bolsa/providers/bolsa_provider.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/main_shell.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/reparto_confirmation_offline.dart';
 import 'package:go_router/go_router.dart';
@@ -220,6 +224,8 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
                 ConnectivityStatus.online;
       },
     );
+    PedidosOfflineService.onVerifiedOrdersSynced =
+        _refreshVerifiedPedidoDependencies;
     // Notifications on online; sync itself runs via OfflineSyncBridge hook.
     _connectivitySubscription =
         ConnectivityService.instance.stream.listen((status) {
@@ -239,6 +245,10 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _connectivitySubscription?.cancel();
+    if (PedidosOfflineService.onVerifiedOrdersSynced ==
+        _refreshVerifiedPedidoDependencies) {
+      PedidosOfflineService.onVerifiedOrdersSynced = null;
+    }
     _router.dispose();
     _authChangeSignal.dispose();
     super.dispose();
@@ -328,6 +338,46 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     } finally {
       _autoSyncInProgress = false;
     }
+  }
+
+  Future<void> _refreshVerifiedPedidoDependencies(
+    String scope,
+    int authEpoch,
+    List<int> orderIds,
+  ) async {
+    await VerifiedPedidoRefresh.run(
+      scope: scope,
+      authEpoch: authEpoch,
+      orderIds: orderIds,
+      isMounted: () => mounted,
+      currentScope: () => PedidosOfflineService.currentScopeId,
+      currentAuthEpoch: () => ApiClient.authMutationEpoch,
+      invalidate: PedidosService.invalidateOrderMutationCaches,
+      refresh: (expectedAuthEpoch) async {
+        final pedidos = ref.read(pedidosNotifierProvider.notifier);
+        final snapshot = ref.read(pedidosNotifierProvider);
+        final refreshes = <Future<void>>[
+          pedidos.refreshOrdersAndStats(
+            expectedAuthEpoch: expectedAuthEpoch,
+          ),
+          ref
+              .read(bolsaProvider.notifier)
+              .refresh(expectedAuthEpoch: expectedAuthEpoch),
+        ];
+        if (snapshot.clientCode?.trim().isNotEmpty ?? false) {
+          refreshes.add(
+            pedidos.loadProducts(
+              vendedorCodes: snapshot.vendedorCodes,
+              search: snapshot.productSearch,
+              reset: true,
+              forceRefresh: true,
+              expectedAuthEpoch: expectedAuthEpoch,
+            ),
+          );
+        }
+        await Future.wait(refreshes);
+      },
+    );
   }
 
   /// Validate session when app resumes to prevent unexpected logouts
