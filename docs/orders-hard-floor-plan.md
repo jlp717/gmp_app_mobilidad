@@ -68,3 +68,18 @@ Seguridad comparó el catálogo real con el importador conservado y confirmó la
 ## Comprobación del precio neto
 
 El módulo de comparación exacta pasó 45/45 pruebas en revisión de seguridad independiente. Rechaza un neto una diezmilésima por debajo del suelo, descuentos compuestos que lo cruzan, UOM distinta, alias contradictorios y entradas sobredimensionadas. Una promoción, regalo, especial, permiso de fuerza o saldo de Bolsa no cambia su decisión. Se conservó en `37935595582490d9c35d06e3dfa44bc012cc7464` hasta que tenga consumidores de servidor. Su aceptación cubre la comprobación unitaria nominal. Falta conectarla a la política de base facturada, al importe redondeado y a las transacciones de alta, edición y confirmación. [Fuente congelada](audits/orders-tablet-20261102/pricing-floor-kernel-frozen.json)
+
+## Estado de integración del comercial
+
+| Entrega | Estado | Verificación |
+|---|---|---|
+| Fórmula de margen sobre venta | DONE en fuente | `a0176f5`, 155 pruebas focales y 10.000 comparaciones exactas. |
+| DDL de catálogo TEST | DONE en DB2 | `87c2278`, tabla creada, clave y journal confirmados. La carga de catálogo es un paso separado y permanece bloqueada. |
+| Importador y aplicación del suelo en pedidos | BLOCKED | Carga detenida con 0 filas por el metadato INTEGER. El kernel exacto existe como candidato y pasó su revisión pura, con la integración de servidor pendiente. |
+| Cobros, presentación | DONE en fuente | `aa0ab18`, 44 pruebas del área y 1.228 Flutter. Montaje real de pantalla y estados en 390×844, 800×1280 y 1280×800 con texto al 200 %. |
+| Liquidación, presentación | DONE en fuente | `f22724c`, 37 pruebas del área y 1.236 Flutter. La revisión confirmó los mensajes vivos a 18 sp y los manejadores financieros existentes. |
+| Aceptación de demo y dispositivo | BLOCKED | Readiness volvió a responder HTTP 503. Esta comprobación descartó el cuerpo. Sin dispositivo disponible y sin ejecución del guion financiero con escrituras. |
+
+La suite del backend comprometido en `87c2278` pasó 3.769 pruebas, con dos omitidas. El lint oficial mantiene 242 errores TypeScript y 0 warnings. El último análisis completo de Flutter devuelve exit 1 por 7.631 infos, con 0 errores y 0 warnings. Las pruebas visuales son del renderer Flutter. Se descartaron capturas de Cobros con Ahem y no se produjeron PNG de Liquidación.
+
+[Backend](audits/orders-tablet-20261102/backend-pricing-checkpoint.json) · [Cobros](audits/orders-tablet-20261102/flutter-cobros-ux-checkpoint.json) · [Liquidación](audits/orders-tablet-20261102/flutter-liquidacion-ux-checkpoint.json)
