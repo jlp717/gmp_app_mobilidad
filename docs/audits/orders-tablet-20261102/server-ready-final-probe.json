@@ -1,0 +1,11 @@
+{
+  "dateEuropeMadrid": "2026-11-03",
+  "target": "installed gmp-api /api/ready",
+  "readOnly": true,
+  "httpStatus": 503,
+  "curlExitCode": 22,
+  "totalSeconds": 0.026125,
+  "responseBodyCollected": false,
+  "causeEvidence": "db2-b2-eligibility.json and baseline-evidence.json",
+  "interpretation": "Current readiness still fails; this probe did not reread the response body or perform a deployment."
+}

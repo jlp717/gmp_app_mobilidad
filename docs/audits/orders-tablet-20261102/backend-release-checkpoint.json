@@ -1,0 +1,34 @@
+{
+  "head": "daaa1afa849883a61c8edcc4c469484d0123e9e3",
+  "scope": "tracked backend after exclusion of both vetoed slices",
+  "tests": {
+    "command": "npm test -- --runInBand",
+    "exitCode": 0,
+    "suitesPassed": 316,
+    "suitesSkipped": 1,
+    "testsPassed": 3726,
+    "testsSkipped": 2,
+    "testsFailed": 0,
+    "seconds": 712.854,
+    "log": "backend-tests-after-gift3.log",
+    "sha256": "8e58d3872b840c87ccb4b92fc1a127aed93c7c3b3236f585b4948a7c3729810a"
+  },
+  "lint": {
+    "command": "npm run lint",
+    "exitCode": 1,
+    "javascriptExitCode": 0,
+    "typescriptErrors": 242,
+    "typescriptWarnings": 0,
+    "typescriptFiles": 28,
+    "log": "backend-lint-after-gift3.log",
+    "sha256": "741f0b17a5451798bb8b657156bf7805632b382f95db9038cc4a802a1f090e5c"
+  },
+  "giftVeto": {
+    "stash": "d4e3654b5b5d43a1a01809beaa9c7ccc3d377c20",
+    "paths": 16,
+    "qaPassed": 219,
+    "appsecPassed": 217,
+    "mainBlocker": "ERP export does not persist order transitions; preexisting disabled export path; production audit buffer absent",
+    "databaseWrites": 0
+  }
+}

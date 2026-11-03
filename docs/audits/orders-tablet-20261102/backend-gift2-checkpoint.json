@@ -1,0 +1,16 @@
+{
+  "status": "CHECKPOINT_FAIL",
+  "scope": "GIFT2 frozen candidate under AppSec export veto",
+  "command": "npm test -- --runInBand",
+  "exitCode": 1,
+  "durationSeconds": 758.191,
+  "suites": {"passed": 316, "failed": 2, "skipped": 1, "total": 319},
+  "tests": {"passed": 3733, "failed": 7, "skipped": 2},
+  "log": "backend-tests-after-gift2.log",
+  "logSha256": "7e53a187166da6955abcbaac88666bdde67b909556274099d3c65ff75c547282",
+  "failures": [
+    {"suite": "backend/__tests__/pedidos_idempotency.test.js", "count": 6, "cause": "Fixture recognizes old JOIN rather than live CLIENT_RATE batch; ORDER_PRICE_UNAVAILABLE is the expected fail-closed behavior without authoritative mock rows."},
+    {"suite": "backend/src/__tests__/performance/latency.test.ts", "count": 1, "observedMs": 10636, "thresholdMs": 500, "isolatedReproduction": {"exitCode": 0, "passed": 11, "caseMs": 26, "suiteSeconds": 14.463, "globalFailureReproduced": false}}
+  ],
+  "limitations": ["Latency values are Jest test observations, not device or running-app benchmarks", "No runtime DB2 exercise or production writes", "Full-suite verification remains required after the final candidate"]
+}

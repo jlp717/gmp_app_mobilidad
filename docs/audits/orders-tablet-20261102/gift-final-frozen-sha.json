@@ -1,0 +1,72 @@
+{
+  "unit": "GIFT03",
+  "base": "daaa1afa849883a61c8edcc4c469484d0123e9e3",
+  "sourceCount": 16,
+  "scope": "frozen producer handoff before QA/AppSec",
+  "files": [
+    {
+      "path": "backend/__tests__/bolsa-comercial.service.test.js",
+      "sha256": "3fc5e381860b30eee2858cc60068e7a6dbec8b692ee49cd9016d533cdeb425bf"
+    },
+    {
+      "path": "backend/__tests__/openapi-contract.test.js",
+      "sha256": "f70cf4a07d13d6d7e719b35eff44f61a0e01886105df330975d551058e53e740"
+    },
+    {
+      "path": "backend/__tests__/pedidos_contracts.test.js",
+      "sha256": "771b520fa09cdb03917e8615f0b70a2b617d809bc8c9629b9b887a97b8903ad4"
+    },
+    {
+      "path": "backend/__tests__/pedidos_idempotency.test.js",
+      "sha256": "906ec5f2983f0e12c2f8501a686aba3cffa7d8d2d03c195c782664a3af38c1b8"
+    },
+    {
+      "path": "backend/__tests__/pedidos_reparto_contracts.test.js",
+      "sha256": "c75268fc11f363a6b0469ba97626f609022b64393ae68d2892a5c0ede719b3db"
+    },
+    {
+      "path": "backend/__tests__/pedidos-comercial-gates.test.js",
+      "sha256": "54851586e9d66b7665b433ec99e6c2b18a4d1d624cf0c4a22cdd86fc3aff8cc2"
+    },
+    {
+      "path": "backend/__tests__/pedidos-gift-authoritative-promotions.test.js",
+      "sha256": "f54a9d3c4364c8efd7a78c75cd787964bc151e7c62661c8e29fab3dd13675cc0"
+    },
+    {
+      "path": "backend/__tests__/pedidos-gift-transaction-contract.test.js",
+      "sha256": "2027c7623ba3992aa8694c2f915cb6880cf092c60e17a08c3d0eb0e52fdec482"
+    },
+    {
+      "path": "backend/__tests__/pedidos-order-state-events.test.js",
+      "sha256": "ece9438988be68136b65c172a8283f6c4510f4d16d7e80bd379f2d6f6af1b946"
+    },
+    {
+      "path": "backend/services/bolsa-comercial.service.js",
+      "sha256": "50a7303335297c0d0df62ed1d75176d3167fef177574f9b7a3d25c99fd210eb5"
+    },
+    {
+      "path": "backend/services/pedidos-comercial-gates.js",
+      "sha256": "34c1269c555d87951b1081efdd5197cdebaf3076f892652471db743a35d3ffbc"
+    },
+    {
+      "path": "backend/services/pedidos/index.js",
+      "sha256": "c234de8696c705e1f234e18f80dfb2c82ae1d7056d4e552ccd3c76f88adf96ac"
+    },
+    {
+      "path": "backend/services/pedidos/local-confirmation-transaction.js",
+      "sha256": "63003f4a1efda6c0751e93dd61255fdfd36cd202255dca848df0d891ab92a179"
+    },
+    {
+      "path": "backend/services/pedidos/order-state-events.js",
+      "sha256": "6227b6028bee1fc50624a9ce259ded49b9325c9e7d9e8d30c039e1012cfbba1a"
+    },
+    {
+      "path": "backend/services/pedidos/promotions-v2.js",
+      "sha256": "5d2ee3cd62bc57c311b760158fa6c4f468033384d996cda30746e80ccf6d358a"
+    },
+    {
+      "path": "docs/openapi/openapi.yaml",
+      "sha256": "b7b1c82149958d32ef36531041c71cd9d647f754fc01fe31c7bc5bfaa895f63d"
+    }
+  ]
+}
