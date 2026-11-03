@@ -27,6 +27,8 @@ El primer comando sólo valida la configuración. El segundo abre una conexión 
 
 En la primera comprobación se ejecutaron los resolutores y el verificador locales en memoria en el servidor con la conexión existente. Los tres perfiles encontraron los ocho objetos que aquel verificador contemplaba, con `SELECT 1` correcto. Esa lista era incompleta: no incluía auditoría, liquidación ni devoluciones comerciales. No acredita que producción esté preparada. No se instaló el nuevo arranque en el servidor. La evidencia inicial está en `docs/audits/orders-tablet-20261102/env-profile-db-evidence.json`.
 
+La comprobación ampliada del 03/11 ejecutó la fuente local sellada en memoria contra el catálogo real. TEST y DEMO validaron 11 de 11 objetos. Producción encontró 8 de 11 y su comprobación devuelve exit 1 por los tres buffers ausentes. La sonda registró 21 SELECT, tres aperturas y tres cierres, cero filas de negocio y cero escrituras. `db2-environment-catalog-verification.json` conserva el detalle de destinos, campos, claves y resultado de cada perfil. QA reprodujo los casos de clave primaria deshabilitada y perfil contradictorio con 272 pruebas aprobadas. Seguridad verificó 77 pruebas y los hashes del alcance corregido.
+
 Flutter consulta `GET /api/runtime-profile` y muestra TEST, DEMO o PRODUCCIÓN junto al estado de escritura. Una respuesta ausente, no verificada o fallida muestra «Entorno sin verificar». Una instalación antigua del servidor no puede producir una etiqueta falsa de producción verificada.
 
 ## Activación de producción pendiente del operador

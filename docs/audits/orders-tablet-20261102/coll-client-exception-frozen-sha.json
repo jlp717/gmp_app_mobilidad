@@ -1,0 +1,94 @@
+[
+  {
+    "path": "backend/__tests__/cobros-commercial.test.js",
+    "sha256": "4af10694d939ad312e6fce63181dc3cdc718118b26caaf628cc0536cd4bcc957"
+  },
+  {
+    "path": "backend/src/modules/cobros/infrastructure/db2-cobros-repository.js",
+    "sha256": "051d97f826bc2b591e86c52b36aab8d0bcc3f41ce83b918751cedfa6137b4dbb"
+  },
+  {
+    "path": "lib/core/providers/auth_notifier.dart",
+    "sha256": "82c15ee1404db2b909663619934915c76927cb99657655874360cca8316ef6ed"
+  },
+  {
+    "path": "lib/core/widgets/global_vendor_selector.dart",
+    "sha256": "03d54d1c0f76677b234e6469ca5d1d476de9bcdb83f51a5f6509d41559f9b3b5"
+  },
+  {
+    "path": "lib/features/cobros/data/commercial_collection_attempt_journal.dart",
+    "sha256": "7bfc2232fdefc38f966691ac7815e1600c19f07369722f5fc13da326fb0f12f8"
+  },
+  {
+    "path": "lib/features/cobros/data/models/cobros_models.dart",
+    "sha256": "812c54eddc4d732fb5dca4635a54dd48ce89f04cf109da4b11c81889389eced2"
+  },
+  {
+    "path": "lib/features/cobros/data/models/cobros_models.freezed.dart",
+    "sha256": "0ef7f90670d863889d606b8c502720552794516041f75caba2bd99403960ea4e"
+  },
+  {
+    "path": "lib/features/cobros/domain/commercial_collection_attempt.dart",
+    "sha256": "d88a8ce01429926a1bd4e581626ef3176387a5e18908d3f7e6e6b3ac8f0cb2d6"
+  },
+  {
+    "path": "lib/features/cobros/domain/commercial_payment_instrument.dart",
+    "sha256": "3dee74f1107b0710fbacc396c83b74e4514f7e8a2eff73a008999de8e6d68eb2"
+  },
+  {
+    "path": "lib/features/cobros/presentation/pages/cobro_detail_screen.dart",
+    "sha256": "0efdad7958d3f55c04795cf29f08d8689f22185e0c60dff7432071ed382c8e85"
+  },
+  {
+    "path": "lib/features/cobros/presentation/widgets/cobro_confirm_dialog.dart",
+    "sha256": "89155dc2bef53ed6b9161680358d9c0fedcbb40daf2de7619dddb8b2358a3008"
+  },
+  {
+    "path": "lib/features/cobros/providers/cobros_provider.dart",
+    "sha256": "23582a0aa1d7bd8f53ef70169ebd4e3568fd8fea79c867a7b2f05d4aa035db81"
+  },
+  {
+    "path": "lib/features/dashboard/presentation/pages/main_shell.dart",
+    "sha256": "cdc5bef026d88213b5655d73e738dacc46d856eb869ffd90eb8fb9c15c7be2ad"
+  },
+  {
+    "path": "lib/features/liquidacion_comercial/data/comercial_liquidacion_service.dart",
+    "sha256": "d921eee8c0b8d417262ae3a18b278418e95a8652be204e00909e558d9e61e292"
+  },
+  {
+    "path": "lib/features/liquidacion_comercial/presentation/pages/comercial_liquidacion_diaria_page.dart",
+    "sha256": "36ae5b276f1bbc38a6c51c8166a1d91abcf06ef6018c8475201c694f5795e510"
+  },
+  {
+    "path": "test/core/widgets/global_vendor_selector_guard_test.dart",
+    "sha256": "3d184081049972a53fc224d904921966e38ff7ff3b857c519dc653449f4bb9c3"
+  },
+  {
+    "path": "test/features/cobros/cobros_business_logic_test.dart",
+    "sha256": "25934fd592997417800064c49dbe2564bfe440703f6ffe263b475a4774f2a46b"
+  },
+  {
+    "path": "test/features/cobros/data/commercial_collection_attempt_journal_test.dart",
+    "sha256": "1ff469058ed76c439c8259b887c94278733e1b81072f30161f68b496ec7a018e"
+  },
+  {
+    "path": "test/features/cobros/presentation/cobro_detail_screen_test.dart",
+    "sha256": "4ba7c1e2dcb8fc9ad6c94b0035630bbb0d3e52a70bc4a586f236b83af2a67ac5"
+  },
+  {
+    "path": "test/features/cobros/support/fake_commercial_collection_journal.dart",
+    "sha256": "fe988f9ca56c3225fa1d95e0ed377d0b8e3f214a13f9507177f800692d0c4415"
+  },
+  {
+    "path": "test/features/dashboard/main_shell_commercial_scope_test.dart",
+    "sha256": "92458781d419d90e09eb59d53e693a2bfc3c060ed6b9ab13e144e5d06a3014eb"
+  },
+  {
+    "path": "test/features/liquidacion_comercial/data/comercial_liquidacion_service_test.dart",
+    "sha256": "3f4f3eef370da804fe6248a4e30c117140161c9e1572e848644426f1b8854ca8"
+  },
+  {
+    "path": "test/features/liquidacion_comercial/presentation/comercial_liquidacion_diaria_page_states_test.dart",
+    "sha256": "54e977656b7ab4102d3c416286e27812e78b561b2ab3a04f248c915b41dd03c3"
+  }
+]

@@ -1,0 +1,26 @@
+{
+  "status": "CHECKPOINT_FAIL",
+  "scope": "READ nullable accepted, ENV04 first repair frozen under veto, 049 prototype quarantined",
+  "tests": {
+    "cwd": "backend",
+    "command": "npm test -- --runInBand",
+    "exitCode": 1,
+    "durationSeconds": 855.62,
+    "suites": {"passed": 308, "failed": 8, "skipped": 1, "total": 317},
+    "tests": {"passed": 3693, "failed": 17, "skipped": 2, "total": 3712},
+    "log": "backend-tests-global-checkpoint.log",
+    "failedSuites": ["reparto-server-startup", "perf-low-risk-contracts", "pedidos-tanda5-req28", "reparto-route-mounts", "post-demo-bolsa-draft-uom", "pedidos_reparto_contracts", "health-check-e2e", "entregas-upload-security"]
+  },
+  "lint": {
+    "cwd": "backend",
+    "command": "npm run lint",
+    "exitCode": 1,
+    "durationSecondsApprox": 52.94,
+    "jsExitCode": 0,
+    "typescriptErrors": 242,
+    "warnings": 0,
+    "filesWithErrors": 28,
+    "log": "backend-lint-global-checkpoint.log"
+  },
+  "limits": ["Logs are locally ignored", "Jest emitted forceExit/open handles warning", "No DB2 or runtime HTTP acceptance", "Final full verification is required after source changes"]
+}

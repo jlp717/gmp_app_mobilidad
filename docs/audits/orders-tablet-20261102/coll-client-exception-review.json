@@ -1,0 +1,21 @@
+{
+  "status": "BLOCKED_STOP",
+  "scope": "One authorized collection client repair, FIN-CLIENT08/09",
+  "authorizationMadrid": "2026-11-03T06:36",
+  "frozenManifest": "coll-client-exception-frozen-sha.json",
+  "appSec": {"verdict": "PASS_SCOPED_SOURCE_REVIEW", "materialFindings": 0, "sdkRun": false},
+  "independentQa": {
+    "verdict": "VETO_P1",
+    "focalTests": {"passed": 77, "exitCode": 0, "durationSeconds": 42, "includesJournalTests": 9, "includesAuthEpochTests": 2},
+    "regression": {"passed": 241, "exitCode": 0, "durationSeconds": 38},
+    "analyze": {"items": 19, "errors": 0, "warnings": 0, "infos": 489, "exitCode": 0, "durationSeconds": 69.9},
+    "diffCheckExitCode": 0,
+    "finding": "Journal integrity validation omits token, state, subject and timestamps. A syntactically valid stored record alteration could rotate the retry token or simulate ACK without transport.",
+    "source": ["lib/features/cobros/data/commercial_collection_attempt_journal.dart:139", "lib/features/cobros/providers/cobros_provider.dart:980"],
+    "reproduction": "Source-level reproduction plan: alter only persisted token or status on an UNKNOWN record, reopen and reserve under the same subject. Existing test covers missing HMAC, not those mutations. No native duplicate payment was generated."
+  },
+  "commit": null,
+  "productionWrites": 0,
+  "nativeFinancialWrites": 0,
+  "nextAction": "Stop the authorized repair after veto. Keep source frozen and out of release commits."
+}

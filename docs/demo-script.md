@@ -13,6 +13,22 @@ El run comenzó el 02/11/2026 y la sesión continúa el 03/11/2026 Europe/Madrid
 5. Guardar instantánea SELECT de pedidos/reservas/bolsa/cobros/liquidación y ejecutar reconciliación. La tabla competitiva ya contiene dos filas acreditadas del pedido 106 (artículos 3519 y 3075, cliente 4300032160); volver a leerlas y no presentar una tarifa como si fuera un último precio registrado. La sonda de semilla inicial requiere tabla vacía y no se repite.
 6. Conectar teléfono y tablet/emulador. Ejecutar perfil de rendimiento; conservar identificador de dispositivo, modo profile, versión, orientación y escala de texto. Sin dispositivo, la aceptación móvil queda bloqueada.
 
+La preparación se puede comprobar por separado. Desde `backend`, ejecuta primero la validación de configuración y después la de catálogo.
+
+```powershell
+npm run env:verify -- --no-db
+npm run env:verify
+```
+
+Desde la raíz, comprueba el servidor y registra la reconciliación previa. Guarda cada salida con la fecha del ensayo. Cualquier error o perfil distinto de TEST/DEMO detiene el recorrido de escritura.
+
+```powershell
+ssh gmp@192.168.1.230 'curl --fail --max-time 8 -A GMP-SRE-HealthCheck/1.0 http://localhost:3335/api/ready'
+powershell -NoProfile -ExecutionPolicy Bypass -File .\docs\audits\orders-tablet-20261102\read-commercial-integrity.ps1
+```
+
+El artículo 2974 del cliente 4300032888, asignado al comercial 73, dio un precio especial de 29,28 € en la lectura de ERP. Confirma su vigencia antes de la demo. El artículo 3075 del cliente 4300032160 tiene un competitivo de 49,572 € procedente del pedido 106. Son dos comprobaciones diferentes. Conserva el cliente y el artículo de cada registro al comparar el valor de pantalla.
+
 ## Recorrido y comprobaciones
 
 | Paso | Acción del comercial | Evidencia necesaria |
