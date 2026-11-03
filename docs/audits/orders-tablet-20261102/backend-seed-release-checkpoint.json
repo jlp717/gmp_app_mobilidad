@@ -1,0 +1,31 @@
+{
+  "commit": "f02402d",
+  "backendTree": "8bb722cd20a632db371a1009240d124a6a933d42",
+  "jest": {
+    "exitCode": 0,
+    "passed": 3792,
+    "skipped": 2,
+    "suitesPassed": 317,
+    "suitesSkipped": 1,
+    "seconds": 698.011,
+    "seedPassed": 23,
+    "sha256": "0C74B0D854CB2171AA78D7648F6927937882CFDF5A6371382E6574FB05D3F1B2"
+  },
+  "lint": {
+    "exitCode": 1,
+    "errors": 242,
+    "warnings": 0,
+    "unchangedBaseline": true,
+    "sha256": "741F0B17A5451798BB8B657156BF7805632B382F95DB9038CC4A802A1F090E5C"
+  },
+  "native": {
+    "beforeRows": 0,
+    "insertedRows": 6235,
+    "afterRows": 6235,
+    "uniqueKeys": 6235,
+    "replayInserted": 0,
+    "replayUpdated": 0,
+    "productionWrites": 0,
+    "sha256": "3E36893D2F89946CCFF6482EFD3E22FE3E75EF376DF0F5639795CA59376F8960"
+  }
+}

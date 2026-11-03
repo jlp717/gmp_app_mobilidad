@@ -2,7 +2,7 @@
 
 Run `orders-tablet-20261102` · rama `codex/orders-tablet-demo-20261102` · base `test` en `4a36ddd`. El ensayo empezó el 2 de noviembre de 2026 y continuó el 3 de noviembre en Europe/Madrid.
 
-La ampliación posterior confirma margen sobre venta, el censo ERP y la creación de la tabla TEST. Su evidencia actual y el bloqueo de la carga se mantienen en el [plan de suelo absoluto](orders-hard-floor-plan.md).
+La ampliación posterior confirma el cálculo del margen sobre venta y la carga reconciliada del censo ERP en la tabla TEST. La activación del suelo sigue pendiente de una política económica acreditada. [Plan de suelo absoluto](orders-hard-floor-plan.md)
 
 **Demo bloqueada en preparación.** El último chequeo del proceso instalado devolvió HTTP 503 con exit 22 de curl. El hallazgo inicial de readiness identifica al vendedor activo B2 sin hash PIN. La comprobación más reciente descartó el cuerpo de respuesta. La configuración de la rama se contrastó por separado contra el catálogo DB2. [Guion](demo-script.md) · [Sonda de readiness](audits/orders-tablet-20261102/server-ready-final-probe.json) · [Elegibilidad](audits/orders-tablet-20261102/db2-b2-eligibility.json)
 
@@ -25,12 +25,12 @@ La ampliación posterior confirma margen sobre venta, el censo ERP y la creació
 
 | Control | Base `4a36ddd` | Rama comprobada |
 |---|---|---|
-| Backend Jest | 3443 pasaron, 3 fallaron, 2 omitidas. Exit 1. | `eaf3214`, 3767 pasaron, 2 omitidas. Exit 0. |
+| Backend Jest | 3443 pasaron, 3 fallaron, 2 omitidas. Exit 1. | `f02402d`, 3792 pasaron, 2 omitidas. Exit 0. Incluye las 23 pruebas del importador. |
 | Lint oficial backend | Exit 2 porque el patrón TS se ignoraba. El diagnóstico TS separado ya encontró 242 errores. | JavaScript pasó. TypeScript conserva 242 errores y 0 warnings, en 28 archivos. Exit 1. |
-| Flutter test | 1140 pasaron, 6 fallaron. Exit 1. | Checkpoint sin candidato visual, 1215/1215. Exit 0. |
-| Flutter analyze | 0 errores, 0 warnings, 7570 infos. Exit 1. | Checkpoint sin candidato visual, 0 errores, 0 warnings, 7624 infos. Exit 1 por infos fatales. |
+| Flutter test | 1140 pasaron, 6 fallaron. Exit 1. | Tras las mejoras de Cobros, Liquidación y Promociones, 1241/1241. Exit 0. |
+| Flutter analyze | 0 errores, 0 warnings, 7570 infos. Exit 1. | 0 errores, 0 warnings, 7635 infos. Exit 1 por infos fatales. |
 
-[Base](audits/orders-tablet-20261102/baseline-evidence.json) · [Backend](audits/orders-tablet-20261102/ddd-state-release-checkpoint.json) · [Flutter](audits/orders-tablet-20261102/flutter-release-checkpoint.json)
+[Base](audits/orders-tablet-20261102/baseline-evidence.json) · [Backend](audits/orders-tablet-20261102/backend-seed-release-checkpoint.json) · [Flutter](audits/orders-tablet-20261102/flutter-promotions-ux-checkpoint.json)
 
 ## 2. Bolsa Comercial y reconciliación
 
