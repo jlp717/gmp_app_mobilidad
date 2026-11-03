@@ -1,0 +1,23 @@
+{
+  "head": "87c2278f66d89ca7f53798ff71b0b8a861c1aa64",
+  "scope": "Complete tracked backend, exact uncommitted hard-floor kernel test excluded",
+  "tests": {
+    "exitCode": 0,
+    "passed": 3769,
+    "skipped": 2,
+    "failed": 0,
+    "suitesPassed": 316,
+    "suitesSkipped": 1,
+    "seconds": 807.517,
+    "log": "backend-tests-checkpoint-87c2278.log",
+    "sha256": "c996df2b8b6673e7cb339f7748aec4ae6550a16ea4e68718e39397da6aedeccf"
+  },
+  "lint": {
+    "exitCode": 1,
+    "errors": 242,
+    "warnings": 0,
+    "unchangedBaseline": true,
+    "log": "backend-lint-checkpoint-87c2278.log",
+    "sha256": "741f0b17a5451798bb8b657156bf7805632b382f95db9038cc4a802a1f090e5c"
+  }
+}

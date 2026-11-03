@@ -1,0 +1,17 @@
+{
+  "stash": "37935595582490d9c35d06e3dfa44bc012cc7464",
+  "status": "PASS_PURE_KERNEL",
+  "runtimeWired": false,
+  "independentTests": 45,
+  "exitCode": 0,
+  "files": [
+    {
+      "path": "backend/services/pedidos/hard-price-floor.js",
+      "sha256": "1f00e795d2d675c4fc72638c911d4459006b41cd481836d4e0f90e83581f6a8d"
+    },
+    {
+      "path": "backend/__tests__/hard-price-floor.test.js",
+      "sha256": "90203f6b5b137cd9f23d7e08a0d8b7448f554999cd7aa68a7b1dbdad08acafb7"
+    }
+  ]
+}
