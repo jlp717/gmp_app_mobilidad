@@ -87,6 +87,524 @@ List<Map<String, dynamic>> _filterCobrosVisible({
   }).toList();
 }
 
+/// Readable commercial debt overview used by the live Cobros page.
+///
+/// Metrics wrap instead of shrinking when text scaling or a compact viewport
+/// leaves too little horizontal space. Primary labels and values intentionally
+/// stay at 18sp or above for field representatives.
+class CommercialCobrosSummaryPanel extends StatelessWidget {
+  /// Creates the commercial debt summary shown above the customer list.
+  const CommercialCobrosSummaryPanel({
+    required this.pendingTotal,
+    required this.overdueTotal,
+    required this.clientCount,
+    required this.overdueClientCount,
+    required this.sourceLabel,
+    this.appOrdersTotal = 0,
+    this.appAdjustmentsTotal = 0,
+    this.cvcTotal = 0,
+    super.key,
+  });
+
+  /// Total amount pending collection.
+  final double pendingTotal;
+
+  /// Pending amount already overdue.
+  final double overdueTotal;
+
+  /// Number of customers in the current commercial scope.
+  final int clientCount;
+
+  /// Number of customers with at least one overdue document.
+  final int overdueClientCount;
+
+  /// Human-readable authoritative source displayed below the metrics.
+  final String sourceLabel;
+
+  /// Provisional total contributed by app orders.
+  final double appOrdersTotal;
+
+  /// Total already deducted by app-side adjustments.
+  final double appAdjustmentsTotal;
+
+  /// Gross CVC amount before app-side adjustments.
+  final double cvcTotal;
+
+  @override
+  Widget build(BuildContext context) {
+    final money = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+    final accent = overdueTotal > 0
+        ? AppTheme.error
+        : pendingTotal > 0
+            ? AppTheme.accentAmber
+            : AppTheme.success;
+    final hasAppLayer = appAdjustmentsTotal > 0 || appOrdersTotal > 0;
+
+    return Container(
+      key: const Key('commercial-cobros-summary'),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      padding: const EdgeInsets.all(16),
+      decoration: AppTheme.premiumPanel(accentColor: accent),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final columns = width >= 760 ? 3 : (width >= 480 ? 2 : 1);
+          final itemWidth = (width - ((columns - 1) * 12)) / columns;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: itemWidth,
+                    child: _CommercialCobrosMetric(
+                      metricKey: const Key('commercial-cobros-metric-pending'),
+                      label: 'Pendiente total',
+                      value: money.format(pendingTotal),
+                      icon: Icons.account_balance_wallet,
+                      accent: AppTheme.accentAmber,
+                    ),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    child: _CommercialCobrosMetric(
+                      metricKey: const Key('commercial-cobros-metric-overdue'),
+                      label: 'Vencido',
+                      value: money.format(overdueTotal),
+                      icon: Icons.error_outline,
+                      accent: AppTheme.error,
+                    ),
+                  ),
+                  SizedBox(
+                    width: itemWidth,
+                    child: _CommercialCobrosMetric(
+                      metricKey: const Key('commercial-cobros-metric-clients'),
+                      label: 'Clientes',
+                      value: '$clientCount'
+                          '${overdueClientCount > 0 ? ' ($overdueClientCount vencidos)' : ''}',
+                      icon: Icons.people_outline,
+                      accent: AppTheme.info,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.info_outline, size: 22),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Fuente: $sourceLabel',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 18,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (hasAppLayer) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'ERP bruto: ${money.format(cvcTotal)}. '
+                  'App provisional: ${money.format(appOrdersTotal)}. '
+                  'App ya descontado: ${money.format(appAdjustmentsTotal)}.',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 18,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CommercialCobrosMetric extends StatelessWidget {
+  const _CommercialCobrosMetric({
+    required this.metricKey,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accent,
+  });
+
+  final Key metricKey;
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: metricKey,
+      constraints: const BoxConstraints(minHeight: 88),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.softPanel,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: accent.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: accent, size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: AppColors.themedWhite,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              color: AppColors.themedWhite,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              height: 1.15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Adaptive commercial customer tile. It never relies on colour alone: the
+/// current debt status is always written out next to the primary amount.
+class CommercialCobroClientTile extends StatelessWidget {
+  /// Creates one accessible customer row in the commercial Cobros list.
+  const CommercialCobroClientTile({
+    required this.code,
+    required this.name,
+    required this.pending,
+    required this.overdue,
+    required this.status,
+    required this.hasSummary,
+    required this.documentCount,
+    required this.fromErpDebt,
+    required this.onTap,
+    this.compact = false,
+    super.key,
+  });
+
+  /// Customer ERP code.
+  final String code;
+
+  /// Customer name shown without forced truncation.
+  final String name;
+
+  /// Total pending amount for the customer.
+  final double pending;
+
+  /// Overdue subset of [pending].
+  final double overdue;
+
+  /// Consolidated backend status (`VENCIDO`, `PENDIENTE` or `AL_DIA`).
+  final String status;
+
+  /// Whether an authoritative summary exists for this customer.
+  final bool hasSummary;
+
+  /// Number of pending documents in that summary.
+  final int documentCount;
+
+  /// Whether the customer is present because of ERP debt discovery.
+  final bool fromErpDebt;
+
+  /// Opens the existing commercial collection detail.
+  final VoidCallback onTap;
+
+  /// Retains the list's compact spacing mode on wide two-pane layouts.
+  final bool compact;
+
+  String get _statusLabel {
+    switch (status) {
+      case 'VENCIDO':
+        return 'Vencido';
+      case 'PENDIENTE':
+        return 'Pendiente';
+      case 'AL_DIA':
+        return 'Al día';
+      default:
+        return 'Sin datos';
+    }
+  }
+
+  Color get _statusColor {
+    switch (status) {
+      case 'VENCIDO':
+        return AppTheme.error;
+      case 'PENDIENTE':
+        return AppTheme.warning;
+      case 'AL_DIA':
+        return AppTheme.success;
+      default:
+        return AppTheme.textSecondary;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final money = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+    final badgeColor = _statusColor;
+    return Semantics(
+      button: true,
+      label: 'Cliente $name. Estado $_statusLabel. '
+          'Pendiente ${money.format(pending)}.',
+      child: Card(
+        key: const Key('commercial-cobros-client-tile'),
+        margin: EdgeInsets.only(bottom: compact ? 0 : 12),
+        elevation: 0,
+        color: AppTheme.softPanel,
+        surfaceTintColor: AppColors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          side: BorderSide(
+            color: pending > 0
+                ? badgeColor.withValues(alpha: 0.65)
+                : AppTheme.borderColor,
+          ),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final narrow = constraints.maxWidth < 560;
+                final identity = _CommercialClientIdentity(
+                  code: code,
+                  name: name,
+                  documentCount: documentCount,
+                  hasSummary: hasSummary,
+                  fromErpDebt: fromErpDebt,
+                );
+                final debt = _CommercialClientDebt(
+                  pending: pending,
+                  overdue: overdue,
+                  statusLabel: _statusLabel,
+                  statusColor: badgeColor,
+                  hasSummary: hasSummary,
+                );
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: narrow
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            identity,
+                            const SizedBox(height: 14),
+                            debt,
+                          ],
+                        )
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(child: identity),
+                            const SizedBox(width: 20),
+                            Flexible(child: debt),
+                          ],
+                        ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CommercialClientIdentity extends StatelessWidget {
+  const _CommercialClientIdentity({
+    required this.code,
+    required this.name,
+    required this.documentCount,
+    required this.hasSummary,
+    required this.fromErpDebt,
+  });
+
+  final String code;
+  final String name;
+  final int documentCount;
+  final bool hasSummary;
+  final bool fromErpDebt;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 24,
+          backgroundColor: fromErpDebt
+              ? AppTheme.warning.withValues(alpha: 0.16)
+              : AppTheme.info.withValues(alpha: 0.16),
+          child: Text(
+            name.isNotEmpty ? name[0].toUpperCase() : '?',
+            style: TextStyle(
+              color: AppColors.themedWhite,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.themedWhite,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Código: $code',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: AppTheme.textSecondary,
+                  height: 1.25,
+                ),
+              ),
+              if (hasSummary) ...[
+                const SizedBox(height: 4),
+                Text(
+                  documentCount > 0
+                      ? '$documentCount documento${documentCount == 1 ? '' : 's'} pendiente${documentCount == 1 ? '' : 's'}'
+                      : 'Sin documentos pendientes',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: AppColors.themedWhite,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+              if (fromErpDebt) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Deuda ERP',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: AppColors.themedWhite,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CommercialClientDebt extends StatelessWidget {
+  const _CommercialClientDebt({
+    required this.pending,
+    required this.overdue,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.hasSummary,
+  });
+
+  final double pending;
+  final double overdue;
+  final String statusLabel;
+  final Color statusColor;
+  final bool hasSummary;
+
+  @override
+  Widget build(BuildContext context) {
+    final money = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+    return Container(
+      constraints: const BoxConstraints(minHeight: 56),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: statusColor.withValues(alpha: 0.65)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Estado: $statusLabel',
+            style: TextStyle(
+              color: AppColors.themedWhite,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              height: 1.2,
+            ),
+          ),
+          if (pending > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              money.format(pending),
+              style: TextStyle(
+                color: AppColors.themedWhite,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                height: 1.15,
+              ),
+            ),
+          ],
+          if (overdue > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Vencido: ${money.format(overdue)}',
+              style: TextStyle(
+                color: AppColors.themedWhite,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                height: 1.2,
+              ),
+            ),
+          ],
+          if (!hasSummary)
+            Text(
+              'Importe todavía no verificado',
+              style: TextStyle(
+                color: AppColors.themedWhite,
+                fontSize: 18,
+                height: 1.2,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class CobrosPage extends ConsumerStatefulWidget {
   const CobrosPage({
     required this.employeeCode,
@@ -458,16 +976,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
   /// numero de clientes con deuda. De un vistazo el comercial/jefe ve el
   /// estado global de cobros antes de entrar en el detalle por cliente.
   Widget _buildSummaryCard(CobrosState cobros) {
-    // Formato es_ES: el formateo manual anterior producía "1.234.56€"
-    // (punto como separador decimal Y de miles a la vez).
-    String fmtMoney(num v) => _moneyFormat.format(v);
-    final tienePendiente = cobros.grandTotal > 0;
-    final tieneVencido = cobros.grandTotalVencido > 0;
     final sourceLabel = cobros.summarySource == 'CVC+PEDIDOS_CAB'
         ? 'ERP CVC + pedidos app sin factura/albaran'
         : 'ERP CVC';
-    final hasAppLayer =
-        cobros.appAdjustmentsTotal > 0 || cobros.appOrdersTotal > 0;
     final clientesCartera = cobros.portfolioClientCount > 0
         ? cobros.portfolioClientCount
         : cobros.clientsWithDebt;
@@ -475,124 +986,15 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
         ? cobros.portfolioVencidoClientCount
         : cobros.clientsWithVencido;
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-      padding: const EdgeInsets.all(14),
-      decoration: AppTheme.premiumPanel(
-        accentColor: tieneVencido
-            ? AppTheme.error
-            : (tienePendiente ? AppTheme.accentAmber : AppTheme.success),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _summaryItem(
-                  'Pendiente total',
-                  fmtMoney(cobros.grandTotal),
-                  Icons.account_balance_wallet,
-                  AppTheme.accentAmber,
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 36,
-                color: AppColors.themedWhite.withValues(alpha: 0.08),
-              ),
-              Expanded(
-                child: _summaryItem(
-                  'Vencido',
-                  fmtMoney(cobros.grandTotalVencido),
-                  Icons.error_outline,
-                  AppTheme.error,
-                ),
-              ),
-              Container(
-                width: 1,
-                height: 36,
-                color: AppColors.themedWhite.withValues(alpha: 0.08),
-              ),
-              Expanded(
-                child: _summaryItem(
-                  'Clientes',
-                  '$clientesCartera'
-                      '${clientesVencidos > 0 ? ' (${clientesVencidos}v)' : ''}',
-                  Icons.people_outline,
-                  AppTheme.info,
-                ),
-              ),
-            ],
-          ),
-          // Fuente de datos: CVC = deuda real del ERP (vencimientos comerciales)
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(
-                Icons.info_outline,
-                size: 11,
-                color: AppColors.themedWhite.withValues(alpha: 0.35),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  'Fuente: $sourceLabel',
-                  style: const TextStyle(
-                    fontSize: A11yTokens.minText,
-                  ).copyWith(color: AppTheme.textSecondary),
-                ),
-              ),
-            ],
-          ),
-          if (hasAppLayer) ...[
-            const SizedBox(height: 3),
-            Text(
-              'ERP bruto: ${fmtMoney(cobros.cvcGrandTotal)}. App provisional: ${fmtMoney(cobros.appOrdersTotal)}. App ya descontado: ${fmtMoney(cobros.appAdjustmentsTotal)}.',
-              style: const TextStyle(
-                fontSize: A11yTokens.minText,
-              ).copyWith(color: AppTheme.textSecondary),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryItem(String label, String value, IconData icon, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 13),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: AppColors.themedWhite.withValues(alpha: 0.55),
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: TextStyle(
-                color: AppColors.themedWhite,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return CommercialCobrosSummaryPanel(
+      pendingTotal: cobros.grandTotal,
+      overdueTotal: cobros.grandTotalVencido,
+      clientCount: clientesCartera,
+      overdueClientCount: clientesVencidos,
+      sourceLabel: sourceLabel,
+      appOrdersTotal: cobros.appOrdersTotal,
+      appAdjustmentsTotal: cobros.appAdjustmentsTotal,
+      cvcTotal: cobros.cvcGrandTotal,
     );
   }
 
@@ -634,36 +1036,42 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
             final selected = _estadoFilter == f.value;
             return Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: Semantics(
-                label: 'Filtrar cobros por estado: ${f.label}',
-                button: true,
-                selected: selected,
-                enabled: true,
-                child: FilterChip(
-                  avatar: Icon(
-                    f.icon,
-                    size: 16,
-                    color: selected ? AppColors.themedWhite : f.color,
-                  ),
-                  label: Text(f.label),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 56),
+                child: Semantics(
+                  label: 'Filtrar cobros por estado: ${f.label}',
+                  button: true,
                   selected: selected,
-                  onSelected: (_) => setState(() => _estadoFilter = f.value),
-                  backgroundColor: AppTheme.softPanel,
-                  selectedColor: f.color.withValues(alpha: 0.25),
-                  labelStyle: TextStyle(
-                    color: selected
-                        ? AppColors.themedWhite
-                        : AppColors.themedWhite70,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                    fontSize: A11yTokens.minText,
-                  ),
-                  showCheckmark: true,
-                  materialTapTargetSize: MaterialTapTargetSize.padded,
-                  visualDensity: VisualDensity.comfortable,
-                  side: BorderSide(
-                    color: selected
-                        ? f.color.withValues(alpha: 0.6)
-                        : AppColors.themedWhite.withValues(alpha: 0.1),
+                  enabled: true,
+                  child: FilterChip(
+                    avatar: Icon(
+                      f.icon,
+                      size: 22,
+                      color: selected ? AppColors.themedWhite : f.color,
+                    ),
+                    label: Text(f.label),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _estadoFilter = f.value),
+                    backgroundColor: AppTheme.softPanel,
+                    selectedColor: f.color.withValues(alpha: 0.34),
+                    labelStyle: TextStyle(
+                      color: AppColors.themedWhite,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                      fontSize: 18,
+                    ),
+                    labelPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    showCheckmark: true,
+                    checkmarkColor: AppColors.themedWhite,
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    visualDensity: VisualDensity.comfortable,
+                    side: BorderSide(
+                      color: selected
+                          ? f.color.withValues(alpha: 0.85)
+                          : AppTheme.borderColor,
+                    ),
                   ),
                 ),
               ),
@@ -689,11 +1097,18 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
             enabled: true,
             child: OutlinedButton.icon(
               onPressed: () => _pickSummaryDate(isDesde: true),
-              icon: const Icon(Icons.calendar_today, size: 16),
+              icon: const Icon(Icons.calendar_today, size: 22),
               label: Text(
                 _summaryFechaDesde == null
                     ? 'Vence desde'
                     : DateFormat('dd/MM/yy').format(_summaryFechaDesde!),
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(56, 56),
+                textStyle: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -703,11 +1118,18 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
             enabled: true,
             child: OutlinedButton.icon(
               onPressed: () => _pickSummaryDate(isDesde: false),
-              icon: const Icon(Icons.event, size: 16),
+              icon: const Icon(Icons.event, size: 22),
               label: Text(
                 _summaryFechaHasta == null
                     ? 'Vence hasta'
                     : DateFormat('dd/MM/yy').format(_summaryFechaHasta!),
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(56, 56),
+                textStyle: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -724,8 +1146,15 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                   });
                   await _loadPendingSummary(forceRefresh: true);
                 },
-                icon: const Icon(Icons.clear, size: 16),
+                icon: const Icon(Icons.clear, size: 22),
                 label: const Text('Limpiar periodo'),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(56, 56),
+                  textStyle: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
         ],
@@ -757,8 +1186,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
       child: Row(
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 56,
+            height: 56,
             decoration: BoxDecoration(
               color: AppTheme.info.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -769,14 +1198,14 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
             child: const Icon(
               Icons.account_balance_wallet,
               color: AppTheme.info,
-              size: 22,
+              size: 28,
             ),
           ),
           const SizedBox(width: 12),
           Text(
             'Gestión de Cobros',
             style: TextStyle(
-              fontSize: Responsive.fontSize(context, small: 18, large: 22),
+              fontSize: Responsive.fontSize(context, small: 20, large: 24),
               fontWeight: FontWeight.bold,
               color: AppColors.themedWhite,
             ),
@@ -798,11 +1227,17 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
-              style: TextStyle(color: AppColors.themedWhite),
+              style: TextStyle(
+                color: AppColors.themedWhite,
+                fontSize: 18,
+                height: 1.25,
+              ),
               decoration: InputDecoration(
+                constraints: const BoxConstraints(minHeight: 56),
                 hintText: 'Buscar por nombre, código, NIF...',
                 hintStyle: TextStyle(
-                  color: AppTheme.textSecondary.withValues(alpha: 0.6),
+                  color: AppTheme.textSecondary,
+                  fontSize: 18,
                 ),
                 prefixIcon: Icon(
                   Icons.search,
@@ -880,7 +1315,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                           : 'Resumen de cobros no disponible')),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 20,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.textSecondary,
               ),
@@ -896,7 +1331,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                           : 'Reintenta para cargar la deuda real del ERP')),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 18,
+                height: 1.3,
                 color: AppTheme.textSecondary.withValues(alpha: 0.7),
               ),
             ),
@@ -905,7 +1341,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
               Text(
                 'Pendiente total: ${_moneyFormat.format(cobros.grandTotal)}',
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 18,
                   color: AppTheme.warning,
                   fontWeight: FontWeight.w600,
                 ),
@@ -965,6 +1401,33 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
             client['nombreCliente'] ??
             'Cliente')
         .toString();
+
+    if (pending.isFinite && vencido.isFinite) {
+      return CommercialCobroClientTile(
+        code: code,
+        name: name,
+        pending: pending,
+        overdue: vencido,
+        status: estado,
+        hasSummary: hasSummary,
+        documentCount: docCount,
+        fromErpDebt: fromErpDebt,
+        compact: compact,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CobroDetailScreen(
+                codigoCliente: code,
+                nombreCliente: name,
+                employeeCode: widget.employeeCode,
+                vendedorCodes: _resolvedVendorCodes(),
+              ),
+            ),
+          );
+        },
+      );
+    }
 
     // Badge tricolor segun estado consolidado del cliente.
     final Color badgeColor;

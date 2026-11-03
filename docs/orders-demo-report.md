@@ -2,6 +2,8 @@
 
 Run `orders-tablet-20261102` · rama `codex/orders-tablet-demo-20261102` · base `test` en `4a36ddd`. El ensayo empezó el 2 de noviembre de 2026 y continuó el 3 de noviembre en Europe/Madrid.
 
+La ampliación posterior confirma margen sobre venta, el censo ERP y la creación de la tabla TEST. Su evidencia actual y el bloqueo de la carga se mantienen en el [plan de suelo absoluto](orders-hard-floor-plan.md).
+
 **Demo bloqueada en preparación.** El último chequeo del proceso instalado devolvió HTTP 503 con exit 22 de curl. El hallazgo inicial de readiness identifica al vendedor activo B2 sin hash PIN. La comprobación más reciente descartó el cuerpo de respuesta. La configuración de la rama se contrastó por separado contra el catálogo DB2. [Guion](demo-script.md) · [Sonda de readiness](audits/orders-tablet-20261102/server-ready-final-probe.json) · [Elegibilidad](audits/orders-tablet-20261102/db2-b2-eligibility.json)
 
 ## 1. Evidencia por unidad

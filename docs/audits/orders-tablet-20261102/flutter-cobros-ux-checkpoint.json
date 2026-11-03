@@ -1,0 +1,40 @@
+{
+  "unit": "COM-UX-COB repair2",
+  "scope": "live CobroDetailScreen, presentation only, no payment changes",
+  "focal": {
+    "passed": 44,
+    "exitCode": 0,
+    "seconds": 24.37
+  },
+  "fullTests": {
+    "passed": 1228,
+    "exitCode": 0,
+    "seconds": 278.857,
+    "log": "flutter-full-test-cobros-ux-repair2.log",
+    "sha256": "6ce52ce3bac007ca385026fbec0ab0ac18c99241fa7373e547f242852436d51c"
+  },
+  "analyze": {
+    "exitCode": 1,
+    "errors": 0,
+    "warnings": 0,
+    "infos": 7623,
+    "seconds": 232.549,
+    "log": "flutter-analyze-default-cobros-ux-repair2.log",
+    "sha256": "6f23076e3dcf41743956fe2818ea2eea102ac2e2db66547799edfa762b494b9d"
+  },
+  "renderer": {
+    "sizes": [
+      "390x844",
+      "800x1280",
+      "1280x800"
+    ],
+    "scale": 2.0,
+    "usableScreenshots": 0,
+    "device": false
+  },
+  "approvedSource": {
+    "page": "45F84A369DD9B0E77CBF60EC757D33D1CDCABDE7FCFF05D55B194D2874C62A9D",
+    "detail": "9BAD4DBA40521C7321878D58B8266B58CAC0CBB98D72F38F9A2FC8E67E0088E7",
+    "test": "91C9F86A33A05169889A9F832CEA6A43A778C480F43128D34108811F2530E033"
+  }
+}

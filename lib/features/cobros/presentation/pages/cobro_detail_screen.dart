@@ -5,7 +5,6 @@ import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
-import 'package:gmp_app_mobilidad/core/design/a11y_tokens.dart';
 import 'package:gmp_app_mobilidad/features/cobros/presentation/widgets/cobro_confirm_dialog.dart';
 import 'package:gmp_app_mobilidad/features/cobros/providers/cobros_provider.dart';
 import 'package:intl/intl.dart';
@@ -69,6 +68,148 @@ Map<String, String> nextCobroSelectionAfterSubmit({
           retryableIds.contains(entry.key);
     }),
   );
+}
+
+/// Commercial payment controls shared by the live detail screen and its
+/// renderer contract. The available values and callbacks intentionally match
+/// the existing payment workflow; this widget changes presentation only.
+class CommercialPaymentControls extends StatelessWidget {
+  /// Creates the commercial-only payment method and submit controls.
+  const CommercialPaymentControls({
+    required this.paymentMethod,
+    required this.total,
+    required this.isSubmitting,
+    required this.onPaymentMethodChanged,
+    required this.onSubmit,
+    super.key,
+  });
+
+  /// Existing backend payment value selected by the commercial workflow.
+  final String paymentMethod;
+
+  /// Selected amount shown in the primary action.
+  final double total;
+
+  /// Whether the existing payment request is currently running.
+  final bool isSubmitting;
+
+  /// Preserved callback for changing the existing payment value.
+  final ValueChanged<String> onPaymentMethodChanged;
+
+  /// Preserved callback that starts the existing payment handler.
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final money = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.raisedSurface,
+        border: Border(
+          top: BorderSide(color: AppTheme.info.withValues(alpha: 0.45)),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stack = constraints.maxWidth < 620;
+          final methodControl = Semantics(
+            label: 'Forma de pago comercial: $paymentMethod',
+            child: ConstrainedBox(
+              key: const Key('commercial-payment-method-control'),
+              constraints: const BoxConstraints(minHeight: 56),
+              child: DropdownButtonFormField<String>(
+                key: ValueKey(paymentMethod),
+                initialValue: paymentMethod,
+                dropdownColor: AppTheme.raisedSurface,
+                style: TextStyle(
+                  color: AppColors.themedWhite,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Forma de pago',
+                  labelStyle: TextStyle(
+                    color: AppColors.themedWhite,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  filled: true,
+                  fillColor: AppTheme.softPanel,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                  ),
+                ),
+                items: const ['CONTADO', 'CREDITO']
+                    .map(
+                      (method) => DropdownMenuItem<String>(
+                        value: method,
+                        child: Text(method),
+                      ),
+                    )
+                    .toList(),
+                onChanged: isSubmitting
+                    ? null
+                    : (value) {
+                        if (value != null) onPaymentMethodChanged(value);
+                      },
+              ),
+            ),
+          );
+          final submit = ElevatedButton(
+            key: const Key('commercial-payment-submit'),
+            onPressed: total > 0 && !isSubmitting ? onSubmit : null,
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(56, 56),
+              backgroundColor: AppTheme.info,
+              foregroundColor: AppColors.systemWhite,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              textStyle: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              ),
+            ),
+            child: isSubmitting
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.systemWhite,
+                    ),
+                  )
+                : Text('Cobrar ${money.format(total)}'),
+          );
+
+          if (stack) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                methodControl,
+                const SizedBox(height: 12),
+                submit,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: methodControl),
+              const SizedBox(width: 16),
+              Flexible(child: submit),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class CobroDetailScreen extends ConsumerStatefulWidget {
@@ -156,64 +297,122 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   Widget _buildCobrosFilters() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          DropdownButton<String?>(
-            value: _tipoDocumento,
-            dropdownColor: AppTheme.raisedSurface,
-            style: TextStyle(color: AppColors.themedWhite, fontSize: 13),
-            hint: Text(
-              'Tipo documento',
-              style: TextStyle(color: AppColors.themedWhite54),
-            ),
-            items: _tipoDocumentoOptions.entries
-                .map(
-                  (e) => DropdownMenuItem<String?>(
-                    value: e.key,
-                    child: Text(e.value),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
+              child: DropdownButton<String?>(
+                value: _tipoDocumento,
+                dropdownColor: AppTheme.raisedSurface,
+                style: TextStyle(color: AppColors.themedWhite, fontSize: 18),
+                hint: Text(
+                  'Tipo documento',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 18,
                   ),
-                )
-                .toList(),
-            onChanged: (value) async {
-              setState(() => _tipoDocumento = value);
-              await _reloadPendientes();
-            },
-          ),
-          OutlinedButton.icon(
-            onPressed: () => _pickDate(isDesde: true),
-            icon: const Icon(Icons.calendar_today, size: 16),
-            label: Text(
-              _fechaDesde == null
-                  ? 'Vence desde'
-                  : DateFormat('dd/MM/yy').format(_fechaDesde!),
+                ),
+                items: _tipoDocumentoOptions.entries
+                    .map(
+                      (e) => DropdownMenuItem<String?>(
+                        value: e.key,
+                        child: Text(e.value),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) async {
+                  setState(() => _tipoDocumento = value);
+                  await _reloadPendientes();
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () => _pickDate(isDesde: true),
+              icon: const Icon(Icons.calendar_today, size: 22),
+              label: Text(
+                _fechaDesde == null
+                    ? 'Vence desde'
+                    : DateFormat('dd/MM/yy').format(_fechaDesde!),
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(56, 56),
+                textStyle: const TextStyle(fontSize: 18),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () => _pickDate(isDesde: false),
+              icon: const Icon(Icons.event, size: 22),
+              label: Text(
+                _fechaHasta == null
+                    ? 'Vence hasta'
+                    : DateFormat('dd/MM/yy').format(_fechaHasta!),
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(56, 56),
+                textStyle: const TextStyle(fontSize: 18),
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (_tipoDocumento != null ||
+                _fechaDesde != null ||
+                _fechaHasta != null)
+              TextButton(
+                onPressed: () async {
+                  setState(() {
+                    _tipoDocumento = null;
+                    _fechaDesde = null;
+                    _fechaHasta = null;
+                  });
+                  await _reloadPendientes();
+                },
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(56, 56),
+                  textStyle: const TextStyle(fontSize: 18),
+                ),
+                child: const Text('Limpiar'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClientHeader() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.softPanel,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: AppTheme.info.withValues(alpha: 0.55)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.nombreCliente,
+            style: TextStyle(
+              color: AppColors.themedWhite,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              height: 1.2,
             ),
           ),
-          OutlinedButton.icon(
-            onPressed: () => _pickDate(isDesde: false),
-            icon: const Icon(Icons.event, size: 16),
-            label: Text(
-              _fechaHasta == null
-                  ? 'Vence hasta'
-                  : DateFormat('dd/MM/yy').format(_fechaHasta!),
+          const SizedBox(height: 6),
+          Text(
+            'Código: ${widget.codigoCliente}',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
             ),
           ),
-          if (_tipoDocumento != null ||
-              _fechaDesde != null ||
-              _fechaHasta != null)
-            TextButton(
-              onPressed: () async {
-                setState(() {
-                  _tipoDocumento = null;
-                  _fechaDesde = null;
-                  _fechaHasta = null;
-                });
-                await _reloadPendientes();
-              },
-              child: const Text('Limpiar'),
-            ),
         ],
       ),
     );
@@ -301,7 +500,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         const SnackBar(
           content: Text(
             'Selecciona algún documento para cobrar. Marca al menos uno de la lista.',
-            style: TextStyle(fontSize: A11yTokens.minText),
+            style: TextStyle(fontSize: 18, height: 1.3),
           ),
         ),
       );
@@ -314,7 +513,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         const SnackBar(
           content: Text(
             'Corrige los importes en rojo antes de cobrar. El mínimo y el máximo están junto a cada documento.',
-            style: TextStyle(fontSize: A11yTokens.minText),
+            style: TextStyle(fontSize: 18, height: 1.3),
           ),
           backgroundColor: AppTheme.error,
         ),
@@ -530,7 +729,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               style: TextStyle(
                 color: AppColors.themedWhite,
                 fontWeight: FontWeight.w600,
-                fontSize: 13,
+                fontSize: 18,
+                height: 1.3,
               ),
             ),
           ),
@@ -584,24 +784,22 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     return Scaffold(
       backgroundColor: AppTheme.inkSurface,
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.nombreCliente,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              'Codigo: ${widget.codigoCliente}',
-              style: TextStyle(fontSize: 12, color: AppColors.themedWhite70),
-            ),
-          ],
+        toolbarHeight: 72,
+        title: Text(
+          'Detalle de cobros',
+          style: TextStyle(
+            color: AppColors.themedWhite,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         backgroundColor: AppTheme.raisedSurface,
         iconTheme: IconThemeData(color: AppColors.themedWhite),
         elevation: 0,
         actions: [
           IconButton(
+            constraints: const BoxConstraints(minWidth: 56, minHeight: 56),
+            iconSize: 28,
             icon: const Icon(Icons.refresh),
             onPressed: () async {
               await Future.wait([
@@ -647,156 +845,157 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               color: AppTheme.info,
               child: Column(
                 children: [
-                  _buildCobrosFilters(),
-                  if (cobros.error != null)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppTheme.error.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppTheme.error),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            color: AppTheme.error,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              cobros.error!,
-                              style: TextStyle(color: AppColors.themedWhite),
+                  Expanded(
+                    child: ListView(
+                      padding: EdgeInsets.zero,
+                      children: [
+                        _buildClientHeader(),
+                        _buildCobrosFilters(),
+                        if (cobros.error != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.error.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.error),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.error_outline,
+                                  color: AppTheme.error,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    cobros.error!,
+                                    style: TextStyle(
+                                      color: AppColors.themedWhite,
+                                      fontSize: 18,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  // Aviso si el resumen de lista y el detalle no cuadran (paginación ERP, etc.)
-                  if (summaryMismatch)
-                    Container(
-                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppTheme.warning.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: AppTheme.warning.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.info_outline,
-                            color: AppTheme.warning,
-                            size: 16,
+                        // Aviso si el resumen de lista y el detalle no cuadran (paginación ERP, etc.)
+                        if (summaryMismatch)
+                          Container(
+                            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppTheme.warning.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppTheme.warning.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.info_outline,
+                                  color: AppTheme.warning,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Resumen lista: ${_currencyFormat.format(summaryPending)} · '
+                                    'Detalle cobrable: ${_currencyFormat.format(totalPendiente)}. '
+                                    'Puede haber más documentos en ERP.',
+                                    style: TextStyle(
+                                      color: AppColors.themedWhite,
+                                      fontSize: 18,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Resumen lista: ${_currencyFormat.format(summaryPending)} · '
-                              'Detalle cobrable: ${_currencyFormat.format(totalPendiente)}. '
-                              'Puede haber más documentos en ERP.',
-                              style: TextStyle(
-                                color: AppColors.themedWhite70,
-                                fontSize: 11,
+                        // Resumen del cliente
+                        if (payableCobros.isNotEmpty ||
+                            settledCobros.isNotEmpty)
+                          Container(
+                            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppTheme.raisedSurface.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: totalVencido > 0
+                                    ? AppTheme.error.withValues(alpha: 0.3)
+                                    : AppTheme.info.withValues(alpha: 0.2),
+                              ),
+                            ),
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  _detailSummaryItem(
+                                    'Pendiente',
+                                    _currencyFormat.format(totalPendiente),
+                                    Icons.account_balance_wallet,
+                                    totalPendiente > 0
+                                        ? AppTheme.warning
+                                        : AppTheme.success,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _detailSummaryItem(
+                                    'Vencido',
+                                    _currencyFormat.format(totalVencido),
+                                    Icons.error_outline,
+                                    totalVencido > 0
+                                        ? AppTheme.error
+                                        : AppTheme.success,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _detailSummaryItem(
+                                    'Documentos',
+                                    '$numDocs',
+                                    Icons.receipt_long,
+                                    AppTheme.info,
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  // Resumen del cliente
-                  if (payableCobros.isNotEmpty || settledCobros.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.raisedSurface.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: totalVencido > 0
-                              ? AppTheme.error.withValues(alpha: 0.3)
-                              : AppTheme.info.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _detailSummaryItem(
-                              'Pendiente',
-                              _currencyFormat.format(totalPendiente),
-                              Icons.account_balance_wallet,
-                              totalPendiente > 0
-                                  ? AppTheme.warning
-                                  : AppTheme.success,
-                            ),
-                          ),
+                        // Total a cobrar (solo si hay seleccion)
+                        if (payableCobros.isNotEmpty && totalAbonar > 0)
                           Container(
-                            width: 1,
-                            height: 32,
-                            color:
-                                AppColors.themedWhite.withValues(alpha: 0.08),
-                          ),
-                          Expanded(
-                            child: _detailSummaryItem(
-                              'Vencido',
-                              _currencyFormat.format(totalVencido),
-                              Icons.error_outline,
-                              totalVencido > 0
-                                  ? AppTheme.error
-                                  : AppTheme.success,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Total a cobrar:',
+                                  style: TextStyle(
+                                    color: AppColors.themedWhite,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  _currencyFormat.format(totalAbonar),
+                                  style: const TextStyle(
+                                    color: AppTheme.success,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          Container(
-                            width: 1,
-                            height: 32,
-                            color:
-                                AppColors.themedWhite.withValues(alpha: 0.08),
-                          ),
-                          Expanded(
-                            child: _detailSummaryItem(
-                              'Documentos',
-                              '$numDocs',
-                              Icons.receipt_long,
-                              AppTheme.info,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  // Total a cobrar (solo si hay seleccion)
-                  if (payableCobros.isNotEmpty && totalAbonar > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Total a cobrar:',
-                            style: TextStyle(
-                                color: AppColors.themedWhite70, fontSize: 14),
-                          ),
-                          Text(
-                            _currencyFormat.format(totalAbonar),
-                            style: const TextStyle(
-                              color: AppTheme.success,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Expanded(
-                    child: payableCobros.isEmpty && settledCobros.isEmpty
-                        ? Center(
+                        if (payableCobros.isEmpty && settledCobros.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.all(32),
                             child: Column(
-                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
                                   Icons.check_circle_outline,
@@ -807,26 +1006,33 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                                 const SizedBox(height: 16),
                                 Text(
                                   'No hay cobros pendientes',
-                                  style:
-                                      TextStyle(color: AppTheme.textSecondary),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: AppColors.themedWhite,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
                                   'El cliente esta al dia',
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    fontSize: 13,
-                                    color: AppTheme.textSecondary
-                                        .withValues(alpha: 0.7),
+                                    fontSize: 18,
+                                    height: 1.3,
+                                    color: AppTheme.textSecondary,
                                   ),
                                 ),
                               ],
                             ),
                           )
-                        : ListView.builder(
+                        else
+                          Padding(
                             padding: const EdgeInsets.all(16),
-                            itemCount: detailRows.length,
-                            itemBuilder: (_, index) => detailRows[index],
+                            child: Column(children: detailRows),
                           ),
+                      ],
+                    ),
                   ),
                   if (payableCobros.isNotEmpty) _buildBottomBar(totalAbonar),
                 ],
@@ -841,35 +1047,38 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     IconData icon,
     Color color,
   ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+    return Container(
+      constraints: const BoxConstraints(minWidth: 180, minHeight: 88),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.softPanel,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 12),
-              const SizedBox(width: 4),
+              Icon(icon, color: color, size: 24),
+              const SizedBox(width: 8),
               Text(
                 label,
                 style: TextStyle(
-                  color: AppColors.themedWhite.withValues(alpha: 0.5),
-                  fontSize: 9,
+                  color: AppColors.themedWhite,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: TextStyle(
-                color: color,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              color: AppColors.themedWhite,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -903,13 +1112,15 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                 style: TextStyle(
                   color: AppColors.themedWhite,
                   fontWeight: FontWeight.w700,
+                  fontSize: 20,
                 ),
               ),
               Text(
                 subtitle,
                 style: TextStyle(
                   color: AppTheme.textSecondary,
-                  fontSize: 12,
+                  fontSize: 18,
+                  height: 1.25,
                 ),
               ),
             ],
@@ -948,16 +1159,19 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         ),
         title: Text(
           cobro.conceptoVisible,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: AppColors.themedWhite70,
+            color: AppColors.themedWhite,
             fontWeight: FontWeight.w600,
+            fontSize: 18,
           ),
         ),
         subtitle: Text(
           '${cobro.tipo.label} ${cobro.referencia.isNotEmpty ? cobro.referencia : cobro.id}',
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 18,
+            height: 1.25,
+          ),
         ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -966,18 +1180,17 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             Text(
               _currencyFormat.format(cobro.importePendiente),
               style: TextStyle(
-                color: statusColor,
+                color: AppColors.themedWhite,
                 fontWeight: FontWeight.bold,
+                fontSize: 20,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               settledLabel,
               style: TextStyle(
-                color: cobro.isSettledByRepartidor
-                    ? AppTheme.info
-                    : AppTheme.textSecondary,
-                fontSize: 11,
+                color: AppColors.themedWhite,
+                fontSize: 18,
                 fontWeight: cobro.isSettledByRepartidor
                     ? FontWeight.w600
                     : FontWeight.normal,
@@ -995,14 +1208,13 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       color: AppTheme.raisedSurface.withValues(alpha: 0.7),
       child: ListTile(
-        dense: true,
         leading: const Icon(Icons.payments, color: AppTheme.info, size: 20),
         title: Text(
           cobro.referencia.isNotEmpty ? cobro.referencia : 'Cobro #${cobro.id}',
           style: TextStyle(
             color: AppColors.themedWhite,
             fontWeight: FontWeight.w600,
-            fontSize: 13,
+            fontSize: 18,
           ),
         ),
         subtitle: Text(
@@ -1014,13 +1226,18 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           ].join(' · '),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 18,
+            height: 1.25,
+          ),
         ),
         trailing: Text(
           _currencyFormat.format(cobro.importe),
           style: const TextStyle(
             color: AppTheme.success,
             fontWeight: FontWeight.bold,
+            fontSize: 20,
           ),
         ),
       ),
@@ -1058,77 +1275,82 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   : Icons.radio_button_unchecked,
           color: state != 'NONE' ? AppTheme.success : AppTheme.textSecondary,
         ),
-        title: Row(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Text(
-                cobro.conceptoVisible,
-                style: TextStyle(
-                  color: AppColors.themedWhite,
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            Text(
+              cobro.conceptoVisible,
+              style: TextStyle(
+                color: AppColors.themedWhite,
+                fontWeight: FontWeight.w700,
+                fontSize: 20,
+                height: 1.2,
               ),
             ),
-            // Req #15: badge tricolor según estado del vencimiento.
-            if (cobro.isPedidoAppProvisional) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppTheme.info.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: AppTheme.info.withValues(alpha: 0.35),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (cobro.isPedidoAppProvisional)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.info.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.info),
+                    ),
+                    child: Text(
+                      'PENDIENTE DE ERP',
+                      style: TextStyle(
+                        color: AppColors.themedWhite,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: cobro.estado.color.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: cobro.estado.color),
+                  ),
+                  child: Text(
+                    cobro.estado.label.toUpperCase(),
+                    style: TextStyle(
+                      color: AppColors.themedWhite,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-                child: const Text(
-                  'APP',
+                Text(
+                  _currencyFormat.format(cobro.importePendiente),
                   style: TextStyle(
-                    color: AppTheme.info,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
+                    color: AppColors.themedWhite,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 22,
                   ),
                 ),
-              ),
-            ],
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: cobro.estado.color.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: cobro.estado.color.withValues(alpha: 0.45),
-                ),
-              ),
-              child: Text(
-                cobro.estado.label.toUpperCase(),
-                style: TextStyle(
-                  color: cobro.estado.color,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              ],
             ),
           ],
         ),
         subtitle: Text(
           subtitle,
           style: TextStyle(
-            color: cobro.isVencido
-                ? AppTheme.error.withValues(alpha: 0.9)
-                : AppTheme.textSecondary,
-            fontSize: 12,
+            color: AppColors.themedWhite,
+            fontSize: 18,
+            height: 1.3,
             fontWeight: cobro.isVencido ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
-        trailing: Text(
-          _currencyFormat.format(cobro.importePendiente),
-          style: const TextStyle(
-            color: AppTheme.info,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
           ),
         ),
         children: [
@@ -1136,7 +1358,9 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Column(
               children: [
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     _buildStateButton(
                       'NINGUNO',
@@ -1144,9 +1368,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                       Icons.radio_button_unchecked,
                       value: 'NONE',
                     ),
-                    const SizedBox(width: 8),
                     _buildStateButton('COMPLETO', cobro, Icons.check_circle),
-                    const SizedBox(width: 8),
                     _buildStateButton(
                       'PARCIAL',
                       cobro,
@@ -1159,10 +1381,16 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   TextField(
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
-                    style: TextStyle(color: AppColors.themedWhite),
+                    style: TextStyle(
+                      color: AppColors.themedWhite,
+                      fontSize: 18,
+                    ),
                     decoration: InputDecoration(
                       hintText: 'Importe a cobrar',
-                      hintStyle: TextStyle(color: AppColors.themedWhite54),
+                      hintStyle: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 18,
+                      ),
                       filled: true,
                       fillColor: AppTheme.inkSurface,
                       border: OutlineInputBorder(
@@ -1176,8 +1404,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                       suffixText:
                           'Max: ${_currencyFormat.format(cobro.importePendiente)}',
                       suffixStyle: TextStyle(
-                        color: AppColors.themedWhite54,
-                        fontSize: 10,
+                        color: AppColors.themedWhite,
+                        fontSize: 18,
                       ),
                     ),
                     onChanged: (value) =>
@@ -1202,7 +1430,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     final current = _itemStates[cobro.id] ?? 'NONE';
     final isSelected = current == stateValue;
 
-    return Expanded(
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 160, minHeight: 56),
       child: ElevatedButton.icon(
         onPressed: _isSubmitting
             ? null
@@ -1217,83 +1446,30 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                     _partialErrors.remove(cobro.id);
                   }
                 }),
-        icon: Icon(icon, size: 18),
-        label: Text(label, style: const TextStyle(fontSize: 11)),
+        icon: Icon(icon, size: 24),
+        label: Text(label),
         style: ElevatedButton.styleFrom(
           backgroundColor: isSelected ? AppTheme.success : AppTheme.inkSurface,
           foregroundColor:
-              isSelected ? AppColors.themedWhite : AppColors.themedWhite70,
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              isSelected ? AppColors.systemWhite : AppColors.themedWhite,
+          minimumSize: const Size(160, 56),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+          textStyle: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
   }
 
   Widget _buildBottomBar(double total) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.raisedSurface,
-        border: Border(
-          top: BorderSide(color: AppTheme.info.withValues(alpha: 0.2)),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Forma de pago',
-                  style:
-                      TextStyle(color: AppColors.themedWhite70, fontSize: 12),
-                ),
-                DropdownButton<String>(
-                  value: _formaPago,
-                  dropdownColor: AppTheme.raisedSurface,
-                  style: TextStyle(color: AppColors.themedWhite),
-                  items: ['CONTADO', 'CREDITO'].map((p) {
-                    return DropdownMenuItem(value: p, child: Text(p));
-                  }).toList(),
-                  onChanged: _isSubmitting
-                      ? null
-                      : (v) {
-                          if (v != null) setState(() => _formaPago = v);
-                        },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          ElevatedButton(
-            onPressed:
-                total > 0 && !_isSubmitting ? () => _submitCobro(total) : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.info,
-              foregroundColor: AppColors.themedWhite,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: _isSubmitting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(
-                    'Cobrar ${_currencyFormat.format(total)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-          ),
-        ],
-      ),
+    return CommercialPaymentControls(
+      paymentMethod: _formaPago,
+      total: total,
+      isSubmitting: _isSubmitting,
+      onPaymentMethodChanged: (value) => setState(() => _formaPago = value),
+      onSubmit: () => _submitCobro(total),
     );
   }
 }
