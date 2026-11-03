@@ -19,6 +19,13 @@ export '../../domain/liquidacion_domain.dart';
 final NumberFormat _moneyFormat =
     NumberFormat.currency(locale: 'es_ES', symbol: '€');
 
+const _liquidacionSnackBarTextStyle = TextStyle(
+  color: AppColors.systemWhite,
+  fontSize: 18,
+  height: 1.3,
+  fontWeight: FontWeight.w600,
+);
+
 class ComercialLiquidacionDiariaPage extends ConsumerStatefulWidget {
   const ComercialLiquidacionDiariaPage({
     required this.employeeCode,
@@ -197,6 +204,7 @@ class _ComercialLiquidacionDiariaPageState
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final compactAppBar = MediaQuery.sizeOf(context).width < 520;
     final draft = _draft;
     final status = _LiquidacionStatus.fromDraft(
       draft,
@@ -207,13 +215,24 @@ class _ComercialLiquidacionDiariaPageState
     return Scaffold(
       backgroundColor: AppColors.transparent,
       appBar: AppBar(
-        title: const Text('Liquidación diaria'),
+        toolbarHeight: compactAppBar ? 96 : 72,
+        title: Text(
+          compactAppBar ? 'Liquidación\ndiaria' : 'Liquidación diaria',
+          maxLines: compactAppBar ? 2 : 1,
+          style: const TextStyle(
+            fontSize: 18,
+            height: 1.05,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         backgroundColor: AppTheme.inkSurface,
         actions: [
           if (widget.snapshotLoader != null)
             Tooltip(
               message: 'Actualizar cobros y devoluciones',
               child: IconButton(
+                constraints: const BoxConstraints(minWidth: 56, minHeight: 56),
+                iconSize: 28,
                 icon: const Icon(Icons.refresh_rounded),
                 onPressed: _isLoadingRemote || _isSaving ? null : _loadRemote,
               ),
@@ -221,6 +240,8 @@ class _ComercialLiquidacionDiariaPageState
           Tooltip(
             message: 'Limpiar importes',
             child: IconButton(
+              constraints: const BoxConstraints(minWidth: 56, minHeight: 56),
+              iconSize: 28,
               icon: const Icon(Icons.restart_alt_rounded),
               onPressed: _hasInput && !_isSaving ? _clearDraft : null,
             ),
@@ -331,7 +352,8 @@ class _ComercialLiquidacionDiariaPageState
                                     'Mínimo cobro vendedor (VDDX): ${_summary.porcentajeMinimoVendedor.toStringAsFixed(0)}%',
                                     style: TextStyle(
                                       color: AppTheme.textSecondary,
-                                      fontSize: compact ? 12 : 13,
+                                      fontSize: 18,
+                                      height: 1.3,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -386,7 +408,10 @@ class _ComercialLiquidacionDiariaPageState
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No hay grabación de liquidación conectada.'),
+            content: Text(
+              'No hay grabación de liquidación conectada.',
+              style: _liquidacionSnackBarTextStyle,
+            ),
           ),
         );
         return;
@@ -398,7 +423,12 @@ class _ComercialLiquidacionDiariaPageState
       if (!mounted) return;
       setState(() => _lastSavedAt = DateTime.now());
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Liquidación guardada.')),
+        const SnackBar(
+          content: Text(
+            'Liquidación guardada.',
+            style: _liquidacionSnackBarTextStyle,
+          ),
+        ),
       );
     } catch (error, stackTrace) {
       debugPrint('Commercial liquidation save failed: $error');
@@ -409,7 +439,10 @@ class _ComercialLiquidacionDiariaPageState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_liquidacionSaveErrorMessage(error)),
+            content: Text(
+              _liquidacionSaveErrorMessage(error),
+              style: _liquidacionSnackBarTextStyle,
+            ),
           ),
         );
       }
@@ -454,7 +487,12 @@ class _ComercialLiquidacionDiariaPageState
     if (result == null || !mounted) return;
     if (result.client.isEmpty || result.amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cliente e importe válidos obligatorios')),
+        const SnackBar(
+          content: Text(
+            'Cliente e importe válidos obligatorios',
+            style: _liquidacionSnackBarTextStyle,
+          ),
+        ),
       );
       return;
     }
@@ -471,7 +509,12 @@ class _ComercialLiquidacionDiariaPageState
       if (!mounted) return;
       setState(() => _returns = [..._returns, item]);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Devolución registrada en TEST.')),
+        const SnackBar(
+          content: Text(
+            'Devolución registrada en TEST.',
+            style: _liquidacionSnackBarTextStyle,
+          ),
+        ),
       );
     } catch (error, stackTrace) {
       debugPrint('Commercial return overlay failed: $error');
@@ -479,7 +522,10 @@ class _ComercialLiquidacionDiariaPageState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No se pudo registrar la devolución TEST.'),
+          content: Text(
+            'No se pudo registrar la devolución TEST.',
+            style: _liquidacionSnackBarTextStyle,
+          ),
         ),
       );
     }
@@ -528,7 +574,8 @@ class _LiquidacionRemoteConflict extends StatelessWidget {
               'los cambios locales y carga la versión actual.',
               style: TextStyle(
                 color: AppColors.themedWhite70,
-                fontSize: 16,
+                fontSize: 18,
+                height: 1.3,
               ),
             ),
             const SizedBox(height: 12),
@@ -539,6 +586,12 @@ class _LiquidacionRemoteConflict extends StatelessWidget {
                 onPressed: onAcceptRemote,
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('Descartar cambios y cargar actualización'),
+                style: ElevatedButton.styleFrom(
+                  textStyle: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
           ],
@@ -647,8 +700,13 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      key: const ValueKey('comercial-liquidacion-return-dialog'),
       backgroundColor: AppTheme.raisedSurface,
-      title: const Text('Devuelve (TEST)'),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      title: const Text(
+        'Devuelve (TEST)',
+        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+      ),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -658,7 +716,7 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
             children: [
               const Text(
                 'Ajusta caja ya cobrada (LIQ.Vd), no una factura impagada a N D F.Factura. Overlay TEST: Pendiente técnico movimiento (ERP LAC/CVC/LQD no se escribe).',
-                style: TextStyle(fontSize: 13),
+                style: TextStyle(fontSize: 18, height: 1.3),
               ),
               const SizedBox(height: 12),
               if (_loadingPg)
@@ -675,10 +733,21 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                   label: 'Error al cargar pagarés',
                   child: Column(
                     children: [
-                      Text(_pgError!, style: TextStyle(color: AppTheme.error)),
+                      Text(
+                        _pgError!,
+                        style: TextStyle(
+                          color: AppTheme.error,
+                          fontSize: 18,
+                          height: 1.3,
+                        ),
+                      ),
                       TextButton(
                         key: const ValueKey('comercial-devuelve-pg-retry'),
                         onPressed: _loadPgDocs,
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(120, 56),
+                          textStyle: const TextStyle(fontSize: 18),
+                        ),
                         child: const Text('Reintentar'),
                       ),
                     ],
@@ -687,6 +756,7 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
               else if (widget.loader != null && _pgDocs.isEmpty)
                 const Text(
                   'No hay pagarés ya cobrados para este vendedor. Introduce cliente e importe a mano.',
+                  style: TextStyle(fontSize: 18, height: 1.3),
                 )
               else if (_pgDocs.isNotEmpty)
                 Semantics(
@@ -696,7 +766,9 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                       for (var i = 0; i < _pgDocs.length; i++)
                         RadioListTile<int>(
                           key: ValueKey('comercial-devuelve-pg-$i'),
-                          dense: true,
+                          dense: false,
+                          contentPadding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.standard,
                           value: i,
                           groupValue: _selectedPg,
                           onChanged: (value) {
@@ -704,7 +776,10 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                           },
                           title: Text(
                             '${_pgDocs[i]['documento'] ?? ''} · ${_pgDocs[i]['formaPago'] ?? 'PG'}',
-                            style: const TextStyle(fontSize: 13),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                           subtitle: Text(
                             [
@@ -736,6 +811,7 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                                 'vto ${_pgDocs[i]['vencimiento']}',
                               'LIQ.Vd ya cobrados',
                             ].join(' · '),
+                            style: const TextStyle(fontSize: 18, height: 1.3),
                           ),
                         ),
                     ],
@@ -747,7 +823,11 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                 child: TextField(
                   key: const ValueKey('comercial-devuelve-cliente'),
                   controller: _clientController,
-                  decoration: const InputDecoration(labelText: 'Cliente'),
+                  style: const TextStyle(fontSize: 18),
+                  decoration: const InputDecoration(
+                    labelText: 'Cliente',
+                    labelStyle: TextStyle(fontSize: 18),
+                  ),
                 ),
               ),
               Semantics(
@@ -757,7 +837,11 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                   key: const ValueKey('comercial-devuelve-importe'),
                   controller: _amountController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Importe'),
+                  style: const TextStyle(fontSize: 18),
+                  decoration: const InputDecoration(
+                    labelText: 'Importe',
+                    labelStyle: TextStyle(fontSize: 18),
+                  ),
                 ),
               ),
               Semantics(
@@ -766,16 +850,22 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                 child: TextField(
                   key: const ValueKey('comercial-devuelve-origen'),
                   controller: _originController,
+                  style: const TextStyle(fontSize: 18),
                   decoration: const InputDecoration(
                     labelText: 'Factura / albarán origen',
+                    labelStyle: TextStyle(fontSize: 18),
                   ),
                 ),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Ya cobrada (PG / LIQ.Vd)'),
+                title: const Text(
+                  'Ya cobrada (PG / LIQ.Vd)',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
                 subtitle: const Text(
                   'Ajusta caja ya cobrada, no una factura impagada a N D F.Factura.',
+                  style: TextStyle(fontSize: 18, height: 1.3),
                 ),
                 value: _yaCobrada,
                 onChanged: (value) => setState(() => _yaCobrada = value),
@@ -787,6 +877,10 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
+          style: TextButton.styleFrom(
+            minimumSize: const Size(120, 56),
+            textStyle: const TextStyle(fontSize: 18),
+          ),
           child: const Text('Cancelar'),
         ),
         Semantics(
@@ -808,6 +902,13 @@ class _DevuelveDialogState extends State<_DevuelveDialog> {
                 ),
               );
             },
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(120, 56),
+              textStyle: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             child: const Text('Devuelve'),
           ),
         ),
@@ -842,6 +943,7 @@ class _LiquidacionHero extends StatelessWidget {
         final total = _HeroTotal(totalAIngresar: totalAIngresar);
 
         return AnimatedContainer(
+          key: const ValueKey('comercial-liquidacion-hero'),
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
           padding: const EdgeInsets.all(18),
@@ -908,8 +1010,8 @@ class _HeroCopy extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 48,
-          height: 48,
+          width: 56,
+          height: 56,
           decoration: BoxDecoration(
             color: AppTheme.info.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -918,7 +1020,7 @@ class _HeroCopy extends StatelessWidget {
           child: const Icon(
             Icons.point_of_sale_rounded,
             color: AppTheme.info,
-            size: 26,
+            size: 30,
           ),
         ),
         const SizedBox(width: 14),
@@ -934,6 +1036,7 @@ class _HeroCopy extends StatelessWidget {
                   Text(
                     'Liquidación diaria',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontSize: 24,
                           fontWeight: FontWeight.w800,
                           color: AppColors.themedWhite,
                         ),
@@ -946,7 +1049,8 @@ class _HeroCopy extends StatelessWidget {
                 '${_formatDate(date)} · $codeLabel',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
-                  fontSize: 13,
+                  fontSize: 18,
+                  height: 1.3,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -956,8 +1060,8 @@ class _HeroCopy extends StatelessWidget {
                 'saldo pendiente antes de cerrar el día.',
                 style: TextStyle(
                   color: AppTheme.textSecondary.withValues(alpha: 0.88),
-                  fontSize: 13,
-                  height: 1.35,
+                  fontSize: 18,
+                  height: 1.3,
                 ),
               ),
             ],
@@ -989,7 +1093,7 @@ class _HeroTotal extends StatelessWidget {
             'Total a ingresar',
             style: TextStyle(
               color: AppTheme.textSecondary,
-              fontSize: 12,
+              fontSize: 18,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1032,6 +1136,7 @@ class _MetricGrid extends StatelessWidget {
         final width = (constraints.maxWidth - (gap * (columns - 1))) / columns;
 
         return Wrap(
+          key: const ValueKey('comercial-liquidacion-metrics'),
           spacing: gap,
           runSpacing: gap,
           children: metrics
@@ -1073,6 +1178,7 @@ class _MetricTileState extends State<_MetricTile> {
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOutCubic,
         padding: EdgeInsets.all(compact ? 10 : 14),
+        constraints: const BoxConstraints(minHeight: 88),
         decoration: BoxDecoration(
           color: _hovered
               ? AppTheme.softPanel.withValues(alpha: 0.92)
@@ -1093,8 +1199,8 @@ class _MetricTileState extends State<_MetricTile> {
         child: Row(
           children: [
             Container(
-              width: compact ? 32 : 38,
-              height: compact ? 32 : 38,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 color: metric.color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -1102,7 +1208,7 @@ class _MetricTileState extends State<_MetricTile> {
               child: Icon(
                 metric.icon,
                 color: metric.color,
-                size: compact ? 18 : 21,
+                size: 26,
               ),
             ),
             SizedBox(width: compact ? 8 : 12),
@@ -1112,11 +1218,10 @@ class _MetricTileState extends State<_MetricTile> {
                 children: [
                   Text(
                     metric.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: AppTheme.textSecondary,
-                      fontSize: compact ? 11 : 12,
+                      fontSize: 18,
+                      height: 1.2,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1162,6 +1267,7 @@ class _LiquidacionWorkspace extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
+      key: const ValueKey('comercial-liquidacion-workspace'),
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 820;
         final form = _InputPanel(
@@ -1288,28 +1394,38 @@ class _BalancePanel extends StatelessWidget {
           const SizedBox(height: 8),
           Divider(color: AppTheme.borderColor.withValues(alpha: 0.72)),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  draft.isBalanced ? 'Diferencia' : 'Pendiente',
-                  style: TextStyle(
-                    color: AppColors.themedWhite,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final textScale = MediaQuery.textScalerOf(context).scale(1);
+              final compact = constraints.maxWidth < 420 || textScale >= 1.5;
+              final label = Text(
+                draft.isBalanced ? 'Diferencia' : 'Pendiente',
+                style: TextStyle(
+                  color: AppColors.themedWhite,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
                 ),
-              ),
-              Text(
+              );
+              final value = Text(
                 _money(draft.diferencia),
+                textAlign: TextAlign.end,
                 style: TextStyle(
                   color: status.color,
-                  fontSize: 22,
+                  fontSize: 24,
                   fontWeight: FontWeight.w900,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
-              ),
-            ],
+              );
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [label, const SizedBox(height: 8), value],
+                );
+              }
+              return Row(
+                children: [Expanded(child: label), value],
+              );
+            },
           ),
         ],
       ),
@@ -1347,14 +1463,21 @@ class _MoneyField extends StatelessWidget {
       validator: validateAmount,
       style: TextStyle(
         color: AppColors.themedWhite,
+        fontSize: 20,
         fontWeight: FontWeight.w800,
         fontFeatures: [FontFeature.tabularFigures()],
       ),
       decoration: InputDecoration(
         labelText: label,
+        labelStyle: const TextStyle(fontSize: 18),
+        floatingLabelStyle: const TextStyle(fontSize: 18),
         hintText: hintText,
-        prefixIcon: Icon(icon),
+        hintStyle: const TextStyle(fontSize: 18),
+        prefixIcon: Icon(icon, size: 28),
         suffixText: '€',
+        suffixStyle: const TextStyle(fontSize: 18),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
       ),
     );
   }
@@ -1385,7 +1508,60 @@ class _SaveBar extends StatelessWidget {
         ? null
         : 'Último guardado ${_formatClock(lastSavedAt!)}';
 
+    final devuelveButton = Semantics(
+      button: true,
+      label: 'Devuelve, registrar factura ya cobrada o pagaré',
+      child: Tooltip(
+        message: 'Registrar devolución de factura ya cobrada (TEST)',
+        child: SizedBox(
+          height: 56,
+          child: OutlinedButton.icon(
+            key: const ValueKey('comercial-liquidacion-devuelve-button'),
+            onPressed: isSaving ? null : onDevuelve,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.themedPrimaryText,
+              side: BorderSide(color: AppColors.themedLine),
+              minimumSize: const Size(160, 56),
+              textStyle: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            icon: const Icon(Icons.undo_rounded, size: 24),
+            label: const Text('Devuelve'),
+          ),
+        ),
+      ),
+    );
+
+    final saveButton = Semantics(
+      button: true,
+      label: 'Guardar liquidación del día',
+      child: SizedBox(
+        height: 56,
+        child: ElevatedButton.icon(
+          key: const ValueKey('comercial-liquidacion-save-button'),
+          onPressed: canSave ? onSave : null,
+          icon: isSaving
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.check_rounded, size: 24),
+          label: Text(
+            isSaving ? 'Guardando' : 'Guardar',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+
     return Container(
+      key: const ValueKey('comercial-liquidacion-save-bar'),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: AppTheme.inkSurface.withValues(alpha: 0.98),
@@ -1402,99 +1578,101 @@ class _SaveBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSwitcher(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final stackActions = constraints.maxWidth < 560;
+            final statusSummary = AnimatedSwitcher(
               duration: const Duration(milliseconds: 160),
-              child: Row(
-                children: [
-                  Icon(status.icon, color: status.color, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      status.label,
-                      style: TextStyle(
-                        color: status.color,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
+              child: stackActions
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(status.icon, color: status.color, size: 24),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                status.label,
+                                style: TextStyle(
+                                  color: status.color,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          savedAt ?? 'Registrado: ${_money(draft.registrado)}',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Icon(status.icon, color: status.color, size: 24),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            status.label,
+                            style: TextStyle(
+                              color: status.color,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        Flexible(
+                          child: Text(
+                            savedAt ??
+                                'Registrado: ${_money(draft.registrado)}',
+                            textAlign: TextAlign.end,
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  Flexible(
-                    child: Text(
-                      savedAt ?? 'Registrado: ${_money(draft.registrado)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end,
-                      style: TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
+            );
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                if (onDevuelve != null) ...[
-                  Semantics(
-                    button: true,
-                    label: 'Devuelve, registrar factura ya cobrada o pagaré',
-                    child: Tooltip(
-                      message:
-                          'Registrar devolución de factura ya cobrada (TEST)',
-                      child: OutlinedButton.icon(
-                        key: const ValueKey(
-                          'comercial-liquidacion-devuelve-button',
-                        ),
-                        onPressed: isSaving ? null : onDevuelve,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.themedPrimaryText,
-                          side: BorderSide(color: AppColors.themedLine),
-                          minimumSize: const Size(48, 48),
-                          textStyle: const TextStyle(fontSize: 16),
-                        ),
-                        icon: const Icon(Icons.undo_rounded, size: 18),
-                        label: const Text('Devuelve'),
-                      ),
-                    ),
+                statusSummary,
+                const SizedBox(height: 10),
+                if (stackActions)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (onDevuelve != null) ...[
+                        devuelveButton,
+                        const SizedBox(height: 10),
+                      ],
+                      saveButton,
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      if (onDevuelve != null) ...[
+                        devuelveButton,
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(child: saveButton),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                ],
-                Expanded(
-                  child: Semantics(
-                    button: true,
-                    label: 'Guardar liquidación del día',
-                    child: SizedBox(
-                      height: 48,
-                      child: ElevatedButton.icon(
-                        key: const ValueKey(
-                          'comercial-liquidacion-save-button',
-                        ),
-                        onPressed: canSave ? onSave : null,
-                        icon: isSaving
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.check_rounded, size: 18),
-                        label: Text(
-                          isSaving ? 'Guardando' : 'Guardar',
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
               ],
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -1535,7 +1713,7 @@ class _PanelHeader extends StatelessWidget {
                 title,
                 style: TextStyle(
                   color: AppColors.themedWhite,
-                  fontSize: 16,
+                  fontSize: 20,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -1544,8 +1722,8 @@ class _PanelHeader extends StatelessWidget {
                 subtitle,
                 style: TextStyle(
                   color: AppTheme.textSecondary,
-                  fontSize: 12,
-                  height: 1.32,
+                  fontSize: 18,
+                  height: 1.3,
                 ),
               ),
             ],
@@ -1566,28 +1744,41 @@ class _BalanceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final textScale = MediaQuery.textScalerOf(context).scale(1);
+          final labelWidget = Text(
+            label,
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
             ),
-          ),
-          Text(
+          );
+          final valueWidget = Text(
             _money(value),
+            textAlign: TextAlign.end,
             style: TextStyle(
               color: AppColors.themedWhite,
-              fontSize: 14,
+              fontSize: 20,
               fontWeight: FontWeight.w800,
               fontFeatures: [FontFeature.tabularFigures()],
             ),
-          ),
-        ],
+          );
+          if (constraints.maxWidth < 420 || textScale >= 1.5) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                labelWidget,
+                const SizedBox(height: 4),
+                valueWidget,
+              ],
+            );
+          }
+          return Row(
+            children: [Expanded(child: labelWidget), valueWidget],
+          );
+        },
       ),
     );
   }
@@ -1602,23 +1793,25 @@ class _StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 160),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: status.color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AppTheme.radiusFull),
         border: Border.all(color: status.color.withValues(alpha: 0.34)),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(status.icon, color: status.color, size: 15),
+          Icon(status.icon, color: status.color, size: 22),
           const SizedBox(width: 6),
-          Text(
-            status.label,
-            style: TextStyle(
-              color: status.color,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
+          Expanded(
+            child: Text(
+              status.label,
+              style: TextStyle(
+                color: status.color,
+                fontSize: 18,
+                height: 1.2,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
         ],
@@ -1656,16 +1849,20 @@ class _DevolucionesLoadError extends StatelessWidget {
                 style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w700,
-                  fontSize: 16,
+                  fontSize: 18,
+                  height: 1.3,
                 ),
               ),
             ),
             TextButton(
-              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(120, 56),
+                textStyle: const TextStyle(fontSize: 18),
+              ),
               onPressed: onRetry,
               child: const Text(
                 'Reintentar',
-                style: TextStyle(fontSize: 16),
+                style: TextStyle(fontSize: 18),
               ),
             ),
           ],
@@ -1695,14 +1892,16 @@ class _DevolucionesList extends StatelessWidget {
               'Sin devoluciones de mercancía en el día',
               style: TextStyle(
                 color: AppTheme.textSecondary,
-                fontSize: 16,
+                fontSize: 18,
+                height: 1.3,
               ),
             ),
             Text(
               'Si hay una, pulsa Devuelve.',
               style: TextStyle(
                 color: AppTheme.textSecondary,
-                fontSize: 16,
+                fontSize: 18,
+                height: 1.3,
               ),
             ),
           ],
@@ -1727,7 +1926,7 @@ class _DevolucionesList extends StatelessWidget {
               style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w800,
-                fontSize: 14,
+                fontSize: 18,
               ),
             ),
             const SizedBox(height: 8),
@@ -1745,7 +1944,8 @@ class _DevolucionesList extends StatelessWidget {
                         '${item.pendienteTecnicoMovimiento ? ' · Pde. Tech. Mov.' : ''}',
                         style: TextStyle(
                           color: AppTheme.textPrimary,
-                          fontSize: 13,
+                          fontSize: 18,
+                          height: 1.3,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -1754,6 +1954,7 @@ class _DevolucionesList extends StatelessWidget {
                       _moneyFormat.format(item.amount.abs()),
                       style: TextStyle(
                         color: AppTheme.error,
+                        fontSize: 18,
                         fontWeight: FontWeight.w800,
                       ),
                     ),

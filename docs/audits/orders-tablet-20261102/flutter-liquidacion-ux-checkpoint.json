@@ -1,0 +1,38 @@
+{
+  "unit": "COM-UX-LIQ repair2",
+  "scope": "presentation only, Money/revision/callbacks preserved",
+  "focal": {
+    "passed": 37,
+    "exitCode": 0
+  },
+  "fullTests": {
+    "passed": 1236,
+    "exitCode": 0,
+    "seconds": 316.02111,
+    "log": "flutter-full-test-liquidacion-ui-repair2.log",
+    "sha256": "5ac819ee3c0683b0afa350431ccc35f0a4a0ae653925f08f940ca44c54d30938"
+  },
+  "analyze": {
+    "exitCode": 1,
+    "errors": 0,
+    "warnings": 0,
+    "infos": 7631,
+    "seconds": 440.3752855,
+    "log": "flutter-analyze-default-liquidacion-ui-repair2.log",
+    "sha256": "5aaf36ca583d51be5d447d1ffe10b8e203956123a840fb07c99822100ac4ed39"
+  },
+  "renderer": {
+    "sizes": [
+      "390x844",
+      "800x1280",
+      "1280x800"
+    ],
+    "scale": 2.0,
+    "sixLiveFeedbackStyles18sp": true,
+    "device": false
+  },
+  "sourceHashes": {
+    "lib/features/liquidacion_comercial/presentation/pages/comercial_liquidacion_diaria_page.dart": "ECE5EEE7C94D91749CB00078104B5ADC22778C2E5B9975F81B2BE29150AD0613",
+    "test/features/liquidacion_comercial/presentation/comercial_liquidacion_responsive_test.dart": "EDAAF605566B32C8044D34065C03FEE1D18D4B7AF7FFE87D055A3C7528880818"
+  }
+}
