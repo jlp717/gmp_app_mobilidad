@@ -727,6 +727,54 @@ describe('commercial cobros hardening', () => {
     expect(params).toEqual(['C001', 'C001', 'C001']);
   });
 
+  test('getPendientes preserves numeric terminal zero in the stable CVC identity', async () => {
+    const stableReference = 'CVC:CAC:B:GMP:2026:M:0:123:1:1';
+    mockQuery.mockResolvedValue([{ 1: 1 }]);
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
+        return [{
+          SERIE_DOCUMENTO: 'M',
+          NUMERO_DOCUMENTO: 123,
+          TERMINAL_DOCUMENTO: 0,
+          XDE: 1,
+          DEX: 1,
+          CODIGO_CLIENTE: 'C001',
+          IMPORTE_TOTAL: 100,
+          IMPORTE_DOCUMENTO: 100,
+          IMPORTE_COBRADO: 0,
+          IMPORTE_PENDIENTE: 80,
+          ANO_DOCUMENTO: 2026,
+          MES_DOCUMENTO: 11,
+          DIA_DOCUMENTO: 4,
+          ANO_VENCIMIENTO: 2026,
+          MES_VENCIMIENTO: 11,
+          DIA_VENCIMIENTO: 30,
+          SUBEMPRESA: 'GMP',
+          EJERCICIO_DOCUMENTO: 2026,
+          TIPO_DOCUMENTO: 'CAC',
+          ORIGEN_DOCUMENTO: 'B',
+          FORMA_PAGO: '02',
+        }];
+      }
+      if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [];
+      if (/FROM JAVIER\.COBROS/i.test(sql)) return [{ REF: stableReference, TOTAL: 30 }];
+      return [];
+    });
+
+    const result = await new Db2CobrosRepository().getPendientes('C001', {
+      userId: '35', userRole: 'COMERCIAL', vendorCodes: ['35'],
+    });
+
+    expect(result.cobros[0]).toMatchObject({
+      id: stableReference,
+      importeCobrado: 30,
+      importePendiente: 50,
+      appPaymentApplied: 30,
+      docKey: { reference: stableReference },
+    });
+    expect(result.resumen.totalPendiente).toBe(50);
+  });
+
   test('getPendientes groups duplicate CVC rows by document reference', async () => {
     mockQuery.mockResolvedValue([{ 1: 1 }]);
     mockQueryWithParams.mockImplementation(async (sql) => {

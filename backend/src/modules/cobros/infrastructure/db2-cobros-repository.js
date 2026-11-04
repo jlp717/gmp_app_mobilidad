@@ -351,7 +351,7 @@ function cvcPartsFromRow(row = {}) {
     subempresa: cvcPart(row.SUBEMPRESA || row.SUBEMPRESADOCUMENTO),
     ejercicioDocumento: cvcPart(row.EJERCICIO_DOCUMENTO || row.EJERCICIODOCUMENTO),
     serie: cvcPart(row.SERIE_DOCUMENTO || row.SERIEPEDIDO || row.SERIE || row.SERIEDOCUMENTO),
-    terminalDocumento: cvcPart(row.TERMINAL_DOCUMENTO || row.TERMINALDOCUMENTO),
+    terminalDocumento: cvcPart(row.TERMINAL_DOCUMENTO) || cvcPart(row.TERMINALDOCUMENTO),
     numero: cvcPart(row.NUMERO_DOCUMENTO || row.NUMEROPEDIDO || row.NUMERO || row.NUMERODOCUMENTO),
     xde: cvcPart(row.XDE || row.XDE_DOCUMENTO || row.XDEDOCUMENTO),
     dex: cvcPart(row.DEX || row.DEX_DOCUMENTO || row.DEXDOCUMENTO),
