@@ -1,0 +1,269 @@
+{
+  "version": "1",
+  "run_id": "commercial-prod-readiness-20261104",
+  "goal": "Qualify commercial production activation and test cleanup without collateral changes",
+  "settings": {
+    "max_concurrent": 5,
+    "empty_rounds_to_stop": 2,
+    "max_rounds": 3,
+    "default_mode": "barrier"
+  },
+  "nodes": [
+    {
+      "id": "orders",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "description": "ERP export and reversal, transaction and sequence risks",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "finance",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "description": "Production collections and settlement, ownership trace and side effects",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "profile",
+      "kind": "agent",
+      "role": "graph_security",
+      "model_tier": "premium",
+      "description": "Installed activation requirements, readiness and rollback gate",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "ux",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "description": "High-impact commercial accessibility fixes and renderer tests",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "decision",
+      "kind": "agent",
+      "role": "graph_synthesizer",
+      "model_tier": "premium",
+      "description": "Reduce all evidence into implementation and release decision",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": [],
+      "requires_all_inputs": true
+    },
+    {
+      "input_schema": {
+        "type": "object"
+      },
+      "model_tier": "premium",
+      "id": "maker",
+      "requires_all_inputs": false,
+      "role": "graph_implementer",
+      "writes": [
+        "backend/services/pedidos/index.js",
+        "backend/__tests__/pedidos_reparto_contracts.test.js",
+        "lib/features/bolsa/presentation/pages/bolsa_page.dart",
+        "lib/features/bolsa/presentation/widgets/bolsa_movement_type_filters.dart",
+        "test/features/bolsa/bolsa_movement_type_filters_test.dart",
+        "backend/__tests__/pedidos-hard-floor-confirm.test.js"
+      ],
+      "description": "Root single writer for ERP/Bolsa atomicity contract",
+      "kind": "agent",
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "input_schema": {
+        "type": "object"
+      },
+      "model_tier": "premium",
+      "id": "qa",
+      "requires_all_inputs": false,
+      "role": "graph_qa",
+      "writes": [],
+      "description": "Independent source and execution verification",
+      "kind": "agent",
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "orders",
+      "to": "decision",
+      "data": "bounded findings, exact source evidence and one release criterion"
+    },
+    {
+      "from": "finance",
+      "to": "decision",
+      "data": "bounded findings, exact source evidence and one release criterion"
+    },
+    {
+      "from": "profile",
+      "to": "decision",
+      "data": "bounded findings, exact source evidence and one release criterion"
+    },
+    {
+      "from": "ux",
+      "to": "decision",
+      "data": "bounded findings, exact source evidence and one release criterion"
+    },
+    {
+      "to": "maker",
+      "data": "EARS and exact file ownership",
+      "from": "decision"
+    },
+    {
+      "to": "qa",
+      "data": "Frozen diff and test evidence",
+      "from": "maker"
+    }
+  ]
+}

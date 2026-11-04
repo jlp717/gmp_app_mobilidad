@@ -143,3 +143,26 @@ El detalle Flutter muestra el plazo de reserva y comprueba el estado en el servi
 | `flutter analyze --no-pub` | 1 | 0 errores, 0 advertencias y 7.660 informativos | `F3C1C612156D899C1F0E70C46E06567DDB76AA15F8ABA09E1644C5C5788898F3` |
 
 La comprobación local de Loop Engineering devolvió WARN porque su detección de ejecutables no encontró Flutter y npm. Los resultados anteriores y los del backend corresponden a ejecuciones directas de cada herramienta. El control de publicación sigue en FAIL por readiness, cobertura funcional nativa y verificación en dispositivo.
+
+### Validación de la ruta a producción
+
+SSH confirmó el commit instalado `4a36ddde`, la existencia de `/opt/gmp-api/backend/.env` y HTTP 503 en `/api/ready`. Ese commit carga los selectores heredados y todavía carece del resolutor `APP_ENV`. La selección de perfil de la rama actual se aplica a todo el proceso. Una prueba sobre la instancia compartida requiere aislar el tráfico ajeno para atribuir los cambios a la prueba. El chequeo final informó `writesEnabled=true`, `tableSet=isolated_test`, `productionWritesEnabled=false` y `productionErpWritesApproved=false`.
+
+El catálogo vigente confirma `DSEDAC.CPC`, `DSEDAC.LPC`, `DSEDAC.OCPC` y las tres tablas TEST de auditoría, liquidación y devoluciones. Los tres objetos equivalentes de producción en JAVIER siguen ausentes. El controlador ODBC abrió una transacción nativa, ajustó el aislamiento, consultó el catálogo, ejecutó rollback y cerró la conexión. La prueba hizo cero escrituras. [Prueba ODBC](audits/orders-tablet-20261102/commercial-prod-odbc-readonly.json)
+
+En CPC, LPC y OCPC el catálogo SQL mostró una clave primaria por ID y cero disparadores. Para CPC, la referencia de cinco columnas que usa la app al numerar pedidos carece de restricción única en ese catálogo. La limpieza de un ensayo necesita los IDs propios capturados antes del commit y una barrera que impida que otros procesos consuman las filas durante el ensayo. La API sigue delegando al ERP la cancelación de pedidos exportados. [Claves reales](audits/orders-tablet-20261102/commercial-prod-erp-key-catalog.json)
+
+El commit `d335ff7` hace el cambio a CONFIRMANDO, la comprobación de stock, la exportación, la confirmación local, las reservas y la escritura de Bolsa en una sola conexión ODBC dedicada. El flujo comprueba el estado cuando el controlador no devuelve el recuento del UPDATE. Las pruebas de contrato cubren éxito, rollback cuando falla Bolsa y rollback cuando no se puede acreditar que se confirmó la cabecera. La regresión focal pasó 162 casos. QA y seguridad aprobaron el alcance tras revisar la transacción y el acceso desde ambas rutas de confirmación.
+
+El commit `d1a671c` conserva el proveedor de los cuatro filtros de movimientos de Bolsa. Los filtros muestran etiqueta y recuento en botones de al menos 56 dp, con texto de 18 sp, marca de selección y estado semántico. Las 45 pruebas focales pasaron, incluidas 24 combinaciones del control en teléfonos y tablets, dos orientaciones y escalas 100, 150 y 200 %. La matriz ejecuta el renderizador de Flutter. ADB no detectó dispositivos conectados.
+
+El servicio de liquidación comercial exige `isolated_test` y devuelve `WRITES_TEST_ONLY` fuera de ese modo. El suelo de tarifa sigue como piloto TEST/DEMO. El ensayo integral productivo sigue pendiente del despliegue de una versión compatible en una instancia aislada, la preparación de las tablas y rutas de auditoría y finanzas, la identidad de los registros propios y la aprobación de salud. La instancia compartida conservó `isolated_test`. Se registraron cero cambios de configuración, cero escrituras y cero borrados de datos en producción. [Entornos y verificación](orders-environments.md) · [Grafo de revisión](audits/orders-tablet-20261102/graph-commercial-prod-20261104.json)
+
+La primera regresión completa del backend detectó una aserción estructural que buscaba la rama anterior. El commit `69d0307` actualizó esa aserción y sustituyó una comprobación sobre un fragmento vacío por la ejecución del piloto en perfil producción. El ajuste conserva la comprobación del mínimo antes de cualquier escritura y pasó 24 pruebas focales. La segunda ejecución completa pasó las 3.820 pruebas activas y emitió un aviso de cierre forzado de un proceso de Jest.
+
+| Comprobación | Salida | Resultado | SHA-256 del log |
+|---|---:|---|---|
+| `npm test -- --maxWorkers=2` | 0 | 320 suites aprobadas, una omitida. 3.820 pruebas aprobadas, dos omitidas | `F2E6021D9F9A82A7C71A281C9B9C13F000417AB53D223467ADFB353E64243F69` |
+| `npm run lint` | 1 | 242 errores existentes, cero advertencias. Salida idéntica a la línea base | `741F0B17A5451798BB8B657156BF7805632B382F95DB9038CC4A802A1F090E5C` |
+| `flutter test --no-pub --concurrency=1 --reporter expanded` | 0 | 1.270 pruebas aprobadas | `42631455579129394FB7DB287A7B310606E36991373B5DFB94BE2DE1BD7AE981` |
+| `flutter analyze --no-pub` | 1 | Cero errores y advertencias. 7.665 informativos | `1F15B1CB9C3976634EF93D3B6635E212296C762321B1BCD58C83208112F22E98` |

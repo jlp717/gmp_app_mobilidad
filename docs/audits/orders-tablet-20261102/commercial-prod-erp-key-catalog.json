@@ -1,0 +1,56 @@
+{
+  "mode": "READ_ONLY",
+  "mutations": 0,
+  "queries": 4,
+  "closed": true,
+  "tables": [
+    {
+      "name": "DSEDAC.CPC",
+      "uniqueConstraints": [
+        {
+          "kind": "PRIMARY KEY",
+          "columns": [
+            "ID"
+          ]
+        }
+      ],
+      "uniqueIndexes": [],
+      "nonUniqueIndexes": 0,
+      "indexKindValues": [],
+      "hasExactOrderKey": false,
+      "triggers": 0
+    },
+    {
+      "name": "DSEDAC.LPC",
+      "uniqueConstraints": [
+        {
+          "kind": "PRIMARY KEY",
+          "columns": [
+            "ID"
+          ]
+        }
+      ],
+      "uniqueIndexes": [],
+      "nonUniqueIndexes": 0,
+      "indexKindValues": [],
+      "hasExactOrderKey": false,
+      "triggers": 0
+    },
+    {
+      "name": "DSEDAC.OCPC",
+      "uniqueConstraints": [
+        {
+          "kind": "PRIMARY KEY",
+          "columns": [
+            "ID"
+          ]
+        }
+      ],
+      "uniqueIndexes": [],
+      "nonUniqueIndexes": 0,
+      "indexKindValues": [],
+      "hasExactOrderKey": false,
+      "triggers": 0
+    }
+  ]
+}

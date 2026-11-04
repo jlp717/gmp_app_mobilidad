@@ -1,0 +1,17 @@
+{
+  "mode": "READ_ONLY",
+  "begin": true,
+  "isolation": true,
+  "selects": 1,
+  "rollback": true,
+  "closed": true,
+  "mutations": 0,
+  "tables": [
+    "DSEDAC.CPC",
+    "DSEDAC.LPC",
+    "DSEDAC.OCPC",
+    "JAVIER.TEST_DEVOLUCIONES_COMERCIAL",
+    "JAVIER.TEST_LIQUIDACION_COMERCIAL",
+    "JAVIER.TEST_PEDIDO_STATE_EVENTS"
+  ]
+}
