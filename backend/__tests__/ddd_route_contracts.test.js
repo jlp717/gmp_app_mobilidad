@@ -1424,7 +1424,7 @@ describe('DDD clients/commissions cache scope contracts', () => {
 
     const cacheKeys = performanceCache.getOrFetch.mock.calls.map(function (call) { return call[0]; });
     expect(cacheKeys).toEqual(expect.arrayContaining([
-      expect.stringContaining('ddd:clients:v4:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
+      expect.stringContaining('ddd:clients:v5:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
       expect.stringContaining('ddd:commissions:v2:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
     ]));
   });
@@ -2077,6 +2077,83 @@ describe('DDD entregas document route contracts', () => {
 });
 
 describe('DDD clients list cache-ready contract', () => {
+  test('warm cached client codes are ownership-filtered before pagination', async () => {
+    const laclae = require('../services/laclae');
+    const db = require('../config/db');
+    const { performanceCache } = require('../src/core/infrastructure/cache/performance-cache');
+    const stale = '4300000001';
+    const owned = ['4300000002', '4300000003'];
+    laclae.isCacheReady.mockReturnValue(true);
+    laclae.getClientCodesFromCache.mockReturnValue([stale, ...owned]);
+    db.queryWithParams.mockImplementation(async (sql, params) => {
+      if (/SELECT C\.CODIGOCLIENTE AS CODE FROM/.test(sql)) {
+        const ownershipBound = /TRIM\(CLP\.VENDEDORCOMERCIAL\)/.test(sql)
+          && /CAST\(\? AS CHAR\(2\)\)/.test(sql);
+        return (ownershipBound ? owned : [stale, ...owned]).map(CODE => ({ CODE }));
+      }
+      if (/VENDOR_NAME/.test(sql)) return [{ VENDOR_CODE: '35', VENDOR_NAME: 'Vendedor' }];
+      const clients = params.filter(value => owned.includes(String(value)));
+      if (/C\.CODIGOCLIENTE as code/.test(sql)) return clients.map(code => ({ CODE: code, NAME: 'Cliente' }));
+      if (/TOTAL_PURCHASES/.test(sql)) return clients.map(code => ({ CLIENT_CODE: code, TOTAL_PURCHASES: 25 }));
+      return clients.map(code => ({ CLIENT_CODE: code, LAST_VENDOR: '35' }));
+    });
+
+    const res = await request(makeApp(createClientsRoutes(), {
+      id: '95', code: '95', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['35', '36'],
+    }))
+      .get('/list')
+      .query({ vendedorCodes: '35', limit: 1, offset: 0 });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ count: 2, fastPath: true });
+    expect(res.body.clients.map(client => client.code)).toEqual([owned[0]]);
+    const matchingCall = db.queryWithParams.mock.calls.find(([sql]) => /SELECT C\.CODIGOCLIENTE AS CODE FROM/.test(sql));
+    expect(matchingCall[0]).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)/);
+    expect(matchingCall[0]).toMatch(/CAST\(\? AS CHAR\(2\)\)/);
+    expect(matchingCall[1].length).toBeGreaterThan(0);
+    expect(matchingCall[1].every(value => value === '35')).toBe(true);
+    expect(performanceCache.getOrFetch.mock.calls.at(-1)[0]).toContain('ddd:clients:v5:');
+  });
+
+  test('fallback keeps ownership SQL and bind order when a cached IN list is present', async () => {
+    const laclae = require('../services/laclae');
+    const db = require('../config/db');
+    const optimizer = require('../services/query-optimizer');
+    const cachedCodes = ['4300000010', '4300000011'];
+    laclae.isCacheReady.mockReturnValue(true);
+    laclae.getClientCodesFromCache
+      .mockReturnValueOnce(cachedCodes)
+      .mockReturnValueOnce(undefined);
+    optimizer.cachedQuery.mockImplementationOnce(async (runner, sql, _options, params) => runner(sql, params));
+    db.queryWithParams.mockResolvedValue([]);
+
+    const res = await request(makeApp(createClientsRoutes(), {
+      id: '95', code: '95', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['35'],
+    }))
+      .get('/list')
+      .query({ vendedorCodes: '35', limit: 20, offset: 0 });
+
+    expect(res.status).toBe(200);
+    const fallbackCall = db.queryWithParams.mock.calls.find(([sql]) => /WITH LACLAE_SCOPED/.test(sql));
+    expect(fallbackCall[0]).toMatch(/C\.CODIGOCLIENTE IN/);
+    expect(fallbackCall[0]).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)/);
+    expect(fallbackCall[1].slice(0, 4)).toEqual([...cachedCodes, ...cachedCodes]);
+    expect(fallbackCall[1].slice(4).every(value => value === '35')).toBe(true);
+  });
+
+  test('GET /list rejects a vendor outside the signed manager scope before DB2', async () => {
+    const db = require('../config/db');
+    const res = await request(makeApp(createClientsRoutes(), {
+      id: '95', code: '95', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['35'],
+    }))
+      .get('/list')
+      .query({ vendedorCodes: '36', limit: 20 });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_VENDOR' });
+    expect(db.queryWithParams).not.toHaveBeenCalled();
+  });
+
   test.each([false, true])('large portfolio uses bounded page queries with search=%s', async (search) => {
     const laclae = require('../services/laclae');
     const db = require('../config/db');

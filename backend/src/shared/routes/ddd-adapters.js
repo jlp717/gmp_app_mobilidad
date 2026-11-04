@@ -48,7 +48,6 @@ const {
   MIN_YEAR,
   getVendorVisibilityScope,
   getVendorColumnExpr,
-  buildClientListVendorSqlFilter,
   buildLaclaeBoundedClientCodesSql,
   lookupClientAssignedVendorCodes,
   sanitizeCodeListForParams,
@@ -2975,8 +2974,9 @@ function createClientsRoutes() {
       const safeLimit = boundedInt(limit, 1, 200, 100);
       const safeOffset = boundedInt(offset, 0, 100000, 0);
       const safeSearch = normalizeSearchTerm(search);
+      const clientOwnershipFilter = buildClientVendorParamFilter(vendorScope.codes, 'C');
       const cacheScope = buildCacheSecurityScope(req, { includeMargin: true });
-      const cacheKey = `ddd:clients:v4:${cacheScope}:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${safeLimit}:${safeOffset}`;
+      const cacheKey = `ddd:clients:v5:${cacheScope}:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${safeLimit}:${safeOffset}`;
       const role = req?.user?.role || 'COMERCIAL';
       const ttlSec = performanceCache.getTTL(role, isAllQuery);
 
@@ -3005,8 +3005,8 @@ function createClientsRoutes() {
             let scopedCodes = [...new Set(cachedClientCodes.map(c => sanitizeForSQL(c)).filter(Boolean))].sort();
             const matchingClients = await queryWithParams(`
               SELECT C.CODIGOCLIENTE AS CODE FROM ${comercialErpTable('CLI')} C
-               WHERE C.ANOBAJA = 0 ${searchClause.clause}
-            `, searchClause.params, false);
+               WHERE C.ANOBAJA = 0 ${clientOwnershipFilter.clause} ${searchClause.clause}
+            `, [...clientOwnershipFilter.params, ...searchClause.params], false);
             const matchingCodes = new Set(matchingClients.map(row => String(row.CODE ?? row.code ?? '').trim()));
             scopedCodes = scopedCodes.filter(code => matchingCodes.has(code));
             const pageCodes = scopedCodes.slice(safeOffset, safeOffset + safeLimit);
@@ -3146,18 +3146,14 @@ function createClientsRoutes() {
           }
         }
 
-        const scopedCliParams = [];
         const boundedLacParams = [];
-        const vendorScopedCliFilter = clientCodesFilter
-          ? ''
-          : buildClientListVendorSqlFilter(vendedorCodes, 'C', scopedCliParams);
         const laclaeBoundedFilter = clientCodesFilter
           ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL')
           : buildLaclaeBoundedClientCodesSql(vendedorCodes, boundedLacParams);
         const laclaeScopeFilter = laclaeBoundedFilter || vendorFilter.replace(/L\./g, '');
         queryParams = clientCodesFilter
-          ? [...clientCodeParams, ...clientCodeParams, ...searchClause.params]
-          : [...boundedLacParams, ...scopedCliParams, ...searchClause.params];
+          ? [...clientCodeParams, ...clientCodeParams, ...clientOwnershipFilter.params, ...searchClause.params]
+          : [...boundedLacParams, ...clientOwnershipFilter.params, ...searchClause.params];
 
         const clients = await cachedQuery((sql, params = []) => queryWithParams(sql, params, false), `
           WITH LACLAE_SCOPED AS (
@@ -3202,7 +3198,7 @@ function createClientsRoutes() {
           LEFT JOIN LACLAE_AGG S ON C.CODIGOCLIENTE = S.CLIENT_CODE
           LEFT JOIN LACLAE_LAST LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
           LEFT JOIN ${comercialErpTable('VDD')} V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
-          WHERE C.ANOBAJA = 0 ${clientCodesFilter || vendorScopedCliFilter} ${searchClause.clause}
+          WHERE C.ANOBAJA = 0 ${clientCodesFilter} ${clientOwnershipFilter.clause} ${searchClause.clause}
           ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
           OFFSET ${safeOffset} ROWS FETCH FIRST ${safeLimit} ROWS ONLY
         `, {
