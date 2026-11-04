@@ -242,3 +242,42 @@ El tercer intento comenzó con 1.276.321.792 bytes libres y terminó con salida 
 El ensayo financiero sellado pasó la selección de sólo lectura con 15 consultas y el preflight de las tres tablas con clave primaria `ID`, diario `JAVIER/QSQJRN *BOTH` y cero disparadores. `Run` terminó con salida 1, 37 lecturas, cero escrituras y cero commits. SQLSTATE `42S22`, SQLCODE `-206`, apareció al consultar el control anterior al ensayo, antes de abrir la conexión de escritura. Se verificó en el catálogo y mediante un SELECT que la fecha de cobro de `JAVIER.TEST_REPARTIDOR_COBROS` usa `ANOCOBRO`, `MESCOBRO` y `DIACOBRO`. Las columnas `ANODOCUMENTO`, `MESDOCUMENTO` y `DIADOCUMENTO` corresponden al ledger comercial. La siguiente reparación debe limitarse al filtro de fecha del control de reparto. Loop Engineering y AGENTS.md limitan la unidad a tres iteraciones y esta ejecución las agotó.
 
 El SELECT corregido se comprobó en DB2 con parámetros reales y devolvió cero filas del período, salida 0 y conexión cerrada. La implementación del ensayo se preservó en `c75038c6b59513f5bcdcfeb3ea2247d593b7db38`. La rama mantiene la sonda ejecutable de sólo lectura. La prueba de pedidos, cobros y liquidación en producción sigue pendiente de las tablas requeridas, la verificación de staging y la puerta de activación del proyecto. Durante este pase no se insertaron ni borraron pedidos, cobros ni liquidaciones productivos.
+
+### Comprobación autenticada y repetición financiera del 04/11
+
+El servidor instalado en `4a36ddde` continuó en TEST con lecturas ERP. Las dos cuentas autorizadas iniciaron y cerraron sesión con HTTP 200. La cuenta de mando fue reconocida como `JEFE_VENTAS`, con modo activo `COMERCIAL` y modos disponibles Comercial, Almacén y Reparto. La cuenta comercial fue reconocida como `COMERCIAL`, sin privilegios de jefatura y con modos Comercial y Reparto. La prueba no consultó PIN en claro ni registró credenciales, sesiones o códigos de clientes.
+
+| Lectura autenticada | Jefatura | Comercial |
+| --- | ---: | ---: |
+| Pedidos | HTTP 200, 126 ms | HTTP 200, 30 ms |
+| Bolsa propia | HTTP 200, 22 ms | HTTP 200, 13 ms |
+| Cobros | HTTP 200, 7.197 ms | HTTP 200, 10.222 ms |
+| Resumen de liquidación | HTTP 200, 854 ms | HTTP 200, 92 ms |
+| Catálogo de un cliente autorizado | HTTP 200, 10 productos, 6.292 ms | HTTP 200, 10 productos, 3.550 ms |
+
+Las duraciones son muestras individuales medidas contra el proceso instalado por SSH. No hay medición de renderizado, comparación antes/después ni validación de objetivos de latencia a partir de estas cifras.
+
+El ensayo financiero de excepción cambió únicamente el predicado de fecha de `TEST_REPARTIDOR_COBROS`. La revisión independiente aprobó los hashes exactos y el preflight verificó un documento real por 310,87 €. El ensayo terminó con salida 1 tras 39 lecturas. Pasó la verificación de fecha y se detuvo con `PAYMENT_INSERT_FINGERPRINT_REJECTED` antes de que DB2 recibiera el primer INSERT. El informe de conexión registró cero DML, cero commits, un rollback físico y conexión cerrada. Otro observador verificó cero filas de cobro o liquidación para los seis identificadores del ensayo. No se completó ninguna de las tres modalidades. Los scripts exactos quedaron preservados en `f84d9979108a1b188c9b7ff36c712647c0624f6c`. La excepción autorizada se consumió en esta repetición.
+
+La limpieza del 04/11 retiró cachés regenerables de instaladores, npm, Edge y pnpm. La limpieza validada de modelos y conjuntos descargados en la caché de Hugging Face elevó el espacio libre de 1.953.902.592 a 7.754.678.272 bytes. El inicio de la compilación universal registró 7.754.551.296 bytes libres. Se conservaron los datos de trabajo, las credenciales de firma y la caché de Windows Update en uso.
+
+### Autorización de Bolsa y paquetes Android
+
+En `4a36ddde`, una cuenta `COMERCIAL` obtuvo HTTP 403 para otro vendedor comercial y HTTP 200 para un código ajeno de reparto. El JSON llevaba el código de reparto solicitado. El servicio sólo hace SELECT y puede responder con valores predeterminados, por lo que este resultado no demuestra que existiera una fila para ese código. La causa fue la combinación del filtro del resolutor comercial y la llamada de la ruta con el código original. El cambio local rechaza códigos excluidos por ese filtro antes del acceso al servicio. Conserva el alcance firmado, el código propio y la jefatura autorizada. Tres regresiones reprodujeron HTTP 200 con salida 1. Con la corrección, Jest pasó los 14 casos de la ruta con salida 0. AppSec repitió los 14 casos y verificó el rechazo antes del servicio. La instancia instalada aún no incorpora la corrección. [Ruta](../backend/routes/bolsa.js) · [Pruebas](../backend/__tests__/bolsa_route_contracts.test.js)
+
+Los dos paquetes Android de `4.1.48+105` se compilaron desde el mismo árbol Flutter que `3b6e0aa`. Ambos comandos de Flutter salieron con código 0. Incluyen `arm64-v8a`, `armeabi-v7a` y `x86_64`, con el identificador `com.maripepa.gmp_mobilidad`. `aapt` y Bundletool 1.18.1 comprobaron el manifiesto. `apksigner` verificó el esquema v2. `jarsigner -verify` verificó el AAB. QA comparó el certificado de ambos paquetes y obtuvo la misma huella SHA-256 `f3f56624be477b679946aa2bed8dc86a5eaa1d533642fba169e9d366d42b3b3a`. El modo estricto de `jarsigner` salió con código 4 por la cadena autofirmada y la falta de un sello de tiempo. La verificación criptográfica ordinaria salió con código 0.
+
+| Artefacto | Tamaño | SHA-256 |
+| --- | ---: | --- |
+| APK universal release | 99.248.711 bytes | `498AEE3EB84744CDE770EBF9673712B930C7EA70936228577827D7F71B5D252E` |
+| Android App Bundle release | 66.250.182 bytes | `44ED861A0B7440843611254FF7C50F5149E5750D893175284D813C874608EB7C` |
+
+Se verificó que las copias de entrega tienen las mismas huellas que los archivos de compilación. No se publicaron en Play ni se distribuyeron a dispositivos físicos.
+
+La suite completa tras `946c68c` salió con código 0. Jest aprobó 3.830 pruebas en 320 suites y omitió dos pruebas en una suite. Conservó el aviso de cierre forzado de un worker. SHA-256 `1FEE9E64A19538AB67D97C3B899162416141E7388C3553EE54F57E36DFEF2E95`. `npm run lint` salió con código 1 por los mismos 242 errores existentes y cero advertencias. Su log volvió a coincidir byte por byte con la línea base, SHA-256 `741F0B17A5451798BB8B657156BF7805632B382F95DB9038CC4A802A1F090E5C`. El árbol Flutter de la versión 105 sólo difiere de la regresión Flutter descrita arriba en el código de versión.
+
+El último chequeo SSH devolvió HTTP 200 en `/api/ready` y HTTP 401 en `/api/runtime-profile`. La revisión instalada carece de la ruta pública que espera el APK para verificar el perfil. La captura del candidato muestra «Entorno sin verificar». Para la prueba productiva siguen pendientes `JAVIER.PEDIDO_STATE_EVENTS`, `JAVIER.LIQUIDACION_COMERCIAL` y `JAVIER.DEVOLUCIONES_COMERCIAL`, el journaling tras la migración 051 y las verificaciones de staging y activación. El servidor sigue en TEST con lecturas del ERP. No se insertó ni borró ningún pedido, cobro o liquidación en tablas productivas durante este pase.
+
+El APK entregable se instaló con `adb install -r` en un emulador temporal Android 35 x86_64. `dumpsys package` confirmó versión 105. Se observaron una espera de lanzamiento superior a 15 segundos y avisos de que la interfaz del sistema Android no respondía. El emulador llegó a dibujar el formulario de acceso y se capturó en teléfono de 1080 × 2340 px a 440 dpi. En el mismo emulador se verificó el ajuste de 800 × 1280 px a 160 dpi y escala de texto 2,0. Las capturas `tablet-simulada-acceso-vertical-200-105.png` y `tablet-simulada-acceso-horizontal-200-105.png` muestran ambas orientaciones. El texto de ayuda del campo de usuario se elide en ambas capturas de tablet. Las imágenes permanecen junto a los paquetes de entrega fuera de Git. Esta evidencia cubre la pantalla de acceso en el emulador. La revisión de todas las pestañas autenticadas, el 200 % en el selector de pedido y el rendimiento de campo siguen abiertos.
+
+El recorrido autenticado dentro del APK no llegó al inicio comercial. El intento en modo teléfono volvió al formulario y el intento en modo tablet volvió a mostrar el aviso del sistema Android. La comprobación por API sí completó el acceso y las lecturas con las dos cuentas.
