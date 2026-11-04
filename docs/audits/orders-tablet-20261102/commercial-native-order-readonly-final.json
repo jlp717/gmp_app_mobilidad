@@ -1,0 +1,79 @@
+{
+  "mode": "ReadOnly",
+  "sourceCommit": "87e99f151db2247e038225e34e66832aa8e5865f",
+  "runtimeSha256": "ec17bec3c3897c1b3e3f4c3c888ee436cee95be850344e9bb2dbc710b43da151",
+  "sourceManifestSha256": "f64c6e4f0816c7cfbf816a2e9fc4aa269fb79e01396925d0a2c9636d55923607",
+  "passed": true,
+  "error": null,
+  "readOnly": {
+    "dedicatedConnections": 0,
+    "transactionCommands": 0,
+    "lockCommands": 0
+  },
+  "closed": {
+    "observer": true
+  },
+  "physicalCommits": 0,
+  "logicalCommits": 0,
+  "catalog": [
+    {
+      "table": "TEST_PEDIDOS_CAB",
+      "journal": "JAVIER/QSQJRN *BOTH",
+      "triggerCount": 0
+    },
+    {
+      "table": "TEST_PEDIDOS_LIN",
+      "journal": "JAVIER/QSQJRN *BOTH",
+      "triggerCount": 0
+    },
+    {
+      "table": "TEST_PEDIDOS_SEQ",
+      "journal": "JAVIER/QSQJRN *BOTH",
+      "triggerCount": 0
+    },
+    {
+      "table": "TEST_PEDIDOS_STOCK_RESERVE",
+      "journal": "JAVIER/QSQJRN *BOTH",
+      "triggerCount": 0
+    },
+    {
+      "table": "TEST_PEDIDO_IDEMPOTENCY",
+      "journal": "JAVIER/QSQJRN *BOTH",
+      "triggerCount": 0
+    },
+    {
+      "table": "TEST_BOLSA_COMERCIAL",
+      "journal": "JAVIER/QSQJRN *BOTH",
+      "triggerCount": 0
+    },
+    {
+      "table": "TEST_MOVIMIENTOS_BOLSA",
+      "journal": "JAVIER/QSQJRN *BOTH",
+      "triggerCount": 0
+    },
+    {
+      "table": "TEST_PEDIDO_STATE_EVENTS",
+      "journal": "JAVIER/QSQJRN *BOTH",
+      "triggerCount": 0
+    }
+  ],
+  "lifecycle": {
+    "preflight": {
+      "target": "LOCAL",
+      "stockEnvases": 72.5,
+      "unitsPerBox": 5,
+      "unitMeasure": "KILO",
+      "tariff1": 4.648,
+      "tariff2": 4.124,
+      "precioTarifaCliente": 4.648,
+      "ultimoPrecioHistorico": null
+    },
+    "journalBefore": {
+      "bolsaId": 14,
+      "saldo": 300,
+      "acumulado": 0,
+      "consumido": 0,
+      "movementCount": 0
+    }
+  }
+}

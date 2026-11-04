@@ -1,0 +1,22 @@
+{
+  "readOnly": true,
+  "mutations": 0,
+  "queries": 8,
+  "closed": true,
+  "orderId": 114,
+  "ownedRowCounts": {
+    "TEST_PEDIDOS_CAB": 0,
+    "TEST_PEDIDOS_LIN": 0,
+    "TEST_PEDIDOS_STOCK_RESERVE": 0,
+    "TEST_PEDIDO_IDEMPOTENCY": 0,
+    "TEST_PEDIDO_STATE_EVENTS": 0,
+    "TEST_MOVIMIENTOS_BOLSA": 0
+  },
+  "bolsa": {
+    "saldo": 300,
+    "acumulado": 0,
+    "consumido": 0,
+    "movimientos": 0
+  },
+  "passed": true
+}

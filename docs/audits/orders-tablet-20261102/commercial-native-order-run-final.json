@@ -1,0 +1,363 @@
+{
+  "exitCode": 1,
+  "mode": "Run",
+  "sourceCommit": "87e99f151db2247e038225e34e66832aa8e5865f",
+  "runtimeSha256": "ec17bec3c3897c1b3e3f4c3c888ee436cee95be850344e9bb2dbc710b43da151",
+  "sourceManifestSha256": "f64c6e4f0816c7cfbf816a2e9fc4aa269fb79e01396925d0a2c9636d55923607",
+  "passed": false,
+  "error": null,
+  "rollbackError": {
+    "code": "ORDER_BOLSA_DEMO_FAILED",
+    "odbc": [
+      {
+        "state": "HY000",
+        "code": -913
+      }
+    ]
+  },
+  "physicalRollbackCompleted": true,
+  "rollbackVerified": false,
+  "physicalCommits": 0,
+  "logicalCommits": 5,
+  "writes": [
+    "JAVIER.TEST_BOLSA_COMERCIAL",
+    "JAVIER.TEST_MOVIMIENTOS_BOLSA",
+    "JAVIER.TEST_PEDIDOS_CAB",
+    "JAVIER.TEST_PEDIDOS_LIN",
+    "JAVIER.TEST_PEDIDOS_SEQ",
+    "JAVIER.TEST_PEDIDOS_STOCK_RESERVE",
+    "JAVIER.TEST_PEDIDO_IDEMPOTENCY",
+    "JAVIER.TEST_PEDIDO_STATE_EVENTS"
+  ],
+  "writeCounts": {
+    "JAVIER.TEST_BOLSA_COMERCIAL": 2,
+    "JAVIER.TEST_MOVIMIENTOS_BOLSA": 2,
+    "JAVIER.TEST_PEDIDO_IDEMPOTENCY": 1,
+    "JAVIER.TEST_PEDIDO_STATE_EVENTS": 5,
+    "JAVIER.TEST_PEDIDOS_CAB": 7,
+    "JAVIER.TEST_PEDIDOS_LIN": 1,
+    "JAVIER.TEST_PEDIDOS_SEQ": 2,
+    "JAVIER.TEST_PEDIDOS_STOCK_RESERVE": 5
+  },
+  "closed": {
+    "scenario": true,
+    "observer": false
+  },
+  "lifecycle": {
+    "preflight": {
+      "target": "LOCAL",
+      "stockEnvases": 72.5,
+      "unitsPerBox": 5,
+      "unitMeasure": "KILO",
+      "tariff1": 4.648,
+      "tariff2": 4.124,
+      "precioTarifaCliente": 4.648,
+      "ultimoPrecioHistorico": null
+    },
+    "journalBefore": {
+      "bolsaId": 14,
+      "saldo": 300,
+      "acumulado": 0,
+      "consumido": 0,
+      "movementCount": 0
+    },
+    "create": {
+      "orderId": 114,
+      "idempotent": false,
+      "snapshot": {
+        "header": [
+          {
+            "ID": 114,
+            "ESTADO": "BORRADOR",
+            "NUMEROPEDIDO": 38,
+            "IMPORTETOTAL": 21.44
+          }
+        ],
+        "lines": [
+          {
+            "ID": 130,
+            "PEDIDO_ID": 114,
+            "CODIGOARTICULO": "1009      ",
+            "CANTIDADENVASES": 1,
+            "CANTIDADUNIDADES": 5,
+            "UNIDADMEDIDA": "KILO",
+            "PRECIOVENTA": 4.124,
+            "IMPORTEVENTA": 20.62
+          }
+        ],
+        "reserve": [
+          {
+            "PEDIDO_ID": 114,
+            "CODIGOARTICULO": "1009      ",
+            "CANTIDADENVASES": 1,
+            "CANTIDADUNIDADES": 5
+          }
+        ],
+        "idempotency": [
+          {
+            "PEDIDO_ID": 114,
+            "PAYLOAD_HASH": "fb70e8d5c0b19590c4313f48889361d6e2a7d6339bb20bc1303b1aeea485e395"
+          }
+        ],
+        "events": [
+          {
+            "ID": "17",
+            "PEDIDO_ID": 114,
+            "FROM_STATE": null,
+            "TO_STATE": "BORRADOR",
+            "ACTOR_ROLE": "COMERCIAL",
+            "PAYLOAD_HASH": "2200a27b3b38ea39295ba321083e13c7c08d447ccc7214ad550f6bebce35ee32",
+            "ORIGINAL_CLIENT_AT": "2026-11-04 12:47:50.584000",
+            "SERVER_OCCURRED_AT": "2026-11-04 13:45:47.745396"
+          }
+        ],
+        "movements": [],
+        "bag": [
+          {
+            "ID": 14,
+            "EJERCICIO": 2026,
+            "MES": 11,
+            "SALDO_DISPONIBLE": 300,
+            "ACUMULADO": 0,
+            "CONSUMIDO": 0
+          }
+        ]
+      }
+    },
+    "createReplay": {
+      "idempotent": true
+    },
+    "confirm": {
+      "idempotentReplay": false,
+      "snapshot": {
+        "header": [
+          {
+            "ID": 114,
+            "ESTADO": "CONFIRMADO",
+            "NUMEROPEDIDO": 38,
+            "IMPORTETOTAL": 21.44
+          }
+        ],
+        "lines": [
+          {
+            "ID": 130,
+            "PEDIDO_ID": 114,
+            "CODIGOARTICULO": "1009      ",
+            "CANTIDADENVASES": 1,
+            "CANTIDADUNIDADES": 5,
+            "UNIDADMEDIDA": "KILO",
+            "PRECIOVENTA": 4.124,
+            "IMPORTEVENTA": 20.62
+          }
+        ],
+        "reserve": [
+          {
+            "PEDIDO_ID": 114,
+            "CODIGOARTICULO": "1009      ",
+            "CANTIDADENVASES": 1,
+            "CANTIDADUNIDADES": 5
+          }
+        ],
+        "idempotency": [
+          {
+            "PEDIDO_ID": 114,
+            "PAYLOAD_HASH": "fb70e8d5c0b19590c4313f48889361d6e2a7d6339bb20bc1303b1aeea485e395"
+          }
+        ],
+        "events": [
+          {
+            "ID": "17",
+            "PEDIDO_ID": 114,
+            "FROM_STATE": null,
+            "TO_STATE": "BORRADOR",
+            "ACTOR_ROLE": "COMERCIAL",
+            "PAYLOAD_HASH": "2200a27b3b38ea39295ba321083e13c7c08d447ccc7214ad550f6bebce35ee32",
+            "ORIGINAL_CLIENT_AT": "2026-11-04 12:47:50.584000",
+            "SERVER_OCCURRED_AT": "2026-11-04 13:45:47.745396"
+          },
+          {
+            "ID": "18",
+            "PEDIDO_ID": 114,
+            "FROM_STATE": "BORRADOR",
+            "TO_STATE": "CONFIRMANDO",
+            "ACTOR_ROLE": "COMERCIAL",
+            "PAYLOAD_HASH": "e5af7673bc6e46480b3cdfd35fa0c1b1f75fb02b84c5432e8256d247b5c2cb80",
+            "ORIGINAL_CLIENT_AT": null,
+            "SERVER_OCCURRED_AT": "2026-11-04 13:45:48.585200"
+          },
+          {
+            "ID": "19",
+            "PEDIDO_ID": 114,
+            "FROM_STATE": "CONFIRMANDO",
+            "TO_STATE": "CONFIRMADO",
+            "ACTOR_ROLE": "COMERCIAL",
+            "PAYLOAD_HASH": "a69ac5fc481f166c58afaa7b12cad4b3fbba168aa1b4ee045cc2635b12be118d",
+            "ORIGINAL_CLIENT_AT": null,
+            "SERVER_OCCURRED_AT": "2026-11-04 13:45:48.667354"
+          }
+        ],
+        "movements": [
+          {
+            "ID": 42,
+            "BOLSA_ID": 14,
+            "PEDIDO_ID": 114,
+            "LINEA_ID": 130,
+            "TIPO": "CONSUMO",
+            "IMPORTE": 2.64,
+            "SALDO_ANTERIOR": 300,
+            "SALDO_POSTERIOR": 297.36
+          }
+        ],
+        "bag": [
+          {
+            "ID": 14,
+            "EJERCICIO": 2026,
+            "MES": 11,
+            "SALDO_DISPONIBLE": 297.36,
+            "ACUMULADO": 0,
+            "CONSUMIDO": 2.64
+          }
+        ]
+      }
+    },
+    "bolsaAfterConfirm": {
+      "movementTypes": [
+        "CONSUMO"
+      ],
+      "movementTotal": 2.64,
+      "saldo": 297.36
+    },
+    "confirmReplay": {
+      "idempotentReplay": true
+    },
+    "cancel": {
+      "idempotentReplay": false,
+      "reversalCount": 1
+    },
+    "cancelReplay": {
+      "idempotentReplay": true
+    },
+    "afterCancel": {
+      "state": "CANCELADO",
+      "reserveRows": 0,
+      "movementRows": 2,
+      "saldo": 300,
+      "acumulado": 0,
+      "consumido": 0,
+      "stockRestored": true,
+      "snapshot": {
+        "header": [
+          {
+            "ID": 114,
+            "ESTADO": "CANCELADO",
+            "NUMEROPEDIDO": 38,
+            "IMPORTETOTAL": 21.44
+          }
+        ],
+        "lines": [
+          {
+            "ID": 130,
+            "PEDIDO_ID": 114,
+            "CODIGOARTICULO": "1009      ",
+            "CANTIDADENVASES": 1,
+            "CANTIDADUNIDADES": 5,
+            "UNIDADMEDIDA": "KILO",
+            "PRECIOVENTA": 4.124,
+            "IMPORTEVENTA": 20.62
+          }
+        ],
+        "reserve": [],
+        "idempotency": [
+          {
+            "PEDIDO_ID": 114,
+            "PAYLOAD_HASH": "fb70e8d5c0b19590c4313f48889361d6e2a7d6339bb20bc1303b1aeea485e395"
+          }
+        ],
+        "events": [
+          {
+            "ID": "17",
+            "PEDIDO_ID": 114,
+            "FROM_STATE": null,
+            "TO_STATE": "BORRADOR",
+            "ACTOR_ROLE": "COMERCIAL",
+            "PAYLOAD_HASH": "2200a27b3b38ea39295ba321083e13c7c08d447ccc7214ad550f6bebce35ee32",
+            "ORIGINAL_CLIENT_AT": "2026-11-04 12:47:50.584000",
+            "SERVER_OCCURRED_AT": "2026-11-04 13:45:47.745396"
+          },
+          {
+            "ID": "18",
+            "PEDIDO_ID": 114,
+            "FROM_STATE": "BORRADOR",
+            "TO_STATE": "CONFIRMANDO",
+            "ACTOR_ROLE": "COMERCIAL",
+            "PAYLOAD_HASH": "e5af7673bc6e46480b3cdfd35fa0c1b1f75fb02b84c5432e8256d247b5c2cb80",
+            "ORIGINAL_CLIENT_AT": null,
+            "SERVER_OCCURRED_AT": "2026-11-04 13:45:48.585200"
+          },
+          {
+            "ID": "19",
+            "PEDIDO_ID": 114,
+            "FROM_STATE": "CONFIRMANDO",
+            "TO_STATE": "CONFIRMADO",
+            "ACTOR_ROLE": "COMERCIAL",
+            "PAYLOAD_HASH": "a69ac5fc481f166c58afaa7b12cad4b3fbba168aa1b4ee045cc2635b12be118d",
+            "ORIGINAL_CLIENT_AT": null,
+            "SERVER_OCCURRED_AT": "2026-11-04 13:45:48.667354"
+          },
+          {
+            "ID": "20",
+            "PEDIDO_ID": 114,
+            "FROM_STATE": "CONFIRMADO",
+            "TO_STATE": "CANCELANDO",
+            "ACTOR_ROLE": "COMERCIAL",
+            "PAYLOAD_HASH": "5bf2fd485238a81badb675966276c0a7836319351ca07fc4fb67929c96d6db1b",
+            "ORIGINAL_CLIENT_AT": null,
+            "SERVER_OCCURRED_AT": "2026-11-04 13:45:48.784499"
+          },
+          {
+            "ID": "21",
+            "PEDIDO_ID": 114,
+            "FROM_STATE": "CANCELANDO",
+            "TO_STATE": "CANCELADO",
+            "ACTOR_ROLE": "COMERCIAL",
+            "PAYLOAD_HASH": "3cdd9a1a4aebdf9776e682a01bb6d315bf6f2319af98b21dbd01c8095e1be16d",
+            "ORIGINAL_CLIENT_AT": null,
+            "SERVER_OCCURRED_AT": "2026-11-04 13:45:48.814461"
+          }
+        ],
+        "movements": [
+          {
+            "ID": 42,
+            "BOLSA_ID": 14,
+            "PEDIDO_ID": 114,
+            "LINEA_ID": 130,
+            "TIPO": "CONSUMO",
+            "IMPORTE": 2.64,
+            "SALDO_ANTERIOR": 300,
+            "SALDO_POSTERIOR": 297.36
+          },
+          {
+            "ID": 43,
+            "BOLSA_ID": 14,
+            "PEDIDO_ID": 114,
+            "LINEA_ID": 130,
+            "TIPO": "REVERSO_CONSUMO",
+            "IMPORTE": 2.64,
+            "SALDO_ANTERIOR": 297.36,
+            "SALDO_POSTERIOR": 300
+          }
+        ],
+        "bag": [
+          {
+            "ID": 14,
+            "EJERCICIO": 2026,
+            "MES": 11,
+            "SALDO_DISPONIBLE": 300,
+            "ACUMULADO": 0,
+            "CONSUMIDO": 0
+          }
+        ]
+      }
+    }
+  }
+}
