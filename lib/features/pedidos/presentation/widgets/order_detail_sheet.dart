@@ -3,6 +3,8 @@
 /// Bottom sheet showing full order details: header info, lines, totals, and actions
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +19,51 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_pdf_generator.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_notifier.dart';
+
+DateTime? _parseServerLocalClock(String? value) {
+  final match = RegExp(
+    r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$',
+  ).firstMatch(value?.trim() ?? '');
+  if (match == null) return null;
+  final parts = List<int>.generate(
+    6,
+    (index) => int.parse(match.group(index + 1)!),
+  );
+  final fraction = (match.group(7) ?? '').padRight(6, '0');
+  final microseconds = fraction.isEmpty ? 0 : int.parse(fraction);
+  final parsed = DateTime.utc(
+    parts[0],
+    parts[1],
+    parts[2],
+    parts[3],
+    parts[4],
+    parts[5],
+    microseconds ~/ 1000,
+    microseconds % 1000,
+  );
+  if (parsed.year != parts[0] ||
+      parsed.month != parts[1] ||
+      parsed.day != parts[2] ||
+      parsed.hour != parts[3] ||
+      parsed.minute != parts[4] ||
+      parsed.second != parts[5]) {
+    return null;
+  }
+  return parsed;
+}
+
+@visibleForTesting
+Duration? orderReservationRefreshDelay(OrderInventoryRead? inventory) {
+  if (inventory?.reservation.status != 'ACTIVE') return null;
+  final serverNow =
+      _parseServerLocalClock(inventory?.reservation.serverNowLocal);
+  final reservedUntil =
+      _parseServerLocalClock(inventory?.reservation.reservedUntilLocal);
+  if (serverNow == null || reservedUntil == null) return null;
+  final delay = reservedUntil.difference(serverNow);
+  if (delay <= Duration.zero || delay > const Duration(hours: 24)) return null;
+  return delay;
+}
 
 class OrderDetailSheet {
   /// Show order detail as a draggable bottom sheet
@@ -63,6 +110,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   String? _error;
   bool _isDeleting = false;
   bool _isConfirming = false;
+  bool _reservationVerificationFailed = false;
+  Timer? _reservationRefreshTimer;
 
   @override
   void initState() {
@@ -70,30 +119,58 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     _loadDetail();
   }
 
-  Future<void> _loadDetail() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  Future<void> _loadDetail({bool showLoading = true}) async {
+    _reservationRefreshTimer?.cancel();
+    _reservationRefreshTimer = null;
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
     try {
       final detail = await PedidosService.getOrderDetail(
         widget.orderId,
         forceRefresh: true,
+        skipRetry: !showLoading,
       );
       if (mounted) {
         setState(() {
           _detail = detail;
           _isLoading = false;
+          _error = null;
+          _reservationVerificationFailed = false;
         });
+        _scheduleReservationRefresh(detail);
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
+        if (showLoading || _detail == null) {
+          setState(() {
+            _error = e.toString();
+            _isLoading = false;
+          });
+        } else {
+          setState(() {
+            _reservationVerificationFailed = true;
+          });
+        }
       }
     }
+  }
+
+  void _scheduleReservationRefresh(OrderDetail detail) {
+    final delay = orderReservationRefreshDelay(detail.inventoryRead);
+    if (delay == null) return;
+    _reservationRefreshTimer = Timer(delay, () {
+      if (mounted) unawaited(_loadDetail(showLoading: false));
+    });
+  }
+
+  @override
+  void dispose() {
+    _reservationRefreshTimer?.cancel();
+    super.dispose();
   }
 
   bool _lineUsesBoxes(OrderLine line) {
@@ -190,7 +267,9 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
 
     setState(() => _isDeleting = true);
     try {
-      await ref.read(pedidosNotifierProvider.notifier).deleteDraftOrder(widget.orderId);
+      await ref
+          .read(pedidosNotifierProvider.notifier)
+          .deleteDraftOrder(widget.orderId);
       if (mounted) Navigator.pop(context, 'deleted');
     } catch (e) {
       if (mounted) {
@@ -329,6 +408,13 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     final detail = _detail!;
     final header = detail.header;
     final statusColor = _statusColor(header.estado);
+    final showReservationStatus = const {
+          'ACTIVE',
+          'EXPIRED',
+          'RELEASED',
+          'UNAVAILABLE',
+        }.contains(detail.inventoryRead?.reservation.status) ||
+        _reservationVerificationFailed;
 
     return Column(
       children: [
@@ -363,10 +449,21 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                   controller: widget.scrollController,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  itemCount: detail.lines.length + 1, // +1 for totals card
+                  itemCount:
+                      detail.lines.length + 1 + (showReservationStatus ? 1 : 0),
                   itemBuilder: (ctx, i) {
-                    if (i < detail.lines.length) {
-                      return _buildLineTile(detail.lines[i], i + 1);
+                    if (showReservationStatus && i == 0) {
+                      return _buildReservationStatus(
+                        detail.inventoryRead,
+                        verificationFailed: _reservationVerificationFailed,
+                      );
+                    }
+                    final lineIndex = i - (showReservationStatus ? 1 : 0);
+                    if (lineIndex < detail.lines.length) {
+                      return _buildLineTile(
+                        detail.lines[lineIndex],
+                        lineIndex + 1,
+                      );
                     }
                     return _buildTotalsCard(detail);
                   },
@@ -379,13 +476,142 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     );
   }
 
+  Widget _buildReservationStatus(
+    OrderInventoryRead? inventory, {
+    required bool verificationFailed,
+  }) {
+    final reservation = inventory?.reservation;
+    final status = verificationFailed
+        ? 'VERIFICATION_FAILED'
+        : (reservation?.status ?? 'UNAVAILABLE');
+    late final IconData icon;
+    late final Color color;
+    late final String title;
+    late final String message;
+
+    switch (status) {
+      case 'ACTIVE':
+        icon = Icons.inventory_2_outlined;
+        color = AppTheme.info;
+        title = 'Stock reservado';
+        final deadline = _formatReservationDeadline(
+          reservation?.reservedUntilLocal,
+        );
+        message = deadline == null
+            ? 'La reserva de stock está activa durante 24 horas.'
+            : 'Reservado hasta $deadline.';
+        break;
+      case 'EXPIRED':
+        icon = Icons.warning_amber_rounded;
+        color = AppTheme.warning;
+        title = 'Reserva caducada';
+        message =
+            'Han pasado 24 horas. El stock se comprobará de nuevo al confirmar.';
+        break;
+      case 'RELEASED':
+        icon = Icons.inventory_2_outlined;
+        color = AppTheme.info;
+        title = 'Reserva liberada';
+        message = 'La reserva de este pedido ya no está activa.';
+        break;
+      case 'UNAVAILABLE':
+        icon = Icons.cloud_off_outlined;
+        color = AppTheme.error;
+        title = 'Reserva no verificada';
+        message =
+            'No se pudo comprobar la reserva de stock. Actualiza el pedido.';
+        break;
+      case 'VERIFICATION_FAILED':
+        icon = Icons.sync_problem_outlined;
+        color = AppTheme.error;
+        title = 'No se pudo verificar la reserva';
+        message =
+            'El último estado sigue visible, pero debe actualizarse antes de confirmar.';
+        break;
+      default:
+        return const SizedBox.shrink();
+    }
+
+    final semanticsLabel = '$title. $message';
+    return Semantics(
+      container: true,
+      explicitChildNodes: verificationFailed,
+      excludeSemantics: !verificationFailed,
+      label: semanticsLabel,
+      child: Container(
+        key: ValueKey('order-reservation-${status.toLowerCase()}'),
+        width: double.infinity,
+        margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.65), width: 1.5),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 30),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: AppColors.themedWhite,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      color: AppColors.themedWhite70,
+                      fontSize: 18,
+                      height: 1.25,
+                    ),
+                  ),
+                  if (verificationFailed) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      key: const ValueKey('order-reservation-retry'),
+                      onPressed: () => _loadDetail(showLoading: false),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(56, 56),
+                      ),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text(
+                        'Reintentar',
+                        style: TextStyle(fontSize: 18),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _formatReservationDeadline(String? value) {
+    final parsed = _parseServerLocalClock(value);
+    if (parsed == null) return null;
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${two(parsed.day)}/${two(parsed.month)} '
+        'a las ${two(parsed.hour)}:${two(parsed.minute)}';
+  }
+
   Widget _buildHeader(OrderSummary header, Color statusColor) {
     final compact = Responsive.useCompactTiles(context);
     // REQ-34: cabecera senior. El detalle backend no trae direccion,
     // telefonos ni email del cliente: se muestran con guion explicito.
-    final routeDays = header.diasReparto.trim().isEmpty
-        ? '—'
-        : header.diasReparto.trim();
+    final routeDays =
+        header.diasReparto.trim().isEmpty ? '—' : header.diasReparto.trim();
     final routeLabel = header.ruta.trim().isEmpty
         ? 'Ruta: — · Reparto: $routeDays'
         : 'Ruta ${header.ruta.trim()} · Reparto: $routeDays';
@@ -396,7 +622,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         ? 'Vendedor: —'
         : 'Vendedor: ${header.vendedorCode.trim()}';
     return Semantics(
-      label: 'Pedido ${header.numeroPedidoFormatted.isNotEmpty ? header.numeroPedidoFormatted : header.numeroPedido}, '
+      label:
+          'Pedido ${header.numeroPedidoFormatted.isNotEmpty ? header.numeroPedidoFormatted : header.numeroPedido}, '
           '${header.clienteName}, estado ${header.estado}',
       header: true,
       child: Padding(
@@ -477,7 +704,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             const SizedBox(height: 4),
             Row(
               children: [
-                Expanded(child: _buildInfoRow(Icons.badge_outlined, sellerLabel)),
+                Expanded(
+                    child: _buildInfoRow(Icons.badge_outlined, sellerLabel)),
                 _buildInfoRow(Icons.payments_outlined, paymentLabel),
               ],
             ),
@@ -570,13 +798,21 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                       width: 38,
                       height: 38,
                       color: AppTheme.raisedSurface,
-                      child: SmartProductImage(
-                        imageUrl: imageUrl,
-                        productCode: line.codigoArticulo,
-                        productName: line.descripcion,
-                        headers: ApiClient.authHeaders,
-                        fit: BoxFit.contain,
-                        borderRadius: BorderRadius.circular(6),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Icon(Icons.image_outlined,
+                              color: AppColors.themedWhite54, size: 20),
+                          SmartProductImage(
+                            imageUrl: imageUrl,
+                            productCode: line.codigoArticulo,
+                            productName: line.descripcion,
+                            headers: ApiClient.authHeaders,
+                            fit: BoxFit.contain,
+                            showCodeOnFallback: false,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -648,21 +884,21 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               ],
             ),
             const SizedBox(height: 4),
-            Row(
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
               children: [
                 Text(
                   'PVP: ${PedidosFormatters.money(line.precioVenta, decimals: 3)}',
                   style:
                       TextStyle(color: AppColors.themedWhite54, fontSize: 11),
                 ),
-                const SizedBox(width: 12),
                 Text(
                   'Tarifa: ${PedidosFormatters.money(line.precioTarifa, decimals: 3)}',
                   style:
                       TextStyle(color: AppColors.themedWhite38, fontSize: 11),
                 ),
                 if (showMargin && line.precioMinimo > 0) ...[
-                  const SizedBox(width: 12),
                   Text(
                     'Min: ${PedidosFormatters.money(line.precioMinimo, decimals: 3)}',
                     style: TextStyle(
@@ -762,9 +998,11 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           children: [
             Icon(icon, color: AppColors.themedWhite54, size: 12),
             const SizedBox(width: 3),
-            Text(
-              label,
-              style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(color: AppColors.themedWhite54, fontSize: 11),
+              ),
             ),
           ],
         ),
@@ -805,8 +1043,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 16,
+            runSpacing: 8,
             children: [
               _buildTotalItem(
                 'Lineas',
@@ -834,8 +1074,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               final showMargin = ref.watch(
                 pedidosNotifierProvider.select((p) => p.isMarginVisible),
               );
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
+              return Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 16,
+                runSpacing: 8,
                 children: [
                   _buildTotalItem(
                     'Total',
@@ -880,8 +1122,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                 'Bolsa: —',
                 style: TextStyle(
                   color: AppColors.themedWhite70,
-                  fontSize:
-                      Responsive.fontSize(context, small: 13, large: 14),
+                  fontSize: Responsive.fontSize(context, small: 13, large: 14),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -893,8 +1134,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   }
 
   Widget _buildOrderBolsaSummary(OrderBolsaImpact impact) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 16,
+      runSpacing: 8,
       children: [
         if (impact.acumulacion > 0)
           _buildTotalItem(
@@ -967,7 +1210,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                     : () async {
                         HapticFeedback.lightImpact();
                         final canSeeMargin = ref.watch(
-                          pedidosNotifierProvider.select((p) => p.isMarginVisible),
+                          pedidosNotifierProvider
+                              .select((p) => p.isMarginVisible),
                         );
                         await OrderPdfGenerator.generateAndShare(
                           context,
@@ -1020,8 +1264,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                             ),
                           )
                         : const Icon(Icons.check_circle_outline),
-                    label:
-                        Text(_isConfirming ? 'Confirmando...' : 'Confirmar'),
+                    label: Text(_isConfirming ? 'Confirmando...' : 'Confirmar'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.success,
                       foregroundColor: AppColors.systemBlack,

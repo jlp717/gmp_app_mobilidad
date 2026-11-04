@@ -1649,12 +1649,78 @@ class OrderStats {
 }
 
 /// Order detail (header + lines)
+class OrderReservationRead {
+  const OrderReservationRead({
+    required this.status,
+    this.reservedUntilLocal,
+    this.serverNowLocal,
+  });
+
+  factory OrderReservationRead.fromJson(Map<String, dynamic>? json) {
+    final source = json ?? const <String, dynamic>{};
+    String? optionalText(Object? value) {
+      final text = value?.toString().trim() ?? '';
+      return text.isEmpty ? null : text;
+    }
+
+    return OrderReservationRead(
+      status:
+          (source['status'] ?? 'UNAVAILABLE').toString().trim().toUpperCase(),
+      reservedUntilLocal: optionalText(source['reservedUntilLocal']),
+      serverNowLocal: optionalText(source['serverNowLocal']),
+    );
+  }
+
+  final String status;
+  final String? reservedUntilLocal;
+  final String? serverNowLocal;
+}
+
+class OrderInventoryRead {
+  const OrderInventoryRead({
+    required this.status,
+    required this.reservation,
+    this.serverTimeZone,
+    this.stockStatus,
+    this.code,
+  });
+
+  factory OrderInventoryRead.fromJson(Map<String, dynamic>? json) {
+    final source = json ?? const <String, dynamic>{};
+    final rawReservation = source['reservation'];
+    String? optionalText(Object? value) {
+      final text = value?.toString().trim() ?? '';
+      return text.isEmpty ? null : text;
+    }
+
+    return OrderInventoryRead(
+      status:
+          (source['status'] ?? 'unavailable').toString().trim().toLowerCase(),
+      reservation: OrderReservationRead.fromJson(
+        rawReservation is Map
+            ? Map<String, dynamic>.from(rawReservation)
+            : null,
+      ),
+      serverTimeZone: optionalText(source['serverTimeZone']),
+      stockStatus: optionalText(source['stockStatus']),
+      code: optionalText(source['code']),
+    );
+  }
+
+  final String status;
+  final OrderReservationRead reservation;
+  final String? serverTimeZone;
+  final String? stockStatus;
+  final String? code;
+}
+
 class OrderDetail {
   OrderDetail({
     required this.header,
     required this.lines,
     this.bolsaMovements = const [],
     this.bolsaSummary = const OrderBolsaImpact(),
+    this.inventoryRead,
   });
 
   factory OrderDetail.fromJson(Map<String, dynamic> json) {
@@ -1664,6 +1730,7 @@ class OrderDetail {
     final linesJson = json['lines'] as List? ?? [];
     final rawMovements = json['bolsaMovements'] as List? ?? const [];
     final rawSummary = json['bolsaSummary'];
+    final rawInventory = json['inventoryRead'];
     return OrderDetail(
       header: OrderSummary.fromJson(headerJson),
       lines: linesJson
@@ -1679,12 +1746,18 @@ class OrderDetail {
       bolsaSummary: rawSummary is Map
           ? OrderBolsaImpact.fromJson(Map<String, dynamic>.from(rawSummary))
           : const OrderBolsaImpact(),
+      inventoryRead: rawInventory is Map
+          ? OrderInventoryRead.fromJson(
+              Map<String, dynamic>.from(rawInventory),
+            )
+          : null,
     );
   }
   final OrderSummary header;
   final List<OrderLine> lines;
   final List<OrderBolsaMovement> bolsaMovements;
   final OrderBolsaImpact bolsaSummary;
+  final OrderInventoryRead? inventoryRead;
 }
 
 /// Recommendation item — enriquecido con datos reales de producto
@@ -2316,6 +2389,7 @@ class PedidosService {
   static Future<OrderDetail> getOrderDetail(
     int orderId, {
     bool forceRefresh = false,
+    bool skipRetry = false,
   }) async {
     try {
       if (forceRefresh) {
@@ -2326,6 +2400,7 @@ class PedidosService {
         cacheKey: 'pedidos:order:$orderId',
         cacheTTL: const Duration(minutes: 1),
         forceRefresh: forceRefresh,
+        skipRetry: skipRetry,
       );
       return OrderDetail.fromJson(response['order'] as Map<String, dynamic>);
     } catch (e) {
