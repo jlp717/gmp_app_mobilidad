@@ -1,14 +1,14 @@
 # Guion reproducible de demo comercial — 02/11/2026
 
-**Estado del ensayo al 03/11/2026 · BLOQUEADO en preparación.** El servidor instalado devolvió HTTP 503 en `/api/ready`. Consulta `docs/orders-evidence.md` antes de ejecutar. Cualquier paso con error o sin su evidencia detiene el ensayo. Usa un comercial y registros reales con sus importes documentales.
+**Estado del ensayo al 04/11/2026 · PARTIAL.** El servidor instalado devuelve HTTP 200 en `/api/ready`, pero mantiene la revisión `4a36ddde` con escritura aislada en TEST. La revisión instalada aún no expone el perfil público que espera el APK 105. Consulta `docs/orders-demo-report.md` antes de ejecutar. Usa un comercial y registros reales con sus importes documentales. Cualquier paso con error o sin evidencia detiene la aceptación.
 
-El run comenzó el 02/11/2026 y la sesión continúa el 03/11/2026 Europe/Madrid. Los cobros y liquidaciones se validan con la fecha real del servidor. El día 02 es un periodo histórico; no cambiar el reloj ni retrofechar nuevos cobros para hacerlo pasar por «hoy».
+El run comenzó el 02/11/2026, Europe/Madrid. Los cobros y liquidaciones se validan con la fecha de negocio real del servidor. El 02/11 es un periodo histórico. Mantén el reloj del servidor y registra cualquier ensayo nuevo en su fecha real.
 
 ## Preparación y guardas
 
 1. Confirmar que la versión instalada corresponde al commit entregado y que el entorno activo es TEST/DEMO con lecturas DSEDAC/DSED y escrituras **JAVIER.TEST_***. Mantener exportación CPC/LPC/OCPC deshabilitada. No cambiar NODE_ENV a production mientras las escrituras estén aisladas.
 2. Ejecutar la comprobación de entorno disponible en la versión entregada y conservar su salida. Si falta `env:verify`, la preparación no pasa.
-3. Comprobar `/api/ready` con el agente GMP-SRE-HealthCheck/1.0. En esta auditoría devolvió 503 por hash PIN ausente de B2: requiere resolución por propietario autorizado antes de aprobar readiness. No editar db.js/auth.js ni leer/copiar secretos para evitar el chequeo.
+3. Comprobar `/api/ready` con el agente GMP-SRE-HealthCheck/1.0. La comprobación del 04/11 obtuvo HTTP 200 y cobertura de PIN de 68 sobre 68 vendedores activos. Verificar también que el APK identifica el perfil esperado mediante `/api/runtime-profile`.
 4. Seleccionar vendedor con umbral ERP comprobado de 3. La columna es TEST_VDDX.PEDIDOSPENDIENTESSINCRONIZAR en isolated_test; no alterar el valor silenciosamente. Obtener cliente con precio especial y documento cobrable desde registros reales.
 5. Guardar instantánea SELECT de pedidos/reservas/bolsa/cobros/liquidación y ejecutar reconciliación. La tabla competitiva ya contiene dos filas acreditadas del pedido 106 (artículos 3519 y 3075, cliente 4300032160); volver a leerlas y no presentar una tarifa como si fuera un último precio registrado. La sonda de semilla inicial requiere tabla vacía y no se repite.
 6. Conectar teléfono y tablet/emulador. Ejecutar perfil de rendimiento; conservar identificador de dispositivo, modo profile, versión, orientación y escala de texto. Sin dispositivo, la aceptación móvil queda bloqueada.
