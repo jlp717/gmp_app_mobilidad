@@ -208,3 +208,23 @@ La regresión del backend tras `08573b3` pasó 3.826 pruebas, dos omitidas, en 3
 `flutter test --no-pub --concurrency=1 --reporter expanded` pasó las 1.270 pruebas de la rama verificada y salió con código 0. SHA-256 `57B03A042B3509E5E308F03F22AF254D5BB429C1CA53AF6522A36539D31534E3`. `flutter analyze --no-pub` salió con código 1 y reprodujo la línea base de cero errores, cero advertencias y 7.665 informativos. SHA-256 `0EC407EC7EB2864B5DE02D5288B9369BDBAF08BA4BC453CFE60FD6D109572E76`.
 
 Los dos intentos SSH finales agotaron los 10 segundos de conexión a puerto 22 y salieron con código 255. La última comprobación válida de este pase conserva `4a36ddde` y HTTP 503. El pase realizó cero cambios de configuración remota, despliegues o escrituras de validación en producción.
+
+### Revalidación con VPN y compilación Android
+
+Con la VPN restablecida, SSH comprobó de nuevo `4a36ddde` y HTTP 503. Una sesión física ODBC verificó que siguen ausentes las tres tablas productivas y encontró seis clientes potenciales con deuda en el ERP. La sonda posterior selló el código de `4a099e8`, abrió el perfil DEMO aislado en memoria y revalidó el primer cliente por la cartera canónica. El documento CC tenía 310,87 € pendientes. Se verificaron la identidad estable, el propietario y el importe del documento, con 14 consultas, ninguna escritura y conexión cerrada. Su huella redactada es `8b29b38741087910608fdfc71f28527a9b240ab7fd7ef9fc0180143d03c73a69`. Este preflight acredita un documento apto, que aún debe pasar el ensayo de cobro y liquidación.
+
+La reconciliación nueva examinó 10 bolsas, 27 movimientos, 39 pedidos y 32 reservas en JAVIER TEST. El resultado fue salida 0, ocho SELECT, conexión cerrada y cero duplicados, huérfanos, errores de reverso o pedidos cancelados con reserva. La batería dirigida del backend pasó 355 pruebas en 19 suites, con salida 0. SHA-256 del log `9E98B65A5C22770609D424E6467A7FACBD1F9FF921AF16C0DCDA0F7DA5DCD201`.
+
+La [sonda reproducible de cartera](audits/orders-tablet-20261102/probe-finance-rollback.ps1) confirmó la misma huella con 15 consultas, conexión cerrada, salida 0 y cero escrituras o commits. QA y seguridad revisaron sus dos archivos y comprobaron que `Run` sale con `RUN_ROLLBACK_UOW_NOT_REVIEWED` antes de conectar. El recorrido que escriba cobro y liquidación requiere una conexión dedicada con rollback físico y un observador posterior al cierre para verificar la restauración.
+
+El APK arm64 de `4.1.48+104` se intentó con la firma release configurada y la URL canónica, con `flutter --no-version-check build apk --release --no-pub --target-platform android-arm64 --dart-define=API_BASE_URL=https://api.mari-pepa.com/api`. Gradle alcanzó `assembleRelease`. El proceso arrancó con 434.302.976 bytes libres en C y el límite de espacio detuvo la compilación con salida 3 tras observar 132.509.696 bytes libres. El directorio `build` apunta a Temp en el mismo disco. No se generó un APK firmado ni se inició el AAB. Los binarios históricos de esa versión corresponden a otro código y quedan fuera del candidato. Se necesita espacio para la compilación completa y luego comprobar ambas firmas y hashes.
+
+Con espacio disponible en el equipo de compilación, los comandos locales para generar y verificar los dos paquetes son los siguientes. La versión permanece en `4.1.48+104` para comprobar el candidato existente. Publicar en Play requerirá su procedimiento de versión y aprobación.
+
+```powershell
+flutter build appbundle --release --no-pub --dart-define=API_BASE_URL=https://api.mari-pepa.com/api
+flutter build apk --release --no-pub --dart-define=API_BASE_URL=https://api.mari-pepa.com/api
+jarsigner -verify build/app/outputs/bundle/release/app-release.aab
+& 'C:/Android/build-tools/35.0.0/apksigner.bat' verify --verbose build/app/outputs/flutter-apk/app-release.apk
+Get-FileHash -Algorithm SHA256 build/app/outputs/bundle/release/app-release.aab,build/app/outputs/flutter-apk/app-release.apk
+```
