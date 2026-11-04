@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { createErpTariffFloorPilot } = require('../services/pedidos/erp-tariff-floor');
 
 function confirmOrderSource() {
     const source = fs.readFileSync(
@@ -39,7 +40,8 @@ describe('hard floor confirmation integration contract', () => {
         expect(preflight).toBeLessThan(legacyBolsa);
         expect(typedRethrow).toBeGreaterThan(legacyBolsa);
         expect(source.slice(typedRethrow, typedRethrow + 180)).toContain('throw bolsaErr');
-        expect(source).toContain('floorPreflight.active && localConfirmationRequested');
+        expect(source.slice(preflight, legacyBolsa))
+            .toMatch(/if\s*\(\s*!exportToSystem\s*&&\s*!floorPreflight\.active\s*\)/);
     });
 
     test('revalidates locked lines and locked header discount before any ledger or stock side effect', () => {
@@ -74,14 +76,18 @@ describe('hard floor confirmation integration contract', () => {
         expect(local).toMatch(/validateOrderWithBolsa\([\s\S]*lockedLines,[\s\S]*queryFn/);
     });
 
-    test('keeps the pilot out of the ERP export branch', () => {
-        const source = confirmOrderSource();
-        const exportBranch = source.slice(
-            source.indexOf('if (target.shouldExportToSystem && !cobroPropio)'),
-            source.indexOf('} else {', source.indexOf('if (target.shouldExportToSystem && !cobroPropio)')),
-        );
+    test('keeps the TEST pilot inactive for production without querying tariff authority', async () => {
+        const queryFn = jest.fn();
+        const pilot = createErpTariffFloorPilot({
+            profileProvider: () => ({ profile: 'production', verified: true }),
+        });
 
-        expect(exportBranch).not.toContain('assertErpTariffFloorForOrder');
+        await expect(pilot.assertOrderFloor({
+            queryFn,
+            lines: [{ CODIGOARTICULO: 'ART001' }],
+            requireVerifiedProfile: true,
+        })).resolves.toEqual({ active: false, covered: 0, skipped: [] });
+        expect(queryFn).not.toHaveBeenCalled();
     });
 
     test('both public confirm routes require a verified pilot profile server-side', () => {
