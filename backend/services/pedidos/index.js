@@ -28,6 +28,7 @@ const {
     withDraftPurgeTransaction,
     withLocalConfirmationTransaction,
 } = require('./local-confirmation-transaction');
+const { assertErpTariffFloorForOrder } = require('./erp-tariff-floor');
 const promotions = require('./promotions');
 const catalogAux = require('./catalog-aux');
 const discovery = require('./discovery');
@@ -4926,6 +4927,16 @@ async function confirmOrder(orderId, saleType, options = {}) {
             Number.parseFloat(header.DESCUENTO_GLOBAL) || 0,
             Number.parseFloat(header.PORCENTAJEDESCUENTO1) || 0,
         );
+        // Preflight is deliberately before the legacy bolsa validator because
+        // that path may initialise a monthly row. The locked check below is the
+        // final authority; this one prevents avoidable non-transactional effects.
+        const floorPreflight = await assertErpTariffFloorForOrder({
+            queryFn: (sql, params) => queryWithParams(sql, params, false),
+            lines,
+            headerDiscountPct: globalDiscountPct,
+            requireVerifiedProfile: options.requireTariffFloorPilotProfile === true,
+        });
+        if (!(floorPreflight.active && localConfirmationRequested)) {
         const bolsaResult = await bolsaService.validateOrderWithBolsa(vendedorCode, lines, {
             globalDiscountPct,
         });
@@ -4965,9 +4976,13 @@ async function confirmOrder(orderId, saleType, options = {}) {
         options._bolsaConsumo = bolsaResult.consumo || 0;
         options._bolsaAcumulacion = bolsaResult.acumulacion || 0;
         options._bolsaLineMovements = Array.isArray(bolsaResult.lineMovements) ? bolsaResult.lineMovements : [];
+        }
         options._bolsaGlobalDiscountPct = globalDiscountPct;
     } catch (bolsaErr) {
         await revertConfirming('BOLSA_VALIDATION_FAILED');
+        if (String(bolsaErr.code || '').startsWith('HARD_PRICE_FLOOR_')) {
+            throw bolsaErr;
+        }
         const err = new Error('No se pudo validar bolsa comercial. El pedido no se ha confirmado. Error: ' + bolsaErr.message);
         err.code = bolsaErr.code || 'BOLSA_VALIDATION_FAILED';
         err.status = bolsaErr.status || 503;
@@ -5080,6 +5095,33 @@ async function confirmOrder(orderId, saleType, options = {}) {
             const txResult = await withLocalConfirmationTransaction(async (conn) => {
                 const queryFn = (sql, params) => conn.query(sql, params);
                 const lockedHeaderBefore = await readOrderAuditHeader(queryFn, id);
+                const lockedInitialState = canonicalOrderStatus(
+                    await readConfirmationState(queryFn, id),
+                );
+                if (lockedInitialState === 'CONFIRMADO') {
+                    return {
+                        idempotentReplay: true,
+                        stockWarnings: [],
+                        outOfStockProducts: [],
+                    };
+                }
+                if (!['BORRADOR', 'PEND_APROB'].includes(lockedInitialState)) {
+                    throw confirmationStateError(lockedInitialState);
+                }
+                const lockedLines = rehydrateLockedPricingProvenance(
+                    await readOrderLinesForMutation(queryFn, id),
+                    confirmationPricing,
+                );
+                const lockedGlobalDiscountPct = Math.max(
+                    Number.parseFloat(lockedHeaderBefore.DESCUENTO_GLOBAL) || 0,
+                    Number.parseFloat(lockedHeaderBefore.PORCENTAJEDESCUENTO1) || 0,
+                );
+                await assertErpTariffFloorForOrder({
+                    queryFn,
+                    lines: lockedLines,
+                    headerDiscountPct: lockedGlobalDiscountPct,
+                    requireVerifiedProfile: options.requireTariffFloorPilotProfile === true,
+                });
                 const claim = await claimLocalOrderForConfirmation(queryFn, id);
                 if (claim.idempotentReplay) {
                     return {
@@ -5088,10 +5130,6 @@ async function confirmOrder(orderId, saleType, options = {}) {
                         outOfStockProducts: [],
                     };
                 }
-                const lockedLines = rehydrateLockedPricingProvenance(
-                    await readOrderLinesForMutation(queryFn, id),
-                    confirmationPricing,
-                );
                 await appendOrderStateEvent(queryFn, {
                     pedidoId: id,
                     fromState: 'BORRADOR',
@@ -5108,14 +5146,10 @@ async function confirmOrder(orderId, saleType, options = {}) {
                         },
                     },
                 });
-                const lockedGlobalDiscountPct = Math.max(
-                    Number.parseFloat(lockedHeaderBefore.DESCUENTO_GLOBAL) || 0,
-                    Number.parseFloat(lockedHeaderBefore.PORCENTAJEDESCUENTO1) || 0,
-                );
                 const lockedBolsa = await bolsaService.validateOrderWithBolsa(
                     vendedorCode,
                     lockedLines,
-                    { globalDiscountPct: lockedGlobalDiscountPct },
+                    { globalDiscountPct: lockedGlobalDiscountPct, queryFn },
                 );
                 if (!lockedBolsa.valid && !effectiveForceConfirm) {
                     const bolsaError = new Error(

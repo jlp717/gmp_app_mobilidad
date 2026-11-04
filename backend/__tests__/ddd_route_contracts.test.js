@@ -765,6 +765,7 @@ describe('DDD pedidos route contracts', () => {
         userRole: 'COMERCIAL',
         deviceId: 'tablet-route-01',
         idempotencyKey: 'confirmroute22',
+        requireTariffFloorPilotProfile: true,
       }),
     );
 
@@ -960,6 +961,41 @@ describe('DDD pedidos route contracts', () => {
     expect(failure.status).toBe(500);
     expect(failure.body).toMatchObject({ success: false, code: 'BOLSA_MOVEMENT_WRITE_FAILED', error: 'Error interno al confirmar pedido' });
     expect(failure.body.error).not.toContain('SQL0204');
+  });
+
+  test('PUT /:id/confirm exposes actionable floor conflicts and redacts authority failures', async () => {
+    const breach = new Error('El precio neto queda por debajo del mínimo permitido. Revisa precio y descuentos.');
+    breach.code = 'HARD_PRICE_FLOOR_BREACH';
+    breach.status = 409;
+    mockPedidosService.confirmOrder.mockRejectedValueOnce(breach);
+
+    const conflict = await request(makeApp(createPedidosRoutes()))
+      .put('/22/confirm')
+      .send({ saleType: 'CC', forceConfirm: true });
+
+    expect(conflict.status).toBe(409);
+    expect(conflict.body).toEqual({
+      success: false,
+      code: 'HARD_PRICE_FLOOR_BREACH',
+      error: breach.message,
+    });
+
+    const unavailable = new Error('SQL0204 DSEDAC.ARA internal authority detail');
+    unavailable.code = 'HARD_PRICE_FLOOR_AUTHORITY_UNAVAILABLE';
+    unavailable.status = 503;
+    mockPedidosService.confirmOrder.mockRejectedValueOnce(unavailable);
+
+    const failure = await request(makeApp(createPedidosRoutes()))
+      .put('/22/confirm')
+      .send({ saleType: 'CC' });
+
+    expect(failure.status).toBe(503);
+    expect(failure.body).toEqual({
+      success: false,
+      code: 'HARD_PRICE_FLOOR_AUTHORITY_UNAVAILABLE',
+      error: 'Error interno al confirmar pedido',
+    });
+    expect(failure.body.error).not.toContain('DSEDAC');
   });
 
   test('DELETE /:id/lines/:lineId pins repeated delete as typed LINE_NOT_FOUND', async () => {

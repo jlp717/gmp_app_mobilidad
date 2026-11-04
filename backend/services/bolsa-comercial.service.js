@@ -761,7 +761,13 @@ function buildBolsaLineMovement(line, tipo, importe, referenceTariff) {
 
 async function validateOrderWithBolsa(vendedorCode, lines, options = {}) {
     const now = new Date();
-    const bolsa = await getOrCreateBolsa(vendedorCode, now.getFullYear(), now.getMonth() + 1);
+    const queryFn = typeof options.queryFn === 'function' ? options.queryFn : queryWithParams;
+    const bolsa = await getOrCreateBolsaWith(
+        queryFn,
+        vendedorCode,
+        now.getFullYear(),
+        now.getMonth() + 1,
+    );
     const saldoDisponible = toMoney(bolsa.saldoDisponible);
     const globalDiscountPct = Number.parseFloat(
         options.globalDiscountPct ?? options.descuentoGlobal ?? 0

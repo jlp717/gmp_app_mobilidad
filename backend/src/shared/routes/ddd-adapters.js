@@ -2068,6 +2068,7 @@ function createPedidosRoutes() {
         driverCode: driverCode ? String(driverCode).trim() : undefined,
         routeCode: routeCode ? String(routeCode).trim() : undefined,
         cobroPropio: cobroPropio === true || cobroEnMano === true,
+        requireTariffFloorPilotProfile: true,
       });
 
       if (result && result.blocked) {

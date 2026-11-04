@@ -1814,6 +1814,7 @@ router.put('/:id/confirm', async (req, res) => {
             cobroPropio: cobroPropio === true || cobroEnMano === true,
             deviceId: auditContext.deviceId,
             idempotencyKey: auditContext.idempotencyKey,
+            requireTariffFloorPilotProfile: true,
         };
         const order = await pedidosService.confirmOrder(id, normalizedSaleType, options);
 
