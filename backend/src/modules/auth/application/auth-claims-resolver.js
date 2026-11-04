@@ -65,7 +65,7 @@ function createAuthClaimsResolver({ authRepository } = {}) {
       if (!profile || profile.isActive !== true) throw subjectInvalid();
 
       const canonicalCode = normalizeCode(profile.code);
-      if (!canonicalCode) throw subjectInvalid();
+      if (!canonicalCode || !codesMatch(requestedCode, canonicalCode)) throw subjectInvalid();
       const normalizedTipoVendedor = normalizeCode(profile.tipoVendedor);
 
       // ERP mobility flags (DSEDAC.VDDX): Preventista, Jefe de ventas, Repartidor.

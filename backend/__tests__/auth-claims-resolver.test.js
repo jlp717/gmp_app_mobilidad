@@ -349,4 +349,37 @@ describe('authoritative auth claims resolver', () => {
       message: 'Perfil de autorización no disponible',
     });
   });
+
+  test('binds the requested subject to the canonical repository profile before deriving privileges', async () => {
+    const { repository, resolver } = harness({
+      user: profile({
+        code: 'A17',
+        tipoVendedor: 'ADMIN',
+        isJefeVentas: true,
+      }),
+    });
+
+    await expect(resolver.resolve({ code: '050', selectedMode: 'ALMACEN' }))
+      .rejects.toMatchObject({
+        status: 401,
+        code: 'AUTH_SUBJECT_INVALID',
+      });
+    expect(repository.getVendorVisibilityScope).not.toHaveBeenCalled();
+    expect(repository.listRepartidorFleet).not.toHaveBeenCalled();
+  });
+
+  test('accepts only the existing numeric alias equivalence for a canonical subject', async () => {
+    const { repository, resolver } = harness({
+      user: profile({ code: '050' }),
+    });
+
+    await expect(resolver.resolve({ code: '50' })).resolves.toEqual(
+      expect.objectContaining({
+        id: 'V050',
+        user: '050',
+        role: 'COMERCIAL',
+      }),
+    );
+    expect(repository.getVendorVisibilityScope).toHaveBeenCalledWith('050', { role: 'COMERCIAL' });
+  });
 });

@@ -86,6 +86,23 @@ function sendWarehouseError(error, res, message, statusCode = 500, extras = {}) 
     });
 }
 
+function requireWarehouseMode(req, res, next) {
+    const role = String(req.user?.role || '').trim().toUpperCase();
+    const activeMode = String(req.user?.activeMode || '').trim().toUpperCase();
+    if (!['ADMIN', 'JEFE_VENTAS'].includes(role) || activeMode !== 'ALMACEN') {
+        return res.status(403).json({
+            error: 'Activa el perfil Almacén con una cuenta autorizada.',
+            code: 'WAREHOUSE_MODE_REQUIRED',
+        });
+    }
+    return next();
+}
+
+// Una sola frontera para todo el dominio: el JWT debe ser válido y proyectar
+// un supervisor en modo ALMACEN antes de que cualquier handler pueda consultar
+// o escribir. Los guards de rol de mutaciones se mantienen como defensa extra.
+router.use(verifyToken, requireWarehouseMode);
+
 // ═════════════════════════════════════════════════════════════════════════════
 // AUTO-CREATE JAVIER.* WAREHOUSE TABLES (safe, idempotent)
 // ═════════════════════════════════════════════════════════════════════════════
@@ -341,7 +358,7 @@ function getVehiclePhotoUrl(description) {
  * GET /warehouse/dashboard?year=2026&month=2&day=19
  * Devuelve resumen de camiones/rutas del día con KPIs
  */
-router.get('/dashboard', verifyToken, async (req, res) => {
+router.get('/dashboard', async (req, res) => {
     try {
         const now = new Date();
         const year = parseInt(req.query.year) || now.getFullYear();
@@ -423,7 +440,7 @@ router.get('/dashboard', verifyToken, async (req, res) => {
  * Body: { vehicleCode, year, month, day, tolerance? }
  * Ejecuta el algoritmo 3D bin packing y devuelve posiciones de cajas
  */
-router.post('/load-plan', verifyToken, async (req, res) => {
+router.post('/load-plan', async (req, res) => {
     try {
         const { vehicleCode, year, month, day, tolerance } = req.body;
         logger.info(`[LOAD-PLAN] Request received: vehicle=${vehicleCode}, date=${year}-${month}-${day}`);
@@ -530,7 +547,7 @@ router.post('/load-plan', verifyToken, async (req, res) => {
  * Body: { vehicleCode, year, month, day }
  * Optimiza la carga para máximo beneficio (greedy knapsack)
  */
-router.post('/load-plan/optimize', verifyToken, async (req, res) => {
+router.post('/load-plan/optimize', async (req, res) => {
     try {
         const { vehicleCode, year, month, day } = req.body;
         if (!vehicleCode) {
@@ -553,7 +570,7 @@ router.post('/load-plan/optimize', verifyToken, async (req, res) => {
  * Body: { vehicleCode, year, month, day, mustDeliverOrders?: number[] }
  * Optimización inteligente: must-deliver + máximo margen EUR
  */
-router.post('/load-plan/smart-optimize', verifyToken, async (req, res) => {
+router.post('/load-plan/smart-optimize', async (req, res) => {
     try {
         const { vehicleCode, year, month, day, mustDeliverOrders } = req.body;
         if (!vehicleCode) {
@@ -577,7 +594,7 @@ router.post('/load-plan/smart-optimize', verifyToken, async (req, res) => {
  * Body: { placed: [...], interior: { lengthCm, widthCm, heightCm } }
  * Calcula equilibrio de ejes a partir de cajas colocadas
  */
-router.post('/load-plan/axle-balance', verifyToken, async (req, res) => {
+router.post('/load-plan/axle-balance', async (req, res) => {
     try {
         const { placed, interior } = req.body;
         if (!placed || !interior) {
@@ -596,7 +613,7 @@ router.post('/load-plan/axle-balance', verifyToken, async (req, res) => {
  * Body: { vehicleCode, items: [{articleCode, quantity, ...}], tolerance? }
  * Para simulaciones "what-if" desde el frontend
  */
-router.post('/load-plan-manual', verifyToken, async (req, res) => {
+router.post('/load-plan-manual', async (req, res) => {
     try {
         const { vehicleCode, items, tolerance } = req.body;
         if (!vehicleCode || !items?.length) {
@@ -618,7 +635,7 @@ router.post('/load-plan-manual', verifyToken, async (req, res) => {
  * GET /warehouse/vehicles
  * Lista todos los vehículos con sus capacidades y configuración
  */
-router.get('/vehicles', verifyToken, async (req, res) => {
+router.get('/vehicles', async (req, res) => {
     try {
         const vehicles = await cachedQuery(query, `
       SELECT
@@ -693,7 +710,7 @@ router.get('/vehicles', verifyToken, async (req, res) => {
 /**
  * GET /warehouse/truck-config/:vehicleCode
  */
-router.get('/truck-config/:vehicleCode', verifyToken, async (req, res) => {
+router.get('/truck-config/:vehicleCode', async (req, res) => {
     try {
         const config = await loadPlanner.getTruckConfig(req.params.vehicleCode);
         if (!config) return res.status(404).json({ error: 'Vehículo no encontrado' });
@@ -708,7 +725,7 @@ router.get('/truck-config/:vehicleCode', verifyToken, async (req, res) => {
  * PUT /warehouse/truck-config/:vehicleCode
  * Body: { largoInteriorCm, anchoInteriorCm, altoInteriorCm, toleranciaExceso, notas }
  */
-router.put('/truck-config/:vehicleCode', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.put('/truck-config/:vehicleCode', requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.vehicleCode);
         const { largoInteriorCm, anchoInteriorCm, altoInteriorCm, toleranciaExceso, notas } = req.body;
@@ -766,7 +783,7 @@ router.put('/truck-config/:vehicleCode', verifyToken, requireRoles('JEFE_VENTAS'
 /**
  * GET /warehouse/personnel
  */
-router.get('/personnel', verifyToken, async (req, res) => {
+router.get('/personnel', async (req, res) => {
     try {
         // Get custom personnel from ALMACEN_PERSONAL
         const customRows = await cachedQuery(query, `
@@ -805,7 +822,7 @@ router.get('/personnel', verifyToken, async (req, res) => {
  * POST /warehouse/personnel
  * Body: { nombre, codigoVendedor?, rol?, telefono?, email? }
  */
-router.post('/personnel', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.post('/personnel', requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const { nombre, codigoVendedor, rol, telefono, email } = req.body;
         if (!nombre) return res.status(400).json({ error: 'nombre es obligatorio' });
@@ -831,7 +848,7 @@ router.post('/personnel', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), asy
 /**
  * PUT /warehouse/personnel/:id
  */
-router.put('/personnel/:id', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.put('/personnel/:id', requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const { nombre, codigoVendedor, rol, telefono, email, activo } = req.body;
@@ -858,7 +875,7 @@ router.put('/personnel/:id', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), 
 /**
  * POST /warehouse/personnel/:id/delete — Soft delete (ACTIVO = 'N')
  */
-router.post('/personnel/:id/delete', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.post('/personnel/:id/delete', requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         await queryWithParams(`UPDATE JAVIER.ALMACEN_PERSONAL SET ACTIVO = 'N', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`, [id]);
@@ -876,7 +893,7 @@ router.post('/personnel/:id/delete', verifyToken, requireRoles('JEFE_VENTAS', 'A
 /**
  * GET /warehouse/articles?search=&onlyWithDimensions=true&limit=50
  */
-router.get('/articles', verifyToken, async (req, res) => {
+router.get('/articles', async (req, res) => {
     try {
         const { search, onlyWithDimensions, limit, offset } = req.query;
         const page = parsePage({ limit, offset }, { defaultLimit: 80, maxLimit: 200 });
@@ -989,7 +1006,7 @@ router.get('/articles', verifyToken, async (req, res) => {
 /**
  * GET /warehouse/article-dimensions/:code
  */
-router.get('/article-dimensions/:code', verifyToken, async (req, res) => {
+router.get('/article-dimensions/:code', async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.code.trim());
         const rows = await queryWithParams(`
@@ -1030,7 +1047,7 @@ router.get('/article-dimensions/:code', verifyToken, async (req, res) => {
  * PUT /warehouse/article-dimensions/:code
  * Body: { largoCm, anchoCm, altoCm, pesoCajaKg?, notas? }
  */
-router.put('/article-dimensions/:code', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.put('/article-dimensions/:code', requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.code.trim());
         const { largoCm, anchoCm, altoCm, pesoCajaKg, notas } = req.body;
@@ -1067,7 +1084,7 @@ router.put('/article-dimensions/:code', verifyToken, requireRoles('JEFE_VENTAS',
  * POST /warehouse/article-dimensions/:code/delete
  * Elimina dimensiones reales de un artículo (vuelve a estimado)
  */
-router.post('/article-dimensions/:code/delete', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.post('/article-dimensions/:code/delete', requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.code.trim());
         await queryWithParams(`DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES WHERE CODIGOARTICULO = ?`, [code]);
@@ -1083,7 +1100,7 @@ router.post('/article-dimensions/:code/delete', verifyToken, requireRoles('JEFE_
  * Elimina TODAS las dimensiones reales guardadas (vuelve todo a estimado)
  * Útil cuando se confirmaron dimensiones por error en masa
  */
-router.post('/articles/reset-all-dimensions', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.post('/articles/reset-all-dimensions', requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const countResult = await query(`SELECT COUNT(*) AS CNT FROM JAVIER.ALMACEN_ART_DIMENSIONES`);
         const total = parseInt(countResult[0]?.CNT) || 0;
@@ -1101,7 +1118,7 @@ router.post('/articles/reset-all-dimensions', verifyToken, requireRoles('JEFE_VE
  * Proxy endpoint for vehicle photos — avoids Wikipedia User-Agent blocks in Flutter
  * Streams the image directly from Wikimedia Commons
  */
-router.get('/vehicle-photo/:code', verifyToken, async (req, res) => {
+router.get('/vehicle-photo/:code', async (req, res) => {
     try {
         const code = req.params.code.trim();
         const rows = await cachedQuery(queryWithParams, `
@@ -1168,7 +1185,7 @@ router.get('/vehicle-photo/:code', verifyToken, async (req, res) => {
  * POST /warehouse/personnel/cleanup-test
  * Remove test personnel entries (like test_operario_script)
  */
-router.post('/personnel/cleanup-test', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.post('/personnel/cleanup-test', requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const result = await query(`
             UPDATE JAVIER.ALMACEN_PERSONAL
@@ -1187,7 +1204,7 @@ router.post('/personnel/cleanup-test', verifyToken, requireRoles('JEFE_VENTAS', 
  * POST /warehouse/articles/bulk-estimate
  * Auto-estimate and save dimensions for articles without real dimensions
  */
-router.post('/articles/bulk-estimate', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.post('/articles/bulk-estimate', requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const estimateFn = estimateBoxDimensions;
         const rows = await query(`
@@ -1264,7 +1281,7 @@ router.post('/articles/bulk-estimate', verifyToken, requireRoles('JEFE_VENTAS', 
 /**
  * GET /warehouse/truck/:vehicleCode/orders?year=&month=&day=
  */
-router.get('/truck/:vehicleCode/orders', verifyToken, async (req, res) => {
+router.get('/truck/:vehicleCode/orders', async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.vehicleCode);
         const now = new Date();
@@ -1339,7 +1356,7 @@ router.get('/truck/:vehicleCode/orders', verifyToken, async (req, res) => {
 /**
  * GET /warehouse/load-history?vehicleCode=&limit=20
  */
-router.get('/load-history', verifyToken, async (req, res) => {
+router.get('/load-history', async (req, res) => {
     const page = parsePage(req.query, { defaultLimit: 50, maxLimit: 200 });
     try {
         const { vehicleCode, dateFrom, dateTo } = req.query;
@@ -1458,7 +1475,7 @@ router.get('/load-history', verifyToken, async (req, res) => {
  * GET /warehouse/manual-layout/:vehicleCode/:date
  * Recupera el layout manual guardado para un camion y fecha
  */
-router.get('/manual-layout/:vehicleCode/:date', verifyToken, async (req, res) => {
+router.get('/manual-layout/:vehicleCode/:date', async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.vehicleCode.trim());
         const date = sanitizeForSQL(req.params.date.trim());
@@ -1513,7 +1530,7 @@ router.get('/manual-layout/:vehicleCode/:date', verifyToken, async (req, res) =>
  * Guardar o actualizar layout manual (upsert por vehicleCode + date)
  * Body: { vehicleCode, date, vendor?, layoutJson, metricsJson? }
  */
-router.post('/manual-layout', verifyToken, async (req, res) => {
+router.post('/manual-layout', async (req, res) => {
     try {
         const { vehicleCode, date, vendor, layoutJson, metricsJson } = req.body;
 
@@ -1564,7 +1581,7 @@ router.post('/manual-layout', verifyToken, async (req, res) => {
  * DELETE /warehouse/manual-layout/:id
  * Eliminar layout manual
  */
-router.post('/manual-layout/:id/delete', verifyToken, async (req, res) => {
+router.post('/manual-layout/:id/delete', async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
@@ -1588,7 +1605,7 @@ router.post('/manual-layout/:id/delete', verifyToken, async (req, res) => {
  * GET /warehouse/config
  * Devuelve toda la configuración global del almacén
  */
-router.get('/config', verifyToken, async (req, res) => {
+router.get('/config', async (req, res) => {
     try {
         const rows = await query('SELECT CLAVE, VALOR, DESCRIPCION FROM JAVIER.ALMACEN_CONFIG_GLOBAL ORDER BY CLAVE');
         const config = {};
@@ -1613,7 +1630,7 @@ router.get('/config', verifyToken, async (req, res) => {
  * Body: { updates: { CLAVE: VALOR, ... } }
  * Actualiza configuración global (upsert por clave)
  */
-router.put('/config', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.put('/config', requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const { updates } = req.body;
         if (!updates || typeof updates !== 'object') {
@@ -1660,7 +1677,7 @@ router.put('/config', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (
  * POST /warehouse/config/seed
  * Inserta valores por defecto si no existen (idempotente)
  */
-router.post('/config/seed', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.post('/config/seed', requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
     try {
         const defaults = [
             { key: 'MAX_ALTURA_APILADO_CM', value: '150', desc: 'Altura máxima de apilado en cm' },
@@ -1700,7 +1717,7 @@ router.post('/config/seed', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), a
  * Body: { vehicleCode, year, month, day, metrics, placed, overflow }
  * Guarda explícitamente la carga actual al histórico
  */
-router.post('/save-load', verifyToken, async (req, res) => {
+router.post('/save-load', async (req, res) => {
     try {
         const { vehicleCode, year, month, day, metrics, placed, overflow } = req.body;
         if (!vehicleCode || !metrics) {

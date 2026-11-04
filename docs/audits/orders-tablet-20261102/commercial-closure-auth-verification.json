@@ -1,0 +1,27 @@
+{
+  "base": "bc215a50ac64225d7c4ad5a0aecde1d3efff219d",
+  "warehouseSha256": "149879821BF1A35CB38BB2B3A8A69425348502719635873D061290F5D926E26D",
+  "resolverSha256": "607BA13C4A2619C7CAD5E1F44B0C18723F163720FB1F62C54EBB83F9629B4DC5",
+  "testsExit": 0,
+  "lintExit": 1,
+  "testSeconds": 778.9570701,
+  "lintSeconds": 65.6617388,
+  "testLogSha256": "51BFB95287CD0EF3E07E831C1E4F1C87FA584044F050520936BF703777776191",
+  "lintLogSha256": "741F0B17A5451798BB8B657156BF7805632B382F95DB9038CC4A802A1F090E5C",
+  "lintIdentical": true,
+  "testsTail": [
+    "",
+    "Test Suites: 1 skipped, 320 passed, 320 of 321 total",
+    "Tests:       2 skipped, 3818 passed, 3820 total",
+    "Snapshots:   0 total",
+    "Time:        767.644 s",
+    "Ran all test suites.",
+    "Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?"
+  ],
+  "lintTail": [
+    "",
+    "✖ 242 problems (242 errors, 0 warnings)",
+    "  2 errors and 0 warnings potentially fixable with the `--fix` option.",
+    ""
+  ]
+}
