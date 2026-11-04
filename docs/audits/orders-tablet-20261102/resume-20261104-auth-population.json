@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-04",
+  "readonly": true,
+  "credentialsReturned": false,
+  "physicalConnectionClosed": true,
+  "installedCommit": "4a36ddde",
+  "erpGmpCodes": 92,
+  "serverReadinessRows": 68,
+  "exactCodeEligibleWithActiveErpPin": 67,
+  "eligibleWithNonemptyHash": 66,
+  "eligibleMissingHash": 1,
+  "readinessCountedOutsideExactPopulation": 1,
+  "withoutUsableErpPin": 25,
+  "existingNonemptyButMalformed": 0,
+  "hashesWithoutExactProfile": 1,
+  "roleFlags": {
+    "preventista": 28,
+    "reparto": 47,
+    "repartoSinPreventa": 36,
+    "jefeVentas": 7,
+    "sinIndicadores": 3,
+    "noSumar": true
+  },
+  "b2": {
+    "activeExactErpProfile": true,
+    "reparto": true,
+    "hashPresent": false,
+    "vehicles": 0,
+    "activeWarehouseRosterLinks": 0,
+    "fleetPlaceholderPrefix": false,
+    "identityOperationallyVerified": false,
+    "cpcDeliveries": 0,
+    "oppPreparations": 1
+  },
+  "warehouse": {
+    "rows": 5,
+    "active": 4,
+    "activeErpLinked": 4,
+    "roles": {
+      "CARRETILLERO": 1,
+      "JEFE_TURNO": 1,
+      "PREPARADOR": 2
+    },
+    "modeRequires": "JEFE_VENTAS or ADMIN in current source",
+    "eligibleForExactCodeLogin": 0,
+    "eligibleForWarehouseMode": 0
+  },
+  "alternateDirectory": {
+    "APPUSUARIOS_GMP": 31,
+    "rowsWithGroup": 0,
+    "APPUSUARIOSGRUPOS_GMP": 0,
+    "ROL": 0,
+    "linkedToWarehouse": 0,
+    "linkedToCurrentMobileLogin": 0,
+    "VDC_TIPOVENDEDOR_length": 1,
+    "possibleAdminLiteral": false
+  }
+}

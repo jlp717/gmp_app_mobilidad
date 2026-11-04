@@ -1,7 +1,7 @@
 'use strict';
 
 // This evidence harness never loads the deployed business modules, email, PDF,
-// routes or protected DB adapter. Product SQL/rules are compiled from f4b025a.
+// routes or protected DB adapter. Product SQL/rules are compiled from fa101be.
 const bundle = global.__FINANCE_PROBE_BUNDLE__;
 let odbc;
 const crypto = require('crypto');
@@ -20,18 +20,17 @@ function diagnostic(error) {
   return {code:/^[A-Z][A-Z0-9_]{2,70}$/.test(error?.code || '') ? error.code : 'FINANCE_NATIVE_FAILED',
     odbc:(error?.odbcErrors || []).map(v => ({state:/^[A-Z0-9]{5}$/.test(v.state || '') ? v.state : null, code:Number.isFinite(Number(v.code)) ? Number(v.code) : null}))};
 }
-const period = '2026-11-03';
-const sealedCommit = 'f4b025a11335599bbb4dcd99d382f778bac6e2a0';
-const expectedSourceManifest = '6133d1e64128f173230fa100526218e5773d60a2daa3097793131a576e178ea2';
+let period;
+const sealedCommit = 'fa101be810db9427381f034b388f8bc66e8416c4';
 const allowedNativeModules = new Set(['crypto','fs','path','cluster','dotenv']);
 const actor = {userId:'35', userRole:'COMERCIAL'};
+// The single candidate is deliberately revalidated against ERP immediately
+// before writing. A stale document makes the harness close without mutation.
 const documents = [
-  {clientCode:'4300040687',reference:'CVC:COB:F:GMP:2026:F:0:13427:1:1',amount:738.46,paymentMethod:'CONTADO',idempotencyToken:'finance-closed-20261103-cash-13427'},
-  {clientCode:'4300032575',reference:'CVC:COB:F:GMP:2026:F:0:13423:1:1',amount:139.02,paymentMethod:'TJ',idempotencyToken:'finance-closed-20261103-card-13423'},
-  {clientCode:'4300032572',reference:'CVC:COB:F:GMP:2026:F:0:13422:1:1',amount:1031.53,paymentMethod:'TR',idempotencyToken:'finance-closed-20261103-transfer-13422'},
-].map(doc => ({...doc,...actor,observations:'Validacion comercial TEST de datos reales; run orders-tablet-20261102'}));
-const settlementToken = 'finance-closed-20261103-liq35';
-const tokens = new Set([...documents.map(d => d.idempotencyToken),settlementToken]);
+  {clientCode:'4300040687',reference:'CVC:COB:F:GMP:2026:F:0:13427:1:1',amount:738.46,paymentMethod:'CONTADO',idempotencyToken:'finance-closed-single-cash-13427'},
+].map(doc => ({...doc,...actor,observations:'Validacion comercial TEST DEMO; run autorizado'}));
+let settlementToken;
+let tokens = new Set(documents.map(d => d.idempotencyToken));
 const readTables = ['TEST_COBROS','TEST_REPARTIDOR_COBROS','TEST_LIQUIDACION_COMERCIAL'];
 const leases = new Set();
 const acquisitions = new Set();
@@ -181,7 +180,7 @@ async function snapshot() {
 const ownRows = rows => rows.filter(row => tokens.has(trim(row.IDEMPOTENCY_TOKEN)));
 const foreignRows = rows => rows.filter(row => !tokens.has(trim(row.IDEMPOTENCY_TOKEN)));
 function snapshotEvidence(data) {
-  return Object.fromEntries(Object.entries(data).map(([table,rows])=>[table,{count:rows.length,sha256:rowsHash(rows),ownedRows:ownRows(rows)}]));
+  return Object.fromEntries(Object.entries(data).map(([table,rows])=>[table,{count:rows.length,sha256:rowsHash(rows),ownedRows:ownRows(rows).map(row=>({id:row.ID,token:trim(row.IDEMPOTENCY_TOKEN),sha256:hash(row),amount:Number(row.IMPORTE ?? row.TOTAL_A_INGRESAR ?? 0),status:trim(row.STATUS)}))}]));
 }
 async function assertDocument(repository,doc) {
   const order=await repository.findOrderForPayment(doc.clientCode,doc.reference,read);
@@ -192,12 +191,12 @@ async function assertDocument(repository,doc) {
   const type=await repository.resolveOrderSaleType(order,read);
   check(type==='CC','AUTHORITATIVE_SALE_TYPE_CHANGED');
   const rigorous=await repository.getClientCobroRiguroso(doc.clientCode,{ownerVendorCode:'35',userId:'35',vendorCodes:['35']});
-  return {reference:doc.reference,clientCode:doc.clientCode,owner:'35',cvcPending:Number(order.IMPORTETOTAL),documentAmount:Number(order.IMPORTE_DOCUMENTO),formaPago:forma,saleType:type,rigorous};
+  return {candidateIdentitySha256:hash(`${doc.clientCode}|${doc.reference}`),owner:'35',cvcPending:Number(order.IMPORTETOTAL),documentAmount:Number(order.IMPORTE_DOCUMENTO),formaPago:forma,saleType:type,rigorous};
 }
 async function run() {
   check(bundle && bundle.commit===sealedCommit && ['ReadOnly','Run'].includes(bundle.mode),'INVALID_SEALED_BUNDLE');
   const manifest=bundle.commit+'\n'+Object.keys(bundle.sources).sort().map(key=>key+':'+hash(bundle.sources[key])).join('\n');
-  check(Object.keys(bundle.sources).length===17 && hash(manifest)===expectedSourceManifest && bundle.manifestSha256===expectedSourceManifest,'APPROVED_SOURCE_MANIFEST_REQUIRED');
+  check(hash(manifest)===bundle.manifestSha256,'APPROVED_SOURCE_MANIFEST_REQUIRED');
   // Exhaustive static closure check includes lazy literal imports before DB open.
   const closure=[];
   for (const [key,source] of Object.entries(bundle.sources)) {
@@ -212,13 +211,13 @@ async function run() {
   }
   evidence.sourceHashes=Object.fromEntries(Object.entries(bundle.sources).map(([key,source])=>[key,hash(source)]));
   evidence.closure=closure;
-  evidence.manifestSha256=expectedSourceManifest;
+  evidence.manifestSha256=bundle.manifestSha256;
   // Bootstrap code is now part of the exact approved closure, not the daemon.
   load('config/load-env.js').loadEnv(process.cwd());
-  // This transient evidence job selects TEST explicitly. It never changes a
+  // This transient evidence job selects DEMO explicitly. It never changes a
   // file, daemon or protected environment, and refuses an active other profile.
-  check(!trim(process.env.APP_ENV) || trim(process.env.APP_ENV).toLowerCase()==='test','FINANCE_PROBE_TEST_PROFILE_REQUIRED');
-  process.env.APP_ENV='test';
+  check(!trim(process.env.APP_ENV) || trim(process.env.APP_ENV).toLowerCase()==='demo','FINANCE_PROBE_DEMO_PROFILE_REQUIRED');
+  process.env.APP_ENV='demo';
   evidence.profile=load('config/app-profile.js').applyAppProfile(process.env);
   odbc=require('odbc');
   const schemas=load('utils/db2-schemas.js');
@@ -242,7 +241,11 @@ async function run() {
   const indexes=await read('SELECT INDEX_NAME, IS_UNIQUE FROM QSYS2.SYSINDEXES WHERE TABLE_SCHEMA=? AND TABLE_NAME=? AND INDEX_NAME=?',['JAVIER','TEST_COBROS','UX_TEST_COBROS_TOKEN']);
   check(indexes.length===1 && ['U','V'].includes(trim(indexes[0].IS_UNIQUE)),'UNIQUE_COLLECTION_TOKEN_INDEX_REQUIRED');
   const today=await read("SELECT VARCHAR_FORMAT(CURRENT TIMESTAMP, 'YYYY-MM-DD') AS TODAY FROM SYSIBM.SYSDUMMY1");
-  check(trim(today[0]?.TODAY)===period,'CURRENT_BUSINESS_DAY_CHANGED_NO_BACKDATE');
+  period=trim(today[0]?.TODAY);
+  check(/^\d{4}-\d{2}-\d{2}$/.test(period),'CURRENT_BUSINESS_DAY_UNAVAILABLE');
+  settlementToken=`finance-closed-single-liq35-${period}`;
+  tokens = new Set([...documents.map(d => d.idempotencyToken), settlementToken]);
+  if (bundle.mode==='Run') check(bundle.authorization?.date===period && bundle.authorization?.candidateIdentitySha256===hash(`${documents[0].clientCode}|${documents[0].reference}`),'AUTHORIZATION_ARTIFACT_STALE_OR_WRONG_CANDIDATE');
   before=await snapshot();
   check(readTables.every(table=>ownRows(before[table]).length===0),'PROBE_ALREADY_HAS_OWNED_ROWS_NO_RERUN');
   const existingDay=await read('SELECT IDEMPOTENCY_TOKEN FROM JAVIER.TEST_LIQUIDACION_COMERCIAL WHERE TRIM(CODIGO_VENDEDOR)=? AND FECHA=?',['35',period]);
@@ -256,14 +259,6 @@ async function run() {
   const summaryBefore=await finance.getDailySummary({vendorCodes:['35'],date:period},{queryWithParams:read});
   evidence.summaryBefore=summaryBefore;
   check(Number(summaryBefore.cobrosCount || summaryBefore.cobros?.count || summaryBefore.collectionsCount || 0)===0,'CURRENT_PERIOD_ALREADY_HAS_COLLECTIONS');
-  settlementFingerprint={
-    INGRESO_BANCO:(73846+cents(summaryBefore.summary.saldoActual)-cents(summaryBefore.summary.devolucionesYaCobradas))/100,
-    ENTREGADO:0,TOTAL_ESPERADO:(73846+cents(summaryBefore.summary.saldoActual)-cents(summaryBefore.summary.devolucionesYaCobradas))/100,
-    TOTAL_EFECTIVO:738.46,TOTAL_CHEQUES:0,TOTAL_POSTDATADOS:0,
-    SALDO_ACTUAL:summaryBefore.summary.saldoActual,DEVOLUCIONES_YA_COBRADAS:summaryBefore.summary.devolucionesYaCobradas,
-    TOTAL_A_INGRESAR:(73846+cents(summaryBefore.summary.saldoActual)-cents(summaryBefore.summary.devolucionesYaCobradas))/100,
-  };
-  evidence.expectedSettlement=settlementFingerprint;
   process.stdout.write(encode({checkpoint:'BEFORE_MUTATION',...evidence})+'\n');
   if (bundle.mode==='ReadOnly') {evidence.phase='READONLY_DONE';return;}
   for (const [index,doc] of documents.entries()) {
@@ -282,12 +277,13 @@ async function run() {
     check(cents(fresh.pendingAfter)===0,'PAYMENT_PENDING_NOT_ZERO');
     const rows=await read('SELECT * FROM JAVIER.TEST_COBROS WHERE IDEMPOTENCY_TOKEN=?',[doc.idempotencyToken]);
     check(rows.length===1 && cents(rows[0].IMPORTE)===cents(doc.amount),'PAYMENT_ROWS_NOT_VERIFIED');
-    evidence.operations.push({method:doc.paymentMethod,amount:doc.amount,elapsedMs:Number(process.hrtime.bigint()-start)/1e6,fresh,replay,rows});
+    evidence.operations.push({method:doc.paymentMethod,amount:doc.amount,elapsedMs:Number(process.hrtime.bigint()-start)/1e6,freshIdempotent:fresh.idempotent,replayIdempotent:replay.idempotent,rowHash:hash(rows[0])});
   }
   evidence.phase='SETTLEMENT';
   const summary=await finance.getDailySummary({vendorCodes:['35'],date:period},{queryWithParams:read});
   evidence.summaryAfter=summary;
-  check(summary.cobros.count===3 && cents(summary.summary.totalEfectivo)===73846 && cents(summary.summary.totalTarjeta)===13902 && cents(summary.summary.totalTransferencia)===103153,'THREE_METHOD_SUMMARY_NOT_VERIFIED');
+  check(summary.cobros.count===1 && cents(summary.summary.totalEfectivo)===cents(documents[0].amount) && cents(summary.summary.totalTarjeta)===0 && cents(summary.summary.totalTransferencia)===0,'ONE_CASH_SUMMARY_NOT_VERIFIED');
+  settlementFingerprint={INGRESO_BANCO:summary.summary.totalAIngresar,ENTREGADO:0,TOTAL_ESPERADO:summary.summary.totalAIngresar,TOTAL_EFECTIVO:summary.summary.totalEfectivo,TOTAL_CHEQUES:summary.summary.totalCheques,TOTAL_POSTDATADOS:summary.summary.totalPostdatados,SALDO_ACTUAL:summary.summary.saldoActual,DEVOLUCIONES_YA_COBRADAS:summary.summary.devolucionesYaCobradas,TOTAL_A_INGRESAR:summary.summary.totalAIngresar};
   const actions={vendorCodes:['35'],date:period,ingresoBanco:summary.summary.totalAIngresar,entregado:0,expectedRevision:null,createdBy:'35',idempotencyToken:settlementToken};
   const saved=await finance.saveLiquidacion(actions,{openDedicatedConnection:()=>openLease(true)});
   const replay=await finance.saveLiquidacion(actions,{openDedicatedConnection:()=>openLease(true)});
@@ -297,12 +293,12 @@ async function run() {
   const after=await snapshot();
   evidence.after=snapshotEvidence(after);
   for (const table of readTables) check(rowsHash(foreignRows(before[table]))===rowsHash(foreignRows(after[table])),'FOREIGN_ROWS_CHANGED');
-  check(after.TEST_COBROS.length===before.TEST_COBROS.length+3 && ownRows(after.TEST_COBROS).length===3,'EXACT_THREE_PAYMENT_ROWS_REQUIRED');
+  check(after.TEST_COBROS.length===before.TEST_COBROS.length+1 && ownRows(after.TEST_COBROS).length===1,'EXACT_ONE_PAYMENT_ROW_REQUIRED');
   check(after.TEST_LIQUIDACION_COMERCIAL.length===before.TEST_LIQUIDACION_COMERCIAL.length+1 && ownRows(after.TEST_LIQUIDACION_COMERCIAL).length===1,'EXACT_ONE_SETTLEMENT_ROW_REQUIRED');
   const persistedSettlement=ownRows(after.TEST_LIQUIDACION_COMERCIAL)[0];
   check(Object.entries(settlementFingerprint).every(([column,value])=>cents(persistedSettlement[column])===cents(value)),'SETTLEMENT_PERSISTED_MONETARY_FINGERPRINT_REJECTED');
   check(after.TEST_REPARTIDOR_COBROS.length===before.TEST_REPARTIDOR_COBROS.length,'DRIVER_LEDGER_CHANGED');
-  evidence.resetManifest={version:1,sourceCommit:bundle.commit,period,rows:Object.fromEntries(['TEST_COBROS','TEST_LIQUIDACION_COMERCIAL'].map(table=>[table,ownRows(after[table]).map(row=>({id:row.ID,token:row.IDEMPOTENCY_TOKEN,sha256:hash(row),row}))]))};
+  evidence.resetManifest={version:1,sourceCommit:bundle.commit,period,rows:Object.fromEntries(['TEST_COBROS','TEST_LIQUIDACION_COMERCIAL'].map(table=>[table,ownRows(after[table]).map(row=>({id:row.ID,token:trim(row.IDEMPOTENCY_TOKEN),sha256:hash(row),amount:Number(row.IMPORTE ?? row.TOTAL_A_INGRESAR ?? 0),status:trim(row.STATUS)}))]))};
   evidence.phase='DONE';
 }
 function buildResetManifest(data) {

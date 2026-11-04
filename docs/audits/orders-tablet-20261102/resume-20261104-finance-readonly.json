@@ -1,0 +1,57 @@
+{
+  "exitCode": 0,
+  "result": [
+    {
+      "checkpoint": "BEFORE_MUTATION",
+      "job": "FINANCE_CLOSED_CODE",
+      "mode": "ReadOnly",
+      "phase": "PREFLIGHT",
+      "success": null,
+      "failure": null,
+      "sourceCommit": "fa101be810db9427381f034b388f8bc66e8416c4",
+      "sourceManifest": null,
+      "queryCount": 22,
+      "mutations": 0,
+      "commits": null,
+      "rollbacks": null,
+      "allPhysicalConnectionsClosed": null,
+      "closeFailures": [],
+      "date": "2026-11-04",
+      "documents": [
+        {
+          "candidateIdentitySha256": "98c9969fde3287fd58e10739f48117b05354ec8a384fb70c7028c7d2a5475f4f",
+          "amount": null,
+          "pending": null,
+          "method": null
+        }
+      ],
+      "summaryCount": null
+    },
+    {
+      "checkpoint": "FINAL",
+      "job": "FINANCE_CLOSED_CODE",
+      "mode": "ReadOnly",
+      "phase": "READONLY_DONE",
+      "success": true,
+      "failure": null,
+      "sourceCommit": "fa101be810db9427381f034b388f8bc66e8416c4",
+      "sourceManifest": null,
+      "queryCount": 22,
+      "mutations": 0,
+      "commits": null,
+      "rollbacks": null,
+      "allPhysicalConnectionsClosed": true,
+      "closeFailures": [],
+      "date": "2026-11-04",
+      "documents": [
+        {
+          "candidateIdentitySha256": "98c9969fde3287fd58e10739f48117b05354ec8a384fb70c7028c7d2a5475f4f",
+          "amount": null,
+          "pending": null,
+          "method": null
+        }
+      ],
+      "summaryCount": null
+    }
+  ]
+}

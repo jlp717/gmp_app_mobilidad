@@ -1,0 +1,563 @@
+{
+  "schema": "JAVIER",
+  "date": "2026-11-04",
+  "nativeReadOnly": true,
+  "closed": true,
+  "columns": [
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "ID",
+      "ORDINAL_POSITION": 1,
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "YES"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "SERIE",
+      "ORDINAL_POSITION": 2,
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "NUMERO",
+      "ORDINAL_POSITION": 3,
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "CLIENTE",
+      "ORDINAL_POSITION": 4,
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "VENDEDOR",
+      "ORDINAL_POSITION": 5,
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "FECHA",
+      "ORDINAL_POSITION": 6,
+      "DATA_TYPE": "DATE",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "IMPORTE",
+      "ORDINAL_POSITION": 7,
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "UNIDADES",
+      "ORDINAL_POSITION": 8,
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 3,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "0",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "DOCUMENTO_ORIGEN",
+      "ORDINAL_POSITION": 9,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 40,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "YA_COBRADA",
+      "ORDINAL_POSITION": 10,
+      "DATA_TYPE": "SMALLINT",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "1",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "ORDINAL_POSITION": 11,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "CREATED_BY",
+      "ORDINAL_POSITION": 12,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "CREATED_AT",
+      "ORDINAL_POSITION": 13,
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "CURRENT_TIMESTAMP",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "FORMA_PAGO",
+      "ORDINAL_POSITION": 14,
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "ALBARAN_ORIGEN",
+      "ORDINAL_POSITION": 15,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 40,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "VENCIMIENTO",
+      "ORDINAL_POSITION": 16,
+      "DATA_TYPE": "DATE",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "IMPACTO_LQD",
+      "ORDINAL_POSITION": 17,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": "'YA_COBRADOS'",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "COLUMN_NAME": "FORMA_PAGO_DIAS",
+      "ORDINAL_POSITION": 18,
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "ID",
+      "ORDINAL_POSITION": 1,
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "YES"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "CODIGO_VENDEDOR",
+      "ORDINAL_POSITION": 2,
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 2,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "FECHA",
+      "ORDINAL_POSITION": 3,
+      "DATA_TYPE": "DATE",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "INGRESO_BANCO",
+      "ORDINAL_POSITION": 4,
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "0",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "ENTREGADO",
+      "ORDINAL_POSITION": 5,
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "0",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "TOTAL_ESPERADO",
+      "ORDINAL_POSITION": 6,
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "0",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "TOTAL_EFECTIVO",
+      "ORDINAL_POSITION": 7,
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "0",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "TOTAL_CHEQUES",
+      "ORDINAL_POSITION": 8,
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "0",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "TOTAL_POSTDATADOS",
+      "ORDINAL_POSITION": 9,
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "0",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "SALDO_ACTUAL",
+      "ORDINAL_POSITION": 10,
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "0",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "DEVOLUCIONES_YA_COBRADAS",
+      "ORDINAL_POSITION": 11,
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "0",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "TOTAL_A_INGRESAR",
+      "ORDINAL_POSITION": 12,
+      "DATA_TYPE": "DECIMAL",
+      "LENGTH": 11,
+      "NUMERIC_SCALE": 2,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "0",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "STATUS",
+      "ORDINAL_POSITION": 13,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "'SAVED'",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "ORDINAL_POSITION": 14,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "CREATED_BY",
+      "ORDINAL_POSITION": 15,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 20,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "CREATED_AT",
+      "ORDINAL_POSITION": 16,
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "CURRENT_TIMESTAMP",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "COLUMN_NAME": "UPDATED_AT",
+      "ORDINAL_POSITION": 17,
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "CURRENT_TIMESTAMP",
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "ID",
+      "ORDINAL_POSITION": 1,
+      "DATA_TYPE": "BIGINT",
+      "LENGTH": 8,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "YES"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "PEDIDO_ID",
+      "ORDINAL_POSITION": 2,
+      "DATA_TYPE": "INTEGER",
+      "LENGTH": 4,
+      "NUMERIC_SCALE": 0,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "FROM_STATE",
+      "ORDINAL_POSITION": 3,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 24,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "TO_STATE",
+      "ORDINAL_POSITION": 4,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 24,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "ACTOR_ID",
+      "ORDINAL_POSITION": 5,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 80,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "ACTOR_ROLE",
+      "ORDINAL_POSITION": 6,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 32,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "DEVICE_ID",
+      "ORDINAL_POSITION": 7,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "REASON",
+      "ORDINAL_POSITION": 8,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 500,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "IDEMPOTENCY_KEY",
+      "ORDINAL_POSITION": 9,
+      "DATA_TYPE": "VARCHAR",
+      "LENGTH": 128,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "PAYLOAD_JSON",
+      "ORDINAL_POSITION": 10,
+      "DATA_TYPE": "CLOB",
+      "LENGTH": 262144,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "PAYLOAD_HASH",
+      "ORDINAL_POSITION": 11,
+      "DATA_TYPE": "CHAR",
+      "LENGTH": 64,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "ORIGINAL_CLIENT_AT",
+      "ORDINAL_POSITION": 12,
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "Y",
+      "COLUMN_DEFAULT": null,
+      "IS_IDENTITY": "NO"
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "COLUMN_NAME": "SERVER_OCCURRED_AT",
+      "ORDINAL_POSITION": 13,
+      "DATA_TYPE": "TIMESTMP",
+      "LENGTH": 10,
+      "NUMERIC_SCALE": null,
+      "IS_NULLABLE": "N",
+      "COLUMN_DEFAULT": "CURRENT_TIMESTAMP",
+      "IS_IDENTITY": "NO"
+    }
+  ],
+  "constraints": [
+    {
+      "TABLE_NAME": "TEST_DEVOLUCIONES_COMERCIAL",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "CNT": 1
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "CNT": 1
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "CONSTRAINT_TYPE": "CHECK",
+      "CNT": 4
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "CNT": 1
+    },
+    {
+      "TABLE_NAME": "TEST_PEDIDO_STATE_EVENTS",
+      "CONSTRAINT_TYPE": "UNIQUE",
+      "CNT": 1
+    }
+  ]
+}

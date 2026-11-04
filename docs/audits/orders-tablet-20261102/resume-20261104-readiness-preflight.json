@@ -1,0 +1,36 @@
+{
+  "localDate": "2026-11-04",
+  "probe": "via SSH, HTTP loopback and native ODBC readonly",
+  "http": 503,
+  "checkedAtUtc": "2026-11-04T05:33:44.753Z",
+  "database": "connected",
+  "redis": "connected",
+  "sessions": "ready",
+  "settlement": "catalog verified, writable",
+  "installedRouting": {
+    "environment": "staging",
+    "tableSet": "isolated_test",
+    "productionWritesEnabled": false,
+    "productionErpWritesApproved": false
+  },
+  "pins": {
+    "hashed": 67,
+    "total": 68,
+    "missing": "B2",
+    "eligibleRows": 1,
+    "targetRows": 0,
+    "nonemptyHashes": 0
+  },
+  "tableCatalog": {
+    "PEDIDO_STATE_EVENTS": null,
+    "LIQUIDACION_COMERCIAL": null,
+    "DEVOLUCIONES_COMERCIAL": null,
+    "TEST_PEDIDO_STATE_EVENTS": "T",
+    "TEST_LIQUIDACION_COMERCIAL": "T",
+    "TEST_DEVOLUCIONES_COMERCIAL": "T",
+    "TEST_POLITICA_PRECIO_ART": "T",
+    "VENDOR_PIN_HASHES": "T"
+  },
+  "nativePhysicalClosed": true,
+  "writes": 0
+}

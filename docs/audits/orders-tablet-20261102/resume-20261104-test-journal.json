@@ -1,0 +1,15 @@
+{
+  "date": "2026-11-04",
+  "readonly": true,
+  "physicalConnectionClosed": true,
+  "journal": "JAVIER.QSQJRN",
+  "images": "*BOTH",
+  "tables": [
+    "TEST_BOLSA_COMERCIAL",
+    "TEST_COBROS",
+    "TEST_DEVOLUCIONES_COMERCIAL",
+    "TEST_LIQUIDACION_COMERCIAL",
+    "TEST_MOVIMIENTOS_BOLSA",
+    "TEST_PEDIDO_STATE_EVENTS"
+  ]
+}
