@@ -37,7 +37,7 @@ const history = require('./history');
 const { normalizeDayList, CRUT_DELIVERY_COLUMNS, deliveryDaysFromRows, LACLAE_DELIVERY_COLUMNS, getNextDeliveryDate, parseDeliveryDate, DAY_LABELS, formatDateDisplay, deliveryDaysShort, pad2, resolvePedidoActorCodes, normalizePedidoSaleType, getPedidosConfirmationTarget, resolvePedidoTerminal, normalizePedidoIdempotencyKey, generatePedidoIdempotencyKey, resolveIdempotentCreateOrder, storePedidoIdempotency, lookupPedidoIdempotency, createIdempotencyConflictError, createIdempotencyUnavailableError, publicOrderStatus, formatPedidoNumeroAcisa, assertOrderEditable, isAuthorizedForceConfirm, canonicalOrderStatus } = orderLifecycle;
 const { getActivePromotionsV2 } = promotions;
 const { getSimilarProducts } = similarity;
-const { query, queryWithParams, getPool, initDb } = require('../../config/db');
+const { query, queryWithParams, getPool } = require('../../config/db');
 const {
     db2QualifiedTableName,
     db2ColumnList,
@@ -1360,39 +1360,6 @@ function isBoxUnidadMedida(unidadMedida) {
 
 function cajaUnidadFlag(unidadMedida) {
     return isBoxUnidadMedida(unidadMedida) ? 'C' : 'U';
-}
-
-async function withPedidosTransaction(callback) {
-    let pool = getPool();
-    if (!pool && typeof initDb === 'function') {
-        await initDb();
-        pool = getPool();
-    }
-    if (!pool || typeof pool.connect !== 'function') {
-        throw new Error('No DB pool available for pedidos transaction');
-    }
-
-    const conn = await pool.connect();
-    try {
-        // IBM i ODBC rejects BEGIN WORK (-104); use isolation + COMMIT/ROLLBACK instead.
-        await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
-        const result = await callback(conn);
-        await conn.query('COMMIT');
-        return result;
-    } catch (error) {
-        try {
-            await conn.query('ROLLBACK');
-        } catch (rollbackError) {
-            logger.error(`[PEDIDOS] Rollback failed: ${rollbackError.message}`);
-        }
-        throw error;
-    } finally {
-        try {
-            await conn.close();
-        } catch {
-            // ignore close errors
-        }
-    }
 }
 
 function db2BulkInsertSql(qualifiedTable, columns, rowCount) {
@@ -4753,27 +4720,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     }
     if (isNaN(id)) throw new Error('Invalid orderId');
 
-    // CRITICAL: race-condition guard. Reservamos atomicamente el pedido pasando
-    // a estado intermedio CONFIRMANDO en una sola sentencia (compare-and-swap).
-    // Si el UPDATE no afecta filas, otro request ya tomo el pedido (o el estado
-    // no es BORRADOR), y abortamos con un error claro.
-    // La exportación ERP conserva el claim histórico. La rama local reclama
-    // la cabecera dentro de la misma transacción dedicada que stock y bolsa.
-    // Así un rollback nunca deja un CONFIRMANDO persistente.
-    const reserveResult = localConfirmationRequested
-        ? null
-        : await queryWithParams(
-            `UPDATE ${PEDIDOS_CAB_TABLE}
-                SET ESTADO = 'CONFIRMANDO',
-                    UPDATED_AT = CURRENT_TIMESTAMP
-              WHERE ID = ?
-                AND ESTADO IN ('BORRADOR', 'PEND_APROB')`,
-            [id], false
-        );
-    const rowsAffected = affectedRowCount(reserveResult);
-
-    // STATE READ (siempre): trae payload + estado actual tras el intento de reserva.
-    const currentRows = await queryWithParams(
+    const confirmationHeaderSql =
         `SELECT ESTADO,
                 ID, EJERCICIO, NUMEROPEDIDO, SERIEPEDIDO, TERMINAL,
                 DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, HORADOCUMENTO,
@@ -4785,9 +4732,8 @@ async function confirmOrder(orderId, saleType, options = {}) {
                 TRIM(TIPOVENTA) AS TIPOVENTA,
                 IMPORTETOTAL, IMPORTEBASE, IMPORTEIVA, IMPORTECOSTO, IMPORTEMARGEN,
                 TRIM(OBSERVACIONES) AS OBSERVACIONES
-         FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`,
-        [id], false
-    );
+         FROM ${PEDIDOS_CAB_TABLE} WHERE ID = ?`;
+    const currentRows = await queryWithParams(confirmationHeaderSql, [id], false);
 
     if (!currentRows || currentRows.length === 0) {
         throw new Error('Pedido no encontrado');
@@ -4816,59 +4762,14 @@ async function confirmOrder(orderId, saleType, options = {}) {
         };
     }
 
-    // Si rowsAffected es 0 y el estado NO es CONFIRMANDO de este request,
-    // significa que otro proceso lo tomo (CONFIRMADO) o estaba en
-    // estado invalido. Algunos drivers ODBC no reportan rowsAffected, por
-    // eso confiamos en el estado leido.
-    if (rowsAffected === 0) {
-        if (currentState === 'CONFIRMANDO') {
-            const err = new Error('Pedido ya confirmado o en proceso de confirmacion por otra sesion');
-            err.code = 'PEDIDO_ALREADY_CONFIRMING';
-            err.status = 409;
-            throw err;
-        }
-        if (currentState !== 'BORRADOR') {
-            const err = new Error(`Solo se pueden confirmar pedidos en estado BORRADOR (estado actual: ${currentState})`);
-            err.code = 'PEDIDO_INVALID_STATE';
-            err.status = 409;
-            throw err;
-        }
-    }
-    // Si llegamos aqui con currentState != CONFIRMANDO/BORRADOR, hay corrupcion.
-    if (currentState !== 'CONFIRMANDO' && currentState !== 'BORRADOR') {
-        const err = new Error(`Estado inesperado tras intento de reserva: ${currentState}`);
-        err.code = 'PEDIDO_INVALID_STATE';
-        err.status = 409;
-        throw err;
+    if (!['BORRADOR', 'PEND_APROB'].includes(currentState)) {
+        throw confirmationStateError(currentState);
     }
     const effectiveSaleType = normalizePedidoSaleType(saleType || currentRows[0].TIPOVENTA || 'CC');
 
-    // Helper: revierte CONFIRMANDO -> BORRADOR cuando un retorno temprano o un
-    // fallo deja el pedido bloqueado en estado intermedio. Best-effort: si falla
-    // se loguea pero NO se propaga, para no enmascarar el error original.
-    const revertConfirming = async (reasonTag) => {
-        if (localConfirmationRequested) return;
-        try {
-            await queryWithParams(
-                `UPDATE ${PEDIDOS_CAB_TABLE}
-                    SET ESTADO = 'BORRADOR', UPDATED_AT = CURRENT_TIMESTAMP
-                  WHERE ID = ? AND ESTADO = 'CONFIRMANDO'`,
-                [id], false
-            );
-            logger.info(`[PEDIDOS] CONFIRMANDO->BORRADOR revertido (#${id}) tag=${reasonTag}`);
-        } catch (revertErr) {
-            logger.error(`[PEDIDOS] No se pudo revertir CONFIRMANDO->BORRADOR para #${id}: ${revertErr.message}`);
-        }
-    };
-
     const clientCode = trimString(currentRows[0].CODIGOCLIENTE || options.clientCode);
     const vendedorCode = trimString(currentRows[0].CODIGOVENDEDOR || options.vendedorCode);
-    try {
-        await assertMinCobroAllowsOrder({ clientCode, vendorCode: vendedorCode, saleType: effectiveSaleType });
-    } catch (gateErr) {
-        await revertConfirming('MIN_COBRO_ORDER_BLOCKED');
-        throw gateErr;
-    }
+    await assertMinCobroAllowsOrder({ clientCode, vendorCode: vendedorCode, saleType: effectiveSaleType });
     const deliveryPlan = await resolveDeliveryPlan({
         clientCode,
         vendedorCode,
@@ -4881,6 +4782,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
         routeCode: options.routeCode,
     });
     const cobroPropio = isCobroPropio(options, currentRows[0]);
+    const exportToSystem = target.shouldExportToSystem && !cobroPropio;
     // Cobro en mano quita la obligación de cobrar, no la entrega. El repartidor
     // asignado sigue viendo la parada.
     const vehicleCode = trimString(options.vehicleCode || inferredAssignment.vehicleCode).substring(0, 10);
@@ -4936,12 +4838,11 @@ async function confirmOrder(orderId, saleType, options = {}) {
             headerDiscountPct: globalDiscountPct,
             requireVerifiedProfile: options.requireTariffFloorPilotProfile === true,
         });
-        if (!(floorPreflight.active && localConfirmationRequested)) {
+        if (!exportToSystem && !floorPreflight.active) {
         const bolsaResult = await bolsaService.validateOrderWithBolsa(vendedorCode, lines, {
             globalDiscountPct,
         });
         if (!bolsaResult.valid && !effectiveForceConfirm) {
-            await revertConfirming('BOLSA_INSUFICIENTE');
             return {
                 blocked: true,
                 reason: 'BOLSA_INSUFICIENTE',
@@ -4979,7 +4880,6 @@ async function confirmOrder(orderId, saleType, options = {}) {
         }
         options._bolsaGlobalDiscountPct = globalDiscountPct;
     } catch (bolsaErr) {
-        await revertConfirming('BOLSA_VALIDATION_FAILED');
         if (String(bolsaErr.code || '').startsWith('HARD_PRICE_FLOOR_')) {
             throw bolsaErr;
         }
@@ -4993,7 +4893,6 @@ async function confirmOrder(orderId, saleType, options = {}) {
     try {
         stockByCode = await getStockBatch(lines.map(line => line.CODIGOARTICULO), 1, { excludePedidoId: id });
     } catch (cause) {
-        await revertConfirming('STOCK_VALIDATION_FAILED');
         const error = new Error('No se pudo comprobar el stock. El pedido permanece en borrador.');
         error.code = 'STOCK_VALIDATION_FAILED';
         error.status = 503;
@@ -5018,7 +4917,6 @@ async function confirmOrder(orderId, saleType, options = {}) {
             }
         }
 
-        await revertConfirming('STOCK_INSUFICIENTE');
         return {
             blocked: true,
             reason: 'STOCK_INSUFICIENTE',
@@ -5030,106 +4928,48 @@ async function confirmOrder(orderId, saleType, options = {}) {
 
     const bolsaService = require('../bolsa-comercial.service');
     let consumoAmount = Number(options._bolsaConsumo || 0);
-    let acumulacionAmount = Number(options._bolsaAcumulacion || 0);
-    let mustWriteBolsaLedger = !options.skipBolsaMovement;
-    const lineMovements = Array.isArray(options._bolsaLineMovements)
-        ? options._bolsaLineMovements
-        : [];
-    const consumoMovements = lineMovements.filter(m => m && m.tipo === 'CONSUMO');
-    const acumulacionMovements = lineMovements.filter(m => m && m.tipo === 'ACUMULACION');
-    let bolsaWrittenInOrderTransaction = false;
+    const mustWriteBolsaLedger = !options.skipBolsaMovement;
 
-    // Confirmación/reserva/bolsa local forman una única unidad de trabajo.
-    let syncResult = {
-        targetSchema: 'JAVIER',
-        syncStatus: 'LOCAL',
-        synced: false,
-        systemRef: { subempresa: ' ', ejercicio: 0, serie: ' ', terminal: 0, numero: 0 },
-    };
-
-    // Export confirmed order to ERP when required.
-    if (target.shouldExportToSystem && !cobroPropio) {
-        try {
-            await withPedidosTransaction(async (conn) => {
-                syncResult = await exportCommercialOrderToSystem(conn, {
-                    header: currentRows[0],
-                    lines,
-                    deliveryPlan,
-                    routeCode,
-                    saleType: effectiveSaleType,
-                    vehicleCode,
-                    driverCode,
-                    userId: options.userId,
-                });
-                const update = buildConfirmOrderUpdate({
-                    id,
-                    deliveryPlan,
-                    vehicleCode,
-                    driverCode,
-                    routeCode,
-                    saleType: effectiveSaleType,
-                    syncResult,
-                });
-                await conn.query(update.sql, update.params);
-                await replaceStockReservationLines((sql, params) => conn.query(sql, params), lines, id);
+    try {
+        const txResult = await withLocalConfirmationTransaction(async (conn) => {
+            const queryFn = (sql, params) => conn.query(sql, params);
+            const lockedHeaderBefore = await readOrderAuditHeader(queryFn, id);
+            const lockedInitialState = canonicalOrderStatus(
+                await readConfirmationState(queryFn, id),
+            );
+            if (lockedInitialState === 'CONFIRMADO') {
+                return {
+                    idempotentReplay: true,
+                    stockWarnings: [],
+                    outOfStockProducts: [],
+                };
+            }
+            if (!['BORRADOR', 'PEND_APROB'].includes(lockedInitialState)) {
+                throw confirmationStateError(lockedInitialState);
+            }
+            const lockedLines = rehydrateLockedPricingProvenance(
+                await readOrderLinesForMutation(queryFn, id),
+                confirmationPricing,
+            );
+            const lockedGlobalDiscountPct = Math.max(
+                Number.parseFloat(lockedHeaderBefore.DESCUENTO_GLOBAL) || 0,
+                Number.parseFloat(lockedHeaderBefore.PORCENTAJEDESCUENTO1) || 0,
+            );
+            await assertErpTariffFloorForOrder({
+                queryFn,
+                lines: lockedLines,
+                headerDiscountPct: lockedGlobalDiscountPct,
+                requireVerifiedProfile: options.requireTariffFloorPilotProfile === true,
             });
-            logger.info(`[PEDIDOS] Order #${id} exported to ${syncResult.targetSchema}.CPC and confirmed`);
-        } catch (systemErr) {
-            logger.error(`[PEDIDOS] System export failed for order #${id}: ${systemErr.message}${systemErr.odbcErrors ? ' ' + JSON.stringify(systemErr.odbcErrors) : ''}`);
-            // El transaction interno ya hizo rollback de los inserts; revertimos
-            // CONFIRMANDO -> BORRADOR para que el usuario pueda reintentar.
-            await revertConfirming('SYSTEM_EXPORT_FAILED');
-            throw new Error(`No se pudo pasar el pedido a sistema. No se ha confirmado. Error: ${systemErr.message}`);
-        }
-    } else {
-        const update = buildConfirmOrderUpdate({
-            id,
-            deliveryPlan,
-            vehicleCode,
-            driverCode,
-            routeCode,
-            saleType: effectiveSaleType,
-            syncResult,
-        });
-        try {
-            const txResult = await withLocalConfirmationTransaction(async (conn) => {
-                const queryFn = (sql, params) => conn.query(sql, params);
-                const lockedHeaderBefore = await readOrderAuditHeader(queryFn, id);
-                const lockedInitialState = canonicalOrderStatus(
-                    await readConfirmationState(queryFn, id),
-                );
-                if (lockedInitialState === 'CONFIRMADO') {
-                    return {
-                        idempotentReplay: true,
-                        stockWarnings: [],
-                        outOfStockProducts: [],
-                    };
-                }
-                if (!['BORRADOR', 'PEND_APROB'].includes(lockedInitialState)) {
-                    throw confirmationStateError(lockedInitialState);
-                }
-                const lockedLines = rehydrateLockedPricingProvenance(
-                    await readOrderLinesForMutation(queryFn, id),
-                    confirmationPricing,
-                );
-                const lockedGlobalDiscountPct = Math.max(
-                    Number.parseFloat(lockedHeaderBefore.DESCUENTO_GLOBAL) || 0,
-                    Number.parseFloat(lockedHeaderBefore.PORCENTAJEDESCUENTO1) || 0,
-                );
-                await assertErpTariffFloorForOrder({
-                    queryFn,
-                    lines: lockedLines,
-                    headerDiscountPct: lockedGlobalDiscountPct,
-                    requireVerifiedProfile: options.requireTariffFloorPilotProfile === true,
-                });
-                const claim = await claimLocalOrderForConfirmation(queryFn, id);
-                if (claim.idempotentReplay) {
-                    return {
-                        idempotentReplay: true,
-                        stockWarnings: [],
-                        outOfStockProducts: [],
-                    };
-                }
+            const claim = await claimLocalOrderForConfirmation(queryFn, id);
+            if (claim.idempotentReplay) {
+                return {
+                    idempotentReplay: true,
+                    stockWarnings: [],
+                    outOfStockProducts: [],
+                };
+            }
+            if (!exportToSystem) {
                 await appendOrderStateEvent(queryFn, {
                     pedidoId: id,
                     fromState: 'BORRADOR',
@@ -5146,81 +4986,112 @@ async function confirmOrder(orderId, saleType, options = {}) {
                         },
                     },
                 });
-                const lockedBolsa = await bolsaService.validateOrderWithBolsa(
-                    vendedorCode,
-                    lockedLines,
-                    { globalDiscountPct: lockedGlobalDiscountPct, queryFn },
+            }
+
+            const lockedBolsa = await bolsaService.validateOrderWithBolsa(
+                vendedorCode,
+                lockedLines,
+                { globalDiscountPct: lockedGlobalDiscountPct, queryFn },
+            );
+            if (!lockedBolsa.valid && !effectiveForceConfirm) {
+                const bolsaError = new Error(
+                    lockedBolsa.message || 'La bolsa comercial cambió mientras se confirmaba el pedido.',
                 );
-                if (!lockedBolsa.valid && !effectiveForceConfirm) {
-                    const bolsaError = new Error(
-                        lockedBolsa.message || 'La bolsa comercial cambió mientras se confirmaba el pedido.',
+                bolsaError.code = lockedBolsa.reason || 'BOLSA_INSUFICIENTE';
+                bolsaError.status = 409;
+                bolsaError.bolsaResult = lockedBolsa;
+                throw bolsaError;
+            }
+            const lockedConsumo = Number(lockedBolsa.consumo || 0);
+            const lockedAcumulacion = Number(lockedBolsa.acumulacion || 0);
+            const lockedLineMovements = Array.isArray(lockedBolsa.lineMovements)
+                ? lockedBolsa.lineMovements
+                : [];
+            const lockedConsumoMovements = lockedLineMovements.filter((movement) =>
+                movement && movement.tipo === 'CONSUMO'
+            );
+            const lockedAcumulacionMovements = lockedLineMovements.filter((movement) =>
+                movement && movement.tipo === 'ACUMULACION'
+            );
+            // Relee stock sin cache DESPUÉS del lock de reservas. Esta es
+            // la comprobación autoritativa frente a dos dispositivos.
+            const lockedStock = await getStockBatch(
+                lockedLines.map(line => line.CODIGOARTICULO),
+                1,
+                { excludePedidoId: id, queryFn },
+            );
+            const lockedAvailability = evaluateStockAvailability(lockedLines, lockedStock);
+            if (lockedAvailability.stockWarnings.length > 0) {
+                const stockError = new Error('El stock cambió mientras se confirmaba el pedido.');
+                stockError.code = 'STOCK_CHANGED_DURING_CONFIRM';
+                stockError.status = 409;
+                stockError.stockWarnings = lockedAvailability.stockWarnings;
+                throw stockError;
+            }
+
+            let syncResult;
+            if (exportToSystem) {
+                const [lockedHeader] = await queryFn(confirmationHeaderSql, [id]);
+                if (!lockedHeader
+                    || trimString(lockedHeader.CODIGOCLIENTE || options.clientCode) !== clientCode
+                    || trimString(lockedHeader.CODIGOVENDEDOR || options.vendedorCode) !== vendedorCode
+                    || normalizePedidoSaleType(saleType || lockedHeader.TIPOVENTA || 'CC') !== effectiveSaleType
+                    || isCobroPropio(options, lockedHeader)) {
+                    throw new OrderStateError(
+                        'PEDIDO_STATE_CONFLICT',
+                        'Los datos del pedido cambiaron. Revísalo antes de confirmar.',
+                        409,
                     );
-                    bolsaError.code = lockedBolsa.reason || 'BOLSA_INSUFICIENTE';
+                }
+                syncResult = await exportCommercialOrderToSystem(conn, {
+                    header: lockedHeader,
+                    lines: lockedLines,
+                    deliveryPlan,
+                    routeCode,
+                    saleType: effectiveSaleType,
+                    vehicleCode,
+                    driverCode,
+                    userId: options.userId,
+                });
+            }
+            const update = buildConfirmOrderUpdate({
+                id, deliveryPlan, vehicleCode, driverCode, routeCode,
+                saleType: effectiveSaleType, syncResult,
+            });
+            const guardedUpdateSql = `${update.sql} AND ESTADO = 'CONFIRMANDO'`;
+            const confirmedResult = await conn.query(guardedUpdateSql, update.params);
+            const confirmedRows = affectedRowCount(confirmedResult);
+            if (confirmedRows === 0) {
+                throw confirmationStateError(await readConfirmationState(queryFn, id));
+            }
+            if (confirmedRows === null) {
+                const confirmedState = await readConfirmationState(queryFn, id);
+                if (confirmedState !== 'CONFIRMADO') {
+                    throw confirmationStateError(confirmedState);
+                }
+            }
+            await replaceStockReservationLines(queryFn, lockedLines, id);
+
+            if (mustWriteBolsaLedger) {
+                const bolsaResult = await bolsaService.applyOrderMovementsWith(queryFn, {
+                    vendedorCode,
+                    pedidoId: id,
+                    consumoAmount: lockedConsumo,
+                    acumulacionAmount: lockedAcumulacion,
+                    consumoMovements: lockedConsumoMovements,
+                    acumulacionMovements: lockedAcumulacionMovements,
+                });
+                if (bolsaResult && bolsaResult.allowed === false) {
+                    const bolsaError = new Error(
+                        `Bolsa insuficiente al registrar consumo. Deficit: ${bolsaResult.deficit}`,
+                    );
+                    bolsaError.code = 'BOLSA_MOVEMENT_WRITE_FAILED';
                     bolsaError.status = 409;
-                    bolsaError.bolsaResult = lockedBolsa;
                     throw bolsaError;
                 }
-                const lockedConsumo = Number(lockedBolsa.consumo || 0);
-                const lockedAcumulacion = Number(lockedBolsa.acumulacion || 0);
-                const lockedLineMovements = Array.isArray(lockedBolsa.lineMovements)
-                    ? lockedBolsa.lineMovements
-                    : [];
-                const lockedConsumoMovements = lockedLineMovements.filter((movement) =>
-                    movement && movement.tipo === 'CONSUMO'
-                );
-                const lockedAcumulacionMovements = lockedLineMovements.filter((movement) =>
-                    movement && movement.tipo === 'ACUMULACION'
-                );
-                const lockedMustWriteBolsa = !options.skipBolsaMovement;
-                // Relee stock sin cache DESPUÉS del lock de reservas. Esta es
-                // la comprobación autoritativa frente a dos dispositivos.
-                const lockedStock = await getStockBatch(
-                    lockedLines.map(line => line.CODIGOARTICULO),
-                    1,
-                    { excludePedidoId: id, queryFn },
-                );
-                const lockedAvailability = evaluateStockAvailability(lockedLines, lockedStock);
-                if (lockedAvailability.stockWarnings.length > 0) {
-                    const stockError = new Error('El stock cambió mientras se confirmaba el pedido.');
-                    stockError.code = 'STOCK_CHANGED_DURING_CONFIRM';
-                    stockError.status = 409;
-                    stockError.stockWarnings = lockedAvailability.stockWarnings;
-                    throw stockError;
-                }
+            }
 
-                const guardedUpdateSql = `${update.sql} AND ESTADO = 'CONFIRMANDO'`;
-                const confirmedResult = await conn.query(guardedUpdateSql, update.params);
-                const confirmedRows = affectedRowCount(confirmedResult);
-                if (confirmedRows === 0) {
-                    throw confirmationStateError(await readConfirmationState(queryFn, id));
-                }
-                if (confirmedRows === null) {
-                    const confirmedState = await readConfirmationState(queryFn, id);
-                    if (confirmedState !== 'CONFIRMADO') {
-                        throw confirmationStateError(confirmedState);
-                    }
-                }
-                await replaceStockReservationLines(queryFn, lockedLines, id);
-
-                if (lockedMustWriteBolsa) {
-                    const bolsaResult = await bolsaService.applyOrderMovementsWith(queryFn, {
-                        vendedorCode,
-                        pedidoId: id,
-                        consumoAmount: lockedConsumo,
-                        acumulacionAmount: lockedAcumulacion,
-                        consumoMovements: lockedConsumoMovements,
-                        acumulacionMovements: lockedAcumulacionMovements,
-                    });
-                    if (bolsaResult && bolsaResult.allowed === false) {
-                        const bolsaError = new Error(
-                            `Bolsa insuficiente al registrar consumo. Deficit: ${bolsaResult.deficit}`,
-                        );
-                        bolsaError.code = 'BOLSA_MOVEMENT_WRITE_FAILED';
-                        bolsaError.status = 409;
-                        throw bolsaError;
-                    }
-                }
-
+            if (!exportToSystem) {
                 const lockedHeaderAfter = await readOrderAuditHeader(queryFn, id);
 
                 await appendOrderStateEvent(queryFn, {
@@ -5247,66 +5118,64 @@ async function confirmOrder(orderId, saleType, options = {}) {
                         },
                     },
                 });
+            }
 
-                return {
-                    ...lockedAvailability,
-                    idempotentReplay: false,
-                    lines: lockedLines,
-                    consumoAmount: lockedConsumo,
-                    acumulacionAmount: lockedAcumulacion,
-                    globalDiscountPct: lockedGlobalDiscountPct,
-                    bolsaWritten: lockedMustWriteBolsa,
-                };
-            });
-            if (txResult.idempotentReplay) {
-                const existingOrder = await getOrderDetail(id);
-                return {
-                    ...existingOrder,
-                    stockWarnings: [],
-                    cobroPropio,
-                    idempotentReplay: true,
-                };
-            }
-            lines = txResult.lines;
-            consumoAmount = txResult.consumoAmount;
-            acumulacionAmount = txResult.acumulacionAmount;
-            options._bolsaGlobalDiscountPct = txResult.globalDiscountPct;
-            stockWarnings = txResult.stockWarnings;
-            outOfStockProducts = txResult.outOfStockProducts;
-            mustWriteBolsaLedger = txResult.bolsaWritten;
-            bolsaWrittenInOrderTransaction = txResult.bolsaWritten;
-            logger.info(`[PEDIDOS] Pedido #${id}, reserva y bolsa confirmados en una transacción`);
-        } catch (localError) {
-            if (localError.code === 'STOCK_CHANGED_DURING_CONFIRM') {
-                return {
-                    blocked: true,
-                    reason: localError.code,
-                    stockWarnings: localError.stockWarnings || [],
-                    alternatives: [],
-                    message: 'El stock cambió mientras confirmabas. Revisa las cantidades e inténtalo de nuevo.',
-                };
-            }
-            if (localError.code === 'BOLSA_MOVEMENT_WRITE_FAILED') {
-                throw localError;
-            }
-            if (localError.bolsaResult) {
-                return {
-                    blocked: true,
-                    reason: localError.code,
-                    deficit: localError.bolsaResult.deficit,
-                    saldoBolsa: localError.bolsaResult.saldo,
-                    warnings: localError.bolsaResult.warnings || [],
-                    message: localError.message,
-                };
-            }
-            const error = new Error(
-                `No se pudo confirmar pedido, reserva y bolsa de forma atómica. Error: ${localError.message}`,
-            );
-            error.code = localError.code || 'LOCAL_CONFIRMATION_FAILED';
-            error.status = localError.status || 503;
-            error.cause = localError;
-            throw error;
+            return {
+                ...lockedAvailability,
+                idempotentReplay: false,
+                lines: lockedLines,
+                consumoAmount: lockedConsumo,
+                globalDiscountPct: lockedGlobalDiscountPct,
+                syncResult,
+            };
+        });
+        if (txResult.idempotentReplay) {
+            const existingOrder = await getOrderDetail(id);
+            return {
+                ...existingOrder,
+                stockWarnings: [],
+                cobroPropio,
+                idempotentReplay: true,
+            };
         }
+        lines = txResult.lines;
+        consumoAmount = txResult.consumoAmount;
+        options._bolsaGlobalDiscountPct = txResult.globalDiscountPct;
+        stockWarnings = txResult.stockWarnings;
+        outOfStockProducts = txResult.outOfStockProducts;
+        logger.info(txResult.syncResult
+            ? `[PEDIDOS] Pedido #${id} exportado a ${txResult.syncResult.targetSchema}.CPC con reserva y bolsa`
+            : `[PEDIDOS] Pedido #${id}, reserva y bolsa confirmados en una transacción`);
+    } catch (localError) {
+        if (localError.code === 'STOCK_CHANGED_DURING_CONFIRM') {
+            return {
+                blocked: true,
+                reason: localError.code,
+                stockWarnings: localError.stockWarnings || [],
+                alternatives: [],
+                message: 'El stock cambió mientras confirmabas. Revisa las cantidades e inténtalo de nuevo.',
+            };
+        }
+        if (localError.code === 'BOLSA_MOVEMENT_WRITE_FAILED') {
+            throw localError;
+        }
+        if (localError.bolsaResult) {
+            return {
+                blocked: true,
+                reason: localError.code,
+                deficit: localError.bolsaResult.deficit,
+                saldoBolsa: localError.bolsaResult.saldo,
+                warnings: localError.bolsaResult.warnings || [],
+                message: localError.message,
+            };
+        }
+        const error = new Error(
+            `No se pudo confirmar pedido, reserva y bolsa de forma atómica. Error: ${localError.message}`,
+        );
+        error.code = localError.code || (exportToSystem ? 'SYSTEM_EXPORT_FAILED' : 'LOCAL_CONFIRMATION_FAILED');
+        error.status = localError.status || 503;
+        error.cause = localError;
+        throw error;
     }
 
     if (cobroPropio) {
@@ -5328,7 +5197,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     // P4-A: Invalidate stock and product cache to ensure real-time updates for all sales reps
     await invalidatePedidosStockCache('confirm');
 
-    let order = await getOrderDetail(id);
+    const order = await getOrderDetail(id);
 
     // AUD: Audit log for order confirmation
     try {
@@ -5355,58 +5224,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
         logger.info(`[AUDIT] âœ… ORDER_CONFIRMED #${id} | Client:${auditEntry.clientCode} | Total:${auditEntry.total} | Lines:${lines.length}`);
     } catch { /* silent */ }
 
-    // La exportación ERP conserva su flujo existente; en confirmación local la
-    // bolsa ya quedó incluida en la transacción de pedido + reserva.
-    if (mustWriteBolsaLedger && !bolsaWrittenInOrderTransaction) {
-        try {
-            const bolsaResult = await bolsaService.applyOrderMovements({
-                vendedorCode,
-                pedidoId: id,
-                consumoAmount,
-                acumulacionAmount,
-                consumoMovements,
-                acumulacionMovements,
-            });
-            if (bolsaResult && bolsaResult.allowed === false) {
-                throw new Error('Bolsa insuficiente al registrar consumo. Deficit: ' + bolsaResult.deficit);
-            }
-            order = await getOrderDetail(id);
-            logger.info(
-                `[PEDIDOS] Bolsa ledger written for #${id} consumo=${consumoAmount} acumulacion=${acumulacionAmount} dto=${options._bolsaGlobalDiscountPct || 0}`,
-            );
-        } catch (bolsaErr) {
-            logger.error('[PEDIDOS] Bolsa movement failed for confirmed order #' + id + ': ' + bolsaErr.message);
-            if (!target.shouldExportToSystem) {
-                try {
-                    await queryWithParams(
-                        `UPDATE ${PEDIDOS_CAB_TABLE}
-                            SET ESTADO = 'BORRADOR',
-                                UPDATED_AT = CURRENT_TIMESTAMP
-                          WHERE ID = ?
-                            AND ESTADO IN ('CONFIRMANDO', 'CONFIRMADO')`,
-                        [id],
-                        false
-                    );
-                    logger.info(`[PEDIDOS] Pedido #${id} revertido a BORRADOR tras fallo de bolsa`);
-                } catch (rollbackErr) {
-                    logger.error('[PEDIDOS] Failed to rollback order state after bolsa error for #' + id + ': ' + rollbackErr.message);
-                }
-                try {
-                    await queryWithParams(
-                        DELETE_STOCK_RESERVE_BY_PEDIDO_SQL,
-                        [id],
-                        false
-                    );
-                } catch (cleanupErr) {
-                    logger.error('[PEDIDOS] Failed to cleanup stock reservation after bolsa error for #' + id + ': ' + cleanupErr.message);
-                }
-            }
-            const err = new Error('No se pudo registrar movimiento de bolsa. El pedido no se ha confirmado correctamente. Error: ' + bolsaErr.message);
-            err.code = 'BOLSA_MOVEMENT_WRITE_FAILED';
-            err.status = 500;
-            throw err;
-        }
-    } else if (consumoAmount <= 0 && Number(options._bolsaGlobalDiscountPct || 0) > 0) {
+    if (consumoAmount <= 0 && Number(options._bolsaGlobalDiscountPct || 0) > 0) {
         logger.info(`[PEDIDOS] Confirm #${id} with dto=${options._bolsaGlobalDiscountPct} and no bolsa consumo (tariff-neutral after discounts)`);
     }
 

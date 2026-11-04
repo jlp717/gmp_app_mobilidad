@@ -450,7 +450,12 @@ describe('pedidos reparto confirmation contract', () => {
     expect(txSql).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
   });
 
-  test('DSEDAC target exports commercial order to CPC/LPC with ERP column names', async () => {
+  test.each(['success', 'bolsa', 'unknown-update'])('DSEDAC exports CPC, LPC and Bolsa atomically (%s)', async (scenario) => {
+    const failBolsa = scenario === 'bolsa';
+    const unknownUpdate = scenario === 'unknown-update';
+    let stateBeforeTransaction;
+    mockBeginTransaction.mockImplementation(async () => { stateBeforeTransaction = mockLocalState; });
+    mockRollback.mockImplementation(async () => { mockLocalState = stateBeforeTransaction; });
     process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'JAVIER';
     process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
     process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED = 'true';
@@ -461,22 +466,28 @@ describe('pedidos reparto confirmation contract', () => {
       deliveryDaysShort: 'MJ',
     });
     mockSuccessfulConfirmationQueries({ includeLine: true, vehicleCode: '11', driverCode: '57' });
-    mockConnQuery.mockImplementation(async (sql) => {
+    const defaultQuery = mockConnQuery.getMockImplementation();
+    mockConnQuery.mockImplementation(async (sql, params) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 778 }];
+      if (unknownUpdate && /SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql)) return [];
+      if (failBolsa && /INSERT\s+INTO\s+JAVIER\.TEST_MOVIMIENTOS_BOLSA/i.test(sql)) {
+        throw new Error('Test Bolsa insert failure');
+      }
       if (/FROM\s+JAVIER\.TEST_BOLSA_COMERCIAL/i.test(sql)) {
         return [{ ID: 9, CODIGOVENDEDOR: '57', EJERCICIO: 2026, MES: 5,
           SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
       }
-      return [];
+      return defaultQuery(sql, params);
     });
-    mockPool = {
-      connect: jest.fn().mockResolvedValue({
-        query: (...args) => mockConnQuery(...args),
-        close: mockConnClose,
-      }),
-    };
 
-    await pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' });
+    const confirmation = pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' });
+    if (failBolsa) {
+      await expect(confirmation).rejects.toThrow('Test Bolsa insert failure');
+    } else if (unknownUpdate) {
+      await expect(confirmation).rejects.toMatchObject({ status: 409 });
+    } else {
+      await confirmation;
+    }
 
     const cpcInsert = mockConnQuery.mock.calls.find(([sql]) =>
       /INSERT\s+INTO\s+DSEDAC\.CPC/i.test(sql),
@@ -506,7 +517,43 @@ describe('pedidos reparto confirmation contract', () => {
     expect(localUpdate[0]).toContain('SYSTEM_NUMEROPEDIDO = ?');
     expect(localUpdate[1]).toEqual(expect.arrayContaining(['DSEDAC', 'SYNCED', 2026, 'P', 57, 778]));
     expect(mockConnQuery.mock.calls.some(([sql]) => /SET TRANSACTION ISOLATION LEVEL READ COMMITTED/i.test(sql))).toBe(true);
-    expect(mockConnQuery.mock.calls.some(([sql]) => /^COMMIT$/i.test(sql))).toBe(true);
+    const bolsaWriteIndex = mockConnQuery.mock.calls.findIndex(([sql]) =>
+      /INSERT\s+INTO\s+JAVIER\.TEST_MOVIMIENTOS_BOLSA/i.test(sql),
+    );
+    const confirmWriteIndex = mockConnQuery.mock.calls.indexOf(localUpdate);
+    if (unknownUpdate) {
+      expect(bolsaWriteIndex).toBe(-1);
+      expect(mockConnQuery.mock.calls.slice(confirmWriteIndex + 1).some(([sql]) =>
+        /SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO/i.test(sql),
+      )).toBe(true);
+    } else {
+      expect(bolsaWriteIndex).toBeGreaterThan(confirmWriteIndex);
+    }
+    expect(mockOpenDedicatedConnection).toHaveBeenCalledTimes(1);
+    expect(mockPool.connect).not.toHaveBeenCalled();
+    expect(mockBeginTransaction).toHaveBeenCalledTimes(1);
+    expect(mockBeginTransaction.mock.invocationCallOrder[0])
+      .toBeLessThan(mockConnQuery.mock.invocationCallOrder[0]);
+    expect(stateBeforeTransaction).toBe('BORRADOR');
+    const rolledBack = failBolsa || unknownUpdate;
+    const endTransaction = rolledBack ? mockRollback : mockCommit;
+    const lastWriteIndex = unknownUpdate ? confirmWriteIndex : bolsaWriteIndex;
+    expect(endTransaction).toHaveBeenCalledTimes(1);
+    expect(endTransaction.mock.invocationCallOrder[0])
+      .toBeGreaterThan(mockConnQuery.mock.invocationCallOrder[lastWriteIndex]);
+    expect(mockConnClose).toHaveBeenCalledTimes(1);
+    expect(mockConnClose.mock.invocationCallOrder[0])
+      .toBeGreaterThan(endTransaction.mock.invocationCallOrder[0]);
+    if (rolledBack) {
+      expect(mockCommit).not.toHaveBeenCalled();
+      expect(mockLocalState).toBe('BORRADOR');
+      expect(mockQueryWithParams.mock.calls.some(([sql]) =>
+        /SET\s+ESTADO\s*=\s*'BORRADOR'/i.test(sql),
+      )).toBe(false);
+    } else {
+      expect(mockRollback).not.toHaveBeenCalled();
+      expect(mockLocalState).toBe('CONFIRMADO');
+    }
   });
 
   test('DSEDAC target carries manual vehicle assignment into CPC export', async () => {
@@ -520,20 +567,15 @@ describe('pedidos reparto confirmation contract', () => {
       deliveryDaysShort: 'MJ',
     });
     mockSuccessfulConfirmationQueries({ includeLine: true, vehicleCode: '11', driverCode: '57' });
-    mockConnQuery.mockImplementation(async (sql) => {
+    const defaultQuery = mockConnQuery.getMockImplementation();
+    mockConnQuery.mockImplementation(async (sql, params) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 779 }];
       if (/FROM\s+JAVIER\.TEST_BOLSA_COMERCIAL/i.test(sql)) {
         return [{ ID: 9, CODIGOVENDEDOR: '57', EJERCICIO: 2026, MES: 5,
           SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
       }
-      return [];
+      return defaultQuery(sql, params);
     });
-    mockPool = {
-      connect: jest.fn().mockResolvedValue({
-        query: (...args) => mockConnQuery(...args),
-        close: mockConnClose,
-      }),
-    };
 
     await pedidosService.confirmOrder(42, 'CC', {
       deliveryDate: '2026-05-05',
@@ -569,20 +611,15 @@ describe('pedidos reparto confirmation contract', () => {
       vehicleCode: '11',
       driverCode: '95',
     });
-    mockConnQuery.mockImplementation(async (sql) => {
+    const defaultQuery = mockConnQuery.getMockImplementation();
+    mockConnQuery.mockImplementation(async (sql, params) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 780 }];
       if (/FROM\s+JAVIER\.TEST_BOLSA_COMERCIAL/i.test(sql)) {
         return [{ ID: 9, CODIGOVENDEDOR: '02', EJERCICIO: 2026, MES: 5,
           SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
       }
-      return [];
+      return defaultQuery(sql, params);
     });
-    mockPool = {
-      connect: jest.fn().mockResolvedValue({
-        query: (...args) => mockConnQuery(...args),
-        close: mockConnClose,
-      }),
-    };
 
     await pedidosService.confirmOrder(42, 'CC', {
       deliveryDate: '2026-05-05',
@@ -627,20 +664,15 @@ describe('pedidos reparto confirmation contract', () => {
       vehicleCode: '11',
       driverCode: '95',
     });
-    mockConnQuery.mockImplementation(async (sql) => {
+    const defaultQuery = mockConnQuery.getMockImplementation();
+    mockConnQuery.mockImplementation(async (sql, params) => {
       if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 781 }];
       if (/FROM\s+JAVIER\.TEST_BOLSA_COMERCIAL/i.test(sql)) {
         return [{ ID: 9, CODIGOVENDEDOR: 'A3', EJERCICIO: 2026, MES: 5,
           SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
       }
-      return [];
+      return defaultQuery(sql, params);
     });
-    mockPool = {
-      connect: jest.fn().mockResolvedValue({
-        query: (...args) => mockConnQuery(...args),
-        close: mockConnClose,
-      }),
-    };
 
     await pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' });
 
