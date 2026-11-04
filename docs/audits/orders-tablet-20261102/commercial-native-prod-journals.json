@@ -1,0 +1,153 @@
+{
+  "readOnly": true,
+  "mutations": 0,
+  "queries": 15,
+  "closed": true,
+  "catalog": [
+    {
+      "name": "DSEDAC.CPC",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "DSEDAC",
+        "name": "QSQJRN",
+        "images": "*AFTER"
+      }
+    },
+    {
+      "name": "DSEDAC.LPC",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "DSEDAC",
+        "name": "QSQJRN",
+        "images": "*AFTER"
+      }
+    },
+    {
+      "name": "DSEDAC.OCPC",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "DSEDAC",
+        "name": "QSQJRN",
+        "images": "*AFTER"
+      }
+    },
+    {
+      "name": "DSEDAC.LQD",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "DSEDAC",
+        "name": "QSQJRN",
+        "images": "*AFTER"
+      }
+    },
+    {
+      "name": "JAVIER.PEDIDOS_CAB",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "JAVIER",
+        "name": "QSQJRN",
+        "images": "*BOTH"
+      }
+    },
+    {
+      "name": "JAVIER.PEDIDOS_LIN",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "JAVIER",
+        "name": "QSQJRN",
+        "images": "*BOTH"
+      }
+    },
+    {
+      "name": "JAVIER.PEDIDOS_SEQ",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "JAVIER",
+        "name": "QSQJRN",
+        "images": "*BOTH"
+      }
+    },
+    {
+      "name": "JAVIER.PEDIDOS_STOCK_RESERVE",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "JAVIER",
+        "name": "QSQJRN",
+        "images": "*BOTH"
+      }
+    },
+    {
+      "name": "JAVIER.PEDIDO_IDEMPOTENCY",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "JAVIER",
+        "name": "QSQJRN",
+        "images": "*BOTH"
+      }
+    },
+    {
+      "name": "JAVIER.BOLSA_COMERCIAL",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "JAVIER",
+        "name": "QSQJRN",
+        "images": "*BOTH"
+      }
+    },
+    {
+      "name": "JAVIER.MOVIMIENTOS_BOLSA",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "JAVIER",
+        "name": "QSQJRN",
+        "images": "*BOTH"
+      }
+    },
+    {
+      "name": "JAVIER.PEDIDO_STATE_EVENTS",
+      "exists": false,
+      "journal": null
+    },
+    {
+      "name": "JAVIER.COBROS",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "JAVIER",
+        "name": "QSQJRN",
+        "images": "*BOTH"
+      }
+    },
+    {
+      "name": "JAVIER.REPARTIDOR_COBROS",
+      "exists": true,
+      "journal": {
+        "active": "YES",
+        "library": "JAVIER",
+        "name": "QSQJRN",
+        "images": "*BOTH"
+      }
+    },
+    {
+      "name": "JAVIER.LIQUIDACION_COMERCIAL",
+      "exists": false,
+      "journal": null
+    },
+    {
+      "name": "JAVIER.DEVOLUCIONES_COMERCIAL",
+      "exists": false,
+      "journal": null
+    }
+  ]
+}

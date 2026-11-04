@@ -1,0 +1,33 @@
+{
+  "readOnly": true,
+  "mutations": 0,
+  "queries": 3,
+  "closed": true,
+  "tableCollisions": [],
+  "constraintCollisions": [],
+  "indexCollisions": [],
+  "checked": {
+    "tables": [
+      "PEDIDO_STATE_EVENTS",
+      "LIQUIDACION_COMERCIAL",
+      "DEVOLUCIONES_COMERCIAL"
+    ],
+    "constraints": [
+      "PK_PED_STATE_EVENTS",
+      "UQ_PED_STATE_EVT_IDEMP",
+      "CK_PED_STATE_FROM",
+      "CK_PED_STATE_TO",
+      "CK_PED_STATE_INITIAL",
+      "CK_PED_STATE_CANCEL_REASON",
+      "PK_LIQCOM",
+      "PK_DEVCOM"
+    ],
+    "indexes": [
+      "IX_PED_STATE_EVENT_ORDER",
+      "UX_LIQCOM_VENDOR_DAY",
+      "UX_LIQCOM_TOKEN",
+      "UX_DEVCOM_TOKEN",
+      "UX_DEVCOM_DOC"
+    ]
+  }
+}

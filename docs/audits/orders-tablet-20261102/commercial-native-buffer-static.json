@@ -1,0 +1,29 @@
+{
+  "sqlSha256": "2daf6d0d48ff872ed2fdcb9c360721473b13d1b4aaa974f807cb1c23887bf6a4",
+  "statementCount": 8,
+  "createTables": {
+    "PEDIDO_STATE_EVENTS": {
+      "columnsMatched": 13,
+      "identityPrimaryKey": true
+    },
+    "LIQUIDACION_COMERCIAL": {
+      "columnsMatched": 17,
+      "identityPrimaryKey": true
+    },
+    "DEVOLUCIONES_COMERCIAL": {
+      "columnsMatched": 18,
+      "identityPrimaryKey": true
+    }
+  },
+  "indexesMatched": [
+    "IX_PED_STATE_EVENT_ORDER",
+    "UX_LIQCOM_VENDOR_DAY",
+    "UX_LIQCOM_TOKEN",
+    "UX_DEVCOM_TOKEN",
+    "UX_DEVCOM_DOC"
+  ],
+  "stateChecks": 4,
+  "preflightNameCollisions": 0,
+  "sqlExecuted": false,
+  "status": "PASS_STATIC"
+}
