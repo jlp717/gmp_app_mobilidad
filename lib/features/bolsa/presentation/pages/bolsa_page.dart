@@ -22,6 +22,7 @@ import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/presentation/widgets/bolsa_monthly_chart.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/presentation/widgets/bolsa_movement_detail_sheet.dart';
+import 'package:gmp_app_mobilidad/features/bolsa/presentation/widgets/bolsa_movement_type_filters.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/providers/bolsa_provider.dart';
 import 'package:intl/intl.dart';
 
@@ -1104,78 +1105,13 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
   @override
   Widget build(BuildContext context) {
     final p = widget.provider;
-    final counts = p.countsByTipo;
-
-    Widget chip(String label, BolsaMovimientoTipo? tipo, IconData icon) {
-      final selected = p.tipoFilter == tipo;
-      final count = tipo == null ? p.movements.length : (counts[tipo] ?? 0);
-      return Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: ChoiceChip(
-          selected: selected,
-          onSelected: (_) => p.setTipoFilter(tipo),
-          backgroundColor: AppTheme.inkSurface.withValues(alpha: 0.34),
-          selectedColor: AppTheme.info.withValues(alpha: 0.20),
-          side: BorderSide(
-            color: selected
-                ? AppTheme.info
-                : AppColors.themedWhite.withValues(alpha: 0.15),
-          ),
-          label: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon,
-                  size: 13,
-                  color: AppColors.themedWhite.withValues(alpha: 0.7)),
-              const SizedBox(width: 4),
-              Text(label, style: const TextStyle(fontSize: 11)),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: AppColors.themedWhite.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$count',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          labelStyle: TextStyle(
-            color: selected
-                ? AppColors.themedWhite
-                : AppColors.themedWhite.withValues(alpha: 0.75),
-          ),
-        ),
-      );
-    }
-
     return Column(
       children: [
-        SizedBox(
-          height: 32,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              chip('Todos', null, Icons.list_alt),
-              chip(
-                'Acumulación',
-                BolsaMovimientoTipo.acumulacion,
-                Icons.trending_up,
-              ),
-              chip(
-                'Consumo',
-                BolsaMovimientoTipo.consumo,
-                Icons.trending_down,
-              ),
-              chip('Ajustes', BolsaMovimientoTipo.ajuste, Icons.tune),
-            ],
-          ),
+        BolsaMovementTypeFilters(
+          selectedType: p.tipoFilter,
+          totalCount: p.movements.length,
+          counts: p.countsByTipo,
+          onSelected: p.setTipoFilter,
         ),
         const SizedBox(height: 8),
         TextField(
