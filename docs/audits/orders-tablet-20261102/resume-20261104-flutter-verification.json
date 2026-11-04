@@ -1,0 +1,25 @@
+{
+  "sourceRevision": "90c621c43682b93af2333e96010403ab9138402a",
+  "trackedFlutterDiff": [],
+  "testsExit": -1,
+  "analyzeExit": 1,
+  "testSeconds": 682.945684,
+  "analyzeSeconds": 375.4977586,
+  "testsTail": [
+    "00:33 +230: C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/test/features/chatbot/chatbot_page_test.dart: ChatbotPage smoke renders assistant shell without sending network calls",
+    "00:33 +231: C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/test/features/chatbot/chatbot_page_test.dart: ChatbotPage smoke renders assistant shell without sending network calls"
+  ],
+  "analyzeTail": [
+    "",
+    "7635 issues found. (ran in 364.4s)"
+  ],
+  "analyzeCounts": {
+    "infos": 7635,
+    "warnings": 0,
+    "errors": 0
+  },
+  "firstSuiteTerminatedAfterOutputStall": true,
+  "freeMiBBeforeOwnTempCleanup": 150,
+  "freeMiBAfterOwnTempCleanup": 313,
+  "secondFocalCompileFailure": "Windows errno 112: insufficient disk space"
+}

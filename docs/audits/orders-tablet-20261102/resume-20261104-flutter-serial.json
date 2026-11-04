@@ -1,0 +1,14 @@
+{
+  "commit": "088bb72d0c671ae6b4bf7a64aa65aeb644c09500",
+  "targets": [
+    "test/features/cobros/commercial_cobros_presentation_test.dart",
+    "test/features/liquidacion_comercial/presentation/comercial_liquidacion_responsive_test.dart",
+    "test/features/pedidos/presentation/promotions_commercial_responsive_test.dart"
+  ],
+  "exitCode": 0,
+  "output": [
+    "[ApiClient] Request failed: type=DioExceptionType.connectionError status=0",
+    "00:17 +26: All tests passed!"
+  ],
+  "sha256": "3AC4EB57070BEBBA8BD97853D9E9D6942E284F382442637F4CD76D468A39B7E7"
+}

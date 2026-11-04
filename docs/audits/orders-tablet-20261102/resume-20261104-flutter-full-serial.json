@@ -1,0 +1,12 @@
+{
+  "sourceCommit": "088bb72d0c671ae6b4bf7a64aa65aeb644c09500",
+  "exitCode": 0,
+  "elapsedSeconds": 498.3711398,
+  "tail": [
+    "07:59 +1238: C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/test/widget_test.dart: GMP App basic widget test",
+    "07:59 +1239: C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/test/widget_test.dart: CircularProgressIndicator renders correctly",
+    "08:00 +1240: C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/test/widget_test.dart: Error message displays correctly",
+    "08:00 +1241: All tests passed!"
+  ],
+  "sha256": "C24888820A46D7D317E2DDDE28F9D44B9066EE9AB35C13AACB9A5B71D7813B48"
+}
