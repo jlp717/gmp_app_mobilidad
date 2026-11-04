@@ -233,7 +233,9 @@
         "backend/__tests__/pedidos-hard-floor-confirm.test.js",
         "backend/routes/pedidos.js",
         "backend/src/shared/routes/ddd-adapters.js",
-        "backend/__tests__/ddd_route_contracts.test.js"
+        "backend/__tests__/ddd_route_contracts.test.js",
+        "backend/services/bolsa-comercial.service.js",
+        "backend/__tests__/bolsa-comercial.service.test.js"
       ],
       "requires_all_inputs": false
     },

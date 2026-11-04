@@ -1,0 +1,43 @@
+{
+  "exitCode": 1,
+  "wrapperSha256": "AF1EC6E6E3B9D542ABFF119967355F9D6F019A52982911B65A4B1DD0185735FF",
+  "runtimeSha256": "69C00E2BF2993FBFA55C1FADD9C7BD6B70DCEA9D2C67B75754F09EB1B18C0C97",
+  "result": [
+    {
+      "phase": "PREFLIGHT",
+      "success": false,
+      "code": null,
+      "odbc": null,
+      "failure": null,
+      "sourceCommit": "fa101be810db9427381f034b388f8bc66e8416c4",
+      "manifestSha256": "dea3b3263b0a2bead9bd1daabdb40b9bdfbec65186a9d899ba232f79b70a1dd0",
+      "queryCount": 30,
+      "mutationCount": 0,
+      "commitCount": 0,
+      "rollbackCount": 0,
+      "closed": true,
+      "closeFailures": [],
+      "period": "2026-11-04",
+      "date": null,
+      "documentBefore": {
+        "totalPending": 4849.37,
+        "pendingCount": 4,
+        "documentPendingCents": 0,
+        "historyCount": 0,
+        "matchingHistoryIds": []
+      },
+      "documents": [
+        {
+          "candidateIdentitySha256": "98c9969fde3287fd58e10739f48117b05354ec8a384fb70c7028c7d2a5475f4f",
+          "cvcPending": 738.46,
+          "documentAmount": 738.47,
+          "saleType": "CC"
+        }
+      ],
+      "summaryBefore": null,
+      "authoritativeLqd": null
+    }
+  ],
+  "invariantFromExactSource": "DOCUMENT_PENDING_BEFORE_MISMATCH",
+  "runPermitted": false
+}
