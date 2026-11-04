@@ -4783,6 +4783,8 @@ async function confirmOrder(orderId, saleType, options = {}) {
     });
     const cobroPropio = isCobroPropio(options, currentRows[0]);
     const exportToSystem = target.shouldExportToSystem && !cobroPropio;
+    const recordStateEvents = !exportToSystem
+        || trimString(process.env.APP_ENV).toLowerCase() === 'production';
     // Cobro en mano quita la obligación de cobrar, no la entrega. El repartidor
     // asignado sigue viendo la parada.
     const vehicleCode = trimString(options.vehicleCode || inferredAssignment.vehicleCode).substring(0, 10);
@@ -4969,7 +4971,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
                     outOfStockProducts: [],
                 };
             }
-            if (!exportToSystem) {
+            if (recordStateEvents) {
                 await appendOrderStateEvent(queryFn, {
                     pedidoId: id,
                     fromState: 'BORRADOR',
@@ -5091,7 +5093,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
                 }
             }
 
-            if (!exportToSystem) {
+            if (recordStateEvents) {
                 const lockedHeaderAfter = await readOrderAuditHeader(queryFn, id);
 
                 await appendOrderStateEvent(queryFn, {

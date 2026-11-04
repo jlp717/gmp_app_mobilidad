@@ -1,6 +1,6 @@
 'use strict';
 
-const { resolveAppProfile } = require('../config/app-profile');
+const { getAppliedAppProfile, resolveAppProfile } = require('../config/app-profile');
 const { db2QualifiedTable } = require('./db2-identifiers');
 
 function column(name, type, length, nullable, precision = null, scale = null) {
@@ -393,11 +393,27 @@ async function requireAppBufferCapability(options) {
   return result;
 }
 
+function requireProductionAppBufferWrites({ family, catalogQuery } = {}) {
+  const configured = assertStrictAppBufferProfile();
+  const applied = getAppliedAppProfile();
+  if (configured.profile !== 'production' || !configured.productionWritesEnabled
+    || !applied.verified || applied.profile !== 'production'
+    || applied.tableSet !== 'production' || applied.writeSchema !== 'JAVIER'
+    || !applied.productionWritesEnabled) {
+    throw capabilityError(
+      'APP_BUFFER_PRODUCTION_WRITES_DISABLED',
+      'Las escrituras comerciales de produccion no estan habilitadas.',
+    );
+  }
+  return requireAppBufferCapability({ family, catalogQuery });
+}
+
 module.exports = {
   APP_BUFFER_FAMILIES,
   APP_BUFFER_REQUIREMENTS,
   assertStrictAppBufferProfile,
   inspectAppBufferCapability,
   requireAppBufferCapability,
+  requireProductionAppBufferWrites,
   resolveAppBufferTable,
 };

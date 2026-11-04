@@ -5,6 +5,7 @@ const { db2AppTable } = require('../../utils/db2-schemas');
 const {
   assertStrictAppBufferProfile,
   requireAppBufferCapability,
+  requireProductionAppBufferWrites,
   resolveAppBufferTable,
 } = require('../../utils/db2-app-buffer-capability');
 
@@ -13,6 +14,7 @@ const PEDIDOS_CAB_TABLE = db2AppTable('PEDIDOS_CAB');
 const TIMELINE_DEFAULT_LIMIT = 25;
 const TIMELINE_MAX_LIMIT = 100;
 const DB2_BIGINT_MAX = 9223372036854775807n;
+const verifiedProductionAuditTransactions = new WeakSet();
 const SENSITIVE_KEY = /(authorization|cookie|password|passwd|secret|token|jwt|credential)/i;
 const ALLOWED_STATES = new Set([
   'BORRADOR',
@@ -34,15 +36,16 @@ function assertAuditTarget() {
   const expectedEvents = resolveAppBufferTable('PEDIDO_STATE_EVENTS', profile);
   const isolated = profile.tableSet === 'isolated_test';
   const expectedHeader = isolated ? 'JAVIER.TEST_PEDIDOS_CAB' : 'JAVIER.PEDIDOS_CAB';
-  if (!isolated
+  if (!profile.writesEnabled
     || STATE_EVENTS_TABLE !== expectedEvents
     || PEDIDOS_CAB_TABLE !== expectedHeader) {
     throw stateEventError(
       'ORDER_STATE_AUDIT_TARGET_UNAVAILABLE',
-      'La escritura de auditoria solo esta habilitada en el esquema TEST aislado.',
+      'El destino de escritura de auditoria de pedidos no esta habilitado.',
       503,
     );
   }
+  return profile;
 }
 
 function normalizeState(value, { nullable = false } = {}) {
@@ -140,7 +143,7 @@ async function appendOrderStateEvent(queryFn, {
   payload,
 }) {
   if (typeof queryFn !== 'function') throw new TypeError('queryFn transaccional requerido');
-  assertAuditTarget();
+  const profile = assertAuditTarget();
   const id = Number.parseInt(pedidoId, 10);
   if (!Number.isInteger(id) || id <= 0) {
     throw stateEventError('INVALID_ORDER_ID', 'Pedido invalido para auditoria.', 400);
@@ -155,6 +158,10 @@ async function appendOrderStateEvent(queryFn, {
   if (!key) throw stateEventError('STATE_EVENT_IDEMPOTENCY_REQUIRED', 'Clave de auditoria requerida.', 400);
   const json = canonicalPayload(payload);
   const hash = payloadHash(json);
+  if (profile.profile === 'production' && !verifiedProductionAuditTransactions.has(queryFn)) {
+    await requireProductionAppBufferWrites({ family: 'audit', catalogQuery: queryFn });
+    verifiedProductionAuditTransactions.add(queryFn);
+  }
   const existing = await queryFn(
     `SELECT PAYLOAD_HASH, FROM_STATE, TO_STATE
        FROM ${STATE_EVENTS_TABLE}

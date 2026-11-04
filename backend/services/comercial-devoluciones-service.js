@@ -8,6 +8,8 @@ const { db2AppTable } = require('../utils/db2-schemas');
 const {
   assertStrictAppBufferProfile,
   requireAppBufferCapability,
+  requireProductionAppBufferWrites,
+  resolveAppBufferTable,
 } = require('../utils/db2-app-buffer-capability');
 const { db2InsertSql } = require('../utils/db2-identifiers');
 const { resolveRepartoRuntime } = require('../config/reparto-runtime');
@@ -319,6 +321,22 @@ function assertIsolatedTestWrites() {
     || !TEST_DEVOLUCIONES_TABLE.startsWith('JAVIER.TEST_')) {
     throw typedError('Tabla TEST comercial mal configurada', 'WRITES_TEST_ONLY', 409);
   }
+}
+
+async function requireSettlementWrites(deps) {
+  if (String(process.env.APP_ENV || '').trim().toLowerCase() !== 'production') {
+    assertIsolatedTestWrites();
+    return;
+  }
+  const profile = assertStrictAppBufferProfile();
+  if (TEST_LIQUIDACION_TABLE !== resolveAppBufferTable('LIQUIDACION_COMERCIAL', profile)
+    || TEST_DEVOLUCIONES_TABLE !== resolveAppBufferTable('DEVOLUCIONES_COMERCIAL', profile)) {
+    throw typedError('Las tablas comerciales no corresponden al perfil aplicado', 'RUNTIME_UNAVAILABLE', 503);
+  }
+  await requireProductionAppBufferWrites({
+    family: 'commercialFinance',
+    catalogQuery: deps.catalogQuery || deps.queryWithParams || queryWithParams,
+  });
 }
 
 async function requireCommercialAppBufferRead(deps = {}) {
@@ -1123,8 +1141,6 @@ async function withLiquidacionTransaction(callback, deps = {}) {
   }
 }
 
-// Async keeps validation failures on the same rejected-Promise API as DB errors.
-// eslint-disable-next-line require-await
 async function saveLiquidacion({
   vendorCodes,
   date,
@@ -1134,7 +1150,7 @@ async function saveLiquidacion({
   createdBy,
   idempotencyToken,
 } = {}, deps = {}) {
-  assertIsolatedTestWrites();
+  await requireSettlementWrites(deps);
   const parsedDate = parseIsoDate(date);
   if (!parsedDate) {
     throw typedError('fecha invalida; usa YYYY-MM-DD', 'VALIDATION_ERROR', 400);
@@ -1236,7 +1252,7 @@ async function saveLiquidacion({
     );
     const returns = await listReturns(
       { vendorCodes: codes, date: actions.date },
-      { queryWithParams: run },
+      { queryWithParams: run, appBufferCapabilityVerified: true },
     );
     if ((Number(cobros.count) || 0) < 1) {
       throw typedError(
