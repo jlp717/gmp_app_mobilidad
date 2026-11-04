@@ -7,6 +7,7 @@ const mockGetOrCreateBolsa = jest.fn();
 const mockGetBolsaStatus = jest.fn();
 const mockGetMovimientos = jest.fn();
 const mockGetGroupedStatus = jest.fn();
+const mockGetHistorialMensual = jest.fn();
 let mockUser = { code: '01', role: 'COMERCIAL' };
 
 jest.mock('../services/bolsa-comercial.service', function() { return {
@@ -14,7 +15,7 @@ jest.mock('../services/bolsa-comercial.service', function() { return {
   getBolsaStatus: mockGetBolsaStatus,
   getMovimientos: mockGetMovimientos,
   getGroupedStatus: mockGetGroupedStatus,
-  getHistorialMensual: jest.fn(),
+  getHistorialMensual: mockGetHistorialMensual,
   updateBolsaConfig: jest.fn(),
 }; });
 
@@ -47,7 +48,7 @@ function makeApp() {
 }
 
 beforeEach(function() {
-  jest.clearAllMocks();
+  jest.resetAllMocks();
   mockUser = { code: '01', role: 'COMERCIAL' };
 });
 
@@ -188,6 +189,38 @@ describe('bolsa route validation contracts', function() {
 
 
 describe('bolsa route authorization and public errors', function() {
+  test.each([
+    ['status', mockGetBolsaStatus],
+    ['movements', mockGetMovimientos],
+    ['history', mockGetHistorialMensual],
+  ])('GET /api/bolsa/:vendedorCode/%s rejects a non-sales requested code before service access', async function(endpoint, serviceMock) {
+    mockUser = { code: '35', role: 'COMERCIAL' };
+    serviceMock.mockResolvedValueOnce(endpoint === 'movements' ? [] : {});
+
+    const res = await request(makeApp())
+      .get(`/api/bolsa/B2/${endpoint}`)
+      .set('x-request-id', `req-non-sales-${endpoint}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 'FORBIDDEN_VENDOR',
+      request_id: `req-non-sales-${endpoint}`,
+    });
+    expect(serviceMock).not.toHaveBeenCalled();
+    expect(mockGetOrCreateBolsa).not.toHaveBeenCalled();
+  });
+
+  test('GET /api/bolsa/:vendedorCode/status rejects non-sales codes for JEFE_VENTAS too', async function() {
+    mockUser = { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true };
+
+    const res = await request(makeApp()).get('/api/bolsa/B2/status');
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_VENDOR' });
+    expect(mockGetBolsaStatus).not.toHaveBeenCalled();
+  });
+
   test('GET /api/bolsa/:vendedorCode/status allows COMERCIAL to access own vendor only', async function() {
     mockUser = { code: '01', role: 'COMERCIAL' };
     mockGetBolsaStatus.mockResolvedValueOnce({ vendedor: '01', saldoDisponible: 300 });

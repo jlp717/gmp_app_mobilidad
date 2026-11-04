@@ -7,6 +7,7 @@ const bolsaService = require('../services/bolsa-comercial.service');
 const { bolsaLimiter } = require('../middleware/security');
 const {
     resolveVendorScope: resolveCanonicalVendorScope,
+    isSalesVendorCode,
     getCachedActiveGmpVendorCatalog,
 } = require('../middleware/vendor-scope');
 
@@ -60,6 +61,7 @@ function parseVendorCodesParam(value) {
 function authorizeVendorScope(req, vendedorCode) {
     // F2a-01: delega en canonico vendor-scope.js. COMERCIAL propio intacto
     // via resolveVendorScope (raso: su codigo; 80: equipo firmado).
+    if (!isSalesVendorCode(vendedorCode)) return { ok: false };
     const user = req.user || {};
     const visible = getVisibleVendorCodes(user);
     const scope = resolveCanonicalVendorScope(user, [vendedorCode], { visibleCodes: visible });
