@@ -1,0 +1,16 @@
+{
+  "commit": "088bb72d0c671ae6b4bf7a64aa65aeb644c09500",
+  "targets": [
+    "test/features/cobros/commercial_cobros_presentation_test.dart",
+    "test/features/liquidacion_comercial/presentation/comercial_liquidacion_responsive_test.dart",
+    "test/features/pedidos/presentation/promotions_commercial_responsive_test.dart",
+    "test/features/pedidos/presentation/product_card_price_and_fields_test.dart",
+    "test/features/bolsa/tanda3_bolsa_cuadre_test.dart"
+  ],
+  "exitCode": -1,
+  "output": [
+    "00:06 +19 -1: C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/test/features/liquidacion_comercial/presentation/comercial_liquidacion_responsive_test.dart: commercial daily settlement live layout at 200% tablet landscape keeps hierarchy and actions usable",
+    "00:06 +20 -1: C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/test/features/liquidacion_comercial/presentation/comercial_liquidacion_responsive_test.dart: commercial daily settlement live layout at 200% compact dialog keeps explanatory text and actions readable"
+  ],
+  "sha256": "1129789BE306C88379E9E21FFD6E188CCBE21781C565532A16289C82A0900302"
+}

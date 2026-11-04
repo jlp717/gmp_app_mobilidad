@@ -235,7 +235,9 @@
         "backend/src/shared/routes/ddd-adapters.js",
         "backend/__tests__/ddd_route_contracts.test.js",
         "backend/services/bolsa-comercial.service.js",
-        "backend/__tests__/bolsa-comercial.service.test.js"
+        "backend/__tests__/bolsa-comercial.service.test.js",
+        "docs/audits/orders-tablet-20261102/probe-order-bolsa-demo.ps1",
+        "docs/audits/orders-tablet-20261102/probe-order-bolsa-demo-runtime.js"
       ],
       "requires_all_inputs": false
     },

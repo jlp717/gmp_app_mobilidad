@@ -1,0 +1,34 @@
+{
+  "exitCode": 1,
+  "runtimeSha256": "AB990ADEF9BD28A1E4E04AA38F80928995B0A24F408AD9A514B23D8FBE101EC1",
+  "wrapperSha256": "ABF313631D2BC35F321D1814BB05CA01F3629ECF2CD041EF4FEFF2AE6D91A779",
+  "result": [
+    {
+      "mode": "ReadOnly",
+      "passed": false,
+      "error": {
+        "code": "BUNDLE_LOCAL_MODULE_MISSING",
+        "odbc": []
+      },
+      "sourceCommit": "088bb72d0c671ae6b4bf7a64aa65aeb644c09500",
+      "sourceManifestSha256": "bdaaff0f29024c07f77eb90f70ae59b57bcbe51d82a4951898e6ab7f58f42aa9",
+      "runtimeSha256": "ab990adef9bd28a1e4e04aa38f80928995b0a24f408ad9a514b23d8fbe101ec1",
+      "candidateFingerprint": "00c035f220aa77a4cccaa5b2f085af5993b2d9df090296c5313fa3bba5c767ba",
+      "candidate": {
+        "article": "1009",
+        "tariff1": 4.648,
+        "tariff2": 4.124,
+        "expectedBolsaId": 14
+      },
+      "lifecycle": {},
+      "closed": {
+        "observer": true
+      },
+      "writes": [],
+      "readOnlyFirewall": null,
+      "dedicatedConnections": null,
+      "transactionCommands": null,
+      "lockCommands": null
+    }
+  ]
+}

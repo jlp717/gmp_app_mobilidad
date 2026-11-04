@@ -1,0 +1,49 @@
+{
+  "exitCode": 0,
+  "runtimeSha256": "37706AF1AD669FA3DE298249B180C62BC2D584B4A19F17C1731D400173D209CD",
+  "wrapperSha256": "ABF313631D2BC35F321D1814BB05CA01F3629ECF2CD041EF4FEFF2AE6D91A779",
+  "result": [
+    {
+      "mode": "ReadOnly",
+      "passed": true,
+      "error": null,
+      "sourceCommit": "088bb72d0c671ae6b4bf7a64aa65aeb644c09500",
+      "sourceManifestSha256": "bdaaff0f29024c07f77eb90f70ae59b57bcbe51d82a4951898e6ab7f58f42aa9",
+      "runtimeSha256": "37706af1ad669fa3de298249b180c62bc2d584b4a19f17c1731d400173d209cd",
+      "candidateFingerprint": "00c035f220aa77a4cccaa5b2f085af5993b2d9df090296c5313fa3bba5c767ba",
+      "candidate": {
+        "article": "1009",
+        "tariff1": 4.648,
+        "tariff2": 4.124,
+        "expectedBolsaId": 14
+      },
+      "lifecycle": {
+        "preflight": {
+          "target": "LOCAL",
+          "stockEnvases": 72.5,
+          "unitsPerBox": 5,
+          "unitMeasure": "KILO",
+          "tariff1": 4.648,
+          "tariff2": 4.124,
+          "precioTarifaCliente": 4.648,
+          "ultimoPrecioHistorico": null
+        },
+        "journalBefore": {
+          "bolsaId": 14,
+          "saldo": 300,
+          "acumulado": 0,
+          "consumido": 0,
+          "movementCount": 0
+        }
+      },
+      "closed": {
+        "observer": true
+      },
+      "writes": [],
+      "readOnlyFirewall": null,
+      "dedicatedConnections": null,
+      "transactionCommands": null,
+      "lockCommands": null
+    }
+  ]
+}
