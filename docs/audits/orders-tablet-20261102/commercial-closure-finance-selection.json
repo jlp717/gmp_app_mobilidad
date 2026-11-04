@@ -1,0 +1,32 @@
+{
+  "exitCode": 1,
+  "wrapperSha256": "D5F384581F3AC900D2BE23AE9B425AD0E536D8F39312B67080994808494F0383",
+  "runtimeSha256": "E9BDDC51A215E6F3C2A5CB86D1246EFFBCF8555ADD0AF0469217CA7B587B65B4",
+  "result": [
+    {
+      "phase": "PREFLIGHT",
+      "success": false,
+      "code": null,
+      "error": {
+        "code": "PAYMENT_SALE_TYPE_UNVERIFIED",
+        "odbc": []
+      },
+      "sourceCommit": "fa101be810db9427381f034b388f8bc66e8416c4",
+      "manifestSha256": "dea3b3263b0a2bead9bd1daabdb40b9bdfbec65186a9d899ba232f79b70a1dd0",
+      "queryCount": 17,
+      "mutationCount": 0,
+      "commitCount": 0,
+      "closed": true,
+      "closeFailures": [],
+      "period": "2026-11-04",
+      "date": null,
+      "candidate": null,
+      "registrations": 0,
+      "lastLqd": {
+        "source": null,
+        "carry": null
+      },
+      "expectedBefore": null
+    }
+  ]
+}

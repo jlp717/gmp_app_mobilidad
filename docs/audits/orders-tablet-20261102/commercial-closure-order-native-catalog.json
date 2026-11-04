@@ -1,0 +1,143 @@
+{
+  "readOnly": true,
+  "closed": true,
+  "targets": [
+    "TEST_PEDIDOS_CAB",
+    "TEST_PEDIDOS_LIN",
+    "TEST_PEDIDOS_SEQ",
+    "TEST_PEDIDOS_STOCK_RESERVE",
+    "TEST_PEDIDO_IDEMPOTENCY",
+    "TEST_BOLSA_COMERCIAL",
+    "TEST_MOVIMIENTOS_BOLSA",
+    "TEST_PEDIDO_STATE_EVENTS"
+  ],
+  "physical": [
+    {
+      "TARGET": "TEST_BOLSA_COMERCIAL",
+      "TABLE_TYPE": "T",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    },
+    {
+      "TARGET": "TEST_MOVIMIENTOS_BOLSA",
+      "TABLE_TYPE": "T",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    },
+    {
+      "TARGET": "TEST_PEDIDO_IDEMPOTENCY",
+      "TABLE_TYPE": "T",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    },
+    {
+      "TARGET": "TEST_PEDIDO_STATE_EVENTS",
+      "TABLE_TYPE": "T",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    },
+    {
+      "TARGET": "TEST_PEDIDOS_CAB",
+      "TABLE_TYPE": "T",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    },
+    {
+      "TARGET": "TEST_PEDIDOS_LIN",
+      "TABLE_TYPE": "T",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    },
+    {
+      "TARGET": "TEST_PEDIDOS_SEQ",
+      "TABLE_TYPE": "T",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    },
+    {
+      "TARGET": "TEST_PEDIDOS_STOCK_RESERVE",
+      "TABLE_TYPE": "T",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    }
+  ],
+  "triggers": [],
+  "keys": [
+    {
+      "TARGET": "TEST_BOLSA_COMERCIAL",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "CNT": 1
+    },
+    {
+      "TARGET": "TEST_BOLSA_COMERCIAL",
+      "CONSTRAINT_TYPE": "UNIQUE",
+      "CNT": 1
+    },
+    {
+      "TARGET": "TEST_MOVIMIENTOS_BOLSA",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "CNT": 1
+    },
+    {
+      "TARGET": "TEST_MOVIMIENTOS_BOLSA",
+      "CONSTRAINT_TYPE": "UNIQUE",
+      "CNT": 1
+    },
+    {
+      "TARGET": "TEST_PEDIDO_IDEMPOTENCY",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "CNT": 1
+    },
+    {
+      "TARGET": "TEST_PEDIDO_STATE_EVENTS",
+      "CONSTRAINT_TYPE": "CHECK",
+      "CNT": 4
+    },
+    {
+      "TARGET": "TEST_PEDIDO_STATE_EVENTS",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "CNT": 1
+    },
+    {
+      "TARGET": "TEST_PEDIDO_STATE_EVENTS",
+      "CONSTRAINT_TYPE": "UNIQUE",
+      "CNT": 1
+    },
+    {
+      "TARGET": "TEST_PEDIDOS_CAB",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "CNT": 1
+    },
+    {
+      "TARGET": "TEST_PEDIDOS_LIN",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "CNT": 1
+    },
+    {
+      "TARGET": "TEST_PEDIDOS_SEQ",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "CNT": 1
+    },
+    {
+      "TARGET": "TEST_PEDIDOS_STOCK_RESERVE",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "CNT": 1
+    }
+  ]
+}

@@ -1,0 +1,418 @@
+{
+  "version": "1",
+  "run_id": "commercial-closure-20261104",
+  "goal": "Verify sales access and commercial journeys; production mutation separately gated",
+  "settings": {
+    "max_concurrent": 8,
+    "empty_rounds_to_stop": 2,
+    "max_rounds": 3,
+    "default_mode": "barrier"
+  },
+  "nodes": [
+    {
+      "id": "health",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "description": "Fresh VPN/health HTTP and redacted failure causality",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "tables",
+      "kind": "agent",
+      "role": "graph_security",
+      "model_tier": "premium",
+      "description": "Physical target names, metadata and safe DDL provenance",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "pricing",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "description": "Native authority/UOM discovery and safe minimum integration",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "orders",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "description": "TEST lifecycle with full Bolsa reversal and isolated credentials",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "finance",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "description": "TEST cobros and settlement reproducible scope and ownership",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "plan",
+      "kind": "code",
+      "role": "orchestrator",
+      "model_tier": "standard",
+      "description": "Reduce readonly results and sequence single writer",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "writes": [],
+      "requires_all_inputs": true
+    },
+    {
+      "id": "maker",
+      "kind": "agent",
+      "role": "graph_implementer",
+      "model_tier": "premium",
+      "description": "Execute gated owner slice only",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "writes": [
+        "docs/audits/orders-tablet-20261102/probe-finance-closed-code-runtime.js",
+        "docs/audits/orders-tablet-20261102/probe-finance-closed-code.ps1",
+        "backend/routes/warehouse.js",
+        "backend/__tests__/warehouse-mode-authorization.test.js",
+        "backend/src/modules/auth/application/auth-claims-resolver.js",
+        "backend/__tests__/auth-claims-resolver.test.js",
+        "docs/audits/orders-tablet-20261102/probe-order-bolsa-demo.ps1",
+        "docs/audits/orders-tablet-20261102/probe-order-bolsa-demo-runtime.js",
+        "lib/features/pedidos/data/pedidos_service.dart",
+        "lib/features/pedidos/presentation/widgets/order_detail_sheet.dart",
+        "test/features/pedidos/presentation/order_reservation_detail_test.dart"
+      ],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "verify",
+      "kind": "agent",
+      "role": "graph_qa",
+      "model_tier": "premium",
+      "description": "Verify exact source and native before/after",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "writes": [],
+      "requires_all_inputs": true
+    },
+    {
+      "id": "close",
+      "kind": "agent",
+      "role": "graph_synthesizer",
+      "model_tier": "premium",
+      "description": "Report gates and recorded remaining gaps",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "writes": [],
+      "requires_all_inputs": true
+    },
+    {
+      "id": "auth",
+      "kind": "agent",
+      "role": "graph_security",
+      "model_tier": "premium",
+      "description": "Admin impersonation and role authority",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    },
+    {
+      "id": "ux",
+      "kind": "agent",
+      "role": "graph_explorer",
+      "model_tier": "cheap",
+      "description": "Mobile/tablet commercial visual gaps",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "node_id",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "writes": [],
+      "requires_all_inputs": false
+    }
+  ],
+  "edges": [
+    {
+      "to": "plan",
+      "from": "health",
+      "data": "bounded findings with evidence"
+    },
+    {
+      "to": "plan",
+      "from": "tables",
+      "data": "bounded findings with evidence"
+    },
+    {
+      "to": "plan",
+      "from": "pricing",
+      "data": "bounded findings with evidence"
+    },
+    {
+      "to": "plan",
+      "from": "orders",
+      "data": "bounded findings with evidence"
+    },
+    {
+      "to": "plan",
+      "from": "finance",
+      "data": "bounded findings with evidence"
+    },
+    {
+      "to": "maker",
+      "from": "plan",
+      "data": "signed spec and single slice scope"
+    },
+    {
+      "to": "verify",
+      "from": "maker",
+      "data": "exact sources, tests and native run artifacts"
+    },
+    {
+      "to": "close",
+      "from": "verify",
+      "data": "verified results and gate verdict"
+    },
+    {
+      "to": "plan",
+      "from": "auth",
+      "data": "security findings and test contract"
+    },
+    {
+      "to": "plan",
+      "from": "ux",
+      "data": "ranked responsive gaps and evidence"
+    }
+  ]
+}

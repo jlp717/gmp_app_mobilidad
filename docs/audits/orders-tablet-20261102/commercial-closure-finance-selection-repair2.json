@@ -1,0 +1,32 @@
+{
+  "exitCode": 1,
+  "wrapperSha256": "D5F384581F3AC900D2BE23AE9B425AD0E536D8F39312B67080994808494F0383",
+  "runtimeSha256": "7BCB6B369CC60C152F9B6C397492E05211B1AF32B0323B6943BD5007594069E5",
+  "result": [
+    {
+      "phase": "PREFLIGHT",
+      "success": false,
+      "error": {
+        "code": "FINANCE_NATIVE_FAILED",
+        "odbc": [
+          {
+            "state": "HY000",
+            "code": -666
+          }
+        ]
+      },
+      "sourceCommit": "fa101be810db9427381f034b388f8bc66e8416c4",
+      "manifestSha256": "dea3b3263b0a2bead9bd1daabdb40b9bdfbec65186a9d899ba232f79b70a1dd0",
+      "queryCount": 12,
+      "mutationCount": 0,
+      "commitCount": 0,
+      "closed": true,
+      "closeFailures": [],
+      "period": "2026-11-04",
+      "candidate": null,
+      "documentBefore": null,
+      "expectedSettlement": null,
+      "summaryBefore": null
+    }
+  ]
+}
