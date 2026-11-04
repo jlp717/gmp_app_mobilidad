@@ -135,3 +135,11 @@ Cobros quedó en solo lectura. La primera selección se detuvo ante un tipo de v
 DB2 confirmó la comparación de 24 horas sobre cinco marcas de creación almacenadas. La expresión resultó activa un microsegundo antes del límite e inactiva en el límite y un microsegundo después. La muestra contiene 38 pedidos confirmados y uno cancelado, con 32 reservas en confirmados y cero en el cancelado. No había borradores en ese instante. La prueba de reloj es una comparación en solo lectura, sin simular una cancelación ni una reserva nueva. [Límite de reloj DB2](audits/orders-tablet-20261102/commercial-closure-reservation-clock-proof.json)
 
 El detalle Flutter muestra el plazo de reserva y comprueba el estado en el servidor cuando vence. Si falla la consulta, deja de mostrar la reserva como activa y ofrece reintentar. También distingue la reserva liberada. La revisión independiente aprobó el cambio de código. Las cinco pruebas focales pasaron con salida 0. El caso de vencimiento abrió el modal en superficies de 360 × 640 y 1024 × 1366 con escala de texto al 200 %. El fallo y la recuperación se comprobaron en la superficie de teléfono. Son pruebas del renderizador con un adaptador HTTP de prueba. La comprobación en dispositivos, la matriz de orientación y las mediciones de fluidez siguen pendientes. [Pruebas focales](../test/features/pedidos/presentation/order_reservation_detail_test.dart)
+
+| Verificación del commit `a446329` | Salida | Resultado | SHA-256 del log |
+|---|---:|---|---|
+| `flutter test --no-pub --concurrency=1 --reporter expanded test/features/pedidos/presentation/order_reservation_detail_test.dart` | 0 | 5 aprobadas | `879ADAA70A9A69AEC1ECD90982C2AE4CEA84D76134D752F0935E2569A66F98AE` |
+| `flutter test --no-pub --concurrency=1 --reporter expanded` | 0 | 1.246 aprobadas, 10 min 31 s | `CBE0EC8975BD8D65EE77EA6B5640FCE514DC58560E45D5E84FE50D3E03E1F982` |
+| `flutter analyze --no-pub` | 1 | 0 errores, 0 advertencias y 7.660 informativos | `F3C1C612156D899C1F0E70C46E06567DDB76AA15F8ABA09E1644C5C5788898F3` |
+
+La comprobación local de Loop Engineering devolvió WARN porque su detección de ejecutables no encontró Flutter y npm. Los resultados anteriores y los del backend corresponden a ejecuciones directas de cada herramienta. El control de publicación sigue en FAIL por readiness, cobertura funcional nativa y verificación en dispositivo.
