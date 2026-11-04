@@ -35,7 +35,7 @@ Flutter consulta `GET /api/runtime-profile` y muestra TEST, DEMO o PRODUCCIÓN j
 
 El cambio `APP_ENV=production` prepara un arranque de sólo lectura: no permite login mutante, pedidos, cobros ni tareas programadas de escritura. No equivale a aprobar la demo ni la producción.
 
-**Activación bloqueada:** el catálogo real del 03/11/2026 confirma que faltan `JAVIER.PEDIDO_STATE_EVENTS`, `JAVIER.LIQUIDACION_COMERCIAL` y `JAVIER.DEVOLUCIONES_COMERCIAL`. Sus tres equivalentes TEST existen. No activar las variables siguientes mientras falten esos objetos, su compatibilidad y los gates de la aplicación. No se ha preparado ni ejecutado DDL de producción; su instalación requerirá un cambio separado revisado y autorizado. El perfil por sí solo no puede resolver ese bloqueo.
+**Activación bloqueada.** El catálogo real del 04/11/2026 confirmó que faltan `JAVIER.PEDIDO_STATE_EVENTS`, `JAVIER.LIQUIDACION_COMERCIAL` y `JAVIER.DEVOLUCIONES_COMERCIAL`. Sus tres equivalentes TEST existen. La migración aditiva `backend/migrations/051_javier_commercial_production_buffers.sql` prepara esos destinos. Se contrastó su estructura con el catálogo real de TEST y se verificó que sus nombres de tabla, restricciones e índices estaban libres. La migración está versionada y sigue pendiente de instalación. Después de instalarla, hay que verificar estructura y claves con `npm run env:verify`, que consulta DB2 en modo de sólo lectura, y verificar diario y disparadores mediante las consultas de catálogo antes de habilitar escrituras. [Verificación de catálogo](audits/orders-tablet-20261102/commercial-native-buffer-names.json) · [Informe](orders-demo-report.md)
 
 Las reglas PROD de `AGENTS.md` siguen vigentes: staging, QA, AppSec, salud y autorización explícita `/adelante-production`, registrada con TTL máximo de 30 minutos. Sólo después de resolver esos bloqueos y gates, el operador podrá inyectar las aprobaciones ya existentes en el entorno protegido del proceso:
 
@@ -45,7 +45,7 @@ REPARTO_WRITES_ENABLED=true
 REPARTO_PRODUCTION_WRITES_APPROVED=true
 ```
 
-No se han activado esas variables. El perfil las reconoce, pero eso no concede disponibilidad física ni supera los guards particulares de auditoría, cobros o liquidación: esos recorridos aún no tienen aprobación integral de producción. La exportación de pedidos al ERP requiere además las tres aprobaciones `PEDIDOS_EXPORT_TO_SYSTEM`, `PEDIDOS_DSEDAC_EXPORT_APPROVED` y `PEDIDOS_DSEDAC_STORAGE_APPROVED`; permanecen desactivadas. Las capacidades de reparto conservan sus propios gates y quedan fuera de esta activación comercial.
+La auditoría de pedidos y el guardado de liquidaciones exigen perfil aplicado, autorización de escritura y tablas verificadas. En una confirmación exportada, la auditoría usa la misma transacción que pedido, stock y Bolsa. La liquidación escribe en el buffer JAVIER y lee el arrastre de DSEDAC.LQD. El registro de devoluciones mantiene el alcance TEST. La exportación de pedidos al ERP requiere además `PEDIDOS_EXPORT_TO_SYSTEM`, `PEDIDOS_DSEDAC_EXPORT_APPROVED` y `PEDIDOS_DSEDAC_STORAGE_APPROVED`. El servidor observado continúa con escrituras aisladas y exportación apagada. [Pruebas de enrutamiento](../backend/__tests__/app-buffer-service-routing.test.js)
 
 Después de verificar la configuración, únicamente el procedimiento de despliegue aprobado puede ejecutar las mutaciones de producción permitidas:
 
