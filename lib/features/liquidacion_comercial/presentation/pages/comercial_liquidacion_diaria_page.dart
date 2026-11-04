@@ -216,6 +216,7 @@ class _ComercialLiquidacionDiariaPageState
       backgroundColor: AppColors.transparent,
       appBar: AppBar(
         toolbarHeight: compactAppBar ? 96 : 72,
+        titleSpacing: compactAppBar ? 4 : NavigationToolbar.kMiddleSpacing,
         title: Text(
           compactAppBar ? 'Liquidación\ndiaria' : 'Liquidación diaria',
           maxLines: compactAppBar ? 2 : 1,
@@ -1127,12 +1128,22 @@ class _MetricGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = Responsive.useCompactTiles(context);
-        final columns = constraints.maxWidth >= 980
+        final preferredColumns = constraints.maxWidth >= 980
             ? (compact ? 5 : 4)
             : constraints.maxWidth >= 620
                 ? (compact ? 3 : 2)
                 : 1;
         final gap = compact ? 8.0 : 12.0;
+        var minimumTileWidth = 0.0;
+        for (final metric in metrics) {
+          final required = _minimumMetricTileWidth(context, metric, compact);
+          if (required > minimumTileWidth) minimumTileWidth = required;
+        }
+        final scaledUnit = MediaQuery.textScalerOf(context).scale(1);
+        final fittingColumns = scaledUnit <= 1
+            ? preferredColumns
+            : ((constraints.maxWidth + gap) / (minimumTileWidth + gap)).floor();
+        final columns = fittingColumns.clamp(1, preferredColumns).toInt();
         final width = (constraints.maxWidth - (gap * (columns - 1))) / columns;
 
         return Wrap(
@@ -1196,55 +1207,131 @@ class _MetricTileState extends State<_MetricTile> {
               ),
           ],
         ),
-        child: Row(
-          children: [
-            Container(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final gap = compact ? 8.0 : 12.0;
+            final requiredTextWidth = _minimumMetricTextWidth(context, metric);
+            final rowTextWidth = constraints.maxWidth - 48 - gap;
+            final stackIcon = requiredTextWidth > rowTextWidth;
+            final text = _MetricText(metric: metric, compact: compact);
+            final icon = Container(
               width: 48,
               height: 48,
               decoration: BoxDecoration(
                 color: metric.color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               ),
-              child: Icon(
-                metric.icon,
-                color: metric.color,
-                size: 26,
-              ),
-            ),
-            SizedBox(width: compact ? 8 : 12),
-            Expanded(
-              child: Column(
+              child: Icon(metric.icon, color: metric.color, size: 26),
+            );
+
+            if (stackIcon) {
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    metric.label,
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 18,
-                      height: 1.2,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  SizedBox(height: compact ? 4 : 6),
-                  Text(
-                    _money(metric.value),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppColors.themedWhite,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      fontFeatures: [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+                children: [icon, SizedBox(height: gap), text],
+              );
+            }
+            return Row(
+              children: [
+                icon,
+                SizedBox(width: gap),
+                Expanded(child: text),
+              ],
+            );
+          },
         ),
       ),
     );
   }
+}
+
+class _MetricText extends StatelessWidget {
+  const _MetricText({required this.metric, required this.compact});
+
+  final _MetricData metric;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(metric.label, softWrap: true, style: _metricLabelStyle),
+        SizedBox(height: compact ? 4 : 6),
+        SizedBox(
+          width: double.infinity,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _money(metric.value),
+              maxLines: 1,
+              softWrap: false,
+              style: _metricValueStyle,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+TextStyle get _metricLabelStyle => TextStyle(
+      color: AppTheme.textSecondary,
+      fontSize: 18,
+      height: 1.2,
+      fontWeight: FontWeight.w700,
+    );
+
+TextStyle get _metricValueStyle => TextStyle(
+      color: AppColors.themedWhite,
+      fontSize: 20,
+      fontWeight: FontWeight.w800,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
+double _minimumMetricTileWidth(
+  BuildContext context,
+  _MetricData metric,
+  bool compact,
+) {
+  final textWidth = _minimumMetricTextWidth(
+    context,
+    metric,
+    includeAmount: false,
+  );
+  final horizontalChrome = compact ? 76.0 : 88.0;
+  return textWidth + horizontalChrome;
+}
+
+double _minimumMetricTextWidth(
+  BuildContext context,
+  _MetricData metric, {
+  bool includeAmount = true,
+}) {
+  final textScaler = MediaQuery.textScalerOf(context);
+  final textDirection = Directionality.of(context);
+  final defaultStyle = DefaultTextStyle.of(context).style;
+
+  double measure(String text, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: defaultStyle.merge(style)),
+      maxLines: 1,
+      textDirection: textDirection,
+      textScaler: textScaler,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  var widestWord = 0.0;
+  for (final word in metric.label.split(RegExp(r'\s+'))) {
+    final width = measure(word, _metricLabelStyle);
+    if (width > widestWord) widestWord = width;
+  }
+  if (!includeAmount) return widestWord;
+  final amountWidth = measure(_money(metric.value), _metricValueStyle);
+  return amountWidth > widestWord ? amountWidth : widestWord;
 }
 
 class _LiquidacionWorkspace extends StatelessWidget {
@@ -1933,32 +2020,49 @@ class _DevolucionesList extends StatelessWidget {
             for (final item in returns)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${item.documento} · ${item.cliente}'
-                        '${item.yaCobrada ? ' · ya cobrada (LIQ.Vd)' : ''}'
-                        '${item.formaPagoDias != null ? ' · ${item.formaPagoDias} D F.Factura' : ''}'
-                        '${item.albaranOrigen != null && item.albaranOrigen!.isNotEmpty ? ' · alb ${item.albaranOrigen}' : ''}'
-                        '${item.pendienteTecnicoMovimiento ? ' · Pde. Tech. Mov.' : ''}',
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 18,
-                          height: 1.3,
-                          fontWeight: FontWeight.w600,
-                        ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final details = Text(
+                      '${item.documento} · ${item.cliente}'
+                      '${item.yaCobrada ? ' · ya cobrada (LIQ.Vd)' : ''}'
+                      '${item.formaPagoDias != null ? ' · ${item.formaPagoDias} D F.Factura' : ''}'
+                      '${item.albaranOrigen != null && item.albaranOrigen!.isNotEmpty ? ' · alb ${item.albaranOrigen}' : ''}'
+                      '${item.pendienteTecnicoMovimiento ? ' · Pde. Tech. Mov.' : ''}',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 18,
+                        height: 1.3,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ),
-                    Text(
+                    );
+                    final amount = Text(
                       _moneyFormat.format(item.amount.abs()),
                       style: TextStyle(
                         color: AppTheme.error,
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
                       ),
-                    ),
-                  ],
+                    );
+                    final stack = constraints.maxWidth < 360 ||
+                        MediaQuery.textScalerOf(context).scale(1) > 1.5;
+                    if (stack) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          details,
+                          const SizedBox(height: 6),
+                          amount,
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: details),
+                        const SizedBox(width: 12),
+                        amount,
+                      ],
+                    );
+                  },
                 ),
               ),
           ],

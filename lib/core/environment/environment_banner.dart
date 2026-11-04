@@ -88,62 +88,80 @@ class _EnvironmentBannerState extends State<EnvironmentBanner>
         ? 'Entorno sin verificar'
         : 'Entorno verificado: $visibleLabel';
 
-    return Stack(
-      fit: StackFit.expand,
+    final topInset = MediaQuery.paddingOf(context).top;
+
+    return Column(
       children: [
-        widget.child,
-        Positioned(
-          top: MediaQuery.paddingOf(context).top + 8,
-          right: 8,
+        Material(
+          color: background,
           child: IgnorePointer(
             child: Semantics(
               container: true,
               liveRegion: true,
               label: semanticLabel,
               child: ExcludeSemantics(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: background,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: foreground, width: 1.5),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x52000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: foreground, width: 1.5),
                       ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          unverified
-                              ? Icons.gpp_maybe_outlined
-                              : Icons.science_outlined,
-                          size: 20,
-                          color: foreground,
-                        ),
-                        const SizedBox(width: 7),
-                        Text(
-                          visibleLabel,
-                          style: TextStyle(
-                            color: foreground,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.3,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 960),
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            12,
+                            topInset + 8,
+                            12,
+                            8,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                unverified
+                                    ? Icons.gpp_maybe_outlined
+                                    : Icons.science_outlined,
+                                size: 24,
+                                color: foreground,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  visibleLabel,
+                                  softWrap: true,
+                                  style: TextStyle(
+                                    color: foreground,
+                                    fontSize: 18,
+                                    height: 1.2,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.3,
+                                    decoration: TextDecoration.none,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: MediaQuery.removeViewPadding(
+            context: context,
+            removeTop: true,
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: true,
+              child: widget.child,
             ),
           ),
         ),

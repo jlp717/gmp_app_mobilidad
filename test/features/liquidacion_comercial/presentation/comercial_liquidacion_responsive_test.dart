@@ -37,6 +37,8 @@ const _returns = [
 
 Widget _page({
   required Size size,
+  double textScale = 2,
+  ComercialLiquidacionSummary summary = _summary,
   Future<List<Map<String, dynamic>>> Function()? pgCollectedLoader,
   Future<void> Function(ComercialLiquidacionDraft)? onSubmit,
   Future<ComercialDevolucionItem> Function({
@@ -55,16 +57,16 @@ Widget _page({
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(
           size: size,
-          textScaler: const TextScaler.linear(2),
+          textScaler: TextScaler.linear(textScale),
         ),
         child: child!,
       ),
       home: ComercialLiquidacionDiariaPage(
         employeeCode: '57',
-        initialSummary: _summary,
+        initialSummary: summary,
         initialReturns: _returns,
-        snapshotLoader: () async => const ComercialLiquidacionDailySnapshot(
-          summary: _summary,
+        snapshotLoader: () async => ComercialLiquidacionDailySnapshot(
+          summary: summary,
           returns: _returns,
         ),
         onSubmit: onSubmit ?? (_) async {},
@@ -273,6 +275,97 @@ void main() {
         }
       });
     }
+
+    testWidgets(
+        'tablet landscape gives scaled metric words their measured width',
+        (tester) async {
+      const size = Size(1280, 900);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(_page(size: size));
+      await tester.pumpAndSettle();
+
+      final label = find.text('Transferencia (informativo)');
+      final labelWidget = tester.widget<Text>(label);
+      final wordPainter = TextPainter(
+        text: TextSpan(
+          text: 'Transferencia',
+          style: labelWidget.style,
+        ),
+        maxLines: 1,
+        textDirection: TextDirection.ltr,
+        textScaler: const TextScaler.linear(2),
+      )..layout();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(label).width,
+        greaterThanOrEqualTo(wordPainter.width),
+        reason: 'A word must wrap as a whole instead of splitting mid-word.',
+      );
+      expect(find.text('640,00\u00a0€'), findsOneWidget);
+    });
+
+    testWidgets('normal text preserves the dense landscape metric row',
+        (tester) async {
+      const size = Size(1280, 900);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(_page(size: size, textScale: 1));
+      await tester.pumpAndSettle();
+
+      final labels = [
+        find.text('Total efectivo'),
+        find.text('Total cheques'),
+        find.text('Tarjeta (informativo)'),
+        find.text('Transferencia (informativo)'),
+        find.text('Total postdatados'),
+      ];
+      Finder tileFor(Finder label) => find
+          .ancestor(of: label, matching: find.byType(AnimatedContainer))
+          .first;
+      final firstTop = tester.getTopLeft(tileFor(labels.first)).dy;
+      for (final label in labels.skip(1)) {
+        expect(tester.getTopLeft(tileFor(label)).dy, firstTop);
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('narrow phone keeps a large amount fully visible at 200%',
+        (tester) async {
+      const size = Size(320, 720);
+      const largeSummary = ComercialLiquidacionSummary(
+        totalEfectivo: 1234567.89,
+        totalCheques: 150,
+        totalTarjeta: 325.50,
+        totalTransferencia: 640,
+        totalPostdatados: 80,
+        saldoActual: 29.15,
+        totalAIngresar: 1314.15,
+        porcentajeMinimoVendedor: 75,
+      );
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        _page(size: size, summary: largeSummary),
+      );
+      await tester.pumpAndSettle();
+
+      final amount = find.text('1.234.567,89\u00a0€');
+      expect(amount, findsOneWidget);
+      expect(
+          tester.widget<Text>(amount).overflow, isNot(TextOverflow.ellipsis));
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets('compact dialog keeps explanatory text and actions readable',
         (tester) async {
