@@ -105,6 +105,34 @@ describe('Db2AuthRepository reparto association', () => {
     expect(params).toEqual(['ANA']);
   });
 
+  test('exact-name login excludes the same ERP inactive state as code login', async () => {
+    const inactiveFilter = "COALESCE(NULLIF(TRIM(P.ESTADO), ''), '') <> 'A'";
+    const inactive = { USUARIO: '050', NOMBRE: 'ANA', ROL: 'COMERCIAL', ACTIVO: 1 };
+    const db = { executeParams: jest.fn()
+      .mockResolvedValueOnce([])
+      .mockImplementationOnce(async (sql) => sql.includes(inactiveFilter) ? [] : [inactive]) };
+    const repo = new Db2AuthRepository(db);
+
+    await expect(repo.findByCode('ana')).resolves.toBeNull();
+    expect(db.executeParams).toHaveBeenCalledTimes(2);
+    const [nameSql, params] = db.executeParams.mock.calls[1];
+    expect(nameSql).toContain(inactiveFilter);
+    expect(nameSql).toContain('= CAST(? AS VARCHAR(100))');
+    expect(nameSql).not.toContain("'ANA'");
+    expect(params).toEqual(['ANA']);
+  });
+
+  test('exact-name login preserves a unique active ERP vendor', async () => {
+    const db = { executeParams: jest.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ USUARIO: '050', NOMBRE: 'ANA MARIA', ROL: 'COMERCIAL', ACTIVO: 1 }]) };
+    const repo = new Db2AuthRepository(db);
+
+    await expect(repo.findByCode('ana maria')).resolves.toMatchObject({ code: '050' });
+    expect(db.executeParams).toHaveBeenCalledTimes(2);
+    expect(db.executeParams.mock.calls[1][1]).toEqual(['ANAMARIA']);
+  });
+
   test('findNameLoginCandidates uses parameterized LIKE contains, not exact name', async () => {
     const db = { executeParams: jest.fn().mockResolvedValue([
       { USUARIO: '22', NOMBRE: '22 DIEGO ALCAZAR', ROL: 'COMERCIAL', PASSWORD_HASH: 'hash-22', ACTIVO: 1 },

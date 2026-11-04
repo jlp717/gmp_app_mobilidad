@@ -120,6 +120,7 @@ class Db2AuthRepository extends AuthRepository {
           WHERE V.CODIGOVENDEDOR = P.CODIGOVENDEDOR
             AND V.SUBEMPRESA = 'GMP'
         )
+          AND COALESCE(NULLIF(TRIM(P.ESTADO), ''), '') <> 'A'
           AND REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '')
             = CAST(? AS VARCHAR(100))
         ORDER BY TRIM(P.CODIGOVENDEDOR)
