@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-04",
+  "readOnly": true,
+  "physicalConnectionClosed": true,
+  "sources": [
+    "DSEDAC.ART",
+    "DSEDAC.ARA"
+  ],
+  "verifiedColumns": 6,
+  "erpTariffCode": "2",
+  "eachSampleDistinctPositivePrices": 1,
+  "samples": [
+    {
+      "article": "1007",
+      "unit": "KILO",
+      "pack": 10,
+      "tariff": 1.603
+    },
+    {
+      "article": "1009",
+      "unit": "KILO",
+      "pack": 5,
+      "tariff": 4.124
+    },
+    {
+      "article": "1011",
+      "unit": "KILO",
+      "pack": 10,
+      "tariff": 4.067
+    },
+    {
+      "article": "1021",
+      "unit": "KILO",
+      "pack": 5,
+      "tariff": 1.753
+    },
+    {
+      "article": "2974",
+      "unit": "",
+      "pack": 1,
+      "tariff": 39.4
+    },
+    {
+      "article": "3075",
+      "unit": "",
+      "pack": 1,
+      "tariff": 49.572
+    },
+    {
+      "article": "3519",
+      "unit": "",
+      "pack": 1,
+      "tariff": 27.54
+    }
+  ],
+  "authorizesManufacturingCostOrMargin": false,
+  "coverage": {
+    "allProducts": 6235,
+    "allTariffAndSupportedUnit": 3549,
+    "activeProducts": 2937,
+    "activeUniquePositiveTariff": 2613,
+    "activeTariffAndSupportedUnit": 1334
+  }
+}

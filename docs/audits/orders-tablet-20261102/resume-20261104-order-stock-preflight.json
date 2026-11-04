@@ -1,0 +1,17 @@
+{
+  "date": "2026-11-04",
+  "readOnly": true,
+  "physicalConnectionClosed": true,
+  "verifiedStockAndReservationColumns": 11,
+  "warehouse": 1,
+  "erpStock": {
+    "1009": {"packages": 72.5, "units": 202.5},
+    "3519": {"packages": 30, "units": 30}
+  },
+  "activeTestReservations": {
+    "1009": {"packages": 0, "units": 0},
+    "3519": {"packages": 1, "units": 1}
+  },
+  "testMonthlyBag": {"id": 14, "vendor": "35", "period": "2026-11", "available": 300, "consumed": 0, "accumulated": 0},
+  "fixtureCreated": false
+}

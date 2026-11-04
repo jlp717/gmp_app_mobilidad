@@ -54,5 +54,27 @@
     "linkedToCurrentMobileLogin": 0,
     "VDC_TIPOVENDEDOR_length": 1,
     "possibleAdminLiteral": false
-  }
+  },
+  "loginCohorts": [
+    {
+      "classification": "ELIGIBLE",
+      "codes": 67,
+      "withMobilityFlag": 64
+    },
+    {
+      "classification": "MISSING_MASTER",
+      "codes": 1,
+      "withMobilityFlag": 0
+    },
+    {
+      "classification": "NO_ACTIVE_PIN_PROFILE",
+      "codes": 1,
+      "withMobilityFlag": 1
+    },
+    {
+      "classification": "NO_PIN_PROFILE",
+      "codes": 23,
+      "withMobilityFlag": 9
+    }
+  ]
 }

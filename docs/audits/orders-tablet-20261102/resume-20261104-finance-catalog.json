@@ -1,0 +1,89 @@
+{
+  "readOnly": true,
+  "closed": true,
+  "triggers": {
+    "TEST_COBROS": 0,
+    "TEST_REPARTIDOR_COBROS": 0,
+    "TEST_LIQUIDACION_COMERCIAL": 0
+  },
+  "indexes": [
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "INDEX_NAME": "UX_TEST_COBROS_TOKEN",
+      "IS_UNIQUE": "V",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "INDEX_NAME": "UX_TEST_LIQCOM_TOKEN",
+      "IS_UNIQUE": "U",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "INDEX_NAME": "UX_TEST_LIQCOM_VENDOR_DAY",
+      "IS_UNIQUE": "U",
+      "COLUMN_NAME": "CODIGO_VENDEDOR",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "INDEX_NAME": "UX_TEST_LIQCOM_VENDOR_DAY",
+      "IS_UNIQUE": "U",
+      "COLUMN_NAME": "FECHA",
+      "ORDINAL_POSITION": 2
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "INDEX_NAME": "UXT_TEST_REPARTIDOR_COBROS_E3600C8932",
+      "IS_UNIQUE": "U",
+      "COLUMN_NAME": "IDEMPOTENCY_TOKEN",
+      "ORDINAL_POSITION": 1
+    }
+  ],
+  "pks": [
+    {
+      "TABLE_NAME": "TEST_COBROS",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "COLUMN_NAME": "ID",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_LIQUIDACION_COMERCIAL",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "COLUMN_NAME": "ID",
+      "ORDINAL_POSITION": 1
+    },
+    {
+      "TABLE_NAME": "TEST_REPARTIDOR_COBROS",
+      "CONSTRAINT_TYPE": "PRIMARY KEY",
+      "COLUMN_NAME": "ID",
+      "ORDINAL_POSITION": 1
+    }
+  ],
+  "journals": [
+    {
+      "TARGET": "TEST_COBROS",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    },
+    {
+      "TARGET": "TEST_LIQUIDACION_COMERCIAL",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    },
+    {
+      "TARGET": "TEST_REPARTIDOR_COBROS",
+      "JOURNALED": "YES",
+      "JOURNAL_LIBRARY": "JAVIER",
+      "JOURNAL_NAME": "QSQJRN",
+      "JOURNAL_IMAGES": "*BOTH"
+    }
+  ]
+}
