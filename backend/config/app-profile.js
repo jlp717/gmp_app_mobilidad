@@ -27,6 +27,10 @@ const NON_PRODUCTION_SAFETY = Object.freeze({
   PEDIDOS_EXPORT_TO_SYSTEM: 'false',
   PEDIDOS_DSEDAC_EXPORT_APPROVED: 'false',
   PEDIDOS_DSEDAC_STORAGE_APPROVED: 'false',
+  // TEST renders the real commercial documents and keeps intended to/cc,
+  // but must never notify customers or staff about acceptance-test payments.
+  REPARTO_EMAIL_TEST_SINK: 'reparto-test@localhost',
+  REPARTO_EMAIL_TEST_ALLOWLIST: 'reparto-test@localhost',
 });
 
 const PRODUCTION_CONTROLLED_FLAGS = Object.freeze([
@@ -194,7 +198,10 @@ function resolveAppProfile(env = {}) {
     if (controlled.has(key)) continue;
     const actual = clean(env[key]);
     if (actual && actual.toLowerCase() !== expected.toLowerCase()) {
-      errors.push(`${key}=${actual} contradicts APP_ENV=${appEnv} (${expected} required)`);
+      const privateRouting = key === 'REPARTO_EMAIL_TEST_SINK' || key === 'REPARTO_EMAIL_TEST_ALLOWLIST';
+      errors.push(privateRouting
+        ? `${key} contradicts APP_ENV=${appEnv} (local test delivery required)`
+        : `${key}=${actual} contradicts APP_ENV=${appEnv} (${expected} required)`);
     }
   }
   if (appEnv === 'production') validateControlledProductionFlags(assignments, errors);

@@ -7,6 +7,45 @@ const {
 } = require('../config/app-profile');
 
 describe('APP_ENV profile resolver', () => {
+  test.each(['test', 'demo'])('%s routes generated commercial notifications only to the local sink', (appEnv) => {
+    const { composeProductEmailDispatch, shouldSkipSmtpForIsolatedTest } = require('../services/reparto-email-delivery-policy');
+    const resolved = resolveAppProfile({ APP_ENV: appEnv });
+    expect(resolved.valid).toBe(true);
+    expect(resolved.assignments).toMatchObject({
+      REPARTO_EMAIL_TEST_SINK: 'reparto-test@localhost',
+      REPARTO_EMAIL_TEST_ALLOWLIST: 'reparto-test@localhost',
+    });
+    const dispatch = composeProductEmailDispatch({
+      destinatario: 'reparto-test@localhost',
+      staffEmails: ['operations@example.com', 'commercial@example.com'],
+      env: resolved.assignments,
+    });
+    expect(dispatch.intendedCc).toEqual(['operations@example.com', 'commercial@example.com']);
+    expect(dispatch.effectiveRecipients).toEqual(['reparto-test@localhost']);
+    expect(dispatch.smtpCc).toEqual([]);
+    expect(shouldSkipSmtpForIsolatedTest(dispatch.smtpTo, resolved.assignments)).toBe(true);
+  });
+
+  test.each(['test', 'demo'])('%s rejects inherited live mail routing without disclosing recipients', (appEnv) => {
+    const resolved = resolveAppProfile({ APP_ENV: appEnv,
+      REPARTO_EMAIL_TEST_SINK: 'private-mailbox@example.com',
+      REPARTO_EMAIL_TEST_ALLOWLIST: 'private-staff@example.com',
+    });
+    expect(resolved.valid).toBe(false);
+    expect(resolved.errors.join(' ')).toContain('REPARTO_EMAIL_TEST_SINK');
+    expect(resolved.errors.join(' ')).toContain('REPARTO_EMAIL_TEST_ALLOWLIST');
+    expect(resolved.errors.join(' ')).not.toContain('@');
+  });
+
+  test('production mail routing remains explicitly configured outside TEST profile assignments', () => {
+    const resolved = resolveAppProfile({ APP_ENV: 'production',
+      REPARTO_EMAIL_TEST_SINK: 'existing@example.com', REPARTO_EMAIL_TEST_ALLOWLIST: 'existing@example.com',
+    });
+    expect(resolved.valid).toBe(true);
+    expect(resolved.assignments).not.toHaveProperty('REPARTO_EMAIL_TEST_SINK');
+    expect(resolved.assignments).not.toHaveProperty('REPARTO_EMAIL_TEST_ALLOWLIST');
+  });
+
   test.each([
     ['test', 'test', 'test', 'isolated_test'],
     ['demo', 'staging', 'staging', 'isolated_test'],
