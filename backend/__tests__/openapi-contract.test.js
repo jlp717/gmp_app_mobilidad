@@ -131,7 +131,7 @@ function runtimeDocsProbe(nodeEnv, extraEnv = {}) {
     'const runtime = require("./server");',
     'const app = runtime.app || runtime;',
     'request(app).get("/docs.json").set("User-Agent", "GMP-OpenAPI-Contract-Test/1.0").then((res) => {',
-    '  process.stdout.write("DOCS_PROBE:" + JSON.stringify({ status: res.status, openapi: res.body.openapi, pathCount: Object.keys(res.body.paths || {}).length, code: res.body.code }) + "\\n");',
+    '  process.stdout.write("DOCS_PROBE:" + JSON.stringify({ status: res.status, openapi: res.body.openapi, pathCount: Object.keys(res.body.paths || {}).length, code: res.body.code, rateLimitPolicy: res.headers["ratelimit-policy"] }) + "\\n");',
     '  process.exit(0);',
     '}).catch((error) => { process.stderr.write(String(error.stack || error)); process.exit(2); });',
   ].join(" ");
@@ -474,8 +474,10 @@ describe("runtime API documentation mount", () => {
       status: 200,
       openapi: "3.1.0",
       pathCount: expect.any(Number),
+      rateLimitPolicy: "100;w=900",
     });
     expect(publicResult.response.pathCount).toBeGreaterThan(0);
+    expect(publicResult.stderr).not.toMatch(/ERR_ERL_CREATED_IN_REQUEST_HANDLER/);
   });
 });
 

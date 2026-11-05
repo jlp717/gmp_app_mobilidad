@@ -438,20 +438,14 @@ app.use((req, res, next) => {
 // API documentation is mounted before legacy /api path normalization.
 // Dedicated limiter: Basic Auth on /docs must not bypass the global rate limit
 // (brute-force protection; covers /docs and /docs.json).
-let docsLimiter;
-function lazyDocsLimiter(req, res, next) {
-  if (!docsLimiter) {
-    docsLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000,
-      limit: 100,
-      standardHeaders: 'draft-7',
-      legacyHeaders: false,
-      message: { error: 'Too many requests' },
-    });
-  }
-  return docsLimiter(req, res, next);
-}
-app.use(['/docs', '/docs.json'], lazyDocsLimiter);
+const docsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests' },
+});
+app.use(['/docs', '/docs.json'], docsLimiter);
 app.use(docsRoutes);
 
 // Path normalization — handle requests arriving without /api prefix.
