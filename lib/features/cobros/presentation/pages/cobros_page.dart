@@ -857,6 +857,15 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
         Timer(const Duration(milliseconds: 250), () => _loadClients(query));
   }
 
+  void _clearSearch() {
+    _debounceTimer?.cancel();
+    _searchController.clear();
+    setState(() {
+      _foundClients = [];
+      _isSearchingClients = false;
+    });
+  }
+
   Future<void> _onRefresh() async {
     await Future.wait([
       _loadClients(_searchController.text, true),
@@ -895,6 +904,43 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
       ),
     );
     final isOfflineView = connectivityStatus != ConnectivityStatus.online;
+    final showInitialLoading =
+        _isLoadingSummary && cobros.pendingSummary.isEmpty;
+    final showOfflineEmpty =
+        isOfflineView && cobros.pendingSummary.isEmpty && _loadError == null;
+    final accessibleLoaded = MediaQuery.textScalerOf(context).scale(16) >= 24 &&
+        !showInitialLoading &&
+        !showOfflineEmpty &&
+        _loadError == null;
+
+    Widget clientsSection({List<Widget> headerChildren = const []}) {
+      return _CobrosClientsSection(
+        params: CobrosParams(employeeCode: widget.employeeCode),
+        foundClients: _foundClients,
+        estadoFilter: _estadoFilter,
+        searchQuery: _searchController.text.trim(),
+        isSearching: _isSearchingClients,
+        cardBuilder: _buildClientCobroCard,
+        emptyBuilder: _buildNoClientsState,
+        headerChildren: headerChildren,
+      );
+    }
+
+    final shellHeaderChildren = <Widget>[
+      _buildHeader(),
+      GlobalVendorSelector(
+        isJefeVentas: widget.isJefeVentas,
+        forceShow: widget.forceShowVendorSelector,
+      ),
+      OfflineBanner(onRetry: () => unawaited(_onRefresh())),
+    ];
+    final loadedControls = <Widget>[
+      if (_isLoadingSummary)
+        const LinearProgressIndicator(color: AppTheme.info),
+      _buildSummaryCard(cobros),
+      _buildSearchArea(),
+      _buildEstadoFilterChips(),
+    ];
 
     return Scaffold(
       backgroundColor: AppColors.transparent,
@@ -903,70 +949,52 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
         child: RefreshIndicator(
           onRefresh: _onRefresh,
           color: AppTheme.info,
-          child: Column(
-            children: [
-              _buildHeader(),
-              GlobalVendorSelector(
-                isJefeVentas: widget.isJefeVentas,
-                forceShow: widget.forceShowVendorSelector,
-              ),
-              // Offline-first (patron pedidos_page: OfflineBanner reactivo
-              // + estado vacio offline con reintento en espanol).
-              OfflineBanner(
-                onRetry: () {
-                  unawaited(_onRefresh());
-                },
-              ),
-              // Loading state para pendingSummary
-              if (_isLoadingSummary && cobros.pendingSummary.isEmpty)
-                const Expanded(
-                  child: Center(
-                    child: ModernLoading(message: 'Cargando cobros…'),
-                  ),
+          child: accessibleLoaded
+              ? clientsSection(
+                  headerChildren: [
+                    ...shellHeaderChildren,
+                    ...loadedControls,
+                  ],
                 )
-              else if (isOfflineView &&
-                  cobros.pendingSummary.isEmpty &&
-                  _loadError == null)
-                Expanded(
-                  child: OfflineStateWidget(
-                    message: 'Sin conexión',
-                    detail:
-                        'No se pudieron cargar los cobros. Se mostrarán los últimos datos guardados al reconectar.',
-                    onRetry: () {
-                      unawaited(_onRefresh());
-                    },
-                  ),
-                )
-              else if (_loadError != null)
-                Expanded(
-                  child: GmpErrorPanel(
-                    whatHappened: gmpWhatHappened(_loadError!),
-                    whatToDo: gmpWhatToDo(_loadError!),
-                    onRetry: () {
-                      unawaited(_onRefresh());
-                    },
-                  ),
-                )
-              else ...[
-                if (_isLoadingSummary)
-                  const LinearProgressIndicator(color: AppTheme.info),
-                _buildSummaryCard(cobros),
-                _buildSearchArea(),
-                _buildEstadoFilterChips(),
-                Expanded(
-                  child: _CobrosClientsSection(
-                    params: CobrosParams(employeeCode: widget.employeeCode),
-                    foundClients: _foundClients,
-                    estadoFilter: _estadoFilter,
-                    searchQuery: _searchController.text.trim(),
-                    isSearching: _isSearchingClients,
-                    cardBuilder: _buildClientCobroCard,
-                    emptyBuilder: _buildNoClientsState,
-                  ),
+              : Column(
+                  children: [
+                    ...shellHeaderChildren,
+                    // Loading state para pendingSummary
+                    if (showInitialLoading)
+                      const Expanded(
+                        child: Center(
+                          child: ModernLoading(message: 'Cargando cobros…'),
+                        ),
+                      )
+                    else if (showOfflineEmpty)
+                      Expanded(
+                        child: OfflineStateWidget(
+                          message: 'Sin conexión',
+                          detail:
+                              'No se pudieron cargar los cobros. Se mostrarán los últimos datos guardados al reconectar.',
+                          onRetry: () {
+                            unawaited(_onRefresh());
+                          },
+                        ),
+                      )
+                    else if (_loadError != null)
+                      Expanded(
+                        child: GmpErrorPanel(
+                          whatHappened: gmpWhatHappened(_loadError!),
+                          whatToDo: gmpWhatToDo(_loadError!),
+                          onRetry: () {
+                            unawaited(_onRefresh());
+                          },
+                        ),
+                      )
+                    else ...[
+                      ...loadedControls,
+                      Expanded(
+                        child: clientsSection(),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-            ],
-          ),
         ),
       ),
     );
@@ -1202,12 +1230,14 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            'Gestión de Cobros',
-            style: TextStyle(
-              fontSize: Responsive.fontSize(context, small: 20, large: 24),
-              fontWeight: FontWeight.bold,
-              color: AppColors.themedWhite,
+          Expanded(
+            child: Text(
+              'Gestión de Cobros',
+              style: TextStyle(
+                fontSize: Responsive.fontSize(context, small: 20, large: 24),
+                fontWeight: FontWeight.bold,
+                color: AppColors.themedWhite,
+              ),
             ),
           ),
         ],
@@ -1270,7 +1300,17 @@ class _CobrosPageState extends ConsumerState<CobrosPage>
                           ),
                         ),
                       )
-                    : null,
+                    : _searchController.text.isNotEmpty
+                        ? IconButton(
+                            tooltip: 'Limpiar búsqueda',
+                            constraints: const BoxConstraints(
+                              minWidth: 56,
+                              minHeight: 56,
+                            ),
+                            onPressed: _clearSearch,
+                            icon: const Icon(Icons.clear),
+                          )
+                        : null,
               ),
             ),
           ),
@@ -1671,6 +1711,7 @@ class _CobrosClientsSection extends ConsumerWidget {
     required this.isSearching,
     required this.cardBuilder,
     required this.emptyBuilder,
+    this.headerChildren = const [],
   });
 
   final CobrosParams params;
@@ -1681,9 +1722,11 @@ class _CobrosClientsSection extends ConsumerWidget {
   final Widget Function(Map<String, dynamic> client, {required bool compact})
       cardBuilder;
   final Widget Function(CobrosState state, String query) emptyBuilder;
+  final List<Widget> headerChildren;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final accessibleText = MediaQuery.textScalerOf(context).scale(16) >= 24;
     final pendingSummary = ref.watch(
       cobrosProvider(params).select((s) => s.pendingSummary),
     );
@@ -1693,7 +1736,7 @@ class _CobrosClientsSection extends ConsumerWidget {
       searchQuery: searchQuery,
       estadoFilter: estadoFilter,
     );
-    if (visible.isEmpty && !isSearching) {
+    if (visible.isEmpty && !isSearching && !accessibleText) {
       return emptyBuilder(ref.read(cobrosProvider(params)), searchQuery);
     }
     return LayoutBuilder(
@@ -1701,6 +1744,38 @@ class _CobrosClientsSection extends ConsumerWidget {
         final cols = Responsive.denseListCrossAxisCount(context);
         final gap = Responsive.denseListSpacing(context);
         final compact = Responsive.useCompactTiles(context);
+        if (accessibleText) {
+          return CustomScrollView(
+            cacheExtent: MediaQuery.sizeOf(context).height,
+            slivers: [
+              if (headerChildren.isNotEmpty)
+                SliverList(
+                  delegate: SliverChildListDelegate(headerChildren),
+                ),
+              if (visible.isEmpty && !isSearching)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: emptyBuilder(
+                    ref.read(cobrosProvider(params)),
+                    searchQuery,
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) =>
+                          cardBuilder(visible[index], compact: false),
+                      childCount: visible.length,
+                      addAutomaticKeepAlives: false,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        }
 
         if (cols <= 1) {
           return ListView.builder(

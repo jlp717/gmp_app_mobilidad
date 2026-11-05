@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
 import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
 import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobro_detail_screen.dart';
 import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobros_page.dart';
@@ -59,6 +60,19 @@ class _FixtureCobrosNotifier extends CobrosNotifier {
     String? vendedorCodes,
     bool forceRefresh = false,
   }) async {}
+
+  @override
+  Future<void> cargarPendingSummary(
+    String? vendedorCode, {
+    List<String>? vendedorCodes,
+    int limit = 2000,
+    int page = 1,
+    int offset = 0,
+    bool forceRefresh = false,
+    String? tipoDocumento,
+    String? fechaDesde,
+    String? fechaHasta,
+  }) async {}
 }
 
 CobroPendiente _payableFixture() {
@@ -99,8 +113,134 @@ Widget _liveDetail({required CobrosState state, required Size size}) {
   );
 }
 
+Widget _liveCobrosPage({required Size size}) {
+  const fixture = CobrosState(
+    employeeCode: '35',
+    pendingSummary: {
+      '4300040687': {
+        'total': 738.46,
+        'vencido': 120.10,
+        'count': 4,
+        'nombre': 'CLIENTE DE PRUEBA CON NOMBRE COMPLETO Y APELLIDOS',
+      },
+    },
+  );
+  return ProviderScope(
+    overrides: [
+      cobrosProvider.overrideWith(() => _FixtureCobrosNotifier(fixture)),
+      connectivityStatusProvider.overrideWith(
+        (ref) async* {
+          yield ConnectivityStatus.online;
+        },
+      ),
+    ],
+    child: MaterialApp(
+      theme: AppTheme.darkTheme,
+      home: MediaQuery(
+        data: MediaQueryData(
+          size: size,
+          textScaler: const TextScaler.linear(2),
+        ),
+        child: const CobrosPage(employeeCode: '35'),
+      ),
+    ),
+  );
+}
+
 void main() {
   group('commercial cobros responsive presentation', () {
+    for (final viewport in const {
+      'narrow phone': Size(390, 844),
+      'tablet landscape': Size(1280, 800),
+    }.entries) {
+      testWidgets('${viewport.key} live client list grows naturally at 200%',
+          (tester) async {
+        tester.view.physicalSize = viewport.value;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(_liveCobrosPage(size: viewport.value));
+        await tester.pumpAndSettle();
+
+        final tile = find.byKey(const Key('commercial-cobros-client-tile'));
+        final name = find.text(
+          'CLIENTE DE PRUEBA CON NOMBRE COMPLETO Y APELLIDOS',
+        );
+        final status = find.text('Estado: Vencido');
+        final pending = find.textContaining('738,46');
+        final scroll = find.byType(CustomScrollView);
+        for (var attempt = 0;
+            attempt < 8 && tile.evaluate().isEmpty;
+            attempt++) {
+          await tester.drag(scroll, const Offset(0, -300));
+          await tester.pump();
+        }
+        expect(tile, findsOneWidget);
+        await tester.ensureVisible(tile);
+        await tester.pumpAndSettle();
+        expect(name, findsOneWidget);
+        expect(status, findsOneWidget);
+        expect(pending, findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        final tileRect = tester.getRect(tile);
+        for (final content in [name, status, pending]) {
+          final contentRect = tester.getRect(content);
+          expect(contentRect.top, greaterThanOrEqualTo(tileRect.top));
+          expect(contentRect.bottom, lessThanOrEqualTo(tileRect.bottom));
+        }
+        expect(tileRect.height, greaterThan(104));
+        if (viewport.key == 'tablet landscape') {
+          expect(tileRect.width, greaterThan(viewport.value.width * 0.75));
+        }
+
+        await tester.tap(tile);
+        await tester.pumpAndSettle();
+        expect(find.byType(CobroDetailScreen), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('accessible empty search keeps its clear control',
+        (tester) async {
+      const size = Size(390, 844);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(_liveCobrosPage(size: size));
+      await tester.pumpAndSettle();
+
+      final search = find.byType(TextField);
+      final scroll = find.byType(CustomScrollView);
+      for (var attempt = 0;
+          attempt < 8 && search.evaluate().isEmpty;
+          attempt++) {
+        await tester.drag(scroll, const Offset(0, -250));
+        await tester.pump();
+      }
+      expect(search, findsOneWidget);
+      await tester.ensureVisible(search);
+      await tester.enterText(search, 'SIN COINCIDENCIAS');
+      final dynamic pageState = tester.state(find.byType(CobrosPage));
+      pageState.setState(() {});
+      await tester.pump();
+
+      expect(find.text('No se encontraron resultados'), findsOneWidget);
+      expect(find.byTooltip('Limpiar búsqueda'), findsOneWidget);
+      expect(search, findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      final clear = find.byTooltip('Limpiar búsqueda');
+      await tester.ensureVisible(clear);
+      await tester.pump();
+      await tester.tap(clear);
+      await tester.pump();
+      expect(find.text('No se encontraron resultados'), findsNothing);
+    });
+
     for (final viewport in _viewports.entries) {
       testWidgets(
         '${viewport.key} keeps customer, status and primary amounts readable',
