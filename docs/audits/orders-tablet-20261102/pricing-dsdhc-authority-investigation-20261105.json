@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-05",
+  "runId": "commercial-dsdhc-cost-authority-20261105",
+  "status": "NO_OPERATIONAL_AUTHORITY_FOUND",
+  "readOnly": true,
+  "mutations": 0,
+  "sourceCatalogue": {
+    "schema": "DSEDAC",
+    "table": "ART",
+    "distinctArticleCodes": 6235
+  },
+  "investigatedLibraries": {
+    "requested": [
+      "DSDHC",
+      "DSEDHC"
+    ],
+    "visibleMatches": 0,
+    "visibility": "Same DB2 account as running API; catalog does not establish absence under other IBM i authorities",
+    "visibleDsLibraries": [
+      "DSED",
+      "DSEDAC",
+      "DSEDUT",
+      "DSEDYY",
+      "DSED77",
+      "DSEF",
+      "DSEMAC",
+      "DSEMOVIL",
+      "DSEMUT",
+      "DSEMYY",
+      "DSEM77",
+      "DSEO",
+      "DSEOLAP",
+      "DSES",
+      "DST$DLT",
+      "DSTD",
+      "DSTD02",
+      "DSTD09",
+      "DSTF",
+      "DSTMOVIL",
+      "DSTM02",
+      "DSTM09",
+      "DSTO",
+      "DSTS"
+    ]
+  },
+  "candidateSources": [
+    {
+      "table": "DSEDAC.ESC",
+      "semantics": "Manufacturing bill of materials, finished article/UOM/version, total cost/quantity/production expenses",
+      "applicableArticles": 0
+    },
+    {
+      "table": "DSEDAC.LTCT",
+      "semantics": "Article cost table with validity dates",
+      "applicableArticles": 0
+    },
+    {
+      "table": "DSEDAC.DLG",
+      "semantics": "Configured article cost tariff",
+      "configuredPositiveCostTariffCodes": 0
+    },
+    {
+      "table": "DSEDAC.DLGM",
+      "semantics": "Margin by delegation/brand/range/family",
+      "validMarginRules": 0
+    }
+  ],
+  "independentVerification": {
+    "node": "authority_verify",
+    "sshRounds": 1,
+    "selects": 483,
+    "connectionsClosed": true,
+    "noDdlOrDml": true,
+    "noBusinessRowsPrinted": true,
+    "verdict": "PASS_NO_AUTHORITY_FOUND",
+    "policyTargetRecount": "Not independently recounted: verifier used incorrect margin-column name; existing seed evidence remains separate"
+  },
+  "existingSeed": {
+    "target": "JAVIER.TEST_POLITICA_PRECIO_ART",
+    "articleRows": 6235,
+    "evidence": "pricing-seed-native-final.json",
+    "costAndMarginAuthority": "Not established by catalog/tariff copy"
+  },
+  "excludedAssumptions": [
+    "Historical LAC purchase/sales costs do not establish manufacturing authority",
+    "Legacy importer hardcodes CAJAS and a default margin; cannot enrich verified policies",
+    "Alternative company libraries do not establish ownership/validity against DSEDAC catalogue"
+  ],
+  "nextRequiredEvidence": "ERP screen/module and actual article showing current authoritative cost and target margin, or exact accessible library/table with explicit UOM, validity and company ownership"
+}

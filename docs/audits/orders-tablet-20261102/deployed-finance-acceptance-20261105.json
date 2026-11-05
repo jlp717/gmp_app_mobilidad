@@ -1,0 +1,196 @@
+{
+  "verifiedDate": "2026-11-05",
+  "sourceCommit": "ef793d74821f7a8fdaade9a2227f26973bc527f2",
+  "runtimeSha256": "2BE96F071B9B0827D82E93968C00AD662B881DCB82B235A243934645A600A0C1",
+  "wrapperSha256": "FDD3D65214F87E9ED17157DC074FA7A51A103038292D00E12F6F933BFDD280CA",
+  "independentReview": "Finance and AppSec source PASS; finance execution evidence independently verified",
+  "scope": "Native repository/service, TEST-only rollback; this evidence does not establish HTTP mutations, Flutter payment flow, PDF or email acceptance",
+  "stages": [
+    {
+      "result": {
+        "job": "FINANCE_ACCEPTANCE_20261105",
+        "mode": "ReadOnly",
+        "sourceCommit": "ef793d74821f7a8fdaade9a2227f26973bc527f2",
+        "profile": {
+          "profile": "demo",
+          "tableSet": "isolated_test",
+          "verified": true,
+          "erpExportEnabled": false,
+          "productionWritesEnabled": false
+        },
+        "phase": "READONLY_DONE",
+        "queryCount": 56,
+        "physicalDml": 0,
+        "physicalCommit": 0,
+        "physicalRollback": 0,
+        "virtualBegin": 0,
+        "virtualCommit": 0,
+        "virtualRollback": 0,
+        "virtualClose": 0,
+        "exportsSuppressed": 0,
+        "allConnectionsClosed": true,
+        "closureEdgeCount": 39,
+        "businessDate": "2026-11-05",
+        "candidateClientCount": 30,
+        "eligibleCandidateCount": 3,
+        "candidateSetSha256": "79cd2ffef43e169ad6233f4e126db7b3e32bb4bd46f00f1e534615caec8709d2",
+        "candidates": [
+          {
+            "fingerprint": "8d910f0f9d310ad15b61d5b1358709cb2e60f6e71760cca626bc73466308f2a1",
+            "method": "CONTADO",
+            "amountCents": 31087,
+            "referenceMatches": true
+          },
+          {
+            "fingerprint": "4be718e8ea760c97a2abe87c2040d2f370939fd5e1d648699fa2f2738f6c587c",
+            "method": "TJ",
+            "amountCents": 6151,
+            "referenceMatches": true
+          },
+          {
+            "fingerprint": "0cdf7b5cbe3a3c3c94207b9b6871a68411c50fdbab13180a83bd7c9d9a3cb96e",
+            "method": "TR",
+            "amountCents": 24868,
+            "referenceMatches": true
+          }
+        ],
+        "before": {
+          "cobros": {
+            "count": 0,
+            "ownedCount": 0,
+            "foreignCount": 0,
+            "foreignSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          },
+          "liquidacion": {
+            "count": 0,
+            "ownedCount": 0,
+            "foreignCount": 0,
+            "foreignSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          }
+        },
+        "catalog": {
+          "JAVIER.TEST_COBROS": {
+            "columnCount": 43,
+            "constraints": 1,
+            "indexes": 3,
+            "triggerCount": 0
+          },
+          "JAVIER.TEST_LIQUIDACION_COMERCIAL": {
+            "columnCount": 17,
+            "constraints": 1,
+            "indexes": 3,
+            "triggerCount": 0
+          }
+        },
+        "lastLqdRows": 1,
+        "success": true
+      },
+      "logSha256": "F34509104F971EFAC39C9CD796F7DF8C37D09A19AC3FF6C670507209F6A6DC40"
+    },
+    {
+      "result": {
+        "job": "FINANCE_ACCEPTANCE_20261105",
+        "mode": "Rollback",
+        "sourceCommit": "ef793d74821f7a8fdaade9a2227f26973bc527f2",
+        "profile": {
+          "profile": "demo",
+          "tableSet": "isolated_test",
+          "verified": true,
+          "erpExportEnabled": false,
+          "productionWritesEnabled": false
+        },
+        "phase": "ROLLBACK_DONE",
+        "queryCount": 185,
+        "physicalDml": 4,
+        "physicalCommit": 0,
+        "physicalRollback": 1,
+        "virtualBegin": 8,
+        "virtualCommit": 8,
+        "virtualRollback": 0,
+        "virtualClose": 8,
+        "exportsSuppressed": 3,
+        "allConnectionsClosed": true,
+        "closureEdgeCount": 39,
+        "businessDate": "2026-11-05",
+        "candidateClientCount": 30,
+        "eligibleCandidateCount": 3,
+        "candidateSetSha256": "79cd2ffef43e169ad6233f4e126db7b3e32bb4bd46f00f1e534615caec8709d2",
+        "candidates": [
+          {
+            "fingerprint": "8d910f0f9d310ad15b61d5b1358709cb2e60f6e71760cca626bc73466308f2a1",
+            "method": "CONTADO",
+            "amountCents": 31087,
+            "referenceMatches": true
+          },
+          {
+            "fingerprint": "4be718e8ea760c97a2abe87c2040d2f370939fd5e1d648699fa2f2738f6c587c",
+            "method": "TJ",
+            "amountCents": 6151,
+            "referenceMatches": true
+          },
+          {
+            "fingerprint": "0cdf7b5cbe3a3c3c94207b9b6871a68411c50fdbab13180a83bd7c9d9a3cb96e",
+            "method": "TR",
+            "amountCents": 24868,
+            "referenceMatches": true
+          }
+        ],
+        "before": {
+          "cobros": {
+            "count": 0,
+            "ownedCount": 0,
+            "foreignCount": 0,
+            "foreignSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          },
+          "liquidacion": {
+            "count": 0,
+            "ownedCount": 0,
+            "foreignCount": 0,
+            "foreignSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          }
+        },
+        "catalog": {
+          "JAVIER.TEST_COBROS": {
+            "columnCount": 43,
+            "constraints": 1,
+            "indexes": 3,
+            "triggerCount": 0
+          },
+          "JAVIER.TEST_LIQUIDACION_COMERCIAL": {
+            "columnCount": 17,
+            "constraints": 1,
+            "indexes": 3,
+            "triggerCount": 0
+          }
+        },
+        "lastLqdRows": 1,
+        "summary": {
+          "count": 3,
+          "bucketsCents": {
+            "CONTADO": 31087,
+            "TJ": 6151,
+            "TR": 24868
+          },
+          "totalAIngresarCents": 34813
+        },
+        "after": {
+          "cobros": {
+            "count": 0,
+            "ownedCount": 0,
+            "foreignCount": 0,
+            "foreignSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          },
+          "liquidacion": {
+            "count": 0,
+            "ownedCount": 0,
+            "foreignCount": 0,
+            "foreignSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          }
+        },
+        "debtsRestored": 3,
+        "success": true
+      },
+      "logSha256": "26FB191F24C13525BC334C1FC30D5A79655BEB22BFDFB8D171C7A4B9298E45CD"
+    }
+  ]
+}

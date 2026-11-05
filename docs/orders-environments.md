@@ -1,6 +1,6 @@
 # Entornos de pedidos y preparación del cambio
 
-Run `orders-tablet-20261102`. No se ha editado el archivo de credenciales real, desplegado código, reiniciado PM2 ni habilitado producción durante este trabajo.
+Run `orders-tablet-20261102`. El 05/11 se publicó y desplegó `test` en `ef793d7`, se preparó `APP_ENV=demo` preservando las demás variables y se reiniciaron únicamente las ocho instancias de `gmp-api`. El perfil observado lee DSEDAC/DSED y escribe JAVIER.TEST_*. La exportación ERP y las escrituras productivas siguen desactivadas. Las secciones históricas siguientes conservan sus fechas y limitaciones.
 
 `backend/server.js` valida `APP_ENV` antes de cargar rutas, adaptadores de base de datos y tareas programadas. Los comandos `start`, `dev` y `api` usan ese mismo arranque. La selección es obligatoria: `test`, `demo` o `production`. Una combinación heredada que contradiga el perfil impide el arranque con un mensaje que identifica la variable.
 
