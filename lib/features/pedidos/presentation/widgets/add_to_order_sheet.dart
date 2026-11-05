@@ -863,7 +863,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                           ),
                                         ),
                                         Text(
-                                          '${PedidosFormatters.money(t.price, decimals: 3)} €/caja',
+                                          '${PedidosFormatters.money(t.price, decimals: 3)}/caja',
                                           style: TextStyle(
                                             color: isSelected
                                                 ? AppTheme.success
@@ -1152,7 +1152,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                           children: [
                             // Primary: price per selected unit
                             Text(
-                              'Precio: ${PedidosFormatters.money(selectedUnitPrice, decimals: 3)} €/$selectedLabel',
+                              'Precio: ${PedidosFormatters.money(selectedUnitPrice, decimals: 3)}/$selectedLabel',
                               style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 12,
@@ -1163,7 +1163,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             // Box content: what each caja contains
                             if (boxContent.isNotEmpty)
                               Text(
-                                '1 caja = $boxContent · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)} €',
+                                '1 caja = $boxContent · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}',
                                 style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 11,
@@ -1171,7 +1171,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                               ),
                             if (boxContent.isEmpty && _selectedUnit != 'CAJAS')
                               Text(
-                                '1 caja = ${_formatUnitQty(product.quantityPerBoxForUnit(product.displayUnit), product.displayUnit)} ${Product.unitLabel(product.displayUnit)} · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)} €',
+                                '1 caja = ${_formatUnitQty(product.quantityPerBoxForUnit(product.displayUnit), product.displayUnit)} ${Product.unitLabel(product.displayUnit)} · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}',
                                 style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 11,
@@ -1196,7 +1196,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                 ) &&
                                 minPriceForSelected > 0)
                               Text(
-                                'Precio minimo: ${PedidosFormatters.money(minPriceForSelected, decimals: 3)} €/$selectedLabel',
+                                'Precio minimo: ${PedidosFormatters.money(minPriceForSelected, decimals: 3)}/$selectedLabel',
                                 style: TextStyle(
                                   color: price < minPriceForSelected
                                       ? AppTheme.error
@@ -1348,9 +1348,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     if (product.precioMinimo > 0)
                       Semantics(
                         label:
-                            'Precio mínimo política ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)} euros',
+                            'Precio mínimo política ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)}',
                         child: Text(
-                          'Min: ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)} €/${Product.unitLabel(_selectedUnit)}',
+                          'Min: ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)}/${Product.unitLabel(_selectedUnit)}',
                           style: TextStyle(
                             color: price > 0 &&
                                     price <
