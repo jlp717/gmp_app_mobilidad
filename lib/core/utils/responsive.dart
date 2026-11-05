@@ -131,8 +131,10 @@ class Responsive {
   /// Width for the sidebar navigation (0 on phones — they use bottom nav).
   static double sidebarWidth(BuildContext ctx) {
     if (isSmall(ctx)) return 0;
-    if (isMedium(ctx)) return 64;
-    return 90;
+    final textScale = MediaQuery.textScalerOf(ctx).scale(1).clamp(1.0, 2.0);
+    // Base 18sp labels need a 128dp rail at 100%. Scale the rail with the
+    // accessible text setting so long destinations remain complete at 200%.
+    return 128 + ((textScale - 1) * 96);
   }
 
   /// Columns for product catalog grids from available panel width.

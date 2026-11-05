@@ -990,55 +990,11 @@ class _MainShellState extends ConsumerState<MainShell> {
                         ),
                       ],
                     ),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 16),
-                        _buildUserAvatar(user, isJefeVentas),
-                        const SizedBox(height: 16),
-
-                        // Mode switcher for Jefe
-                        if (canSwitchAuthenticatedModes(user))
-                          _buildModeSwitcher(compact: sidebarW < 128),
-
-                        const SizedBox(height: 16),
-
-                        Expanded(
-                          child: ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            itemCount: navItems.length,
-                            itemBuilder: (context, index) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: _buildNavItem(
-                                  item: navItems[index],
-                                  isSelected: safeIndex == index,
-                                  onTap: () =>
-                                      setState(() => _currentIndex = index),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-
-                        Divider(
-                          height: 1,
-                          color: AppTheme.borderColor,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            children: [
-                              const AppVersionBadge(),
-                              const SizedBox(height: 8),
-                              _buildNotificationSettingsButton(),
-                              const SizedBox(height: 8),
-                              _buildCollapseButton(),
-                              const SizedBox(height: 8),
-                              _buildLogoutButton(),
-                            ],
-                          ),
-                        ),
-                      ],
+                    child: _buildTabletSidebarBody(
+                      navItems,
+                      safeIndex,
+                      user,
+                      isJefeVentas,
                     ),
                   )
                 : null,
@@ -1050,9 +1006,10 @@ class _MainShellState extends ConsumerState<MainShell> {
                 button: true,
                 label: 'Mostrar navegacion lateral',
                 child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: () => setState(() => _isNavExpanded = true),
                   child: Container(
-                    width: 24,
+                    width: 56,
                     decoration: BoxDecoration(
                       color: AppTheme.raisedSurface,
                       border: Border(
@@ -1088,6 +1045,76 @@ class _MainShellState extends ConsumerState<MainShell> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTabletSidebarBody(
+    List<_NavItem> navItems,
+    int safeIndex,
+    UserModel user,
+    bool isJefeVentas,
+  ) {
+    Widget navEntry(int index) => Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          child: _buildNavItem(
+            item: navItems[index],
+            isSelected: safeIndex == index,
+            onTap: () => setState(() => _currentIndex = index),
+          ),
+        );
+
+    final footer = Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          const AppVersionBadge(),
+          const SizedBox(height: 8),
+          _buildNotificationSettingsButton(),
+          const SizedBox(height: 8),
+          _buildCollapseButton(),
+          const SizedBox(height: 8),
+          _buildLogoutButton(),
+        ],
+      ),
+    );
+    final scrollWholeSidebar =
+        MediaQuery.textScalerOf(context).scale(1) >= 1.5 &&
+            MediaQuery.sizeOf(context).height < 900;
+    final header = <Widget>[
+      const SizedBox(height: 16),
+      _buildUserAvatar(user, isJefeVentas),
+      const SizedBox(height: 16),
+      if (canSwitchAuthenticatedModes(user)) _buildModeSwitcher(compact: true),
+      const SizedBox(height: 16),
+    ];
+
+    if (scrollWholeSidebar) {
+      return SingleChildScrollView(
+        child: Column(
+          children: [
+            ...header,
+            for (var index = 0; index < navItems.length; index++)
+              navEntry(index),
+            Divider(height: 1, color: AppTheme.borderColor),
+            footer,
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        ...header,
+        Expanded(
+          child: ListView.builder(
+            padding: EdgeInsets.zero,
+            itemCount: navItems.length,
+            itemBuilder: (context, index) => navEntry(index),
+          ),
+        ),
+        Divider(height: 1, color: AppTheme.borderColor),
+        footer,
+      ],
     );
   }
 
@@ -1453,6 +1480,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOutCubic,
+            constraints: const BoxConstraints(minHeight: 56),
             padding:
                 EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
             decoration: BoxDecoration(
@@ -1518,7 +1546,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                     AnimatedDefaultTextStyle(
                       duration: const Duration(milliseconds: 180),
                       style: TextStyle(
-                        fontSize: isSmall ? 8 : 10,
+                        fontSize: 18,
                         color: isSelected
                             ? AppTheme.textPrimary
                             : AppTheme.textSecondary,
@@ -1528,8 +1556,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                       child: Text(
                         item.label,
                         textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                        overflow: TextOverflow.visible,
                       ),
                     ),
                   ],
@@ -1552,6 +1580,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           },
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           child: Container(
+            constraints: const BoxConstraints(minHeight: 56, minWidth: 56),
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -1565,7 +1594,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 Text(
                   'Salir',
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 18,
                     color: AppTheme.error,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1624,6 +1653,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           onTap: _openNotificationSettings,
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           child: Container(
+            constraints: const BoxConstraints(minHeight: 56, minWidth: 56),
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -1641,7 +1671,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 Text(
                   'Avisos',
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 18,
                     color: AppTheme.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1660,6 +1690,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           onTap: () => setState(() => _isNavExpanded = !_isNavExpanded),
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           child: Container(
+            constraints: const BoxConstraints(minHeight: 56, minWidth: 56),
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -1679,7 +1710,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 Text(
                   _isNavExpanded ? 'Ocultar' : '',
                   style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 18,
                     color: AppTheme.textSecondary,
                     fontWeight: FontWeight.w500,
                   ),
