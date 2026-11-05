@@ -2108,10 +2108,11 @@ describe('DDD clients list cache-ready contract', () => {
     expect(res.body).toMatchObject({ count: 2, fastPath: true });
     expect(res.body.clients.map(client => client.code)).toEqual([owned[0]]);
     const matchingCall = db.queryWithParams.mock.calls.find(([sql]) => /SELECT C\.CODIGOCLIENTE AS CODE FROM/.test(sql));
+    expect(matchingCall[0]).toMatch(/C\.CODIGOCLIENTE IN \(CAST\(\? AS CHAR\(10\)\)/);
     expect(matchingCall[0]).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)/);
     expect(matchingCall[0]).toMatch(/CAST\(\? AS CHAR\(2\)\)/);
-    expect(matchingCall[1].length).toBeGreaterThan(0);
-    expect(matchingCall[1].every(value => value === '35')).toBe(true);
+    expect(matchingCall[1].slice(0, 3)).toEqual([stale, ...owned]);
+    expect(matchingCall[1].slice(3).every(value => value === '35')).toBe(true);
     expect(performanceCache.getOrFetch.mock.calls.at(-1)[0]).toContain('ddd:clients:v5:');
   });
 
@@ -2175,9 +2176,100 @@ describe('DDD clients list cache-ready contract', () => {
     expect(res.status).toBe(200);
     expect(res.body.clients).toHaveLength(search ? 1 : 100);
     expect(res.body.clients.every(client => codes.includes(client.code) && client.totalPurchases === 25)).toBe(true);
-    expect(db.queryWithParams.mock.calls.every(([, params]) => params.length <= 51)).toBe(true);
+    const matchingCall = db.queryWithParams.mock.calls.find(([sql]) => /SELECT C.CODIGOCLIENTE AS CODE FROM/.test(sql));
+    expect(matchingCall[1].slice(0, codes.length)).toEqual(codes);
+    const pageCalls = db.queryWithParams.mock.calls.filter(([sql]) => (
+      !/SELECT C.CODIGOCLIENTE AS CODE FROM/.test(sql)
+        && (/C.CODIGOCLIENTE as code/.test(sql) || /TOTAL_PURCHASES/.test(sql) || /LAST_VENDOR/.test(sql))
+    ));
+    expect(pageCalls.every(([, params]) => params.length <= 51)).toBe(true);
     expect(db.queryWithParams.mock.calls.some(([sql]) => /WITH LACLAE_SCOPED/.test(sql))).toBe(false);
     laclae.getClientCodesFromCache.mockReturnValue(undefined);
+  });
+
+  test('fast path chunks more than 1000 cached codes before ownership and pagination', async () => {
+    const laclae = require('../services/laclae');
+    const db = require('../config/db');
+    const codes = Array.from({ length: 1005 }, (_, index) => String(4300000000 + index));
+    laclae.isCacheReady.mockReturnValue(true);
+    laclae.getClientCodesFromCache.mockReturnValue(codes);
+    db.queryWithParams.mockImplementation((sql, params) => {
+      if (/SELECT C.CODIGOCLIENTE AS CODE FROM/.test(sql)) {
+        return Promise.resolve(params.filter(value => codes.includes(String(value)))
+          .map(CODE => ({ CODE })));
+      }
+      if (/VENDOR_NAME/.test(sql)) {
+        return Promise.resolve([{ VENDOR_CODE: '35', VENDOR_NAME: 'Vendedor' }]);
+      }
+      const clients = params.filter(value => codes.includes(String(value)));
+      if (/C.CODIGOCLIENTE as code/.test(sql)) {
+        return Promise.resolve(clients.map(code => ({ CODE: code, NAME: 'Cliente' })));
+      }
+      if (/TOTAL_PURCHASES/.test(sql)) {
+        return Promise.resolve(clients.map(code => ({ CLIENT_CODE: code, TOTAL_PURCHASES: 25 })));
+      }
+      return Promise.resolve(clients.map(code => ({ CLIENT_CODE: code, LAST_VENDOR: '35' })));
+    });
+
+    const res = await request(makeApp(createClientsRoutes(), {
+      id: '35', code: '35', role: 'COMERCIAL',
+    })).get('/list').query({ vendedorCodes: '35', search: 'Cliente', limit: 5, offset: 1000 });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ count: 1005, fastPath: true });
+    expect(res.body.clients.map(client => client.code)).toEqual(codes.slice(1000));
+    const matchingCalls = db.queryWithParams.mock.calls
+      .filter(([sql]) => /SELECT C.CODIGOCLIENTE AS CODE FROM/.test(sql));
+    expect(matchingCalls).toHaveLength(6);
+    const boundCodes = [];
+    for (const [sql, params] of matchingCalls) {
+      const codeBindCount = (sql.match(/CAST\(\? AS CHAR\(10\)\)/g) || []).length;
+      expect(codeBindCount).toBeGreaterThan(0);
+      expect(codeBindCount).toBeLessThanOrEqual(200);
+      expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)/);
+      expect(sql).toMatch(/UPPER\(COALESCE\(C\.NOMBRECLIENTE/);
+      expect(sql).not.toContain(codes[0]);
+      boundCodes.push(...params.slice(0, codeBindCount));
+      expect(params.slice(codeBindCount)).toContain('35');
+      expect(params.slice(codeBindCount)).toContain('%CLIENTE%');
+    }
+    expect(boundCodes).toEqual(codes);
+  });
+
+  test('ALL cache with about 50000 codes keeps one matching query without an IN list', async () => {
+    const laclae = require('../services/laclae');
+    const db = require('../config/db');
+    const codes = Array.from({ length: 50000 }, (_, index) => String(1000000000 + index));
+    const visible = codes.slice(0, 2);
+    const codeSet = new Set(codes);
+    laclae.isCacheReady.mockReturnValue(true);
+    laclae.getClientCodesFromCache.mockReturnValue(codes);
+    db.queryWithParams.mockImplementation((sql, params) => {
+      if (/SELECT C.CODIGOCLIENTE AS CODE FROM/.test(sql)) {
+        return Promise.resolve(visible.map(CODE => ({ CODE })));
+      }
+      if (/VENDOR_NAME/.test(sql)) return Promise.resolve([]);
+      const clients = params.filter(value => codeSet.has(String(value)));
+      if (/C.CODIGOCLIENTE as code/.test(sql)) {
+        return Promise.resolve(clients.map(code => ({ CODE: code, NAME: 'Cliente' })));
+      }
+      if (/TOTAL_PURCHASES/.test(sql)) {
+        return Promise.resolve(clients.map(code => ({ CLIENT_CODE: code, TOTAL_PURCHASES: 25 })));
+      }
+      return Promise.resolve(clients.map(code => ({ CLIENT_CODE: code, LAST_VENDOR: '' })));
+    });
+
+    const res = await request(makeApp(createClientsRoutes(), {
+      id: '95', code: '95', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['ALL'],
+    })).get('/list').query({ vendedorCodes: 'ALL', limit: 5 });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ count: 2, fastPath: true, isAllQuery: true });
+    const matchingCalls = db.queryWithParams.mock.calls
+      .filter(([sql]) => /SELECT C.CODIGOCLIENTE AS CODE FROM/.test(sql));
+    expect(matchingCalls).toHaveLength(1);
+    expect(matchingCalls[0][0]).not.toMatch(/C\.CODIGOCLIENTE IN/);
+    expect(matchingCalls[0][1]).toEqual([]);
   });
 
   test('GET /list returns 503 when LACLAE memory is not ready', async () => {

@@ -3003,11 +3003,30 @@ function createClientsRoutes() {
           const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
           if (Array.isArray(cachedClientCodes) && cachedClientCodes.length > 0) {
             let scopedCodes = [...new Set(cachedClientCodes.map(c => sanitizeForSQL(c)).filter(Boolean))].sort();
-            const matchingClients = await queryWithParams(`
-              SELECT C.CODIGOCLIENTE AS CODE FROM ${comercialErpTable('CLI')} C
-               WHERE C.ANOBAJA = 0 ${clientOwnershipFilter.clause} ${searchClause.clause}
-            `, [...clientOwnershipFilter.params, ...searchClause.params], false);
-            const matchingCodes = new Set(matchingClients.map(row => String(row.CODE ?? row.code ?? '').trim()));
+            const MATCHING_BATCH_SIZE = 200;
+            const matchingBatches = isAllQuery
+              ? [null]
+              : Array.from(
+                { length: Math.ceil(scopedCodes.length / MATCHING_BATCH_SIZE) },
+                (_, index) => scopedCodes.slice(
+                  index * MATCHING_BATCH_SIZE, (index + 1) * MATCHING_BATCH_SIZE,
+                ),
+              );
+            const matchingCodes = new Set();
+            for (const batch of matchingBatches) {
+              const scopedCodeParams = [];
+              const scopedCodeFilter = batch
+                ? buildChunkedClientCodeFilter('C.CODIGOCLIENTE', batch, scopedCodeParams)
+                : '';
+              const matchingClients = await queryWithParams(`
+                SELECT C.CODIGOCLIENTE AS CODE FROM ${comercialErpTable('CLI')} C
+                 WHERE C.ANOBAJA = 0 ${scopedCodeFilter} ${clientOwnershipFilter.clause} ${searchClause.clause}
+              `, [...scopedCodeParams, ...clientOwnershipFilter.params, ...searchClause.params], false);
+              for (const row of matchingClients) {
+                const code = String(row.CODE ?? row.code ?? '').trim();
+                if (code) matchingCodes.add(code);
+              }
+            }
             scopedCodes = scopedCodes.filter(code => matchingCodes.has(code));
             const pageCodes = scopedCodes.slice(safeOffset, safeOffset + safeLimit);
 
