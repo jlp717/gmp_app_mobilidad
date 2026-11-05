@@ -75,3 +75,18 @@ APP_ENV=production encuentra cuatro selectores heredados que requieren la migrac
 La sonda financiera fijó TEST en vez del DEMO compatible; su tercer intento se detuvo antes de DB2 con INVALID_APP_ENV_PROFILE. Es un bloqueo de esa instrumentación bajo su límite de reparaciones, no evidencia de un cobro fallido ni de que el perfil DEMO sea inválido. No se vuelve a ejecutar Run sin una autorización nueva para esa unidad.
 
 `db2-profile-app-buffer-catalog.json` conserva la comprobación posterior de seis destinos: 12 SELECT de catálogo, cero filas de negocio, cero mutaciones y conexión cerrada. TEST auditoría tiene 13 columnas; TEST liquidación tiene 17, incluyendo `UPDATED_AT TIMESTMP NOT NULL`; TEST devoluciones tiene 18. `db2-profile-app-buffer-indexes.json` conserva una consulta adicional con las composiciones reales de los índices únicos de liquidación y devoluciones y el índice temporal de auditoría. Las claves primarias y algunas restricciones UNIQUE de IBM i se consultan en SYSCST/SYSKEYCST; su ausencia en SYSINDEXES no significa ausencia de la restricción.
+
+## Despliegue comercial en el servidor
+
+El 05/11/2026, el servidor `/opt/gmp-api` y la rama remota `origin/test` estaban en `4a36ddde`, con el checkout limpio. PM2 mostró ocho instancias en línea de `gmp-api`. El nuevo candidato aún no estaba publicado en esa rama y la configuración cargada por el servidor carecía de `APP_ENV`. Reiniciar en ese estado conservaría el código antiguo. Una vez publicado el candidato, su guard de arranque requerirá `APP_ENV=demo`.
+
+Para este pase, DEMO usa el servidor y los datos reales de DSEDAC/DSED, escribe únicamente en `JAVIER.TEST_*` y mantiene desactivada la exportación al ERP. La comprobación ampliada del 05/11 pasó 11/11 objetos para DEMO mediante SELECT de catálogo. El modo `production` obtuvo 8/11. La salud de la instalación devolvió HTTP 200 con DB2 y Redis disponibles y 68/68 PIN cubiertos.
+
+Con la revisión aprobada publicada en `origin/test`, la configuración DEMO verificada y el gate PROD vigente, desde `/opt/gmp-api` se ejecutan únicamente estas dos mutaciones:
+
+```sh
+git pull origin test
+pm2 restart gmp-api
+```
+
+Los pasos de comprobación son de sólo lectura. Tras el reinicio, deben coincidir el SHA instalado y el aprobado, estar las instancias de `gmp-api` en línea y responder HTTP 200 `/api/ready`. `/api/runtime-profile` debe confirmar DEMO, `isolated_test`, escrituras productivas desactivadas y exportación desactivada. Ningún otro proceso de PM2 interviene en este despliegue.

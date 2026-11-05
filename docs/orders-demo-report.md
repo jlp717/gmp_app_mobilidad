@@ -325,3 +325,39 @@ La instancia instalada carece del guard de perfil de la rama. La confirmación p
 | Flutter dirigido a navegación, pedidos, Bolsa, cobros y liquidación | 0 | 135 aprobadas. SHA-256 `88C4492DC417BDDDD6DC0DC785E62F060B1BEC05A267FAE5BE8E328A33076752`. El árbol Dart mantiene la revisión de la regresión completa anterior. |
 
 El chequeo final del 05/11 conservó la revisión `4a36ddde`, HTTP 200, DB2 y Redis conectados, 68 de 68 PIN cubiertos, `isolated_test` y los dos indicadores de escritura productiva desactivados. El emulador temporal se apagó tras cerrar ambas sesiones.
+
+## Revalidación del despliegue comercial del 05/11
+
+En el servidor `/opt/gmp-api`, el checkout `test` y la referencia remota consultada en vivo `origin/test` coincidieron en `4a36ddde00619542af81419a2de02fe4d09a5745`. El checkout estaba limpio. La revisión candidata inicial `cce8848` estaba 72 commits por delante. PM2 mostró ocho instancias en línea de **`gmp-api`**. El nombre `gmpapi` no aparecía. `/api/ready` devolvió HTTP 200. El proceso y el cargador de entorno de la instalación indicaron `APP_ENV` ausente. El nuevo arranque exige ese selector. Los dos comandos de despliegue se conservan en [Entornos](orders-environments.md#despliegue-comercial-en-el-servidor). No hubo despliegue ni reinicios durante la revisión.
+
+Se ejecutó el verificador de catálogo del candidato en memoria sobre DB2 real, con el bundle SHA-256 `caecf8ca057b6955d0a535da8acc26751bfde97b4558fa624ba1fa6114bc987c`. Hizo 21 SELECT y cerró sus tres conexiones con cero lecturas de filas de negocio y cero mutaciones. TEST y DEMO devolvieron 11/11 objetos y código 0. El perfil `production` encontró 8/11 y devolvió código 1 por la ausencia de `JAVIER.PEDIDO_STATE_EVENTS`, `JAVIER.LIQUIDACION_COMERCIAL` y `JAVIER.DEVOLUCIONES_COMERCIAL`. El perfil operativo para el ensayo solicitado es DEMO en el servidor, con lecturas de producción, escrituras en `JAVIER.TEST_*` y exportación ERP desactivada.
+
+### Rendimiento del servicio instalado
+
+Cada fila contiene tres lecturas autenticadas consecutivas contra `4a36ddde` por VPN. Todas devolvieron HTTP 200. Son tiempos de petición observados, en milisegundos.
+
+| Lectura | Primera | Segunda | Tercera |
+| --- | ---: | ---: | ---: |
+| Pedidos | 43 | 2 | 2 |
+| Cobros, resumen | 2.409 | 6 | 10 |
+| Liquidación, resumen | 159 | 49 | 45 |
+| Catálogo | 1.957 | 585 | 5 |
+
+Se mantuvo la caché actual. La primera lectura de Cobros y catálogo excede los objetivos. Esta serie no mide el tiempo después de guardar, los fotogramas ni el percentil 95. La revisión independiente pasó 226 pruebas de contratos del catálogo y Cobros. Esas pruebas usan mocks.
+
+### Regresión visual y comprobaciones de esta revalidación
+
+| Unidad | Estado | Resultado |
+| --- | --- | --- |
+| Aviso de entorno y Liquidación | DONE para el cambio local | `5024ef9`, cuatro archivos. El aviso reserva espacio encima del contenido sin tapar la cabecera y mantiene una sola etiqueta accesible. Liquidación conserva cinco métricas por fila a 1280 dp y escala 1,0, adapta columnas y devoluciones con texto grande y muestra íntegro el importe de la regresión a 320 dp y escala 2,0. QA independiente verificó los cuatro hashes y aprobó 17/17 pruebas. |
+| Cobros, lista y búsqueda | DONE para el cambio local | `a848905`, dos archivos. Una sola vista desplazable a partir de 150 %, tarjetas de altura natural y lista o rejilla habitual a 100 %. El caso sin coincidencias conserva la búsqueda y el control de limpiar. Las 16 pruebas dirigidas salieron con código 0, SHA-256 `6E966FFC64A7E4827CE0511DDF2050F75F71D2236AC519C5D3B3DC6E0F5E5289`. QA verificó ambos archivos y la rama offline por lectura de código. |
+| Validación física y Play Store | PARTIAL | El APK 105 permitió revisar doce pestañas en teléfono emulado y cuatro en tablet emulada a 200 %. Los PNG anteriores a los arreglos documentan recorte de tarjetas de Cobros, etiquetas truncadas en la navegación y métricas partidas en Liquidación. El AAB 105 firmado precede a los arreglos. Falta un nuevo binario, capturas de esa revisión, pruebas físicas y cerrar los defectos de navegación y de pedidos/Bolsa recogidos en esta auditoría. |
+| Cobros y liquidación con DB2 real | PARTIAL | La aceptación de la referencia CVC corregida, los tres métodos, el saldo posterior, la idempotencia de reintento tras reiniciar la app y una liquidación nueva con arrastre y documento real siguen abiertas. Este pase repitió lecturas. No hizo DML de negocio. |
+| Actualización tras guardar | PARTIAL | El cliente invalida stock, pedidos y Bolsa tras las mutaciones de pedido, y cartera y liquidación tras cobrar. Se verificaron esas llamadas en fuente. Falta demostrar los importes nuevos desde la aplicación conectada con un caso físico de cobro y un cambio de pestaña. |
+| Despliegue | BLOCKED | El candidato sigue fuera de `origin/test`, falta preparar `APP_ENV=demo` en la configuración protegida y falta completar la aprobación operativa. La instalación sigue respondiendo y usando `isolated_test`. |
+
+Jest completo, código 0. 3.834 pruebas aprobadas, dos omitidas, 320 suites aprobadas y una omitida. SHA-256 `8A35DE8903ED46EDC8EC8F860485694E16ADD74C9966D3FF8C0FCF912723A1C6`. Persiste el aviso de cierre forzado del ejecutor. El lint del backend devolvió código 1 y 242 errores de la línea base, cero advertencias. SHA-256 `741F0B17A5451798BB8B657156BF7805632B382F95DB9038CC4A802A1F090E5C`, idéntico a la línea base. `npm run check:domain` pasó con código 0.
+
+`flutter analyze --no-pub --no-fatal-infos` sobre la primera revisión de Cobros devolvió código 0, cero errores, cero advertencias y 7.674 avisos informativos. El análisis de los dos archivos finales de Cobros también devolvió código 0, cero errores, cero advertencias y 25 avisos informativos en ese alcance. El control Loop devolvió WARN porque su proceso Python no pudo invocar Flutter ni npm en Windows. `git diff --check`, el escáner de secretos y la comprobación de política pasaron. Flutter y npm se ejecutaron directamente en PowerShell.
+
+La primera suite completa sobre Cobros en desarrollo se detuvo tras 708 pruebas aprobadas y dos fallos de las regresiones nuevas. Después de corregirlos, `flutter test --no-pub --concurrency=2 --timeout=2m -r expanded` pasó sobre las fuentes congeladas con **1.278 pruebas aprobadas**, código 0 y duración 6 min 36 s. SHA-256 `5344CC22A01F8097703A5184BE41310EDB63FCFEC6D9702EDE2CEB752001F64A`. El resultado valida el árbol local, con cobertura de widgets y contratos. Las comprobaciones de la app conectada, de las escrituras financieras y del binario de Play requieren su propia aceptación.
