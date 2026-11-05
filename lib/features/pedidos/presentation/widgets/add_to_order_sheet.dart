@@ -550,9 +550,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                Row(
                   children: [
                     Text(
                       product.code,
@@ -580,17 +578,19 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                         ),
                         child: Row(
                           children: [
-                            Text(
-                              _buildStockText(),
-                              style: TextStyle(
-                                color: product.hasStock
-                                    ? AppTheme.success
-                                    : AppTheme.error,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
+                            Expanded(
+                              child: Text(
+                                _buildStockText(),
+                                style: TextStyle(
+                                  color: product.hasStock
+                                      ? AppTheme.success
+                                      : AppTheme.error,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
                             if (_stockByWarehouse.isNotEmpty)
                               Icon(
@@ -664,33 +664,13 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     ),
                   ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _buildQuickLink(
-                      icon: Icons.info_outline,
-                      label: 'Datos producto',
-                      color: AppTheme.info,
-                      onTap: () {
-                        final prov = ref.read(pedidosNotifierProvider.notifier);
-                        final canSeeMargin = ref.watch(
-                          pedidosNotifierProvider
-                              .select((p) => p.isMarginVisible),
-                        );
-                        ProductDetailSheet.show(
-                          ctx,
-                          productCode: product.code,
-                          productName: product.name,
-                          clientCode: prov.hasClient ? prov.clientCode : null,
-                          clientName: prov.hasClient ? prov.clientName : null,
-                          isMarginVisible: canSeeMargin,
-                        );
-                      },
-                    ),
-                    if (ref.read(pedidosNotifierProvider.notifier).hasClient)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final links = <Widget>[
                       _buildQuickLink(
-                        icon: Icons.bar_chart_rounded,
-                        label: 'Historial compras',
-                        color: AppTheme.accentIndigo,
+                        icon: Icons.info_outline,
+                        label: 'Datos producto',
+                        color: AppTheme.info,
                         onTap: () {
                           final prov =
                               ref.read(pedidosNotifierProvider.notifier);
@@ -698,17 +678,55 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             pedidosNotifierProvider
                                 .select((p) => p.isMarginVisible),
                           );
-                          ProductHistorySheet.show(
+                          ProductDetailSheet.show(
                             ctx,
                             productCode: product.code,
                             productName: product.name,
-                            clientCode: prov.clientCode!,
-                            clientName: prov.clientName ?? '',
+                            clientCode: prov.hasClient ? prov.clientCode : null,
+                            clientName: prov.hasClient ? prov.clientName : null,
                             isMarginVisible: canSeeMargin,
                           );
                         },
                       ),
-                  ],
+                      if (ref.read(pedidosNotifierProvider.notifier).hasClient)
+                        _buildQuickLink(
+                          icon: Icons.bar_chart_rounded,
+                          label: 'Historial compras',
+                          color: AppTheme.accentIndigo,
+                          onTap: () {
+                            final prov =
+                                ref.read(pedidosNotifierProvider.notifier);
+                            final canSeeMargin = ref.watch(
+                              pedidosNotifierProvider
+                                  .select((p) => p.isMarginVisible),
+                            );
+                            ProductHistorySheet.show(
+                              ctx,
+                              productCode: product.code,
+                              productName: product.name,
+                              clientCode: prov.clientCode!,
+                              clientName: prov.clientName ?? '',
+                              isMarginVisible: canSeeMargin,
+                            );
+                          },
+                        ),
+                    ];
+                    final stackLinks =
+                        MediaQuery.textScalerOf(context).scale(1) >= 1.5 &&
+                            constraints.maxWidth < 600;
+                    if (stackLinks) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var i = 0; i < links.length; i++) ...[
+                            if (i > 0) const SizedBox(height: 8),
+                            links[i],
+                          ],
+                        ],
+                      );
+                    }
+                    return Row(children: links);
+                  },
                 ),
                 if (_tariffs.isNotEmpty) ...[
                   const SizedBox(height: 10),
@@ -1041,79 +1059,84 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                         final stockLabel = Product.unitLabel(unit);
                         return SizedBox(
                           width: (MediaQuery.of(ctx).size.width - 56) / 3,
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              setModalState(() {
-                                _selectedUnit = unit;
-                                _priceController.text = _formatPriceForInput(
-                                  _unitPriceForSelection(unit),
-                                );
-                                final currentQty =
-                                    _parseInputNumber(_qtyController.text);
-                                _qtyController.text = _formatQtyForInput(
-                                  currentQty,
-                                  _selectedUnit,
-                                );
-                              });
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: selected
-                                  ? AppTheme.info.withValues(alpha: 0.2)
-                                  : AppTheme.softPanel,
-                              foregroundColor: selected
-                                  ? AppTheme.info
-                                  : AppTheme.textSecondary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                side: BorderSide(
-                                  color: selected
-                                      ? AppTheme.info
-                                      : AppTheme.borderColor,
-                                  width: selected ? 1.5 : 1,
-                                ),
-                              ),
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(vertical: 2),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  unit,
-                                  style: TextStyle(
-                                    fontSize: Responsive.fontSize(
-                                      context,
-                                      small: 10,
-                                      large: 11,
-                                    ),
-                                    fontWeight: selected
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                                Text(
-                                  PedidosFormatters.money(
-                                    unitPrice,
-                                    decimals: 3,
-                                  ),
-                                  style: TextStyle(
-                                    fontSize: 9,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(minHeight: 56),
+                            child: ElevatedButton(
+                              onPressed: () {
+                                setModalState(() {
+                                  _selectedUnit = unit;
+                                  _priceController.text = _formatPriceForInput(
+                                    _unitPriceForSelection(unit),
+                                  );
+                                  final currentQty =
+                                      _parseInputNumber(_qtyController.text);
+                                  _qtyController.text = _formatQtyForInput(
+                                    currentQty,
+                                    _selectedUnit,
+                                  );
+                                });
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: selected
+                                    ? AppTheme.info.withValues(alpha: 0.2)
+                                    : AppTheme.softPanel,
+                                foregroundColor: selected
+                                    ? AppTheme.info
+                                    : AppTheme.textSecondary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  side: BorderSide(
                                     color: selected
-                                        ? AppTheme.success
-                                        : AppTheme.textTertiary,
+                                        ? AppTheme.info
+                                        : AppTheme.borderColor,
+                                    width: selected ? 1.5 : 1,
                                   ),
                                 ),
-                                Text(
-                                  '${_formatUnitQty(unitStock, unit)} $stockLabel',
-                                  style: TextStyle(
-                                    fontSize: 8,
-                                    color: unitStock > 0
-                                        ? AppTheme.textTertiary
-                                        : AppTheme.error.withValues(alpha: 0.6),
+                                elevation: 0,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 2),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    unit,
+                                    style: TextStyle(
+                                      fontSize: Responsive.fontSize(
+                                        context,
+                                        small: 10,
+                                        large: 11,
+                                      ),
+                                      fontWeight: selected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  Text(
+                                    PedidosFormatters.money(
+                                      unitPrice,
+                                      decimals: 3,
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: selected
+                                          ? AppTheme.success
+                                          : AppTheme.textTertiary,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${_formatUnitQty(unitStock, unit)} $stockLabel',
+                                    style: TextStyle(
+                                      fontSize: 8,
+                                      color: unitStock > 0
+                                          ? AppTheme.textTertiary
+                                          : AppTheme.error
+                                              .withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         );
@@ -1343,35 +1366,58 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Row(
-                  children: [
-                    if (product.precioMinimo > 0)
-                      Semantics(
-                        label:
-                            'Precio mínimo política ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)}',
-                        child: Text(
-                          'Min: ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)}/${Product.unitLabel(_selectedUnit)}',
-                          style: TextStyle(
-                            color: price > 0 &&
-                                    price <
-                                        product
-                                            .minimumPriceForUnit(_selectedUnit)
-                                ? AppTheme.error
-                                : AppTheme.textTertiary,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    const Spacer(),
-                    Text(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final minimumPrice = product.precioMinimo > 0
+                        ? Semantics(
+                            label:
+                                'Precio mínimo política ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)}',
+                            child: Text(
+                              'Min: ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)}/${Product.unitLabel(_selectedUnit)}',
+                              style: TextStyle(
+                                color: price > 0 &&
+                                        price <
+                                            product.minimumPriceForUnit(
+                                                _selectedUnit)
+                                    ? AppTheme.error
+                                    : AppTheme.textTertiary,
+                                fontSize: 11,
+                              ),
+                            ),
+                          )
+                        : null;
+                    final totalText = Text(
                       'Total: ${PedidosFormatters.money(total)}',
                       style: const TextStyle(
                         color: AppTheme.success,
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
                       ),
-                    ),
-                  ],
+                    );
+                    final stackSummary =
+                        MediaQuery.textScalerOf(context).scale(1) >= 1.5 &&
+                            constraints.maxWidth < 600;
+                    if (stackSummary) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (minimumPrice != null) minimumPrice,
+                          if (minimumPrice != null) const SizedBox(height: 4),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: totalText,
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        if (minimumPrice != null) minimumPrice,
+                        const Spacer(),
+                        totalText,
+                      ],
+                    );
+                  },
                 ),
                 if (product.precioMinimo > 0 &&
                     price > 0 &&
@@ -1442,62 +1488,82 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   },
                 ),
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: SizedBox(
-                        height: 56,
-                        child: OutlinedButton(
-                          onPressed: () {
-                            setModalState(() {
-                              _qtyController.text = '0';
-                              _cajasController.text = '0';
-                              _unidadesController.text = '0';
-                            });
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.error,
-                            side: const BorderSide(color: AppTheme.error),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'LIMPIAR',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final stackActions =
+                        MediaQuery.textScalerOf(context).scale(1) >= 1.5 &&
+                            constraints.maxWidth < 600;
+                    final clearButton = OutlinedButton(
+                      key: const ValueKey('order-line-clear-button'),
+                      onPressed: () {
+                        setModalState(() {
+                          _qtyController.text = '0';
+                          _cajasController.text = '0';
+                          _unidadesController.text = '0';
+                        });
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.error,
+                        side: const BorderSide(color: AppTheme.error),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        minimumSize: const Size.fromHeight(56),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 2,
-                      child: SizedBox(
-                        height: 56,
-                        child: ElevatedButton.icon(
-                          onPressed: () => _handleAddToOrder(ctx),
-                          icon: const Icon(Icons.add_shopping_cart),
-                          label: const Text(
-                            'Añadir al pedido',
-                            style: TextStyle(fontSize: 18),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.info,
-                            foregroundColor: AppTheme.inkSurface,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            textStyle: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                      child: const Text(
+                        'LIMPIAR',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
                         ),
                       ),
-                    ),
-                  ],
+                    );
+                    final addButton = ElevatedButton.icon(
+                      key: const ValueKey('order-line-add-button'),
+                      onPressed: () => _handleAddToOrder(ctx),
+                      icon: const Icon(Icons.add_shopping_cart),
+                      label: const Text(
+                        'Añadir al pedido',
+                        style: TextStyle(fontSize: 18),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.info,
+                        foregroundColor: AppTheme.inkSurface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        minimumSize: const Size.fromHeight(56),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        textStyle: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    );
+                    if (stackActions) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          clearButton,
+                          const SizedBox(height: 10),
+                          addButton,
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: clearButton),
+                        const SizedBox(width: 10),
+                        Expanded(flex: 2, child: addButton),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 8),
               ],

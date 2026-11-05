@@ -13,6 +13,8 @@ class _OrderDetailAdapter implements HttpClientAdapter {
   int requestCount = 0;
   bool failSecondRequest = false;
   String initialStatus = 'ACTIVE';
+  String? orderState;
+  bool useLongLabels = false;
 
   void reset() => requestCount = 0;
 
@@ -37,7 +39,11 @@ class _OrderDetailAdapter implements HttpClientAdapter {
     return ResponseBody.fromString(
       jsonEncode({
         'success': true,
-        'order': _orderPayload(status),
+        'order': _orderPayload(
+          status,
+          orderState: orderState,
+          useLongLabels: useLongLabels,
+        ),
       }),
       200,
       headers: {
@@ -50,17 +56,31 @@ class _OrderDetailAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-Map<String, dynamic> _orderPayload(String reservationStatus) => {
+const _longOrderReference = 'M-2026-0000000000000106-REFERENCIA-COMPLETA';
+const _longClientName =
+    'Cliente de demostración con razón social extraordinariamente larga';
+const _longProductName =
+    'Producto activo de demostración con descripción completa muy extensa';
+
+Map<String, dynamic> _orderPayload(
+  String reservationStatus, {
+  String? orderState,
+  bool useLongLabels = false,
+}) =>
+    {
       'header': {
         'id': 42,
         'numeroPedido': 106,
-        'numeroPedidoFormatted': 'M-1-106',
+        'numeroPedidoFormatted':
+            useLongLabels ? _longOrderReference : 'M-1-106',
         'clienteId': '4300032888',
-        'clienteNombre': 'Cliente de demostración',
+        'clienteNombre':
+            useLongLabels ? _longClientName : 'Cliente de demostración',
         'vendedor': '73',
         'fecha': '03/11/2026',
         'fechaFormatted': '03/11/2026',
-        'estado': reservationStatus == 'RELEASED' ? 'CANCELADO' : 'BORRADOR',
+        'estado': orderState ??
+            (reservationStatus == 'RELEASED' ? 'CANCELADO' : 'BORRADOR'),
         'tipoventa': 'CC',
         'total': 29.28,
         'formaPago': '02',
@@ -69,7 +89,9 @@ Map<String, dynamic> _orderPayload(String reservationStatus) => {
         {
           'id': 7,
           'codigoArticulo': '2974',
-          'descripcion': 'Producto activo de demostración',
+          'descripcion': useLongLabels
+              ? _longProductName
+              : 'Producto activo de demostración',
           'cantidadEnvases': 1,
           'cantidadUnidades': 0,
           'unidadMedida': 'CAJAS',
@@ -99,12 +121,12 @@ Map<String, dynamic> _orderPayload(String reservationStatus) => {
       },
     };
 
-Widget _app() => ProviderScope(
+Widget _app({double textScale = 2}) => ProviderScope(
       key: UniqueKey(),
       child: MaterialApp(
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
-            textScaler: const TextScaler.linear(2),
+            textScaler: TextScaler.linear(textScale),
           ),
           child: child!,
         ),
@@ -199,6 +221,66 @@ void main() {
       orderReservationRefreshDelay(inventory('not-a-date', 'also-invalid')),
       isNull,
     );
+  });
+
+  testWidgets(
+      'detalle compacto envuelve referencia cliente producto y localiza estado',
+      (tester) async {
+    final originalAdapter = ApiClient.dio.httpClientAdapter;
+    final originalBaseUrl = ApiClient.dio.options.baseUrl;
+    final adapter = _OrderDetailAdapter()
+      ..useLongLabels = true
+      ..orderState = 'DRAFT';
+    ApiClient.dio.httpClientAdapter = adapter;
+    ApiClient.dio.options.baseUrl = 'http://127.0.0.1/api';
+    addTearDown(() {
+      ApiClient.dio.httpClientAdapter = originalAdapter;
+      ApiClient.dio.options.baseUrl = originalBaseUrl;
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view
+      ..physicalSize = const Size(360, 640)
+      ..devicePixelRatio = 1;
+
+    await tester.pumpWidget(_app(textScale: 2));
+    await _openDetail(tester);
+
+    final orderTitle = find.text('Pedido $_longOrderReference');
+    expect(orderTitle, findsOneWidget);
+    expect(tester.widget<Text>(orderTitle).overflow, isNull);
+    final client = find.text('$_longClientName (4300032888)');
+    expect(client, findsOneWidget);
+    expect(tester.widget<Text>(client).overflow, isNull);
+    expect(find.text('Borrador'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('Borrador')).style?.fontSize,
+      greaterThanOrEqualTo(18),
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == 'Estado: Borrador',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('DRAFT'), findsNothing);
+    expect(
+      find.bySemanticsLabel('Confirmar pedido'),
+      findsNothing,
+      reason: 'La etiqueta visual no cambia el estado bruto de autorización.',
+    );
+
+    final product = find.text(_longProductName);
+    await tester.ensureVisible(product);
+    await tester.pump();
+    expect(product, findsOneWidget);
+    expect(tester.widget<Text>(product).overflow, isNull);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets(
@@ -308,11 +390,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 20));
     expect(adapter.requestCount, 3);
-    final scrollable = find.descendant(
-      of: find.byType(ListView),
-      matching: find.byType(Scrollable),
-    );
-    tester.state<ScrollableState>(scrollable.first).position.jumpTo(0);
+    await tester.ensureVisible(find.text('Reserva caducada'));
     await tester.pumpAndSettle();
     expect(find.text('Reserva caducada'), findsOneWidget);
     expect(tester.takeException(), isNull);

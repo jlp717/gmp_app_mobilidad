@@ -415,21 +415,75 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           'UNAVAILABLE',
         }.contains(detail.inventoryRead?.reservation.status) ||
         _reservationVerificationFailed;
+    final accessibleCompact =
+        MediaQuery.textScalerOf(context).scale(1) >= 1.5 &&
+            MediaQuery.sizeOf(context).width < 600;
+    final handleBar = Center(
+      child: Container(
+        margin: const EdgeInsets.only(top: 8, bottom: 4),
+        width: 40,
+        height: 4,
+        decoration: BoxDecoration(
+          color: AppColors.themedWhite24,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+
+    if (accessibleCompact) {
+      return Column(
+        children: [
+          handleBar,
+          Expanded(
+            child: SingleChildScrollView(
+              controller: widget.scrollController,
+              child: Column(
+                children: [
+                  _buildHeader(header, statusColor),
+                  Divider(color: AppTheme.borderColor, height: 1),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    child: Column(
+                      children: [
+                        if (showReservationStatus)
+                          _buildReservationStatus(
+                            detail.inventoryRead,
+                            verificationFailed: _reservationVerificationFailed,
+                          ),
+                        if (detail.lines.isEmpty)
+                          Semantics(
+                            label: 'Pedido sin líneas',
+                            child: Text(
+                              'Sin lineas',
+                              style: TextStyle(color: AppColors.themedWhite38),
+                            ),
+                          )
+                        else ...[
+                          for (var i = 0; i < detail.lines.length; i++)
+                            _buildLineTile(detail.lines[i], i + 1),
+                          _buildTotalsCard(detail),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (header.estado == 'BORRADOR' ||
+                      header.estado == 'CONFIRMADO')
+                    _buildActions(header),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
 
     return Column(
       children: [
         // Handle bar
-        Center(
-          child: Container(
-            margin: const EdgeInsets.only(top: 8, bottom: 4),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.themedWhite24,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        ),
+        handleBar,
         // Header
         _buildHeader(header, statusColor),
         Divider(color: AppTheme.borderColor, height: 1),
@@ -608,6 +662,9 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
 
   Widget _buildHeader(OrderSummary header, Color statusColor) {
     final compact = Responsive.useCompactTiles(context);
+    final stackHeading = MediaQuery.textScalerOf(context).scale(1) >= 1.5 &&
+        MediaQuery.sizeOf(context).width < 600;
+    final statusLabel = _statusLabel(header.estado);
     // REQ-34: cabecera senior. El detalle backend no trae direccion,
     // telefonos ni email del cliente: se muestran con guion explicito.
     final routeDays =
@@ -622,9 +679,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         ? 'Vendedor: —'
         : 'Vendedor: ${header.vendedorCode.trim()}';
     return Semantics(
+      explicitChildNodes: true,
       label:
           'Pedido ${header.numeroPedidoFormatted.isNotEmpty ? header.numeroPedidoFormatted : header.numeroPedido}, '
-          '${header.clienteName}, estado ${header.estado}',
+          '${header.clienteName}, estado $statusLabel',
       header: true,
       child: Padding(
         padding: EdgeInsets.symmetric(
@@ -634,10 +692,26 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            Flex(
+              direction: stackHeading ? Axis.vertical : Axis.horizontal,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Flexible(
-                  child: Text(
+                if (!stackHeading)
+                  Expanded(
+                    child: Text(
+                      header.numeroPedidoFormatted.isNotEmpty
+                          ? 'Pedido ${header.numeroPedidoFormatted}'
+                          : 'Pedido #${header.numeroPedido}',
+                      style: TextStyle(
+                        color: AppColors.themedWhite,
+                        fontSize:
+                            Responsive.fontSize(context, small: 18, large: 22),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                else
+                  Text(
                     header.numeroPedidoFormatted.isNotEmpty
                         ? 'Pedido ${header.numeroPedidoFormatted}'
                         : 'Pedido #${header.numeroPedido}',
@@ -647,27 +721,32 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                           Responsive.fontSize(context, small: 18, large: 22),
                       fontWeight: FontWeight.bold,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
+                SizedBox(
+                  width: stackHeading ? 0 : 10,
+                  height: stackHeading ? 8 : 0,
                 ),
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: statusColor.withValues(alpha: 0.5)),
-                  ),
-                  child: Text(
-                    header.estado,
-                    style: TextStyle(
-                      color: statusColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                Semantics(
+                  container: true,
+                  label: 'Estado: $statusLabel',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border:
+                          Border.all(color: statusColor.withValues(alpha: 0.5)),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -732,7 +811,6 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                 color: AppColors.themedWhite70,
                 fontSize: Responsive.fontSize(context, small: 13, large: 14),
               ),
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -827,7 +905,6 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                       fontSize:
                           Responsive.fontSize(context, small: 13, large: 15),
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -1318,12 +1395,41 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   }
 
   Color _statusColor(String status) {
-    switch (status) {
+    switch (status.trim().toUpperCase()) {
       case 'CONFIRMADO':
+      case 'CONFIRMED':
         return AppTheme.success;
+      case 'CANCELADO':
+      case 'CANCELLED':
+      case 'CANCELED':
+        return AppTheme.error;
       case 'BORRADOR':
+      case 'DRAFT':
       default:
         return AppTheme.warning;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status.trim().toUpperCase()) {
+      case 'CONFIRMADO':
+      case 'CONFIRMED':
+        return 'Confirmado';
+      case 'BORRADOR':
+      case 'DRAFT':
+        return 'Borrador';
+      case 'CANCELADO':
+      case 'CANCELLED':
+      case 'CANCELED':
+        return 'Cancelado';
+      case 'CONFIRMANDO':
+      case 'CONFIRMING':
+        return 'Confirmando';
+      case 'CANCELANDO':
+      case 'CANCELLING':
+        return 'Cancelando';
+      default:
+        return status.trim().isEmpty ? 'Estado desconocido' : status.trim();
     }
   }
 
