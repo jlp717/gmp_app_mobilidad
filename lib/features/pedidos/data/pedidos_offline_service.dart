@@ -445,6 +445,7 @@ class PedidosOfflineService {
     var postSyncRefreshFailed = false;
     var identityDeferred = 0;
     var nextIndex = 0;
+    final syncedOrders = <Map<String, dynamic>>[];
 
     Future<void> processOne(Map item) async {
       final syncKey = item['syncKey'].toString();
@@ -518,6 +519,22 @@ class PedidosOfflineService {
         if (_decodeScopedSyncItem(box, syncKey, capturedScope) != null) {
           await box.delete(syncKey);
         }
+        final header = confirmResult['header'];
+        final estado = (confirmResult['estado'] ??
+                (header is Map ? header['estado'] : null) ??
+                'CONFIRMADO')
+            .toString();
+        final numeroPedido = confirmResult['numeroPedido'] ??
+            confirmResult['numeroPedidoFormatted'] ??
+            (header is Map
+                ? header['numeroPedido'] ?? header['numeroPedidoFormatted']
+                : null);
+        syncedOrders.add({
+          'syncKey': syncKey,
+          'orderId': orderId,
+          'estado': estado,
+          'numeroPedido': numeroPedido,
+        });
         verifiedOrderIds.add(orderId);
         synced++;
       } on _SyncIdentityChanged catch (e) {
@@ -609,6 +626,7 @@ class PedidosOfflineService {
       'nextRetryAt': nextRetryAt?.toIso8601String(),
       'failures': failures,
       'postSyncRefreshFailed': postSyncRefreshFailed,
+      'syncedOrders': syncedOrders,
     };
   }
 
@@ -648,6 +666,67 @@ class PedidosOfflineService {
       }),
     );
     _triggerAutoSyncThresholdIfReached(capturedScope, vendor);
+  }
+
+  /// Last server or transport reason stored for a queued order.
+  static String? syncIssueFor(String syncKey) {
+    final key = syncKey.trim();
+    if (key.isEmpty) return null;
+    for (final raw in [
+      ...getFailedSyncs(),
+      ...getPendingSyncs(),
+      ...getSyncingSyncs(),
+    ]) {
+      if (raw is! Map) continue;
+      if (raw['syncKey']?.toString() != key) continue;
+      final error = raw['error'] ?? raw['lastTransientError'];
+      final text = error?.toString().trim() ?? '';
+      return text.isEmpty ? null : text;
+    }
+    return null;
+  }
+
+  /// Sends saved manual drafts once their count reaches the ERP threshold.
+  ///
+  /// Autosaved carts stay on the device. A threshold of zero leaves every
+  /// draft where it is. The returned count is the number moved into the
+  /// upload queue.
+  static Future<int> promoteManualDraftsIfThresholdReached(
+    String vendedorCode,
+  ) async {
+    final vendor = _normalizeVendorCode(vendedorCode);
+    final threshold = _configuredThreshold(_scope, vendor);
+    if (vendor.isEmpty || threshold <= 0) return 0;
+    final drafts = getDrafts().where((draft) {
+      final key = draft['draftKey']?.toString() ?? '';
+      if (!key.contains('draft_manual_')) return false;
+      return _normalizeVendorCode(draft['vendedorCode']?.toString() ?? '') ==
+          vendor;
+    }).toList(growable: false);
+    if (drafts.length < threshold) return 0;
+
+    final oldestFirst = [...drafts]..sort(
+        (a, b) => (a['savedAt']?.toString() ?? '')
+            .compareTo(b['savedAt']?.toString() ?? ''),
+      );
+    var promoted = 0;
+    for (final draft in oldestFirst) {
+      final lines = _decodeOrderLines(draft['lines']);
+      if (lines.isEmpty) continue;
+      await queueOrderForSync(
+        clientCode: draft['clientCode']?.toString() ?? '',
+        clientName: draft['clientName']?.toString() ?? '',
+        vendedorCode: draft['vendedorCode']?.toString() ?? vendor,
+        saleType: draft['saleType']?.toString() ?? 'CC',
+        lines: lines,
+        globalDiscountPct:
+            (draft['globalDiscountPct'] as num?)?.toDouble() ?? 0,
+        notifyQueued: false,
+      );
+      await deleteDraft(draft['draftKey'].toString());
+      promoted++;
+    }
+    return promoted;
   }
 
   /// Earliest durable retry deadline for an opaque queue scope.

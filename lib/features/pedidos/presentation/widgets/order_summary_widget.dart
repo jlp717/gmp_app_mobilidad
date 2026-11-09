@@ -675,41 +675,77 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 ],
               ),
             ),
-          // E1 – Preview before confirm
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: provider.isSaving
-                  ? null
-                  : () => _showOrderPreview(context, provider),
-              icon: provider.isSaving
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppTheme.textPrimary,
+          Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  button: true,
+                  label: 'Guardar como borrador. No se envía al sistema.',
+                  child: OutlinedButton(
+                    key: const ValueKey('save-order-draft'),
+                    onPressed: provider.isSaving
+                        ? null
+                        : () => _saveDraftOnly(context, provider),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(48, 56),
+                      foregroundColor: AppTheme.textPrimary,
+                      side: BorderSide(color: AppTheme.textSecondary),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    )
-                  : const Icon(Icons.preview_outlined),
-              label: Text(
-                provider.isSaving ? 'Guardando...' : 'Confirmar pedido',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+                    ),
+                    child: const Text(
+                      'Guardar borrador',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.success,
-                foregroundColor: AppColors.onAccent,
-                disabledBackgroundColor:
-                    AppTheme.success.withValues(alpha: 0.5),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SizedBox(
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: provider.isSaving
+                        ? null
+                        : () => _showOrderPreview(context, provider),
+                    icon: provider.isSaving
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.textPrimary,
+                            ),
+                          )
+                        : const Icon(Icons.check_circle_outline),
+                    label: Text(
+                      provider.isSaving ? 'Guardando...' : 'Confirmar pedido',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.success,
+                      foregroundColor: AppColors.onAccent,
+                      disabledBackgroundColor:
+                          AppTheme.success.withValues(alpha: 0.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
           // Error
           if (provider.error != null)
@@ -1524,6 +1560,33 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       discountPctController.dispose();
       discountEuroController.dispose();
     });
+  }
+
+  Future<void> _saveDraftOnly(
+    BuildContext context,
+    PedidosNotifier provider,
+  ) async {
+    if (!provider.hasClient || !provider.hasLines) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona un cliente y añade productos.'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+    final promoted = await provider.saveDraft(widget.vendedorCode);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          promoted > 0
+              ? 'Umbral alcanzado. $promoted borradores enviados al sistema.'
+              : 'Borrador guardado en este dispositivo. No se envía.',
+        ),
+        backgroundColor: promoted > 0 ? AppTheme.success : AppTheme.info,
+      ),
+    );
   }
 
   Future<void> _onConfirm(

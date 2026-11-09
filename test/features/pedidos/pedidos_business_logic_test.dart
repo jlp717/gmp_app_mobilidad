@@ -1129,7 +1129,8 @@ void main() {
       }
 
       expect(result, isNotNull);
-      expect(result!['estado'], 'PENDIENTE_SYNC');
+      expect(result!['estado'], 'CONFIRMADO');
+      expect(result['queued'], isNot(true));
       expect(api.confirmedOrderId, 42);
       expect(api.confirmedSaleType, 'CC');
       expect(api.confirmedDeliveryDate, '2026-05-05');
@@ -1281,8 +1282,7 @@ void main() {
       expect(pending['observaciones'].toString(), isNot(contains('[DTO')));
     });
 
-    test('durable finalization returns before a blocked transport completes',
-        () async {
+    test('sends the order when the server accepts it', () async {
       final api = _BlockingOrderApi();
       final container = _newContainer();
       final provider = _newNotifier(
@@ -1305,10 +1305,7 @@ void main() {
       );
       await _flushNotifier();
 
-      final first = await provider.confirmOrder('57');
-      expect(first, isNotNull);
-      expect(first!['estado'], 'PENDIENTE_SYNC');
-      expect(first['finalizedLocally'], isTrue);
+      final pending = provider.confirmOrder('57');
       for (var attempt = 0;
           attempt < 100 && api.createOrderCalls == 0;
           attempt++) {
@@ -1316,24 +1313,23 @@ void main() {
       }
       expect(api.createOrderCalls, 1);
       expect(api.createCompleter.isCompleted, isFalse);
-      expect(api.confirmOrderCalls, 0);
-
-      final second = await provider.confirmOrder('57');
-      expect(second, isNull, reason: 'the submitted cart is already cleared');
-
       api.createCompleter.complete({
         'success': true,
         'id': 42,
         'estado': 'BORRADOR',
       });
-      for (var attempt = 0;
-          attempt < 100 && api.confirmOrderCalls == 0;
-          attempt++) {
-        await Future<void>.delayed(const Duration(milliseconds: 1));
-      }
 
-      expect(api.createOrderCalls, 1);
+      final first = await pending;
+      expect(first, isNotNull);
+      expect(first!['estado'], 'CONFIRMADO');
+      expect(first['queued'], isNot(true));
+      expect(first['id'], 42);
       expect(api.confirmOrderCalls, 1);
+      expect(provider.lines, isEmpty);
+      expect(PedidosOfflineService.getPendingSyncs(), isEmpty);
+
+      final second = await provider.confirmOrder('57');
+      expect(second, isNull, reason: 'the submitted cart is already cleared');
     });
   });
 

@@ -4055,22 +4055,21 @@ async function getOrderInventoryReadModel(
                       WHEN TRIM(C.ESTADO) = 'CONFIRMADO' THEN 'CONFIRMED'
                       WHEN TRIM(C.ESTADO) IN ('CANCELANDO', 'CANCELADO') THEN 'RELEASED'
                       WHEN C.CREATED_AT <= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS THEN 'EXPIRED'
-                      WHEN COUNT(SR.ID) > 0 THEN 'ACTIVE'
+                      WHEN SR.PEDIDO_ID IS NOT NULL THEN 'ACTIVE'
                       ELSE 'NONE'
                     END AS STATUS,
-                    VARCHAR_FORMAT(CURRENT TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS.FF6') AS SERVER_NOW_LOCAL,
+                    VARCHAR_FORMAT(CURRENT TIMESTAMP, 'YYYY-MM-DD') || 'T' || VARCHAR_FORMAT(CURRENT TIMESTAMP, 'HH24:MI:SS') AS SERVER_NOW_LOCAL,
                     CASE
                       WHEN TRIM(C.ESTADO) IN ('CONFIRMADO', 'CANCELANDO', 'CANCELADO')
                         THEN CAST(NULL AS VARCHAR(26))
-                      ELSE VARCHAR_FORMAT(C.CREATED_AT + ${DRAFT_STOCK_RESERVATION_HOURS} HOURS, 'YYYY-MM-DD"T"HH24:MI:SS.FF6')
+                      ELSE VARCHAR_FORMAT(C.CREATED_AT + ${DRAFT_STOCK_RESERVATION_HOURS} HOURS, 'YYYY-MM-DD') || 'T' || VARCHAR_FORMAT(C.CREATED_AT + ${DRAFT_STOCK_RESERVATION_HOURS} HOURS, 'HH24:MI:SS')
                     END AS RESERVED_UNTIL_LOCAL,
                     TRIM(SR.CODIGOARTICULO) AS CODE,
-                    COALESCE(SUM(SR.CANTIDADENVASES), 0) AS RESERVED_ENVASES,
-                    COALESCE(SUM(SR.CANTIDADUNIDADES), 0) AS RESERVED_UNITS
+                    COALESCE(SR.CANTIDADENVASES, 0) AS RESERVED_ENVASES,
+                    COALESCE(SR.CANTIDADUNIDADES, 0) AS RESERVED_UNITS
                FROM ${PEDIDOS_CAB_TABLE} C
                LEFT JOIN ${PEDIDOS_STOCK_RESERVE_TABLE} SR ON SR.PEDIDO_ID = C.ID
-              WHERE C.ID = ?
-              GROUP BY C.ESTADO, C.CREATED_AT, SR.CODIGOARTICULO`,
+              WHERE C.ID = ?`,
             [orderId],
             false,
         );
@@ -4085,6 +4084,42 @@ async function getOrderInventoryReadModel(
         }
     } catch (error) {
         logger.warn(`[PEDIDOS] Reservation detail unavailable order=${orderId} code=${error?.code || 'UNKNOWN'}`);
+        try {
+            reservationRows = await queryFn(
+                `/* ORDER_RESERVATION_STATUS_FALLBACK */
+                 SELECT CASE
+                          WHEN TRIM(C.ESTADO) = 'CONFIRMADO' THEN 'CONFIRMED'
+                          WHEN TRIM(C.ESTADO) IN ('CANCELANDO', 'CANCELADO') THEN 'RELEASED'
+                          WHEN C.CREATED_AT <= CURRENT TIMESTAMP - ${DRAFT_STOCK_RESERVATION_HOURS} HOURS THEN 'EXPIRED'
+                          WHEN EXISTS (
+                            SELECT 1
+                              FROM ${PEDIDOS_STOCK_RESERVE_TABLE} SR
+                             WHERE SR.PEDIDO_ID = C.ID
+                          ) THEN 'ACTIVE'
+                          ELSE 'NONE'
+                        END AS STATUS,
+                        CAST(NULL AS VARCHAR(26)) AS SERVER_NOW_LOCAL,
+                        CAST(NULL AS VARCHAR(26)) AS RESERVED_UNTIL_LOCAL,
+                        CAST(NULL AS CHAR(10)) AS CODE,
+                        0 AS RESERVED_ENVASES,
+                        0 AS RESERVED_UNITS
+                   FROM ${PEDIDOS_CAB_TABLE} C
+                  WHERE C.ID = ?`,
+                [orderId],
+                false,
+            );
+            const first = reservationRows?.[0];
+            if (first) {
+                reservationStatus = 'available';
+                reservation = {
+                    status: trimString(first.STATUS) || 'NONE',
+                    reservedUntilLocal: null,
+                    serverNowLocal: null,
+                };
+            }
+        } catch (fallbackError) {
+            logger.warn(`[PEDIDOS] Reservation fallback unavailable order=${orderId} code=${fallbackError?.code || 'UNKNOWN'}`);
+        }
     }
 
     const codes = [...new Set((lines || [])

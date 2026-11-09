@@ -72,6 +72,9 @@ class _EnvironmentBannerState extends State<EnvironmentBanner>
 
   @override
   Widget build(BuildContext context) {
+    if (_profile.isVerified && _profile.profile == EnvironmentKind.demo) {
+      return widget.child;
+    }
     final unverified = !_profile.isVerified;
     final production =
         _profile.isVerified && _profile.profile == EnvironmentKind.production;

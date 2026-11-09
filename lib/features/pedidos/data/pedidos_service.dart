@@ -1333,6 +1333,7 @@ class OrderSummary {
     this.bolsaGenerada,
     this.bolsaNeto = 0,
     this.syncStatus = '',
+    this.localSyncKey = '',
   });
 
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
@@ -1488,6 +1489,9 @@ class OrderSummary {
   final bool? bolsaGenerada;
   final double bolsaNeto;
   final String syncStatus;
+
+  /// Hive key of an order that has not reached the server yet.
+  final String localSyncKey;
 
   bool get isPendienteErp {
     final estadoUp = estado.toUpperCase();

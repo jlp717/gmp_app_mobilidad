@@ -32,8 +32,7 @@ void main() {
     );
   });
 
-  testWidgets('shows demo mode from the server with accessible semantics',
-      (tester) async {
+  testWidgets('hides the demo ribbon from commercial users', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: EnvironmentBanner(
@@ -52,11 +51,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('DEMO'), findsOneWidget);
-    expect(
-      find.bySemanticsLabel('Entorno verificado: DEMO'),
-      findsOneWidget,
-    );
+    expect(find.text('DEMO'), findsNothing);
+    expect(find.text('Contenido'), findsOneWidget);
+    expect(find.bySemanticsLabel('Entorno verificado: DEMO'), findsNothing);
   });
 
   testWidgets('fails visibly closed when the endpoint is unavailable',
@@ -129,12 +126,12 @@ void main() {
           ),
           home: EnvironmentBanner(
             loader: () async => const EnvironmentProfile.verified(
-              profile: EnvironmentKind.demo,
+              profile: EnvironmentKind.production,
               readSchema: 'DSEDAC',
               writeSchema: 'JAVIER',
-              tableSet: 'isolated_test',
+              tableSet: 'production',
               erpExportEnabled: false,
-              writesEnabled: true,
+              writesEnabled: false,
               productionWritesEnabled: false,
             ),
             child: const Scaffold(
@@ -152,7 +149,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final label = find.text('DEMO');
+      final label = find.text('PRODUCCIÓN · SOLO LECTURA');
       final heading =
           find.byKey(const ValueKey('environment-banner-routed-heading'));
       expect(tester.takeException(), isNull);

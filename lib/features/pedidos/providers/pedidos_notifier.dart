@@ -789,17 +789,28 @@ class PedidosNotifier extends Notifier<PedidosState> {
         vendedorCode: code,
         threshold: threshold,
       );
+      final promoted =
+          await PedidosOfflineService.promoteManualDraftsIfThresholdReached(
+        code,
+      );
+      if (promoted > 0 &&
+          ConnectivityService.instance.currentStatus !=
+              ConnectivityStatus.offline) {
+        await _drainFinalizedOrdersInBackground();
+      }
       final localPending = PedidosOfflineService.pendingSyncCount;
       final warning = autoConfirmIfOverThreshold &&
           threshold > 0 &&
-          localPending >= threshold;
+          (promoted > 0 || localPending >= threshold);
       final next = state.copyWith(
         accumulatedDraftCount: localPending,
         draftAutoSendThreshold: threshold,
-        draftWarningMessage: warning
-            ? '$localPending pedidos finalizados pendientes. '
-                'Se enviaran ahora por haber alcanzado el umbral $threshold.'
-            : null,
+        draftWarningMessage: !warning
+            ? null
+            : promoted > 0
+                ? '$promoted borradores confirmados y enviados al alcanzar el umbral $threshold.'
+                : '$localPending pedidos finalizados pendientes. '
+                    'Se enviaran ahora por haber alcanzado el umbral $threshold.',
         clearDraftWarningMessage: !warning,
       );
 
@@ -1677,7 +1688,6 @@ class PedidosNotifier extends Notifier<PedidosState> {
       );
 
       final connectivityStatus = ConnectivityService.instance.currentStatus;
-      PedidosOfflineService.notifyQueuedOrder(queuedSyncKey);
       _clearSubmittedCartInto((next) {
         _setState(next, immediate: true);
         return next;
@@ -1686,11 +1696,25 @@ class PedidosNotifier extends Notifier<PedidosState> {
         state.copyWith(clearActiveCheckoutClientRequestId: true),
         immediate: true,
       );
-      if (connectivityStatus == ConnectivityStatus.online) {
-        // Durable local acceptance is the user-facing completion boundary.
-        // The network drain starts in the background and reports failures via
-        // OfflineSyncNotifier instead of delaying the save interaction.
-        unawaited(_drainFinalizedOrdersInBackground());
+      if (connectivityStatus != ConnectivityStatus.offline) {
+        final sent = await _sendQueuedOrder(queuedSyncKey);
+        if (sent != null) return sent;
+      }
+      PedidosOfflineService.notifyQueuedOrder(queuedSyncKey);
+      final issue = PedidosOfflineService.syncIssueFor(queuedSyncKey);
+      final keptLocal = connectivityStatus == ConnectivityStatus.offline ||
+          issue == null ||
+          _isTransportSyncIssue(issue);
+      if (!keptLocal) {
+        _setState(state.copyWith(error: issue), immediate: true);
+        return {
+          'blocked': true,
+          'queued': false,
+          'pendingConfirmation': false,
+          'finalizedLocally': true,
+          'editableDraft': false,
+          'message': issue,
+        };
       }
       return {
         'queued': true,
@@ -1699,11 +1723,9 @@ class PedidosNotifier extends Notifier<PedidosState> {
         'editableDraft': false,
         'syncStatus': 'pending',
         'estado': 'PENDIENTE_SYNC',
-        'message': connectivityStatus == ConnectivityStatus.limited
-            ? 'Pedido finalizado y guardado. Pendiente de envio al recuperar conexion completa.'
-            : connectivityStatus == ConnectivityStatus.online
-                ? 'Pedido finalizado y guardado. Sincronizacion en segundo plano.'
-                : 'Pedido finalizado y guardado. Pendiente de envio cuando vuelva internet.',
+        'message': connectivityStatus == ConnectivityStatus.offline
+            ? 'Pedido finalizado y guardado. Pendiente de envio cuando vuelva internet.'
+            : 'Pedido finalizado y guardado. Pendiente de envio al recuperar conexion completa.',
       };
     } catch (e, st) {
       if (e is ApiException &&
@@ -1730,6 +1752,72 @@ class PedidosNotifier extends Notifier<PedidosState> {
     } finally {
       _setState(state.copyWith(isSaving: false), immediate: true);
     }
+  }
+
+  bool _isTransportSyncIssue(String issue) {
+    final text = issue.toLowerCase();
+    return text.contains('connection') ||
+        text.contains('conexion') ||
+        text.contains('timeout') ||
+        text.contains('socket') ||
+        text.contains('offline') ||
+        text.contains('network') ||
+        text.contains('queued') ||
+        text.contains('no confirmado por servidor') ||
+        text.contains('conservado para revision');
+  }
+
+  Future<Map<String, dynamic>?> _sendQueuedOrder(String syncKey) async {
+    await PedidosOfflineService.retryFailedSync(syncKey);
+    final drain = await PedidosOfflineService.syncPendingOrdersWithResult();
+    final rawOrders = drain['syncedOrders'];
+    if (rawOrders is! List) return null;
+    for (final raw in rawOrders) {
+      if (raw is! Map) continue;
+      if (raw['syncKey']?.toString() != syncKey) continue;
+      final orderId = raw['orderId'];
+      final numero = raw['numeroPedido']?.toString() ?? '';
+      return {
+        'queued': false,
+        'pendingConfirmation': false,
+        'finalizedLocally': false,
+        'editableDraft': false,
+        'syncStatus': 'SYNCED',
+        'id': orderId,
+        'orderId': orderId,
+        'estado': (raw['estado'] ?? 'CONFIRMADO').toString(),
+        'numeroPedido': numero,
+        'numeroPedidoFormatted': numero,
+        'message': 'Pedido enviado.',
+      };
+    }
+    return null;
+  }
+
+  /// Uploads one local order when the device can reach the server.
+  Future<Map<String, dynamic>> releaseLocalOrder(String syncKey) async {
+    final key = syncKey.trim();
+    if (key.isEmpty ||
+        ConnectivityService.instance.currentStatus ==
+            ConnectivityStatus.offline) {
+      return const {'released': false, 'offline': true};
+    }
+    final sent = await _sendQueuedOrder(key);
+    if (sent != null) {
+      final orderId = int.tryParse('${sent['id'] ?? ''}');
+      return {
+        'released': orderId != null && orderId > 0,
+        'orderId': orderId,
+        'offline': false,
+      };
+    }
+    final issue = PedidosOfflineService.syncIssueFor(key);
+    return {
+      'released': false,
+      'offline': ConnectivityService.instance.currentStatus ==
+          ConnectivityStatus.offline,
+      'message': issue,
+    };
   }
 
   Future<void> _drainFinalizedOrdersInBackground() async {
@@ -1863,6 +1951,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
               queuedAt.length >= 10 ? queuedAt.substring(0, 10) : queuedAt,
           observaciones: item['observaciones']?.toString() ?? '',
           origen: 'LOCAL',
+          localSyncKey: syncKey,
         ),
       );
     }
@@ -2161,7 +2250,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
 
   // ── Offline Support / Drafts (tramos 1863-1932) ──
 
-  Future<void> saveDraft(String vendedorCode, {bool isAutoSave = false}) async {
+  Future<int> saveDraft(String vendedorCode, {bool isAutoSave = false}) async {
     if (!state.hasClient) {
       if (!isAutoSave) {
         _setState(
@@ -2171,7 +2260,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
           immediate: true,
         );
       }
-      return;
+      return 0;
     }
     if (!state.hasLines) {
       if (!isAutoSave) {
@@ -2182,7 +2271,7 @@ class PedidosNotifier extends Notifier<PedidosState> {
           immediate: true,
         );
       }
-      return;
+      return 0;
     }
     try {
       if (isAutoSave && state.hasLines) {
@@ -2213,10 +2302,21 @@ class PedidosNotifier extends Notifier<PedidosState> {
           state.copyWith(isDirty: false, lastAutoSaved: DateTime.now()),
           immediate: true,
         );
+        final promoted =
+            await PedidosOfflineService.promoteManualDraftsIfThresholdReached(
+          vendedorCode,
+        );
+        if (promoted > 0 &&
+            ConnectivityService.instance.currentStatus !=
+                ConnectivityStatus.offline) {
+          await _drainFinalizedOrdersInBackground();
+        }
+        return promoted;
       }
     } catch (e) {
       _debugLog('[PedidosNotifier] saveDraft error: $e');
     }
+    return 0;
   }
 
   void loadDraft(Map<String, dynamic> draft) {

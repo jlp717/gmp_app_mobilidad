@@ -968,17 +968,22 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     ),
                     tooltip: 'Guardar como borrador manual',
                     onPressed: () async {
-                      await ref
+                      final promoted = await ref
                           .read(pedidosNotifierProvider.notifier)
                           .saveDraft(
                             _vendedorCodes,
                           );
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Borrador manual guardado'),
-                            backgroundColor: AppTheme.info,
-                            duration: Duration(seconds: 2),
+                          SnackBar(
+                            content: Text(
+                              promoted > 0
+                                  ? 'Umbral alcanzado. $promoted borradores enviados al sistema.'
+                                  : 'Borrador guardado en este dispositivo. No se envía.',
+                            ),
+                            backgroundColor:
+                                promoted > 0 ? AppTheme.success : AppTheme.info,
+                            duration: const Duration(seconds: 2),
                           ),
                         );
                       }
@@ -3083,14 +3088,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   Future<void> _showOrderDetail(OrderSummary order) async {
     if (order.id < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Pedido local pendiente de sincronizacion. Estara disponible al recuperar conexion.',
-          ),
-          backgroundColor: AppTheme.info,
-        ),
-      );
+      final releasedId = await _releaseLocalOrder(order);
+      if (!mounted || releasedId == null) return;
+      await _showOrderDetailById(releasedId);
       return;
     }
     final result = await OrderDetailSheet.show(context, orderId: order.id);
@@ -3205,17 +3205,61 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
-  Future<void> _duplicateOrder(OrderSummary order) async {
-    if (order.id < 0) {
+  Future<int?> _releaseLocalOrder(OrderSummary order) async {
+    final offline = ConnectivityService.instance.currentStatus ==
+        ConnectivityStatus.offline;
+    if (offline || order.localSyncKey.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Pedido local pendiente de sincronizacion. No se puede duplicar todavia.',
+            'Pedido local pendiente de sincronizacion. Estara disponible al recuperar conexion.',
           ),
           backgroundColor: AppTheme.info,
         ),
       );
-      return;
+      return null;
+    }
+    final result = await ref
+        .read(pedidosNotifierProvider.notifier)
+        .releaseLocalOrder(order.localSyncKey);
+    if (!mounted) return null;
+    final orderId = result['orderId'];
+    final releasedId = orderId is int ? orderId : int.tryParse('$orderId');
+    if (result['released'] == true && releasedId != null && releasedId > 0) {
+      await _refreshMisPedidos();
+      return releasedId;
+    }
+    final issue = result['message']?.toString().trim() ?? '';
+    final stillOffline = result['offline'] == true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          stillOffline || issue.isEmpty
+              ? 'Pedido local pendiente de sincronizacion. Estara disponible al recuperar conexion.'
+              : 'No se pudo enviar el pedido. $issue',
+        ),
+        backgroundColor: stillOffline ? AppTheme.info : AppTheme.error,
+      ),
+    );
+    return null;
+  }
+
+  Future<void> _duplicateOrder(OrderSummary order) async {
+    if (order.id < 0) {
+      final releasedId = await _releaseLocalOrder(order);
+      if (!mounted || releasedId == null) return;
+      order = OrderSummary(
+        id: releasedId,
+        numeroPedido: order.numeroPedido,
+        clienteCode: order.clienteCode,
+        clienteName: order.clienteName,
+        vendedorCode: order.vendedorCode,
+        fecha: order.fecha,
+        estado: order.estado,
+        tipoVenta: order.tipoVenta,
+        total: order.total,
+        numeroPedidoFormatted: order.numeroPedidoFormatted,
+      );
     }
     final prov = ref.read(pedidosNotifierProvider.notifier);
     await prov.cloneOrderIntoCart(order.id);

@@ -410,6 +410,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     final statusColor = _statusColor(header.estado);
     final showReservationStatus = const {
           'ACTIVE',
+          'CONFIRMED',
           'EXPIRED',
           'RELEASED',
           'UNAVAILABLE',
@@ -567,6 +568,12 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         color = AppTheme.info;
         title = 'Reserva liberada';
         message = 'La reserva de este pedido ya no está activa.';
+        break;
+      case 'CONFIRMED':
+        icon = Icons.inventory_2_outlined;
+        color = AppTheme.success;
+        title = 'Stock registrado';
+        message = 'El pedido está confirmado y su stock ya quedó registrado.';
         break;
       case 'UNAVAILABLE':
         icon = Icons.cloud_off_outlined;
