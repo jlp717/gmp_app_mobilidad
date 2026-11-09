@@ -4,6 +4,7 @@ const express = require('express');
 const { verifyToken, requireRoles } = require('../middleware/auth');
 const logger = require('../middleware/logger');
 const bolsaService = require('../services/bolsa-comercial.service');
+const commercialPricePolicy = require('../services/commercial-price-policy');
 const { bolsaLimiter } = require('../middleware/security');
 const {
     resolveVendorScope: resolveCanonicalVendorScope,
@@ -13,6 +14,38 @@ const {
 
 const router = express.Router();
 router.use(bolsaLimiter);
+
+function createPricePolicyRouter({ service = commercialPricePolicy } = {}) {
+    const policyRouter = express.Router();
+    policyRouter.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+    policyRouter.use(verifyToken);
+    policyRouter.use((req, res, next) => {
+        if (!['ADMIN', 'JEFE_VENTAS'].includes(req.user?.role)) {
+            return res.status(403).json({ success: false, code: 'COMMERCIAL_PRICE_POLICY_MANAGER_REQUIRED', error: 'Se requiere un responsable autorizado.' });
+        }
+        next();
+    });
+    const handle = (work) => async (req, res) => {
+        try { res.json({ success: true, ...await work(req) }); }
+        catch (error) {
+            const known = error instanceof commercialPricePolicy.CommercialPricePolicyError;
+            const status = known ? error.status : 500;
+            if (!known) logger.error('[PRICE_POLICY] Error de persistencia');
+            res.status(status).json({ success: false,
+                code: known ? error.code : 'COMMERCIAL_PRICE_POLICY_INTERNAL_ERROR',
+                error: known ? error.message : 'No se pudo procesar la política de precios.',
+                ...(known && error.details.field ? { field: error.details.field } : {}),
+            });
+        }
+    };
+    policyRouter.get('/', handle((req) => service.listPricePolicies(req.query, req.user)));
+    policyRouter.put('/:codigoArticulo', handle((req) => service.updatePricePolicy(req.params.codigoArticulo, req.body, req.get('Idempotency-Key'), req.user)));
+    policyRouter.get('/:codigoArticulo/audit', handle((req) => service.getPricePolicyAudit(req.params.codigoArticulo, req.query, req.user)));
+    return policyRouter;
+}
+
+// Mounted before the legacy vendor routes so price-policy is never a vendor code.
+router.use('/price-policy', createPricePolicyRouter());
 
 const VENDEDOR_CODE_PATTERN = /^[a-zA-Z0-9]{1,10}$/;
 
@@ -277,3 +310,4 @@ router.put('/:vendedorCode/config', verifyToken, requireRoles('JEFE_VENTAS'), as
 });
 
 module.exports = router;
+module.exports.createPricePolicyRouter = createPricePolicyRouter;

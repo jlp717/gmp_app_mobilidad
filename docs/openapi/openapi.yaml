@@ -1054,6 +1054,105 @@ paths:
                 error: "Demasiadas solicitudes"
                 code: "HTTP_429"
       description: "POST auth · switch role. Contrato del handler Express existente."
+  /bolsa/price-policy:
+    get:
+      tags: ["Bolsa"]
+      summary: "Política propia de precios; solo ADMIN y JEFE_VENTAS firmados"
+      operationId: "listCommercialOwnedPricePolicies"
+      description: "Lista paginada, incluidos artículos inactivos y unidades sin verificar. Coste y margen son privados del responsable. Una fila sin unidad verificada conserva sus datos y devuelve coverageError; no falla la lista completa. Cache-Control no-store. Producción usa objetos propios explícitos y falla con 503 si no están disponibles."
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, maximum: 1000000, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: q, in: query, description: "Búsqueda literal por código o descripción", schema: { type: string, maxLength: 40 } }
+        - { name: unitState, in: query, schema: { type: string, enum: [VERIFICADA, NO_VERIFICADA, CONFLICTIVA] } }
+      responses:
+        "200":
+          description: "Página de política privada del responsable"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, items, total, page, pageSize]
+                properties:
+                  success: { const: true }
+                  total: { type: integer, minimum: 0 }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/CommercialOwnedPricePolicy" }
+        "401": { description: "JWT ausente, inválido o sesión revocada" }
+        "403": { description: "COMERCIAL, REPARTIDOR y alias de rol no autorizados" }
+        "422": { description: "Filtro o paginación inválidos" }
+        "503": { description: "Perfil u objetos propios no verificados; no se desactiva el mínimo" }
+  /bolsa/price-policy/{codigoArticulo}:
+    put:
+      tags: ["Bolsa"]
+      summary: "Confirmar edición revisada de política; solo ADMIN y JEFE_VENTAS"
+      operationId: "updateCommercialOwnedPricePolicy"
+      description: "Reemplazo explícito de los campos propios. UNIDAD_ERP permanece intacta. Coste y margen son una pareja opcional y admiten cero; no hay margen por defecto. El servidor bloquea la fila y guarda política y auditoría de forma atómica. La misma clave, identidad y contenido repite el ACK original antes de comprobar la revisión; otra identidad o contenido devuelve 409 sin datos privados. Producción exige perfil verificado, permisos de escritura existentes y metadatos/keys/checks/journal verificados."
+      parameters:
+        - name: codigoArticulo
+          in: path
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 10, pattern: "^[A-Za-z0-9._-]{1,10}$" }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid, maxLength: 96 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CommercialOwnedPricePolicyUpdate" }
+      responses:
+        "200":
+          description: "ACK estable después del commit, o replay de la operación original"
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [success, articleCode, revision, replayed]
+                properties:
+                  success: { const: true }
+                  articleCode: { type: string }
+                  revision: { type: integer, minimum: 1 }
+                  replayed: { type: boolean }
+        "401": { description: "Autenticación firmada requerida" }
+        "403": { description: "Identidad sin rol ADMIN o JEFE_VENTAS" }
+        "404": { description: "Artículo no encontrado" }
+        "409": { description: "Revisión concurrente, clave reutilizada o conflicto de unidad; actualizar y revisar" }
+        "422": { description: "Campos inválidos, pareja parcial, unidad no canónica o confirmación ausente" }
+        "503": { description: "Edición desactivada o persistencia transaccional no verificada" }
+  /bolsa/price-policy/{codigoArticulo}/audit:
+    get:
+      tags: ["Bolsa"]
+      summary: "Auditoría privada paginada; solo ADMIN y JEFE_VENTAS"
+      operationId: "getCommercialOwnedPricePolicyAudit"
+      description: "Incluye valores propios anteriores/nuevos, revisiones, unidad, origen, estado, huella de fuente, actor y motivo. No expone la clave de solicitud ni el hash del contenido. Orden por ID descendente. Cache-Control no-store."
+      parameters:
+        - { name: codigoArticulo, in: path, required: true, schema: { type: string, maxLength: 10, pattern: "^[A-Za-z0-9._-]{1,10}$" } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, maximum: 1000000, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200":
+          description: "Página de auditoría de política propia (nombres de columnas DB2)"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, items, total, page, pageSize]
+                properties:
+                  success: { const: true }
+                  total: { type: integer, minimum: 0 }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  items: { type: array, items: { type: object, additionalProperties: true } }
+        "401": { description: "Autenticación firmada requerida" }
+        "403": { description: "No autorizado para datos privados de política" }
+        "422": { description: "Código o paginación inválidos" }
+        "503": { description: "Perfil u objetos no disponibles" }
   /bolsa/grouped:
     get:
       tags:
@@ -22006,6 +22105,60 @@ components:
       scheme: "basic"
       description: "Basic Auth para documentación operativa protegida."
   schemas:
+    CommercialPolicyDecimal:
+      description: "Decimal exacto no negativo con hasta cuatro decimales; null conserva la ausencia explícita. Se prefieren cadenas para evitar redondeo del cliente."
+      oneOf:
+        - { type: string, maxLength: 12, pattern: "^[0-9]+(?:\\.[0-9]{1,4})?$" }
+        - { type: number, minimum: 0, maximum: 9999999.9999, multipleOf: 0.0001 }
+        - { type: "null" }
+    CommercialOwnedPricePolicyUpdate:
+      type: object
+      additionalProperties: false
+      required: [confirmed, expectedRevision, reason, policyUnit, manufacturingCost, targetMarginPct, minimumPrice, minimumOrigin]
+      properties:
+        confirmed: { const: true, description: "Confirmación explícita tras revisar los valores" }
+        expectedRevision: { type: integer, minimum: 0, maximum: 2147483646 }
+        reason: { type: string, minLength: 3, maxLength: 250 }
+        policyUnit: { type: string, enum: [CAJAS, KILO, UNIDADES] }
+        manufacturingCost: { $ref: "#/components/schemas/CommercialPolicyDecimal" }
+        targetMarginPct:
+          description: "Margen sobre venta: 0 <= margen < 100, hasta cuatro decimales; null solo junto a coste null"
+          oneOf:
+            - { type: string, maxLength: 7, pattern: "^[0-9]+(?:\\.[0-9]{1,4})?$" }
+            - { type: number, minimum: 0, exclusiveMaximum: 100, multipleOf: 0.0001 }
+            - { type: "null" }
+        minimumPrice: { $ref: "#/components/schemas/CommercialPolicyDecimal", description: "MANUAL exige valor explícito; ERP_BASE exige null y sigue la tarifa ERP actual verificada" }
+        minimumOrigin: { type: string, enum: [ERP_BASE, MANUAL] }
+    CommercialOwnedPricePolicy:
+      type: object
+      description: "Proyección privada de responsable. El catálogo comercial usa una proyección pública sin coste, margen ni auditoría."
+      required: [articleCode, erpUnit, policyUnit, unitState, revision, effectiveFloor, enforceable, coverageError]
+      properties:
+        articleCode: { type: string, maxLength: 10 }
+        description: { type: string }
+        erpUnit: { type: string, description: "Valor original ART, también vacío; nunca se sustituye por CAJAS" }
+        packUnits: { type: [string, number] }
+        active: { type: boolean }
+        inactiveYear: { type: integer }
+        tariffCode: { type: [string, number, "null"] }
+        tariffPrice: { $ref: "#/components/schemas/CommercialPolicyDecimal" }
+        tariffState: { type: string, enum: [AUSENTE, PRESENTE, ALTERNATIVA, CONFLICTIVA] }
+        policyUnit: { type: [string, "null"], enum: [CAJAS, KILO, UNIDADES, null] }
+        unitState: { type: string, enum: [VERIFICADA, NO_VERIFICADA, CONFLICTIVA] }
+        policyState: { type: string }
+        manufacturingCost: { $ref: "#/components/schemas/CommercialPolicyDecimal" }
+        targetMarginPct: { $ref: "#/components/schemas/CommercialPolicyDecimal" }
+        minimumPrice: { $ref: "#/components/schemas/CommercialPolicyDecimal" }
+        minimumOrigin: { type: string, enum: [ERP_BASE, MANUAL] }
+        revision: { type: integer, minimum: 0 }
+        effectiveFloor: { type: [string, "null"] }
+        enforceable: { type: boolean }
+        provenance: { type: array, items: { type: string, enum: [ERP_TARIFA_2, OWN_MINIMUM, OWN_COST_MARGIN] } }
+        coverageError: { type: [string, "null"] }
+        sourceFingerprint: { type: string, pattern: "^[a-f0-9]{64}$" }
+        sourceSnapshotAt: { type: string }
+        updatedBy: { type: [string, "null"] }
+        updatedAt: { type: [string, "null"] }
     PedidoCancellationRequest:
       type: "object"
       additionalProperties: false
