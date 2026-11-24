@@ -36,6 +36,6 @@ describe('objectives ALL live ERP reads', () => {
   });
 
   test('cache version busts stale monthly ALL payloads', () => {
-    expect(source).toContain("OBJECTIVES_CACHE_VERSION = 'v20260921-live-all-months'");
+    expect(source).toContain("OBJECTIVES_CACHE_VERSION = 'v20261124-bsales-once'");
   });
 });

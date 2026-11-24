@@ -217,10 +217,15 @@ async function addBSalesToRows(rows, vendorCodesArray, uniqueYears) {
         uniqueYears.map((yr) => getBSalesByVendor(yr, scopedVendorCodes)),
     );
 
+    // Never mutate the caller's rows: objectives evolution serves them from
+    // redisCache L1 by reference, so an in-place merge would persist the
+    // B-sales into the cache and add them again on the next read.
+    const mergedRows = (rows || []).map((row) => ({ ...row }));
+
     // Index rows once by (year, month) so the merge below is O(rows), not a
     // find() scan per month per year.
     const rowsByYearMonth = new Map();
-    for (const row of rows) {
+    for (const row of mergedRows) {
         rowsByYearMonth.set(`${row.YEAR}:${row.MONTH}`, row);
     }
 
@@ -237,10 +242,12 @@ async function addBSalesToRows(rows, vendorCodesArray, uniqueYears) {
             } else {
                 const newRow = { YEAR: yr, MONTH: m, SALES: value, COST: 0, CLIENTS: 0 };
                 rowsByYearMonth.set(`${yr}:${m}`, newRow);
-                rows.push(newRow);
+                mergedRows.push(newRow);
             }
         }
     });
+
+    return mergedRows;
 }
 
 function aggregateObjectiveRows(rows) {
@@ -391,9 +398,11 @@ async function getGlobalObjectiveBaselineMonthly(year) {
     }
 
     const prevYear = safeYear - 1;
-    const rows = await repo.fetchGlobalBaselinePrevYear(prevYear);
-
-    await addBSalesToRows(rows, [], [prevYear]);
+    const rows = await addBSalesToRows(
+        await repo.fetchGlobalBaselinePrevYear(prevYear),
+        [],
+        [prevYear],
+    );
 
     const prevYearMonthlySales = {};
     let combinedPrevTotal = 0;
@@ -465,9 +474,11 @@ async function buildVendorObjectiveTargets(vendorCode, yearsArray) {
     const uniqueYears = [...new Set([...yearsArray, ...yearsArray.map((y) => y - 1)])];
     const vendedorFilter = buildBoundLaclaeVendorFilter(vendorCode, 'L');
 
-    const rows = await repo.fetchVendorEvolutionRows(uniqueYears, vendedorFilter.clause, vendedorFilter.params);
-
-    await addBSalesToRows(rows, [vendorCode], uniqueYears);
+    const rows = await addBSalesToRows(
+        await repo.fetchVendorEvolutionRows(uniqueYears, vendedorFilter.clause, vendedorFilter.params),
+        [vendorCode],
+        uniqueYears,
+    );
 
     let inheritedMonthlySales = {};
     const prevYear = currentYear - 1;

@@ -23,7 +23,7 @@ Evolution siempre live contra ERP, sin rollup snapshot:
 - `overlayOpenMonthFromLiveLaclae(rows, now, vendorCodes)`: refresca solo el
   mes abierto (ano/mes de `getCurrentDate()`) desde LACLAE vivo y lo fusiona
   (patch o push) sobre las filas agregadas.
-- Version de cache `OBJECTIVES_CACHE_VERSION = 'v20260921-live-all-months'`;
+- Version de cache `OBJECTIVES_CACHE_VERSION = 'v20261124-bsales-once'`;
   claves `obj:evolution:rows:<version>:ALL:<years>` y
   `obj:evolution:rows:<version>:<codes>:<years>` con TTL 600s.
 - Agregado por alcance, no por vendedor: una sola query con
@@ -42,6 +42,19 @@ Negativas / riesgos:
 - TTL 600s: el mes abierto puede tardar hasta 10 min en reflejar el ERP.
 - Sin snapshot: picos de carga van directos a LACLAE; `CircuitBreaker`
   `objectives-by-client` es el unico fusible.
+
+## Enmienda 2026-11-24 - VENTAS_B no se muta en la cache
+
+La cache de filas (obj:evolution:rows:*) se sirve desde L1 por referencia.
+addBSalesToRows mutaba ese array en sitio, asi que la segunda lectura de la
+misma cache volvia a sumar JAVIER.VENTAS_B y el objetivo anual ALL pasaba de
+16.866.761,54 EUR a 17.093.196,20 EUR. Fix: addBSalesToRows clona las filas y
+devuelve un array nuevo; los llamadores usan el retorno. Regresion cubierta en
+backend/__tests__/objectives-bsales-cache-safety.test.js. La version de cache
+sube a v20261124-bsales-once para invalidar las claves contaminadas.
+
+Rollback: revert del commit; el bump de version deja huerfanas las claves
+contaminadas y el primer calculo vuelve a leer LACLAE vivo.
 
 ## Evidencias
 

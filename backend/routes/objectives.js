@@ -54,7 +54,7 @@ const {
 // services/objectives-service.js + repositories/objectives-repository.js.)
 const { CircuitBreaker } = require('../services/circuit-breaker');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260921-live-all-months';
+const OBJECTIVES_CACHE_VERSION = 'v20261124-bsales-once';
 const { historicalYearsCacheMeta } = require('../src/services/dashboard.service.js');
 
 function byClientHistoricalCache(effectiveVendorCodes, years, months, rowsLimit, now) {
@@ -344,7 +344,7 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
 
         // Single optimized query - get monthly totals per year
         // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT (matches 15,220,182.87€ for 2025)
-        const rows = await fetchObjectiveEvolutionRows(
+        let rows = await fetchObjectiveEvolutionRows(
             effectiveVendorCodes,
             vendorCodesArray,
             uniqueYears,
@@ -355,7 +355,7 @@ async function buildObjectivesEvolutionResponse({ effectiveVendorCodes, yearsArr
         // B-SALES: Add secondary channel sales from JAVIER.VENTAS_B
         // Ensures consistency with commissions endpoint
         // =====================================================================
-        await addBSalesToRows(rows, vendorCodesArray, uniqueYears);
+        rows = await addBSalesToRows(rows, vendorCodesArray, uniqueYears);
 
         // Organize by year
         const yearlyData = {};
